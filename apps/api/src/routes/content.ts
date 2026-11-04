@@ -5,6 +5,7 @@ import { attachmentMaxBytes, resolveBotAvatarSet } from "@orkbot/contracts";
 import { AttachmentValidationError } from "@orkbot/core";
 import { IsolationError, parseComputerMode } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
+import { requireIdentityConfirmation } from "#modules/accounts/identity-confirmation";
 import {
   ArtifactListCursorError,
   createOwnedArtifact,
@@ -15,7 +16,6 @@ import {
   listArtifactVersions,
   listSpaceArtifacts,
 } from "../artifacts.js";
-import { requireIdentityConfirmation } from "../identity-confirmation.js";
 import { listSpaceRuns } from "../runs.js";
 import { querySpaceSearch } from "../search.js";
 import { loadAllMessages } from "../thread-message-pages.js";

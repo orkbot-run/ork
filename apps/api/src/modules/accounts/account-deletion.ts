@@ -18,8 +18,8 @@ import {
   releaseOrganizationDeletionClaim,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import type { BillingService } from "./billing.js";
-import type { SpaceDeletionDeps } from "./space-deletion.js";
+import type { BillingService } from "../../billing.js";
+import type { SpaceDeletionDeps } from "../../space-deletion.js";
 
 /**
  * In shared spaces, the account's bot folders also live on the space's Team Computer from before

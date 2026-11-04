@@ -12,8 +12,8 @@ import {
   createThreadMessageInTransaction,
   IsolationError,
 } from "@orkbot/db";
-import { requireBotThread } from "./bot-thread.js";
-import { resolveThreadTarget } from "./thread-target.js";
+import { requireBotThread } from "../../bot-thread.js";
+import { resolveThreadTarget } from "../../thread-target.js";
 
 /**
  * First-run conversational onboarding, seeded deterministically into the bot's

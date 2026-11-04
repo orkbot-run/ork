@@ -45,7 +45,7 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import { applyAccessGrants } from "./access-grants.js";
+import { applyAccessGrants } from "#modules/accounts/access-grants";
 import { createReferrals } from "./referrals.js";
 
 export { TRIAL_DAYS };

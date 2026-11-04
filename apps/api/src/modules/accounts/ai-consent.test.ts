@@ -2,12 +2,12 @@ import type { Actor } from "@orkbot/contracts";
 import { AI_DISCLOSURE_VERSION } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./thread-target.js", () => ({
+vi.mock("../../thread-target.js", () => ({
   resolveThreadTarget: async () => ({ kind: "bot", botId: "bot" }),
 }));
 
+import type { RouterDeps } from "../../router.js";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
-import type { RouterDeps } from "./router.js";
 
 function setup() {
   const upsert = vi.fn(async () => ({}));

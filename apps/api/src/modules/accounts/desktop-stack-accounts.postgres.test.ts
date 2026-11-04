@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { FakeSandboxProvider } from "@orkbot/adapters";
 import { runAsSystem } from "@orkbot/db";
 import { expect, it } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "../../app.js";
 
 const databaseUrl = process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined;
 const webOrigin = "http://127.0.0.1:5173";

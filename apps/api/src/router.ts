@@ -33,8 +33,9 @@ import type {
 import type { Auth } from "@orkbot/auth";
 import type { NavLink } from "@orkbot/contracts";
 import type { BoardEvents, PrismaClient, ThreadEvents } from "@orkbot/db";
+import { accountRoutes } from "#modules/accounts/routes/account";
+import { organizationsRoutes } from "#modules/accounts/routes/organizations";
 import type { BillingService } from "./billing.js";
-import { accountRoutes } from "./routes/account.js";
 import { availabilityRoutes } from "./routes/availability.js";
 import { boardsRoutes } from "./routes/boards.js";
 import { botsRoutes } from "./routes/bots.js";
@@ -47,7 +48,6 @@ import { mcpRoutes } from "./routes/mcp.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { messagingRoutes } from "./routes/messaging.js";
 import { modelsRoutes } from "./routes/models.js";
-import { organizationsRoutes } from "./routes/organizations.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { paymentWalletRoutes } from "./routes/payment-wallet.js";
 import { routinesRoutes } from "./routes/routines.js";

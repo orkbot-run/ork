@@ -14,7 +14,7 @@ import {
   canonicalPiProviderId,
   resolveBotAvatarSet,
 } from "@orkbot/contracts";
-import { isAdmin } from "../admins.js";
+import { isAdmin } from "#modules/accounts/admins";
 import { effectiveSandboxProvider } from "../computer-provider-config.js";
 import type { RouterDeps } from "../router.js";
 

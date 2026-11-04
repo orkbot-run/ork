@@ -26,7 +26,14 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import { requireAdmin } from "../admins.js";
+import { requireAdmin } from "#modules/accounts/admins";
+import {
+  chooseFocus,
+  dismissFocus,
+  markAppConnected,
+  promptFocus,
+  startOnboarding,
+} from "#modules/accounts/onboarding";
 import {
   assertNameFreeWhereAvailable,
   lockOwner,
@@ -50,13 +57,6 @@ import {
   mcpAssignmentDto,
   mcpServerDto,
 } from "../mcp-servers.js";
-import {
-  chooseFocus,
-  dismissFocus,
-  markAppConnected,
-  promptFocus,
-  startOnboarding,
-} from "../onboarding.js";
 import { installPlugin, lockPluginInstalls, setPluginParts } from "../plugin-installs.js";
 import {
   approvedPluginEntries,

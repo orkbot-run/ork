@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@orkbot/db";
 import { requireMembership } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { actorFromMembership } from "./app.js";
+import { actorFromMembership } from "../../app.js";
 
 const actor = {
   userId: "user-1",

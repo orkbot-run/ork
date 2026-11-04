@@ -12,8 +12,8 @@ import {
   SpaceDeletionInProgressError,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
+import type { RouterContext } from "../../../routes/context.js";
 import { deleteOrganization } from "../account-deletion.js";
-import type { RouterContext } from "./context.js";
 
 export function organizationsRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

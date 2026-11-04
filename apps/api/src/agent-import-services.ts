@@ -5,7 +5,7 @@ import { canonicalPiProviderId, ModelConnectInputSchema } from "@orkbot/contract
 import type { createRepos } from "@orkbot/db";
 import { findModelCredential, Prisma } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import { isAdmin } from "./admins.js";
+import { isAdmin } from "#modules/accounts/admins";
 import type { AgentImportServices } from "./agent-import.js";
 import type { createMcpServers } from "./mcp-servers.js";
 import { mcpCredentialRecords, mcpStdioPolicy } from "./mcp-servers.js";
