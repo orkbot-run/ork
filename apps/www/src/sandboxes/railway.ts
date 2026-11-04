@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   MONTH_HOURS,
@@ -31,7 +33,7 @@ export const railway: Sandbox = {
   h1: "Run Ork and your agents' computers on Railway",
   intro: [
     "Railway is a cloud platform for deploying apps and databases without managing servers. It also runs sandboxes: short-lived Linux machines that a program can create through Railway's API.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each bot gets its own computer with a desktop, a browser and files. You can watch its screen and take over at any time. On Railway, one template runs the Ork app, its Postgres database and those bot computers, all in your own Railway account. You don't need a Docker host or a separate sandbox provider.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each bot gets its own computer with a desktop, a browser and files. You can watch its screen and take over at any time. On Railway, one template runs the Ork app, its Postgres database and those bot computers, all in your own Railway account. You don't need a Docker host or a separate sandbox provider.",
   ],
   scene: {
     bot: "Bug Triage",

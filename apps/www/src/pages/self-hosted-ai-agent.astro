@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import ArchitectureDiagram from "../components/ArchitectureDiagram.astro";
 import Button from "../components/Button.astro";
 import CaptionedImage from "../components/CaptionedImage.astro";
@@ -46,12 +48,12 @@ const structuredData = faqPageStructuredData(SELF_HOST_FAQS);
     <main id="main" class="privacy-copy guide">
       <h1>Self-hosted AI agent</h1>
       <p>
-        Ork is an open source AI agent for persistent teammates. Each bot can use a browser and a
+        Ork is a source-available AI agent for persistent teammates. Each bot can use a browser and a
         shell, keep routines as Markdown, and pause for approval when work crosses a boundary you set.
         Self-hosting means that stack runs on a machine you control.
       </p>
       <p>
-        The software is <a href={`${GITHUB_URL}/blob/main/LICENSE`}>Apache-2.0</a>. Run Ork on your own infrastructure. This page is the setup you need
+        The <a href="/license/">license scope</a> separates the Apache-2.0 baseline from new Ork work under PolyForm Noncommercial or a paid commercial license. Run Ork on your own infrastructure. This page is the setup you need
         to run it. The <a href={DOCS_URL}>full self-hosting guide</a> on GitHub covers backups, upgrades,
         secrets, restricted networks, and production Compose.
       </p>
@@ -73,7 +75,7 @@ const structuredData = faqPageStructuredData(SELF_HOST_FAQS);
       </p>
       <h3>Cost control</h3>
       <p>
-        There is no seat fee for the open source software. You pay the model provider you connect and
+        Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model provider you connect and
         any remote computer provider you choose. Local Docker computers are the default, so a single
         machine does not need an E2B, Daytona, CreateOS, or Boat account.
       </p>

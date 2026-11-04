@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { VoiceProvider } from "./types";
 import {
   CHARS_PER_HOUR,
@@ -60,7 +62,7 @@ export const elevenlabs: VoiceProvider = {
   h1: "ElevenLabs for AI agents: pricing, alternatives and setup",
   intro: [
     "[ElevenLabs](https://elevenlabs.io) is a voice AI company best known for natural, expressive text to speech and voice cloning. Its API also transcribes speech, so one key covers both directions of a conversation.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Connect ElevenLabs and it does the speaking and the transcription. Ork runs the bot, decides what it says, and keeps the transcript in the chat.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Connect ElevenLabs and it does the speaking and the transcription. Ork runs the bot, decides what it says, and keeps the transcript in the chat.",
     "This page covers what ElevenLabs costs as of November 2026, how its plans and API billing differ, what a bot that talks every day actually costs, and how it compares with the alternatives.",
   ],
   scene: {

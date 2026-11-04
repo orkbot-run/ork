@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import {
   BOAT_ORKBOT,
   E2B_PRO_FEE,
@@ -38,7 +40,7 @@ export const novita: Sandbox = {
   h1: "Run your AI agents' computers on Novita",
   intro: [
     "Novita's Agent Sandbox gives AI agents their own Linux machines in the cloud, started and stopped through an API. Novita AI also sells model APIs and GPUs, and its sandbox works with the E2B SDK.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each bot gets its own computer with a desktop, a browser, a terminal and files. You can watch its screen and take over at any time. When you self-host Ork, Novita can be where those computers live. Its main strength is the pause: an idle computer is frozen with its memory intact, so a bot comes back to the same open tabs and running programs.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each bot gets its own computer with a desktop, a browser, a terminal and files. You can watch its screen and take over at any time. When you self-host Ork, Novita can be where those computers live. Its main strength is the pause: an idle computer is frozen with its memory intact, so a bot comes back to the same open tabs and running programs.",
   ],
   scene: {
     bot: "Talent Scout",

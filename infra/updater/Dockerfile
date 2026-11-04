@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Modified by Ork contributors to include license notices. See LICENSE.md.
 # The updater is the only service that gets the Docker CLI and the Docker socket, so it is built
 # separately from the application image rather than adding root-equivalent tooling to api, worker,
 # and web. It is also the only service the update never recreates, so its own image moves on the
@@ -15,6 +17,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY LICENSE LICENSE-POLYFORM LICENSE.md NOTICE ./
+COPY docs/licensing-faq.md docs/commercial-license.md docs/licensing-rollout.md ./docs/
+COPY docs/cla/v1.md ./docs/cla/v1.md
 COPY patches patches
 COPY packages/contracts packages/contracts
 COPY packages/core packages/core

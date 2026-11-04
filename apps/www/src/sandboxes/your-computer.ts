@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   BOAT_ORKBOT,
@@ -28,7 +30,7 @@ export const yourComputer: Sandbox = {
   h1: "Let AI agents use your own computer",
   intro: [
     "Most of the time an AI agent should work on a computer of its own, away from your files. Sometimes the work is on your machine: a document open in a desktop app, a folder only you have, a program you can't install anywhere else. For that, you can let a bot use your actual Mac or PC, with your files, apps and logins.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. The Ork [desktop app](/download/) for Mac, Windows and Linux can also open the computer it runs on to your bots. There are two ways to do that, and they behave quite differently.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. The Ork [desktop app](/download/) for Mac, Windows and Linux can also open the computer it runs on to your bots. There are two ways to do that, and they behave quite differently.",
   ],
   scene: {
     bot: "Chief of Staff",
@@ -74,7 +76,7 @@ export const yourComputer: Sandbox = {
     {
       heading: "What it costs",
       paragraphs: [
-        "Using your own computer adds no sandbox bill. With Use this Mac, the desktop app runs a free, self-hosted Ork in Docker on your machine, and bots work on your computer instead of a separate one, so you pay only your model provider. With Let bots use this computer, you pay for the Ork server you're connected to as usual, and the bot keeps its own computer there as well.",
+        "Using your own computer adds no sandbox bill. With Use this Mac, the desktop app runs a self-hosted Ork in Docker on your machine, and bots work on your computer instead of a separate one, so you pay your model provider and any commercial Ork license your use requires. With Let bots use this computer, you pay for the Ork server you're connected to as usual, and the bot keeps its own computer there as well.",
         "The hidden cost is that the machine has to stay on and the app open. An always-on Mac mini draws about 4 W idle and up to about 65 W under full load, according to Apple.",
       ],
       table: {

@@ -1,11 +1,11 @@
 ---
-title: "Claude Duet vs Grok Bot, and an open source alternative"
-description: "Anthropic released Claude Duet on October 21, 2026. How it compares with xAI's Grok Bot, and with Ork, the open source option you run yourself."
+title: "Claude Duet vs Grok Bot, and a source-available alternative"
+description: "Anthropic released Claude Duet on October 21, 2026. How it compares with xAI's Grok Bot, and with Ork, the source-available option you run yourself."
 published: "2026-10-24"
 updated: "2026-10-24"
 author: "Elie Steinbock"
 category: "comparisons"
-tldr: "Claude Duet is one proactive agent in one thread: it briefs you each morning, watches your inbox and calendar, and asks before it sends, pays, signs, or deletes. Grok Bot is a set of named bots with routines on a shared cloud computer. Both are hosted and pick the model for you. Ork is the open source version you run, with the model you choose, including your Claude subscription."
+tldr: "Claude Duet is one proactive agent in one thread: it briefs you each morning, watches your inbox and calendar, and asks before it sends, pays, signs, or deletes. Grok Bot is a set of named bots with routines on a shared cloud computer. Both are hosted and pick the model for you. Ork is the source-available version you run, with the model you choose, including your Claude subscription."
 sources:
   - label: "Anthropic, Introducing Claude Duet (October 21, 2026)"
     href: "https://claude.com/resources/articles/claude-duet"
@@ -27,14 +27,14 @@ sources:
     href: "https://github.com/orkbot-run/ork"
 related:
   - href: "/claude-duet-alternative/"
-    title: "Open source Claude Duet alternative"
+    title: "Source-available Claude Duet alternative"
     description: "The full Ork and Claude Duet comparison table."
   - href: "/grok-bot-alternative/"
-    title: "Grok Bot alternatives (open source and hosted)"
-    description: "A list of open source and hosted Grok Bot alternatives."
+    title: "Grok Bot alternatives (self-hosted and hosted)"
+    description: "A list of self-hosted and hosted Grok Bot alternatives."
   - href: "/alternatives/"
     title: "Best personal AI agents in 2026"
-    description: "Every hosted and open source agent we compare, in one table."
+    description: "Every hosted and self-hosted agent we compare, in one table."
   - href: "/blog/self-host-an-ai-agent/"
     title: "How to self-host an AI agent"
     description: "The published-image install for Ork."
@@ -44,7 +44,7 @@ faq:
   - question: "Can I pick the model in Claude Duet or Grok Bot?"
     answer: "No. Duet runs on Claude Opus 5.5, and the help center says you cannot choose a model. The Grok Bot docs do not describe connecting your own provider. Ork lets each bot use a different model, including Claude through your Pro or Max sign-in."
   - question: "Can I self-host Claude Duet or Grok Bot?"
-    answer: "Neither product's pages describe a self-hosted install. Duet runs on a cloud computer Anthropic operates. Grok Bot uses a cloud computer on your account, with an optional local computer for approved commands. Ork is Apache-2.0 and runs on hardware you control."
+    answer: "Neither product's pages describe a self-hosted install. Duet runs on a cloud computer Anthropic operates. Grok Bot uses a cloud computer on your account, with an optional local computer for approved commands. Ork combines an Apache-2.0 baseline with new PolyForm Noncommercial work and runs on hardware you control."
   - question: "Where do these details come from?"
     answer: "Anthropic's Duet announcement, product page, help center article, and safety post, xAI's Grok Bot docs and pricing page, and this project's source. They were read on October 24, 2026. Duet is a research preview, so check those pages before you rely on a detail."
 comparison:
@@ -74,7 +74,7 @@ comparison:
       cells:
         - "Pro at $20 a month, Max from $100"
         - "Paid Cursor plans, SuperGrok at $30 a month"
-        - "No seat fee. You pay the model and computer."
+        - "Noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model and computer."
     - topic: "Availability"
       cells:
         - "US only, from a waitlist"
@@ -84,8 +84,11 @@ comparison:
       cells:
         - "Hosted only"
         - "Hosted only"
-        - "Apache-2.0"
+        - "Apache baseline + PolyForm NC"
 ---
+
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
 
 Anthropic released Claude Duet on October 21, 2026, as a research preview. It joins Meta's Muse, OpenAI's Dots, Hark Pro, and xAI's Grok Bot as a hosted personal agent. All of them take work off your hands after you close the app. They differ in how many agents you get, who runs the computer, and whether you can pick the model.
 
@@ -113,7 +116,7 @@ Price follows a plan in both cases. Duet comes with Claude Pro at $20 a month an
 
 ## Where Ork fits
 
-Ork is the open source version of this shape. It is Apache-2.0, and it is in beta. You run it with the published Docker images or the desktop app, or use Ork Cloud, in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app.
+Ork is the source-available version of this shape. Its Apache baseline stays Apache, while new Ork work uses PolyForm Noncommercial or a paid commercial license. It is in beta. You run it with the published Docker images or the desktop app, or use Ork Cloud, in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app.
 
 Like Grok Bot, it is just chat once it is running. You create named bots and manage each one from its conversation. Each bot keeps memory, routines, and history. Routines are readable Markdown and can run on a schedule, so a morning brief is a routine you write, not a fixed feature. A bot can pause for approval at a boundary you set, and actions are recorded in an audit log.
 

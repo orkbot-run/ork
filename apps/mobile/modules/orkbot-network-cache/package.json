@@ -1,5 +1,6 @@
 {
   "name": "orkbot-network-cache",
   "version": "0.1.0",
-  "private": true
+  "private": true,
+  "license": "Apache-2.0"
 }

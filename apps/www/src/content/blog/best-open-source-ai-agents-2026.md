@@ -1,11 +1,11 @@
 ---
-title: "Best open source AI agents in 2026"
-description: "A look at open source agents you can run yourself in 2026, split into apps and libraries. There is no single best, and this is not a benchmark."
+title: "Open source and source-available AI agents in 2026"
+description: "Open source AI agents you can run in 2026, with Ork as a source-available comparison. Apps, libraries, and their different licenses. This is not a benchmark."
 published: "2026-10-07"
 updated: "2026-10-07"
 author: "Elie Steinbock"
 category: "roundups"
-tldr: "There is no single best open source agent. Ork, OpenClaw, Hermes Agent, OpenHands, and Goose are projects you can run. LangGraph and CrewAI are libraries for building your own. Dify's license is a modified Apache-2.0 with extra conditions. Pick the shape, then read that project's license."
+tldr: "There is no single best open source agent. OpenClaw, Hermes Agent, OpenHands, and Goose are projects you can run. Ork is included as a source-available comparison, with new work restricted to noncommercial use unless separately licensed. LangGraph and CrewAI are libraries for building your own. Dify's license is a modified Apache-2.0 with extra conditions. Pick the shape, then read that project's license."
 sources:
   - label: "Ork source"
     href: "https://github.com/orkbot-run/ork"
@@ -28,16 +28,16 @@ related:
     title: "OpenClaw vs Hermes Agent vs Ork"
     description: "Which of those three is simplest to run."
   - href: "/alternatives/"
-    title: "Open source alternatives"
-    description: "Comparisons with hosted assistants as well as open source ones."
+    title: "Self-hosted alternatives"
+    description: "Comparisons with hosted and self-hosted assistants, with each license listed."
   - href: "/self-hosted-ai-agent/"
     title: "Self-hosted AI agent"
     description: "How to run Ork from published images."
   - href: "/openclaw-alternative/"
-    title: "Open source OpenClaw alternative"
+    title: "Source-available OpenClaw alternative"
     description: "Ork and OpenClaw in more detail."
   - href: "/hermes-alternative/"
-    title: "Open source Hermes alternative"
+    title: "Source-available Hermes alternative"
     description: "Ork and Hermes Agent in more detail."
 faq:
   - question: "Is this a ranking?"
@@ -45,7 +45,7 @@ faq:
   - question: "Which of these is a chat app?"
     answer: "Ork is a web, desktop, and mobile chat app. OpenClaw is a gateway you message from other chat apps. Hermes Agent has a desktop app and a terminal UI. Goose has a desktop app, a CLI, and an API. OpenHands Agent Canvas is a developer control center. LangGraph and CrewAI are libraries."
   - question: "Are they all Apache-2.0?"
-    answer: "No. Ork and Goose use Apache-2.0. OpenClaw, Hermes Agent, OpenHands, LangGraph, and CrewAI use MIT on the license files checked for this page. Dify uses a modified Apache-2.0 with extra conditions on multi-tenant service and on its logo and copyright in the frontend."
+    answer: "No. Goose uses Apache-2.0. Ork keeps an Apache-2.0 baseline, while new Ork work uses PolyForm Noncommercial or a paid commercial license. OpenClaw, Hermes Agent, OpenHands, LangGraph, and CrewAI use MIT on the license files checked for this page. Dify uses a modified Apache-2.0 with extra conditions on multi-tenant service and on its logo and copyright in the frontend."
   - question: "Do I still pay if the software is open source?"
     answer: "Usually yes, for the model provider and the machine. Some projects also sell optional hosting. Open source describes the license of the code you run, not a promise of a zero-cost model."
 comparison:
@@ -58,7 +58,7 @@ comparison:
   rows:
     - topic: "Ork"
       cells:
-        - "Apache-2.0"
+        - "Apache baseline + PolyForm NC"
         - "Docker images or source, then chat"
         - "Persistent bots in the Ork apps"
     - topic: "OpenClaw"
@@ -93,6 +93,9 @@ comparison:
         - "Multi-agent workflows you build"
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
+
 "Best" is the word people type. It is a poor word for this set. An agent you chat with, a gateway for Telegram, a desktop coding control center, and a Python library are not substitutes. This page separates projects you run as applications from libraries you embed, names the license each repo actually uses, and says what each one is for. It is not a benchmark, and it is not ordered by stars.
 
 The descriptions were checked against each project's public repository or docs on October 7, 2026. If a README moves, the README wins.
@@ -109,7 +112,7 @@ Hosted products with no source you can run are outside this list. The [alternati
 
 ## Ork
 
-Ork is an open source platform for persistent AI teammates, licensed Apache-2.0. You run published Docker images or a source checkout. The web app, the Electron desktop app, and the Expo mobile app are clients of the same API. Run Ork on your own infrastructure.
+Ork is a source-available platform for persistent AI teammates. Its Apache baseline stays Apache. New Ork work uses PolyForm Noncommercial or a paid commercial license, so that work is not OSI open source. You run published Docker images or a source checkout. The web app, the Electron desktop app, and the Expo mobile app are clients of the same API. Run Ork on your own infrastructure.
 
 A bot has conversations, memory, routines, and history. Routines are readable Markdown and can run on a schedule. Browser, terminal, files, and a graphical desktop are available. The default computer is local Docker. E2B, Daytona, CreateOS, and Boat are optional remote computers. You bring model credentials: OpenAI, Anthropic, Google, OpenRouter, Vercel AI Gateway, an OpenAI-compatible endpoint, or a local server such as Ollama, LM Studio, llama.cpp, or MLX. Each bot can use a different model.
 
@@ -176,7 +179,7 @@ Dify, from LangGenius, often appears in lists of open source agent platforms. It
 
 The file says you may not use the Dify source to operate a multi-tenant environment unless Dify authorizes that in writing. In that document, one tenant corresponds to one workspace. It also says you may not remove or modify the logo or copyright information in the Dify console or applications when you use the frontend. That restriction does not apply to uses that do not involve the frontend. The frontend is defined there as the `web/` directory, or the web image when you run Docker.
 
-That is a short caveat, not a full review of the license. Read the file if you are choosing Dify. Do not describe it as the same grant as Ork's or Goose's Apache-2.0.
+That is a short caveat, not a full review of the license. Read the file if you are choosing Dify. Read Ork's license scope separately. Goose uses stock Apache-2.0.
 
 ## How to choose
 

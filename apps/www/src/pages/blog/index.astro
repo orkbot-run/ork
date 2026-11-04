@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { getCollection } from "astro:content";
 import type { BlogCategory } from "../../blog/categories";
 import { BLOG_CATEGORIES, CATEGORY_LABEL, categoryPath } from "../../blog/categories";
@@ -12,7 +14,7 @@ const posts = (await getCollection("blog")).sort(
 
 <SiteFrame
   title="Blog – Ork"
-  description="Notes on running an open source AI agent yourself, including setup and how Ork compares with other projects."
+  description="Notes on running a self-hosted AI agent, including setup and how Ork compares with other projects."
 >
   <h1>Blog</h1>
   <nav class="blog-cats" aria-label="Categories">

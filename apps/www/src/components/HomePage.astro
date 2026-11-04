@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { ANDROID_APP_STORE_URL } from "@orkbot/contracts/client-build";
 import Button from "./Button.astro";
 import Footer from "./Footer.astro";
@@ -443,7 +445,7 @@ const structuredData = homeStructuredData({
                   {stat.value === "stars"
                     ? starsLabel
                     : stat.value === "license"
-                      ? "Apache-2.0"
+                      ? "PolyForm + Apache"
                       : stat.value === "openSource"
                         ? copy.cta.openSourceValue
                         : copy.cta.selfHostValue}

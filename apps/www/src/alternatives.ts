@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { OPENCLAW_H1 } from "./guide";
 import { GROK_ALTERNATIVE_H1, GROK_ALTERNATIVE_PATH } from "./grok-alternative";
 import { DOCS_URL, GITHUB_URL, OPENCLAW_ALTERNATIVE_PATH } from "./site";
@@ -12,7 +14,7 @@ export const GET_STARTED = {
 } as const;
 
 export const OPEN_SOURCE_REASONS = [
-  "The source is Apache-2.0 and public on GitHub.",
+  "The source is public on GitHub. The Apache-2.0 baseline stays Apache-2.0. New Ork work uses PolyForm Noncommercial or a separate commercial license.",
   "You can run the published Docker images, or a source checkout, on a machine you control. The desktop app can start that stack locally or connect to a server you already run.",
   "You bring the model credentials. Connector credentials are encrypted on the server and are not returned by the API.",
   "Routines are readable Markdown. A bot can pause for approval at a boundary you set, and actions are recorded in an audit log.",
@@ -63,10 +65,10 @@ export type Alternative = {
 
 export const ALTERNATIVES_HUB = {
   title:
-    "Best Personal AI Agents in 2026: Grok Bot, Muse, Dots, Instinct, Hark Pro & Open Source Alternatives",
+    "Best Personal AI Agents in 2026: Grok Bot, Muse, Dots, Instinct, Hark Pro & Self-Hosted Alternatives",
   description:
     "A dated comparison of Grok Bot, Meta Muse, OpenAI Dots, Instinct, Claude Duet, Hark Pro, OpenClaw, Hermes Agent, and Ork. Licenses, self-hosting, model choice, price, setup, and whether you manage the agent from chat.",
-  h1: "Best Personal AI Agents in 2026: Grok Bot, Muse, Dots, Instinct, Hark Pro & Open Source Alternatives",
+  h1: "Best Personal AI Agents in 2026: Grok Bot, Muse, Dots, Instinct, Hark Pro & Self-Hosted Alternatives",
   intro:
     "These are different products that all take on work beyond a single reply. This page compares their public descriptions, read between October 7 and October 24, 2026. It is not a score, a benchmark, or a claim that one of them is best at every task.",
 } as const;
@@ -176,20 +178,20 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "muse-alternative",
     name: "Muse",
     summary: "Meta's personal AI agent, and what is different when you host Ork yourself.",
-    title: "Open Source Meta Muse Alternative – Ork",
+    title: "Source-Available Meta Muse Alternative - Ork",
     description:
-      "Ork is an open source, self-hostable platform for persistent AI teammates. Compare it with Meta's Muse personal agent.",
-    h1: "Open source Meta Muse alternative",
+      "Ork is a source-available, self-hostable platform for persistent AI teammates. Compare it with Meta's Muse personal agent.",
+    h1: "Source-available Meta Muse alternative",
     comparedOn: "October 7, 2026",
     otherName: "Muse",
     intro: [
       "Muse is Meta's personal AI agent, introduced on September 8, 2026. It runs on a virtual machine Meta operates, and you talk to it in the Muse app or WhatsApp. Meta says it can keep working after you close the app.",
-      "Ork is open source software for persistent AI teammates. You choose the model and the computer, and you can run the stack yourself. This is a comparison of public descriptions, not a measured benchmark.",
+      "Ork is source-available software for persistent AI teammates. You choose the model and the computer, and you can run the stack yourself. This is a comparison of public descriptions, not a measured benchmark.",
     ],
     rows: [
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "Meta's personal AI agent. Meta says it takes on tasks and longer-term goals, rather than only answering questions.",
       },
@@ -202,7 +204,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
       {
         topic: "Source",
-        orkbot: "Apache-2.0 source on GitHub.",
+        orkbot: "Apache-2.0 baseline, new Ork work under PolyForm Noncommercial or a commercial license.",
         other: "Hosted service from Meta.",
       },
       {
@@ -251,7 +253,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Ork a replacement for Muse?",
         answer:
-          "No. Muse is Meta's hosted personal agent, with the Muse app, WhatsApp, and a virtual machine Meta operates. Ork is open source software for persistent AI teammates on infrastructure you control. Both can keep working beyond a single chat. They differ on hosting, model choice, and which products are built in.",
+          "No. Muse is Meta's hosted personal agent, with the Muse app, WhatsApp, and a virtual machine Meta operates. Ork is source-available software for persistent AI teammates on infrastructure you control. Both can keep working beyond a single chat. They differ on hosting, model choice, and which products are built in.",
       },
       {
         question: "Can I self-host Ork?",
@@ -275,20 +277,20 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "dots-alternative",
     name: "Dots",
     summary: "OpenAI's always-on agents, in a shorter comparison.",
-    title: "Open Source OpenAI Dots Alternative – Ork",
+    title: "Source-Available OpenAI Dots Alternative - Ork",
     description:
-      "Ork is an open source, self-hostable platform for persistent AI teammates. Compare it with OpenAI's Dots agents.",
-    h1: "Open source OpenAI Dots alternative",
+      "Ork is a source-available, self-hostable platform for persistent AI teammates. Compare it with OpenAI's Dots agents.",
+    h1: "Source-available OpenAI Dots alternative",
     comparedOn: "October 7, 2026",
     otherName: "Dots",
     intro: [
       "Dots are OpenAI's always-on agents, announced on September 29, 2026. OpenAI says they use GPT-6 Astra, have their own cloud computer, and are rolling out on eligible Pro, Business Premium, and Enterprise plans.",
-      "Ork is separate software: open source AI teammates you can host yourself, with model credentials you bring.",
+      "Ork is separate software: source-available AI teammates you can host yourself, with model credentials you bring.",
     ],
     rows: [
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "Always-on agents from OpenAI. OpenAI says a dot learns from feedback and can work toward your goals continuously.",
       },
@@ -300,7 +302,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
       {
         topic: "Source",
-        orkbot: "Apache-2.0 source on GitHub.",
+        orkbot: "Apache-2.0 baseline, new Ork work under PolyForm Noncommercial or a commercial license.",
         other: "Hosted product from OpenAI.",
       },
       {
@@ -335,7 +337,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Ork a replacement for a dot?",
         answer:
-          "No. A dot is an OpenAI agent on an eligible ChatGPT plan. Ork is open source software you run yourself, with your own model credentials.",
+          "No. A dot is an OpenAI agent on an eligible ChatGPT plan. Ork is source-available software you run yourself, with your own model credentials.",
       },
       {
         question: "Do I need an OpenAI account to use Ork?",
@@ -354,20 +356,20 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "instinct-alternative",
     name: "Instinct",
     summary: "A hosted personal assistant you text or call, and what is different when you host Ork yourself.",
-    title: "Open Source Instinct AI Alternative – Ork",
+    title: "Source-Available Instinct AI Alternative - Ork",
     description:
-      "Ork is an open source, self-hostable platform for persistent AI teammates. Compare it with Instinct, the personal assistant you text or call.",
-    h1: "Open source Instinct AI alternative",
+      "Ork is a source-available, self-hostable platform for persistent AI teammates. Compare it with Instinct, the personal assistant you text or call.",
+    h1: "Source-available Instinct AI alternative",
     comparedOn: "October 7, 2026",
     otherName: "Instinct",
     intro: [
       "Instinct is a personal assistant operated by Spear Street Technology, Inc. The homepage says there are no new interfaces: you text or call it, and it can use a phone and a computer the way a person does. Examples on that page include disputing a bill, sending gifts, ordering groceries, scheduling a doctor's appointment, and planning a trip.",
-      "Ork is open source software for persistent AI teammates. You choose the model and the computer, and you can run the stack yourself. This is a comparison of public descriptions, not a measured benchmark.",
+      "Ork is source-available software for persistent AI teammates. You choose the model and the computer, and you can run the stack yourself. This is a comparison of public descriptions, not a measured benchmark.",
     ],
     rows: [
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "A personal assistant. The privacy policy, revised August 26, 2026, calls it an autonomous assistant that thinks, plans, and acts on everyday tasks.",
       },
@@ -380,7 +382,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
       {
         topic: "Source",
-        orkbot: "Apache-2.0 source on GitHub.",
+        orkbot: "Apache-2.0 baseline, new Ork work under PolyForm Noncommercial or a commercial license.",
         other: "Hosted service. The terms say the company owns the service and the technology that produces its actions.",
       },
       {
@@ -430,7 +432,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Ork a replacement for Instinct?",
         answer:
-          "No. Instinct is a hosted personal assistant you text or call, operated by Spear Street Technology, Inc. Ork is open source software for persistent AI teammates on infrastructure you control. Both can take on tasks beyond a single reply. They differ on hosting, model choice, and who operates the computer.",
+          "No. Instinct is a hosted personal assistant you text or call, operated by Spear Street Technology, Inc. Ork is source-available software for persistent AI teammates on infrastructure you control. Both can take on tasks beyond a single reply. They differ on hosting, model choice, and who operates the computer.",
       },
       {
         question: "Can I self-host Ork?",
@@ -454,16 +456,16 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "hermes-alternative",
     name: "Hermes",
     summary: "Nous Research's open source agent. Ork keeps setup and daily use in chat.",
-    title: "Open Source Hermes Agent Alternative – Ork",
+    title: "Source-Available Hermes Agent Alternative - Ork",
     description:
-      "Ork is an open source, self-hosted AI agent with a chat interface. Compare its setup with Hermes Agent, the MIT-licensed agent from Nous Research.",
-    h1: "Open source Hermes Agent alternative",
+      "Ork is a source-available, self-hosted AI agent with a chat interface. Compare its setup with Hermes Agent, the MIT-licensed agent from Nous Research.",
+    h1: "Source-available Hermes Agent alternative",
     comparedOn: "October 7, 2026",
     otherName: "Hermes Agent",
     intro: [
       "Hermes Agent is Nous Research's open source AI agent, released under the MIT license. You can run it on your own machine. The project site also offers optional Nous Portal credits and cloud hosting.",
       "The main difference is simplicity. Like Grok Bot, Ork is just chat: you set up the bot and manage it from that chat. Hermes documents a desktop app and a command-line quickstart. Desktop onboarding can reach a first message without the CLI. The quickstart is an installer, a setup wizard, a model command, and config files. Messaging platforms are a separate gateway.",
-      "Both are open source and can run on hardware you control. This comparison uses each project's public docs. It is not a measured benchmark.",
+      "Both can run on hardware you control. Ork is source-available, and Hermes Agent uses MIT. This comparison uses each project's public docs. It is not a measured benchmark.",
     ],
     sections: [
       {
@@ -499,13 +501,13 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "Nous Research describes a self-improving agent: it creates skills from experience, keeps memory across sessions, and can run scheduled jobs. The README also documents a terminal UI and a messaging gateway.",
       },
       {
         topic: "Source",
-        orkbot: "Apache-2.0 source on GitHub.",
+        orkbot: "Apache-2.0 baseline, new Ork work under PolyForm Noncommercial or a commercial license.",
         other: "MIT source on GitHub, built by Nous Research.",
       },
       {
@@ -560,7 +562,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Ork a drop-in replacement for Hermes Agent?",
         answer:
-          "No. Ork does not import Hermes config, skills, or gateway sessions. Both are open source agents you can run yourself. They differ in license, interface, and how much of the setup lives in a chat versus Hermes's CLI and desktop settings.",
+          "No. Ork does not import Hermes config, skills, or gateway sessions. Both are agents you can run yourself. Ork is source-available, and Hermes Agent uses MIT. They differ in license, interface, and how much of the setup lives in a chat versus Hermes's CLI and desktop settings.",
       },
       {
         question: "Do both keep the software on my machine?",
@@ -579,20 +581,20 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "claude-duet-alternative",
     name: "Claude Duet",
     summary: "Anthropic's proactive personal agent, and what is different when you host Ork yourself.",
-    title: "Open Source Claude Duet Alternative – Ork",
+    title: "Source-Available Claude Duet Alternative - Ork",
     description:
-      "Ork is an open source, self-hostable platform for persistent AI teammates. Compare it with Claude Duet, Anthropic's personal agent.",
-    h1: "Open source Claude Duet alternative",
+      "Ork is a source-available, self-hostable platform for persistent AI teammates. Compare it with Claude Duet, Anthropic's personal agent.",
+    h1: "Source-available Claude Duet alternative",
     comparedOn: "October 24, 2026",
     otherName: "Claude Duet",
     intro: [
       "Claude Duet is Anthropic's proactive personal agent, released as a research preview on October 21, 2026. You message it like a person. It sends a morning brief, checks your connected accounts, and works on a cloud computer Anthropic runs.",
-      "Ork is open source software for persistent AI teammates. You run it, you choose the model, and you can have more than one bot. Ork can also sign in with your Claude Pro or Max subscription.",
+      "Ork is source-available software for persistent AI teammates. You run it, you choose the model, and you can have more than one bot. Ork can also sign in with your Claude Pro or Max subscription.",
     ],
     rows: [
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "A standalone Anthropic app with one ongoing thread, by text or voice. Anthropic says it is for professionals and small business owners.",
       },
@@ -605,7 +607,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       },
       {
         topic: "Source",
-        orkbot: "Apache-2.0 source on GitHub.",
+        orkbot: "Apache-2.0 baseline, new Ork work under PolyForm Noncommercial or a commercial license.",
         other: "Hosted service from Anthropic. Its pages do not describe self-hosting.",
       },
       {
@@ -645,7 +647,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Claude Duet open source or self-hosted?",
         answer:
-          "Anthropic's Duet pages do not describe source you can run or a self-hosted install. Duet runs on a cloud computer Anthropic operates. Ork is Apache-2.0, and you can run it yourself.",
+          "Anthropic's Duet pages do not describe source you can run or a self-hosted install. Duet runs on a cloud computer Anthropic operates. Ork combines an Apache-2.0 baseline with new PolyForm Noncommercial work, and you can run it yourself.",
       },
       {
         question: "Where do the Claude Duet details come from?",
@@ -659,10 +661,10 @@ export const ALTERNATIVES: readonly Alternative[] = [
     slug: "hark-alternative",
     name: "Hark",
     summary: "A hosted personal agent. After install, Ork stays in chat on a stack you run.",
-    title: "Open Source Hark Pro Alternative – Ork",
+    title: "Source-Available Hark Pro Alternative - Ork",
     description:
-      "Ork is an open source, self-hosted AI agent with a chat interface. Compare it with Hark Pro, the hosted personal agent at hark.com.",
-    h1: "Open source Hark Pro alternative",
+      "Ork is a source-available, self-hosted AI agent with a chat interface. Compare it with Hark Pro, the hosted personal agent at hark.com.",
+    h1: "Source-available Hark Pro alternative",
     comparedOn: "October 7, 2026",
     otherName: "Hark Pro",
     intro: [
@@ -673,7 +675,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
     rows: [
       {
         topic: "Product",
-        orkbot: "Open source platform for persistent AI teammates. Ork is in beta.",
+        orkbot: "Source-available platform for persistent AI teammates. Ork is in beta.",
         other:
           "Hark Pro, a hosted personal agent launched October 6, 2026, on the web, iOS, and Android. Hark says it remembers what you tell it and can act on the web.",
       },
@@ -687,7 +689,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         topic: "Price",
         orkbot:
-          "No seat fee for the open source software. You pay the model and computer providers you use.",
+          "Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model and computer providers you use.",
         other:
           "Free, including the features named in the launch article. $20 a month is twice the usage. $100 a month is ten times the usage.",
       },
@@ -745,7 +747,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Is Ork a replacement for Hark Pro?",
         answer:
-          "No. Hark Pro is a hosted personal agent at hark.com, operated by Hark Labs, Inc. Ork is open source software for persistent AI teammates on infrastructure you control. Both can take on tasks from a conversation. They differ on hosting, model choice, and who operates the computer.",
+          "No. Hark Pro is a hosted personal agent at hark.com, operated by Hark Labs, Inc. Ork is source-available software for persistent AI teammates on infrastructure you control. Both can take on tasks from a conversation. They differ on hosting, model choice, and who operates the computer.",
       },
       {
         question: "Can I self-host Ork?",
@@ -795,7 +797,7 @@ const OPENCLAW_HUB_CARD: HubCard = {
   href: OPENCLAW_ALTERNATIVE_PATH,
   name: "OpenClaw",
   h1: OPENCLAW_H1,
-  summary: "An open source agent you run yourself. Ork stays in chat; OpenClaw's docs add a gateway and a config file.",
+  summary: "A source-available agent you run yourself. Ork stays in chat. OpenClaw's docs add a gateway and a config file.",
 };
 
 export const HUB_CARDS: readonly HubCard[] = [
@@ -856,7 +858,7 @@ export function alternativeMarkdown(alternative: Alternative): string {
       (row) => `| ${cell(row.topic)} | ${cell(row.orkbot)} | ${cell(row.other)} |`,
     ),
     "",
-    "## Why open source and self-hosted",
+    "## Why source-available and self-hosted",
     "",
     ...OPEN_SOURCE_REASONS.map((reason) => `- ${reason}`),
     "",

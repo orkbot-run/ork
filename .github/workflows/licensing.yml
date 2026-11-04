@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors
+name: Dependency license inventory
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: licensing-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  inventory:
+    name: Dependency license inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install dependency metadata without lifecycle scripts
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Test source notices and license report sanitization
+        run: pnpm test:licenses
+      - name: Check source license notices
+        run: pnpm licenses:check
+      - name: Inventory production and development dependencies
+        run: node scripts/dependency-licenses.mjs
+      - name: Upload sanitized inventory and review items
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: dependency-license-inventory
+          path: |
+            test-report/dependency-licenses/production.json
+            test-report/dependency-licenses/all.json
+            test-report/dependency-licenses/review-required.json
+          if-no-files-found: error

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { HOSTED_SANDBOXES_TABLE } from "./compare";
 import {
   DAYTONA_CREDIT,
@@ -36,7 +38,7 @@ export const daytona: Sandbox = {
   h1: "Daytona sandboxes for AI agents: pricing, limits and alternatives",
   intro: [
     "[Daytona](https://www.daytona.io) is a hosted service for running AI-generated code in sandboxes. Each sandbox is an isolated Linux machine with its own disk, which can be stopped, archived and started again later.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. If your team already uses Daytona, a self-hosted Ork can put those computers there. Daytona supplies the sandbox. Ork installs the desktop, gives each bot its own screen, saves its work, and decides when the sandbox stops.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. If your team already uses Daytona, a self-hosted Ork can put those computers there. Daytona supplies the sandbox. Ork installs the desktop, gives each bot its own screen, saves its work, and decides when the sandbox stops.",
     "This page covers what Daytona costs as of November 2026, the limits that catch people out, what its move to closed source means, and how it compares with E2B, Modal, Vercel Sandbox and the rest.",
   ],
   scene: {

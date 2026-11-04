@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { getCollection } from "astro:content";
 import type { APIRoute } from "astro";
 import { SITE_NAME, SITE_URL } from "../../site";
@@ -31,7 +33,7 @@ export const GET: APIRoute = async () => {
 <channel>
   <title>${SITE_NAME} blog</title>
   <link>${SITE_URL}/blog/</link>
-  <description>Notes on running an open source AI agent yourself.</description>
+  <description>Notes on running a self-hosted AI agent.</description>
 ${items}
 </channel>
 </rss>

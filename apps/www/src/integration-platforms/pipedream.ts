@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { IntegrationPlatform } from "./types";
 import {
   ARCADE,
@@ -44,7 +46,7 @@ export const pipedream: IntegrationPlatform = {
   h1: "Pipedream Connect for AI agents: pricing, MCP and alternatives",
   intro: [
     `[Pipedream Connect](https://pipedream.com/connect) is the part of Pipedream that lets AI agents act in other apps on behalf of each user. Pipedream runs the sign-in for each app, stores the tokens, and serves the app's actions as tools from a remote MCP server. Development is free; production starts at ${YEARLY} a month billed yearly. Pipedream is owned by Workday.`,
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and bots use tools in your apps as well as their own computer. When you host Ork yourself, a Pipedream Connect project can supply the apps people connect. Pipedream supplies the tools and logins. Ork picks which connected account each bot acts as and asks you before anything that changes data.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and bots use tools in your apps as well as their own computer. When you host Ork yourself, a Pipedream Connect project can supply the apps people connect. Pipedream supplies the tools and logins. Ork picks which connected account each bot acts as and asks you before anything that changes data.",
   ],
   scene: {
     bot: "Account Manager",

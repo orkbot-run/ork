@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { ByokTier, ComputerSize, SandboxKind } from "@orkbot/contracts";
 import {
   BYOK_TIERS,
@@ -70,9 +72,10 @@ const CREDITS_PRICE = `From ${dollars(MODEL_CREDIT_AMOUNTS[0])}/mo`;
 export const PRICING_PLANS: PricingPlan[] = [
   {
     name: "Self-hosted",
-    price: "Free",
+    price: "Free for noncommercial use",
+    note: "Commercial use of new Ork work needs a paid license",
     features: [
-      "Open source, Apache-2.0",
+      "Source-available: PolyForm NC + Apache baseline",
       "Your server or your own computer",
       "Bot computers in Docker or a sandbox",
       "Any model you connect",
@@ -135,7 +138,7 @@ const included = (cell: PricingCell): PricingCell[] => Array(COLUMN_COUNT).fill(
 
 export const PRICING_COMPARISON = {
   columns: [
-    { name: "Self-hosted", price: "Free" },
+    { name: "Self-hosted", price: "Free for noncommercial use" },
     ...TIERS.map((tier) => ({ name: tier.name, price: tier.price })),
     { name: "Ork credits", price: CREDITS_PRICE },
   ],
@@ -196,7 +199,7 @@ export const PRICING_COMPARISON = {
         false,
       ],
     },
-    { feature: "Open source", cells: included(true) },
+    { feature: "Source available", cells: included(true) },
   ] satisfies { feature: string; hint?: string; cells: PricingCell[] }[],
 };
 
@@ -213,6 +216,10 @@ ${plan.features.map((feature) => `- ${feature}`).join("\n")}
 export const PRICING_MARKDOWN = `# Ork pricing
 
 ${PRICING_PLANS.slice(0, 1).map(planMarkdown).join("\n\n")}
+
+## Commercial self-hosting
+
+Commercial use of new Ork work, including internal business automation, requires a paid license. Pricing is quoted individually. [Licensing and contact](https://orkbot.run/license/).
 
 You pay the model, computer, and integration providers you choose to use.
 `;

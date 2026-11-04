@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL, SITE_NAME, SITE_URL } from "./site";
 
 export type HomeFaqItem = {
@@ -56,16 +58,10 @@ export function homeStructuredData(input: HomeStructuredDataInput) {
         applicationCategory: "BusinessApplication",
         applicationSubCategory: "AI agent platform",
         operatingSystem: "Web, macOS, Windows, Linux, iOS, Android",
-        isAccessibleForFree: true,
         codeRepository: GITHUB_URL,
-        license: `${GITHUB_URL}/blob/main/LICENSE`,
+        license: `${SITE_URL}/license/`,
         provider: { "@id": `${SITE_URL}/#organization` },
         inLanguage: input.availableLanguages,
-        offers: {
-          "@type": "Offer",
-          price: "0",
-          priceCurrency: "USD",
-        },
       },
       ...(input.faq && input.faq.length > 0
         ? [

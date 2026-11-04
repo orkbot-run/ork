@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { SourceLink } from "../alternatives";
 import { absolute, articleMarkdown, cell, sectionMarkdown } from "../provider-article/markdown";
 import type { ArticleHub, ArticleLink, ArticleSection } from "../provider-article/types";
@@ -250,7 +252,7 @@ export const SANDBOXES_HUB = {
   h1: "Best sandboxes for AI agents in 2026",
   intro: [
     "An AI agent that only chats can't do much. To clean up an inbox, research a list of companies or fix a bug, it needs a computer: a browser it can sign in with, files it can keep, and a terminal to run things in. A sandbox is that computer, kept apart from yours so a mistake stays contained.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer. You can watch its screen and take over at any moment. Where that computer runs is your choice: a hosted sandbox, a container on your own server, a Kubernetes cluster, or your own Mac or PC. This page compares every option Ork supports, with prices as of November 2026, and the popular sandboxes it doesn't support, so you can see where they fit.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer. You can watch its screen and take over at any moment. Where that computer runs is your choice: a hosted sandbox, a container on your own server, a Kubernetes cluster, or your own Mac or PC. This page compares every option Ork supports, with prices as of November 2026, and the popular sandboxes it doesn't support, so you can see where they fit.",
   ],
   scene: {
     bot: "Inbox Manager",

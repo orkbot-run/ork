@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   BOAT,
@@ -31,7 +33,7 @@ export const docker: Sandbox = {
   h1: "Run AI agents in Docker, on your own machine",
   intro: [
     "An AI agent that does real work needs a computer: a browser, a terminal and somewhere to keep files. With Docker, that computer is a container on a machine you control. Nothing runs in someone else's cloud, and you don't need an account with a sandbox provider.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. When you [host Ork yourself](/self-hosted-ai-agent/), Docker is the default: the same install that starts Ork also starts your bots' computers next to it.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. When you [host Ork yourself](/self-hosted-ai-agent/), Docker is the default: the same install that starts Ork also starts your bots' computers next to it.",
   ],
   scene: {
     bot: "Talent Scout",
@@ -61,7 +63,7 @@ export const docker: Sandbox = {
     {
       heading: "What Docker computers cost",
       paragraphs: [
-        "Docker Engine and Ork are free and open source, so the cost is the machine they run on. A server costs the same whether bots work one hour a day or all day, which is the main difference from hosted sandboxes that bill by the second.",
+        "Docker Engine is open source. Ork is free for permitted noncommercial use. Commercial use of new Ork work requires a paid license. You also pay for the machine they run on. A server costs the same whether bots work one hour a day or all day, which is the main difference from hosted sandboxes that bill by the second.",
         `Each computer is capped at ${DOCKER_MEMORY.computerGb} GB of memory and 2 CPUs by default. Most of the time a bot's desktop is waiting on the model, so memory usually runs out before CPU does. The table assumes about ${DOCKER_MEMORY.orkbotGb} GB for Ork itself and its database, and ${DOCKER_MEMORY.computerGb} GB for each computer.`,
       ],
       table: {
