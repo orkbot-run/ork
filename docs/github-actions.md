@@ -38,6 +38,8 @@ The review fallback labels are `review:cr` and `review:greptile`. Install the Qo
 
 GHCR publication needs permission for the repository workflow to create and write packages in its organization. If organization package policy denies that, an organization owner must allow it. No manually stored registry token is required for the normal GHCR path.
 
+After the first GHCR publication, set the `app`, `updater`, and `computer` packages to **Public** in their GitHub package settings so installers can pull them anonymously. New container packages default to private, and inheriting repository access does not change their visibility. See [Container registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) and [package visibility settings](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility).
+
 ## Expo and mobile production releases
 
 Create an Expo account and an EAS project owned by the Ork operator. Set these repository entries:

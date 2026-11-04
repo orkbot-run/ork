@@ -85,7 +85,8 @@ jobs:
         run: pnpm --filter @orkbot/desktop exec electron-builder --mac --publish never -c.mac.identity=null -c.mac.notarize=false -c.forceCodeSigning=false
       - name: Package unsigned Windows installer
         if: runner.os == 'Windows'
-        run: pnpm --filter @orkbot/desktop exec electron-builder --win --x64 --publish never -c.forceCodeSigning=false -c.win.signAndEditExecutable=false
+        shell: bash
+        run: pnpm --filter @orkbot/desktop exec electron-builder --win --x64 --publish never "-c.forceCodeSigning=false" "-c.win.signAndEditExecutable=false"
       - name: Package unsigned Linux AppImage
         if: runner.os == 'Linux'
         run: pnpm --filter @orkbot/desktop exec electron-builder --linux --x64 --publish never

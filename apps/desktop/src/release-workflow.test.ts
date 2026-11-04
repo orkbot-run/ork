@@ -13,6 +13,7 @@ const expression = (inner: string) => `\${{ ${inner} }}`;
 
 interface WorkflowStep {
   id?: string;
+  shell?: string;
   uses?: string;
   run?: string;
   env?: Record<string, string>;
@@ -58,6 +59,8 @@ describe("desktop release workflow", () => {
     expect(diagnostic.env?.ORKBOT_ENABLE_AUTO_UPDATE).toBe("0");
     expect(diagnostic.env?.ORKBOT_LINUX_UPDATE_PUBLIC_KEY).toBe("");
     expect(diagnostic.permissions?.contents ?? definition.permissions.contents).toBe("read");
+    const windowsInstaller = diagnostic.steps.find((step) => step.run?.includes("--win --x64"));
+    expect(windowsInstaller?.shell).toBe("bash");
     const artifact = diagnostic.steps.find((step) =>
       step.uses?.startsWith("actions/upload-artifact@"),
     );
