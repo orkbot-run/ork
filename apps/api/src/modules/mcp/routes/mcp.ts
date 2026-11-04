@@ -39,8 +39,16 @@ import {
   lockOwner,
   serverAvailability,
   serverSecretSpace,
-} from "../availability.js";
-import { searchIntegrationCatalog } from "../integration-catalog.js";
+} from "../../../availability.js";
+import { searchIntegrationCatalog } from "../../../integration-catalog.js";
+import { installPlugin, lockPluginInstalls, setPluginParts } from "../../../plugin-installs.js";
+import {
+  approvedPluginEntries,
+  listPluginSubmissions,
+  reviewPluginSubmission,
+} from "../../../plugin-submissions.js";
+import type { RouterContext } from "../../../routes/context.js";
+import { computerContext, isUniqueViolation } from "../../../routes/shared.js";
 import {
   queueMcpConnectedRun,
   resolveMcpApprovalCards,
@@ -57,14 +65,6 @@ import {
   mcpAssignmentDto,
   mcpServerDto,
 } from "../mcp-servers.js";
-import { installPlugin, lockPluginInstalls, setPluginParts } from "../plugin-installs.js";
-import {
-  approvedPluginEntries,
-  listPluginSubmissions,
-  reviewPluginSubmission,
-} from "../plugin-submissions.js";
-import type { RouterContext } from "./context.js";
-import { computerContext, isUniqueViolation } from "./shared.js";
 
 export function mcpRoutes(ctx: RouterContext) {
   const {

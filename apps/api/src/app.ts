@@ -157,6 +157,7 @@ import {
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
   TeamChatStartupRetries,
 } from "#modules/bots/team-chat-startup";
+import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
   createMessagingInboundHandler,
@@ -188,7 +189,6 @@ import { startHourlySweep } from "./hourly-sweep.js";
 import { trackInFlightRequests } from "./in-flight-requests.js";
 import { mountLocalComputerHost } from "./local-settings.js";
 import { marketingEmailRoutes, sendWelcomeEmail } from "./marketing-email.js";
-import { moveMcpArgsIntoSecrets } from "./mcp-args-migration.js";
 import { monitoringRoutes } from "./monitoring.js";
 import { pluginSubmissionRoutes } from "./plugin-submissions.js";
 import { sendReferralEmails } from "./referral-email.js";

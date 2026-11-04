@@ -33,7 +33,7 @@ import {
   writeModelRole,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { mayUsePrivateEndpoint } from "./mcp-servers.js";
+import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
 import { assertNoDanglingModelPins } from "./model-pins.js";
 import type { RouterDeps } from "./router.js";
 import { withSerializableRetry } from "./serializable-retry.js";

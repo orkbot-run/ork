@@ -14,12 +14,12 @@ import { itemSecretIn, spaceAvailability } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { isAdmin } from "#modules/accounts/admins";
-import { assertNameFreeWhereAvailable, userAddedAvailability } from "./availability.js";
+import { assertNameFreeWhereAvailable, userAddedAvailability } from "../../availability.js";
+import type { RouterDeps } from "../../router.js";
+import { computerContext } from "../../routes/shared.js";
 import { dismissMcpServerApprovals } from "./mcp-approval.js";
 import type { McpSecretMaterial } from "./mcp-material.js";
 import { legacyMcpArgs } from "./mcp-material.js";
-import type { RouterDeps } from "./router.js";
-import { computerContext } from "./routes/shared.js";
 
 export function mcpServerDto(
   row: {

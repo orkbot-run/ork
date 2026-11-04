@@ -7,7 +7,7 @@ import type { PrismaClient } from "@orkbot/db";
 import { createDb, runAsSystem } from "@orkbot/db";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createApp } from "./app.js";
+import { createApp } from "../../app.js";
 import { moveMcpArgsIntoSecrets } from "./mcp-args-migration.js";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);

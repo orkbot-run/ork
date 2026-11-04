@@ -42,7 +42,7 @@ import {
   writeModelRole,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { mayUsePrivateEndpoint } from "../mcp-servers.js";
+import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {
   modelConnectionTarget,

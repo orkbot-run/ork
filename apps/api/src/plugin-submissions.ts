@@ -28,8 +28,8 @@ import type { PluginSubmission as PluginSubmissionRow, PrismaClient } from "@ork
 import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { assertMcpRemoteEndpoint } from "#modules/mcp/mcp-servers";
 import { readBoundedBody } from "./http-body.js";
-import { assertMcpRemoteEndpoint } from "./mcp-servers.js";
 import type { RouterDeps } from "./router.js";
 import { throttleKey, windowCounter } from "./window-counter.js";
 
