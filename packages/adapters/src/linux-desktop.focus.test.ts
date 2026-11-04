@@ -2,8 +2,8 @@ import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AdapterContext, ComputerAction, ComputerRef } from "@rakazo/adapter-kit";
-import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
+import type { AdapterContext, ComputerAction, ComputerRef } from "@orkbot/adapter-kit";
+import { browserProfilePathForScreen } from "@orkbot/core/node/desktop-runtime";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { LinuxDesktop } from "./linux-desktop.js";
 
@@ -68,14 +68,14 @@ async function focusCommand(action: ComputerAction) {
   const runs: string[] = [];
   const desktop = new LinuxDesktop({
     environment: async () => ({
-      homeDir: "/home/rakazo",
+      homeDir: "/home/orkbot",
       workspaceDir: workspace,
-      browserProfilesDir: "/home/rakazo/.browser-profiles",
+      browserProfilesDir: "/home/orkbot/.browser-profiles",
       displayStart: 1,
     }),
     run: async (_computer, command) => {
       runs.push(command);
-      if (runs.length === 1) return { code: 0, stdout: "RAKAZO_DESKTOP=0:token\n" };
+      if (runs.length === 1) return { code: 0, stdout: "ORKBOT_DESKTOP=0:token\n" };
       return { code: 0, stdout: "" };
     },
     screenUrl: async () => "http://screen.example",
@@ -205,9 +205,9 @@ describe("provider focus command", () => {
     "raises the browser window for this screen's profile",
     async () => {
       const env = {
-        homeDir: "/home/rakazo",
+        homeDir: "/home/orkbot",
         workspaceDir: workspace,
-        browserProfilesDir: "/home/rakazo/.browser-profiles",
+        browserProfilesDir: "/home/orkbot/.browser-profiles",
         displayStart: 1,
       };
       const mine = browserProfilePathForScreen("bot-1", env);
@@ -245,7 +245,7 @@ describe("provider focus command", () => {
       application: "firefox",
       uri: "https://example.test",
     });
-    expect(command).toContain("nohup /tmp/rakazo/browser-launch-1 'https://example.test'");
+    expect(command).toContain("nohup /tmp/orkbot/browser-launch-1 'https://example.test'");
     expect(command).toContain(
       "in chromium|chromium-browser|google-chrome|google-chrome-stable|chrome|brave-browser)",
     );

@@ -1,4 +1,4 @@
-import type { ThreadMessage } from "@rakazo/contracts";
+import type { ThreadMessage } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { projectMessageReactions } from "./message-reactions.js";
 import {

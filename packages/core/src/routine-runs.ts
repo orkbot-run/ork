@@ -1,5 +1,5 @@
-import type { RoutineHistory, RoutineRun, RoutineRunCursor } from "@rakazo/contracts";
-import { ROUTINE_HISTORY_FIRST_PAGE_SIZE, ROUTINE_HISTORY_PAGE_SIZE } from "@rakazo/contracts";
+import type { RoutineHistory, RoutineRun, RoutineRunCursor } from "@orkbot/contracts";
+import { ROUTINE_HISTORY_FIRST_PAGE_SIZE, ROUTINE_HISTORY_PAGE_SIZE } from "@orkbot/contracts";
 
 /**
  * Compact human duration, e.g. "850ms", "4.2s", "1m 05s".

@@ -1,4 +1,4 @@
-import type { AutoReviewResult } from "@rakazo/adapter-kit";
+import type { AutoReviewResult } from "@orkbot/adapter-kit";
 import type { AutoReviewChecker } from "./auto-review.js";
 
 /** A deliberate ask is final. Only unavailable checkers advance to an ordered backup. */

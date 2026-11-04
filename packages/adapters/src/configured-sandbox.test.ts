@@ -1,5 +1,5 @@
-import type { ComputerRef } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { ComputerRef } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import type { ComputerProviderSelection, StoredComputerSettings } from "./configured-sandbox.js";
 import {

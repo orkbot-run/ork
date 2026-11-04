@@ -1,11 +1,11 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Messaging
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///messaging"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///messaging"
 - extendedWaitUntil:
     visible: ".*#launch.*"
     timeout: 15000

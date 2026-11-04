@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { Bot } from "@rakazo/contracts";
-import type * as CoreModule from "@rakazo/core";
+import type { Bot } from "@orkbot/contracts";
+import type * as CoreModule from "@orkbot/core";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -25,7 +25,7 @@ vi.mock("@lingui/react/macro", () => ({
       "message" in parts ? parts.message : String.raw(parts, ...values),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   BotAvatar: () => null,
   defaultBotAvatarValue: () => "",
   Button: ({ children, ...props }: { children: ReactNode }) => (
@@ -33,7 +33,7 @@ vi.mock("@rakazo/ui-web", () => ({
   ),
 }));
 vi.mock("./auth", () => ({ authClient: { signOut: mocks.signOut } }));
-vi.mock("@rakazo/core", async (importOriginal) => ({
+vi.mock("@orkbot/core", async (importOriginal) => ({
   ...(await importOriginal<typeof CoreModule>()),
   runThreadSubscription: vi.fn(async () => undefined),
 }));
@@ -241,7 +241,7 @@ it.each([null, "user-b"])(
 );
 
 it.each([
-  ["another tab switches the account", () => storageEvent("rakazo.signedInUser", "user-b")],
+  ["another tab switches the account", () => storageEvent("orkbot.signedInUser", "user-b")],
   ["this tab signs out", (signOut: (to: string) => Promise<void>) => signOut("/")],
 ])(
   "reloads with an answer pending when %s, and the late answer starts no call",

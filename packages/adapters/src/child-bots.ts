@@ -6,16 +6,16 @@ import type {
   JobPublisher,
   SandboxProvider,
   SecretStore,
-} from "@rakazo/adapter-kit";
-import { routineJobKey, runContinueJob, runJobKey } from "@rakazo/adapter-kit";
-import type { Actor, Bot, ComputerMode } from "@rakazo/contracts";
+} from "@orkbot/adapter-kit";
+import { routineJobKey, runContinueJob, runJobKey } from "@orkbot/adapter-kit";
+import type { Actor, Bot, ComputerMode } from "@orkbot/contracts";
 import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   GROUP_MEMBER_MIN,
-} from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES } from "@rakazo/core";
-import type { Prisma, PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { ACTIVE_RUN_STATUSES } from "@orkbot/core";
+import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   cancelRunsInTransaction,
   clearEndedRunState,
@@ -27,8 +27,8 @@ import {
   legacyTeamHomeKey,
   recordComputerRunEnd,
   withTransactionRetry,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { BrowserStoppedReleaseError } from "./computer-screens.js";
 import { toComputerRef } from "./computer-support.js";
 import {

@@ -6,8 +6,8 @@ These settings change downloads; model and remote-computer providers still need 
 | Failure | Setting or action |
 | --- | --- |
 | Cannot fetch the installer | Download it from your mirror or copy it locally |
-| Cannot fetch Compose files | `RAKAZO_DOWNLOAD_BASE`, `--local`, or `RAKAZO_DOWNLOAD_SKIP_EXISTING=1` |
-| Cannot pull app or computer images | `RAKAZO_IMAGE`, `RAKAZO_IMAGE_TAG`, `RAKAZO_COMPUTER_IMAGE`, `RAKAZO_COMPUTER_IMAGE_TAG` |
+| Cannot fetch Compose files | `ORKBOT_DOWNLOAD_BASE`, `--local`, or `ORKBOT_DOWNLOAD_SKIP_EXISTING=1` |
+| Cannot pull app or computer images | `ORKBOT_IMAGE`, `ORKBOT_IMAGE_TAG`, `ORKBOT_COMPUTER_IMAGE`, `ORKBOT_COMPUTER_IMAGE_TAG` |
 | Cannot pull Postgres or busybox | `POSTGRES_IMAGE`, `BUSYBOX_IMAGE`, or Docker daemon `registry-mirrors` |
 
 ## Installer script
@@ -15,14 +15,14 @@ These settings change downloads; model and remote-computer providers still need 
 When raw GitHub is unreachable, download the installer from your mirror:
 
 ```bash
-export RAKAZO_INSTALLER_URL=https://example.com/mirror/rakazo/infra/compose/install-images.sh
-export RAKAZO_DOWNLOAD_BASE=https://example.com/mirror/rakazo/infra/compose
-mkdir -p rakazo && cd rakazo &&
-curl -fsSL -o install-images.sh "${RAKAZO_INSTALLER_URL}" &&
+export ORKBOT_INSTALLER_URL=https://example.com/mirror/orkbot/infra/compose/install-images.sh
+export ORKBOT_DOWNLOAD_BASE=https://example.com/mirror/orkbot/infra/compose
+mkdir -p orkbot && cd orkbot &&
+curl -fsSL -o install-images.sh "${ORKBOT_INSTALLER_URL}" &&
 bash install-images.sh --prepare-only
 ```
 
-`RAKAZO_INSTALLER_URL` selects the script for this curl command; `RAKAZO_DOWNLOAD_BASE` selects
+`ORKBOT_INSTALLER_URL` selects the script for this curl command; `ORKBOT_DOWNLOAD_BASE` selects
 the Compose files downloaded by that script. Set both when raw GitHub is blocked.
 
 ## Compose files
@@ -31,7 +31,7 @@ To mirror `docker-compose.images.yml` and `.env.images.example`, point the insta
 mirror of `infra/compose`:
 
 ```bash
-export RAKAZO_DOWNLOAD_BASE=https://example.com/mirror/rakazo/infra/compose
+export ORKBOT_DOWNLOAD_BASE=https://example.com/mirror/orkbot/infra/compose
 bash install-images.sh --prepare-only
 ```
 
@@ -43,7 +43,7 @@ To reuse files already present in the working directory:
 # Place docker-compose.images.yml and .env.images.example in this directory first.
 bash install-images.sh --local --prepare-only
 # Equivalent environment setting:
-RAKAZO_DOWNLOAD_SKIP_EXISTING=1 bash install-images.sh --prepare-only
+ORKBOT_DOWNLOAD_SKIP_EXISTING=1 bash install-images.sh --prepare-only
 ```
 
 Missing files are still downloaded. `--prepare-only` creates `.env` without starting the stack;
@@ -74,10 +74,10 @@ After `--prepare-only`, set image overrides in `.env`. For mirrored Postgres or 
 (keep `--local` if using pre-copied Compose files):
 
 ```env
-RAKAZO_IMAGE=registry.example.com/mirror/rakazo/app
-RAKAZO_IMAGE_TAG=edge
-RAKAZO_COMPUTER_IMAGE=registry.example.com/mirror/rakazo/computer
-RAKAZO_COMPUTER_IMAGE_TAG=edge
+ORKBOT_IMAGE=registry.example.com/mirror/orkbot/app
+ORKBOT_IMAGE_TAG=edge
+ORKBOT_COMPUTER_IMAGE=registry.example.com/mirror/orkbot/computer
+ORKBOT_COMPUTER_IMAGE_TAG=edge
 POSTGRES_IMAGE=registry.example.com/library/postgres@sha256:<trusted-postgres-digest>
 BUSYBOX_IMAGE=registry.example.com/library/busybox@sha256:<trusted-busybox-digest>
 ```

@@ -6,9 +6,9 @@ import type {
   ConnectorProvider,
   ConnectorTool,
   SecretStore,
-} from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
-import { availableInSpace, itemSecretIn } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
+import { availableInSpace, itemSecretIn } from "@orkbot/db";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import {

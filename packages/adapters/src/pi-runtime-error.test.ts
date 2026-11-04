@@ -1,9 +1,9 @@
-import { ModelAccountError, ModelOutputError, TransientModelError } from "@rakazo/adapter-kit";
+import { ModelAccountError, ModelOutputError, TransientModelError } from "@orkbot/adapter-kit";
 import {
   MODEL_CONTEXT_TOO_SMALL_ERROR,
   MODEL_OUTPUT_LIMIT_ERROR,
   modelFallbackFailure,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const provider = vi.hoisted(() => ({ errorMessage: "" }));

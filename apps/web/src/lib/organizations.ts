@@ -1,5 +1,5 @@
-import type { OrganizationList } from "@rakazo/contracts";
-import { organizationLandingSpaceId, organizationOfSpace } from "@rakazo/core";
+import type { OrganizationList } from "@orkbot/contracts";
+import { organizationLandingSpaceId, organizationOfSpace } from "@orkbot/core";
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { queryClient, spaceQueries, useQueryUserId } from "./query";
 import { ORGANIZATION_SPACES_STORAGE_KEY, rpc, selectedSpaceId, selectSpace } from "./rpc";

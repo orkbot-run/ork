@@ -1,14 +1,12 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromium } from "@playwright/test";
 import { ogPages } from "../src/og-pages.ts";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = join(root, "public/og");
-const chrome = process.env.CHROME_PATH ?? "/usr/bin/google-chrome";
-
-const mark = readFileSync(join(root, "public/brand/rakazo-mark.png")).toString("base64");
+const mark = (await readFile(join(root, "public/brand/orkbot-mark.png"))).toString("base64");
 
 function pageHtml(kicker, title) {
   const fontSize = title.length > 72 ? 40 : 68;
@@ -33,42 +31,33 @@ function pageHtml(kicker, title) {
     </div>
     <div class="brand">
       <img width="36" height="36" src="data:image/png;base64,${mark}" alt="" />
-      Rakazo
+      Ork
     </div>
   </div>
 </body>
 </html>`;
 }
 
-mkdirSync(outDir, { recursive: true });
-const tmp = join(outDir, ".og-render.html");
 
+await mkdir(outDir, { recursive: true });
 const selected = new Set(process.argv.slice(2));
-const pages = ogPages().filter((page) => selected.size === 0 || selected.has(page.id));
-
+const pages = [
+  { id: "home", kicker: "Open source AI teammates", title: "AI teammates you actually own" },
+  ...ogPages(),
+].filter((page) => selected.size === 0 || selected.has(page.id));
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}),
+});
 try {
-  for (const page of pages) {
-    writeFileSync(tmp, pageHtml(page.kicker, page.title));
-    const target = join(outDir, `${page.id}.png`);
-    const result = spawnSync(
-      chrome,
-      [
-        "--headless=new",
-        "--disable-gpu",
-        "--hide-scrollbars",
-        "--force-device-scale-factor=1",
-        "--window-size=1200,630",
-        "--default-background-color=00000000",
-        `--screenshot=${target}`,
-        `file://${tmp}`,
-      ],
-      { stdio: "inherit" },
-    );
-    if (result.status !== 0) {
-      throw new Error(`Open Graph render failed for ${page.id} with status ${result.status ?? 1}`);
-    }
-    console.log(page.id);
+  const page = await browser.newPage({ viewport: { width: 1200, height: 630 } });
+  for (const item of pages) {
+    await page.setContent(pageHtml(item.kicker, item.title));
+    await page.locator("img").evaluateAll((images) => Promise.all(images.map((image) => image.decode())));
+    const target = item.id === "home" ? join(root, "public/og-image.png") : join(outDir, `${item.id}.png`);
+    await page.screenshot({ path: target });
+    console.log(item.id);
   }
 } finally {
-  if (existsSync(tmp)) unlinkSync(tmp);
+  await browser.close();
 }

@@ -1,4 +1,4 @@
-import { InMemoryRealtimeFanout } from "@rakazo/adapters";
+import { InMemoryRealtimeFanout } from "@orkbot/adapters";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { infisicalFake } from "../../../packages/adapters/src/secret-store-fake.js";
 import { createWorkerSecretStore } from "./secret-store.js";

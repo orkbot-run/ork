@@ -23,9 +23,9 @@ const BLOG_OG: readonly OgPage[] = [
     title: "Best open source AI agents in 2026",
   },
   {
-    id: "blog-openclaw-vs-hermes-vs-rakazo",
+    id: "blog-openclaw-vs-hermes-vs-orkbot",
     kicker: "Comparison",
-    title: "OpenClaw vs Hermes Agent vs Rakazo",
+    title: "OpenClaw vs Hermes Agent vs Ork",
   },
   {
     id: "blog-self-host-an-ai-agent",

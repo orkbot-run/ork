@@ -1,5 +1,5 @@
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
+import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { restoreTurnCheckpoint, serializeTurnCheckpoint } from "./turn-checkpoint.js";

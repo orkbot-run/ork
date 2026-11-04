@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { ToolCallStreak } from "@rakazo/core";
-import { trackToolCallStreak } from "@rakazo/core";
+import type { ToolCallStreak } from "@orkbot/core";
+import { trackToolCallStreak } from "@orkbot/core";
 import { toolResultError } from "./tool-result-error.js";
 
 const LOOP_GUARD_STOP_PREFIX = "I got stuck calling ";

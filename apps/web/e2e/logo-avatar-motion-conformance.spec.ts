@@ -28,7 +28,7 @@ for (const activity of activities)
           .locator("article");
         await expect(cards).toHaveCount(6);
         for (let index = 0; index < identities.length; index++) {
-          const avatar = cards.nth(index).locator('.rakazo-logo-avatar[width="104"]');
+          const avatar = cards.nth(index).locator('.orkbot-logo-avatar[width="104"]');
           await expect(avatar).toHaveAttribute("data-activity", activity);
           const color = (await avatar.getAttribute("data-color"))!;
           const traits = logoAvatarTraits(identities[index]!, color);

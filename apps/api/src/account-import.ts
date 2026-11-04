@@ -5,26 +5,26 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
-import type { AdapterContext } from "@rakazo/adapter-kit";
-import { normalizeWorkspacePath, resolveBotWorkspacePath } from "@rakazo/adapters";
+import type { AdapterContext } from "@orkbot/adapter-kit";
+import { normalizeWorkspacePath, resolveBotWorkspacePath } from "@orkbot/adapters";
 import type {
   AccountExportManifest,
   AccountExportRecord,
   AccountImportResult,
   Actor,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
-  ACCOUNT_EXPORT_FORMAT,
   ACCOUNT_EXPORT_MANIFEST_PATH,
   ACCOUNT_EXPORT_MAX_HOME_FILE_BYTES,
   ACCOUNT_EXPORT_VERSION,
   AccountExportExecutablesSchema,
+  AccountExportFormatSchema,
   AccountExportManifestSchema,
   AccountExportRecordSchema,
   attachmentSizeLabel,
   resolveBotAvatarSet,
-} from "@rakazo/contracts";
-import { organicAvatarFamily } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { organicAvatarFamily } from "@orkbot/core";
 import {
   createRepos,
   createSpaceForMember,
@@ -34,10 +34,10 @@ import {
   runAsSystem,
   runAsTenant,
   SpaceLimitError,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
-import { pageViewerCode } from "@rakazo/page-kit/compile";
-import { checkPageSource } from "@rakazo/page-kit/validate";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
+import { pageViewerCode } from "@orkbot/page-kit/compile";
+import { checkPageSource } from "@orkbot/page-kit/validate";
 import { Unzip, UnzipInflate } from "fflate";
 import type { Hono } from "hono";
 import { cancelBody } from "./http-body.js";
@@ -71,7 +71,7 @@ export class AccountImportError extends Error {
   }
 }
 
-const unreadable = () => new AccountImportError("The file is not a readable Rakazo export.");
+const unreadable = () => new AccountImportError("The file is not a readable Ork export.");
 const invalidEntry = () => new AccountImportError("The export contains an unexpected file.");
 const outOfOrder = () => new AccountImportError("The export's files are out of order.");
 const missingRecord = () => new AccountImportError("The export refers to a missing record.");
@@ -476,7 +476,7 @@ class AccountImporter implements ArchiveSink {
       }
     });
     this.created.push({ ...created, sourceId: space.id });
-    const tempDir = await mkdtemp(path.join(tmpdir(), "rakazo-account-import-"));
+    const tempDir = await mkdtemp(path.join(tmpdir(), "orkbot-account-import-"));
     return new SpaceImport(space.id, { ...this.actor, spaceId: created.id }, tempDir);
   }
 
@@ -1018,11 +1018,11 @@ function parseManifest(bytes: Uint8Array): AccountExportManifest {
   }
   const format = (parsed as { format?: unknown } | null)?.format;
   const version = (parsed as { version?: unknown } | null)?.version;
-  if (format !== ACCOUNT_EXPORT_FORMAT) throw unreadable();
+  if (!AccountExportFormatSchema.safeParse(format).success) throw unreadable();
   const manifest = AccountExportManifestSchema.safeParse(parsed);
   if (manifest.success) return manifest.data;
   if (version !== ACCOUNT_EXPORT_VERSION)
-    throw new AccountImportError("This export is from a newer version of Rakazo.");
+    throw new AccountImportError("This export is from a newer version of Ork.");
   throw unreadable();
 }
 

@@ -1,5 +1,5 @@
-import type { SearchHit } from "@rakazo/contracts";
-import { plainTextFromMarkdown } from "@rakazo/core";
+import type { SearchHit } from "@orkbot/contracts";
+import { plainTextFromMarkdown } from "@orkbot/core";
 
 // data:[<mediatype>][;base64],<data>. The comma is required, so `data:image/png`
 // stays text; an omitted mediatype (`data:,hello`, `data:;base64,...`) still matches.

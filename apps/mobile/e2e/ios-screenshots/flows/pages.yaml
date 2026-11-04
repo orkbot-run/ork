@@ -1,11 +1,11 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Pages
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
 - extendedWaitUntil:
     visible: "Open Launch dashboard"
     timeout: 20000
@@ -26,7 +26,7 @@ name: Pages
     timeout: 10000
 - takeScreenshot: 04-share-link
 - tapOn: "Only you"
-- openLink: "rakazo:///pages?botId=${RAKAZO_SCREENSHOT_BOT_ID}"
+- openLink: "orkbot:///pages?botId=${ORKBOT_SCREENSHOT_BOT_ID}"
 - extendedWaitUntil:
     visible: "Launch dashboard"
     timeout: 20000

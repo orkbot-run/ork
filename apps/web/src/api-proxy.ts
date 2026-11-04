@@ -1,5 +1,5 @@
 import { isIP } from "node:net";
-import { USER_DEVICE_CONNECT_PATH } from "@rakazo/contracts/user-devices";
+import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts/user-devices";
 import type { ProxyOptions } from "vite";
 import { appendForwardedFor } from "./forwarded-for.js";
 

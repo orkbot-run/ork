@@ -1,4 +1,4 @@
-import { ACTIVE_RUN_STATUSES, BACKGROUND_RUN_TRIGGERS, plainTextFromMarkdown } from "@rakazo/core";
+import { ACTIVE_RUN_STATUSES, BACKGROUND_RUN_TRIGGERS, plainTextFromMarkdown } from "@orkbot/core";
 
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";

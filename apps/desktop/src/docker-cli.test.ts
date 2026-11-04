@@ -84,8 +84,8 @@ describe("resolveDockerBinary", () => {
     ).toBe("/Users/me/.rd/bin/docker");
   });
 
-  it("treats RAKAZO_DOCKER_BINARY as the only candidate", () => {
-    const env = { RAKAZO_DOCKER_BINARY: "/fake/docker", PATH: "/usr/bin" };
+  it("treats ORKBOT_DOCKER_BINARY as the only candidate", () => {
+    const env = { ORKBOT_DOCKER_BINARY: "/fake/docker", PATH: "/usr/bin" };
     expect(resolveDockerBinary("linux", env, (file) => file === "/fake/docker")).toBe(
       "/fake/docker",
     );
@@ -107,7 +107,7 @@ describe("dockerSpawnEnv", () => {
         LANG: "en_US.UTF-8",
       },
       "/Users/me/.orbstack/bin/docker",
-      { RAKAZO_IMAGE_TAG: "v1.2.3" },
+      { ORKBOT_IMAGE_TAG: "v1.2.3" },
     );
     expect(env).toEqual({
       HOME: "/Users/me",
@@ -124,7 +124,7 @@ describe("dockerSpawnEnv", () => {
       ].join(":"),
       DOCKER_HOST: "unix:///Users/me/.orbstack/run/docker.sock",
       LANG: "en_US.UTF-8",
-      RAKAZO_IMAGE_TAG: "v1.2.3",
+      ORKBOT_IMAGE_TAG: "v1.2.3",
     });
     expect(env).not.toHaveProperty("OPENROUTER_API_KEY");
     expect(env).not.toHaveProperty("POSTGRES_PASSWORD");
@@ -183,7 +183,7 @@ describe("classifyDockerFailure", () => {
     ["Error response from daemon: manifest unknown", "image-not-found"],
     ["pull access denied for ghcr.io/x/y, repository does not exist", "image-not-found"],
     [
-      'Error response from daemon: failed to resolve reference "ghcr.io/elie222/rakazo/computer:v0.3.5": ghcr.io/elie222/rakazo/computer:v0.3.5: not found',
+      'Error response from daemon: failed to resolve reference "ghcr.io/orkbot-run/ork/computer:v0.3.5": ghcr.io/orkbot-run/ork/computer:v0.3.5: not found',
       "image-not-found",
     ],
     ["Get https://ghcr.io/v2/: dial tcp: lookup ghcr.io: no such host", "network"],
@@ -259,7 +259,7 @@ describe("runDocker", () => {
   const options = { cwd: process.cwd(), env: { PATH: process.env.PATH ?? "" }, timeoutMs: 10_000 };
 
   it("preserves the Windows plugin discovery directory when running Compose", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-compose-discovery-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-compose-discovery-"));
     roots.push(root);
     const programFiles = path.join(root, "Program Files");
     const plugins = path.join(programFiles, "Docker", "cli-plugins");
@@ -294,7 +294,7 @@ describe("runDocker", () => {
   it.skipIf(process.platform === "win32")(
     "lets a CLI outside Rancher find its credential helper after a GUI launch",
     async () => {
-      const root = mkdtempSync(path.join(tmpdir(), "rakazo-rancher-helper-"));
+      const root = mkdtempSync(path.join(tmpdir(), "orkbot-rancher-helper-"));
       roots.push(root);
       const bin = path.join(root, ".rd", "bin");
       const helper = `docker-credential-${path.basename(root)}`;
@@ -396,7 +396,7 @@ describe("runDocker", () => {
   });
 
   it("treats shell syntax in a missing program path literally", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-docker-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-docker-command-"));
     roots.push(root);
     const injected = await runDocker(`${node}; touch pwned`, [], { ...options, cwd: root });
     expect(injected.code).toBe(1);
@@ -407,7 +407,7 @@ describe("runDocker", () => {
   it.skipIf(process.platform === "win32")(
     "runs executable paths containing punctuation and .com",
     async () => {
-      const root = mkdtempSync(path.join(tmpdir(), "rakazo-docker-command-"));
+      const root = mkdtempSync(path.join(tmpdir(), "orkbot-docker-command-"));
       roots.push(root);
       const binary = path.join(root, "node$&';.com");
       symlinkSync(node, binary);

@@ -280,7 +280,7 @@ describe("noVNC frame state report", () => {
 
   it("posts loading at once, then follows noVNC's connection classes", () => {
     const p = page();
-    expect(p.posted).toEqual([{ rakazoScreen: "loading" }]);
+    expect(p.posted).toEqual([{ orkbotScreen: "loading" }]);
     p.classes.add("noVNC_connecting");
     p.mutate();
     p.mutate();
@@ -290,10 +290,10 @@ describe("noVNC frame state report", () => {
     p.classes.clear();
     p.mutate();
     expect(p.posted).toEqual([
-      { rakazoScreen: "loading" },
-      { rakazoScreen: "connecting" },
-      { rakazoScreen: "connected" },
-      { rakazoScreen: "disconnected" },
+      { orkbotScreen: "loading" },
+      { orkbotScreen: "connecting" },
+      { orkbotScreen: "connected" },
+      { orkbotScreen: "disconnected" },
     ]);
   });
 
@@ -307,9 +307,9 @@ describe("noVNC frame state report", () => {
     p.status.textContent = "Failed to connect to wss://screen.example/websockify?token=secret";
     p.mutate();
     expect(p.nativePosted).toEqual([
-      '{"rakazoScreen":"loading"}',
-      '{"rakazoScreen":"connected"}',
-      '{"rakazoScreen":"failed"}',
+      '{"orkbotScreen":"loading"}',
+      '{"orkbotScreen":"connected"}',
+      '{"orkbotScreen":"failed"}',
     ]);
     expect(page().nativePosted).toEqual([]);
   });
@@ -317,12 +317,12 @@ describe("noVNC frame state report", () => {
   it("gives the screen the keyboard back only when the app itself asks", () => {
     const p = page({ canvas: true });
     const message = p.windowListeners.message!;
-    message({ source: {}, data: { rakazoScreenFocus: true } });
-    message({ source: p.parent, data: { rakazoScreenFocus: "yes" } });
+    message({ source: {}, data: { orkbotScreenFocus: true } });
+    message({ source: p.parent, data: { orkbotScreenFocus: "yes" } });
     message({ source: p.parent, data: null });
-    message({ source: p.parent, data: { rakazoScreenFocus: true, extra: "x" } });
+    message({ source: p.parent, data: { orkbotScreenFocus: true, extra: "x" } });
     expect(p.canvas.focused).toBe(0);
-    message({ source: p.parent, data: { rakazoScreenFocus: true } });
+    message({ source: p.parent, data: { orkbotScreenFocus: true } });
     expect(p.canvas.focused).toBe(1);
   });
 
@@ -336,44 +336,44 @@ describe("noVNC frame state report", () => {
     p.status.textContent = "Failed to connect to server";
     p.mutate();
     expect(p.posted.at(-1)).toEqual({
-      rakazoScreen: "failed",
+      orkbotScreen: "failed",
       detail: "Failed to connect to server",
     });
   });
 
   it("reports the embed page's failure attribute, with or without a reason", () => {
     const p = page();
-    p.attributes.set("data-rakazo-screen-error", "");
+    p.attributes.set("data-orkbot-screen-error", "");
     p.mutate();
-    expect(p.posted.at(-1)).toEqual({ rakazoScreen: "failed" });
+    expect(p.posted.at(-1)).toEqual({ orkbotScreen: "failed" });
     const reasoned = page();
-    reasoned.attributes.set("data-rakazo-screen-error", "Authentication failure");
+    reasoned.attributes.set("data-orkbot-screen-error", "Authentication failure");
     reasoned.mutate();
     expect(reasoned.posted.at(-1)).toEqual({
-      rakazoScreen: "failed",
+      orkbotScreen: "failed",
       detail: "Authentication failure",
     });
   });
 
   it("reports an empty embed failure without a status bar", () => {
     const p = page({ canvas: true, statusBar: false });
-    expect(p.posted.at(-1)).toEqual({ rakazoScreen: "connecting" });
-    p.attributes.set("data-rakazo-screen-error", "");
+    expect(p.posted.at(-1)).toEqual({ orkbotScreen: "connecting" });
+    p.attributes.set("data-orkbot-screen-error", "");
     p.mutate();
-    expect(p.posted.at(-1)).toEqual({ rakazoScreen: "failed" });
+    expect(p.posted.at(-1)).toEqual({ orkbotScreen: "failed" });
   });
 
-  it("treats a Rakazo embed page that built its viewer as connecting", () => {
+  it("treats a Ork embed page that built its viewer as connecting", () => {
     const p = page({ canvas: true });
     p.mutate();
-    expect(p.posted).toEqual([{ rakazoScreen: "loading" }, { rakazoScreen: "connecting" }]);
+    expect(p.posted).toEqual([{ orkbotScreen: "loading" }, { orkbotScreen: "connecting" }]);
   });
 
   it("stays quiet about a page that has not started connecting", () => {
     const p = page({ readyState: "loading" });
-    expect(p.posted).toEqual([{ rakazoScreen: "loading" }]);
+    expect(p.posted).toEqual([{ orkbotScreen: "loading" }]);
     p.listeners.DOMContentLoaded?.();
     p.mutate();
-    expect(p.posted).toEqual([{ rakazoScreen: "loading" }]);
+    expect(p.posted).toEqual([{ orkbotScreen: "loading" }]);
   });
 });

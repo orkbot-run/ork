@@ -1,10 +1,10 @@
-import { matchUiLocale } from "@rakazo/core";
+import { matchUiLocale } from "@orkbot/core";
 
 export const UI_LOCALES = ["en", "zh-CN", "zh-TW", "ru", "de", "nl", "ja", "es", "pl"] as const;
 
 export type UiLocale = (typeof UI_LOCALES)[number];
 
-export const UI_LOCALE_STORAGE_KEY = "rakazo.uiLocale";
+export const UI_LOCALE_STORAGE_KEY = "orkbot.uiLocale";
 
 export const UI_LOCALE_LABELS: Record<UiLocale, string> = {
   en: "English",

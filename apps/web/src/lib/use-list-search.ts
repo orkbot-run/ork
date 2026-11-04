@@ -1,5 +1,5 @@
-import type { ListSearchOptions } from "@rakazo/core";
-import { listSearch } from "@rakazo/core";
+import type { ListSearchOptions } from "@orkbot/core";
+import { listSearch } from "@orkbot/core";
 import { useState } from "react";
 
 export function useListSearch<T>(items: readonly T[], options: ListSearchOptions<T>) {

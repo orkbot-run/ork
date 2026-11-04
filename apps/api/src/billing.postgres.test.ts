@@ -1,8 +1,8 @@
-import type { ProductAnalytics } from "@rakazo/adapter-kit";
-import { BillingEmulator } from "@rakazo/adapters";
-import type { Actor, AnalyticsEvent } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { billingAccountForOrganization, createBillingAccount, createDb } from "@rakazo/db";
+import type { ProductAnalytics } from "@orkbot/adapter-kit";
+import { BillingEmulator } from "@orkbot/adapters";
+import type { Actor, AnalyticsEvent } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { billingAccountForOrganization, createBillingAccount, createDb } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   BILLING_RETURN_PATH,
@@ -25,10 +25,10 @@ describePostgres("billing service (PostgreSQL)", () => {
   const owner: Actor = {
     userId: ownerId,
     spaceId,
-    email: `${ownerId}@rakazo.test`,
+    email: `${ownerId}@orkbot.test`,
     isDeploymentOwner: false,
   };
-  const member: Actor = { ...owner, userId: memberId, email: `${memberId}@rakazo.test` };
+  const member: Actor = { ...owner, userId: memberId, email: `${memberId}@orkbot.test` };
   const emulator = new BillingEmulator();
   const events: Array<[string, AnalyticsEvent]> = [];
   const analytics: ProductAnalytics = {
@@ -50,7 +50,7 @@ describePostgres("billing service (PostgreSQL)", () => {
     const createdAt = new Date();
     for (const id of [ownerId, memberId]) {
       await prisma.user.create({
-        data: { id, name: id, email: `${id}@rakazo.test`, emailVerified: false },
+        data: { id, name: id, email: `${id}@orkbot.test`, emailVerified: false },
       });
     }
     await prisma.organization.create({
@@ -271,7 +271,7 @@ describePostgres("billing service (PostgreSQL)", () => {
       data: {
         id: inviteeId,
         name: "Invitee",
-        email: `${inviteeId}@rakazo.test`,
+        email: `${inviteeId}@orkbot.test`,
         emailVerified: true,
       },
     });
@@ -290,7 +290,7 @@ describePostgres("billing service (PostgreSQL)", () => {
       const actor = {
         ...owner,
         userId: inviteeId,
-        email: `${inviteeId}@rakazo.test`,
+        email: `${inviteeId}@orkbot.test`,
         spaceId: invited,
       };
       await billing.claimReferral(actor, `ref-${suffix}`);

@@ -1,4 +1,4 @@
-import { MAX_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "@rakazo/contracts";
+import { MAX_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { useId } from "react";
 import { Checkbox } from "./components/ui/checkbox.js";

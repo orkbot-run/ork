@@ -28,12 +28,12 @@ function runUnder(script: string, folder: string) {
 it("writes this release's page-browser files once, and again when they differ", () => {
   root = mkdtempSync(path.join(tmpdir(), "page-browser-install-"));
   execFileSync("mkdir", ["-p", `${root}/usr/local/bin`]);
-  const wrapper = `${root}/usr/local/bin/rakazo-page-browser`;
-  const secrets = `${root}/usr/local/lib/rakazo/page_secrets.py`;
+  const wrapper = `${root}/usr/local/bin/orkbot-page-browser`;
+  const secrets = `${root}/usr/local/lib/orkbot/page_secrets.py`;
 
   runUnder(installPageBrowserFilesCommand(), root);
   expect(readFileSync(wrapper, "utf8")).toBe(
-    readFileSync(path.join(computer, "rakazo-page-browser"), "utf8"),
+    readFileSync(path.join(computer, "orkbot-page-browser"), "utf8"),
   );
   expect(readFileSync(secrets, "utf8")).toBe(
     readFileSync(path.join(computer, "page_secrets.py"), "utf8"),
@@ -47,7 +47,7 @@ it("writes this release's page-browser files once, and again when they differ", 
   expect(readFileSync(secrets, "utf8")).toBe("edited");
 
   // One from another release gets this release's copy.
-  writeFileSync(`${root}/usr/local/lib/rakazo/page-browser.version`, "older");
+  writeFileSync(`${root}/usr/local/lib/orkbot/page-browser.version`, "older");
   runUnder(installPageBrowserFilesCommand(), root);
   expect(readFileSync(secrets, "utf8")).toBe(
     readFileSync(path.join(computer, "page_secrets.py"), "utf8"),

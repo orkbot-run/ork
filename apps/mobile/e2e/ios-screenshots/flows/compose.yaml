@@ -1,11 +1,11 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Compose
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///new-space"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///new-space"
 - extendedWaitUntil:
     visible: "Customer support|Create space"
     timeout: 15000
@@ -13,7 +13,7 @@ name: Compose
     timeout: 3000
 - takeScreenshot: 02-new-space
 - tapOn: "Cancel"
-- openLink: "rakazo:///new-group"
+- openLink: "orkbot:///new-group"
 - extendedWaitUntil:
     visible: "Search bots"
     timeout: 15000
@@ -27,4 +27,4 @@ name: Compose
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 04-new-group-name
-- openLink: "rakazo:///"
+- openLink: "orkbot:///"

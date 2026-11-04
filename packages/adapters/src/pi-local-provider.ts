@@ -13,29 +13,29 @@ import { LOCAL_PROVIDER_ID, localModelIds } from "./pi-local-provider-id.js";
 export { LOCAL_PROVIDER_ID };
 
 /** Model ids the local server serves with vision, declared by the operator. */
-export const LOCAL_VISION_MODELS_ENV = "RAKAZO_LOCAL_VISION_MODELS";
+export const LOCAL_VISION_MODELS_ENV = "ORKBOT_LOCAL_VISION_MODELS";
 
 export function localVisionModelIds(): ReadonlySet<string> {
   return declaredVisionModelIds(LOCAL_VISION_MODELS_ENV);
 }
 
 /** Model ids the local server serves with OpenAI-style `reasoning_effort`, declared by the operator. */
-export const LOCAL_REASONING_MODELS_ENV = "RAKAZO_LOCAL_REASONING_MODELS";
+export const LOCAL_REASONING_MODELS_ENV = "ORKBOT_LOCAL_REASONING_MODELS";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:11434/v1";
 const DEFAULT_CONTEXT_WINDOW = 32_768;
 const DEFAULT_MAX_TOKENS = 4_096;
 
 export function localBaseUrl(): string {
-  const value = process.env.RAKAZO_LOCAL_MODELS_URL?.trim() || DEFAULT_BASE_URL;
+  const value = process.env.ORKBOT_LOCAL_MODELS_URL?.trim() || DEFAULT_BASE_URL;
   let url: URL;
   try {
     url = new URL(value);
   } catch {
-    throw new Error("RAKAZO_LOCAL_MODELS_URL must be an absolute HTTP(S) URL");
+    throw new Error("ORKBOT_LOCAL_MODELS_URL must be an absolute HTTP(S) URL");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("RAKAZO_LOCAL_MODELS_URL must be an absolute HTTP(S) URL");
+    throw new Error("ORKBOT_LOCAL_MODELS_URL must be an absolute HTTP(S) URL");
   }
   return value;
 }
@@ -69,8 +69,8 @@ function localModel(id: string): Model<"openai-completions"> {
     input: inputModalities(localVisionModelIds().has(id)),
     // Runs on the operator's own hardware, so there is nothing to bill.
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: tokenLimit("RAKAZO_LOCAL_CONTEXT_WINDOW", DEFAULT_CONTEXT_WINDOW),
-    maxTokens: tokenLimit("RAKAZO_LOCAL_MAX_TOKENS", DEFAULT_MAX_TOKENS),
+    contextWindow: tokenLimit("ORKBOT_LOCAL_CONTEXT_WINDOW", DEFAULT_CONTEXT_WINDOW),
+    maxTokens: tokenLimit("ORKBOT_LOCAL_MAX_TOKENS", DEFAULT_MAX_TOKENS),
   };
 }
 

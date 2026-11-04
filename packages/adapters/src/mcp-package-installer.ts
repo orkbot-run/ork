@@ -82,7 +82,7 @@ export function isNpxCommand(command: string): boolean {
   return /^npx(?:\.cmd|\.exe)?$/i.test(basename(command.trim()));
 }
 
-// Package managers and runners that fetch and run packages Rakazo can't vet. Whole commands,
+// Package managers and runners that fetch and run packages Ork can't vet. Whole commands,
 // not subcommands: global flags (`pnpm -C dir dlx`) and auto-installs (`bun run`, `uv run
 // --with`) make subcommand checks easy to slip past.
 const PACKAGE_RUNNER =
@@ -143,7 +143,7 @@ export function defaultMcpPackagesRoot(env: NodeJS.ProcessEnv = process.env): st
     accessSync(dataDir, constants.W_OK);
     return join(dataDir, "mcp-packages");
   } catch {
-    return join(tmpdir(), "rakazo-mcp-packages");
+    return join(tmpdir(), "orkbot-mcp-packages");
   }
 }
 

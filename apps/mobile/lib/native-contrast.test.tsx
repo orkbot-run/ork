@@ -1,4 +1,4 @@
-import { darkTokens, lightTokens } from "@rakazo/ui-tokens";
+import { darkTokens, lightTokens } from "@orkbot/ui-tokens";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const appearance = vi.hoisted(() => ({

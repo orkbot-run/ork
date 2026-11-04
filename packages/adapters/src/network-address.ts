@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import dns from "node:dns";
 import type { LookupFunction } from "node:net";
-import { recordSecurityEvent } from "@rakazo/db";
+import { recordSecurityEvent } from "@orkbot/db";
 
 export type ResolvedAddress = { address: string; family: number };
 export type ResolveHostname = (hostname: string) => Promise<ResolvedAddress[]>;

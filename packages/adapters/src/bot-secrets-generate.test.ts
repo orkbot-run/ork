@@ -1,4 +1,4 @@
-import { GENERATED_SECRET_SYMBOLS, GeneratedSecretRules } from "@rakazo/contracts";
+import { GENERATED_SECRET_SYMBOLS, GeneratedSecretRules } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { generateBotSecret, loadBotCommandEnvironment, resolveLoginFill } from "./bot-secrets.js";
 import { fakeDatabase } from "./bot-secrets.test-support.js";

@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import type { KeyProvider, KeyWrapContext } from "@rakazo/adapter-kit";
+import type { KeyProvider, KeyWrapContext } from "@orkbot/adapter-kit";
 
 const PREFIX = "wrapped:v1:";
 const IV_BYTES = 12;

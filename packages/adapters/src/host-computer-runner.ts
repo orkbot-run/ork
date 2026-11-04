@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
-import type { AdapterContext, ComputerRef } from "@rakazo/adapter-kit";
+import type { AdapterContext, ComputerRef } from "@orkbot/adapter-kit";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import type { HostComputerFrame, HostComputerRequest } from "./host-computer-protocol.js";
 import {

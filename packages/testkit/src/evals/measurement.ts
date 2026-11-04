@@ -1,4 +1,4 @@
-import type { UsageOperationKind } from "@rakazo/adapter-kit";
+import type { UsageOperationKind } from "@orkbot/adapter-kit";
 
 /** Prices are USD per million tokens. Output includes reasoning; never price it twice. */
 export type EvalPricing = {

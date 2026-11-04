@@ -1,4 +1,4 @@
-import type { Me, PaymentWalletStatus } from "@rakazo/contracts";
+import type { Me, PaymentWalletStatus } from "@orkbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { Alert, AppState, Linking, ScrollView, StyleSheet } from "react-native";

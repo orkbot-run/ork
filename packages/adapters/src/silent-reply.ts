@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 
 /** Exact token a silent run must emit as its entire final assistant reply. */
 export const NO_RESPONSE = "NO_RESPONSE";

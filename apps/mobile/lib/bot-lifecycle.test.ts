@@ -88,7 +88,7 @@ describe("group deletion", () => {
 it("keeps deletion bound to the archived bot's space through confirmation", async () => {
   const requestContext = {
     apiBase: "https://example.test",
-    headers: { "x-rakazo-space-id": "space-b" },
+    headers: { "x-orkbot-space-id": "space-b" },
   };
   const deleted = vi.fn();
   rpc.mockResolvedValueOnce({ ok: true });

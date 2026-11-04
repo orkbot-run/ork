@@ -6,7 +6,7 @@ import type {
   ModelApiProtocol,
   PurchaseCardField,
   SandboxKind,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 
 export interface AdapterContext {
   operationId: string;

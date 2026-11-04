@@ -1,13 +1,13 @@
 import { randomInt } from "node:crypto";
-import type { BotAvatarSet } from "@rakazo/contracts";
-import { BOT_COLORS, parseBotAvatarValue } from "@rakazo/contracts";
+import type { BotAvatarSet } from "@orkbot/contracts";
+import { BOT_COLORS, parseBotAvatarValue } from "@orkbot/contracts";
 import {
   ORGANIC_AVATAR_HEART_FAMILY,
   ORGANIC_AVATAR_LOOKS,
   organicAvatarFamily,
   organicAvatarLook,
   seededLogoAvatarColor,
-} from "@rakazo/core";
+} from "@orkbot/core";
 
 /** A uniform number in [0, 1). */
 export type Random = () => number;
@@ -93,7 +93,7 @@ export function chooseBotAvatar(
     id: previewId,
   }: { random?: Random; now?: number; family?: number; avatarSet?: BotAvatarSet; id?: string } = {},
 ): { id: string; color: string } {
-  if (avatarSet === "rakazo") {
+  if (avatarSet === "orkbot") {
     // The logo uses no organic family. Keep automatic ids non-heart for a later
     // Original-set switch, without scanning the roster or balancing unused shapes.
     if (previewId) return { id: previewId, color: color ?? seededLogoAvatarColor(previewId) };

@@ -23,7 +23,7 @@ function stopComputer(computer: unknown) {
 test("unavailable computers explain setup and open computer settings", async ({
   page,
 }, testInfo) => {
-  await signup(page, `computers-off-${Date.now()}@rakazo.test`, "password12", "Computers Off");
+  await signup(page, `computers-off-${Date.now()}@orkbot.test`, "password12", "Computers Off");
   await completeOnboarding(page);
   await page.route("**/rpc/me", (route) =>
     patchJson(route, (body) => {

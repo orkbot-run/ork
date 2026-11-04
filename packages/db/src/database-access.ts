@@ -6,6 +6,7 @@ import { rlsBypassKey, runAsSystem } from "./row-security.js";
 /**
  * NOLOGIN group role created by the row-level security migration. It holds the
  * runtime grants; the login in DATABASE_URL is this role or a member of it.
+ * Keep the inherited SQL identifiers compatible with applied migration history.
  */
 export const RUNTIME_ROLE = "rakazo_app";
 

@@ -1,4 +1,4 @@
-import type { Routine } from "@rakazo/contracts";
+import type { Routine } from "@orkbot/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";

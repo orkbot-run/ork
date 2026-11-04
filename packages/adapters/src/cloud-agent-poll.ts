@@ -3,17 +3,17 @@ import type {
   AdapterContext,
   BackgroundJobPayloads,
   CloudAgentSnapshot,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   CloudAgentRequestRejected,
   CloudAgentRetryLater,
   runContinueJob,
-} from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { cloudAgentHttpsUrl } from "@rakazo/core";
-import type { CloudAgent } from "@rakazo/db";
-import { appendEventInTransaction, Prisma } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import { cloudAgentHttpsUrl } from "@orkbot/core";
+import type { CloudAgent } from "@orkbot/db";
+import { appendEventInTransaction, Prisma } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import type { CloudAgentDeps } from "./cloud-agent-service.js";
 import { cloudAgentBlock, enqueueCloudAgent } from "./cloud-agent-service.js";

@@ -1,5 +1,5 @@
 import { createCipheriv, createHash, randomBytes } from "node:crypto";
-import type { AdapterContext } from "@rakazo/adapter-kit";
+import type { AdapterContext } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { InfisicalSecretStore } from "./infisical-secret-store.js";
 import type { SecretMigrationRepository, SecretMigrationRow } from "./secret-migration.js";

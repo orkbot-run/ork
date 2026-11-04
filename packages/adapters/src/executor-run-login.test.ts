@@ -1,6 +1,6 @@
-import type { ComputerRef } from "@rakazo/adapter-kit";
-import { encodeLoginSecret } from "@rakazo/contracts";
-import { runLoginKind } from "@rakazo/db";
+import type { ComputerRef } from "@orkbot/adapter-kit";
+import { encodeLoginSecret } from "@orkbot/contracts";
+import { runLoginKind } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeRunLogin } from "./bot-secrets.js";
 import { builtinAgentTools } from "./builtin-tools.js";
@@ -501,7 +501,7 @@ describe("request_secret for a login saved for another site", () => {
   });
 
   it("keeps turning down a change of type or a site off HTTPS", async () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     try {
       const cases = [
         // Another kind of credential under the name, or a login asked for as another kind.

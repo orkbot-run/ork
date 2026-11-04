@@ -1,4 +1,4 @@
-import type { SearchHit } from "@rakazo/contracts";
+import type { SearchHit } from "@orkbot/contracts";
 import { useCallback, useEffect, useId, useState } from "react";
 import type { ActivityListFilters } from "../../lib/activity-list-filters";
 import { emptyActivityFilters } from "../../lib/activity-list-filters";

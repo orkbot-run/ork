@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { MCP_OAUTH_CLIENT_REQUIRED } from "@rakazo/contracts";
+import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement, useEffect } from "react";
 import type { Root } from "react-dom/client";

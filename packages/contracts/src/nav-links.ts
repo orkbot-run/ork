@@ -1,8 +1,8 @@
 import * as z from "zod";
 
 /**
- * Operator-configured menu links (RAKAZO_NAV_LINKS) that open a same-origin page inside the app.
- * The operator's reverse proxy serves the path; Rakazo only frames it.
+ * Operator-configured menu links (ORKBOT_NAV_LINKS) that open a same-origin page inside the app.
+ * The operator's reverse proxy serves the path; Ork only frames it.
  */
 
 /** App-owned paths a link must not frame. */
@@ -10,8 +10,8 @@ const RESERVED_PREFIXES = ["/app", "/api", "/rpc", "/novnc", "/health"];
 
 function isSameOriginPath(path: string) {
   if (!path.startsWith("/") || path.startsWith("//") || /[\\\s]/.test(path)) return false;
-  const url = new URL(path, "http://rakazo.invalid");
-  if (url.origin !== "http://rakazo.invalid") return false;
+  const url = new URL(path, "http://orkbot.invalid");
+  if (url.origin !== "http://orkbot.invalid") return false;
   return !RESERVED_PREFIXES.some(
     (prefix) => url.pathname === prefix || url.pathname.startsWith(`${prefix}/`),
   );
@@ -21,7 +21,7 @@ export const NavLinkSchema = z.object({
   id: z.string().regex(/^[a-z0-9-]{1,32}$/),
   label: z.string().trim().min(1).max(40),
   path: z.string().max(400).refine(isSameOriginPath),
-  /** Lets the page use its own origin, and so the signed-in user's access to Rakazo. */
+  /** Lets the page use its own origin, and so the signed-in user's access to Ork. */
   trusted: z.boolean().default(false),
 });
 export type NavLink = z.infer<typeof NavLinkSchema>;
@@ -37,12 +37,12 @@ export function parseNavLinks(value: string | undefined): NavLink[] {
   try {
     json = JSON.parse(value);
   } catch {
-    throw new Error("RAKAZO_NAV_LINKS must be a JSON array");
+    throw new Error("ORKBOT_NAV_LINKS must be a JSON array");
   }
   const parsed = NavLinksSchema.safeParse(json);
   if (!parsed.success) {
     throw new Error(
-      `Invalid RAKAZO_NAV_LINKS: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "value"}: ${issue.message}`).join("; ")}`,
+      `Invalid ORKBOT_NAV_LINKS: ${parsed.error.issues.map((issue) => `${issue.path.join(".") || "value"}: ${issue.message}`).join("; ")}`,
     );
   }
   return parsed.data;

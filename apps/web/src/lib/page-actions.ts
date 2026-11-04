@@ -1,4 +1,4 @@
-import type { PageDetail, PageSummary } from "@rakazo/contracts";
+import type { PageDetail, PageSummary } from "@orkbot/contracts";
 import type { QueryClient } from "@tanstack/react-query";
 import type { SpaceQueries } from "./query";
 import { errorCode } from "./user-error";

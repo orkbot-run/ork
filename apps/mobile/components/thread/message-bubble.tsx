@@ -1,14 +1,14 @@
-import { ChatMarkdown, MarkdownLongPressContext, withBlockMentions } from "@rakazo/chat-ui/native";
-import type { LoginFieldInput, MessageBlock } from "@rakazo/contracts";
-import { artifactPreviewKind, isAttachmentAudioMimeType } from "@rakazo/contracts";
-import type { ChildBotBlock, PeerExchange } from "@rakazo/core";
+import { ChatMarkdown, MarkdownLongPressContext, withBlockMentions } from "@orkbot/chat-ui/native";
+import type { LoginFieldInput, MessageBlock } from "@orkbot/contracts";
+import { artifactPreviewKind, isAttachmentAudioMimeType } from "@orkbot/contracts";
+import type { ChildBotBlock, PeerExchange } from "@orkbot/core";
 import {
   formatFileSize,
   isApprovalAskBlock,
   memberName,
   selectedAskActionLabel,
-} from "@rakazo/core";
-import { fontWeight, typeScale } from "@rakazo/ui-tokens";
+} from "@orkbot/core";
+import { fontWeight, typeScale } from "@orkbot/ui-tokens";
 import type { ComponentProps } from "react";
 import { memo, useContext, useMemo, useState } from "react";
 import type { TextProps } from "react-native";

@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL_MAX_TOKENS } from "@rakazo/contracts";
+import { DEFAULT_MODEL_MAX_TOKENS } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   billedPromptTokens,
@@ -165,9 +165,9 @@ describe("resolveCompletionMaxTokens", () => {
   });
 
   it("takes an operator limit only from the local provider, and only when it is set", () => {
-    vi.stubEnv("RAKAZO_LOCAL_MAX_TOKENS", "");
+    vi.stubEnv("ORKBOT_LOCAL_MAX_TOKENS", "");
     expect(operatorMaxTokens({ provider: "local", maxTokens: 4_096 })).toBeUndefined();
-    vi.stubEnv("RAKAZO_LOCAL_MAX_TOKENS", "20000");
+    vi.stubEnv("ORKBOT_LOCAL_MAX_TOKENS", "20000");
     expect(operatorMaxTokens({ provider: "local", maxTokens: 20_000 })).toBe(20_000);
     expect(operatorMaxTokens({ provider: "openai-compatible", maxTokens: 20_000 })).toBeUndefined();
     expect(operatorMaxTokens({ provider: "openrouter", maxTokens: 20_000 })).toBeUndefined();

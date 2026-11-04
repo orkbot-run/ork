@@ -1,4 +1,4 @@
-import type { RealtimeFanout } from "@rakazo/adapter-kit";
+import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { createThreadEvents } from "./events.js";
 import type { PrismaClient } from "./generated/prisma/client.js";

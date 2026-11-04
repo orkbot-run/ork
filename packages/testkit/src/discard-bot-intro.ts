@@ -1,7 +1,7 @@
-import { runJobKey } from "@rakazo/adapter-kit";
-import type { RunStatus } from "@rakazo/contracts";
-import { isActive } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+import { runJobKey } from "@orkbot/adapter-kit";
+import type { RunStatus } from "@orkbot/contracts";
+import { isActive } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import { asSystem } from "./system-db.js";
 
 type App = { request: (input: string, init?: RequestInit) => Response | Promise<Response> };
@@ -90,7 +90,7 @@ async function rpc(
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",
-      ...(spaceId ? { "x-rakazo-space-id": spaceId } : {}),
+      ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}),
     },
     body: JSON.stringify({ json: body }),
   });

@@ -1,8 +1,8 @@
-import type { MessageBlock } from "@rakazo/contracts";
-import { truncateReplyQuote } from "@rakazo/contracts";
-import { blocksToAgentHistoryText, messageReaction } from "@rakazo/core";
-import { isPageCardMessage } from "@rakazo/core/message-quote";
-import type { PrismaClient } from "@rakazo/db";
+import type { MessageBlock } from "@orkbot/contracts";
+import { truncateReplyQuote } from "@orkbot/contracts";
+import { blocksToAgentHistoryText, messageReaction } from "@orkbot/core";
+import { isPageCardMessage } from "@orkbot/core/message-quote";
+import type { PrismaClient } from "@orkbot/db";
 
 type QuotedMessage = {
   id: string;

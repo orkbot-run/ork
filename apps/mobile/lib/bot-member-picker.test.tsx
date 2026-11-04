@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { GROUP_MEMBER_MAX } from "@rakazo/contracts";
+import { GROUP_MEMBER_MAX } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act, useState } from "react";
 import type { Root } from "react-dom/client";

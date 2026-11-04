@@ -13,7 +13,7 @@ import {
 test("opening and releasing the computer keep a view-only stream; a failed release can be retried", async ({
   page,
 }, testInfo) => {
-  await signup(page, `view-only-${Date.now()}@rakazo.test`, "password12", "Computer");
+  await signup(page, `view-only-${Date.now()}@orkbot.test`, "password12", "Computer");
   await completeOnboarding(page);
   let takeovers = 0;
   page.on("request", (request) => {
@@ -86,7 +86,7 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
 
   await signup(
     page,
-    `active-team-control-${stamp}@rakazo.test`,
+    `active-team-control-${stamp}@orkbot.test`,
     "password12",
     "Active Team Control",
   );

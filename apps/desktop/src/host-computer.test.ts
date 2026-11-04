@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import * as hostComputerServer from "@rakazo/adapters/host-computer-server";
+import * as hostComputerServer from "@orkbot/adapters/host-computer-server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { prepareHostComputer } from "./host-computer.js";
 import * as setupStore from "./setup-store.js";
@@ -16,7 +16,7 @@ describe("desktop local computer consent", () => {
   let root: string;
   let computer: Awaited<ReturnType<typeof prepareHostComputer>>;
   beforeEach(async () => {
-    root = await mkdtemp(path.join(tmpdir(), "rakazo-native-consent-"));
+    root = await mkdtemp(path.join(tmpdir(), "orkbot-native-consent-"));
     computer = await prepareHostComputer(root);
   });
   afterEach(async () => {

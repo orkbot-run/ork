@@ -1,4 +1,4 @@
-import { GROUP_MEMBER_MIN } from "@rakazo/contracts";
+import { GROUP_MEMBER_MIN } from "@orkbot/contracts";
 import type { PrismaClient } from "./client.js";
 import { runAsSystem } from "./row-security.js";
 

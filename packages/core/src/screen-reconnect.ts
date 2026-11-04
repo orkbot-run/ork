@@ -7,7 +7,7 @@ export const SCREEN_RECONNECT_EVERY_MS = 30_000;
  * the access check (204, 403 or 503) and never passes it to the computer, so its answer can't
  * be a redirect or anything the computer wrote.
  */
-export const SCREEN_PROBE_PARAM = "rakazo_probe";
+export const SCREEN_PROBE_PARAM = "orkbot_probe";
 
 /** The status-only probe for a screen URL, absolute or a path. */
 export function screenProbeUrl(url: string): string {

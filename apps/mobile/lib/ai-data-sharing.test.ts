@@ -1,4 +1,4 @@
-import type { AiConsentStatus, AiRecipient } from "@rakazo/contracts";
+import type { AiConsentStatus, AiRecipient } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { aiDataSharingPlaceholder, aiPrivacyLinks, groupAiRecipients } from "./ai-data-sharing";
 

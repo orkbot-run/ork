@@ -1,5 +1,5 @@
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@rakazo/contracts";
+import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { declaredVisionModelIds } from "./model-modalities.js";
 import type * as ModelVision from "./model-vision.js";
@@ -85,7 +85,7 @@ describe("operator-declared vision modalities", () => {
   });
 
   it("applies the same declaration to the local provider", () => {
-    vi.stubEnv("RAKAZO_LOCAL_MODELS", "qwen3-vl,qwen3-text");
+    vi.stubEnv("ORKBOT_LOCAL_MODELS", "qwen3-vl,qwen3-text");
     vi.stubEnv(LOCAL_VISION_MODELS_ENV, "qwen3-vl");
     const models = localProvider()?.getModels() ?? [];
     expect(models.find((m) => m.id === "qwen3-vl")?.input).toContain("image");

@@ -18,7 +18,7 @@ async function adminComputers(route: Route) {
 test("an admin selects a computer provider and sees its fields", async ({ page }, testInfo) => {
   await signup(
     page,
-    `computer-settings-${randomUUID()}@rakazo.test`,
+    `computer-settings-${randomUUID()}@orkbot.test`,
     "password12",
     "Computer settings",
   );

@@ -29,7 +29,7 @@ vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray) => parts.join("");
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
-vi.mock("@rakazo/ui-web", () => {
+vi.mock("@orkbot/ui-web", () => {
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {
     Spinner: (props: ComponentProps<"svg">) => <svg role="status" {...props} />,

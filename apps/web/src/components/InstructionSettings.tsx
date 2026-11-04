@@ -1,9 +1,9 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { Bot } from "@orkbot/contracts";
+import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@orkbot/contracts";
+import { Button, Disclosure, Textarea } from "@orkbot/ui-web";
+import { Popover, PopoverContent, PopoverTrigger } from "@orkbot/ui-web/components/ui/popover";
 import { ORPCError } from "@orpc/client";
-import type { Bot } from "@rakazo/contracts";
-import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@rakazo/contracts";
-import { Button, Disclosure, Textarea } from "@rakazo/ui-web";
-import { Popover, PopoverContent, PopoverTrigger } from "@rakazo/ui-web/components/ui/popover";
 import { History } from "lucide-react";
 import { useId, useState } from "react";
 import { rpc } from "../lib/rpc";

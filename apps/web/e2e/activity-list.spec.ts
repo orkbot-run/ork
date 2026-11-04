@@ -40,7 +40,7 @@ async function captureActivitySidebar(
 
 test("sidebar Working and Recent surface active and terminal runs", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `activity-${stamp}@rakazo.test`, "password12", "Activity");
+  await signup(page, `activity-${stamp}@orkbot.test`, "password12", "Activity");
   await completeOnboarding(page);
 
   const aside = page.locator("aside").first();
@@ -191,7 +191,7 @@ test("sidebar Working and Recent surface active and terminal runs", async ({ pag
 
 test("activity filters keep retry when a refresh fails", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `activity-retry-${stamp}@rakazo.test`, "password12", "Activity");
+  await signup(page, `activity-retry-${stamp}@orkbot.test`, "password12", "Activity");
   await completeOnboarding(page);
   const now = new Date();
 
@@ -299,7 +299,7 @@ test("activity filters keep retry when a refresh fails", async ({ page }, testIn
 test("activity groups what needs you, what is working, and unread chats", async ({
   page,
 }, testInfo) => {
-  await signup(page, `activity-sections-${Date.now()}@rakazo.test`, "password12", "Sections");
+  await signup(page, `activity-sections-${Date.now()}@orkbot.test`, "password12", "Sections");
   await completeOnboarding(page);
   const writer = await createNamedBot(page, "Writer");
   await expect

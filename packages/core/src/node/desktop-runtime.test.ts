@@ -102,8 +102,8 @@ function fixture() {
           "flock() { :; }",
           `bash() { return ${failLifecycle ? 1 : 0}; }`,
           script
-            .replaceAll("/tmp/rakazo/desktop-assignments", root)
-            .replaceAll("/tmp/rakazo", root),
+            .replaceAll("/tmp/orkbot/desktop-assignments", root)
+            .replaceAll("/tmp/orkbot", root),
         ].join("\n"),
       ],
       { encoding: "utf8", timeout: 5000 },
@@ -128,11 +128,11 @@ describe("shared Linux desktop lifecycle", () => {
       const environment = { ...env, bindHost };
       const host = bindHost ?? "127.0.0.1";
       const command = terminalCommand("control", "terminal", "/work", environment);
-      expect(command).toContain(`--token-source=/tmp/rakazo/desktop-targets ${host}:6100 8>&-`);
+      expect(command).toContain(`--token-source=/tmp/orkbot/desktop-targets ${host}:6100 8>&-`);
       const pattern = command.match(/if ! pgrep -f '([^']+)'/)?.[1];
       expect(pattern).toBeDefined();
       const process = (address: string, source = "desktop-targets") =>
-        `/usr/bin/python3 /usr/bin/websockify --token-source=/tmp/rakazo/${source} ${address}:6100`;
+        `/usr/bin/python3 /usr/bin/websockify --token-source=/tmp/orkbot/${source} ${address}:6100`;
       expect(process(host)).toMatch(new RegExp(pattern!));
       expect(process("192x0x2x10")).not.toMatch(new RegExp(pattern!));
       expect(process(host, "view-target-1")).not.toMatch(new RegExp(pattern!));
@@ -152,7 +152,7 @@ describe("shared Linux desktop lifecycle", () => {
 
   it("binds IPv6 computer gateways and probes IPv6 loopback", () => {
     const command = terminalCommand("control", "terminal", "/work", { ...env, bindHost: "::" });
-    expect(command).toContain("--token-source=/tmp/rakazo/desktop-targets :::6100 8>&-");
+    expect(command).toContain("--token-source=/tmp/orkbot/desktop-targets :::6100 8>&-");
     expect(command).toContain("/dev/tcp/::1/6100");
   });
 
@@ -183,7 +183,7 @@ describe("shared Linux desktop lifecycle", () => {
     f.ensure("beto");
     const run = (bot: string, argv: string[]) => {
       const [program, ...args] = screenDisplayArgv(argv, bot, env.displayStart).map((word) =>
-        word.replaceAll("/tmp/rakazo/desktop-assignments", f.root),
+        word.replaceAll("/tmp/orkbot/desktop-assignments", f.root),
       );
       return spawnSync(program ?? "", args, {
         encoding: "utf8",
@@ -206,18 +206,18 @@ describe("shared Linux desktop lifecycle", () => {
 
   it("allocates live slots past 1000 bots, keeps assignments across callers, and rejects stale leases", () => {
     const f = fixture();
-    expect(f.ensure("a").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
-    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=1:view-b");
-    expect(f.ensure("a", "new:2").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.ensure("a").stdout).toContain("ORKBOT_DESKTOP=0:view-a");
+    expect(f.ensure("b").stdout).toContain("ORKBOT_DESKTOP=1:view-b");
+    expect(f.ensure("a", "new:2").stdout).toContain("ORKBOT_DESKTOP=0:view-a");
     expect(f.ensure("a", "run:1").status).toBe(75);
     expect(f.release("a", "run:3").status).toBe(75);
     expect(f.release("a", "new:1").status).toBe(75);
     for (let i = 2; i < 1000; i++)
       writeFileSync(path.join(f.root, `seed-${i}.slot`), `${i}\nseed:1\nunused\n`);
-    expect(f.ensure("bot-1000").stdout).toContain("RAKAZO_DESKTOP=1000:view-bot-1000");
+    expect(f.ensure("bot-1000").stdout).toContain("ORKBOT_DESKTOP=1000:view-bot-1000");
     expect(f.release("a", "new:2").status).toBe(0);
-    expect(f.ensure("c").stdout).toContain("RAKAZO_DESKTOP=0:view-c");
-    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=1:view-b");
+    expect(f.ensure("c").stdout).toContain("ORKBOT_DESKTOP=0:view-c");
+    expect(f.ensure("b").stdout).toContain("ORKBOT_DESKTOP=1:view-b");
   });
 
   it("keeps the slot when the shared registry lock cannot be reacquired after the browser stops", () => {
@@ -225,8 +225,8 @@ describe("shared Linux desktop lifecycle", () => {
     expect(f.ensure("a").status).toBe(0);
     expect(readdirSync(f.root).some((name) => name.endsWith(".slot"))).toBe(true);
     const script = releaseDesktopCommand("a", "run:1", env)
-      .replaceAll("/tmp/rakazo/desktop-assignments", f.root)
-      .replaceAll("/tmp/rakazo", f.root);
+      .replaceAll("/tmp/orkbot/desktop-assignments", f.root)
+      .replaceAll("/tmp/orkbot", f.root);
     const result = spawnSync(
       "bash",
       [
@@ -247,7 +247,7 @@ describe("shared Linux desktop lifecycle", () => {
       { encoding: "utf8", timeout: 5000 },
     );
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("RAKAZO_DESKTOP_RELEASED=");
+    expect(result.stdout).toContain("ORKBOT_DESKTOP_RELEASED=");
     expect(readdirSync(f.root).some((name) => name.endsWith(".slot"))).toBe(true);
   });
 
@@ -255,8 +255,8 @@ describe("shared Linux desktop lifecycle", () => {
     const f = fixture();
     expect(f.ensure("a").status).toBe(0);
     const script = releaseDesktopCommand("a", "run:1", env)
-      .replaceAll("/tmp/rakazo/desktop-assignments", f.root)
-      .replaceAll("/tmp/rakazo", f.root);
+      .replaceAll("/tmp/orkbot/desktop-assignments", f.root)
+      .replaceAll("/tmp/orkbot", f.root);
     const result = spawnSync(
       "bash",
       [
@@ -272,21 +272,21 @@ describe("shared Linux desktop lifecycle", () => {
       { encoding: "utf8", timeout: 5000 },
     );
     expect(result.status).not.toBe(0);
-    expect(result.stdout).toContain("RAKAZO_DESKTOP_RELEASED=");
+    expect(result.stdout).toContain("ORKBOT_DESKTOP_RELEASED=");
     expect(readdirSync(f.root).some((name) => name.endsWith(".slot"))).toBe(true);
   });
 
   it("reserves failed startup and teardown slots until a successful retry", () => {
     const f = fixture();
     expect(f.ensure("a", "run:1", true).status).toBe(1);
-    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=1:view-b");
-    expect(f.ensure("a").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.ensure("b").stdout).toContain("ORKBOT_DESKTOP=1:view-b");
+    expect(f.ensure("a").stdout).toContain("ORKBOT_DESKTOP=0:view-a");
     const failedRelease = f.release("a", "run:1", true);
     expect(failedRelease.status).toBe(1);
-    expect(failedRelease.stdout).not.toContain("RAKAZO_DESKTOP_RELEASED=");
-    expect(f.ensure("c").stdout).toContain("RAKAZO_DESKTOP=2:view-c");
+    expect(failedRelease.stdout).not.toContain("ORKBOT_DESKTOP_RELEASED=");
+    expect(f.ensure("c").stdout).toContain("ORKBOT_DESKTOP=2:view-c");
     expect(f.release("a").status).toBe(0);
-    expect(f.ensure("d").stdout).toContain("RAKAZO_DESKTOP=0:view-d");
+    expect(f.ensure("d").stdout).toContain("ORKBOT_DESKTOP=0:view-d");
   });
 
   it("does not create a screen on control release and keeps newer fences", () => {
@@ -301,12 +301,12 @@ describe("shared Linux desktop lifecycle", () => {
 
   it("keeps a completed run's display for that bot's next run and rejects its stale fence", () => {
     const f = fixture();
-    expect(f.ensure("a", "run:1").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.ensure("a", "run:1").stdout).toContain("ORKBOT_DESKTOP=0:view-a");
     expect(f.run(desktopControlCommand("a", "run:1", env, false)).status).toBe(0);
     const slot = readdirSync(f.root).find((name) => name.endsWith(".slot"))!;
     expect(readFileSync(path.join(f.root, slot), "utf8")).toBe("0\nrun:1\nview-a\n");
-    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=1:view-b");
-    expect(f.ensure("a", "next:2").stdout).toContain("RAKAZO_DESKTOP=0:view-a");
+    expect(f.ensure("b").stdout).toContain("ORKBOT_DESKTOP=1:view-b");
+    expect(f.ensure("a", "next:2").stdout).toContain("ORKBOT_DESKTOP=0:view-a");
     expect(f.run(desktopControlCommand("a", "run:1", env, false)).status).toBe(75);
     expect(f.release("a", "run:1").status).toBe(75);
   });
@@ -326,16 +326,16 @@ describe("shared Linux desktop lifecycle", () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: generated shell parameter expansion
     expect(command).toContain("${_rest%%[: ]*}");
     expect(command).toContain("unset LD_PRELOAD");
-    expect(command).toContain('[ "$(cat /tmp/rakazo/desktop-targets/view-1)" != "$desired" ]');
+    expect(command).toContain('[ "$(cat /tmp/orkbot/desktop-targets/view-1)" != "$desired" ]');
     expect(command).toContain(
-      "browser=$(command -v rakazo-browser || command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)",
+      "browser=$(command -v orkbot-browser || command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser)",
     );
     const lines = command.split("\n");
     const unsetAt = lines.findIndex((line) => line.includes("unset LD_PRELOAD"));
     const execAt = lines.findIndex((line) => line.startsWith("exec "));
     expect(unsetAt).toBeGreaterThan(-1);
     expect(execAt).toBeGreaterThan(unsetAt);
-    // A relaunch keeps the bot's tabs and session cookies, matching rakazo-browser.
+    // A relaunch keeps the bot's tabs and session cookies, matching orkbot-browser.
     expect(lines[execAt]).toContain("--restore-last-session");
   });
 
@@ -363,7 +363,7 @@ describe("shared Linux desktop lifecycle", () => {
           ...screenPorts(0),
           controlPort: String(address.port),
         })
-          .replaceAll("/tmp/rakazo", root)
+          .replaceAll("/tmp/orkbot", root)
           .replaceAll("/usr/share/novnc", root);
         const result = spawnSync(
           "bash",
@@ -396,7 +396,7 @@ describe("shared Linux desktop lifecycle", () => {
   it("fails without publishing a token when the input server cannot start", () => {
     const root = mkdtempSync("/tmp/rk-control-");
     roots.push(root);
-    const script = interactiveScreenCommand(true, "human").replaceAll("/tmp/rakazo", root);
+    const script = interactiveScreenCommand(true, "human").replaceAll("/tmp/orkbot", root);
     const result = spawnSync(
       "bash",
       [
@@ -416,7 +416,7 @@ describe("shared Linux desktop lifecycle", () => {
   });
 
   it("stops the terminal with the control lease and the screen transports", () => {
-    expect(interactiveScreenCommand(false)).toMatch(/pkill -f .*rakazo-terminal\.py/);
+    expect(interactiveScreenCommand(false)).toMatch(/pkill -f .*orkbot-terminal\.py/);
     expect(interactiveScreenCommand(false)).toContain("desktop-targets/terminal-1");
     expect(stopExtraScreenCommand(1, "a")).toMatch(/pkill -f .*sockets\/terminal-2-/);
   });
@@ -450,9 +450,9 @@ describe("shared Linux desktop lifecycle", () => {
       path.join(f.root, "browser-profile-20"),
       "/home/user/work/.browser-profiles/live",
     );
-    expect(f.ensure("a").stdout).toContain("RAKAZO_DESKTOP=1:view-a");
-    expect(f.ensure("b").stdout).toContain("RAKAZO_DESKTOP=2:view-b");
-    expect(f.ensure("a").stdout).toContain("RAKAZO_DESKTOP=1:view-a");
+    expect(f.ensure("a").stdout).toContain("ORKBOT_DESKTOP=1:view-a");
+    expect(f.ensure("b").stdout).toContain("ORKBOT_DESKTOP=2:view-b");
+    expect(f.ensure("a").stdout).toContain("ORKBOT_DESKTOP=1:view-a");
   });
 
   it("continues resetting valid displays after invalid or out-of-range markers", () => {
@@ -468,7 +468,7 @@ describe("shared Linux desktop lifecycle", () => {
         [
           "pkill() { :; }; sleep() { :; }",
           `bash() { printf '%s\\n' "$5" >>${shellQuote(record)}; }`,
-          resetDesktopRuntimeCommand(env).replaceAll("/tmp/rakazo", f.root),
+          resetDesktopRuntimeCommand(env).replaceAll("/tmp/orkbot", f.root),
         ].join("\n"),
       ],
       { encoding: "utf8", timeout: 5000 },
@@ -491,7 +491,7 @@ describe("shared Linux desktop lifecycle", () => {
     expect(
       patterns.some((pattern) =>
         pattern.test(
-          "/usr/bin/x11vnc -display :21 -rfbport 0 -unixsock /tmp/rakazo/sockets/view-21-token -forever",
+          "/usr/bin/x11vnc -display :21 -rfbport 0 -unixsock /tmp/orkbot/sockets/view-21-token -forever",
         ),
       ),
     ).toBe(true);
@@ -606,7 +606,7 @@ describe("shared Linux desktop lifecycle", () => {
           homeDir: home,
           workspaceDir: home,
           browserProfilesDir: profiles,
-        }).replaceAll("/tmp/rakazo", path.join(root, "runtime"));
+        }).replaceAll("/tmp/orkbot", path.join(root, "runtime"));
         waitForReady(joinedReady);
         const result = spawnSync("bash", ["-eu", "-c", command], {
           encoding: "utf8",
@@ -733,7 +733,7 @@ describe("shared Linux desktop lifecycle", () => {
       };
       const { debugPort } = screenPorts(0, screenEnv);
       writeFileSync(
-        path.join(bin, "rakazo-browser"),
+        path.join(bin, "orkbot-browser"),
         [
           "#!/usr/bin/env python3",
           "import os, socket, sys, time",
@@ -746,9 +746,9 @@ describe("shared Linux desktop lifecycle", () => {
           "",
         ].join("\n"),
       );
-      chmodSync(path.join(bin, "rakazo-browser"), 0o755);
+      chmodSync(path.join(bin, "orkbot-browser"), 0o755);
       const command = ensureScreenCommand(0, "bot", "token", screenEnv)
-        .replaceAll("/tmp/rakazo", path.join(root, "runtime"))
+        .replaceAll("/tmp/orkbot", path.join(root, "runtime"))
         .replaceAll("/usr/share/novnc", root);
       const cdpChecked = command.indexOf("\nfi\n", command.indexOf("CDP not ready")) + 4;
       const profile = browserProfilePathForScreen("bot", screenEnv);

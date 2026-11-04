@@ -42,7 +42,7 @@ describe("Pi JSONL sessions", () => {
   });
 
   it("uses Pi's session format for context and completed messages", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rakazo-pi-session-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "orkbot-pi-session-"));
     try {
       const recorder = new PiJsonlSessionRecorder(path.join(root, "sessions"), root);
       const session = await recorder.start({
@@ -88,10 +88,10 @@ describe("Pi JSONL sessions", () => {
       expect(records).toContainEqual(
         expect.objectContaining({
           kind: "entry",
-          customType: "rakazo_context",
+          customType: "orkbot_context",
           data: expect.objectContaining({
-            rakazoThreadId: "thread-1",
-            rakazoTraceId: "trace-1",
+            orkbotThreadId: "thread-1",
+            orkbotTraceId: "trace-1",
           }),
         }),
       );
@@ -125,7 +125,7 @@ describe("Pi JSONL sessions", () => {
   });
 
   it("never recreates a transcript deleted during a session", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rakazo-pi-session-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "orkbot-pi-session-"));
     try {
       const session = await new PiJsonlSessionRecorder(root, root).start({
         runId: "run-1",
@@ -153,7 +153,7 @@ describe("Pi JSONL sessions", () => {
   });
 
   it("protects the session being started from the retention count limit", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rakazo-pi-retention-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "orkbot-pi-retention-"));
     try {
       const botRoot = piSessionBotRoot(root, "user-1", "bot-1");
       await mkdir(botRoot, { recursive: true });
@@ -181,14 +181,14 @@ describe("Pi JSONL sessions", () => {
       expect(await readdir(botRoot)).toHaveLength(PI_SESSION_MAX_FILES_PER_BOT);
       const raw = await readFiles(botRoot);
       expect(raw).toContain('"kind":"header","id":"run-new"');
-      expect(raw).toContain('"customType":"rakazo_context"');
+      expect(raw).toContain('"customType":"orkbot_context"');
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
   it("keeps sessions scoped and bounded by the retention policy", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rakazo-pi-retention-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "orkbot-pi-retention-"));
     try {
       const sessionsRoot = path.join(root, "sessions");
       const botRoot = piSessionBotRoot(sessionsRoot, "user-1", "bot-1");
@@ -225,7 +225,7 @@ describe("Pi JSONL sessions", () => {
   });
 
   it("removes bot and account session scopes", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "rakazo-pi-cleanup-"));
+    const root = await mkdtemp(path.join(os.tmpdir(), "orkbot-pi-cleanup-"));
     try {
       const sessionsRoot = path.join(root, "pi-sessions");
       const botRoot = piSessionBotRoot(sessionsRoot, "user-1", "bot-1");

@@ -1,5 +1,5 @@
 {
-  "name": "@rakazo/web",
+  "name": "@orkbot/web",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
@@ -20,11 +20,11 @@
     "@orpc/client": "1.16.1",
     "@orpc/contract": "1.16.1",
     "@orpc/tanstack-query": "1.16.1",
-    "@rakazo/chat-ui": "workspace:*",
-    "@rakazo/contracts": "workspace:*",
-    "@rakazo/core": "workspace:*",
-    "@rakazo/ui-tokens": "workspace:*",
-    "@rakazo/ui-web": "workspace:*",
+    "@orkbot/chat-ui": "workspace:*",
+    "@orkbot/contracts": "workspace:*",
+    "@orkbot/core": "workspace:*",
+    "@orkbot/ui-tokens": "workspace:*",
+    "@orkbot/ui-web": "workspace:*",
     "@sentry/react": "11.10.0",
     "@simplewebauthn/browser": "13.3.0",
     "@tanstack/react-query": "5.105.3",
@@ -34,7 +34,7 @@
     "react-dom": "19.2.3",
     "react-router-dom": "7.18.5",
     "zod": "4.6.7",
-    "@rakazo/logging": "workspace:*"
+    "@orkbot/logging": "workspace:*"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",

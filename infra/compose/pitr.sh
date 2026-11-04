@@ -13,10 +13,10 @@ set -Eeuo pipefail
 umask 077
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="${RAKAZO_DEPLOY_DIR:-$(cd "${HERE}/../.." && pwd)}"
+PROJECT_DIR="${ORKBOT_DEPLOY_DIR:-$(cd "${HERE}/../.." && pwd)}"
 ENV_FILE="${PITR_ENV_FILE:-${PROJECT_DIR}/.env}"
 COMPOSE_FILE="${PROJECT_DIR}/infra/compose/docker-compose.prod.yml"
-ROLE=rakazo_pitr
+ROLE=orkbot_pitr
 HBA_LINE="host replication ${ROLE} all scram-sha-256"
 
 die() { echo "$*" >&2; exit 1; }
@@ -83,7 +83,7 @@ SELECT pg_reload_conf();
 SQL
   compose up -d --wait pitr
   echo "Point-in-time recovery is on. The first base backup is uploading; check it with:"
-  echo "  docker compose --env-file .env -f infra/compose/docker-compose.prod.yml exec pitr rakazo-pitr health"
+  echo "  docker compose --env-file .env -f infra/compose/docker-compose.prod.yml exec pitr orkbot-pitr health"
 }
 
 disable() {
@@ -131,7 +131,7 @@ restore() {
 }
 
 drill() {
-  DRILL_VOLUME="rakazo-pitr-drill-$$"
+  DRILL_VOLUME="orkbot-pitr-drill-$$"
   docker volume create "${DRILL_VOLUME}" >/dev/null
   trap 'docker volume rm -f "${DRILL_VOLUME}" >/dev/null' EXIT
   restore_into latest "${DRILL_VOLUME}"

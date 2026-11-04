@@ -101,10 +101,10 @@ describe("egress probe", () => {
     expect(script.trim().endsWith("exit 0")).toBe(true);
   });
 
-  it("probes from a named rakazo-c bridge and cleans up", async () => {
+  it("probes from a named orkbot-c bridge and cleans up", async () => {
     const { docker, raw, container, network } = fakeDocker();
     await expect(verifyRestrictedEgress(docker, "computer:test")).resolves.toBeUndefined();
-    expect(EGRESS_PROBE_BRIDGE).toMatch(/^rakazo-c/);
+    expect(EGRESS_PROBE_BRIDGE).toMatch(/^orkbot-c/);
     expect(EGRESS_PROBE_BRIDGE.length).toBeLessThanOrEqual(15);
     expect(raw.createNetwork).toHaveBeenCalledWith(
       expect.objectContaining({

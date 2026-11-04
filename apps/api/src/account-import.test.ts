@@ -1,4 +1,4 @@
-import type { Actor } from "@rakazo/contracts";
+import type { Actor } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import type { AccountImportDeps, ArchiveEntry, ArchiveSink } from "./account-import.js";
 import {
@@ -57,18 +57,28 @@ class RecordingSink implements ArchiveSink {
 const limits = { ...ACCOUNT_IMPORT_LIMITS, artifactBytes: 1024 };
 
 describe("account import archive", () => {
+  it.each(["orkbot-account-export", "rakazo-account-export"])(
+    "reads the %s format without creating content for an empty export",
+    async (format) => {
+      const bytes = buildArchive([
+        ["manifest.json", JSON.stringify({ ...manifestFor([]), format })],
+      ]);
+      await expect(importBytes(bytes)).resolves.toEqual({ spaces: [] });
+    },
+  );
+
   it("rejects another format", async () => {
     const bytes = buildArchive([
       ["manifest.json", JSON.stringify({ ...manifestFor([]), format: "other-export" })],
     ]);
-    await expect(importBytes(bytes)).rejects.toThrow("not a readable Rakazo export");
+    await expect(importBytes(bytes)).rejects.toThrow("not a readable Ork export");
   });
 
   it("rejects a newer version", async () => {
     const bytes = buildArchive([
       ["manifest.json", JSON.stringify({ ...manifestFor([]), version: 2 })],
     ]);
-    await expect(importBytes(bytes)).rejects.toThrow("newer version of Rakazo");
+    await expect(importBytes(bytes)).rejects.toThrow("newer version of Ork");
   });
 
   it("rejects an archive that does not start with the manifest", async () => {
@@ -76,19 +86,19 @@ describe("account import archive", () => {
       ["spaces/s1/records.jsonl", ""],
       ["manifest.json", JSON.stringify(manifestFor([{ id: "s1", name: "Home" }]))],
     ]);
-    await expect(importBytes(bytes)).rejects.toThrow("not a readable Rakazo export");
+    await expect(importBytes(bytes)).rejects.toThrow("not a readable Ork export");
   });
 
   it("rejects bytes that are not a zip, and a truncated zip", async () => {
     await expect(importBytes(new TextEncoder().encode("hello"))).rejects.toThrow(
-      "not a readable Rakazo export",
+      "not a readable Ork export",
     );
     const name = Array.from({ length: 4000 }, (_, i) => i.toString(36)).join("");
     const bytes = buildArchive([
       ["manifest.json", JSON.stringify(manifestFor([{ id: "s1", name }]))],
     ]);
     await expect(importBytes(bytes.subarray(0, bytes.byteLength / 2))).rejects.toThrow(
-      "not a readable Rakazo export",
+      "not a readable Ork export",
     );
   });
 

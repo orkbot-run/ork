@@ -1,6 +1,6 @@
 import { Input as InputPrimitive } from "@base-ui/react/input";
-import { Button } from "@rakazo/ui-web/components/ui/button";
-import { cn } from "@rakazo/ui-web/lib/utils";
+import { Button } from "@orkbot/ui-web/components/ui/button";
+import { cn } from "@orkbot/ui-web/lib/utils";
 import { EyeIcon, EyeOffIcon } from "lucide-react";
 import * as React from "react";
 

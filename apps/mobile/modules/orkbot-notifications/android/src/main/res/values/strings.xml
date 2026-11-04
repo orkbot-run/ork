@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_channel_live">Live agent status</string>
+  <string name="orkbot_channel_messages">Agent messages</string>
+  <string name="orkbot_channel_scheduled">Scheduled tasks</string>
+  <string name="orkbot_channel_attention">Needs attention</string>
+
+  <string name="orkbot_live_one">%1$s is working</string>
+  <string name="orkbot_live_many">%1$s and %2$d more are working</string>
+  <string name="orkbot_live_working">Working</string>
+
+  <string name="orkbot_scheduled_title">%1$s · Scheduled task</string>
+  <string name="orkbot_replied_group">%1$s replied in %2$s</string>
+  <string name="orkbot_replied">%1$s replied</string>
+
+  <string name="orkbot_attention_failed">%1$s hit a problem</string>
+  <string name="orkbot_attention_takeover">%1$s needs you on screen</string>
+  <string name="orkbot_attention_input">%1$s needs your input</string>
+</resources>

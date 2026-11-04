@@ -4,7 +4,7 @@ import {
   LOGO_RIGHT_HAND_PATH,
   LOGO_AVATAR_LIGHTING as lighting,
   logoAvatarPaint,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { memo } from "react";
 
 /** Fully vector body. The photographic grain is intentionally simplified. */

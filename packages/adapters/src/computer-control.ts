@@ -1,8 +1,8 @@
-import type { AdapterContext, JobPublisher, SandboxProvider } from "@rakazo/adapter-kit";
-import { computerControlExpireJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { recordComputerRunEnd } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { AdapterContext, JobPublisher, SandboxProvider } from "@orkbot/adapter-kit";
+import { computerControlExpireJob, runContinueJob } from "@orkbot/adapter-kit";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { recordComputerRunEnd } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { toComputerRef } from "./computer-support.js";
 import { isSandboxGoneError } from "./sandbox-errors.js";
 

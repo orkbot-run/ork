@@ -1,5 +1,5 @@
-import type { ComputerRef } from "@rakazo/adapter-kit";
-import * as Logging from "@rakazo/logging";
+import type { ComputerRef } from "@orkbot/adapter-kit";
+import * as Logging from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";

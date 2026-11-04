@@ -1,4 +1,4 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 ---
 # Reuse an already-open server sheet, or open it from authentication.
 - runFlow:
@@ -10,7 +10,7 @@ appId: com.rakazo.app
 - tapOn:
     id: "server-address"
 - eraseText
-- inputText: ${RAKAZO_MOBILE_API_URL}
+- inputText: ${ORKBOT_MOBILE_API_URL}
 # Android form sheets can omit native-stack header buttons. Submit the URL
 # through TextInput.onSubmitEditing while its keyboard remains focused.
 - pressKey: Enter

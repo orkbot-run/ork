@@ -33,7 +33,7 @@ function installSecrets(html: string, url = "https://portal.example.test/") {
   (win.Element.prototype as unknown as { getBoundingClientRect: unknown }).getBoundingClientRect =
     () => ({ width: 10, height: 10, top: 0, left: 0, right: 10, bottom: 10, x: 0, y: 0 });
   vm.runInContext(match[1], dom.getInternalVMContext());
-  const secrets = (win as unknown as { __rakazoPageBrowser: Secrets }).__rakazoPageBrowser;
+  const secrets = (win as unknown as { __orkbotPageBrowser: Secrets }).__orkbotPageBrowser;
   const field = (label: string) =>
     win.document.querySelector(`[aria-label="${label}"]`) as HTMLInputElement;
   return { win, secrets, field };
@@ -70,7 +70,7 @@ describe("saved logins and cards in the focused field", () => {
     expect(field("Password").value).toBe("");
     fill("Password", "fake-password", origin, "password")();
     expect(field("Password").value).toBe("fake-password");
-    expect(field("Password").hasAttribute("data-rakazo-filled")).toBe(true);
+    expect(field("Password").hasAttribute("data-orkbot-filled")).toBe(true);
   });
 
   it("refuses when nothing has focus, so a secret never lands elsewhere", () => {
@@ -101,7 +101,7 @@ describe("saved logins and cards in the focused field", () => {
     );
     expect(secrets.findCard("cc-number")).toBe(1);
     expect(secrets.focusCard()).toBe(true);
-    expect(field("Card").hasAttribute("data-rakazo-filled")).toBe(true);
+    expect(field("Card").hasAttribute("data-orkbot-filled")).toBe(true);
     field("Card").value = "4242 4242";
     expect(secrets.cardTyped(8)).toBe(true);
     expect(secrets.findCard("cc-csc")).toBe(0);

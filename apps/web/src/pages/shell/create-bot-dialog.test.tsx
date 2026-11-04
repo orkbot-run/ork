@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import type { BotAvatarSet } from "@rakazo/contracts";
-import { ORGANIC_AVATAR_LOOKS } from "@rakazo/core";
+import type { BotAvatarSet } from "@orkbot/contracts";
+import { ORGANIC_AVATAR_LOOKS } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -87,7 +87,7 @@ describe("CreateBotDialog", () => {
     await render(onCreate);
     expect(document.querySelector('[role="tablist"]')).toBeNull();
     const family = Number(
-      document.querySelector(".rakazo-organic-avatar")?.getAttribute("data-shape-family"),
+      document.querySelector(".orkbot-organic-avatar")?.getAttribute("data-shape-family"),
     );
     await typeName("Scout");
     await click(button("Create"));
@@ -96,24 +96,24 @@ describe("CreateBotDialog", () => {
     expect(onCreate.mock.lastCall?.[0]).not.toHaveProperty("id");
   });
 
-  it("sends the Rakazo preview id without an organic family", async () => {
+  it("sends the Ork preview id without an organic family", async () => {
     const onCreate = vi.fn(async (_input: CreateBotDialogInput) => undefined);
-    await render(onCreate, "rakazo");
+    await render(onCreate, "orkbot");
     await typeName("Scout");
     await click(button("Create"));
     const input = onCreate.mock.lastCall![0];
-    const preview = document.querySelector(".rakazo-logo-avatar")!;
+    const preview = document.querySelector(".orkbot-logo-avatar")!;
     expect(input).toMatchObject({ name: "Scout" });
     expect(input).not.toHaveProperty("avatarFamily");
     expect(input.id).toMatch(/^c[a-z0-9]{24}$/);
     expect(input.color?.toUpperCase()).toBe(preview.getAttribute("data-color")?.toUpperCase());
   });
 
-  it("preserves an explicitly chosen Rakazo colour through a failed create and retry", async () => {
+  it("preserves an explicitly chosen Ork colour through a failed create and retry", async () => {
     const onCreate = vi
       .fn(async (_input: CreateBotDialogInput) => undefined)
       .mockRejectedValueOnce(new Error("Try again"));
-    await render(onCreate, "rakazo");
+    await render(onCreate, "orkbot");
     await click(button("Color #00C972"));
     await typeName("Scout");
     await click(button("Create"));
@@ -127,7 +127,7 @@ describe("CreateBotDialog", () => {
     await render(onCreate);
     await click(button("Shape 2"));
     await click(button("Color #00C972"));
-    const preview = document.querySelector(".rakazo-organic-avatar");
+    const preview = document.querySelector(".orkbot-organic-avatar");
     const family = Number(preview?.getAttribute("data-shape-family"));
     await typeName("Scout");
     await click(button("Create"));
@@ -169,11 +169,11 @@ it("retains the preview identity and colour through rerenders and a retry", asyn
   const onCreate = vi
     .fn(async (_input: CreateBotDialogInput) => undefined)
     .mockRejectedValueOnce(new Error("Try again"));
-  await render(onCreate, "rakazo");
-  const colour = document.querySelector(".rakazo-logo-avatar")!.getAttribute("data-color");
+  await render(onCreate, "orkbot");
+  const colour = document.querySelector(".orkbot-logo-avatar")!.getAttribute("data-color");
   await typeName("First name");
-  await render(onCreate, "rakazo");
-  expect(document.querySelector(".rakazo-logo-avatar")!.getAttribute("data-color")).toBe(colour);
+  await render(onCreate, "orkbot");
+  expect(document.querySelector(".orkbot-logo-avatar")!.getAttribute("data-color")).toBe(colour);
   await click(button("Create"));
   const first = onCreate.mock.lastCall![0];
   await typeName("Retry name");

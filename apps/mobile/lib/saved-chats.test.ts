@@ -1,4 +1,4 @@
-import { displayIdentityResult, displayMessageBlock } from "@rakazo/core";
+import { displayIdentityResult, displayMessageBlock } from "@orkbot/core";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { MobileMe, MobileSnapshot, MobileSpaceNavigation } from "./api";
 import { resetI18nForTests } from "./i18n";

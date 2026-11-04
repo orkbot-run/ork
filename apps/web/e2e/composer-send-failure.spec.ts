@@ -1,10 +1,10 @@
+import type { Routine } from "@orkbot/contracts";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import type { Routine } from "@rakazo/contracts";
 import { activeBotId, completeOnboarding, createNamedBot, rpc, signup } from "./helpers";
 
 async function openComposer(page: Page, prefix: string) {
-  await signup(page, `${prefix}-${Date.now()}@rakazo.test`, "password12", "Draft Keeper");
+  await signup(page, `${prefix}-${Date.now()}@orkbot.test`, "password12", "Draft Keeper");
   await completeOnboarding(page);
   const composer = page.getByRole("combobox", { name: /Message/ });
   await expect(composer).toBeVisible();

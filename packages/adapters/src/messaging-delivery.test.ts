@@ -1,5 +1,5 @@
-import type { AdapterContext, MessagingSurface } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { AdapterContext, MessagingSurface } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatSdkMessagingSurface, MessagingSendError } from "./chat-sdk-surface.js";
 import type { MessagingDeliveryDeps } from "./messaging-delivery.js";

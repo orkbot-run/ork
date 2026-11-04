@@ -1,6 +1,6 @@
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { runAsSystem } from "@rakazo/db";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { runAsSystem } from "@orkbot/db";
 
 /** The other Space holding one of the caller's own bots, among the Spaces they belong to in any organization. */
 export function otherSpaceOfBot(

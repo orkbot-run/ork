@@ -1,4 +1,8 @@
-import { hasThinkingActivityMarker, parseBotAvatarValue } from "@rakazo/contracts";
+import {
+  hasThinkingActivityMarker,
+  parseBotAvatarValue,
+  resolveBotAvatarSet,
+} from "@orkbot/contracts";
 import { isBackgroundRunTrigger, isRunWaitingOnUser, isRunWorking } from "./run-state.js";
 
 /** Minimal public stream fields used by web and native activity projections. */
@@ -33,7 +37,11 @@ export function botAvatarActivity(
 
 export function usesLogoAvatar(bot: { avatarSet?: string; color: string }): boolean {
   const parsed = parseBotAvatarValue(bot.color);
-  return bot.avatarSet === "rakazo" && parsed.kind !== "image" && parsed.kind !== "shape";
+  return (
+    resolveBotAvatarSet(bot.avatarSet) === "orkbot" &&
+    parsed.kind !== "image" &&
+    parsed.kind !== "shape"
+  );
 }
 
 export function logoAvatarNeedsAttention(activity: LogoAvatarActivity): boolean {

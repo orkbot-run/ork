@@ -12,7 +12,7 @@ import {
   refreshable,
   shapes,
 } from "@expo/ui/swift-ui/modifiers";
-import { TICKET_STATUSES } from "@rakazo/contracts";
+import { TICKET_STATUSES } from "@orkbot/contracts";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ticketStatusLabel } from "../lib/board";
 import { useFloatingHeaderInset } from "../lib/floating-header";

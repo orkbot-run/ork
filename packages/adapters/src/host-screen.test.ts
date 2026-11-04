@@ -13,7 +13,7 @@ const observation = { app: "TextEdit", tree: "- [0] AXWindow" };
 describe("host screen requests", () => {
   let root: string;
   beforeEach(async () => {
-    root = await mkdtemp(path.join(tmpdir(), "rakazo-screen-test-"));
+    root = await mkdtemp(path.join(tmpdir(), "orkbot-screen-test-"));
   });
   afterEach(async () => {
     await rm(root, { recursive: true, force: true });

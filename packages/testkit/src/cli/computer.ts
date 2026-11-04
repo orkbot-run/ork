@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { computerTestSandbox } from "../computer-test-config.js";
 import { disposableDatabaseEnv, startPostgres } from "./postgres.js";
 import { runProcess } from "./process.js";
@@ -15,7 +15,7 @@ async function main() {
   for (const key of [sandbox.apiKeyEnv, "OPENROUTER_API_KEY", "COMPUTER_E2E_MODEL"]) {
     if (!process.env[key]) throw new Error(`${key} is required`);
   }
-  const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-computer-e2e-run-"));
+  const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-computer-e2e-run-"));
   const database = await startPostgres();
   const env = {
     ...process.env,
@@ -40,11 +40,11 @@ async function main() {
     SIGNUP_ALLOWLIST: "",
   };
   try {
-    execFileSync("pnpm", ["--filter", "@rakazo/db", "generate"], {
+    execFileSync("pnpm", ["--filter", "@orkbot/db", "generate"], {
       stdio: "inherit",
       env,
     });
-    execFileSync("pnpm", ["--filter", "@rakazo/db", "exec", "prisma", "migrate", "deploy"], {
+    execFileSync("pnpm", ["--filter", "@orkbot/db", "exec", "prisma", "migrate", "deploy"], {
       stdio: "inherit",
       env,
       cwd: path.resolve("packages/db"),

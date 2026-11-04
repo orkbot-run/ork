@@ -166,11 +166,11 @@ describe("waiting for a dropped screen's page", () => {
 describe("the screen's status-only probe", () => {
   it("marks a screen path or URL as a probe, keeping its own query", () => {
     expect(screenProbeUrl("/novnc/session/view/1.t/vnc.html")).toBe(
-      "/novnc/session/view/1.t/vnc.html?rakazo_probe=1",
+      "/novnc/session/view/1.t/vnc.html?orkbot_probe=1",
     );
     expect(screenProbeUrl("https://app.example.test/novnc/session/control/1.t/vnc.html?a=b")).toBe(
-      "https://app.example.test/novnc/session/control/1.t/vnc.html?a=b&rakazo_probe=1",
+      "https://app.example.test/novnc/session/control/1.t/vnc.html?a=b&orkbot_probe=1",
     );
-    expect(screenProbeUrl("/novnc/x?a=b#top")).toBe("/novnc/x?a=b&rakazo_probe=1#top");
+    expect(screenProbeUrl("/novnc/x?a=b#top")).toBe("/novnc/x?a=b&orkbot_probe=1#top");
   });
 });

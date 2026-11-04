@@ -1,4 +1,4 @@
-import { nextCronDate, ONCE_ROUTINE_CRON } from "@rakazo/core";
+import { nextCronDate, ONCE_ROUTINE_CRON } from "@orkbot/core";
 import type { Criterion, EvalCase, Evidence } from "./cases.js";
 import type { RoutineEvidence } from "./silence.js";
 import { hasVisibleMessage } from "./silence.js";

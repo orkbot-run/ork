@@ -80,7 +80,7 @@ describe.skipIf(findVersion.status !== 0 || !findVersion.stdout.includes("GNU"))
       ["Railway", "-print0", 1],
       ["Boxd", "-printf '%P\\0%m\\0%s\\0'", 3],
     ])("prints regular files and prunes excluded directories for %s", async (_, action, fields) => {
-      const scratch = await mkdtemp(path.join(tmpdir(), "rakazo-find-"));
+      const scratch = await mkdtemp(path.join(tmpdir(), "orkbot-find-"));
       try {
         const home = path.join(scratch, "home with 'quotes'");
         const kept = [
@@ -171,7 +171,7 @@ describe.skipIf(findVersion.status !== 0 || !findVersion.stdout.includes("GNU"))
   "GNU home save traversal with many tags",
   () => {
     it("keeps the arguments bounded and saves the tagged directories past the cap", async () => {
-      const home = await mkdtemp(path.join(tmpdir(), "rakazo-find-many-"));
+      const home = await mkdtemp(path.join(tmpdir(), "orkbot-find-many-"));
       try {
         // Long names put the uncapped argument list past Linux's 2 MiB limit.
         const count = 10_000;
@@ -199,7 +199,7 @@ describe.skipIf(findVersion.status !== 0 || !findVersion.stdout.includes("GNU"))
 
 describe("tagged cache directories", () => {
   it("recognizes only a tag that starts with the signature", async () => {
-    const scratch = await mkdtemp(path.join(tmpdir(), "rakazo-cachedir-"));
+    const scratch = await mkdtemp(path.join(tmpdir(), "orkbot-cachedir-"));
     try {
       const write = async (dir: string, content?: string) => {
         await mkdir(path.join(scratch, dir), { recursive: true });

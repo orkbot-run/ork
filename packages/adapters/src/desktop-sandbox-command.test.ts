@@ -4,7 +4,7 @@ import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
-import type { ProcessEvent } from "@rakazo/adapter-kit";
+import type { ProcessEvent } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as processTree from "./desktop-process-tree.js";
 import { assertHostCommandsAllowed, DesktopSandboxProvider } from "./desktop-sandbox.js";
@@ -31,7 +31,7 @@ describe("desktop command execution", () => {
     { code: null, signal: "SIGTERM", expected: 1, stderr: "command terminated by SIGTERM\n" },
     { code: null, signal: "SIGSEGV", expected: 1, stderr: "command terminated by SIGSEGV\n" },
   ])("reports close code $code and signal $signal", async ({ code, signal, expected, stderr }) => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
     roots.push(root);
     const desktop = new DesktopSandboxProvider({ root });
     const computer = await desktop.provision({ botId: "close", homePath: "/unused" }, ctx);
@@ -56,7 +56,7 @@ describe("desktop command execution", () => {
   it.each(["error", "cancel"] as const)(
     "preserves %s when close follows settlement",
     async (outcome) => {
-      const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+      const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
       roots.push(root);
       const desktop = new DesktopSandboxProvider({ root });
       const controller = new AbortController();
@@ -123,7 +123,7 @@ describe("desktop command execution", () => {
   });
 
   it("gives commands a shell environment and the request env, never backend secrets", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
     roots.push(root);
     vi.stubEnv("DATABASE_URL", "postgres://fake:fake@127.0.0.1/fake");
     vi.stubEnv("ENCRYPTION_KEY", "fake-encryption-key");
@@ -157,7 +157,7 @@ describe("desktop command execution", () => {
   });
 
   it("keeps UTF-8 characters split across output chunks intact", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
     roots.push(root);
     const desktop = new DesktopSandboxProvider({ root });
     const computer = await desktop.provision({ botId: "utf8", homePath: "/unused" }, ctx);
@@ -181,7 +181,7 @@ describe("desktop command execution", () => {
   });
 
   it("never starts an OS process for an already-cancelled command", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
     roots.push(root);
     const desktop = new DesktopSandboxProvider({ root });
     const computer = await desktop.provision({ botId: "cancelled", homePath: "/unused" }, ctx);
@@ -205,7 +205,7 @@ describe("desktop command execution", () => {
   });
 
   it("does not pass the program or its arguments through a shell", async () => {
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
     roots.push(root);
     const desktop = new DesktopSandboxProvider({ root });
     const computer = await desktop.provision({ botId: "cmd", homePath: "/unused" }, ctx);
@@ -251,7 +251,7 @@ describe("desktop command execution", () => {
   it.skipIf(process.platform === "win32")(
     "runs executable paths containing punctuation and .com",
     async () => {
-      const root = mkdtempSync(path.join(tmpdir(), "rakazo-desktop-command-"));
+      const root = mkdtempSync(path.join(tmpdir(), "orkbot-desktop-command-"));
       roots.push(root);
       const binary = path.join(root, "node$&';.com");
       symlinkSync(process.execPath, binary);

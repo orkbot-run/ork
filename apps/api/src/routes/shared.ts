@@ -6,19 +6,19 @@ import {
   mcpStdioAvailable,
   resolveMemberMainModel,
   selectConfiguredModel,
-} from "@rakazo/adapters";
-import type { Actor, Me } from "@rakazo/contracts";
+} from "@orkbot/adapters";
+import type { Actor, Me } from "@orkbot/contracts";
 import {
   attachmentMaxBytes,
   attachmentMaxCount,
   canonicalPiProviderId,
   resolveBotAvatarSet,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { isAdmin } from "../admins.js";
 import { effectiveSandboxProvider } from "../computer-provider-config.js";
 import type { RouterDeps } from "../router.js";
 
-export { createAdapterContext as computerContext } from "@rakazo/adapter-kit";
+export { createAdapterContext as computerContext } from "@orkbot/adapter-kit";
 
 function hostCredentials(active: boolean, provider: string) {
   return active

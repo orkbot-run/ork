@@ -1,4 +1,4 @@
-import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@rakazo/adapter-kit";
+import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@orkbot/adapter-kit";
 import { redact } from "./report.js";
 
 export type DiagnosticToolObservation = {

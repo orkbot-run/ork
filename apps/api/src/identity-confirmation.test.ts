@@ -1,5 +1,5 @@
+import { IDENTITY_CONFIRMATION_REQUIRED, isIdentityConfirmationRequired } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/server";
-import { IDENTITY_CONFIRMATION_REQUIRED, isIdentityConfirmationRequired } from "@rakazo/contracts";
 import { expect, it, vi } from "vitest";
 import { requireIdentityConfirmation } from "./identity-confirmation.js";
 

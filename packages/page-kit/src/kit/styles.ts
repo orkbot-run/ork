@@ -1,10 +1,10 @@
-import type { WebColorTokens } from "@rakazo/ui-tokens";
+import type { WebColorTokens } from "@orkbot/ui-tokens";
 import {
   cssVariableName,
   pageKitPalette,
   renderTokensCss,
   webLightTokens,
-} from "@rakazo/ui-tokens";
+} from "@orkbot/ui-tokens";
 import { CALENDAR_CSS } from "./calendar.js";
 import { CONTROLS_CSS } from "./controls.js";
 import { DATAVIZ_CSS } from "./dataviz-styles.js";

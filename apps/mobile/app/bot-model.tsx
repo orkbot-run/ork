@@ -1,4 +1,4 @@
-import type { ChatModelChoice } from "@rakazo/core";
+import type { ChatModelChoice } from "@orkbot/core";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ModelPickerList } from "../components/model-picker-list";

@@ -1,5 +1,5 @@
-import type { RoutineRun, RunActivityRow } from "@rakazo/contracts";
-import { routineRunLateness } from "@rakazo/core";
+import type { RoutineRun, RunActivityRow } from "@orkbot/contracts";
+import { routineRunLateness } from "@orkbot/core";
 import { rpc } from "../lib/api";
 import { dateLocaleForUi, t } from "./i18n";
 

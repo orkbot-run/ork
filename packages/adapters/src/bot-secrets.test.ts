@@ -1,8 +1,8 @@
-import type { BotSecretDestination } from "@rakazo/contracts";
-import { BOT_SECRET_ORIGIN_MISSING_MESSAGE, encodeLoginSecret } from "@rakazo/contracts";
-import { redactSecrets } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
-import * as Logging from "@rakazo/logging";
+import type { BotSecretDestination } from "@orkbot/contracts";
+import { BOT_SECRET_ORIGIN_MISSING_MESSAGE, encodeLoginSecret } from "@orkbot/contracts";
+import { redactSecrets } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
+import * as Logging from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   credentialArgument,
@@ -220,7 +220,7 @@ describe("authenticated secret requests", () => {
   });
 
   it("delivers plain-HTTP private destination requests directly when the owner opts in", async () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     const encrypted = await secretStore.put(
       secret,
       { ...scope, operationId: "test", traceId: "test", signal: new AbortController().signal },
@@ -267,7 +267,7 @@ describe("authenticated secret requests", () => {
   });
 
   it("refuses an opted-in private destination that resolves publicly", async () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     const encrypted = await secretStore.put(
       secret,
       { ...scope, operationId: "test", traceId: "test", signal: new AbortController().signal },
@@ -690,7 +690,7 @@ describe("normalizeSecretDestination", () => {
   });
 
   it("accepts plain-HTTP private origins when the owner opts in", () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(normalizeSecretDestination(lanDestination)).toMatchObject({
       name: "hive_api_token",
       origin: "http://192.168.2.10:8080",
@@ -698,7 +698,7 @@ describe("normalizeSecretDestination", () => {
   });
 
   it("still rejects public HTTP origins when the owner opts in", () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(() =>
       normalizeSecretDestination({ ...lanDestination, origin: "http://api.example.test" }),
     ).toThrow();
@@ -711,7 +711,7 @@ describe("normalizeSecretDestination", () => {
   });
 
   it("names the failing field instead of a generic instruction", () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(() =>
       normalizeSecretDestination({
         name: "Feishu Creds",
@@ -785,7 +785,7 @@ describe("normalizeSecretDestination", () => {
       expect(error).toMatch(/^Invalid credential destination — origin: /);
       expect(error).not.toContain("example.test/");
     }
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(requestedOrigin("http://192.168.2.10:8080/api/v1", { type: "bearer" })).toBe(
       "http://192.168.2.10:8080",
     );
@@ -795,7 +795,7 @@ describe("normalizeSecretDestination", () => {
   });
 
   it("reports login-over-plain-HTTP as an origin problem", () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(() =>
       normalizeSecretDestination({
         name: "feishu_app_credentials",
@@ -1078,7 +1078,7 @@ describe("saved website logins", () => {
   });
 
   it("refuses to fill a login saved on plain HTTP, including a private LAN origin", async () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     const { prisma } = await loginFixture(
       "fake-user@example.test",
       login.auth,
@@ -1236,7 +1236,7 @@ describe("a one-time code request", () => {
   );
 
   it("refuses a private-LAN HTTP origin even when the owner allows it for credentials", () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     expect(
       resolveRequestSecretDestination({
         oneTimeCode: oneTimeCodeArgument({ origin: "http://192.168.1.20" }),
@@ -1516,7 +1516,7 @@ describe("replacing a saved login's site", () => {
   });
 
   it("moves only a login, only to another HTTPS login", async () => {
-    vi.stubEnv("RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP", "1");
+    vi.stubEnv("ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP", "1");
     const db = fakeDatabase();
     const token = await save(db, { name: "api", origin: WWW, auth: { type: "bearer" } });
     const saved = await save(db);

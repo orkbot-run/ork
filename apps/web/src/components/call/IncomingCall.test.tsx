@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot } from "@rakazo/contracts";
+import type { Bot } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act, Suspense } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,7 +14,7 @@ vi.mock("@lingui/react/macro", () => ({
       "message" in parts ? parts.message : String.raw(parts, ...values),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   BotAvatar: () => null,
   defaultBotAvatarValue: () => "",
   Button: ({ children, ...props }: { children: ReactNode }) => (

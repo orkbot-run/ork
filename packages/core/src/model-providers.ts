@@ -1,4 +1,4 @@
-import type { Bot, ModelApiProtocol, ModelCatalogEntry } from "@rakazo/contracts";
+import type { Bot, ModelApiProtocol, ModelCatalogEntry } from "@orkbot/contracts";
 import {
   canonicalPiProviderId,
   DEFAULT_MODEL_MAX_TOKENS,
@@ -6,7 +6,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   selectCompatibleModelCredential,
   withConnectionName,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { listSearch } from "./list-search.js";
 
 /** Bots that pick their own model ignore the space default and its changes. */

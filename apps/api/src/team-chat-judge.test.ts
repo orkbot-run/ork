@@ -1,4 +1,4 @@
-import { createLogger, createTestSink, getLogger, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import { mainRole, withModelRoles } from "../../../packages/adapters/src/testing/model-roles.js";
 import {

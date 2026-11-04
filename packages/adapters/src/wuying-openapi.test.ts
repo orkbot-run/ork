@@ -1,6 +1,6 @@
 import * as Appstream from "@alicloud/appstream-center20210218";
 import * as Ecd from "@alicloud/ecd20200930";
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@rakazo/adapter-kit";
+import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WuyingOpenApi } from "./wuying-openapi.js";
 

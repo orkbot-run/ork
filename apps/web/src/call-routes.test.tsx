@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { Bot } from "@rakazo/contracts";
-import type * as CoreModule from "@rakazo/core";
+import type { Bot } from "@orkbot/contracts";
+import type * as CoreModule from "@orkbot/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -25,7 +25,7 @@ vi.mock("@lingui/react/macro", () => ({
       "message" in parts ? parts.message : String.raw(parts, ...values),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   BotAvatar: () => null,
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   defaultBotAvatarValue: () => "",
@@ -33,7 +33,7 @@ vi.mock("@rakazo/ui-web", () => ({
     <button {...props}>{children}</button>
   ),
 }));
-vi.mock("@rakazo/core", async (importOriginal) => ({
+vi.mock("@orkbot/core", async (importOriginal) => ({
   ...(await importOriginal<typeof CoreModule>()),
   runThreadSubscription: vi.fn(async () => undefined),
 }));

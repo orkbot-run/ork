@@ -32,7 +32,7 @@ model User {
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("organic")
-  /// The icon set this user's bots wear unless one is pinned to another: "organic" or "rakazo".
+  /// The icon set this user's bots wear unless one is pinned to another: "organic" or "orkbot".
   botAvatarSet                String                       @default("organic")
   /// IANA timezone such as "Pacific/Auckland". Null until set; bots then get UTC only.
   timezone                    String?
@@ -1452,7 +1452,7 @@ model Computer {
   homeRevision            String                   @default("empty")
   /// When the sandbox was read for `homeRevision`; null when an older release saved it.
   homeRevisionAt          DateTime?
-  /// When a damaged system last made Rakazo stop and start the computer by itself. Tried once
+  /// When a damaged system last made Ork stop and start the computer by itself. Tried once
   /// until a later save shows the computer works again.
   autoRecoveredAt         DateTime?
   /// The machine at `providerRef` came from a start whose restore never finished, so it holds no
@@ -1532,7 +1532,7 @@ model ComputerRun {
   endedAt    DateTime?
   /// How it ended; see `ComputerRunEnd` in packages/db/src/computer-runs.ts.
   endReason  String?
-  /// When Rakazo last saw this stretch running: at its start and at each idle check.
+  /// When Ork last saw this stretch running: at its start and at each idle check.
   lastSeenAt DateTime?
 
   @@unique([computerId, startedAt])

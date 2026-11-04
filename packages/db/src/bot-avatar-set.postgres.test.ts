@@ -42,10 +42,10 @@ describePostgres("avatar-set migration and persistence (PostgreSQL)", () => {
         "#3B82F6",
         "organic",
       ]);
-      await client.query('UPDATE bots SET "avatarSet"=$1 WHERE id=$2', ["rakazo", "old-0"]);
+      await client.query('UPDATE bots SET "avatarSet"=$1 WHERE id=$2', ["orkbot", "old-0"]);
       expect(
         (await client.query('SELECT "avatarSet", color FROM bots WHERE id=$1', ["old-0"])).rows[0],
-      ).toEqual({ avatarSet: "rakazo", color: colors[0] });
+      ).toEqual({ avatarSet: "orkbot", color: colors[0] });
       expect(
         (await client.query('SELECT "avatarSet" FROM bots WHERE id=$1', ["explicit"])).rows[0]
           .avatarSet,

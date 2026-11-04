@@ -1,4 +1,4 @@
-import { commandVariableName } from "@rakazo/contracts";
+import { commandVariableName } from "@orkbot/contracts";
 import { t } from "./i18n";
 
 /** The host a site card shows, or the origin when it does not parse. */

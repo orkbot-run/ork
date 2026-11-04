@@ -1,7 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
-import type { BotSecretMetadata, VaultKind } from "@rakazo/contracts";
-import { vaultItemSubtitle } from "@rakazo/contracts";
-import { cn } from "@rakazo/ui-web";
+import type { BotSecretMetadata, VaultKind } from "@orkbot/contracts";
+import { vaultItemSubtitle } from "@orkbot/contracts";
+import { cn } from "@orkbot/ui-web";
 import type { LucideIcon } from "lucide-react";
 import { Braces, CreditCard, KeyRound, MapPin, SquareTerminal } from "lucide-react";
 

@@ -9,7 +9,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children?: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => {
+vi.mock("@orkbot/ui-web", () => {
   const OpenChange = createContext<(open: boolean) => void>(() => {});
   const Pass = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {

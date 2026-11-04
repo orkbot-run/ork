@@ -1,12 +1,12 @@
-import type { PrismaClient } from "@rakazo/db";
+import type { PrismaClient } from "@orkbot/db";
 import {
   auditEventDto,
   auditEventRetentionDays,
   createRetentionPruner,
   pruneAuditEvents,
   runAsSystem,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 
 /**
  * Rows are written outside transactions, but instances commit a moment apart. Forwarding only

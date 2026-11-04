@@ -33,7 +33,7 @@ function installPageHelper(url: string, html: string) {
   vm.runInContext(match[1], dom.getInternalVMContext());
   const secrets = (
     domWindow as unknown as {
-      __rakazoPageBrowser: {
+      __orkbotPageBrowser: {
         findCard: (token: string) => number;
         focusCard: () => boolean;
         cardHolds: () => boolean;
@@ -42,7 +42,7 @@ function installPageHelper(url: string, html: string) {
         fill: (value: string, origin?: string, field?: string) => boolean;
       };
     }
-  ).__rakazoPageBrowser;
+  ).__orkbotPageBrowser;
   // The page browser focuses the field the bot pointed to; the fill then takes the focused field.
   const browser = {
     ...secrets,
@@ -75,7 +75,7 @@ function fieldValue(window: JSDOM["window"], label: string): string {
 function filled(window: JSDOM["window"], label: string) {
   return window.document
     .querySelector(`[aria-label="${label}"]`)!
-    .hasAttribute("data-rakazo-filled");
+    .hasAttribute("data-orkbot-filled");
 }
 
 describe("live page helper saved-login fill", () => {

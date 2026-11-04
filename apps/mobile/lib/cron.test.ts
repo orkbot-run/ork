@@ -1,4 +1,4 @@
-import { formatCron } from "@rakazo/core";
+import { formatCron } from "@orkbot/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { cronLabels } from "./cron";
 import { resetI18nForTests } from "./i18n";

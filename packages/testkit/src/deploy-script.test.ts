@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const COMPOSE = "docker compose --env-file .env -f infra/compose/docker-compose.prod.yml";
-const APP_IMAGE = "ghcr.example.test/rakazo/app:local";
+const APP_IMAGE = "ghcr.example.test/orkbot/app:local";
 // Each rolled service gains a new container, which must pass its health check before the old
 // one stops; the rest of the stack is reconciled afterwards.
 const WORKERS = "docker inspect --format {{.Id}} {{.HostConfig.RestartPolicy.Name}}";
@@ -27,7 +27,7 @@ const rolloutSteps = (revision: string) => [
   `${WORKERS} worker-old`,
   // Only this container gets the database owner login; the old API keeps serving meanwhile.
   `${COMPOSE} config --services`,
-  `${COMPOSE} run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS= migrate`,
+  `${COMPOSE} run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS= migrate`,
   ...["api", "web"].flatMap((service) => [
     `${COMPOSE} ps --all --quiet ${service}`,
     ...startBeside(service),
@@ -92,13 +92,13 @@ function rollout(commands: string[]) {
     .filter(
       (line) =>
         / (config|build|up|ps) /.test(`${line} `) ||
-        line.includes(" run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS=") ||
+        line.includes(" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS=") ||
         /^docker (inspect|stop|rm|update|kill) /.test(line),
     );
 }
 
 function fixture() {
-  const root = mkdtempSync(path.join(os.tmpdir(), "rakazo-deploy-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "orkbot-deploy-"));
   temporaryDirectories.push(root);
   const upstream = path.join(root, "upstream");
   const checkout = path.join(root, "checkout with spaces");
@@ -107,7 +107,7 @@ function fixture() {
   git(upstream, "init", "-q", "-b", "main");
   const first = commit(upstream, "first");
   git(root, "clone", "-q", upstream, checkout);
-  write(path.join(checkout, ".env"), "RAKAZO_HOST=app.example.test\n");
+  write(path.join(checkout, ".env"), "ORKBOT_HOST=app.example.test\n");
   const log = path.join(root, "commands.log");
   // Record every privileged or network command instead of running it.
   write(path.join(bin, "sudo"), '#!/bin/bash\nexec "$@"\n', 0o755);
@@ -137,7 +137,7 @@ if [[ "$*" == *" config --services" ]]; then
   echo api
   [[ "$revision" == "\${NO_MIGRATE_REVISION:-}" ]] || echo migrate
 fi
-if [[ "$*" == *" run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS="* && ( -n "\${FAIL_MIGRATE:-}" || "$revision" == "\${NO_MIGRATE_REVISION:-}" ) ]]; then exit 1; fi
+if [[ "$*" == *" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS="* && ( -n "\${FAIL_MIGRATE:-}" || "$revision" == "\${NO_MIGRATE_REVISION:-}" ) ]]; then exit 1; fi
 if [[ "$1" == pull && -n "\${FAIL_PULL:-}" ]]; then exit 1; fi
 if [[ "$*" == *" images -q" ]]; then echo sha256:running; fi
 if [[ "$1" == tag && -n "\${FAIL_TAG:-}" ]]; then exit 1; fi
@@ -172,7 +172,7 @@ if [[ "$1" == inspect && "$*" == *RestartPolicy* ]]; then
   exit 0
 fi
 if [[ "$1" == inspect ]]; then echo "\${CONTAINER_HEALTH:-running healthy}"; fi
-if [[ "$*" == "image ls "* ]]; then echo rakazo-rollback:old; fi
+if [[ "$*" == "image ls "* ]]; then echo orkbot-rollback:old; fi
 exit 0
 `,
     0o755,
@@ -196,8 +196,8 @@ echo "/dev/fake 104857600 0 \${FREE_KB:-52428800} 0% /"
     PATH: [bin, "/usr/bin", "/bin"].join(path.delimiter),
     HOME: root,
     COMMAND_LOG: log,
-    RAKAZO_DEPLOY_DIR: checkout,
-    RAKAZO_DEPLOY_HEALTH_INTERVAL: "0",
+    ORKBOT_DEPLOY_DIR: checkout,
+    ORKBOT_DEPLOY_HEALTH_INTERVAL: "0",
   };
   return {
     upstream,
@@ -260,7 +260,7 @@ describe("production deploy script", () => {
     const deploy = fixture();
     const pinned = commit(deploy.upstream, "pinned");
     commit(deploy.upstream, "later");
-    const result = deploy.run({ RAKAZO_DEPLOY_REVISION: pinned });
+    const result = deploy.run({ ORKBOT_DEPLOY_REVISION: pinned });
     expect(result.status).toBe(0);
     expect(deploy.head()).toBe(pinned);
     expect(deploy.deployed()).toBe(pinned);
@@ -270,7 +270,7 @@ describe("production deploy script", () => {
   it("builds, starts, records, and prunes after a healthy rollout", () => {
     const deploy = fixture();
     const next = commit(deploy.upstream, "next");
-    const result = deploy.run({ RAKAZO_DEPLOY_BUILD_CACHE_GB: "3" });
+    const result = deploy.run({ ORKBOT_DEPLOY_BUILD_CACHE_GB: "3" });
     expect(result.status).toBe(0);
     expect(deploy.head()).toBe(next);
     expect(deploy.deployed()).toBe(next);
@@ -281,9 +281,9 @@ describe("production deploy script", () => {
       commands.slice(commands.findIndex((line) => line.includes("--remove-orphans")) + 1),
     ).toEqual([
       "curl https://app.example.test/health",
-      "docker image ls --format {{.Repository}}:{{.Tag}} rakazo-rollback",
-      "docker rmi rakazo-rollback:old",
-      "docker tag sha256:running rakazo-rollback:running",
+      "docker image ls --format {{.Repository}}:{{.Tag}} orkbot-rollback",
+      "docker rmi orkbot-rollback:old",
+      "docker tag sha256:running orkbot-rollback:running",
       "docker image prune --force",
       "docker builder prune --force --keep-storage 3GB",
       ...finishDraining,
@@ -293,12 +293,12 @@ describe("production deploy script", () => {
   it("refuses malformed size settings before deploying", () => {
     const deploy = fixture();
     commit(deploy.upstream, "next");
-    const cache = deploy.run({ RAKAZO_DEPLOY_BUILD_CACHE_GB: "8GB" });
+    const cache = deploy.run({ ORKBOT_DEPLOY_BUILD_CACHE_GB: "8GB" });
     expect(cache.status).toBe(1);
-    expect(cache.stderr).toContain("RAKAZO_DEPLOY_BUILD_CACHE_GB must be a whole number");
-    const threshold = deploy.run({ RAKAZO_DEPLOY_MIN_FREE_GB: "08" });
+    expect(cache.stderr).toContain("ORKBOT_DEPLOY_BUILD_CACHE_GB must be a whole number");
+    const threshold = deploy.run({ ORKBOT_DEPLOY_MIN_FREE_GB: "08" });
     expect(threshold.status).toBe(1);
-    expect(threshold.stderr).toContain("RAKAZO_DEPLOY_MIN_FREE_GB must be a whole number");
+    expect(threshold.stderr).toContain("ORKBOT_DEPLOY_MIN_FREE_GB must be a whole number");
     expect(deploy.commands()).toEqual([]);
     expect(deploy.head()).toBe(deploy.first);
   });
@@ -315,7 +315,7 @@ describe("production deploy script", () => {
   it("refuses to build with too little free disk", () => {
     const deploy = fixture();
     commit(deploy.upstream, "next");
-    const result = deploy.run({ FREE_KB: String(2 * 1024 * 1024), RAKAZO_DEPLOY_MIN_FREE_GB: "5" });
+    const result = deploy.run({ FREE_KB: String(2 * 1024 * 1024), ORKBOT_DEPLOY_MIN_FREE_GB: "5" });
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Only 2GB free");
     expect(deploy.head()).toBe(deploy.first);
@@ -366,7 +366,7 @@ describe("production deploy script", () => {
   });
 
   describe("with published images", () => {
-    const REGISTRY = "registry.example.test/rakazo/app";
+    const REGISTRY = "registry.example.test/orkbot/app";
     const published = (revision: string) => `${REGISTRY}:sha-${revision}`;
     const commandsOf = (deploy: ReturnType<typeof fixture>) =>
       deploy.commands().map((line) => line.split(" @ ")[0]!);
@@ -374,7 +374,7 @@ describe("production deploy script", () => {
     it("pulls the image published for the commit instead of building", () => {
       const deploy = fixture();
       const next = commit(deploy.upstream, "next");
-      const result = deploy.run({ RAKAZO_DEPLOY_IMAGE: REGISTRY });
+      const result = deploy.run({ ORKBOT_DEPLOY_IMAGE: REGISTRY });
       expect(result.status).toBe(0);
       expect(deploy.deployed()).toBe(next);
       const commands = commandsOf(deploy);
@@ -390,9 +390,9 @@ describe("production deploy script", () => {
       expect(up).toBeGreaterThan(pull);
       expect(commands.slice(up + 1)).toEqual([
         "curl https://app.example.test/health",
-        "docker image ls --format {{.Repository}}:{{.Tag}} rakazo-rollback",
-        "docker rmi rakazo-rollback:old",
-        "docker tag sha256:running rakazo-rollback:running",
+        "docker image ls --format {{.Repository}}:{{.Tag}} orkbot-rollback",
+        "docker rmi orkbot-rollback:old",
+        "docker tag sha256:running orkbot-rollback:running",
         "docker image prune --force",
         "docker builder prune --force --keep-storage 8GB",
         ...finishDraining,
@@ -402,7 +402,7 @@ describe("production deploy script", () => {
     it("uses the GHCR image of the GitHub repository the checkout tracks by default", () => {
       const deploy = fixture();
       const next = commit(deploy.upstream, "next");
-      const github = "https://github.com/Example/Rakazo.git";
+      const github = "https://github.com/Example/Ork.git";
       git(deploy.checkout, "remote", "set-url", "origin", github);
       // The deploy runs with HOME set to the fixture root, so fetches still reach the local upstream.
       write(
@@ -411,14 +411,14 @@ describe("production deploy script", () => {
       );
       expect(deploy.run().status).toBe(0);
       expect(commandsOf(deploy)).toContain(
-        `docker pull --quiet ghcr.io/example/rakazo/app:sha-${next}`,
+        `docker pull --quiet ghcr.io/example/ork/app:sha-${next}`,
       );
     });
 
     it("builds on the host, loudly, when the image cannot be pulled", () => {
       const deploy = fixture();
       const next = commit(deploy.upstream, "next");
-      const result = deploy.run({ RAKAZO_DEPLOY_IMAGE: REGISTRY, FAIL_PULL: "1" });
+      const result = deploy.run({ ORKBOT_DEPLOY_IMAGE: REGISTRY, FAIL_PULL: "1" });
       expect(result.status).toBe(0);
       expect(result.stderr).toContain(`::warning::Could not pull ${published(next)}`);
       expect(deploy.deployed()).toBe(next);
@@ -430,7 +430,7 @@ describe("production deploy script", () => {
     it("rolls back by retagging the previous image when production never becomes healthy", () => {
       const deploy = fixture();
       commit(deploy.upstream, "unhealthy");
-      const result = deploy.run({ RAKAZO_DEPLOY_IMAGE: REGISTRY, FAIL_HEALTH: "1" });
+      const result = deploy.run({ ORKBOT_DEPLOY_IMAGE: REGISTRY, FAIL_HEALTH: "1" });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain("did not recover");
       expect(deploy.head()).toBe(deploy.first);
@@ -443,7 +443,7 @@ describe("production deploy script", () => {
       const deploy = fixture();
       const next = commit(deploy.upstream, "unhealthy");
       const result = deploy.run({
-        RAKAZO_DEPLOY_IMAGE: REGISTRY,
+        ORKBOT_DEPLOY_IMAGE: REGISTRY,
         FAIL_HEALTH: "1",
         PREVIOUS_IMAGE: "",
       });
@@ -466,7 +466,7 @@ describe("production deploy script", () => {
     expect(commands).toContain(`${COMPOSE} up -d --no-deps --wait web`);
     expect(commands).toContain(`${COMPOSE} up -d --no-deps --wait worker`);
     expect(
-      commands.filter((line) => line.includes(" run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS=")),
+      commands.filter((line) => line.includes(" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS=")),
     ).toHaveLength(1);
     expect(commands.some((line) => line.includes("--scale"))).toBe(false);
   });
@@ -495,22 +495,22 @@ describe("production deploy script", () => {
     // Both the failed rollout and its rollback retain the last healthy release's eligibility.
     expect(migrationCommands()).toHaveLength(2);
     for (const line of migrationCommands()) {
-      expect(line).toContain("RAKAZO_DEPLOYED_MIGRATIONS=001_add migrate");
+      expect(line).toContain("ORKBOT_DEPLOYED_MIGRATIONS=001_add migrate");
     }
     start = deploy.commands().length;
     expect(deploy.run({ FAIL_HEALTH: "1" }).status).toBe(1);
     for (const line of migrationCommands()) {
-      expect(line).toContain("RAKAZO_DEPLOYED_MIGRATIONS=001_add migrate");
+      expect(line).toContain("ORKBOT_DEPLOYED_MIGRATIONS=001_add migrate");
     }
     commit(deploy.upstream, "release-c");
     start = deploy.commands().length;
     expect(deploy.run().status).toBe(0);
-    expect(migrationCommands()[0]).toContain("RAKAZO_DEPLOYED_MIGRATIONS=001_add migrate");
+    expect(migrationCommands()[0]).toContain("ORKBOT_DEPLOYED_MIGRATIONS=001_add migrate");
 
     commit(deploy.upstream, "release-d");
     start = deploy.commands().length;
     expect(deploy.run().status).toBe(0);
-    expect(migrationCommands()[0]).toContain("RAKAZO_DEPLOYED_MIGRATIONS=001_add,002_drop migrate");
+    expect(migrationCommands()[0]).toContain("ORKBOT_DEPLOYED_MIGRATIONS=001_add,002_drop migrate");
   });
 
   it("starts no new container and keeps the old one serving when migrations fail", () => {
@@ -518,7 +518,7 @@ describe("production deploy script", () => {
     commit(deploy.upstream, "next");
     expect(deploy.run({ FAIL_MIGRATE: "1" }).status).toBe(1);
     const commands = rollout(deploy.commands());
-    expect(commands).toContain(`${COMPOSE} run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS= migrate`);
+    expect(commands).toContain(`${COMPOSE} run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS= migrate`);
     expect(commands.some((line) => line.includes(" up "))).toBe(false);
     expect(commands.some((line) => line.startsWith("docker stop"))).toBe(false);
     expect(deploy.head()).toBe(deploy.first);
@@ -532,7 +532,7 @@ describe("production deploy script", () => {
     expect(deploy.head()).toBe(deploy.first);
     const commands = rollout(deploy.commands());
     expect(
-      commands.filter((line) => line.includes(" run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS=")),
+      commands.filter((line) => line.includes(" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS=")),
     ).toHaveLength(1);
     expect(commands).toContain(`${COMPOSE} up -d --wait postgres`);
     // The rollback still replaces the failed release's containers.
@@ -561,7 +561,7 @@ describe("production deploy script", () => {
     expect(deploy.run({ EXTRA_WORKER: "running" }).status).toBe(0);
     const commands = rollout(deploy.commands());
     const migrate = commands.indexOf(
-      `${COMPOSE} run --rm -T -e RAKAZO_DEPLOYED_MIGRATIONS= migrate`,
+      `${COMPOSE} run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS= migrate`,
     );
     expect(commands.slice(migrate - 4, migrate)).toEqual([
       `${WORKERS} worker-old worker-older`,
@@ -630,7 +630,7 @@ describe("production deploy launcher", () => {
   let later: string;
 
   beforeAll(() => {
-    root = mkdtempSync(path.join(os.tmpdir(), "rakazo-launcher-"));
+    root = mkdtempSync(path.join(os.tmpdir(), "orkbot-launcher-"));
     const upstream = path.join(root, "upstream");
     checkout = path.join(root, "checkout with spaces");
     const script = path.join("infra", "compose", "deploy-main.sh");
@@ -640,7 +640,7 @@ describe("production deploy launcher", () => {
     git(upstream, "add", script);
     commit(upstream, "first");
     git(root, "clone", "-q", upstream, checkout);
-    write(path.join(upstream, script), 'echo "deploy $RAKAZO_DEPLOY_REVISION $0 $*"\n');
+    write(path.join(upstream, script), 'echo "deploy $ORKBOT_DEPLOY_REVISION $0 $*"\n');
     git(upstream, "add", script);
     tested = commit(upstream, "tested");
     later = commit(upstream, "merged after the green run");
@@ -654,7 +654,7 @@ describe("production deploy launcher", () => {
       env: {
         PATH: process.env.PATH,
         HOME: root,
-        RAKAZO_DEPLOY_DIR: checkout,
+        ORKBOT_DEPLOY_DIR: checkout,
         ...(command === undefined ? {} : { SSH_ORIGINAL_COMMAND: command }),
       },
       encoding: "utf8",
@@ -666,14 +666,14 @@ describe("production deploy launcher", () => {
     const result = launch(undefined, "--flag");
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(`deploy ${later} rakazo-deploy-main --flag`);
+    expect(result.stdout.trim()).toBe(`deploy ${later} orkbot-deploy-main --flag`);
   });
 
   it("deploys the commit CI tested, not a newer main", () => {
     const result = launch(`deploy-main ${tested}`);
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
-    expect(result.stdout.trim()).toBe(`deploy ${tested} rakazo-deploy-main`);
+    expect(result.stdout.trim()).toBe(`deploy ${tested} orkbot-deploy-main`);
   });
 
   it("does not roll back to an older commit than production runs", () => {
@@ -700,7 +700,7 @@ describe("production deploy launcher", () => {
 
   it("refuses a relative checkout path", () => {
     const result = spawnSync("/bin/bash", [launcher], {
-      env: { PATH: process.env.PATH, RAKAZO_DEPLOY_DIR: "relative" },
+      env: { PATH: process.env.PATH, ORKBOT_DEPLOY_DIR: "relative" },
       encoding: "utf8",
     });
     expect(result.status).toBe(1);

@@ -21,7 +21,7 @@ COPY packages/core packages/core
 COPY packages/ui-tokens packages/ui-tokens
 COPY packages/logging packages/logging
 COPY infra/updater infra/updater
-RUN corepack enable && pnpm install --frozen-lockfile --prod --filter "@rakazo/updater..."
+RUN corepack enable && pnpm install --frozen-lockfile --prod --filter "@orkbot/updater..."
 WORKDIR /app/infra/updater
 ARG GIT_SHA
 ENV GIT_SHA=$GIT_SHA

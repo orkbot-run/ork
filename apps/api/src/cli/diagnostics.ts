@@ -1,9 +1,9 @@
 // `docker compose exec api node dist/cli/diagnostics.js`: a redacted report for a support issue.
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@rakazo/adapters";
-import type { PrismaClient } from "@rakazo/db";
-import { createDb, runAsSystem } from "@rakazo/db";
+import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
+import type { PrismaClient } from "@orkbot/db";
+import { createDb, runAsSystem } from "@orkbot/db";
 import type { DiagnosticsInput } from "../diagnostics.js";
 import { renderDiagnostics } from "../diagnostics.js";
 import type { AppEnv } from "../env.js";

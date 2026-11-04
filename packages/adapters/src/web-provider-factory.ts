@@ -1,4 +1,4 @@
-import type { WebProvider } from "@rakazo/adapter-kit";
+import type { WebProvider } from "@orkbot/adapter-kit";
 import { FakeWebProvider } from "./fake-web.js";
 import { KeenableWebProvider } from "./keenable-web.js";
 import { KeylessHttpWebProvider } from "./keyless-http-web.js";

@@ -2,23 +2,23 @@
 set -euo pipefail
 umask 077
 
-PROJECT_DIR="${RAKAZO_DEPLOY_DIR:-/srv/rakazo}"
-[[ "${PROJECT_DIR}" == /* ]] || { echo "RAKAZO_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
+PROJECT_DIR="${ORKBOT_DEPLOY_DIR:-/srv/orkbot}"
+[[ "${PROJECT_DIR}" == /* ]] || { echo "ORKBOT_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
 COMPOSE_FILE="${PROJECT_DIR}/infra/compose/docker-compose.prod.yml"
 ENV_FILE="${PROJECT_DIR}/.env"
-BACKUP_ROOT="/var/backups/rakazo"
+BACKUP_ROOT="/var/backups/orkbot"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 SNAPSHOT_DIR="${BACKUP_ROOT}/${STAMP}"
 # Verified snapshots kept on this host.
-KEEP="${RAKAZO_BACKUP_KEEP:-3}"
-[[ "${KEEP}" =~ ^[1-9][0-9]*$ ]] || { echo "RAKAZO_BACKUP_KEEP must be a positive whole number" >&2; exit 1; }
-OFFSITE="${RAKAZO_BACKUP_OFFSITE_REMOTE:-}"
+KEEP="${ORKBOT_BACKUP_KEEP:-3}"
+[[ "${KEEP}" =~ ^[1-9][0-9]*$ ]] || { echo "ORKBOT_BACKUP_KEEP must be a positive whole number" >&2; exit 1; }
+OFFSITE="${ORKBOT_BACKUP_OFFSITE_REMOTE:-}"
 # Off-site snapshots to keep; 0 leaves pruning to the destination's own lifecycle rules.
-OFFSITE_KEEP="${RAKAZO_BACKUP_OFFSITE_KEEP:-14}"
-[[ "${OFFSITE_KEEP}" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "RAKAZO_BACKUP_OFFSITE_KEEP must be a whole number" >&2; exit 1; }
+OFFSITE_KEEP="${ORKBOT_BACKUP_OFFSITE_KEEP:-14}"
+[[ "${OFFSITE_KEEP}" =~ ^(0|[1-9][0-9]*)$ ]] || { echo "ORKBOT_BACKUP_OFFSITE_KEEP must be a whole number" >&2; exit 1; }
 
-MIN_FREE_GB="${RAKAZO_BACKUP_MIN_FREE_GB:-5}"
-MAX_GB="${RAKAZO_BACKUP_MAX_GB:-50}"
+MIN_FREE_GB="${ORKBOT_BACKUP_MIN_FREE_GB:-5}"
+MAX_GB="${ORKBOT_BACKUP_MAX_GB:-50}"
 for value in "${MIN_FREE_GB}" "${MAX_GB}"; do
   [[ "${value}" =~ ^[1-9][0-9]*$ ]] || { echo "Backup space limits must be positive whole GiB" >&2; exit 1; }
 done
@@ -26,12 +26,12 @@ done
 # Encrypt every artifact to public age recipients. The private key never lives on this host,
 # and plaintext is streamed straight into age, so it never touches disk.
 age_args=()
-read -r -a recipients <<<"${RAKAZO_BACKUP_AGE_RECIPIENTS:-}"
+read -r -a recipients <<<"${ORKBOT_BACKUP_AGE_RECIPIENTS:-}"
 for recipient in "${recipients[@]}"; do age_args+=(-r "${recipient}"); done
-RECIPIENTS_FILE="${RAKAZO_BACKUP_AGE_RECIPIENTS_FILE:-}"
+RECIPIENTS_FILE="${ORKBOT_BACKUP_AGE_RECIPIENTS_FILE:-}"
 if [[ -n "${RECIPIENTS_FILE}" ]]; then
   [[ -r "${RECIPIENTS_FILE}" && -s "${RECIPIENTS_FILE}" ]] || {
-    echo "RAKAZO_BACKUP_AGE_RECIPIENTS_FILE is not a readable, non-empty file" >&2; exit 1;
+    echo "ORKBOT_BACKUP_AGE_RECIPIENTS_FILE is not a readable, non-empty file" >&2; exit 1;
   }
   age_args+=(-R "${RECIPIENTS_FILE}")
 fi
@@ -45,16 +45,16 @@ fi
 # instead of quietly falling back to plaintext.
 ENCRYPTED_MARKER="${BACKUP_ROOT}/.encrypted"
 if [[ -z "${suffix}" ]]; then
-  if [[ -e "${ENCRYPTED_MARKER}" && "${RAKAZO_BACKUP_ALLOW_PLAINTEXT:-0}" != 1 ]]; then
-    echo "Backups on this host are encrypted; refusing to write plaintext. Set RAKAZO_BACKUP_AGE_RECIPIENTS, or RAKAZO_BACKUP_ALLOW_PLAINTEXT=1 to accept plaintext." >&2
+  if [[ -e "${ENCRYPTED_MARKER}" && "${ORKBOT_BACKUP_ALLOW_PLAINTEXT:-0}" != 1 ]]; then
+    echo "Backups on this host are encrypted; refusing to write plaintext. Set ORKBOT_BACKUP_AGE_RECIPIENTS, or ORKBOT_BACKUP_ALLOW_PLAINTEXT=1 to accept plaintext." >&2
     exit 1
   fi
-  echo "WARNING: this backup is not encrypted. Set RAKAZO_BACKUP_AGE_RECIPIENTS to encrypt it." >&2
+  echo "WARNING: this backup is not encrypted. Set ORKBOT_BACKUP_AGE_RECIPIENTS to encrypt it." >&2
 fi
 
 reserve_kb=$((MIN_FREE_GB * 1024 * 1024))
 budget_kb=$((MAX_GB * 1024 * 1024))
-if [[ "${RAKAZO_BACKUP_REQUIRE_VOLUME:-0}" == 1 ]]; then
+if [[ "${ORKBOT_BACKUP_REQUIRE_VOLUME:-0}" == 1 ]]; then
   mountpoint -q /var/backups || { echo "/var/backups must be a mounted backup volume" >&2; exit 1; }
   [[ "$(stat -c %d /var/backups)" != "$(stat -c %d /)" ]] || {
     echo "/var/backups must be on a separate filesystem" >&2; exit 1;
@@ -78,7 +78,7 @@ appdata="$(docker inspect "${api}" \
 install -d -m 700 "${BACKUP_ROOT}"
 # One backup at a time, so cleanup never removes a snapshot another run is still writing.
 exec 8>"${BACKUP_ROOT}/.lock"
-flock -n 8 || { echo "Another Rakazo backup is running" >&2; exit 1; }
+flock -n 8 || { echo "Another Ork backup is running" >&2; exit 1; }
 # Newest first; stamps sort by time. Only stamp-named directories are ever listed or removed.
 snapshots() {
   find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -regextype posix-extended \
@@ -112,7 +112,7 @@ if [[ -n "${last}" ]]; then
   last_source=""
   [[ ! -f "${last}/SOURCE_SIZE_KB" ]] || last_source="$(cat "${last}/SOURCE_SIZE_KB")"
   last_archive="${last}/appdata.tgz"
-  last_dump="${last}/rakazo.dump"
+  last_dump="${last}/orkbot.dump"
   [[ -f "${last_archive}" ]] || last_archive+=".age"
   [[ -f "${last_dump}" ]] || last_dump+=".age"
   if [[ "${last_source}" =~ ^[1-9][0-9]*$ && -f "${last_archive}" && -f "${last_dump}" ]]; then
@@ -202,7 +202,7 @@ capture() {
 }
 
 rc=0
-capture rakazo.dump dump_database verify_database || rc=$?
+capture orkbot.dump dump_database verify_database || rc=$?
 ((rc == 0)) || { echo "database dump failed with exit ${rc}" >&2; exit "${rc}"; }
 
 # Bots write while this runs. GNU tar exits 1 for "file changed as we read it",
@@ -215,7 +215,7 @@ if [[ "${rc}" -gt 1 ]]; then
   exit "${rc}"
 fi
 
-(cd "${SNAPSHOT_DIR}" && sha256sum "rakazo.dump${suffix}" "appdata.tgz${suffix}" SOURCE_SIZE_KB > SHA256SUMS.pending)
+(cd "${SNAPSHOT_DIR}" && sha256sum "orkbot.dump${suffix}" "appdata.tgz${suffix}" SOURCE_SIZE_KB > SHA256SUMS.pending)
 chmod 600 "${SNAPSHOT_DIR}"/*
 sync -- "${SNAPSHOT_DIR}"/*
 # Publish the completion marker only after every checksum is written.
@@ -236,13 +236,13 @@ while read -r dir; do
   fi
 done < <(snapshots)
 
-echo "Verified Rakazo backup written to ${SNAPSHOT_DIR}"
+echo "Verified Ork backup written to ${SNAPSHOT_DIR}"
 
 # Optional off-site copy through any rclone remote (S3-compatible storage, SFTP, ...), configured
 # with rclone's own settings. A failure here keeps the verified local snapshot but fails the run.
 [[ -n "${OFFSITE}" ]] || exit 0
 offsite_failed() { echo "Off-site copy failed: $1" >&2; exit 1; }
-[[ -n "${suffix}" ]] || offsite_failed "off-site copies require RAKAZO_BACKUP_AGE_RECIPIENTS"
+[[ -n "${suffix}" ]] || offsite_failed "off-site copies require ORKBOT_BACKUP_AGE_RECIPIENTS"
 command -v rclone >/dev/null || offsite_failed "rclone is not installed"
 # Accept "remote:", "remote:path" and "remote:path/".
 remote="${OFFSITE%/}"

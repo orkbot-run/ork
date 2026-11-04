@@ -1,4 +1,4 @@
-import { InfisicalSecretStore } from "@rakazo/adapters";
+import { InfisicalSecretStore } from "@orkbot/adapters";
 import { describe, expect, it, vi } from "vitest";
 import { infisicalFake } from "../../../packages/adapters/src/secret-store-fake.js";
 import { DATABASE_CHECK_TIMEOUT_MS, healthRoutes } from "./health.js";

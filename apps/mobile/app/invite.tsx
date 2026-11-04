@@ -1,5 +1,5 @@
-import { BOT_COLORS, DEFAULT_NEW_BOT_AVATAR_SET, INVITED_TRIAL_WEEKS } from "@rakazo/contracts";
-import { typeScale } from "@rakazo/ui-tokens";
+import { BOT_COLORS, DEFAULT_NEW_BOT_AVATAR_SET, INVITED_TRIAL_WEEKS } from "@orkbot/contracts";
+import { typeScale } from "@orkbot/ui-tokens";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
 import { ScrollView, Share, StyleSheet, Text, View } from "react-native";

@@ -1,4 +1,4 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from "@rakazo/ui-web";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@orkbot/ui-web";
 import type { ComponentProps, ReactElement } from "react";
 
 /** Shows `label` beside an icon-only control on hover and focus; the control keeps its own accessible name. */

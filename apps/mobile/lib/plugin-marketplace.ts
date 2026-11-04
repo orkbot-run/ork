@@ -3,9 +3,9 @@ import type {
   ConnectionCatalogItem,
   McpServer,
   PluginMarketplaceEntry,
-} from "@rakazo/contracts";
-import { PluginPreviewSchema } from "@rakazo/contracts";
-import type { PluginCategory } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { PluginPreviewSchema } from "@orkbot/contracts";
+import type { PluginCategory } from "@orkbot/core";
 import {
   catalogItemKey,
   installedPluginParts,
@@ -13,7 +13,7 @@ import {
   matchesPluginQuery,
   OTHER_PLUGINS,
   PLUGIN_CATEGORIES,
-} from "@rakazo/core";
+} from "@orkbot/core";
 
 /** What the plugin screen needs, from a catalog entry or a pasted GitHub URL. */
 export type PluginParams = {

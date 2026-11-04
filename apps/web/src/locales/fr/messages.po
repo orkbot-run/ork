@@ -6,7 +6,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: @lingui/cli\n"
 "Language: fr\n"
-"Project-Id-Version: rakazo-web\n"
+"Project-Id-Version: orkbot-web\n"
 "Report-Msgid-Bugs-To: \n"
 "PO-Revision-Date: \n"
 "Last-Translator: \n"
@@ -718,7 +718,7 @@ msgid "Allow once"
 msgstr "Autoriser une fois"
 
 #: src/lib/dictation.ts
-msgid "Allow Rakazo to use Speech Recognition and the microphone in System Settings."
+msgid "Allow Ork to use Speech Recognition and the microphone in System Settings."
 msgstr ""
 
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -766,8 +766,8 @@ msgid "An API key is stored for this provider, not a subscription sign-in."
 msgstr "Une clé API est enregistrée pour ce fournisseur, et non une connexion par abonnement."
 
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "An existing Honcho peer to read from. Rakazo never writes to it."
-msgstr "Un pair Honcho existant à consulter. Rakazo n’y écrit jamais."
+msgid "An existing Honcho peer to read from. Ork never writes to it."
+msgstr "Un pair Honcho existant à consulter. Ork n’y écrit jamais."
 
 #: src/lib/agent-import-errors.ts
 msgid "An imported API key could not be checked. Try again."
@@ -1413,7 +1413,7 @@ msgstr "Choisir un dossier"
 
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
-msgid "Choose how to use Rakazo"
+msgid "Choose how to use Ork"
 msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
@@ -1733,8 +1733,8 @@ msgstr "Connectez d’abord le fournisseur de ce modèle."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
-msgid "Connect your own API key in Models or choose Rakazo credits in Billing."
-msgstr "Connectez votre propre clé API dans Modèles ou choisissez les crédits Rakazo dans Facturation."
+msgid "Connect your own API key in Models or choose Ork credits in Billing."
+msgstr "Connectez votre propre clé API dans Modèles ou choisissez les crédits Ork dans Facturation."
 
 #: src/components/ComputerDeviceSettings.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -2499,8 +2499,8 @@ msgid "Create space"
 msgstr "Créer un espace"
 
 #: src/pages/Auth.tsx
-msgid "Create your Rakazo"
-msgstr "Créez votre Rakazo"
+msgid "Create your Ork"
+msgstr "Créez votre Ork"
 
 #: src/components/AskCard.tsx
 msgid "Created"
@@ -2973,7 +2973,7 @@ msgid "Ends {day}"
 msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
-msgid "Enjoying Rakazo?"
+msgid "Enjoying Ork?"
 msgstr ""
 
 #: src/lib/user-error.ts
@@ -3478,7 +3478,7 @@ msgid "How to check"
 msgstr "Comment vérifier"
 
 #: src/components/SignupSurvey.tsx
-msgid "How will you use Rakazo?"
+msgid "How will you use Ork?"
 msgstr ""
 
 #: src/pages/shell/computer-release-actions.tsx
@@ -4521,8 +4521,8 @@ msgid "Not imported"
 msgstr "Non importé"
 
 #: src/pages/shell/import-status.ts
-msgid "Not in Rakazo's catalog"
-msgstr "Absent du catalogue de Rakazo"
+msgid "Not in Ork's catalog"
+msgstr "Absent du catalogue de Ork"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Not in the plugin catalog"
@@ -4535,12 +4535,12 @@ msgstr "Pas maintenant"
 
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/import-status.ts
-msgid "Not supported in Rakazo"
-msgstr "Non pris en charge par Rakazo"
+msgid "Not supported in Ork"
+msgstr "Non pris en charge par Ork"
 
 #: src/pages/shell/agent-import.tsx
-msgid "Not used by Rakazo"
-msgstr "Non utilisé par Rakazo"
+msgid "Not used by Ork"
+msgstr "Non utilisé par Ork"
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Not working"
@@ -4684,8 +4684,8 @@ msgstr "Ouvrir la navigation"
 
 #: src/components/pages/PublicPageShell.tsx
 #: src/pages/SharedPage.tsx
-msgid "Open Rakazo"
-msgstr "Ouvrir Rakazo"
+msgid "Open Ork"
+msgstr "Ouvrir Ork"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4862,8 +4862,8 @@ msgid "Paste a replacement key"
 msgstr "Collez une clé de remplacement"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
-msgid "Paste the OpenAI-compatible address from your server. Rakazo adds /v1 if needed."
-msgstr "Collez l'adresse compatible OpenAI de votre serveur. Rakazo ajoute /v1 si nécessaire."
+msgid "Paste the OpenAI-compatible address from your server. Ork adds /v1 if needed."
+msgstr "Collez l'adresse compatible OpenAI de votre serveur. Ork ajoute /v1 si nécessaire."
 
 #: src/pages/shell/agent-import.tsx
 msgid "Paste the reply"
@@ -5055,16 +5055,16 @@ msgstr "En file d'attente"
 
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Rakazo"
-msgstr "Rakazo"
+msgid "Ork"
+msgstr "Ork"
 
 #: src/components/ModelCredits.tsx
 #: src/pages/Onboarding.tsx
-msgid "Rakazo credits"
+msgid "Ork credits"
 msgstr ""
 
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "rakazo-shared and IDs starting with bot- are reserved for Rakazo."
+msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
 msgstr ""
 
 #: src/pages/shell/message-hover-actions.tsx
@@ -5485,8 +5485,8 @@ msgstr "Revenir à l’appel avec {0}"
 
 #: src/pages/McpOAuthCallback.tsx
 #: src/pages/SlackInstallCallback.tsx
-msgid "Return to Rakazo"
-msgstr "Retour à Rakazo"
+msgid "Return to Ork"
+msgstr "Retour à Ork"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
@@ -5963,8 +5963,8 @@ msgid "Sign in at <0>{0}</0>, then paste the code here."
 msgstr "Connectez-vous sur <0>{0}</0>, puis collez le code ici."
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Rakazo"
-msgstr "Connectez-vous à Rakazo"
+msgid "Sign in to Ork"
+msgstr "Connectez-vous à Ork"
 
 #: src/lib/user-error.ts
 msgid "Sign in to your existing account to link SSO"
@@ -6244,8 +6244,8 @@ msgid "Subscribe for {price} / month"
 msgstr "S’abonner pour {price} / mois"
 
 #: src/components/ModelCredits.tsx
-msgid "Subscribe to Rakazo credits"
-msgstr "S’abonner aux crédits Rakazo"
+msgid "Subscribe to Ork credits"
+msgstr "S’abonner aux crédits Ork"
 
 #: src/components/ModelCredits.tsx
 msgid "Subscribe with your own AI"
@@ -6594,8 +6594,8 @@ msgid "This server's tool result does not fit the model. Turn off Keep tool resu
 msgstr ""
 
 #: src/pages/model-settings/connection-controls.tsx
-msgid "This subscription sign-in is not available in Rakazo yet. Use a deployment credential or choose another provider."
-msgstr "Cette connexion par abonnement n'est pas encore disponible dans Rakazo. Utilisez un identifiant de déploiement ou choisissez un autre fournisseur."
+msgid "This subscription sign-in is not available in Ork yet. Use a deployment credential or choose another provider."
+msgstr "Cette connexion par abonnement n'est pas encore disponible dans Ork. Utilisez un identifiant de déploiement ou choisissez un autre fournisseur."
 
 #: src/pages/Artifacts.tsx
 msgid "This week"
@@ -6903,7 +6903,7 @@ msgid "Use Protected input for passwords."
 msgstr ""
 
 #: src/components/ModelCredits.tsx
-msgid "Use Rakazo credits"
+msgid "Use Ork credits"
 msgstr ""
 
 #: src/pages/model-settings/space-bots-model.tsx
@@ -7051,7 +7051,7 @@ msgid "Weekends"
 msgstr "Week-ends"
 
 #: src/components/SignupSurvey.tsx
-msgid "Welcome to Rakazo"
+msgid "Welcome to Ork"
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx
@@ -7063,7 +7063,7 @@ msgid "What can this space use?"
 msgstr ""
 
 #: src/components/SignupSurvey.tsx
-msgid "What do you most want Rakazo to help with?"
+msgid "What do you most want Ork to help with?"
 msgstr ""
 
 #: src/pages/shell/message-cards.tsx

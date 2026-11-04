@@ -1,6 +1,6 @@
 import type * as TimersPromises from "node:timers/promises";
 import { FetchError, ResponseError } from "@boatdev/sdk";
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@rakazo/adapter-kit";
+import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoatApiError, BoatRequestGate, boatResponseError, wrapBoatCall } from "./boat-errors.js";
 import { BoatSandboxProvider } from "./boat-sandbox.js";

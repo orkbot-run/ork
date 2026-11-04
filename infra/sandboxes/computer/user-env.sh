@@ -9,10 +9,10 @@ gid=$(id -g) || exit 1
   cp /etc/passwd "$NSS_WRAPPER_PASSWD" || exit 1
   cp /etc/group "$NSS_WRAPPER_GROUP" || exit 1
   if ! awk -F: -v uid="$uid" '$3 == uid { found = 1 } END { exit !found }' /etc/passwd; then
-    printf 'rakazo-runtime:x:%s:%s:Computer:/home/rakazo:/bin/bash\n' "$uid" "$gid" >> "$NSS_WRAPPER_PASSWD" || exit 1
+    printf 'orkbot-runtime:x:%s:%s:Computer:/home/orkbot:/bin/bash\n' "$uid" "$gid" >> "$NSS_WRAPPER_PASSWD" || exit 1
   fi
   if ! awk -F: -v gid="$gid" '$3 == gid { found = 1 } END { exit !found }' /etc/group; then
-    printf 'rakazo-runtime:x:%s:\n' "$gid" >> "$NSS_WRAPPER_GROUP" || exit 1
+    printf 'orkbot-runtime:x:%s:\n' "$gid" >> "$NSS_WRAPPER_GROUP" || exit 1
   fi
 ) || {
   echo "Failed to create nss_wrapper passwd/group files" >&2

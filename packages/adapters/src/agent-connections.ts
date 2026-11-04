@@ -1,21 +1,21 @@
-import type { JobPublisher } from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { JobPublisher } from "@orkbot/adapter-kit";
+import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
 import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
   nextBotMessageHop,
   sanitizeMessagingLabel,
-} from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@orkbot/core";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   crossSpaceCommunicationAllowed,
   runAsSystem,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { currentBotMessageHop } from "./bot-messages.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { runLeaseFor } from "./run-messages.js";

@@ -5,7 +5,7 @@ import type {
   ModelHeaderRow,
   SettingsScope,
   ThinkingLevel,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
   cloudflareModelRouting,
@@ -20,8 +20,8 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleProbeSuccessMessage,
   savedCompatibleEndpointMatches,
-} from "@rakazo/contracts";
-import type { ConnectionFormFields } from "@rakazo/core";
+} from "@orkbot/contracts";
+import type { ConnectionFormFields } from "@orkbot/core";
 import {
   clampCatalogThinkingLevel,
   compatibleConnectionReady,
@@ -35,8 +35,8 @@ import {
   modelConnectRequest,
   popularModelProvidersFirst,
   savedCompatibleModelIds,
-} from "@rakazo/core";
-import { fetchFresh } from "@rakazo/core/query";
+} from "@orkbot/core";
+import { fetchFresh } from "@orkbot/core/query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCopyText } from "../../lib/copy-text";

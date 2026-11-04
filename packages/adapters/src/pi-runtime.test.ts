@@ -29,8 +29,8 @@ describe("describeToolActivity", () => {
     expect(describeToolActivity("create_space", { name: "Customer support" })).toBe(
       "Creating space: Customer support",
     );
-    expect(describeToolActivity("web_search", { query: "rakazo agents" })).toBe(
-      "Searching the web: rakazo agents",
+    expect(describeToolActivity("web_search", { query: "orkbot agents" })).toBe(
+      "Searching the web: orkbot agents",
     );
     expect(describeToolActivity("web_fetch", { url: "https://example.com" })).toBe(
       "Reading page: https://example.com/",

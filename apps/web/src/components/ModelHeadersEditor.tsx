@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { ModelHeaderRow } from "@rakazo/contracts";
-import { Button, Input } from "@rakazo/ui-web";
+import type { ModelHeaderRow } from "@orkbot/contracts";
+import { Button, Input } from "@orkbot/ui-web";
 import { X } from "lucide-react";
 
 export function ModelHeadersEditor({

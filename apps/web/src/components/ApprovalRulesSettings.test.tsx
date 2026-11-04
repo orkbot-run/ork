@@ -20,7 +20,7 @@ vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray) => parts.join("");
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
-vi.mock("@rakazo/ui-web", async () => {
+vi.mock("@orkbot/ui-web", async () => {
   const { createContext, useContext } = await import("react");
   const Group = createContext<{ value: string[]; onValueChange: (value: string[]) => void }>({
     value: [],

@@ -51,7 +51,7 @@ it("says under a choice only what its title does not", async () => {
           title="Plan"
           owner={{ name: "RJ", image: null }}
           visibility={visibility}
-          shareUrl={visibility === "link" ? "https://rakazo.example/p/1" : null}
+          shareUrl={visibility === "link" ? "https://orkbot.example/p/1" : null}
           open
           onOpenChange={() => {}}
           onVisibilityChange={() => {}}

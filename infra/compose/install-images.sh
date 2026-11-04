@@ -2,14 +2,14 @@
 
 set -Eeuo pipefail
 
-DOWNLOAD_BASE="${RAKAZO_DOWNLOAD_BASE:-https://raw.githubusercontent.com/elie222/rakazo/main/infra/compose}"
+DOWNLOAD_BASE="${ORKBOT_DOWNLOAD_BASE:-https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose}"
 while [[ "$DOWNLOAD_BASE" == */ ]]; do
   DOWNLOAD_BASE="${DOWNLOAD_BASE%/}"
 done
 case "$DOWNLOAD_BASE" in
   https://*) ;;
   *)
-    echo "Rakazo setup failed: RAKAZO_DOWNLOAD_BASE must use https." >&2
+    echo "Ork setup failed: ORKBOT_DOWNLOAD_BASE must use https." >&2
     exit 1
     ;;
 esac
@@ -26,10 +26,10 @@ prepare_only=false
 skip_existing=false
 pull_never=false
 offline=false
-if [[ "${RAKAZO_DOWNLOAD_SKIP_EXISTING:-}" == "1" ]]; then
+if [[ "${ORKBOT_DOWNLOAD_SKIP_EXISTING:-}" == "1" ]]; then
   skip_existing=true
 fi
-if [[ "${RAKAZO_PULL_NEVER:-}" == "1" ]]; then
+if [[ "${ORKBOT_PULL_NEVER:-}" == "1" ]]; then
   pull_never=true
 fi
 
@@ -66,7 +66,7 @@ cleanup() {
 trap cleanup EXIT
 
 fail() {
-  echo "Rakazo setup failed: $*" >&2
+  echo "Ork setup failed: $*" >&2
   exit 1
 }
 
@@ -308,12 +308,12 @@ validate_required_secrets() {
 services:
   api:
     environment:
-      _RAKAZO_VALIDATE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      _RAKAZO_VALIDATE_POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
-      _RAKAZO_VALIDATE_BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
-      _RAKAZO_VALIDATE_ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
-      _RAKAZO_VALIDATE_SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
-      _RAKAZO_VALIDATE_SANDBOX_SUPERVISOR_TOKEN: ${SANDBOX_SUPERVISOR_TOKEN:?Set SANDBOX_SUPERVISOR_TOKEN in .env}
+      _ORKBOT_VALIDATE_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      _ORKBOT_VALIDATE_POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
+      _ORKBOT_VALIDATE_BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set BETTER_AUTH_SECRET in .env}
+      _ORKBOT_VALIDATE_ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      _ORKBOT_VALIDATE_SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
+      _ORKBOT_VALIDATE_SANDBOX_SUPERVISOR_TOKEN: ${SANDBOX_SUPERVISOR_TOKEN:?Set SANDBOX_SUPERVISOR_TOKEN in .env}
 YAML
   then
     fail "set every required secret in .env to a non-empty value."
@@ -393,7 +393,7 @@ validate_required_secrets
 warn_unpassed_settings
 
 if [[ "$prepare_only" == true ]]; then
-  echo "Rakazo files are ready. Edit .env, then run: bash install-images.sh"
+  echo "Ork files are ready. Edit .env, then run: bash install-images.sh"
   exit 0
 fi
 
@@ -426,4 +426,4 @@ else
   docker compose --env-file "$ENV_FILE" "${compose_files[@]}" up -d ${up_pull_args[@]+"${up_pull_args[@]}"}
 fi
 
-echo "Rakazo is starting at http://127.0.0.1:5173"
+echo "Ork is starting at http://127.0.0.1:5173"

@@ -1,7 +1,7 @@
-import type { AgentToolExecutionResult } from "@rakazo/adapter-kit";
-import { ModelOutputError } from "@rakazo/adapter-kit";
-import { FLEET_WRITE_TOOL_NAMES } from "@rakazo/contracts";
-import { APPROVED_ACTION_NOT_RUN_ERROR } from "@rakazo/core";
+import type { AgentToolExecutionResult } from "@orkbot/adapter-kit";
+import { ModelOutputError } from "@orkbot/adapter-kit";
+import { FLEET_WRITE_TOOL_NAMES } from "@orkbot/contracts";
+import { APPROVED_ACTION_NOT_RUN_ERROR } from "@orkbot/core";
 import { argumentGiven } from "./update-bot-patch.js";
 
 export type ApprovalPausedToolResult = AgentToolExecutionResult & { terminate: true };

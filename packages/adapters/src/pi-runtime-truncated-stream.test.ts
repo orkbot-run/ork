@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
-import type { AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { expect, it, vi } from "vitest";
 import { PiAgentRuntime } from "./pi-runtime.js";
 

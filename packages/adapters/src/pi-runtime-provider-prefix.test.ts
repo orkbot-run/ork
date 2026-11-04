@@ -1,6 +1,6 @@
 import { once } from "node:events";
 import { createServer } from "node:http";
-import type { ConnectorTool } from "@rakazo/adapter-kit";
+import type { ConnectorTool } from "@orkbot/adapter-kit";
 import sharp from "sharp";
 import { describe, expect, it, vi } from "vitest";
 import { PiAgentRuntime } from "./pi-runtime.js";

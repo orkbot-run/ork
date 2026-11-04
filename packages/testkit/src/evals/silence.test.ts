@@ -1,5 +1,5 @@
-import type { AdapterContext, ConnectorCall } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { AdapterContext, ConnectorCall } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import type { Evidence } from "./cases.js";
 import { EMPTY_SETTINGS } from "./cases.js";

@@ -1,5 +1,5 @@
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import type { AccountItem, Bot, BotSection } from "@rakazo/contracts";
+import type { AccountItem, Bot, BotSection } from "@orkbot/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,7 +20,7 @@ import {
   Input,
   RadioGroup,
   RadioGroupItem,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { Lock } from "lucide-react";
 import { useId, useState } from "react";
 import { errorText } from "../../lib/user-error";

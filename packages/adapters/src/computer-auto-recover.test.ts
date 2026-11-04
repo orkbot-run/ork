@@ -2,10 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type * as TimersPromises from "node:timers/promises";
-import type { AdapterContext, JobPublisher } from "@rakazo/adapter-kit";
-import { SandboxDamagedError } from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import type { AdapterContext, JobPublisher } from "@orkbot/adapter-kit";
+import { SandboxDamagedError } from "@orkbot/adapter-kit";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeBoatApi, fakeBoatProvider } from "./boat-sandbox.test-support.js";
 import { provisionComputer } from "./computer-lifecycle.js";
@@ -46,7 +46,7 @@ afterEach(async () => {
  * `snapshot.txt` from a minute later. Then Boat's storage breaks under it.
  */
 async function damagedComputer(damage: "resume_heals" | "persists" = "resume_heals") {
-  const root = await mkdtemp(path.join(tmpdir(), "rakazo-auto-recover-"));
+  const root = await mkdtemp(path.join(tmpdir(), "orkbot-auto-recover-"));
   roots.push(root);
   // The adapter binds the API's methods when it is built, so spy first.
   const stop = vi.spyOn(FakeBoatApi.prototype, "stop");

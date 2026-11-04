@@ -85,13 +85,13 @@ test("legacy opaque names never appear in navigation, account, chats or Activity
     await expect(page.getByPlaceholder("Message Group")).toBeVisible();
     await expectReadableNames(page.locator("body"));
     await captureScreenshot(page, testInfo, "readable-names-group-members");
-    await page.evaluate(() => localStorage.setItem("rakazo.uiLocale", "ru"));
+    await page.evaluate(() => localStorage.setItem("orkbot.uiLocale", "ru"));
     await page.reload();
     await expect(page.getByTestId("bots-sidebar")).toContainText("Группа");
     await expect(page.getByTestId("bots-sidebar")).toContainText("Бот");
     await expectReadableNames(page.locator("body"));
     await captureScreenshot(page, testInfo, "readable-names-localized");
-    await page.evaluate(() => localStorage.setItem("rakazo.uiLocale", "en"));
+    await page.evaluate(() => localStorage.setItem("orkbot.uiLocale", "en"));
     await page.goto(`/app/${bot.id}`);
     await rpc(page, "threads/send", { botId: bot.id, text: "keep working until I stop you" });
     await page.getByRole("button", { name: "Activity", exact: true }).click();

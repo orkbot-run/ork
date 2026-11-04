@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { BOT_DELIBERATION_GUIDANCE } from "@rakazo/core";
+import { BOT_DELIBERATION_GUIDANCE } from "@orkbot/core";
 import { describe, expect, it, vi } from "vitest";
 import type { Evidence } from "./evals/cases.js";
 import { DELIBERATION_EVAL_CASES } from "./evals/deliberation.js";
@@ -78,10 +78,10 @@ describe.skipIf(!databaseAvailable)("bot deliberation eval through the product",
         apiKey: fixtureKey,
         steps: turns.flatMap(peerTurn),
       });
-      const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-deliberation-eval-"));
+      const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-deliberation-eval-"));
       let evidence: Evidence | undefined;
       try {
-        const { createApp } = await import("@rakazo/api/app");
+        const { createApp } = await import("@orkbot/api/app");
         const result = await runTrial(
           {
             ...scenario,

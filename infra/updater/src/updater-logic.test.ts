@@ -1,4 +1,4 @@
-import { DEFAULT_COMPOSE_PROJECT_NAME, isLocalImageTag } from "@rakazo/core";
+import { DEFAULT_COMPOSE_PROJECT_NAME, isLocalImageTag } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_COMPOSE_FILE,
@@ -11,20 +11,20 @@ import {
 } from "./updater-logic.js";
 
 const base = {
-  RAKAZO_DEPLOY_DIR: "/srv/rakazo",
-  RAKAZO_UPDATER_TOKEN: "fake-review-updater-token-000000000000",
+  ORKBOT_DEPLOY_DIR: "/srv/orkbot",
+  ORKBOT_UPDATER_TOKEN: "fake-review-updater-token-000000000000",
 } as const;
 
 describe("resolveUpdaterConfig", () => {
   it("derives the compose file, env file, and defaults from the deployment directory", () => {
     const config = resolveUpdaterConfig({ ...base });
     expect(config).toMatchObject({
-      deployDir: "/srv/rakazo",
-      composeFiles: [`/srv/rakazo/${DEFAULT_COMPOSE_FILE}`],
+      deployDir: "/srv/orkbot",
+      composeFiles: [`/srv/orkbot/${DEFAULT_COMPOSE_FILE}`],
       updateServices: ["api", "worker", "web"],
-      envFile: "/srv/rakazo/.env",
+      envFile: "/srv/orkbot/.env",
       projectName: DEFAULT_COMPOSE_PROJECT_NAME,
-      token: base.RAKAZO_UPDATER_TOKEN,
+      token: base.ORKBOT_UPDATER_TOKEN,
       port: DEFAULT_UPDATER_PORT,
     });
   });
@@ -34,7 +34,7 @@ describe("resolveUpdaterConfig", () => {
       resolveUpdaterConfig({ ...base, COMPOSE_PROJECT_NAME: "operator-stack" }).projectName,
     ).toBe("operator-stack");
     expect(
-      resolveUpdaterConfig({ ...base, RAKAZO_COMPOSE_PROJECT_NAME: "manual-stack" }).projectName,
+      resolveUpdaterConfig({ ...base, ORKBOT_COMPOSE_PROJECT_NAME: "manual-stack" }).projectName,
     ).toBe("manual-stack");
   });
 
@@ -46,20 +46,20 @@ describe("resolveUpdaterConfig", () => {
 
   it("binds to loopback unless the deployment says otherwise, so a stray port is not a door", () => {
     expect(resolveUpdaterConfig({ ...base }).host).toBe("127.0.0.1");
-    expect(resolveUpdaterConfig({ ...base, RAKAZO_UPDATER_HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
+    expect(resolveUpdaterConfig({ ...base, ORKBOT_UPDATER_HOST: "0.0.0.0" }).host).toBe("0.0.0.0");
   });
 
   it("refuses a deployment directory that is missing or relative", () => {
-    expect(() => resolveUpdaterConfig({ RAKAZO_UPDATER_TOKEN: "t" })).toThrow(/RAKAZO_DEPLOY_DIR/);
-    expect(() => resolveUpdaterConfig({ ...base, RAKAZO_DEPLOY_DIR: "srv/rakazo" })).toThrow(
-      /RAKAZO_DEPLOY_DIR/,
+    expect(() => resolveUpdaterConfig({ ORKBOT_UPDATER_TOKEN: "t" })).toThrow(/ORKBOT_DEPLOY_DIR/);
+    expect(() => resolveUpdaterConfig({ ...base, ORKBOT_DEPLOY_DIR: "srv/orkbot" })).toThrow(
+      /ORKBOT_DEPLOY_DIR/,
     );
   });
 
   it("refuses a compose path that escapes the deployment directory", () => {
     for (const composeFile of ["/etc/compose.yml", "../../etc/compose.yml", "a/../../b.yml"]) {
-      expect(() => resolveUpdaterConfig({ ...base, RAKAZO_COMPOSE_FILE: composeFile })).toThrow(
-        /RAKAZO_COMPOSE_FILE/,
+      expect(() => resolveUpdaterConfig({ ...base, ORKBOT_COMPOSE_FILE: composeFile })).toThrow(
+        /ORKBOT_COMPOSE_FILE/,
       );
     }
   });
@@ -68,9 +68,9 @@ describe("resolveUpdaterConfig", () => {
     expect(
       resolveUpdaterConfig({
         ...base,
-        RAKAZO_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:ops/overlay.yml",
+        ORKBOT_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:ops/overlay.yml",
       }).composeFiles,
-    ).toEqual(["/srv/rakazo/infra/compose/docker-compose.prod.yml", "/srv/rakazo/ops/overlay.yml"]);
+    ).toEqual(["/srv/orkbot/infra/compose/docker-compose.prod.yml", "/srv/orkbot/ops/overlay.yml"]);
   });
 
   it("honours COMPOSE_PATH_SEPARATOR the way Compose does", () => {
@@ -78,80 +78,80 @@ describe("resolveUpdaterConfig", () => {
       resolveUpdaterConfig({
         ...base,
         COMPOSE_PATH_SEPARATOR: ",",
-        RAKAZO_COMPOSE_FILE: "a.yml,b.yml",
+        ORKBOT_COMPOSE_FILE: "a.yml,b.yml",
       }).composeFiles,
-    ).toEqual(["/srv/rakazo/a.yml", "/srv/rakazo/b.yml"]);
+    ).toEqual(["/srv/orkbot/a.yml", "/srv/orkbot/b.yml"]);
   });
 
   it("checks every entry in a list, not just the first", () => {
     expect(() =>
       resolveUpdaterConfig({
         ...base,
-        RAKAZO_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:../../etc/compose.yml",
+        ORKBOT_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:../../etc/compose.yml",
       }),
-    ).toThrow(/RAKAZO_COMPOSE_FILE/);
+    ).toThrow(/ORKBOT_COMPOSE_FILE/);
     expect(() =>
       resolveUpdaterConfig({
         ...base,
-        RAKAZO_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:/etc/compose.yml",
+        ORKBOT_COMPOSE_FILE: "infra/compose/docker-compose.prod.yml:/etc/compose.yml",
       }),
-    ).toThrow(/RAKAZO_COMPOSE_FILE/);
+    ).toThrow(/ORKBOT_COMPOSE_FILE/);
   });
 
   it("refuses a Compose file list that names nothing", () => {
-    expect(() => resolveUpdaterConfig({ ...base, RAKAZO_COMPOSE_FILE: ":  :" })).toThrow(
-      /RAKAZO_COMPOSE_FILE/,
+    expect(() => resolveUpdaterConfig({ ...base, ORKBOT_COMPOSE_FILE: ":  :" })).toThrow(
+      /ORKBOT_COMPOSE_FILE/,
     );
   });
 
   it("appends the deployment's extra services to the built-in set", () => {
     expect(
-      resolveUpdaterConfig({ ...base, RAKAZO_UPDATE_SERVICES: "supervisor, caddy" }).updateServices,
+      resolveUpdaterConfig({ ...base, ORKBOT_UPDATE_SERVICES: "supervisor, caddy" }).updateServices,
     ).toEqual(["api", "worker", "web", "supervisor", "caddy"]);
   });
 
-  it("cannot drop a built-in service, however RAKAZO_UPDATE_SERVICES is written", () => {
+  it("cannot drop a built-in service, however ORKBOT_UPDATE_SERVICES is written", () => {
     const services = resolveUpdaterConfig({
       ...base,
-      RAKAZO_UPDATE_SERVICES: "web,supervisor",
+      ORKBOT_UPDATE_SERVICES: "web,supervisor",
     }).updateServices;
     expect(services).toEqual(["api", "worker", "web", "supervisor"]);
   });
 
   it("refuses to recreate the updater, which would kill the run mid-flight", () => {
     expect(() =>
-      resolveUpdaterConfig({ ...base, RAKAZO_UPDATE_SERVICES: "supervisor,updater" }),
+      resolveUpdaterConfig({ ...base, ORKBOT_UPDATE_SERVICES: "supervisor,updater" }),
     ).toThrow(/updater/);
   });
 
   it("refuses a service name it would not hand to compose as one argument", () => {
     for (const service of ["--build", "a b", "-f", "api;rm"]) {
       expect(() =>
-        resolveUpdaterConfig({ ...base, RAKAZO_UPDATE_SERVICES: `supervisor,${service}` }),
-      ).toThrow(/RAKAZO_UPDATE_SERVICES/);
+        resolveUpdaterConfig({ ...base, ORKBOT_UPDATE_SERVICES: `supervisor,${service}` }),
+      ).toThrow(/ORKBOT_UPDATE_SERVICES/);
     }
   });
 
   it("refuses an image name it would not be willing to hand to compose", () => {
-    expect(() => resolveUpdaterConfig({ ...base, RAKAZO_IMAGE: "Bad Name" })).toThrow(
-      /RAKAZO_IMAGE/,
+    expect(() => resolveUpdaterConfig({ ...base, ORKBOT_IMAGE: "Bad Name" })).toThrow(
+      /ORKBOT_IMAGE/,
     );
-    expect(resolveUpdaterConfig({ ...base, RAKAZO_IMAGE: "ghcr.io/me/app" }).image).toBe(
+    expect(resolveUpdaterConfig({ ...base, ORKBOT_IMAGE: "ghcr.io/me/app" }).image).toBe(
       "ghcr.io/me/app",
     );
   });
 
   it("refuses a port that is not a port", () => {
-    expect(() => resolveUpdaterConfig({ ...base, RAKAZO_UPDATER_PORT: "0" })).toThrow(/port/);
-    expect(() => resolveUpdaterConfig({ ...base, RAKAZO_UPDATER_PORT: "seven" })).toThrow(/port/);
+    expect(() => resolveUpdaterConfig({ ...base, ORKBOT_UPDATER_PORT: "0" })).toThrow(/port/);
+    expect(() => resolveUpdaterConfig({ ...base, ORKBOT_UPDATER_PORT: "seven" })).toThrow(/port/);
   });
 });
 
 describe("readEnvAssignment", () => {
   it("reads the last assignment, ignoring comments and blank lines", () => {
-    const contents = ["# RAKAZO_IMAGE_TAG=commented", "", "A=1", "A=2"].join("\n");
+    const contents = ["# ORKBOT_IMAGE_TAG=commented", "", "A=1", "A=2"].join("\n");
     expect(readEnvAssignment(contents, "A")).toBe("2");
-    expect(readEnvAssignment(contents, "RAKAZO_IMAGE_TAG")).toBeNull();
+    expect(readEnvAssignment(contents, "ORKBOT_IMAGE_TAG")).toBeNull();
   });
 
   it("removes one layer of quoting", () => {
@@ -185,7 +185,7 @@ describe("readEnvAssignment", () => {
   });
 
   it("does not match a key that merely shares a prefix", () => {
-    expect(readEnvAssignment("RAKAZO_IMAGE_TAG_PREVIOUS=v1", "RAKAZO_IMAGE_TAG")).toBeNull();
+    expect(readEnvAssignment("ORKBOT_IMAGE_TAG_PREVIOUS=v1", "ORKBOT_IMAGE_TAG")).toBeNull();
   });
 });
 
@@ -225,14 +225,14 @@ describe("missingSecretAssignments", () => {
 
 describe("readTagState", () => {
   it("reads the pinned tag and the rollback tag", () => {
-    const contents = "RAKAZO_IMAGE_TAG=v1.1.0\nRAKAZO_IMAGE_TAG_PREVIOUS=v1.0.0\n";
+    const contents = "ORKBOT_IMAGE_TAG=v1.1.0\nORKBOT_IMAGE_TAG_PREVIOUS=v1.0.0\n";
     expect(readTagState(contents)).toEqual({ currentTag: "v1.1.0", previousTag: "v1.0.0" });
   });
 
   it.each(["", '"', "'"])("reads tags with inline comments and %j quoting", (quote) => {
     const contents = [
-      `RAKAZO_IMAGE_TAG=${quote}v1.2.3${quote} # pinned`,
-      `RAKAZO_IMAGE_TAG_PREVIOUS=${quote}v1.2.2${quote} # rollback`,
+      `ORKBOT_IMAGE_TAG=${quote}v1.2.3${quote} # pinned`,
+      `ORKBOT_IMAGE_TAG_PREVIOUS=${quote}v1.2.2${quote} # rollback`,
     ].join("\n");
     expect(readTagState(contents)).toEqual({ currentTag: "v1.2.3", previousTag: "v1.2.2" });
   });
@@ -242,7 +242,7 @@ describe("readTagState", () => {
   });
 
   it("ignores values in the file that are not usable tags", () => {
-    const contents = "RAKAZO_IMAGE_TAG=-rm\nRAKAZO_IMAGE_TAG_PREVIOUS=$(id)\n";
+    const contents = "ORKBOT_IMAGE_TAG=-rm\nORKBOT_IMAGE_TAG_PREVIOUS=$(id)\n";
     expect(readTagState(contents)).toEqual({ currentTag: "local", previousTag: null });
   });
 

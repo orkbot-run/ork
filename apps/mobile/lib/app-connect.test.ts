@@ -1,4 +1,4 @@
-import { appConnectedInput } from "@rakazo/core";
+import { appConnectedInput } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import { appConnectPresentation } from "./app-connect.js";
 

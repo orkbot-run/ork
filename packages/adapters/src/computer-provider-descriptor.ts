@@ -1,10 +1,10 @@
-import type { ComputerProviderDescriptor, ComputerProviderField } from "@rakazo/contracts";
+import type { ComputerProviderDescriptor, ComputerProviderField } from "@orkbot/contracts";
 import {
   ipVersion,
   isCloudMetadataHost,
   isInternalHostname,
   isNonPublicAddress,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 import { sandboxProviderOptionsFromEnv } from "./sandbox-provider-env.js";
 

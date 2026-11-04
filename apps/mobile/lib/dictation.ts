@@ -4,7 +4,7 @@
  * `isFinal` / `end` is a breath or an OS timeout, never the caller finishing a sentence.
  */
 
-import { supportedSpeechTag } from "@rakazo/core";
+import { supportedSpeechTag } from "@orkbot/core";
 import { Platform } from "react-native";
 import { reportMobileError } from "./monitoring";
 

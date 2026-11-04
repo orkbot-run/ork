@@ -148,7 +148,7 @@ describe("sealed screen capabilities", () => {
       expect([...rootClasses]).toEqual(["noVNC_connected"]);
       rfbListeners.get("disconnect")?.({ detail: { clean: false } });
       expect([...rootClasses]).toEqual([]);
-      expect(rootAttributes.get("data-rakazo-screen-error")).toBe("");
+      expect(rootAttributes.get("data-orkbot-screen-error")).toBe("");
       const socket = new URL(socketUrl);
       expect(socket.protocol).toBe("wss:");
       expect(socket.host).toBe(url.host);

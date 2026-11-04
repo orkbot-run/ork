@@ -1,11 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { Bot, BotAvatarSet, BotSection, Group, Space } from "@rakazo/contracts";
+import type { Bot, BotAvatarSet, BotSection, Group, Space } from "@orkbot/contracts";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Settings, Trash2 } from "lucide-react";
 import type { ComponentProps, RefObject } from "react";

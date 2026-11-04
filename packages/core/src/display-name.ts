@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { identitySource, preserveIdentitySource } from "./identity-source.js";
 
 /** Deliberately narrow: complete tokens only, never substrings of prose or short handles. */

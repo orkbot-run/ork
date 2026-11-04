@@ -1,4 +1,15 @@
+import { createPublicKey } from "node:crypto";
 import { build } from "esbuild";
+
+const updatePublicKey = process.env.ORKBOT_LINUX_UPDATE_PUBLIC_KEY?.trim() ?? "";
+if (updatePublicKey) {
+  if (
+    !updatePublicKey.startsWith("-----BEGIN PUBLIC KEY-----") ||
+    createPublicKey(updatePublicKey).asymmetricKeyType !== "ed25519"
+  ) {
+    throw new Error("ORKBOT_LINUX_UPDATE_PUBLIC_KEY must be an Ed25519 public key in PEM format.");
+  }
+}
 
 await build({
   entryPoints: ["src/main.ts"],
@@ -14,8 +25,12 @@ await build({
   external: ["electron", "electron-updater", "koffi", "@sentry/electron"],
   // Only the release workflow's builds report errors; local and agent builds never do.
   define: {
-    "process.env.RAKAZO_DESKTOP_RELEASE": JSON.stringify(process.env.RAKAZO_DESKTOP_RELEASE ?? ""),
+    "process.env.ORKBOT_ENABLE_AUTO_UPDATE": JSON.stringify(
+      process.env.ORKBOT_ENABLE_AUTO_UPDATE ?? "",
+    ),
+    "process.env.ORKBOT_LINUX_UPDATE_PUBLIC_KEY": JSON.stringify(updatePublicKey),
+    "process.env.ORKBOT_DESKTOP_RELEASE": JSON.stringify(process.env.ORKBOT_DESKTOP_RELEASE ?? ""),
     // Self-hosted builds associated with their own passkey domain (see src/passkeys.ts).
-    "process.env.RAKAZO_PASSKEY_RP_ID": JSON.stringify(process.env.RAKAZO_PASSKEY_RP_ID ?? ""),
+    "process.env.ORKBOT_PASSKEY_RP_ID": JSON.stringify(process.env.ORKBOT_PASSKEY_RP_ID ?? ""),
   },
 });

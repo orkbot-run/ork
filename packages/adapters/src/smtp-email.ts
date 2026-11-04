@@ -1,4 +1,4 @@
-import type { TransactionalEmail, TransactionalEmailProvider } from "@rakazo/adapter-kit";
+import type { TransactionalEmail, TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import type { NodemailerError, Transporter } from "nodemailer";
 import nodemailer from "nodemailer";
 

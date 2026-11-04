@@ -1,4 +1,4 @@
-import type { BrowserProvider, SandboxProvider } from "@rakazo/adapter-kit";
+import type { BrowserProvider, SandboxProvider } from "@orkbot/adapter-kit";
 import { EmulatorBrowserProvider } from "./browser-emulator.js";
 import { ComputerBrowserProvider } from "./computer-browser.js";
 import type { FakeBrowserProviderOptions } from "./fake-browser.js";

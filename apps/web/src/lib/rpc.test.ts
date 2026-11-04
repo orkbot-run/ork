@@ -38,7 +38,7 @@ describe("signed-out responses", () => {
 
 describe("unavailable space", () => {
   function browser(selected: string, spaces: string[] | null) {
-    const items = new Map([["rakazo:space-id", selected]]);
+    const items = new Map([["orkbot:space-id", selected]]);
     const reload = vi.fn();
     vi.stubGlobal("window", {
       localStorage: {
@@ -51,7 +51,7 @@ describe("unavailable space", () => {
     const fetch = vi.fn(async (_request: Request, init?: RequestInit) => {
       if (!spaces)
         return Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 });
-      expect(new Headers(init?.headers).has("x-rakazo-space-id")).toBe(false);
+      expect(new Headers(init?.headers).has("x-orkbot-space-id")).toBe(false);
       return Response.json({
         json: {
           activeOrganizationId: "personal",
@@ -87,10 +87,10 @@ describe("unavailable space", () => {
 
   it("drops a space the user is no longer in and reloads", async () => {
     const { items, reload } = browser("space-gone", ["home"]);
-    items.set("rakazo:org-spaces", JSON.stringify({ work: "work-home" }));
+    items.set("orkbot:org-spaces", JSON.stringify({ work: "work-home" }));
     await leaveUnavailableSpace("space-gone");
-    expect(items.has("rakazo:space-id")).toBe(false);
-    expect(items.get("rakazo:org-spaces")).toBe(JSON.stringify({ work: "work-home" }));
+    expect(items.has("orkbot:space-id")).toBe(false);
+    expect(items.get("orkbot:org-spaces")).toBe(JSON.stringify({ work: "work-home" }));
     expect(reload).toHaveBeenCalledOnce();
   });
 
@@ -99,20 +99,20 @@ describe("unavailable space", () => {
     const fetch = vi.mocked(globalThis.fetch);
     const list = fetch.getMockImplementation()!;
     fetch.mockImplementation(async (request, init) =>
-      new Headers(init?.headers).get("x-rakazo-space-id") === "space-gone"
+      new Headers(init?.headers).get("x-orkbot-space-id") === "space-gone"
         ? Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 })
         : list(request, init),
     );
     await expect(createSpaceRpc("space-gone").me()).rejects.toMatchObject({ status: 401 });
     await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
-    expect(items.has("rakazo:space-id")).toBe(false);
+    expect(items.has("orkbot:space-id")).toBe(false);
   });
 
   it("keeps a space the user still has, and keeps it when signed out", async () => {
     for (const spaces of [["home", "space-a"], null]) {
       const { items, reload } = browser("space-a", spaces);
       await leaveUnavailableSpace("space-a");
-      expect(items.get("rakazo:space-id")).toBe("space-a");
+      expect(items.get("orkbot:space-id")).toBe("space-a");
       expect(reload).not.toHaveBeenCalled();
     }
   });
@@ -120,14 +120,14 @@ describe("unavailable space", () => {
   it("keeps a space in an organization the user is only a member of", async () => {
     const { items, reload } = browser("team-home", ["home"]);
     await leaveUnavailableSpace("team-home");
-    expect(items.get("rakazo:space-id")).toBe("team-home");
+    expect(items.get("orkbot:space-id")).toBe("team-home");
     expect(reload).not.toHaveBeenCalled();
   });
 
   it("keeps a space that belongs to another of the user's organizations", async () => {
     const { items, reload } = browser("work-home", ["home"]);
     await leaveUnavailableSpace("work-home");
-    expect(items.get("rakazo:space-id")).toBe("work-home");
+    expect(items.get("orkbot:space-id")).toBe("work-home");
     expect(reload).not.toHaveBeenCalled();
   });
 });
@@ -171,7 +171,7 @@ describe("space selection storage", () => {
 
   it("treats an already-persisted selection as success when writes fail", () => {
     const localStorage = {
-      getItem: (key: string) => (key === "rakazo:space-id" ? "space-support" : null),
+      getItem: (key: string) => (key === "orkbot:space-id" ? "space-support" : null),
       setItem: () => {
         throw new Error("quota exceeded");
       },
@@ -191,7 +191,7 @@ describe("space selection storage", () => {
     vi.stubGlobal("localStorage", localStorage);
 
     expect(selectSpace("space-support")).toBe(true);
-    expect(setItem).toHaveBeenCalledWith("rakazo:space-id", "space-support");
+    expect(setItem).toHaveBeenCalledWith("orkbot:space-id", "space-support");
   });
 });
 
@@ -240,7 +240,7 @@ describe("shell RPC space isolation", () => {
       await rpc.me();
       const headers = fetch.mock.calls.map((call) => {
         const init = call[1];
-        return new Headers(init.headers).get("x-rakazo-space-id");
+        return new Headers(init.headers).get("x-orkbot-space-id");
       });
       expect(headers).toEqual([originalSpace, originalSpace, "space-b"]);
     },
@@ -262,7 +262,7 @@ describe("shell RPC space isolation", () => {
       await shellRpc.me(undefined, { context: { spaceId: null } });
       await shellRpc.me();
       const headers = fetch.mock.calls.map((call) =>
-        new Headers(call[1].headers).get("x-rakazo-space-id"),
+        new Headers(call[1].headers).get("x-orkbot-space-id"),
       );
       expect(headers).toEqual(["space-b", null, "space-a"]);
     },
@@ -272,7 +272,7 @@ describe("shell RPC space isolation", () => {
 describe("space-bound clients", () => {
   function stubSelection(selected: string) {
     const localStorage = {
-      getItem: (key: string) => (key === "rakazo:space-id" ? selected : null),
+      getItem: (key: string) => (key === "orkbot:space-id" ? selected : null),
       setItem: vi.fn(),
       removeItem: vi.fn(),
     };
@@ -285,7 +285,7 @@ describe("space-bound clients", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (request: Request, init?: RequestInit) => {
-        sent.push(new Headers(init?.headers ?? request.headers).get("x-rakazo-space-id"));
+        sent.push(new Headers(init?.headers ?? request.headers).get("x-orkbot-space-id"));
         return Response.json({ json: null });
       }),
     );

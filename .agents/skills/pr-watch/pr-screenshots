@@ -12,7 +12,7 @@ die() { echo "pr-screenshots: $*" >&2; exit 1; }
 
 pr=${1:-$(gh pr view --json number -q .number)} || die "no PR for this branch"
 filter=${2:-}
-marker="<!-- rakazo-playwright-screenshots -->"
+marker="<!-- orkbot-playwright-screenshots -->"
 
 gallery_url="$(gh api --paginate --slurp "repos/{owner}/{repo}/issues/$pr/comments?per_page=100" |
   jq -r --arg marker "$marker" '

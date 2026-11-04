@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { OrganizationList } from "@rakazo/contracts";
-import { typeScale } from "@rakazo/ui-tokens";
+import type { OrganizationList } from "@orkbot/contracts";
+import { typeScale } from "@orkbot/ui-tokens";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import { resolveMobileAppearance } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";

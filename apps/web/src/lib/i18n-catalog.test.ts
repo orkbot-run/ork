@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { i18n, setupI18n } from "@lingui/core";
 import { formatter } from "@lingui/format-po";
-import { RUN_ERROR_LIMIT_MESSAGES } from "@rakazo/core";
+import { RUN_ERROR_LIMIT_MESSAGES } from "@orkbot/core";
 import { beforeEach, describe, expect, it } from "vitest";
 import { UI_LOCALES } from "./ui-locale";
 
@@ -43,7 +43,7 @@ describe("lingui catalogs", () => {
       "utf8",
     );
     for (const message of [
-      "Allow Rakazo to use Speech Recognition and the microphone in System Settings.",
+      "Allow Ork to use Speech Recognition and the microphone in System Settings.",
       "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer.",
       "Dictation failed: {code}",
       "Transcription request timed out.",
@@ -72,7 +72,7 @@ describe("lingui catalogs", () => {
       "Your model provider",
       "The model provider returned an error.",
       "Connect a model in Settings before running bots.",
-      "Connect your own API key in Models or choose Rakazo credits in Billing.",
+      "Connect your own API key in Models or choose Ork credits in Billing.",
       "{provider} is rate limiting requests. Try again shortly.",
       "{summary} Resets {date}.",
       "{provider} rejected the API key. Check your connection settings.",

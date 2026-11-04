@@ -1,4 +1,4 @@
-import { routineWakeupJob } from "@rakazo/adapter-kit";
+import { routineWakeupJob } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { selectBuiltinToolsForRun } from "./run-tool-selection.js";
 import { preferenceTools } from "./run-tools-preferences.js";

@@ -16,7 +16,7 @@ export const DOCS_NAV = [
     ],
   },
   {
-    title: "Using Rakazo",
+    title: "Using Ork",
     pages: [
       { slug: "integrations", label: "Connect apps" },
       { slug: "routines", label: "Routines" },

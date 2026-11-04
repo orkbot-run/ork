@@ -1,4 +1,4 @@
-import type { EmbeddedComputerScreenPolicy } from "@rakazo/contracts/content-security-policy";
+import type { EmbeddedComputerScreenPolicy } from "@orkbot/contracts/content-security-policy";
 
 function serialize(directives: Record<string, string[]>) {
   return Object.entries(directives)

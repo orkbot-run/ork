@@ -1,4 +1,4 @@
-import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { createEvalJudge } from "./judge.js";
 import { SpendBudget } from "./measurement.js";

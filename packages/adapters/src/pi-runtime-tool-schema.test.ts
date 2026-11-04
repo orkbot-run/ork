@@ -3,7 +3,7 @@ import {
   TICKET_COMMENT_MAX_LENGTH,
   TICKET_DESCRIPTION_MAX_LENGTH,
   TICKET_TITLE_MAX_LENGTH,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { lazyCatalogTools, parseConnectorToolArgs } from "./lazy-tool-catalog.js";

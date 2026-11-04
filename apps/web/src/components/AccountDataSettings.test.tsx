@@ -11,7 +11,7 @@ const accountToken = vi.hoisted(() => vi.fn());
 // The dialog itself is tested on its own; here it is a button that confirms it.
 vi.mock("./ConfirmIdentityDialog", async () => {
   const { useState } = await import("react");
-  const { runWithIdentityConfirmation } = await import("@rakazo/contracts");
+  const { runWithIdentityConfirmation } = await import("@orkbot/contracts");
   return {
     useIdentityConfirmation: () => {
       const [settle, setSettle] = useState<((confirmed: boolean) => void) | null>(null);
@@ -43,7 +43,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button type="button" {...props} />
   ),
@@ -136,7 +136,7 @@ it("uploads the chosen archive and refreshes spaces", async () => {
   );
   const onImported = vi.fn(async () => undefined);
   await render(onImported);
-  const file = new File(["zip"], "rakazo-export.zip", { type: "application/zip" });
+  const file = new File(["zip"], "orkbot-export.zip", { type: "application/zip" });
 
   await chooseFile(file);
 
@@ -161,7 +161,7 @@ it("shows the server's message when the import is rejected", async () => {
   const onImported = vi.fn(async () => undefined);
   await render(onImported);
 
-  await chooseFile(new File(["zip"], "rakazo-export.zip"));
+  await chooseFile(new File(["zip"], "orkbot-export.zip"));
 
   expect(container.querySelector('[role="alert"]')?.textContent).toBe(
     "This archive is from a newer version.",

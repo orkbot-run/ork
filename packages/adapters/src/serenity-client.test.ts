@@ -446,16 +446,16 @@ describe("serenity verbs", () => {
     const server = fakeSerenityFetch(() => ({
       content: [{ type: "text", text: JSON.stringify({ id: "fact-1", status: "inserted" }) }],
     }));
-    const result = await rememberSerenity("Use metric units.", "rakazo", LOOPBACK, {
-      entity: "rakazo-bot/bot-1",
-      operationKey: "rakazo:abc",
+    const result = await rememberSerenity("Use metric units.", "orkbot", LOOPBACK, {
+      entity: "orkbot-bot/bot-1",
+      operationKey: "orkbot:abc",
       network: { fetch: server.fetch },
     });
     expect(result).toEqual({ ok: true, value: { id: "fact-1", status: "inserted" } });
     const call = server.calls.find((entry) => entry.rpc?.method === "tools/call");
     expect(call?.rpc?.params?.arguments).toMatchObject({
-      entity: "rakazo-bot/bot-1",
-      operation_key: "rakazo:abc",
+      entity: "orkbot-bot/bot-1",
+      operation_key: "orkbot:abc",
     });
     expect(server.calls.at(-1)?.method).toBe("DELETE");
   });
@@ -467,7 +467,7 @@ describe("serenity verbs", () => {
       fact: `Fact ${index}`,
       kind: "preference",
       entity_slug: "bot-1",
-      provenance: "rakazo",
+      provenance: "orkbot",
       valid_until: null,
       visibility: "world",
     }));
@@ -480,19 +480,19 @@ describe("serenity verbs", () => {
       ],
     }));
     const result = await recallSerenity(LOOPBACK, {
-      entity: "rakazo-bot/bot-1",
+      entity: "orkbot-bot/bot-1",
       network: { fetch: server.fetch },
     });
     expect(result.ok && result.value).toHaveLength(100);
     const call = server.calls.find((entry) => entry.rpc?.method === "tools/call");
-    expect(call?.rpc?.params?.arguments).toEqual({ limit: 100, entity: "rakazo-bot/bot-1" });
+    expect(call?.rpc?.params?.arguments).toEqual({ limit: 100, entity: "orkbot-bot/bot-1" });
   });
 
   it("rejects facts over the hosted byte limit before connecting", async () => {
     const server = fakeSerenityFetch(() => ({}));
     const result = await rememberSerenity(
       "é".repeat(MAX_SERENITY_FACT_BYTES / 2 + 1),
-      "rakazo",
+      "orkbot",
       LOOPBACK,
       { network: { fetch: server.fetch } },
     );
@@ -555,7 +555,7 @@ describe("serenity verbs", () => {
         },
       ],
     }));
-    const remembered = await rememberSerenity("Use metric units.", "rakazo", LOOPBACK, {
+    const remembered = await rememberSerenity("Use metric units.", "orkbot", LOOPBACK, {
       network: { fetch: statusEcho.fetch },
     });
     expect(remembered.ok).toBe(true);

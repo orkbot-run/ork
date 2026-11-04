@@ -56,7 +56,7 @@ describe("sourceEnvironmentCommand", () => {
   });
 
   it("deletes the file, then runs argv with the exported values", () => {
-    directory = mkdtempSync(path.join(tmpdir(), "rakazo-env-"));
+    directory = mkdtempSync(path.join(tmpdir(), "orkbot-env-"));
     const envFile = path.join(directory, "env");
     const value = `fake'secret\nline two`;
     writeFileSync(envFile, shellExportScript({ FAKE_TOKEN: value }));
@@ -67,7 +67,7 @@ describe("sourceEnvironmentCommand", () => {
   });
 
   it("does not run argv when the file is missing or cannot apply", () => {
-    directory = mkdtempSync(path.join(tmpdir(), "rakazo-env-"));
+    directory = mkdtempSync(path.join(tmpdir(), "orkbot-env-"));
     const envFile = path.join(directory, "env");
     expect(run(envFile, "echo ran").stdout).toBe("");
     writeFileSync(envFile, shellExportScript({ EUID: "0" }));
@@ -77,7 +77,7 @@ describe("sourceEnvironmentCommand", () => {
   });
 
   it("does not run argv when the file cannot be read", () => {
-    directory = mkdtempSync(path.join(tmpdir(), "rakazo-env-"));
+    directory = mkdtempSync(path.join(tmpdir(), "orkbot-env-"));
     const envFile = path.join(directory, "env");
     writeFileSync(envFile, shellExportScript({ FAKE_TOKEN: "fake" }));
     const bin = path.join(directory, "bin");

@@ -1,4 +1,4 @@
-import type * as db from "@rakazo/db";
+import type * as db from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   dismissMcpServerApprovals,
@@ -7,7 +7,7 @@ import {
   revertConnectedMcpApprovals,
 } from "./mcp-approval.js";
 
-vi.mock("@rakazo/db", async (original) => ({
+vi.mock("@orkbot/db", async (original) => ({
   ...(await original<typeof db>()),
   appendEventInTransaction: vi.fn(async () => ({ seq: 1 })),
 }));
@@ -52,7 +52,7 @@ function fixture(blocks: unknown[]) {
   const actor = {
     userId: "user",
     spaceId: "space",
-    email: "user@rakazo.test",
+    email: "user@orkbot.test",
     isDeploymentOwner: true,
   };
   return { deps, actor, tx };
@@ -330,7 +330,7 @@ describe("queueMcpConnectedRun", () => {
   const actor = {
     userId: "user",
     spaceId: "space",
-    email: "user@rakazo.test",
+    email: "user@orkbot.test",
     isDeploymentOwner: true,
   };
   const input = { botId: "bot", serverId: "srv-a", threadId: "thread" };

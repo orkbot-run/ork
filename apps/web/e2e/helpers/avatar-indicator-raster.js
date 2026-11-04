@@ -27,7 +27,7 @@ export async function auditIndicatorBounds({ theme, activity }) {
     actors = 0;
   const sizes = new Set(),
     colours = new Set();
-  const avatars = [...document.querySelectorAll(".rakazo-logo-avatar")].filter((a) =>
+  const avatars = [...document.querySelectorAll(".orkbot-logo-avatar")].filter((a) =>
     [24, 32, 38].includes(Number(a.getAttribute("width"))),
   );
   for (const avatar of avatars) {

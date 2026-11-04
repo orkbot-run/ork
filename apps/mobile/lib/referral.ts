@@ -1,4 +1,4 @@
-import type { BillingStatus } from "@rakazo/contracts";
+import type { BillingStatus } from "@orkbot/contracts";
 import { useSyncExternalStore } from "react";
 
 export type Referral = NonNullable<BillingStatus["referral"]>;

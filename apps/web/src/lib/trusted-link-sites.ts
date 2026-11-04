@@ -1,4 +1,4 @@
-import { writeSaved } from "@rakazo/core/query";
+import { writeSaved } from "@orkbot/core/query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { spaceQueries, useQueryUserId } from "./query";

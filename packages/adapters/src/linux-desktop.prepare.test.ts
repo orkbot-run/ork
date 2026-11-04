@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { BROWSER_POLICY, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 
 function prepareDesktop({ repairExitCode = 0, installExitCode = 0, broken = true } = {}) {
-  const bin = mkdtempSync(path.join(tmpdir(), "rakazo-prepare-"));
+  const bin = mkdtempSync(path.join(tmpdir(), "orkbot-prepare-"));
   try {
     const calls = path.join(bin, "calls");
     const repaired = path.join(bin, "repaired");
@@ -117,7 +117,7 @@ describe("provider desktop preparation", () => {
   });
 
   it("still prepares the desktop when only the emoji font cannot be installed", () => {
-    const bin = mkdtempSync(path.join(tmpdir(), "rakazo-prepare-"));
+    const bin = mkdtempSync(path.join(tmpdir(), "orkbot-prepare-"));
     try {
       const calls = path.join(bin, "calls");
       const fakes: Record<string, string> = {
@@ -165,7 +165,7 @@ describe("provider desktop preparation", () => {
   });
 
   it("fails when the package index cannot be updated", () => {
-    const bin = mkdtempSync(path.join(tmpdir(), "rakazo-prepare-"));
+    const bin = mkdtempSync(path.join(tmpdir(), "orkbot-prepare-"));
     try {
       const calls = path.join(bin, "calls");
       // PATH holds only these fakes, so every desktop tool is missing and nothing runs as root.

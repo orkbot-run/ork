@@ -797,7 +797,7 @@ describe("web markdown mentions", () => {
       <ChatMarkdown
         renderMention={(id, name) => (id === "bot-1" ? <b data-id={id}>{name}</b> : undefined)}
       >
-        {"[Planner](rakazo-mention:bot-1) and [Other](rakazo-mention:bot-2)"}
+        {"[Planner](orkbot-mention:bot-1) and [Other](orkbot-mention:bot-2)"}
       </ChatMarkdown>,
     );
     expect(html).toContain('<b data-id="bot-1">Planner</b>');
@@ -886,7 +886,7 @@ describe("web markdown page links", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const openPage = vi.fn();
     const markdown =
-      "See [Duplex voice](page:page_1) and [x](javascript:alert(1)) and [y](rakazo://settings) and [z](page:a/b)";
+      "See [Duplex voice](page:page_1) and [x](javascript:alert(1)) and [y](orkbot://settings) and [z](page:a/b)";
     const container = document.createElement("div");
     document.body.appendChild(container);
     const root = createRoot(container);

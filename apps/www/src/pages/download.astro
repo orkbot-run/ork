@@ -1,5 +1,4 @@
 ---
-import { ANDROID_APP_STORE_URL } from "@rakazo/contracts/client-build";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import {
@@ -9,7 +8,7 @@ import {
   githubStarsLabel,
 } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { APP_URL, IOS_APP_URL, SELF_HOST_GUIDE_PATH } from "../site";
+import { GITHUB_URL, SELF_HOST_GUIDE_PATH } from "../site";
 
 const [starsLabel, downloads] = await Promise.all([githubStarsLabel(), fetchDesktopDownloads()]);
 
@@ -21,17 +20,17 @@ const platforms = [
     href: desktopDownloadHref(platform),
     attr: platform,
   })),
-  { name: "iPhone", action: "App Store", href: IOS_APP_URL, attr: "ios" },
-  { name: "Android", action: "Google Play", href: ANDROID_APP_STORE_URL, attr: "android" },
-  { name: "Web", action: "Open", href: APP_URL, attr: "web" },
+  { name: "Desktop", action: "Source code", href: `${GITHUB_URL}/tree/main/apps/desktop`, attr: "desktop-source" },
+  { name: "iPhone and Android", action: "Source code", href: `${GITHUB_URL}/tree/main/apps/mobile`, attr: "mobile-source" },
+  { name: "Web", action: "Run locally", href: SELF_HOST_GUIDE_PATH, attr: "web" },
 ];
 ---
 
-<BaseLayout title="Download · Rakazo" description="Get Rakazo for macOS, Windows, Linux, iPhone, Android, and the web.">
+<BaseLayout title="Download · Ork" description="Build Ork from source or download available Ork releases.">
   <div class="container">
     <Header starsLabel={starsLabel} />
     <main id="main" class="privacy-copy">
-      <h1>Download Rakazo</h1>
+      <h1>Download Ork</h1>
       <ul class="platform-list">
         {
           platforms.map((platform) => (

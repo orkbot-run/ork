@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("adds a tool rule and switches it between Ask and Block", async ({ page }, testInfo) => {
-  await signup(page, `approval-rules-${Date.now()}@rakazo.test`, "password12", "Permissions");
+  await signup(page, `approval-rules-${Date.now()}@orkbot.test`, "password12", "Permissions");
   await completeOnboarding(page);
   const settings = await openUserSettings(page);
   await settings.getByTestId("settings-nav-confirmations").click();

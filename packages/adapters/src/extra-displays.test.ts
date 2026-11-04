@@ -22,7 +22,7 @@ afterEach(() => {
  * file interleave, and writes enough bytes that the wrapping base64 below splits the output.
  */
 function fakeTools() {
-  const bin = mkdtempSync(path.join(tmpdir(), "rakazo-observe-bin-"));
+  const bin = mkdtempSync(path.join(tmpdir(), "orkbot-observe-bin-"));
   cleanups.push(bin);
   writeFileSync(
     path.join(bin, "scrot"),
@@ -44,8 +44,8 @@ describe("observing an extra display", () => {
     // A display number no other test uses, so only this test's files are counted.
     const displayNumber = 90_000 + process.pid;
     const owned = () =>
-      readdirSync("/tmp/rakazo").filter((name) => name.startsWith(`observe-${displayNumber}-`));
-    mkdirSync("/tmp/rakazo", { recursive: true });
+      readdirSync("/tmp/orkbot").filter((name) => name.startsWith(`observe-${displayNumber}-`));
+    mkdirSync("/tmp/orkbot", { recursive: true });
     const observe = (char: string) =>
       run("sh", ["-c", observeExtraDisplayCommand({ display: ":7", displayNumber })], {
         env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, DISPLAY_CHAR: char },

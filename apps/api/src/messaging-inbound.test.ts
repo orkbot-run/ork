@@ -1,4 +1,4 @@
-import { ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingInboundDeps } from "./messaging-inbound.js";
 import {

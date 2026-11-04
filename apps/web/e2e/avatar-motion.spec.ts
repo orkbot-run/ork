@@ -10,8 +10,8 @@ test("photo working avatars show a visible ring while idle avatars stay plain", 
   const working = page.locator(".avatar-working");
   await expect(working).toBeVisible();
   await expect(working).toHaveAttribute("data-working", "true");
-  const picture = working.locator(".rakazo-bot-avatar-picture");
-  const ring = working.locator(".rakazo-bot-avatar-ring");
+  const picture = working.locator(".orkbot-bot-avatar-picture");
+  const ring = working.locator(".orkbot-bot-avatar-ring");
   await expect(picture).toBeVisible();
   await expect(ring).toBeVisible();
 
@@ -30,9 +30,9 @@ test("photo working avatars show a visible ring while idle avatars stay plain", 
   });
   expect(overflow).not.toBe("hidden");
   expect(pictureOverflow).toBe("hidden");
-  expect(ringAnimation).toBe("rakazo-avatar-spin");
+  expect(ringAnimation).toBe("orkbot-avatar-spin");
   expect(ringColor).toBe(workingColor);
-  expect(pictureAnimation).toBe("rakazo-avatar-breathe");
+  expect(pictureAnimation).toBe("orkbot-avatar-breathe");
   const firstPictureTransform = await picture.evaluate((el) => getComputedStyle(el).transform);
   await page.waitForTimeout(300);
   const secondPictureTransform = await picture.evaluate((el) => getComputedStyle(el).transform);
@@ -40,9 +40,9 @@ test("photo working avatars show a visible ring while idle avatars stay plain", 
 
   const idle = page.locator(".avatar-idle");
   await expect(idle).toHaveAttribute("data-working", "false");
-  await expect(idle.locator(".rakazo-bot-avatar-ring")).toHaveCount(0);
-  await expect(idle.locator(".rakazo-bot-avatar-picture")).toHaveCSS("animation-name", "none");
-  await expect(page.locator(".avatar-shape-idle .rakazo-bot-avatar-ring")).toHaveCSS(
+  await expect(idle.locator(".orkbot-bot-avatar-ring")).toHaveCount(0);
+  await expect(idle.locator(".orkbot-bot-avatar-picture")).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".avatar-shape-idle .orkbot-bot-avatar-ring")).toHaveCSS(
     "animation-play-state",
     "paused",
   );
@@ -57,8 +57,8 @@ test("photo avatar animations stay still when reduced motion is enabled", async 
   await expect(avatar).toBeVisible();
   await expect(avatar).toHaveAttribute("data-working", "true");
 
-  const ring = avatar.locator(".rakazo-bot-avatar-ring");
-  const picture = avatar.locator(".rakazo-bot-avatar-picture");
+  const ring = avatar.locator(".orkbot-bot-avatar-ring");
+  const picture = avatar.locator(".orkbot-bot-avatar-picture");
   await expect(ring).toBeVisible();
   const snapshot = () =>
     Promise.all([
@@ -92,7 +92,7 @@ test("organic avatars hold still while idle and stop working motion while offscr
       const states = (mode: string) =>
         [
           ...svg.querySelectorAll(
-            `.rakazo-organic-avatar-body-${mode}, .rakazo-organic-avatar-eyes-${mode}`,
+            `.orkbot-organic-avatar-body-${mode}, .orkbot-organic-avatar-eyes-${mode}`,
           ),
         ].flatMap((element) =>
           element
@@ -103,7 +103,7 @@ test("organic avatars hold still while idle and stop working motion while offscr
       return {
         clockPaused: svg.animationsPaused(),
         morphing: ["idle", "working"].filter((mode) =>
-          svg.querySelector(`.rakazo-organic-avatar-body-${mode} animate`),
+          svg.querySelector(`.orkbot-organic-avatar-body-${mode} animate`),
         ),
         idle: [...new Set(states("idle"))],
         working: [...new Set(states("working"))],
@@ -125,7 +125,7 @@ test("organic avatars hold still while idle and stop working motion while offscr
   // The working morph joins the running svg clock instead of restarting it, and fades in.
   const handoff = await avatar.evaluate(async (svg) => {
     const body = (mode: string) =>
-      svg.querySelector<SVGPathElement>(`.rakazo-organic-avatar-body-${mode}`)!;
+      svg.querySelector<SVGPathElement>(`.orkbot-organic-avatar-body-${mode}`)!;
     const before = svg.getCurrentTime();
     svg.parentElement!.querySelector("button")!.click();
     await new Promise((resolve) => setTimeout(resolve, 0));

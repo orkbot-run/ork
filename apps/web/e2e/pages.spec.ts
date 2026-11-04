@@ -56,9 +56,9 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
   page,
   browser,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem("rakazo.uiAppearance", "dark"));
+  await page.addInitScript(() => localStorage.setItem("orkbot.uiAppearance", "dark"));
   await page.setViewportSize({ width: 1280, height: 860 });
-  await signup(page, `pages-${Date.now()}@rakazo.test`, "password12", "Page Owner");
+  await signup(page, `pages-${Date.now()}@orkbot.test`, "password12", "Page Owner");
   await completeOnboarding(page);
 
   const title = "Test dashboard (example data)";
@@ -235,7 +235,7 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
   );
   await expect(outside.getByRole("heading", { name: "Signups dashboard", level: 1 })).toBeVisible();
   await expect(outside.getByRole("button", { name: "Download PDF" })).toBeVisible();
-  await expect(outside.getByRole("link", { name: "Open Rakazo" })).toBeVisible();
+  await expect(outside.getByRole("link", { name: "Open Ork" })).toBeVisible();
   await expect(pageFrame(outside, "Signups dashboard").getByText("$12,400")).toBeVisible();
   // There is no chat beside a shared page, so its reply buttons do nothing.
   await expect(
@@ -337,7 +337,7 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
   await expect(share.getByRole("link", { name: "Open link" })).toBeHidden();
   await outside.reload();
   await expect(outside.getByRole("heading", { name: "This page isn't available" })).toBeVisible();
-  await expect(outside.getByRole("link", { name: "Open Rakazo" })).toBeVisible();
+  await expect(outside.getByRole("link", { name: "Open Ork" })).toBeVisible();
   await captureScreenshot(outside, testInfo, "page-public-unavailable");
   // Busy or unreachable is not gone: the visitor is asked to try again.
   await outside.route("**/api/v1/pages/shared/**", (route) => route.fulfill({ status: 503 }));
@@ -408,9 +408,9 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
 }, testInfo) => {
   // Nine saves through the bot: more than the default budget on a busy machine.
   test.setTimeout(240_000);
-  await page.addInitScript(() => localStorage.setItem("rakazo.uiAppearance", "dark"));
+  await page.addInitScript(() => localStorage.setItem("orkbot.uiAppearance", "dark"));
   await page.setViewportSize({ width: 1280, height: 860 });
-  await signup(page, `pages-states-${Date.now()}@rakazo.test`, "password12", "Page States");
+  await signup(page, `pages-states-${Date.now()}@orkbot.test`, "password12", "Page States");
   await completeOnboarding(page);
   // The command palette caches its own page list; new cards must not trip over it.
   await page.keyboard.press("ControlOrMeta+K");
@@ -681,9 +681,9 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
 test("a group's pages show in its settings, and the palette finds and opens a page", async ({
   page,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem("rakazo.uiAppearance", "dark"));
+  await page.addInitScript(() => localStorage.setItem("orkbot.uiAppearance", "dark"));
   await page.setViewportSize({ width: 1280, height: 860 });
-  await signup(page, `pages-group-${Date.now()}@rakazo.test`, "password12", "Group Pages");
+  await signup(page, `pages-group-${Date.now()}@orkbot.test`, "password12", "Group Pages");
   await completeOnboarding(page);
   const planner = await createNamedBot(page, "Planner");
   const writer = await createNamedBot(page, "Writer");
@@ -739,16 +739,16 @@ function Rogue() {
     let keys = 0;
     const onKey = () => {
       keys += 1;
-      parent.postMessage({ type: "rakazo-page:copy", id: "key" + keys, text: "key " + keys }, "*");
+      parent.postMessage({ type: "orkbot-page:copy", id: "key" + keys, text: "key " + keys }, "*");
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, []);
   useEffect(() => {
     const ask = () => {
-      parent.postMessage({ type: "rakazo-page:copy", id: "load", text: "copied on load" }, "*");
-      parent.postMessage({ type: "rakazo-page:open-link", url: "https://example.com/on-load" }, "*");
-      parent.postMessage({ type: "rakazo-page:reply", text: "replied on load" }, "*");
+      parent.postMessage({ type: "orkbot-page:copy", id: "load", text: "copied on load" }, "*");
+      parent.postMessage({ type: "orkbot-page:open-link", url: "https://example.com/on-load" }, "*");
+      parent.postMessage({ type: "orkbot-page:reply", text: "replied on load" }, "*");
       setSent((count) => count + 1);
     };
     ask();
@@ -762,9 +762,9 @@ function Rogue() {
       <CopyButton label="Copy now" text="copied after a click" />
       <button
         onClick={() => {
-          parent.postMessage({ type: "rakazo-page:copy", id: "one", text: "first copy" }, "*");
-          parent.postMessage({ type: "rakazo-page:copy", id: "two", text: "second copy" }, "*");
-          parent.postMessage({ type: "rakazo-page:reply", text: "replied too" }, "*");
+          parent.postMessage({ type: "orkbot-page:copy", id: "one", text: "first copy" }, "*");
+          parent.postMessage({ type: "orkbot-page:copy", id: "two", text: "second copy" }, "*");
+          parent.postMessage({ type: "orkbot-page:reply", text: "replied too" }, "*");
         }}
       >
         Ask three times
@@ -779,7 +779,7 @@ test("a page acts for its reader only after a click in it, never on load or from
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 860 });
-  await signup(page, `pages-rogue-${Date.now()}@rakazo.test`, "password12", "Rogue Reader");
+  await signup(page, `pages-rogue-${Date.now()}@orkbot.test`, "password12", "Rogue Reader");
   await completeOnboarding(page);
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.evaluate(() => navigator.clipboard.writeText("untouched"));

@@ -16,15 +16,15 @@ import type {
   ScreenRequest,
   ScreenSession,
   TerminalRequest,
-} from "@rakazo/adapter-kit";
-import { INVALID_BROWSER_REQUEST, SandboxRequestRejectedError } from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
+import { INVALID_BROWSER_REQUEST, SandboxRequestRejectedError } from "@orkbot/adapter-kit";
 import {
   boundedSandboxCommandTimeoutMs,
   cancelResponseBody,
   requestDeadline,
   resolveSupervisorToken,
-} from "@rakazo/core";
-import { outgoingCorrelationHeaders } from "@rakazo/logging";
+} from "@orkbot/core";
+import { outgoingCorrelationHeaders } from "@orkbot/logging";
 import {
   boundedComputerActions,
   clampRounded,
@@ -132,12 +132,12 @@ export class DockerSandboxProvider implements SandboxProvider {
   private headers(context: AdapterContext, botId?: string) {
     return {
       authorization: `Bearer ${this.supervisorToken}`,
-      "x-rakazo-space-id": context.spaceId,
+      "x-orkbot-space-id": context.spaceId,
       ...outgoingCorrelationHeaders(),
-      ...(botId ? { "x-rakazo-bot-id": botId } : {}),
-      ...(context.botId ? { "x-rakazo-screen-id": context.botId } : {}),
-      ...(context.screenLeaseId ? { "x-rakazo-screen-lease-id": context.screenLeaseId } : {}),
-      ...(context.cancelRunWork ? { "x-rakazo-cancel-run-work": "1" } : {}),
+      ...(botId ? { "x-orkbot-bot-id": botId } : {}),
+      ...(context.botId ? { "x-orkbot-screen-id": context.botId } : {}),
+      ...(context.screenLeaseId ? { "x-orkbot-screen-lease-id": context.screenLeaseId } : {}),
+      ...(context.cancelRunWork ? { "x-orkbot-cancel-run-work": "1" } : {}),
     };
   }
 
@@ -544,7 +544,7 @@ export class DockerSandboxProvider implements SandboxProvider {
           headers: {
             ...this.headers(context, computer.botId),
             ...(context.keepScreenWarm && !context.cancelRunWork && !context.signal.aborted
-              ? { "x-rakazo-preserve-screen": "1" }
+              ? { "x-orkbot-preserve-screen": "1" }
               : {}),
           },
           signal: deadline.signal,
@@ -704,9 +704,9 @@ function parseProcessLine(line: string): ProcessEvent | undefined {
 }
 
 function dockerCwd(cwd: string | undefined) {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/rakazo") return "/home/rakazo";
-  const relative = cwd.startsWith("/home/rakazo/")
-    ? cwd.slice("/home/rakazo/".length)
+  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/orkbot") return "/home/orkbot";
+  const relative = cwd.startsWith("/home/orkbot/")
+    ? cwd.slice("/home/orkbot/".length)
     : normalizeWorkspacePath(cwd);
-  return path.posix.join("/home/rakazo", relative);
+  return path.posix.join("/home/orkbot", relative);
 }

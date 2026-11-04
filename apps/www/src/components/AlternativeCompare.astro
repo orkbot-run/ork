@@ -40,16 +40,16 @@ const card = vsCard(page.slug);
       </section>
     ))
   }
-  {card && <VsCard otherName={page.otherName} rakazo={card.rakazo} other={card.other} />}
+  {card && <VsCard otherName={page.otherName} orkbot={card.orkbot} other={card.other} />}
   {page.slug === "hermes-alternative" && <SetupSteps />}
 
   <div class="alt-table-wrap">
     <table class="alt-table">
-      <caption class="sr-only">Rakazo compared with {page.otherName}</caption>
+      <caption class="sr-only">Ork compared with {page.otherName}</caption>
       <thead>
         <tr>
           <th scope="col">Topic</th>
-          <th scope="col">Rakazo</th>
+          <th scope="col">Ork</th>
           <th scope="col">{page.otherName}</th>
         </tr>
       </thead>
@@ -58,7 +58,7 @@ const card = vsCard(page.slug);
           page.rows.map((row) => (
             <tr>
               <th scope="row">{row.topic}</th>
-              <td><InlineCode text={row.rakazo} /></td>
+              <td><InlineCode text={row.orkbot} /></td>
               <td><InlineCode text={row.other} /></td>
             </tr>
           ))

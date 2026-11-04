@@ -1,7 +1,7 @@
 import { t } from "@lingui/core/macro";
-import type { UserDeviceSummary } from "@rakazo/contracts";
-import { USER_DEVICE_PATH, userDeviceListSchema } from "@rakazo/contracts";
-import { readBoundedJsonResponse } from "@rakazo/core";
+import type { UserDeviceSummary } from "@orkbot/contracts";
+import { USER_DEVICE_PATH, userDeviceListSchema } from "@orkbot/contracts";
+import { readBoundedJsonResponse } from "@orkbot/core";
 
 export async function listUserDevices(): Promise<UserDeviceSummary[]> {
   const response = await fetch(USER_DEVICE_PATH, { signal: AbortSignal.timeout(8_000) });

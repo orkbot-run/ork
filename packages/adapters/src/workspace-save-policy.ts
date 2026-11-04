@@ -1,8 +1,8 @@
 import { constants } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import path from "node:path";
-import type { WorkspaceExportLimits } from "@rakazo/adapter-kit";
-import { shellQuote } from "@rakazo/core/node/desktop-runtime";
+import type { WorkspaceExportLimits } from "@orkbot/adapter-kit";
+import { shellQuote } from "@orkbot/core/node/desktop-runtime";
 
 /** The most one save copies; a larger home keeps running unsaved. */
 export const WORKSPACE_SAVE_LIMITS: WorkspaceExportLimits = {

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">Laufender Anruf</string>
+  <string name="orkbot_call_title">Ork-Anruf</string>
+  <string name="orkbot_call_text">Mikrofon ist aktiv</string>
+  <string name="orkbot_call_answer">Annehmen</string>
+  <string name="orkbot_call_decline">Ablehnen</string>
+</resources>

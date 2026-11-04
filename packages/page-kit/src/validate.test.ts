@@ -1,4 +1,4 @@
-import { PAGE_SOURCE_MAX_BYTES } from "@rakazo/contracts";
+import { PAGE_SOURCE_MAX_BYTES } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { pageViewerCode } from "./compile.js";
 import { PAGE_HELPERS, PAGE_KIT_COMPONENTS } from "./components.js";
@@ -44,7 +44,7 @@ describe("checkPageSource", () => {
     ],
     [
       "imports of React and the kit, which change nothing",
-      "import React, { useEffect } from 'react';\nimport * as Kit from 'rakazo/page';\nimport { Page as P, Status } from \"rakazo/page\";\nfunction App() { useEffect(() => {}, []); return <P title='t'><Status>ok</Status><Kit.Text /></P>; }",
+      "import React, { useEffect } from 'react';\nimport * as Kit from 'orkbot/page';\nimport { Page as P, Status } from \"orkbot/page\";\nfunction App() { useEffect(() => {}, []); return <P title='t'><Status>ok</Status><Kit.Text /></P>; }",
     ],
     [
       "HTML escapes where JSX decodes them",
@@ -83,22 +83,22 @@ describe("checkPageSource", () => {
     [
       "an import from any other module",
       "import x from 'lodash';\nconst App = () => <Text />;",
-      'line 1: only "react" and "rakazo/page" can be imported',
+      'line 1: only "react" and "orkbot/page" can be imported',
     ],
     [
       "a dynamic import, even of React",
       "const App = () => <Text />;\nconst later = import('react');",
-      'line 2: only "react" and "rakazo/page" can be imported',
+      'line 2: only "react" and "orkbot/page" can be imported',
     ],
     [
       "a name the kit does not have",
-      "import { Page, Card as C } from 'rakazo/page';\nconst App = () => <Page title='t' />;",
+      "import { Page, Card as C } from 'orkbot/page';\nconst App = () => <Page title='t' />;",
       "line 1: Card is not in the kit",
     ],
     [
       "a default import from the kit",
-      "import Kit from 'rakazo/page';\nconst App = () => <Text />;",
-      'line 1: "rakazo/page" has no default export',
+      "import Kit from 'orkbot/page';\nconst App = () => <Text />;",
+      'line 1: "orkbot/page" has no default export',
     ],
     [
       "require",
@@ -273,12 +273,12 @@ describe("checkPageSource", () => {
     for (const name of PAGE_HELPERS)
       expect(
         checkPageSource(
-          `import {${name}} from 'rakazo/page'; export default function App(){return <Page title="x"/>}`,
+          `import {${name}} from 'orkbot/page'; export default function App(){return <Page title="x"/>}`,
         ).ok,
       ).toBe(true);
     expect(
       checkPageSource(
-        `import {missing} from 'rakazo/page'; export default function App(){return <Page title="x"/>}`,
+        `import {missing} from 'orkbot/page'; export default function App(){return <Page title="x"/>}`,
       ).ok,
     ).toBe(false);
   });

@@ -1,5 +1,5 @@
 import { createHash, createHmac, generateKeyPairSync, sign } from "node:crypto";
-import type * as Db from "@rakazo/db";
+import type * as Db from "@orkbot/db";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Auth, AuthEnv } from "./index.js";
@@ -9,13 +9,13 @@ import { encryptStoredOAuthTokens, openIdToken, sealIdToken } from "./token-stor
 
 const state = vi.hoisted(() => ({ db: {} as Record<string, Record<string, unknown>[]> }));
 vi.mock("better-auth/adapters/prisma", () => ({ prismaAdapter: () => memoryAdapter(state.db) }));
-vi.mock("@rakazo/db", async (original) => ({
+vi.mock("@orkbot/db", async (original) => ({
   ...(await original<typeof Db>()),
   bootstrapUserSpace: vi.fn(),
 }));
 
 const issuer = "https://identity.example.test";
-const origin = "https://rakazo.example.test";
+const origin = "https://orkbot.example.test";
 const secret = "offline-test-secret-with-at-least-32-characters";
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const jwk = { ...publicKey.export({ format: "jwk" }), kid: "test-key", alg: "RS256", use: "sig" };
@@ -565,13 +565,13 @@ describe("OIDC callbacks", () => {
       name: "Local",
     });
     rows("user")[0]!.emailVerified = true;
-    const callback = await start(undefined, true, "rakazo://account");
+    const callback = await start(undefined, true, "orkbot://account");
     const authorize = `${issuer}/authorize?state=${new URL(`${origin}${callback}`).searchParams.get("state")}`;
     cookies = "";
     await request(
       `/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: authorize })}`,
     );
-    expect(new URL((await request(callback)).headers.get("location")!).protocol).toBe("rakazo:");
+    expect(new URL((await request(callback)).headers.get("location")!).protocol).toBe("orkbot:");
     expect(rows("account").filter((account) => account.providerId === "oidc")).toHaveLength(1);
   });
   it("drops an unverified account's SSO links when its mailbox owner resets the password", async () => {
@@ -606,7 +606,7 @@ describe("OIDC callbacks", () => {
   });
   it("hands the native browser callback to Expo with a valid bearer session", async () => {
     setup();
-    const callback = await start(undefined, false, "rakazo://sign-in");
+    const callback = await start(undefined, false, "orkbot://sign-in");
     const authorize = `${issuer}/authorize?state=${new URL(`${origin}${callback}`).searchParams.get("state")}`;
     const proxy = await request(
       `/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: authorize })}`,
@@ -614,7 +614,7 @@ describe("OIDC callbacks", () => {
     expect(proxy.headers.get("location")).toBe(authorize);
     const returned = await request(callback);
     const destination = new URL(returned.headers.get("location")!);
-    expect(destination.protocol).toBe("rakazo:");
+    expect(destination.protocol).toBe("orkbot:");
     const signed = destination.searchParams
       .get("cookie")!
       .match(/(?:__Secure-)?better-auth\.session_token=([^;]+)/)![1]!;
@@ -1155,7 +1155,7 @@ describe("SSO-only account deletion", () => {
       "/sign-in/social",
       {
         provider: "oidc",
-        callbackURL: "rakazo://sign-in",
+        callbackURL: "orkbot://sign-in",
         additionalData: { reauthenticate: true },
       },
       token,
@@ -1182,7 +1182,7 @@ describe("SSO-only account deletion", () => {
       `/callback/oidc?state=${url.searchParams.get("state")}&code=native-reauth`,
     );
     const destination = new URL(returned.headers.get("location")!);
-    expect(destination.protocol).toBe("rakazo:");
+    expect(destination.protocol).toBe("orkbot:");
     const signed = destination.searchParams
       .get("cookie")!
       .match(/(?:__Secure-)?better-auth\.session_token=([^;]+)/)![1]!;

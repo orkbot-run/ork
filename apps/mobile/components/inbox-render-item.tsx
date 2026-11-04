@@ -1,5 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { SpaceBot, SpaceGroup } from "@rakazo/contracts";
+import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Platform, Pressable, Text, View } from "react-native";

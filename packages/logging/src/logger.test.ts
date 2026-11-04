@@ -8,14 +8,14 @@ import { createTestSink } from "./test-sink.js";
 describe("logger", () => {
   it("filters levels including off", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", level: "warn", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", level: "warn", sinks: [sink] });
     logger.debug("d");
     logger.info("i");
     logger.warn("w");
     logger.error("e");
     expect(sink.events.map((event) => event.message)).toEqual(["w", "e"]);
 
-    const silent = createLogger({ service: "rakazo-api", level: "off", sinks: [sink] });
+    const silent = createLogger({ service: "orkbot-api", level: "off", sinks: [sink] });
     silent.error("never");
     expect(sink.events.map((event) => event.message)).toEqual(["w", "e"]);
   });
@@ -23,14 +23,14 @@ describe("logger", () => {
   it("merges child bindings under call-site bindings", () => {
     const sink = createTestSink();
     const logger = createLogger({
-      service: "rakazo-api",
+      service: "orkbot-api",
       sinks: [sink],
       bindings: { "service.role": "api" },
     });
     logger.child({ "job.type": "run.continue" }).info("hello", { "job.type": "override" });
     expect(sink.events[0]).toMatchObject({
       message: "hello",
-      "service.name": "rakazo-api",
+      "service.name": "orkbot-api",
       "service.role": "api",
       "job.type": "override",
     });
@@ -38,7 +38,7 @@ describe("logger", () => {
 
   it("serializes a warning's error binding like an error log's error", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const cause = new Error("could not prepare the workspace");
     logger.warn("computer.provision_failed", {
       provider: "fake",
@@ -56,21 +56,21 @@ describe("logger", () => {
 
   it("serializes an error bound on a child logger", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     logger.child({ error: new TypeError("bound failure") }).warn("child");
     expect(sink.events[0]?.error).toMatchObject({ name: "TypeError", message: "bound failure" });
   });
 
   it("keeps the configured service name when bindings try to overwrite it", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     logger.info("svc", { "service.name": "spoofed" });
-    expect(sink.events[0]?.["service.name"]).toBe("rakazo-api");
+    expect(sink.events[0]?.["service.name"]).toBe("orkbot-api");
   });
 
   it("prefers explicit bindings over async context", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     logger.withContext({ "request.id": "als" }, () => {
       logger.info("ctx", { "request.id": "call" });
     });
@@ -79,7 +79,7 @@ describe("logger", () => {
 
   it("isolates concurrent async contexts", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     let releaseFirst!: () => void;
     const firstHold = new Promise<void>((resolve) => {
       releaseFirst = resolve;
@@ -104,7 +104,7 @@ describe("logger", () => {
   it("keeps logging when a sink throws", () => {
     const sink = createTestSink();
     const logger = createLogger({
-      service: "rakazo-api",
+      service: "orkbot-api",
       sinks: [
         {
           write() {
@@ -121,7 +121,7 @@ describe("logger", () => {
   it("flushes sinks and respects a timeout", async () => {
     let flushed = false;
     const logger = createLogger({
-      service: "rakazo-api",
+      service: "orkbot-api",
       sinks: [
         {
           write() {},
@@ -135,7 +135,7 @@ describe("logger", () => {
     expect(flushed).toBe(true);
 
     const hanging = createLogger({
-      service: "rakazo-api",
+      service: "orkbot-api",
       sinks: [
         {
           write() {},
@@ -179,7 +179,7 @@ describe("error serialization", () => {
 
   it("redacts secrets interpolated into the log message", () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     logger.error("render_plot failed: Bearer supersecret for person@example.com");
     expect(JSON.stringify(sink.events[0])).not.toContain("supersecret");
     expect(JSON.stringify(sink.events[0])).not.toContain("person@example.com");
@@ -204,7 +204,7 @@ describe("pretty console errors", () => {
     });
     try {
       createLogger({
-        service: "rakazo-api",
+        service: "orkbot-api",
         sinks: [createConsoleSink({ format: "pretty" })],
       }).error("run.failed", sanitizedError(error));
     } finally {

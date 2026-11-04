@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { clampBotMessage } from "./bot-messages.js";
 import type { FoldedTranscript } from "./message-visibility.js";
 

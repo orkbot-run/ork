@@ -2,7 +2,7 @@ import { execSync } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import type { StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { disposableDatabaseEnv, startPostgres } from "./postgres.js";
 
@@ -21,7 +21,7 @@ async function main() {
     );
   }
 
-  const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-canary-"));
+  const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-canary-"));
   let postgres: StartedPostgreSqlContainer | undefined;
   try {
     if (runOpenRouter) postgres = await startPostgres();
@@ -47,8 +47,8 @@ async function main() {
       DATA_DIR: dataDir,
     };
     if (postgres) {
-      execSync("pnpm --filter @rakazo/db generate", { stdio: "inherit", env });
-      execSync("pnpm --filter @rakazo/db exec prisma migrate deploy", {
+      execSync("pnpm --filter @orkbot/db generate", { stdio: "inherit", env });
+      execSync("pnpm --filter @orkbot/db exec prisma migrate deploy", {
         stdio: "inherit",
         env,
         cwd: path.resolve("packages/db"),

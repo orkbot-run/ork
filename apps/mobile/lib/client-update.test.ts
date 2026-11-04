@@ -29,7 +29,7 @@ vi.mock("react-native", () => rn);
 vi.mock("./api", () => ({ configureClientBuild: vi.fn() }));
 vi.mock("./i18n", () => ({ t: (message: string) => message }));
 
-import { IOS_APP_STORE_URL } from "@rakazo/contracts";
+import { IOS_APP_STORE_URL } from "@orkbot/contracts";
 import {
   clientBuildHeaders,
   FOREGROUND_UPDATE_CHECK_MS,
@@ -54,7 +54,7 @@ function pressUpdate() {
 describe("mobile client build", () => {
   it("names the running bundle by when its update was created", () => {
     expect(mobileClientBuild()).toBe("20261022093015");
-    expect(clientBuildHeaders()).toEqual({ "x-rakazo-client-build": "mobile/20261022093015" });
+    expect(clientBuildHeaders()).toEqual({ "x-orkbot-client-build": "mobile/20261022093015" });
   });
 
   it("names no build where expo-updates is off", () => {

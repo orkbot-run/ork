@@ -12,9 +12,9 @@ import type {
   SandboxProvider,
   ScreenRequest,
   TerminalRequest,
-} from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
-import { COMPUTER_CACHE_ENV } from "@rakazo/core/node/desktop-runtime";
+} from "@orkbot/adapter-kit";
+import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
+import { COMPUTER_CACHE_ENV } from "@orkbot/core/node/desktop-runtime";
 import type * as Railway from "railway";
 import type { ConnectOptions, Sandbox, SandboxStatus } from "railway";
 import WebSocket from "ws";
@@ -36,7 +36,7 @@ import {
 } from "./workspace-save-policy.js";
 
 const DISPLAY_START = 1;
-const WORKSPACE = "/home/rakazo";
+const WORKSPACE = "/home/orkbot";
 const SCREEN_PORT = 6080;
 const RAILWAY_API = "https://backboard.railway.com/graphql/v2";
 const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
@@ -556,7 +556,7 @@ export class RailwaySandboxProvider implements SandboxProvider {
 
 /**
  * Railway destroys an idle sandbox, so it must outlast the checkpointing idle sleep. When no
- * finite timeout can, Railway never idles it out and Rakazo's own idle sleep stops it.
+ * finite timeout can, Railway never idles it out and Ork's own idle sleep stops it.
  */
 function railwayIdleTimeoutMinutes() {
   if (!computerIdleSleepEnabled()) return 0;
@@ -722,7 +722,7 @@ function railwayCwd(cwd: string | undefined) {
 
 const PREPARE_RAILWAY_DESKTOP = [
   "set -eu",
-  "exec 9>/tmp/rakazo-prepare.lock; flock -w 300 9",
+  "exec 9>/tmp/orkbot-prepare.lock; flock -w 300 9",
   PREPARE_LINUX_DESKTOP,
   INSTALL_LINUX_BROWSER,
   `mkdir -p ${WORKSPACE}/.browser-profiles`,

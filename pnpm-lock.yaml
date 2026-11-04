@@ -62,31 +62,31 @@ importers:
       '@orpc/server':
         specifier: 1.16.1
         version: 1.16.1(@opentelemetry/api@1.10.0)(crossws@0.3.5)(ws@8.22.0)
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../../packages/adapter-kit
-      '@rakazo/adapters':
+      '@orkbot/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@rakazo/auth':
+      '@orkbot/auth':
         specifier: workspace:*
         version: link:../../packages/auth
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
-      '@rakazo/memory':
+      '@orkbot/memory':
         specifier: workspace:*
         version: link:../../packages/memory
-      '@rakazo/page-kit':
+      '@orkbot/page-kit':
         specifier: workspace:*
         version: link:../../packages/page-kit
       fflate:
@@ -108,10 +108,10 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
       '@sentry/electron':
@@ -127,13 +127,13 @@ importers:
       '@playwright/test':
         specifier: 1.64.1
         version: 1.64.1
-      '@rakazo/adapters':
+      '@orkbot/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
       electron:
@@ -163,19 +163,19 @@ importers:
       '@expo/ui':
         specifier: 57.0.26
         version: 57.0.26(@babel/core@7.29.7)(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(expo@57.0.31)(react-dom@19.2.3(react@19.2.3))(react-native-worklets@0.10.1(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
-      '@rakazo/chat-ui':
+      '@orkbot/chat-ui':
         specifier: workspace:*
         version: link:../../packages/chat-ui
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
       '@react-native-vector-icons/ionicons':
@@ -350,22 +350,22 @@ importers:
       '@orpc/tanstack-query':
         specifier: 1.16.1
         version: 1.16.1(@opentelemetry/api@1.10.0)(@orpc/client@1.16.1(@opentelemetry/api@1.10.0))(@tanstack/query-core@5.105.3)
-      '@rakazo/chat-ui':
+      '@orkbot/chat-ui':
         specifier: workspace:*
         version: link:../../packages/chat-ui
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../../packages/ui-tokens
-      '@rakazo/ui-web':
+      '@orkbot/ui-web':
         specifier: workspace:*
         version: link:../../packages/ui-web
       '@sentry/react':
@@ -453,22 +453,22 @@ importers:
 
   apps/worker:
     dependencies:
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../../packages/adapter-kit
-      '@rakazo/adapters':
+      '@orkbot/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
-      '@rakazo/memory':
+      '@orkbot/memory':
         specifier: workspace:*
         version: link:../../packages/memory
     devDependencies:
@@ -490,13 +490,13 @@ importers:
       '@astrojs/sitemap':
         specifier: 3.7.4
         version: 3.7.4
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/ui-web':
+      '@orkbot/ui-web':
         specifier: workspace:*
         version: link:../../packages/ui-web
       '@vercel/functions':
@@ -548,10 +548,10 @@ importers:
       '@hono/node-server':
         specifier: 2.1.6
         version: 2.1.6(hono@4.13.16)
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../../packages/core
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../../packages/logging
       dockerode:
@@ -582,13 +582,13 @@ importers:
       '@hono/node-server':
         specifier: 2.1.6
         version: 2.1.6(hono@4.13.16)
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
       hono:
@@ -610,7 +610,7 @@ importers:
 
   packages/adapter-kit:
     dependencies:
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
       zod:
@@ -710,22 +710,22 @@ importers:
       '@photon-ai/chat-adapter-imessage':
         specifier: 3.2.0
         version: 3.2.0(chat@4.44.0(zod@4.6.7))(typescript@7.0.2)(zod@4.6.7)
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../adapter-kit
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../db
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../logging
-      '@rakazo/page-kit':
+      '@orkbot/page-kit':
         specifier: workspace:*
         version: link:../page-kit
       '@stripe/link-sdk':
@@ -822,19 +822,19 @@ importers:
       '@better-auth/passkey':
         specifier: 1.7.16
         version: 1.7.16(t6jdk7bfxwwmxsqal4vqmiplfu)
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../adapter-kit
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../db
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
       better-auth:
@@ -865,16 +865,16 @@ importers:
 
   packages/chat-ui:
     dependencies:
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
-      '@rakazo/ui-web':
+      '@orkbot/ui-web':
         specifier: workspace:*
         version: link:../ui-web
       '@ronradtke/react-native-markdown-display':
@@ -945,10 +945,10 @@ importers:
       '@observablehq/plot':
         specifier: 0.6.17
         version: 0.6.17
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
       '@tanstack/query-core':
@@ -1012,16 +1012,16 @@ importers:
       '@prisma/client':
         specifier: 7.10.1
         version: 7.10.1(prisma@7.10.1(@types/node@26.5.0)(@types/react-dom@19.2.7(@types/react@19.2.18))(@types/react@19.2.18)(magicast@0.5.5)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(typescript@7.0.2))(typescript@7.0.2)
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../adapter-kit
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/logging':
+      '@orkbot/logging':
         specifier: workspace:*
         version: link:../logging
       dotenv:
@@ -1065,10 +1065,10 @@ importers:
 
   packages/memory:
     dependencies:
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../adapter-kit
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../db
     devDependencies:
@@ -1081,10 +1081,10 @@ importers:
 
   packages/page-kit:
     dependencies:
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
       esbuild:
@@ -1118,22 +1118,22 @@ importers:
       '@hono/node-server':
         specifier: 2.1.6
         version: 2.1.6(hono@4.13.16)
-      '@rakazo/adapter-kit':
+      '@orkbot/adapter-kit':
         specifier: workspace:*
         version: link:../adapter-kit
-      '@rakazo/adapters':
+      '@orkbot/adapters':
         specifier: workspace:*
         version: link:../adapters
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/db':
+      '@orkbot/db':
         specifier: workspace:*
         version: link:../db
-      '@rakazo/page-kit':
+      '@orkbot/page-kit':
         specifier: workspace:*
         version: link:../page-kit
       '@testcontainers/postgresql':
@@ -1152,10 +1152,10 @@ importers:
       '@playwright/test':
         specifier: 1.64.1
         version: 1.64.1
-      '@rakazo/api':
+      '@orkbot/api':
         specifier: workspace:*
         version: link:../../apps/api
-      '@rakazo/sandbox-supervisor':
+      '@orkbot/sandbox-supervisor':
         specifier: workspace:*
         version: link:../../infra/sandboxes/supervisor
       '@types/pngjs':
@@ -1185,13 +1185,13 @@ importers:
       '@base-ui/react':
         specifier: 1.9.0
         version: 1.9.0(@types/react@19.2.18)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      '@rakazo/contracts':
+      '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts
-      '@rakazo/core':
+      '@orkbot/core':
         specifier: workspace:*
         version: link:../core
-      '@rakazo/ui-tokens':
+      '@orkbot/ui-tokens':
         specifier: workspace:*
         version: link:../ui-tokens
       class-variance-authority:

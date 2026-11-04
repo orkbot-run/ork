@@ -10,14 +10,14 @@ import {
 
 const OWNER = { allowPrivate: true };
 
-const savedAllowPublic = process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC;
-const savedPrivateHosts = process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS;
+const savedAllowPublic = process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC;
+const savedPrivateHosts = process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS;
 
 afterEach(() => {
-  if (savedAllowPublic === undefined) delete process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC;
-  else process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = savedAllowPublic;
-  if (savedPrivateHosts === undefined) delete process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS;
-  else process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS = savedPrivateHosts;
+  if (savedAllowPublic === undefined) delete process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC;
+  else process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = savedAllowPublic;
+  if (savedPrivateHosts === undefined) delete process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS;
+  else process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS = savedPrivateHosts;
 });
 
 describe("openai-compatible URL policy", () => {
@@ -48,7 +48,7 @@ describe("openai-compatible URL policy", () => {
   ];
 
   it("allows loopback, RFC1918, ULA and Docker host endpoints when private endpoints are allowed", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
     for (const raw of privateUrls) {
       expect(assertAllowedOpenAiCompatibleUrl(raw, OWNER).href).toBe(raw);
     }
@@ -58,7 +58,7 @@ describe("openai-compatible URL policy", () => {
   });
 
   it("refuses private endpoints unless they are allowed, even with public hosts open", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
     for (const raw of privateUrls) {
       for (const policy of [undefined, {}, { allowPrivate: false }]) {
         expect(() => assertAllowedOpenAiCompatibleUrl(raw, policy)).toThrow(
@@ -115,8 +115,8 @@ describe("openai-compatible URL policy", () => {
   });
 
   it("allows only exact configured private hostnames without opening the public gate", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
-    process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS =
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
+    process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS =
       " Models.Example.Test. , other.example.test, , *.wild.example.test";
     for (const hostname of ["models.example.test", "MODELS.EXAMPLE.TEST.", "other.example.test"]) {
       expect(assertAllowedOpenAiCompatibleUrl(`https://${hostname}/v1`, OWNER).hostname).toBe(
@@ -136,14 +136,14 @@ describe("openai-compatible URL policy", () => {
   });
 
   it("requires private endpoint permission for allowlisted hostnames", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS = "models.example.test";
+    process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS = "models.example.test";
     expect(() => assertAllowedOpenAiCompatibleUrl("http://models.example.test/v1")).toThrow(
       PRIVATE_MODEL_ENDPOINT_MESSAGE,
     );
   });
 
   it("does not let the private hostname allowlist override blocked destinations", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS =
+    process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS =
       "metadata.google.internal, metadata.goog, 169.254.169.254, 169.254.1.1";
     for (const hostname of [
       "metadata.google.internal",
@@ -158,13 +158,13 @@ describe("openai-compatible URL policy", () => {
   });
 
   it("allows public hosts unless the operator sets 0", () => {
-    delete process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC;
+    delete process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC;
     expect(openAiCompatAllowPublicHosts()).toBe(true);
     expect(assertAllowedOpenAiCompatibleUrl("https://api.example.com/v1").href).toBe(
       "https://api.example.com/v1",
     );
 
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "0";
     expect(openAiCompatAllowPublicHosts()).toBe(false);
     expect(() => assertAllowedOpenAiCompatibleUrl("https://api.example.com/v1")).toThrow(
       /Public model endpoints are disabled/,
@@ -174,7 +174,7 @@ describe("openai-compatible URL policy", () => {
 
 describe("assertHttpsForKeyedOpenAiCompatibleUrl", () => {
   it("rejects public http when an API key is set", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
     const url = assertAllowedOpenAiCompatibleUrl("http://api.example.com/v1");
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, "secret-key")).toThrow(
       /must use HTTPS/,
@@ -182,7 +182,7 @@ describe("assertHttpsForKeyedOpenAiCompatibleUrl", () => {
   });
 
   it("allows public https when an API key is set", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
     const url = assertAllowedOpenAiCompatibleUrl("https://api.example.com/v1");
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, "secret-key")).not.toThrow();
   });
@@ -195,13 +195,13 @@ describe("assertHttpsForKeyedOpenAiCompatibleUrl", () => {
   });
 
   it("treats explicitly trusted private hostnames like private IP endpoints", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS = "models.example.test";
+    process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS = "models.example.test";
     const url = assertAllowedOpenAiCompatibleUrl("http://models.example.test/v1", OWNER);
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, "fake-local-key")).not.toThrow();
   });
 
   it("skips the HTTPS check when no API key is set", () => {
-    process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
+    process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC = "1";
     const url = assertAllowedOpenAiCompatibleUrl("http://api.example.com/v1");
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, undefined)).not.toThrow();
     expect(() => assertHttpsForKeyedOpenAiCompatibleUrl(url, "  ")).not.toThrow();

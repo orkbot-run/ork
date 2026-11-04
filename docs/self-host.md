@@ -1,4 +1,4 @@
-# Self-hosting Rakazo
+# Self-hosting Ork
 
 Run the API, worker, web app, database and bot computers on a machine you control.
 
@@ -14,12 +14,12 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 ## Published images (no checkout)
 
-Pull Postgres and `ghcr.io/elie222/rakazo/app` into any empty folder. No clone or image build.
+Pull Postgres and `ghcr.io/orkbot-run/ork/app` into any empty folder. No clone or image build.
 Requires Docker Engine 26+ (API 1.45+ for bot home volume subpaths), the Compose plugin, curl, and OpenSSL.
 
 ```bash
-mkdir -p rakazo && cd rakazo &&
-curl -fsSLO https://raw.githubusercontent.com/elie222/rakazo/main/infra/compose/install-images.sh &&
+mkdir -p orkbot && cd orkbot &&
+curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
 bash install-images.sh
 ```
 
@@ -31,7 +31,7 @@ optional providers before startup, run `bash install-images.sh --prepare-only`, 
 run `bash install-images.sh`. Flags may be combined in either order: `--prepare-only`, `--local`.
 
 `SANDBOX_PROVIDER` defaults to `docker`. The images Compose file runs a sandbox supervisor
-(from the app image, on the internal network only) and pulls `ghcr.io/elie222/rakazo/computer`.
+(from the app image, on the internal network only) and pulls `ghcr.io/orkbot-run/ork/computer`.
 Signup and local Docker computers work without an E2B account. Optional remote providers: set
 `SANDBOX_PROVIDER` to `e2b`, `novita`, `daytona`, `createos`, or `boat` and add the matching API key. The published-images
 Compose stack requires `SANDBOX_SUPERVISOR_TOKEN` for every provider; leave it empty and `compose up` fails closed.
@@ -48,7 +48,7 @@ that HTTPS URL.
 Images Compose binds web to loopback (`127.0.0.1:5173`). Terminate TLS on the host and proxy
 there. Vite preview same-origin-proxies `/api` and `/rpc`, so do not expose `:3100`. Set
 `BETTER_AUTH_URL`, `WEB_ORIGIN`, and `API_URL` to that same HTTPS origin, and set
-`RAKAZO_HOST` to its hostname (for example, `app.example.com`). Cookies and CORS follow those
+`ORKBOT_HOST` to its hostname (for example, `app.example.com`). Cookies and CORS follow those
 origins.
 
 ```Caddyfile
@@ -77,7 +77,7 @@ If the installer, Compose downloads, or image pulls are blocked, use the
 
 On Windows, if an older clone with `core.autocrlf=true` leaves the computer pane hung on boot (`bash\r` in sandbox logs): from a clean worktree, set `git config core.autocrlf false`, run `git add --renormalize . && git checkout -- .`, then rebuild with `pnpm sandbox:build`.
 
-Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers (`rakazo/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
+Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers (`orkbot/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
 
 Postgres stays on the Compose network only (not published on the host), matching the images
 compose. Credentials come from `.env` (`POSTGRES_PASSWORD` is required). Prefer a URI-safe value
@@ -94,9 +94,9 @@ Do not publish Postgres on a public interface.
 
 ## Local (source checkout)
 
-Same as the README quick start: `.env` from `.env.example`, `pnpm sandbox:build`, `pnpm dev`, then the URL it prints ([http://127.0.0.1:5173](http://127.0.0.1:5173) by default, or `http://localhost:5173` — both loopback hosts are trusted). Electron: `pnpm --filter @rakazo/desktop dev` while that stack is up, choosing **Existing instance** with that address. The desktop app's **This computer** option instead installs and runs the published images itself with Docker Compose (see [Published images](#published-images-no-checkout)), using port 45173 by default so it can run alongside `pnpm dev`. If that port is occupied, the app selects and remembers another loopback port. The managed API gets a Docker-assigned loopback port; all desktop traffic uses the web origin.
+Same as the README quick start: `.env` from `.env.example`, `pnpm sandbox:build`, `pnpm dev`, then the URL it prints ([http://127.0.0.1:5173](http://127.0.0.1:5173) by default, or `http://localhost:5173` — both loopback hosts are trusted). Electron: `pnpm --filter @orkbot/desktop dev` while that stack is up, choosing **Existing instance** with that address. The desktop app's **This computer** option instead installs and runs the published images itself with Docker Compose (see [Published images](#published-images-no-checkout)), using port 45173 by default so it can run alongside `pnpm dev`. If that port is occupied, the app selects and remembers another loopback port. The managed API gets a Docker-assigned loopback port; all desktop traffic uses the web origin.
 
-For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/rakazo`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
+For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/orkbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
 Compose bot homes mount only their own subdirectory of the application volume using Docker volume semantics. Docker's internal volume paths are never used as host bind mounts.
 
@@ -130,7 +130,7 @@ Compose bot homes mount only their own subdirectory of the application volume us
 
 ## Reporting a problem
 
-Attach a diagnostics report to a [self-host issue](https://github.com/elie222/rakazo/issues/new?template=self-host.yml):
+Attach a diagnostics report to a [self-host issue](https://github.com/orkbot-run/ork/issues/new?template=self-host.yml):
 
 ```bash
 docker compose -f docker-compose.images.yml exec api node dist/cli/diagnostics.js
@@ -143,4 +143,4 @@ paths or message content; servers, bots and runs appear only as short hashes.
 
 When a user asks their bot to report a bug or send feedback, the report is saved on your server
 in the `feedback_reports` table, with the chat, bot and run it came from. Nothing is sent to the
-Rakazo project.
+Ork project.

@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EncryptedSecretStore, FakeSandboxProvider, withSecretPersistence } from "@rakazo/adapters";
-import type { PrismaClient } from "@rakazo/db";
-import { createDb, runAsSystem } from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { EncryptedSecretStore, FakeSandboxProvider, withSecretPersistence } from "@orkbot/adapters";
+import type { PrismaClient } from "@orkbot/db";
+import { createDb, runAsSystem } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { moveMcpArgsIntoSecrets } from "./mcp-args-migration.js";
@@ -145,7 +145,7 @@ describe
     it("skips a server it cannot move and keeps going", () =>
       runAsSystem("mcp args migration", async () => {
         const sink = createTestSink();
-        installLogger(createLogger({ service: "rakazo-api", sinks: [sink] }));
+        installLogger(createLogger({ service: "orkbot-api", sinks: [sink] }));
         await prisma.secret.create({
           data: { id: `unreadable-${suffix}`, userId, spaceId, kind: "mcp", ciphertext: "fake" },
         });
@@ -177,7 +177,7 @@ describe
           expect(counts.failed).toBeGreaterThanOrEqual(3);
           expect(JSON.stringify(sink.events)).not.toMatch(/leak1|leak2/);
         } finally {
-          installLogger(createLogger({ service: "rakazo-api", level: "off", sinks: [] }));
+          installLogger(createLogger({ service: "orkbot-api", level: "off", sinks: [] }));
         }
         expect(
           await prisma.mcpServer.findUniqueOrThrow({ where: { id: broken.id } }),
@@ -191,7 +191,7 @@ describe
       const row = await runAsSystem("mcp args migration", () =>
         server("startup", { args: ["--startup", "fake-startup"] }),
       );
-      const dataDir = await mkdtemp(join(tmpdir(), "rakazo-mcp-args-"));
+      const dataDir = await mkdtemp(join(tmpdir(), "orkbot-mcp-args-"));
       const handles = await createApp({
         databaseUrl: process.env.DATABASE_URL!,
         encryptionKey,

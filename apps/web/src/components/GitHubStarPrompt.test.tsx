@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { Toaster } from "@rakazo/ui-web";
+import { Toaster } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -47,7 +47,7 @@ it("asks after the sixth message and never again once dismissed", async () => {
   // The toaster mounts toasts on its own timers.
   await vi.waitFor(() => expect(prompt()).not.toBeNull());
   const link = prompt()?.querySelector("a");
-  expect(link?.getAttribute("href")).toBe("https://github.com/elie222/rakazo");
+  expect(link?.getAttribute("href")).toBe("https://github.com/orkbot-run/ork");
 
   const notNow = [...(prompt()?.querySelectorAll("button") ?? [])].find(
     (button) => button.textContent === "Not now",

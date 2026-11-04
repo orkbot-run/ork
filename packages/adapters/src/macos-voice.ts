@@ -12,7 +12,7 @@ import type {
   VoiceProvider,
   VoiceSynthesizeRequest,
   VoiceVerifyResult,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import { MAX_SPEAK_CHARS, MAX_SYNTHESIZED_AUDIO_BYTES } from "./voice-http.js";
 
 export const MACOS_VOICE_PROVIDER_ID = "macos";
@@ -104,7 +104,7 @@ export class MacOsVoiceProvider implements VoiceProvider {
     if (!voices.some((voice) => voice.id === request.voiceId)) {
       throw new Error("That voice is not installed on this Mac.");
     }
-    const dir = await mkdtemp(join(tmpdir(), "rakazo-say-"));
+    const dir = await mkdtemp(join(tmpdir(), "orkbot-say-"));
     try {
       const file = join(dir, "speech.wav");
       await this.run(

@@ -1,4 +1,4 @@
-import type { AgentSkill } from "@rakazo/contracts";
+import type { AgentSkill } from "@orkbot/contracts";
 import type { NativeStackNavigationOptions } from "expo-router";
 import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";

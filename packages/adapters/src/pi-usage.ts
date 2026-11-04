@@ -14,7 +14,7 @@ import type {
   AgentUsage,
   ModelCallObserver,
   UsageOperationKind,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import { Agent } from "undici";
 import { withChatCompletionsCompatibility } from "./chat-completions-compat.js";
 import type { ContextBudget } from "./context-selection.js";

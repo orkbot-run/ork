@@ -27,7 +27,7 @@ WATCH_KEYS = frozenset(
         "sudoers",
         "identity",
         "ssh_keys",
-        "rakazo_config",
+        "orkbot_config",
         "app_secrets",
         "host_scripts",
         "persistence",
@@ -282,7 +282,7 @@ def check_sink_url(url):
                 return
         except ValueError:
             pass
-    raise ValueError("RAKAZO_AUDIT_SINK_URL must use https")
+    raise ValueError("ORKBOT_AUDIT_SINK_URL must use https")
 
 
 class _RejectRedirects(urllib.request.HTTPRedirectHandler):
@@ -331,7 +331,7 @@ def heartbeat_seconds(value):
         return DEFAULT_HEARTBEAT_SECONDS
     seconds = int(value)
     if seconds < 60:
-        raise ValueError("RAKAZO_AUDIT_HEARTBEAT_SECONDS must be at least 60")
+        raise ValueError("ORKBOT_AUDIT_HEARTBEAT_SECONDS must be at least 60")
     return seconds
 
 
@@ -341,21 +341,21 @@ def heartbeat_event(host, now):
 
 
 def main():
-    url = os.environ.get("RAKAZO_AUDIT_SINK_URL", "")
-    token_file = os.environ.get("RAKAZO_AUDIT_TOKEN_FILE", "/etc/rakazo/audit-ship.token")
-    host = os.environ.get("RAKAZO_AUDIT_HOST") or socket.gethostname()
-    known_keys = parse_known_keys(os.environ.get("RAKAZO_AUDIT_KNOWN_KEYS", ""))
-    state_dir = os.environ.get("STATE_DIRECTORY", "/var/lib/rakazo/audit-ship").split(":")[0]
+    url = os.environ.get("ORKBOT_AUDIT_SINK_URL", "")
+    token_file = os.environ.get("ORKBOT_AUDIT_TOKEN_FILE", "/etc/orkbot/audit-ship.token")
+    host = os.environ.get("ORKBOT_AUDIT_HOST") or socket.gethostname()
+    known_keys = parse_known_keys(os.environ.get("ORKBOT_AUDIT_KNOWN_KEYS", ""))
+    state_dir = os.environ.get("STATE_DIRECTORY", "/var/lib/orkbot/audit-ship").split(":")[0]
     state_path = Path(state_dir) / "state.json"
     if not url:
-        print("RAKAZO_AUDIT_SINK_URL is not set", file=sys.stderr)
+        print("ORKBOT_AUDIT_SINK_URL is not set", file=sys.stderr)
         return 1
     send = sender(url, token_file)
     sources = [
         ("auth", AUTH_LOG, lambda lines: parse_auth_lines(lines, host, known_keys), False, None),
         ("audit", AUDIT_LOG, lambda lines: parse_audit_lines(lines, host), True, audit_group_start),
     ]
-    interval = heartbeat_seconds(os.environ.get("RAKAZO_AUDIT_HEARTBEAT_SECONDS", ""))
+    interval = heartbeat_seconds(os.environ.get("ORKBOT_AUDIT_HEARTBEAT_SECONDS", ""))
     state = load_state(state_path)
     backoff = 0
     last_heartbeat = None

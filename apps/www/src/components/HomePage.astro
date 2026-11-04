@@ -1,5 +1,5 @@
 ---
-import { ANDROID_APP_STORE_URL } from "@rakazo/contracts/client-build";
+import { ANDROID_APP_STORE_URL } from "@orkbot/contracts/client-build";
 import Button from "./Button.astro";
 import Footer from "./Footer.astro";
 import GetStartedActions from "./GetStartedActions.astro";
@@ -70,7 +70,7 @@ const [starsLabel, desktopDownloads, recentChanges] = await Promise.all([
   fetchDesktopDownloads(),
   fetchRecentChanges(5),
 ]);
-const setupAgentPrompt = `Set up Rakazo for me. Follow the setup prompt at ${SETUP_PROMPT_URL}`;
+const setupAgentPrompt = `Set up Ork for me. Follow the setup prompt at ${SETUP_PROMPT_URL}`;
 const desktopPlatforms = availableDesktopPlatforms(desktopDownloads);
 const PLATFORM_NAMES = { mac: "macOS", windows: "Windows", linux: "Linux" } as const;
 const PROVIDER_LOGOS: Record<string, string> = {
@@ -254,7 +254,7 @@ const structuredData = homeStructuredData({
         </div>
       </section>
 
-      <section id="testimonials" class="section testimonials" aria-labelledby="testimonials-heading">
+      {copy.testimonials.items.length > 0 && (<section id="testimonials" class="section testimonials" aria-labelledby="testimonials-heading">
         <div class="section-intro testimonials__heading">
           <h2 id="testimonials-heading" class="section-heading">{copy.testimonials.heading}</h2>
           <button
@@ -306,7 +306,7 @@ const structuredData = homeStructuredData({
             }
           </div>
         </div>
-      </section>
+      </section>)}
 
       <section id="selfhost" class="section">
         <div class="selfhost__intro">
@@ -367,6 +367,7 @@ const structuredData = homeStructuredData({
               </svg>
               <h3>{copy.platforms.desktop}</h3>
               <div class="platform-card__links">
+                {desktopPlatforms.length === 0 && <a href={`${GITHUB_URL}/tree/main/apps/desktop`}>{copy.hero.viewOnGithub}</a>}
                 {desktopPlatforms.map((platform) => (
                   <a href={desktopDownloadHref(platform)}>{PLATFORM_NAMES[platform]}</a>
                 ))}
@@ -436,7 +437,7 @@ const structuredData = homeStructuredData({
         </div>
         <div class="stats-grid">
           {
-            copy.cta.stats.map((stat) => (
+            copy.cta.stats.filter((stat) => stat.value !== "stars" || starsLabel !== "GitHub").map((stat) => (
               <div>
                 <div class="stat-value">
                   {stat.value === "stars"

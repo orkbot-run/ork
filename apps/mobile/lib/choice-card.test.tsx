@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";

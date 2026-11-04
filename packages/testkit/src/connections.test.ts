@@ -8,9 +8,9 @@ import {
   InstalledConnectorProvider,
   PipedreamConnector,
   ThirdPartyConnectorEmulator,
-} from "@rakazo/adapters";
-import type { createApp } from "@rakazo/api/app";
-import { appliedModelRole, runAsSystem, runAsTenant, updateModelRole } from "@rakazo/db";
+} from "@orkbot/adapters";
+import type { createApp } from "@orkbot/api/app";
+import { appliedModelRole, runAsSystem, runAsTenant, updateModelRole } from "@orkbot/db";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { asSystem } from "./system-db.js";
@@ -35,10 +35,10 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   let thirdParties: ThirdPartyConnectorEmulator;
   let connectionOrdinal = 0;
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const dataDir = mkdtempSync(path.join(tmpdir(), "rakazo-connections-"));
+  const dataDir = mkdtempSync(path.join(tmpdir(), "orkbot-connections-"));
 
   beforeAll(async () => {
-    const { createApp } = await import("@rakazo/api/app");
+    const { createApp } = await import("@orkbot/api/app");
     fake = new FakeComposioClient();
     composio = new ComposioConnector({ client: fake });
     thirdParties = new ThirdPartyConnectorEmulator();
@@ -79,8 +79,8 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("serializes overlapping backup replacements without mixing users or orders", async () => {
-    const ownerCookie = await signup(app, `backup-owner-${stamp}@rakazo.test`, "Owner");
-    const otherCookie = await signup(app, `backup-other-${stamp}@rakazo.test`, "Other");
+    const ownerCookie = await signup(app, `backup-owner-${stamp}@orkbot.test`, "Owner");
+    const otherCookie = await signup(app, `backup-other-${stamp}@orkbot.test`, "Other");
     const owner = await rpc<Actor>(app, ownerCookie, "me");
     const other = await rpc<Actor>(app, otherCookie, "me");
     const first = [{ provider: "provider-a", modelId: "first" }];
@@ -99,8 +99,8 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("reconciles one scoped row per provider under concurrent catalog fetches", async () => {
-    const ownerCookie = await signup(app, `owner-connections-${stamp}@rakazo.test`, "Owner");
-    const otherCookie = await signup(app, `other-connections-${stamp}@rakazo.test`, "Other");
+    const ownerCookie = await signup(app, `owner-connections-${stamp}@orkbot.test`, "Owner");
+    const otherCookie = await signup(app, `other-connections-${stamp}@orkbot.test`, "Other");
     const owner = await rpc<Actor>(app, ownerCookie, "me");
     const other = await rpc<Actor>(app, otherCookie, "me");
     await connectRemote(composio, owner, "GMAIL");
@@ -144,7 +144,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("keeps a second connected account for the same provider and renames it", async () => {
-    const cookie = await signup(app, `multi-account-${stamp}@rakazo.test`, "Multi Account");
+    const cookie = await signup(app, `multi-account-${stamp}@orkbot.test`, "Multi Account");
     const first = await rpc<{ connectionId: string }>(app, cookie, "connections/begin", {
       connectorId: "composio",
       provider: "GMAIL",
@@ -209,7 +209,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("marks a connected account Composio reports dead as needing reconnect", async () => {
-    const cookie = await signup(app, `reconnect-${stamp}@rakazo.test`, "Reconnect");
+    const cookie = await signup(app, `reconnect-${stamp}@orkbot.test`, "Reconnect");
     const work = await rpc<{ connectionId: string }>(app, cookie, "connections/begin", {
       connectorId: "composio",
       provider: "GMAIL",
@@ -234,7 +234,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("returns the remote catalog when local reconciliation fails", async () => {
-    const cookie = await signup(app, `db-failure-connections-${stamp}@rakazo.test`, "DB Failure");
+    const cookie = await signup(app, `db-failure-connections-${stamp}@orkbot.test`, "DB Failure");
     const actor = await rpc<Actor>(app, cookie, "me");
     await connectRemote(composio, actor, "SLACK");
     const pending = await createConnection(actor, "SLACK");
@@ -260,7 +260,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   it("does not mutate local state when the provider catalog fails", async () => {
     const cookie = await signup(
       app,
-      `provider-failure-connections-${stamp}@rakazo.test`,
+      `provider-failure-connections-${stamp}@orkbot.test`,
       "Provider Failure",
     );
     const actor = await rpc<Actor>(app, cookie, "me");
@@ -277,7 +277,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("routes an emulated Composio app tool with user-scoped connection context", async () => {
-    const cookie = await signup(app, `composio-tool-${stamp}@rakazo.test`, "Composio Tool");
+    const cookie = await signup(app, `composio-tool-${stamp}@orkbot.test`, "Composio Tool");
     const actor = await rpc<Actor>(app, cookie, "me");
     const started = await rpc<{ connectionId: string; authorizationUrl: null }>(
       app,
@@ -352,7 +352,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("runs Pipedream connection and MCP tool execution through the product registry", async () => {
-    const cookie = await signup(app, `pipedream-${stamp}@rakazo.test`, "Pipedream Connector");
+    const cookie = await signup(app, `pipedream-${stamp}@orkbot.test`, "Pipedream Connector");
     const actor = await rpc<Actor>(app, cookie, "me");
     const catalog = await rpc<Array<{ connectorId: string; slug: string; connected: boolean }>>(
       app,
@@ -431,7 +431,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("installs Treg, Executor, and custom MCP sources and routes their calls", async () => {
-    const cookie = await signup(app, `mcp-connectors-${stamp}@rakazo.test`, "MCP Connectors");
+    const cookie = await signup(app, `mcp-connectors-${stamp}@orkbot.test`, "MCP Connectors");
     const actor = await rpc<Actor>(app, cookie, "me");
     const tregCredential = "fake-treg-credential-value";
     const treg = await rpc<{ id: string; secretConfigured: boolean }>(
@@ -534,7 +534,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("imports an OpenAPI connector, keeps its credential encrypted, and routes calls", async () => {
-    const cookie = await signup(app, `api-connector-${stamp}@rakazo.test`, "API Connector");
+    const cookie = await signup(app, `api-connector-${stamp}@orkbot.test`, "API Connector");
     const actor = await rpc<Actor>(app, cookie, "me");
     const credential = "test-connector-secret-value";
     const install = await rpc<{
@@ -609,7 +609,7 @@ describeWithDatabase("Composio catalog reconciliation", () => {
   });
 
   it("imports a GraphQL connector, introspects operations, and routes calls", async () => {
-    const cookie = await signup(app, `graphql-connector-${stamp}@rakazo.test`, "GraphQL Connector");
+    const cookie = await signup(app, `graphql-connector-${stamp}@orkbot.test`, "GraphQL Connector");
     const actor = await rpc<Actor>(app, cookie, "me");
     const install = await rpc<{
       id: string;

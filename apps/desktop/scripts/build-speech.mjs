@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, "native", "speech");
 const out = path.join(root, "build", "speech");
-const helper = path.join(out, "rakazo-speech");
+const helper = path.join(out, "orkbot-speech");
 // Electron 45's own minimum.
 const MACOS_TARGET = "12";
 
@@ -21,7 +21,7 @@ await mkdir(out, { recursive: true });
 
 const slices = [];
 for (const arch of ["arm64", "x86_64"]) {
-  const slice = path.join(out, `rakazo-speech-${arch}`);
+  const slice = path.join(out, `orkbot-speech-${arch}`);
   const result = spawnSync(
     "xcrun",
     [

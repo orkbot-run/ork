@@ -7,7 +7,7 @@ SSH_PORT="${SSH_PORT:-22}"
 [[ "${SSH_PORT}" =~ ^[0-9]+$ ]] && ((SSH_PORT > 0 && SSH_PORT <= 65535)) || { echo "Invalid SSH_PORT" >&2; exit 1; }
 
 if [[ "${EUID}" -ne 0 ]]; then
-  exec sudo --preserve-env=DEPLOY_USER,SSH_PORT,SSH_CONNECTION,RAKAZO_DEPLOY_DIR bash "$0" "$@"
+  exec sudo --preserve-env=DEPLOY_USER,SSH_PORT,SSH_CONNECTION,ORKBOT_DEPLOY_DIR bash "$0" "$@"
 fi
 
 # Validate the guard's session identity before installing packages or writing host settings.
@@ -33,7 +33,7 @@ apt-get install -y --no-install-recommends \
   unattended-upgrades
 
 install -d -m 755 /etc/ssh/sshd_config.d
-cat >/etc/ssh/sshd_config.d/99-rakazo-hardening.conf <<EOF
+cat >/etc/ssh/sshd_config.d/99-orkbot-hardening.conf <<EOF
 PermitRootLogin no
 PubkeyAuthentication yes
 PasswordAuthentication no
@@ -58,7 +58,7 @@ UseDNS no
 LogLevel VERBOSE
 AllowUsers ${DEPLOY_USER}
 EOF
-chmod 600 /etc/ssh/sshd_config.d/99-rakazo-hardening.conf
+chmod 600 /etc/ssh/sshd_config.d/99-orkbot-hardening.conf
 sshd -t
 
 cat >/etc/fail2ban/jail.d/sshd.local <<EOF
@@ -81,13 +81,13 @@ APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 EOF
 
-cat >/etc/apt/apt.conf.d/52rakazo-unattended-upgrades <<'EOF'
+cat >/etc/apt/apt.conf.d/52orkbot-unattended-upgrades <<'EOF'
 Unattended-Upgrade::Remove-Unused-Dependencies "true";
 Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
 Unattended-Upgrade::Automatic-Reboot "false";
 EOF
 
-cat >/etc/sysctl.d/99-rakazo-hardening.conf <<'EOF'
+cat >/etc/sysctl.d/99-orkbot-hardening.conf <<'EOF'
 fs.protected_fifos = 2
 fs.protected_hardlinks = 1
 fs.protected_regular = 2
@@ -119,21 +119,21 @@ net.ipv6.conf.default.accept_redirects = 0
 net.ipv6.conf.default.accept_source_route = 0
 EOF
 if [[ -e /proc/sys/net/mptcp/enabled ]]; then
-  echo 'net.mptcp.enabled = 0' >>/etc/sysctl.d/99-rakazo-hardening.conf
+  echo 'net.mptcp.enabled = 0' >>/etc/sysctl.d/99-orkbot-hardening.conf
 fi
 sysctl --system >/dev/null
 
 # Internet TCP never needs IPv4 options, and the kernel's handling of them is a recurring source of remote bugs.
-install -m 0644 "$(dirname "$0")/../systemd/rakazo-drop-ip-options.service" /etc/systemd/system/rakazo-drop-ip-options.service
+install -m 0644 "$(dirname "$0")/../systemd/orkbot-drop-ip-options.service" /etc/systemd/system/orkbot-drop-ip-options.service
 systemctl daemon-reload
-systemctl enable rakazo-drop-ip-options.service
-systemctl restart rakazo-drop-ip-options.service
+systemctl enable orkbot-drop-ip-options.service
+systemctl restart orkbot-drop-ip-options.service
 
-if [[ -z "${RAKAZO_DEPLOY_DIR:-}" && -r /etc/rakazo/deploy.env ]]; then
-  RAKAZO_DEPLOY_DIR="$(sed -n 's/^RAKAZO_DEPLOY_DIR=//p' /etc/rakazo/deploy.env | tail -1 | tr -d '"')"
+if [[ -z "${ORKBOT_DEPLOY_DIR:-}" && -r /etc/orkbot/deploy.env ]]; then
+  ORKBOT_DEPLOY_DIR="$(sed -n 's/^ORKBOT_DEPLOY_DIR=//p' /etc/orkbot/deploy.env | tail -1 | tr -d '"')"
 fi
-DEPLOY_DIR="${RAKAZO_DEPLOY_DIR:-/srv/rakazo}"
-[[ "${DEPLOY_DIR}" == /* ]] || { echo "RAKAZO_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
+DEPLOY_DIR="${ORKBOT_DEPLOY_DIR:-/srv/orkbot}"
+[[ "${DEPLOY_DIR}" == /* ]] || { echo "ORKBOT_DEPLOY_DIR must be an absolute path" >&2; exit 1; }
 DEPLOY_HOME="$(getent passwd "${DEPLOY_USER}" | cut -d: -f6)"
 
 # The kernel needs a watched path's parent directory to exist; rerun after creating a skipped one.
@@ -149,7 +149,7 @@ audit_watches=(
   "/etc/gshadow identity"
   "${DEPLOY_HOME}/.ssh/authorized_keys ssh_keys"
   "/root/.ssh ssh_keys"
-  "/etc/rakazo rakazo_config"
+  "/etc/orkbot orkbot_config"
   "${DEPLOY_DIR}/.env app_secrets"
   "/usr/local/sbin host_scripts"
   "/etc/systemd/system persistence"
@@ -164,12 +164,12 @@ for watch in "${audit_watches[@]}"; do
   else
     echo "Skipping audit watch on ${path}: its directory does not exist" >&2
   fi
-done >/etc/audit/rules.d/50-rakazo.rules
+done >/etc/audit/rules.d/50-orkbot.rules
 augenrules --load >/dev/null
 
 # Keep existing private-network rules. Roll back unless a fresh SSH session confirms.
-install -m 0755 "$(dirname "$0")/firewall-change.sh" /usr/local/sbin/rakazo-firewall-change
-/usr/local/sbin/rakazo-firewall-change apply bash -euc '
+install -m 0755 "$(dirname "$0")/firewall-change.sh" /usr/local/sbin/orkbot-firewall-change
+/usr/local/sbin/orkbot-firewall-change apply bash -euc '
   ufw default deny incoming
   ufw default allow outgoing
   ufw limit "$1/tcp" comment "Rate-limited SSH"
@@ -184,18 +184,18 @@ systemctl restart fail2ban
 systemctl reload ssh
 
 # Ship the audit trail off the host only when an operator configured a sink; see docs/self-host-observability.md#host-audit-trail.
-AUDIT_ENV=/etc/rakazo/audit-ship.env
-if grep -q '^RAKAZO_AUDIT_SINK_URL=.' "${AUDIT_ENV}" 2>/dev/null; then
-  audit_token="$(sed -n 's/^RAKAZO_AUDIT_TOKEN_FILE=//p' "${AUDIT_ENV}" | tail -1 | tr -d '"')"
-  audit_token="${audit_token:-/etc/rakazo/audit-ship.token}"
+AUDIT_ENV=/etc/orkbot/audit-ship.env
+if grep -q '^ORKBOT_AUDIT_SINK_URL=.' "${AUDIT_ENV}" 2>/dev/null; then
+  audit_token="$(sed -n 's/^ORKBOT_AUDIT_TOKEN_FILE=//p' "${AUDIT_ENV}" | tail -1 | tr -d '"')"
+  audit_token="${audit_token:-/etc/orkbot/audit-ship.token}"
   [[ -s "${audit_token}" ]] || { echo "Audit sink is configured but ${audit_token} is missing or empty" >&2; exit 1; }
   chown root:root "${AUDIT_ENV}" "${audit_token}"
   chmod 600 "${AUDIT_ENV}" "${audit_token}"
-  install -m 0755 "$(dirname "$0")/audit-ship.py" /usr/local/sbin/rakazo-audit-ship
-  install -m 0644 "$(dirname "$0")/../systemd/rakazo-audit-ship.service" /etc/systemd/system/rakazo-audit-ship.service
+  install -m 0755 "$(dirname "$0")/audit-ship.py" /usr/local/sbin/orkbot-audit-ship
+  install -m 0644 "$(dirname "$0")/../systemd/orkbot-audit-ship.service" /etc/systemd/system/orkbot-audit-ship.service
   systemctl daemon-reload
-  systemctl enable rakazo-audit-ship.service
-  systemctl restart rakazo-audit-ship.service
+  systemctl enable orkbot-audit-ship.service
+  systemctl restart orkbot-audit-ship.service
 fi
 
 echo "Host hardening applied. Confirm the firewall token from a fresh SSH session within three minutes."

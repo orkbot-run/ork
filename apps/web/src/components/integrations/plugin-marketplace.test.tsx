@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { CapabilityInstall, McpServer } from "@rakazo/contracts";
+import type { CapabilityInstall, McpServer } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -30,7 +30,7 @@ vi.mock("../../lib/rpc", () => ({
   },
 }));
 vi.mock("../../lib/mcp-connect", () => ({ connectMcpOauth: api.connect }));
-vi.mock("@rakazo/chat-ui/web", () => ({
+vi.mock("@orkbot/chat-ui/web", () => ({
   useLinkFavicon: () => ({ icon: null, unusable: () => undefined }),
 }));
 vi.mock("@lingui/react/macro", () => ({
@@ -40,7 +40,7 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   Plural: ({ value, other }: { value: number; other: string }) => other.replace("#", `${value}`),
 }));
-vi.mock("@rakazo/ui-web", () => {
+vi.mock("@orkbot/ui-web", () => {
   const Container = ({ children, summary }: { children?: ReactNode; summary?: ReactNode }) => (
     <div>
       {summary}

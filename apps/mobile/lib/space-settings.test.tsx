@@ -53,7 +53,7 @@ vi.mock("./api", () => ({
   rpc: state.rpc,
   captureApiRequestContext: async (spaceId: string) => ({
     apiBase: "https://app.example.test",
-    headers: { "x-rakazo-space-id": spaceId },
+    headers: { "x-orkbot-space-id": spaceId },
   }),
 }));
 vi.mock("expo-router", () => ({
@@ -128,7 +128,7 @@ vi.mock("../components/settings-group", () => ({
 const spaceContext = {
   requestContext: {
     apiBase: "https://app.example.test",
-    headers: { "x-rakazo-space-id": "space-other" },
+    headers: { "x-orkbot-space-id": "space-other" },
   },
 };
 let root: Root;

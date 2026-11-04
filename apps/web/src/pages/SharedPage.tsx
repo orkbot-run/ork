@@ -1,7 +1,7 @@
 import { Trans } from "@lingui/react/macro";
-import type { SharedPage } from "@rakazo/contracts";
-import { pageShareTokenFromSlug, SHARED_PAGE_PATH_PREFIX } from "@rakazo/contracts";
-import { Button, buttonVariants, Spinner } from "@rakazo/ui-web";
+import type { SharedPage } from "@orkbot/contracts";
+import { pageShareTokenFromSlug, SHARED_PAGE_PATH_PREFIX } from "@orkbot/contracts";
+import { Button, buttonVariants, Spinner } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
@@ -56,7 +56,7 @@ function SharedPageBody() {
             <Trans>The owner may have turned off its link or deleted it.</Trans>
           </p>
           <a href="/" className={`${buttonVariants({ variant: "outline", size: "sm" })} mt-1`}>
-            <Trans>Open Rakazo</Trans>
+            <Trans>Open Ork</Trans>
           </a>
         </div>
       </main>

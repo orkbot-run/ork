@@ -1,5 +1,5 @@
-import { USER_DEVICE_CONNECT_PATH } from "@rakazo/contracts";
-import { secureHttpOrigin } from "@rakazo/contracts/network-host";
+import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
+import { secureHttpOrigin } from "@orkbot/contracts/network-host";
 import WebSocket from "ws";
 import type { HostComputerFrame } from "./host-computer-protocol.js";
 import { HOST_COMPUTER_MAX_BYTES } from "./host-computer-protocol.js";
@@ -33,7 +33,7 @@ export interface UserDeviceClientOptions {
 }
 
 /**
- * Connects outbound to a Rakazo server so its bots can use this computer. The server never
+ * Connects outbound to a Ork server so its bots can use this computer. The server never
  * connects in. Runs only while started; `close` stops every command and the connection, and
  * `cancelAll` stops every command and refuses requests still waiting on `authorize`.
  */

@@ -1,9 +1,9 @@
-import { VoiceAccountError } from "@rakazo/adapter-kit";
-import * as adapters from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import * as db from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { VoiceAccountError } from "@orkbot/adapter-kit";
+import * as adapters from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import * as db from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VoiceDeps } from "./voice.js";
@@ -675,7 +675,7 @@ describe("synthesizeVoice", () => {
     [undefined, 403],
   ] as const)("answers %s from the provider with HTTP %i and a warning", async (code, status) => {
     const sink = createTestSink();
-    installLogger(createLogger({ service: "rakazo-api", sinks: [sink] }));
+    installLogger(createLogger({ service: "orkbot-api", sinks: [sink] }));
     const synthesize = vi
       .fn()
       .mockRejectedValue(
@@ -722,7 +722,7 @@ describe("synthesizeVoice", () => {
       code,
     });
     expect(sink.events.map((event) => event.level)).toEqual(["warn"]);
-    installLogger(createLogger({ service: "rakazo-api", level: "off", sinks: [] }));
+    installLogger(createLogger({ service: "orkbot-api", level: "off", sinks: [] }));
   });
 });
 
@@ -773,7 +773,7 @@ describe("voiceCredentialPlaintext", () => {
   });
 
   it("rejects a public server address as a bad request", () => {
-    vi.stubEnv("RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC", "0");
+    vi.stubEnv("ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC", "0");
     try {
       expect(() =>
         voiceCredentialPlaintext({

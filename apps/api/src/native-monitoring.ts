@@ -6,7 +6,7 @@ import {
   sanitizeMonitoringEvent,
   scrubMonitoringText,
   stripMonitoringUrl,
-} from "@rakazo/logging/monitoring";
+} from "@orkbot/logging/monitoring";
 
 const decompress = promisify(gunzip);
 const MAX_BYTES = 1024 * 1024;

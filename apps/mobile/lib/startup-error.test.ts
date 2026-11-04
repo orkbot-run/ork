@@ -32,8 +32,8 @@ describe("persisted startup error", () => {
     const error = new TypeError("Bearer private-token");
     error.stack = `at /Users/example/project/startup.ts:42\n${"x".repeat(10_000)}`;
     saveStartupError(error, secureStorage, application);
-    expect(store.values.get("rakazo.startup-error")).not.toMatch(/private-token|\/Users\/example/);
-    expect(store.values.get("rakazo.startup-error")!.length).toBeLessThan(8_192);
+    expect(store.values.get("orkbot.startup-error")).not.toMatch(/private-token|\/Users\/example/);
+    expect(store.values.get("orkbot.startup-error")!.length).toBeLessThan(8_192);
     expect(readStartupError(secureStorage)).toMatchObject({
       error: { name: "TypeError", stack: expect.stringContaining("startup.ts:42") },
     });
@@ -48,7 +48,7 @@ describe("persisted startup error", () => {
       dist: "20",
     });
     store.values.set(
-      "rakazo.startup-error",
+      "orkbot.startup-error",
       JSON.stringify({ server, name: "Error", message: "x" }),
     );
     expect(readStartupError(secureStorage)).toEqual({
@@ -62,23 +62,23 @@ describe("persisted startup error", () => {
     const error = new Error('"\\\n\u0000'.repeat(1_024));
     error.stack = `at startup.ts:42\n${'"\\\n\u0000'.repeat(4_096)}`;
     saveStartupError(error, secureStorage, application);
-    expect(store.values.get("rakazo.startup-error")!.length).toBeLessThanOrEqual(8_192);
+    expect(store.values.get("orkbot.startup-error")!.length).toBeLessThanOrEqual(8_192);
     expect(readStartupError(secureStorage)?.error.message).toBe(error.message.slice(0, 1_024));
   });
 
   it("does not replay another server's error even if wiping storage failed", () => {
-    store.values.set("rakazo.api_base", "https://first.example.com");
+    store.values.set("orkbot.api_base", "https://first.example.com");
     saveStartupError(new Error("old server"), secureStorage, application);
     store.fail = true;
     clearStartupError(secureStorage);
     store.fail = false;
-    store.values.set("rakazo.api_base", "https://second.example.com");
+    store.values.set("orkbot.api_base", "https://second.example.com");
     expect(readStartupError(secureStorage)).toBeUndefined();
   });
 
   it("ignores malformed records and unavailable secure storage", () => {
     for (const raw of ["{", "[]", "null", '{"message":42}', "x".repeat(8_193)]) {
-      store.values.set("rakazo.startup-error", raw);
+      store.values.set("orkbot.startup-error", raw);
       expect(readStartupError(secureStorage)).toBeUndefined();
     }
     store.fail = true;

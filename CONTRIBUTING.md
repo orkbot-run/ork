@@ -1,6 +1,6 @@
-# Contributing to Rakazo
+# Contributing to Ork
 
-Thanks for helping improve Rakazo. Keep changes focused and testable.
+Thanks for helping improve Ork. Keep changes focused and testable.
 
 ## Run locally
 
@@ -33,9 +33,9 @@ live canaries explicitly enabled with `VERIFY_PROVIDERS` also opt into loading i
 
 The web and Electron-hosted UI use Lingui catalogs. To add a locale, register it in
 `apps/web/lingui.config.ts`, `apps/web/src/lib/ui-locale.ts`, and
-`apps/web/src/lib/i18n.ts`, then run `pnpm --filter @rakazo/web intl:extract`, fill the new
+`apps/web/src/lib/i18n.ts`, then run `pnpm --filter @orkbot/web intl:extract`, fill the new
 `apps/web/src/locales/<locale>/messages.po` catalog, and validate it with
-`pnpm --filter @rakazo/web intl:compile`. Keep message IDs, placeholders, JSX markers, and
+`pnpm --filter @orkbot/web intl:compile`. Keep message IDs, placeholders, JSX markers, and
 ICU plural branches intact; do not commit generated `*.js`/`*.mjs` catalog files.
 
 Expo mobile has its own catalog and locale registry. Add the locale to
@@ -90,6 +90,6 @@ capability config, fixtures, logs, or snapshots; use the encrypted secret store 
 
 | Address | Use for |
 | --- | --- |
-| [security@rakazo.com](mailto:security@rakazo.com) | Vulnerabilities only — see [SECURITY.md](SECURITY.md) |
-| [support@rakazo.com](mailto:support@rakazo.com) | User and support questions |
-| [elie@rakazo.com](mailto:elie@rakazo.com) | Maintainer |
+| [security@orkbot.run](mailto:security@orkbot.run) | Vulnerabilities only — see [SECURITY.md](SECURITY.md) |
+| [support@orkbot.run](mailto:support@orkbot.run) | User and support questions |
+| [elie@orkbot.run](mailto:elie@orkbot.run) | Maintainer |

@@ -30,7 +30,7 @@ import type {
   StreamedPortableFile,
   TerminalRequest,
   WorkspaceExportLimits,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   SandboxDamagedError,
   SandboxRateLimitError,
@@ -38,10 +38,10 @@ import {
   SandboxUnavailableError,
   SandboxUnresponsiveError,
   WorkspaceTooLargeError,
-} from "@rakazo/adapter-kit";
-import type { ComputerSize } from "@rakazo/contracts";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import type { ComputerSize } from "@orkbot/contracts";
+import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import {
   BoatApiError,
   BoatRequestGate,
@@ -70,12 +70,12 @@ import {
 
 const DISPLAY_START = 20;
 const BOAT_API_BASE = "https://boat.dev/api/v1";
-const BOAT_WORKSPACE = "/home/user/rakazo-home";
+const BOAT_WORKSPACE = "/home/user/orkbot-home";
 const BOAT_BROWSER_PROFILES = `${BOAT_WORKSPACE}/.browser-profiles`;
 /** Outside the workspace so checkpoints never carry it. Boat runs every command as `user`. */
-const BOAT_COMMAND_ENV = "/home/user/.rakazo-command-env";
+const BOAT_COMMAND_ENV = "/home/user/.orkbot-command-env";
 /** Where an export archives the workspace; outside it for the same reason. */
-const BOAT_ARCHIVE_PREFIX = "/tmp/rakazo-workspace-archive-";
+const BOAT_ARCHIVE_PREFIX = "/tmp/orkbot-workspace-archive-";
 const BOAT_READY_TIMEOUT_MS = 5 * 60_000;
 const BOAT_RECOVER_POLL_MAX_MS = 15_000;
 /**
@@ -309,8 +309,8 @@ export class BoatSandboxProvider implements SandboxProvider {
             ttlSeconds: BOAT_TTL_SECONDS,
             noEnv: true,
             env: {
-              RAKAZO_BOT_ID: request.botId,
-              RAKAZO_SANDBOX: "computer",
+              ORKBOT_BOT_ID: request.botId,
+              ORKBOT_SANDBOX: "computer",
             },
             ...(from ? { from } : {}),
             ...(type ? { type } : {}),
@@ -1267,7 +1267,7 @@ export class BoatSandboxProvider implements SandboxProvider {
     timeoutMs: number,
     signal?: AbortSignal,
   ): Promise<BoatCommandResult> {
-    const marker = `/tmp/rakazo-command-${randomUUID()}.completed-124`;
+    const marker = `/tmp/orkbot-command-${randomUUID()}.completed-124`;
     const wrapped = timeoutCommand(command, timeoutMs, marker);
     const timeoutSeconds = Math.ceil(timeoutMs / 1_000);
     const detached = timeoutSeconds + 5 > BOAT_API_COMMAND_TIMEOUT_SECONDS;
@@ -1426,7 +1426,7 @@ export class BoatSandboxProvider implements SandboxProvider {
   }
 
   private async terminateCommand(id: string, marker: string): Promise<void> {
-    const pattern = marker.replace("rakazo", "[r]akazo");
+    const pattern = marker.replace("orkbot", "[r]akazo");
     await this.rawCommand(
       id,
       `pkill -TERM -f ${shellQuote(pattern)} 2>/dev/null || true; sleep 0.2; pkill -KILL -f ${shellQuote(pattern)} 2>/dev/null || true`,
@@ -1718,18 +1718,18 @@ function boatCwd(cwd: string | undefined): string {
     !cwd ||
     cwd === "." ||
     cwd === "/" ||
-    cwd === "/home/rakazo" ||
+    cwd === "/home/orkbot" ||
     cwd === "/home/user" ||
     cwd === BOAT_WORKSPACE
   ) {
-    return "rakazo-home";
+    return "orkbot-home";
   }
   const relative = cwd.startsWith(`${BOAT_WORKSPACE}/`)
     ? cwd.slice(BOAT_WORKSPACE.length + 1)
-    : cwd.startsWith("/home/rakazo/")
-      ? cwd.slice("/home/rakazo/".length)
+    : cwd.startsWith("/home/orkbot/")
+      ? cwd.slice("/home/orkbot/".length)
       : cwd;
-  return path.posix.join("rakazo-home", normalizeWorkspacePath(relative));
+  return path.posix.join("orkbot-home", normalizeWorkspacePath(relative));
 }
 
 function configureBoatWorkspaceCommand(): string {
@@ -1750,7 +1750,7 @@ const BOAT_COMPUTER_SETUP = [
 /** A snapshot name that changes with the setup it captures, so older computers keep theirs. */
 export function boatComputerSnapshotName(setup: readonly string[]): string {
   const hash = createHash("sha256").update(setup.join("\0")).digest("hex").slice(0, 12);
-  return `rakazo-computer-${hash}`;
+  return `orkbot-computer-${hash}`;
 }
 
 export const BOAT_COMPUTER_SNAPSHOT = boatComputerSnapshotName(BOAT_COMPUTER_SETUP);

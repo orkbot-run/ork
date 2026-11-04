@@ -1,5 +1,5 @@
-import type { ConnectorTool } from "@rakazo/adapter-kit";
-import { FLEET_TOOL_NAMES } from "@rakazo/contracts";
+import type { ConnectorTool } from "@orkbot/adapter-kit";
+import { FLEET_TOOL_NAMES } from "@orkbot/contracts";
 import type { CatalogEntry } from "./lazy-tool-catalog.js";
 import {
   catalogEntries,

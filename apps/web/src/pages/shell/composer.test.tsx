@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
-import type { AgentSkillCatalogEntry, ThreadMessage } from "@rakazo/contracts";
-import type { ComposerMention } from "@rakazo/core";
-import { MODEL_REQUIRED_SEND_ERROR, resolveComposerSendPlan } from "@rakazo/core";
+import type { AgentSkillCatalogEntry, ThreadMessage } from "@orkbot/contracts";
+import type { ComposerMention } from "@orkbot/core";
+import { MODEL_REQUIRED_SEND_ERROR, resolveComposerSendPlan } from "@orkbot/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act, createRef } from "react";
 import type { Root } from "react-dom/client";
@@ -570,7 +570,7 @@ describe("Composer", () => {
   });
 
   it("restores a legacy raw same-name draft without inventing either target identity", async () => {
-    localStorage.setItem("rakazo.composerDraft.bot:bot-1", "@Bob ");
+    localStorage.setItem("orkbot.runposerDraft.bot:bot-1", "@Bob ");
     const group: ComposerMention = { kind: "group", id: "group-bob", name: "Bob" };
     const onSend = vi.fn().mockResolvedValue(true);
     const textarea = renderComposer(onSend, { mentionTargets: [bob, group] });
@@ -896,7 +896,7 @@ describe("Composer", () => {
     const draftKey = "bot:draft-restore-test";
     const first = renderComposer(onSend, { draftKey });
     type(first, "unsent thought");
-    expect(window.localStorage.getItem(`rakazo.composerDraft.${draftKey}`)).toBe("unsent thought");
+    expect(window.localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe("unsent thought");
     act(() => root?.unmount());
     container?.remove();
     const second = renderComposer(onSend, { draftKey });
@@ -939,7 +939,7 @@ it.each([true, false])(
     type(textarea, "pending text");
     pressEnter(textarea);
     expect(textarea.value).toBe("");
-    expect(localStorage.getItem(`rakazo.composerDraft.${draftKey}`)).toBe("pending text");
+    expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe("pending text");
     act(() => root?.unmount());
     container?.remove();
     await act(async () => finishSend(accepted));
@@ -963,7 +963,7 @@ it.each([true, false])(
     type(textarea, "newer text");
     await act(async () => finishSend(accepted));
     expect(textarea.value).toBe("newer text");
-    expect(localStorage.getItem("rakazo.composerDraft.bot:bot-1")).toBe("newer text");
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe("newer text");
   },
 );
 
@@ -987,7 +987,7 @@ it.each([true, false])(
     expect(returned.value).toBe("submitted text");
     await act(async () => finishSend(accepted));
     expect(returned.value).toBe(accepted ? "" : "submitted text");
-    expect(localStorage.getItem(`rakazo.composerDraft.${draftKey}`)).toBe(
+    expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe(
       accepted ? null : "submitted text",
     );
   },
@@ -1012,7 +1012,7 @@ it("preserves edits made after returning, even when the text matches the submiss
   type(returned, "submitted text");
   await act(async () => finishSend(true));
   expect(returned.value).toBe("submitted text");
-  expect(localStorage.getItem(`rakazo.composerDraft.${draftKey}`)).toBe("submitted text");
+  expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe("submitted text");
 });
 
 it("clears accepted saved text when only an attachment was picked during the send", async () => {
@@ -1028,7 +1028,7 @@ it("clears accepted saved text when only an attachment was picked during the sen
   pickAttachment();
   await act(async () => finishSend(true));
   expect(textarea.value).toBe("");
-  expect(localStorage.getItem("rakazo.composerDraft.bot:bot-1")).toBeNull();
+  expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBeNull();
 });
 
 it.each([false, true])(
@@ -1099,17 +1099,17 @@ it.each([
       type(returned, "@Bo");
       pressEnter(returned);
       type(returned, "@Bob newer draft");
-      const saved = localStorage.getItem(`rakazo.composerDraft.${draftKey}`);
-      const bindings = localStorage.getItem(`rakazo.composerBindings.${draftKey}`);
+      const saved = localStorage.getItem(`orkbot.runposerDraft.${draftKey}`);
+      const bindings = localStorage.getItem(`orkbot.runposerBindings.${draftKey}`);
       await act(async () => {
         if (throws) fail(new Error("offline"));
         else finish(false);
       });
       expect(returned.value).toBe("@Bob newer draft");
-      expect(localStorage.getItem(`rakazo.composerDraft.${draftKey}`)).toBe(saved);
-      expect(localStorage.getItem(`rakazo.composerBindings.${draftKey}`)).toBe(bindings);
+      expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe(saved);
+      expect(localStorage.getItem(`orkbot.runposerBindings.${draftKey}`)).toBe(bindings);
       if (differentChat)
-        expect(localStorage.getItem("rakazo.composerDraft.bot:bot-1")).toBe("original draft");
+        expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe("original draft");
       act(() => root?.unmount());
       container?.remove();
       const reloaded = renderComposer(vi.fn(), { draftKey });
@@ -1144,8 +1144,8 @@ it("ignores dictation after switching draft keys on the same instance", async ()
     type(textarea, "newer draft");
     await act(async () => finish(false));
     expect(textarea.value).toBe("newer draft");
-    expect(localStorage.getItem("rakazo.composerDraft.bot:other-bot")).toBe("newer draft");
-    expect(localStorage.getItem("rakazo.composerDraft.bot:bot-1")).toBeNull();
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:other-bot")).toBe("newer draft");
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBeNull();
   } finally {
     listen.mockRestore();
   }
@@ -1198,7 +1198,7 @@ it.each([false, true])(
         else finish(false);
       });
       expect(textarea.value).toBe("@Bob @Bob");
-      const record = JSON.parse(localStorage.getItem("rakazo.composerBindings.bot:bot-1")!);
+      const record = JSON.parse(localStorage.getItem("orkbot.runposerBindings.bot:bot-1")!);
       expect(record.bindings).toMatchObject([{ start: 0, end: 4, mention: bob }]);
       type(textarea, "@Bob ");
       expect(container?.querySelectorAll('[data-testid="mention-chip"]')).toHaveLength(1);

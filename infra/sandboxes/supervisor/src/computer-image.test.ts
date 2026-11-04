@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { setTimeout as delay } from "node:timers/promises";
-import { getLogger } from "@rakazo/logging";
+import { getLogger } from "@orkbot/logging";
 import Docker from "dockerode";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,8 +18,8 @@ import { COMPUTER_IMAGE_CONTEXT_FILES } from "./computer-spec.js";
 
 const context = path.resolve(import.meta.dirname, "../../computer");
 const noContext = path.join(import.meta.dirname, "no-such-computer-context");
-const published = "ghcr.io/elie222/rakazo/computer:edge";
-const local = "rakazo/computer:local";
+const published = "ghcr.io/orkbot-run/ork/computer:edge";
+const local = "orkbot/computer:local";
 const image = { "container.image.name": published };
 const progressLine = '{"status":"Downloading"}\n';
 const errorLine = (message: string) => `${JSON.stringify({ errorDetail: { message } })}\n`;
@@ -144,7 +144,7 @@ describe("computer image", () => {
     expect(fake.docker.buildImage).not.toHaveBeenCalled();
   });
 
-  it.each([local, "rakazo/computer:topology"])(
+  it.each([local, "orkbot/computer:topology"])(
     "builds a missing %s with BuildKit from the full context",
     async (name) => {
       const fake = fakeDocker();
@@ -158,10 +158,10 @@ describe("computer image", () => {
   );
 
   it.each([
-    "rakazo-computer-brave:latest",
-    "myorg/rakazo-computer:edge",
+    "orkbot-computer-brave:latest",
+    "myorg/orkbot-computer:edge",
     "computer:local",
-    `rakazo/computer@sha256:${"0".repeat(64)}`,
+    `orkbot/computer@sha256:${"0".repeat(64)}`,
   ])("never replaces the custom image %s with a stock build", async (name) => {
     const fake = fakeDocker();
     await expect(fake.ensure(name, context)()).rejects.toThrow(new Error(missing(name)));
@@ -365,7 +365,7 @@ async function fakeDaemon(answer: {
   session: boolean;
   build: "reject" | "stream" | "finish" | "error";
 }) {
-  const directory = mkdtempSync(path.join(tmpdir(), "rakazo-fake-docker-"));
+  const directory = mkdtempSync(path.join(tmpdir(), "orkbot-fake-docker-"));
   const socketPath = path.join(directory, "docker.sock");
   const sessions: Socket[] = [];
   const requests: string[] = [];
@@ -484,7 +484,7 @@ describe("dockerode BuildKit session", () => {
 
   it("treats a context missing a listed file as missing instead of crashing", async () => {
     const daemon = await fakeDaemon({ session: true, build: "finish" });
-    const partial = mkdtempSync(path.join(tmpdir(), "rakazo-partial-context-"));
+    const partial = mkdtempSync(path.join(tmpdir(), "orkbot-partial-context-"));
     cleanups.push(() => rmSync(partial, { recursive: true, force: true }));
     for (const file of COMPUTER_IMAGE_CONTEXT_FILES) {
       if (file !== "browser-policy.json") {

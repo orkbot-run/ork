@@ -40,7 +40,7 @@ async function wireRequest(
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Fixture endpoint unavailable");
   const baseUrl = `http://127.0.0.1:${address.port}/v1`;
-  vi.stubEnv("RAKAZO_LOCAL_MODELS_URL", baseUrl);
+  vi.stubEnv("ORKBOT_LOCAL_MODELS_URL", baseUrl);
   try {
     const events = [];
     for await (const event of new PiAgentRuntime().run(
@@ -74,25 +74,25 @@ async function wireRequest(
 }
 
 const localServer = {
-  RAKAZO_LOCAL_MODELS: "example-model",
-  RAKAZO_LOCAL_CONTEXT_WINDOW: "120000",
+  ORKBOT_LOCAL_MODELS: "example-model",
+  ORKBOT_LOCAL_CONTEXT_WINDOW: "120000",
 };
 const outputLimit = (request: WireRequest) => request.max_completion_tokens ?? request.max_tokens;
 
 describe("local model output limit on the wire", () => {
-  it("sends the operator's RAKAZO_LOCAL_MAX_TOKENS when the connection sets none", async () => {
-    const request = await wireRequest({ ...localServer, RAKAZO_LOCAL_MAX_TOKENS: "20000" });
+  it("sends the operator's ORKBOT_LOCAL_MAX_TOKENS when the connection sets none", async () => {
+    const request = await wireRequest({ ...localServer, ORKBOT_LOCAL_MAX_TOKENS: "20000" });
     expect(outputLimit(request)).toBe(20_000);
   });
 
-  it("keeps 4096 when RAKAZO_LOCAL_MAX_TOKENS is unset", async () => {
-    vi.stubEnv("RAKAZO_LOCAL_MAX_TOKENS", "");
+  it("keeps 4096 when ORKBOT_LOCAL_MAX_TOKENS is unset", async () => {
+    vi.stubEnv("ORKBOT_LOCAL_MAX_TOKENS", "");
     expect(outputLimit(await wireRequest(localServer))).toBe(4096);
   });
 
   it("lets the connection's own max-tokens field win", async () => {
     const request = await wireRequest(
-      { ...localServer, RAKAZO_LOCAL_MAX_TOKENS: "20000" },
+      { ...localServer, ORKBOT_LOCAL_MAX_TOKENS: "20000" },
       { maxTokens: 2048 },
     );
     expect(outputLimit(request)).toBe(2048);
@@ -101,15 +101,15 @@ describe("local model output limit on the wire", () => {
   it("still reserves three quarters of the context window for input", async () => {
     const request = await wireRequest({
       ...localServer,
-      RAKAZO_LOCAL_CONTEXT_WINDOW: "32000",
-      RAKAZO_LOCAL_MAX_TOKENS: "20000",
+      ORKBOT_LOCAL_CONTEXT_WINDOW: "32000",
+      ORKBOT_LOCAL_MAX_TOKENS: "20000",
     });
     expect(outputLimit(request)).toBe(8000);
   });
 
   it("leaves other providers on the default", async () => {
     const request = await wireRequest(
-      { ...localServer, RAKAZO_LOCAL_MAX_TOKENS: "20000" },
+      { ...localServer, ORKBOT_LOCAL_MAX_TOKENS: "20000" },
       {},
       "openai-compatible",
     );
@@ -118,16 +118,16 @@ describe("local model output limit on the wire", () => {
 });
 
 describe("local model reasoning on the wire", () => {
-  it("sends reasoning_effort only for a model in RAKAZO_LOCAL_REASONING_MODELS", async () => {
+  it("sends reasoning_effort only for a model in ORKBOT_LOCAL_REASONING_MODELS", async () => {
     const plain = await wireRequest({
       ...localServer,
-      RAKAZO_LOCAL_REASONING_MODELS: "other-model",
+      ORKBOT_LOCAL_REASONING_MODELS: "other-model",
     });
     expect(plain).not.toHaveProperty("reasoning_effort");
 
     const listed = await wireRequest({
       ...localServer,
-      RAKAZO_LOCAL_REASONING_MODELS: "example-model",
+      ORKBOT_LOCAL_REASONING_MODELS: "example-model",
     });
     expect(listed.reasoning_effort).toBe("medium");
   });

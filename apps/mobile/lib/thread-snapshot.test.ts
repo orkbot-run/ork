@@ -1,4 +1,4 @@
-import { reduceLiveMessageBlocks, withLiveStreamingProgress } from "@rakazo/core";
+import { reduceLiveMessageBlocks, withLiveStreamingProgress } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import type { MobileSnapshot } from "./api";
 import { reconcileVisibleThreadSnapshot } from "./thread-snapshot";

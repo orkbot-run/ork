@@ -3,6 +3,7 @@ import type { ElectronAutoUpdater, UpdaterEvent } from "./auto-update.js";
 import {
   classifyUpdaterFailure,
   DesktopUpdateController,
+  desktopUpdatesEnabled,
   initialUpdateState,
   MIN_CHECK_INTERVAL_MS,
   reduceUpdateState,
@@ -13,6 +14,27 @@ import {
 const NOW = "2026-08-22T12:00:00.000Z";
 const packaged = { packaged: true, version: "0.1.0" };
 const clock = { now: () => 1_000, iso: () => NOW };
+
+describe("desktopUpdatesEnabled", () => {
+  it("keeps automatic updates off until explicitly enabled", () => {
+    expect(desktopUpdatesEnabled({}, "darwin", true)).toBe(false);
+    expect(desktopUpdatesEnabled({ ORKBOT_ENABLE_AUTO_UPDATE: "true" }, "darwin", true)).toBe(
+      false,
+    );
+    expect(desktopUpdatesEnabled({ ORKBOT_ENABLE_AUTO_UPDATE: "1" }, "darwin", false)).toBe(true);
+  });
+
+  it("requires the Linux release key and lets an operator disable every platform", () => {
+    const enabled = { ORKBOT_ENABLE_AUTO_UPDATE: "1" };
+    expect(desktopUpdatesEnabled(enabled, "linux", false)).toBe(false);
+    expect(desktopUpdatesEnabled(enabled, "linux", true)).toBe(true);
+    for (const platform of ["linux", "darwin", "win32"]) {
+      expect(
+        desktopUpdatesEnabled({ ...enabled, ORKBOT_DISABLE_AUTO_UPDATE: "1" }, platform, true),
+      ).toBe(false);
+    }
+  });
+});
 
 function apply(events: UpdaterEvent[], env = packaged) {
   return events.reduce(
@@ -106,9 +128,9 @@ describe("classifyUpdaterFailure", () => {
       classifyUpdaterFailure(
         new Error("Cannot update while running on a read-only volume. The application is on a…"),
       ),
-    ).toEqual({ kind: "read-only", message: "Move Rakazo to Applications to install updates." });
+    ).toEqual({ kind: "read-only", message: "Move Ork to Applications to install updates." });
     for (const message of [
-      "ditto: /private/update/Rakazo.app/x.js.map: No space left on device\nditto: Couldn't read pkzip signature.",
+      "ditto: /private/update/Ork.app/x.js.map: No space left on device\nditto: Couldn't read pkzip signature.",
       "未能完成该操作。设备上无剩余空间: 设备上无剩余空间",
     ]) {
       expect(classifyUpdaterFailure(new Error(message)), message).toEqual({
@@ -242,7 +264,7 @@ describe("reduceUpdateState", () => {
       apply([{ type: "check-start" }, { type: "failed", error: readOnly, userInitiated: false }]),
     ).toMatchObject({
       phase: "unsupported",
-      message: "Move Rakazo to Applications to install updates.",
+      message: "Move Ork to Applications to install updates.",
     });
   });
 
@@ -601,7 +623,7 @@ describe("DesktopUpdateController", () => {
   });
 
   describe("with a download verifier", () => {
-    const downloaded = { version: "0.2.0", downloadedFile: "/cache/Rakazo-0.2.0.AppImage" };
+    const downloaded = { version: "0.2.0", downloadedFile: "/cache/Ork-0.2.0.AppImage" };
 
     function verifiedUpdater() {
       let fake: ReturnType<typeof fakeUpdater>;

@@ -1,4 +1,4 @@
-import { BillingCheckoutCompletedError, BillingCustomerNotFoundError } from "@rakazo/adapter-kit";
+import { BillingCheckoutCompletedError, BillingCustomerNotFoundError } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import {
   encodeStripeForm,
@@ -286,7 +286,7 @@ describe("Stripe billing HTTP boundary", () => {
       id: "cbtxn_lost",
       customer: customerId,
       amount: -1000,
-      metadata: { rakazo_reference: "referral_2" },
+      metadata: { orkbot_reference: "referral_2" },
     });
     await provider.grantBalanceCredit(customerId, 1000, "referral_2");
     expect(wire.balances.get(customerId)).toBe(-1000);

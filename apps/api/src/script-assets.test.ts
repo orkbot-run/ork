@@ -1,10 +1,10 @@
-import { PAGE_RUNTIME_PATH } from "@rakazo/core";
-import { buildPageRuntime } from "@rakazo/page-kit/runtime-build";
+import { PAGE_RUNTIME_PATH } from "@orkbot/core";
+import { buildPageRuntime } from "@orkbot/page-kit/runtime-build";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { DIAGRAM_SCRIPT_PATH, mountScriptAssets } from "./script-assets.js";
 
-vi.mock(import("@rakazo/page-kit/runtime-build"), async (actual) => ({
+vi.mock(import("@orkbot/page-kit/runtime-build"), async (actual) => ({
   buildPageRuntime: vi.fn((await actual()).buildPageRuntime),
 }));
 
@@ -29,7 +29,7 @@ describe("script asset routes", () => {
       /^"mermaid-\d+\.\d+\.\d+"$/,
       'globalThis["mermaid"]',
     ],
-    [PAGE_RUNTIME_PATH, "public, no-cache", /^"page-runtime-[\w-]{22}"$/, "RakazoPage"],
+    [PAGE_RUNTIME_PATH, "public, no-cache", /^"page-runtime-[\w-]{22}"$/, "OrkPage"],
   ])("serves %s as a cacheable public script", async (path, cacheControl, etag, global) => {
     const response = await app.request(path);
     expect(response.status).toBe(200);

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RakazoDesktop, RakazoDesktopOAuthCallback } from "./desktop.js";
+import type { OrkDesktop, OrkDesktopOAuthCallback } from "./desktop.js";
 import {
   desktopOAuthCode,
   oauthStateOf,
@@ -7,7 +7,7 @@ import {
   windowChromeKind,
 } from "./desktop.js";
 
-function desktop(platform: string): RakazoDesktop {
+function desktop(platform: string): OrkDesktop {
   const updateState = {
     phase: "unsupported" as const,
     currentVersion: "0.1.0",
@@ -67,20 +67,20 @@ describe("attempt correlation", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   function bridgeEmitting() {
-    let emit: (callback: RakazoDesktopOAuthCallback) => void = () => undefined;
+    let emit: (callback: OrkDesktopOAuthCallback) => void = () => undefined;
     const unsubscribe = vi.fn();
     vi.stubGlobal("window", {
-      rakazoDesktop: {
+      orkbotDesktop: {
         ...desktop("linux"),
         oauth: {
-          onCallback: (listener: (callback: RakazoDesktopOAuthCallback) => void) => {
+          onCallback: (listener: (callback: OrkDesktopOAuthCallback) => void) => {
             emit = listener;
             return unsubscribe;
           },
         },
       },
     });
-    return { emit: (c: RakazoDesktopOAuthCallback) => emit(c), unsubscribe };
+    return { emit: (c: OrkDesktopOAuthCallback) => emit(c), unsubscribe };
   }
 
   it("reads the attempt state out of the authorize URL", () => {

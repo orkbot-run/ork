@@ -4,7 +4,7 @@ import type {
   AvatarMotionMode,
   AvatarPoke,
   AvatarSegment,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import {
   AVATAR_POKE_SECONDS,
   AVATAR_POKES,
@@ -13,7 +13,7 @@ import {
   avatarClipPool,
   avatarSchedule,
   avatarSchedulePose,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import type { ReactNode } from "react";
 import {
   createContext,

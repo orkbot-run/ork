@@ -2,8 +2,8 @@ import type {
   AgentToolExecutionResult,
   ComputerAction,
   ComputerObservation,
-} from "@rakazo/adapter-kit";
-import { scrollDirection } from "@rakazo/core";
+} from "@orkbot/adapter-kit";
+import { scrollDirection } from "@orkbot/core";
 import { computerActionCount, MAX_ACTIONS_PER_CALL } from "./tool-loop.js";
 
 /** Identical visual actions that leave the frame unchanged before computer_act stops repeating them. */

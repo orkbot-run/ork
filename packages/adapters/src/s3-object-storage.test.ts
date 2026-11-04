@@ -242,7 +242,7 @@ describe("objectStorageConfigFromEnv", () => {
         OBJECT_STORAGE_ENDPOINT: "https://storage.example.invalid",
         OBJECT_STORAGE_ACCESS_KEY_ID: "id",
         OBJECT_STORAGE_SECRET_ACCESS_KEY: "secret",
-        OBJECT_STORAGE_PREFIX: "/rakazo/",
+        OBJECT_STORAGE_PREFIX: "/orkbot/",
         OBJECT_STORAGE_PATH_STYLE: "true",
       }),
     ).toEqual({
@@ -251,7 +251,7 @@ describe("objectStorageConfigFromEnv", () => {
       region: "us-east-1",
       accessKeyId: "id",
       secretAccessKey: "secret",
-      prefix: "rakazo/",
+      prefix: "orkbot/",
       pathStyle: true,
     });
   });

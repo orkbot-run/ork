@@ -1,4 +1,4 @@
-import { memberName, resolvePersonaColorDef } from "@rakazo/core";
+import { memberName, resolvePersonaColorDef } from "@orkbot/core";
 import { useNavigation, useRouter } from "expo-router";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";

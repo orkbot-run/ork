@@ -40,7 +40,7 @@ describePostgres("model roles (PostgreSQL)", () => {
       data: {
         id: userId,
         name: "Model Roles",
-        email: `${userId}@rakazo.test`,
+        email: `${userId}@orkbot.test`,
         emailVerified: false,
       },
     });

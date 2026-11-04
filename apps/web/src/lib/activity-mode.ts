@@ -1,5 +1,5 @@
 /** Persisted Codex-style recency mode for the sidebar activity sections. Default off. */
-export const ACTIVITY_MODE_KEY = "rakazo.activity-mode";
+export const ACTIVITY_MODE_KEY = "orkbot.activity-mode";
 
 export function readActivityMode(): boolean {
   try {

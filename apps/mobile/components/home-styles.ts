@@ -1,4 +1,4 @@
-import { typeScale } from "@rakazo/ui-tokens";
+import { typeScale } from "@orkbot/ui-tokens";
 import { StyleSheet } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { native } from "../lib/native";

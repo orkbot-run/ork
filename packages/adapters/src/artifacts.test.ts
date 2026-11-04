@@ -2,8 +2,8 @@ import { randomBytes } from "node:crypto";
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { SpaceKeyRecord, SpaceKeyStore } from "@rakazo/db";
-import { ContentKeyRing, LocalKeyProvider } from "@rakazo/db";
+import type { SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
+import { ContentKeyRing, LocalKeyProvider } from "@orkbot/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { LocalArtifactStore } from "./artifacts.js";
 
@@ -16,7 +16,7 @@ afterEach(async () => {
 
 describe("LocalArtifactStore", () => {
   it("creates artifact files with owner-only permissions", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-artifacts-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-artifacts-"));
     dirs.push(root);
     const store = new LocalArtifactStore(root);
 
@@ -30,7 +30,7 @@ describe("LocalArtifactStore", () => {
   });
 
   it("does not follow a replacement symlink when reading an artifact", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-artifacts-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-artifacts-"));
     dirs.push(root);
     const store = new LocalArtifactStore(root);
     const stored = await store.put(
@@ -68,7 +68,7 @@ function memoryKeys() {
 
 describe("LocalArtifactStore with encryption off", () => {
   it("writes plaintext and still reads files sealed while encryption was on", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-artifacts-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-artifacts-"));
     dirs.push(root);
     const on = memoryKeys();
     const off = on.withWrites(false);
@@ -102,7 +102,7 @@ describe("LocalArtifactStore with encryption off", () => {
 
 describe("LocalArtifactStore with content keys", () => {
   async function setup() {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-artifacts-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-artifacts-"));
     dirs.push(root);
     const keys = memoryKeys();
     return { root, keys, store: new LocalArtifactStore(root, keys) };

@@ -14,9 +14,9 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { CommandRequest, ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
-import { SandboxDamagedError } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { CommandRequest, ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
+import { SandboxDamagedError } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkpointAndStopComputer,
@@ -80,7 +80,7 @@ describe("provider-neutral computer workspace", () => {
   });
 
   it("skips dependencies and caches before counting a remote export", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const provider = new FakeSandboxProvider();
@@ -123,7 +123,7 @@ describe("provider-neutral computer workspace", () => {
   });
 
   it("leaves deleted bots' folders and browser profiles out of a Team Computer checkpoint", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const provider = new FakeSandboxProvider();
@@ -190,7 +190,7 @@ describe("provider-neutral computer workspace", () => {
   ])(
     "saves nothing from a run's $kind computer $when the export",
     async ({ first, second, exported, kind = "fake" }) => {
-      const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-restoring-"));
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-restoring-"));
       roots.push(root);
       const home = new LocalAgentHomeStore(root);
       const provider = new FakeSandboxProvider();
@@ -233,7 +233,7 @@ describe("provider-neutral computer workspace", () => {
   );
 
   it("restores a checkpoint into a replacement provider machine", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const firstProvider = new FakeSandboxProvider();
@@ -300,7 +300,7 @@ describe("mounted Kubernetes homes", () => {
   };
 
   it("skips the copy when the pod mounts the local home", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const { sandbox, importWorkspace, exportWorkspace } = kubernetesSandbox(true);
@@ -314,7 +314,7 @@ describe("mounted Kubernetes homes", () => {
   });
 
   it("saves a legacy pod even after persistent homes have been enabled", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const { sandbox, exportWorkspace } = kubernetesSandbox(true, false);
@@ -327,7 +327,7 @@ describe("mounted Kubernetes homes", () => {
   });
 
   it("copies the home in and out when the pod has no mounted home", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-workspace-store-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-workspace-store-"));
     roots.push(root);
     const home = new LocalAgentHomeStore(root);
     const { sandbox, importWorkspace, exportWorkspace } = kubernetesSandbox(false);
@@ -504,7 +504,7 @@ describe("Team bot folder cleanup", () => {
   }
 
   it("removes only folders of bots deleted from this space when a Team Computer wakes", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-"));
     roots.push(workspace);
     await seedFile(workspace, "bots/deleted-bot/private.txt", "gone");
     await seedFile(workspace, "bots/deleted-bot-2/notes.txt", "keep");
@@ -534,7 +534,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("removes deleted bots' browser profiles when a Team Computer wakes", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-profile-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-profile-"));
     roots.push(workspace);
     const deletedProfile = `.browser-profiles/${teamBrowserProfileName("deleted-bot")}`;
     const liveProfile = `.browser-profiles/${teamBrowserProfileName("live-bot")}`;
@@ -556,7 +556,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("unlinks a deleted bot's symlink that the provider's file listing does not show", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-link-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-link-"));
     roots.push(workspace);
     await seedFile(workspace, "shared/plan.txt", "keep");
     await mkdir(path.join(workspace, "bots"));
@@ -578,7 +578,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("keeps removing deleted bots' folders after one entry is refused", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-refused-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-refused-"));
     roots.push(workspace);
     await seedFile(workspace, "bots/deleted-a", "not a folder");
     await seedFile(workspace, "bots/deleted-b/private.txt", "gone");
@@ -598,7 +598,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("removes a deleted bot's folder that holds Go's read-only module cache", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-readonly-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-readonly-"));
     roots.push(workspace);
     const module = path.join(workspace, "bots/deleted-bot/go/pkg/mod/example.com/m@v1.0.0");
     await mkdir(path.join(workspace, "outside"), { mode: 0o555 });
@@ -620,7 +620,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("leaves the mode of a file the deleted bot's folder links to", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-hardlink-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-hardlink-"));
     roots.push(workspace);
     await seedFile(workspace, "shared/keep.txt", "keep");
     await chmod(path.join(workspace, "shared/keep.txt"), 0o444);
@@ -643,7 +643,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("does not look up deletions when the Team Computer has no bot folders", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-empty-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-empty-"));
     roots.push(workspace);
     await mkdir(path.join(workspace, "bots"));
     await mkdir(path.join(workspace, ".browser-profiles"));
@@ -660,7 +660,7 @@ describe("Team bot folder cleanup", () => {
   });
 
   it("reaches the oldest leftover however long the deletion history is", async () => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-wake-history-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-wake-history-"));
     roots.push(workspace);
     await seedFile(workspace, "bots/oldest-bot/private.txt", "gone");
     await seedFile(workspace, "bots/live-bot/notes.txt", "keep");
@@ -714,7 +714,7 @@ describe("Team bot folder cleanup", () => {
     ["bots", "."],
     ["shared", "plan"],
   ])("refuses to remove %s/%s", async (parent, name) => {
-    const workspace = await mkdtemp(path.join(tmpdir(), "rakazo-team-escape-"));
+    const workspace = await mkdtemp(path.join(tmpdir(), "orkbot-team-escape-"));
     roots.push(workspace);
     await seedFile(workspace, "shared/plan/notes.txt", "keep");
     await mkdir(path.join(workspace, "bots"));

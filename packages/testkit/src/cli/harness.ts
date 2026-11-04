@@ -2,9 +2,9 @@ import { execSync } from "node:child_process";
 import { globSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { createApp } from "@rakazo/api/app";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
-import type { runAsSystem as RunAsSystem } from "@rakazo/db";
+import type { createApp } from "@orkbot/api/app";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
+import type { runAsSystem as RunAsSystem } from "@orkbot/db";
 import { createModelConnectionFixtureFetch } from "../model-connection-fixture.js";
 import { PluginMarketplaceFixture } from "../plugin-marketplace-fixture.js";
 import { startPostgres } from "./postgres.js";
@@ -65,7 +65,7 @@ async function main() {
     const migrationUrl = container.getConnectionUri();
     const runtimeUrl = new URL(migrationUrl);
     runtimeUrl.username = "rakazo_app";
-    runtimeUrl.password = "rakazo-test-runtime";
+    runtimeUrl.password = "orkbot-test-runtime";
     const databaseUrl = runtimeUrl.toString();
     const apiPort = Number(process.env.API_PORT ?? 3110);
     const webPort = Number(process.env.WEB_PORT ?? 5180);
@@ -78,13 +78,13 @@ async function main() {
     process.env.WAKEUP_DRIVER = "memory";
     process.env.SANDBOX_PROVIDER = sandboxProvider;
     process.env.AGENT_RUNTIME = agentRuntime;
-    process.env.RAKAZO_LIVE_MODEL_CATALOG = "off";
+    process.env.ORKBOT_LIVE_MODEL_CATALOG = "off";
     if (!integration) {
       process.env.TICKET_BOARD_ENABLED = "true";
       process.env.PHONE_CALLS_ENABLED = "true";
       // The offline wallet, so Settings shows Wallet and sign-in completes without a provider.
       process.env.PAYMENT_WALLET_PROVIDER = "emulator";
-      process.env.RAKAZO_NAV_LINKS = JSON.stringify([
+      process.env.ORKBOT_NAV_LINKS = JSON.stringify([
         { id: "clients", label: "Clients", path: "/ext/clients/" },
       ]);
     }
@@ -115,7 +115,7 @@ async function main() {
     }
     process.env.CI = "1";
 
-    execSync("pnpm --filter @rakazo/db generate", { stdio: "inherit", env: process.env });
+    execSync("pnpm --filter @orkbot/db generate", { stdio: "inherit", env: process.env });
     execSync("pnpm db:migrate", { stdio: "inherit", env: process.env });
 
     if (integration) {
@@ -171,9 +171,9 @@ async function main() {
       { createApp },
       { drainUnscopedDatabaseAccess, runAsSystem },
     ] = await Promise.all([
-      import("@rakazo/adapters"),
-      import("@rakazo/api/app"),
-      import("@rakazo/db"),
+      import("@orkbot/adapters"),
+      import("@orkbot/api/app"),
+      import("@orkbot/db"),
     ]);
     const { serve } = await import("@hono/node-server");
     const thirdParties = new ThirdPartyConnectorEmulator();
@@ -242,7 +242,7 @@ async function main() {
           "pnpm",
           [
             "--filter",
-            "@rakazo/web",
+            "@orkbot/web",
             "exec",
             "playwright",
             "test",

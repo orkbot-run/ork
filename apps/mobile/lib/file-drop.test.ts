@@ -58,7 +58,7 @@ it("ignores drops without the native module", () => {
 });
 
 it("syncs limits without changing target priority", () => {
-  const native = requireOptionalNativeModule("RakazoFileDrop") as {
+  const native = requireOptionalNativeModule("OrkFileDrop") as {
     setDropTarget: ReturnType<typeof vi.fn>;
   };
   const first = addDropTarget("chat", vi.fn(), { enabled: true, maxBytes: 100, maxFiles: 2 });
@@ -94,7 +94,7 @@ it("releases a pending drop after the last target leaves", () => {
   drop({ files: [{ uri: "file:///fake/copy", name: "a.png", mimeType: "image/png", size: 1 }] });
   expect(handler).not.toHaveBeenCalled();
   expect(
-    (requireOptionalNativeModule("RakazoFileDrop") as { release: unknown }).release,
+    (requireOptionalNativeModule("OrkFileDrop") as { release: unknown }).release,
   ).toHaveBeenCalledWith("file:///fake/copy");
   expect(listeners.get("onFilesDropped")?.size).toBe(0);
 });
@@ -127,7 +127,7 @@ it("keeps queued drops separate and releases a disabled owner's copies", () => {
   expect(first).toHaveBeenCalledOnce();
   expect(second).not.toHaveBeenCalled();
   expect(
-    (requireOptionalNativeModule("RakazoFileDrop") as { release: unknown }).release,
+    (requireOptionalNativeModule("OrkFileDrop") as { release: unknown }).release,
   ).toHaveBeenCalledWith(files[0]?.uri);
   removeSecond();
   removeFirst();
@@ -144,7 +144,7 @@ it("uses the newest matching target even when an older match is enabled", () => 
   expect(stale).not.toHaveBeenCalled();
   expect(fresh).not.toHaveBeenCalled();
   expect(
-    (requireOptionalNativeModule("RakazoFileDrop") as { release: unknown }).release,
+    (requireOptionalNativeModule("OrkFileDrop") as { release: unknown }).release,
   ).toHaveBeenCalledWith(files[0]?.uri);
   removeFresh();
   removeStale();

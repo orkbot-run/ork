@@ -1,6 +1,6 @@
+import type { McpServer } from "@orkbot/contracts";
 import type { Route } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import type { McpServer } from "@rakazo/contracts";
 import { captureScreenshot, completeOnboarding, openIntegrationsAdd, signup } from "./helpers";
 
 const credentialsTemplate = `{
@@ -23,7 +23,7 @@ test("adds a stdio MCP server with encrypted environment variables", async ({ pa
   await page.context().route("**/rpc/me", (route) => asAdmin(route, "me"));
   await page.context().route("**/rpc/bootstrap", (route) => asAdmin(route, "bootstrap"));
   const stamp = Date.now();
-  await signup(page, `mcp-stdio-${stamp}@rakazo.test`, "password12", "MCP stdio");
+  await signup(page, `mcp-stdio-${stamp}@orkbot.test`, "password12", "MCP stdio");
   await completeOnboarding(page);
 
   const servers: McpServer[] = [];

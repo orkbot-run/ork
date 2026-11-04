@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@rakazo/core";
+import type { ThreadItem } from "@orkbot/core";
 import {
   answerableAskMessageIds,
   dismissableAskMessageIds,
@@ -7,7 +7,7 @@ import {
   timeSeparatorIds,
   unreadDividerMessageId,
   voiceChatHoldsMessage,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import { StyleSheet, View } from "react-native";

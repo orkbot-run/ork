@@ -19,7 +19,7 @@ import urllib.request
 from typing import Any
 from urllib.parse import urlsplit
 
-WORLD_NAME = "rakazo-page-browser"
+WORLD_NAME = "orkbot-page-browser"
 
 # A frame asked for, began or committed a load of another document. Same-document changes, such as
 # a new URL fragment, leave the page and its fields in place and are not counted.
@@ -269,9 +269,9 @@ class CdpClient:
 # change them, and they read the real DOM.
 EVAL_HELPERS = r"""
 (() => {
-  if (window.__rakazoPageBrowser) return true;
+  if (window.__orkbotPageBrowser) return true;
   // Marks a field holding a saved login or card, which the page browser's snapshots never show.
-  const FILLED = "data-rakazo-filled";
+  const FILLED = "data-orkbot-filled";
   // A refused fill changed nothing the bot cannot see; the step reports it as settled.
   const refused = (message) => new Error(`Refused: ${message}`);
   // Set through the CSSOM, which a page's Content-Security-Policy does not block, unlike an
@@ -348,7 +348,7 @@ EVAL_HELPERS = r"""
     while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
     return el && el !== document.body && el !== document.documentElement ? el : null;
   }
-  window.__rakazoPageBrowser = {
+  window.__orkbotPageBrowser = {
     // The frame element holding focus in this document, when focus is inside one of its frames.
     focusedFrame() {
       const el = focused();
@@ -619,7 +619,7 @@ def focused_frame(client: CdpClient, session_id: str) -> tuple[str, str, int]:
     at = (session_id, main_frame(client, session_id)["id"], client.context_id)
     for _ in range(MAX_FRAME_DEPTH):
         session, frame_id, world = at
-        owner = client.call("Runtime.evaluate", {"expression": "window.__rakazoPageBrowser.focusedFrame()",
+        owner = client.call("Runtime.evaluate", {"expression": "window.__orkbotPageBrowser.focusedFrame()",
                                                  "contextId": world}, session_id=session)
         object_id = (owner.get("result") or {}).get("objectId")
         if not object_id:
@@ -671,13 +671,13 @@ def fill_focused(client: CdpClient, session_id: str, step: dict[str, Any]) -> No
     if frame[0] != session_id or frame[2] != client.context_id:
         frame_site_check(client, frame, step)
     call_with(client, frame[0], frame[2], "function (value, origin, field) { "
-              "return window.__rakazoPageBrowser.fill(value, origin, field); }",
+              "return window.__orkbotPageBrowser.fill(value, origin, field); }",
               step["text"], step["origin"], step.get("field"))
 
 
 def find_card_field(client: CdpClient, session_id: str, main_frame_id: str, token: str) -> tuple[str, str, int]:
     """The one field the page shows for this card detail, in the page itself or else in a payment frame."""
-    find = f"window.__rakazoPageBrowser.findCard({json.dumps(token)})"
+    find = f"window.__orkbotPageBrowser.findCard({json.dumps(token)})"
     found = eval_json(client, session_id, find)
     if found == 1:
         assert client.context_id is not None
@@ -720,7 +720,7 @@ def fill_pay_token(client: CdpClient, session_id: str, step: dict[str, Any]) -> 
     """
     on_merchant = merchant_check(client, session_id, step["origin"])
     account = step["merchantAccountId"]
-    lookup = "window.__rakazoPageBrowser.payTokenAccount()"
+    lookup = "window.__orkbotPageBrowser.payTokenAccount()"
     targets = []
     if eval_json(client, session_id, lookup) == account:
         assert client.context_id is not None
@@ -736,7 +736,7 @@ def fill_pay_token(client: CdpClient, session_id: str, step: dict[str, Any]) -> 
         raise Refused(NOT_ON_MERCHANT)
     try:
         taken = call_with(client, target_session, world,
-                          "function (token) { return window.__rakazoPageBrowser.setPayToken(token); }", step["text"])
+                          "function (token) { return window.__orkbotPageBrowser.setPayToken(token); }", step["text"])
     except Exception:  # noqa: BLE001
         raise Refused("The checkout didn't take the pay token. Take a fresh snapshot before trying again.") from None
     if taken is not True:
@@ -774,12 +774,12 @@ def fill_card(client: CdpClient, session_id: str, step: dict[str, Any]) -> None:
             return "The payment frame changed, so the card was not typed. Take a fresh snapshot before trying again."
         return None
 
-    if run("window.__rakazoPageBrowser.focusCard()") is not True:
+    if run("window.__orkbotPageBrowser.focusCard()") is not True:
         raise Refused("The card field did not take focus, so nothing was typed.")
     for index, char in enumerate(text):
         inserting = False
         try:
-            reason = stopped() or (None if run("window.__rakazoPageBrowser.cardHolds()") is True else
+            reason = stopped() or (None if run("window.__orkbotPageBrowser.cardHolds()") is True else
                                    "Focus left the card field, so the card was not typed. Fill it again.")
             if not reason:
                 inserting = True
@@ -799,7 +799,7 @@ def fill_card(client: CdpClient, session_id: str, step: dict[str, Any]) -> None:
         clear_or_uncertain(client, field_session, run, reason)
         raise Refused(reason)
     # Fields often move on to the next one by themselves once complete, so focus is not checked here.
-    if run(f"window.__rakazoPageBrowser.cardTyped({sum(char.isalnum() for char in text)})") is not True:
+    if run(f"window.__orkbotPageBrowser.cardTyped({sum(char.isalnum() for char in text)})") is not True:
         reason = "This field didn't accept the card, so it was cleared."
         clear_or_uncertain(client, field_session, run, reason)
         raise Refused(reason)
@@ -813,10 +813,10 @@ def clear_or_uncertain(client: CdpClient, session_id: str, run: Any, reason: str
 def clear_card(client: CdpClient, session_id: str, run: Any) -> bool:
     """Keys erase what the field's own script kept, then its value is emptied directly; True once it is empty."""
     try:
-        if run("window.__rakazoPageBrowser.focusCard()") is True:
+        if run("window.__orkbotPageBrowser.focusCard()") is True:
             press_key(client, session_id, {"key": "Backspace", "code": "Backspace", "windowsVirtualKeyCode": 8})
-        run("window.__rakazoPageBrowser.emptyCard()")
-        return run("window.__rakazoPageBrowser.cardTyped(0)") is True
+        run("window.__orkbotPageBrowser.emptyCard()")
+        return run("window.__orkbotPageBrowser.cardTyped(0)") is True
     except Exception:  # noqa: BLE001
         return False
 
@@ -846,9 +846,9 @@ def frame_hints(client: CdpClient, session_id: str) -> tuple[bool, str | None]:
     """Whether a payment frame the page shows holds a card field, and the merchant account a pay token
     checkout names inside Stripe's frame: what the snapshot tells the bot about its payment frames."""
     frames = payment_frames(client, session_id)
-    card = any(frame_eval(client, frames, "window.__rakazoPageBrowser.hasCardField()"))
+    card = any(frame_eval(client, frames, "window.__orkbotPageBrowser.hasCardField()"))
     accounts = [found for found in frame_eval(client, pay_token_frames(client, frames),
-                                              "window.__rakazoPageBrowser.payTokenAccount()") if found]
+                                              "window.__orkbotPageBrowser.payTokenAccount()") if found]
     return card, accounts[0] if len(accounts) == 1 else None
 
 

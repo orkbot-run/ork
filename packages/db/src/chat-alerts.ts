@@ -1,6 +1,6 @@
-import type { RealtimeFanout } from "@rakazo/adapter-kit";
-import type { ChatAlert } from "@rakazo/contracts";
-import { ChatAlertSchema } from "@rakazo/contracts";
+import type { RealtimeFanout } from "@orkbot/adapter-kit";
+import type { ChatAlert } from "@orkbot/contracts";
+import { ChatAlertSchema } from "@orkbot/contracts";
 
 /** Transient: an alert published while the user has no app open is not replayed. */
 export interface ChatAlerts {

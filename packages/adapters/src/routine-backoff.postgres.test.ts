@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { PrismaClient } from "@rakazo/db";
-import { asSystem, createDb, provisionMessagingIdentity, runAsSystem } from "@rakazo/db";
+import type { PrismaClient } from "@orkbot/db";
+import { asSystem, createDb, provisionMessagingIdentity, runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   backOffRoutineAfterAccountError,
@@ -16,7 +16,7 @@ describePostgres("backing off a routine on refused model accounts (PostgreSQL)",
   let db: ReturnType<typeof createDb>;
   let system: PrismaClient;
   let identity: { userId: string; spaceId: string; botId: string; threadId: string };
-  const address = `routine-backoff-${randomUUID()}@rakazo.test`;
+  const address = `routine-backoff-${randomUUID()}@orkbot.test`;
 
   beforeAll(async () => {
     db = createDb(url!);

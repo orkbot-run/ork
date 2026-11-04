@@ -1,4 +1,4 @@
-import { previewMessageText as previewText, resolvePersonaColorDef } from "@rakazo/core";
+import { previewMessageText as previewText, resolvePersonaColorDef } from "@orkbot/core";
 import type { MobileBot, MobileMessage, MobileSnapshot } from "./api";
 import { t } from "./i18n";
 

@@ -1,4 +1,4 @@
-// Relative source path: Vercel functions cannot resolve the TypeScript exports of @rakazo/core.
+// Relative source path: Vercel functions cannot resolve the TypeScript exports of @orkbot/core.
 import { readBoundedJsonResponse } from "../../../packages/core/src/http-response.js";
 import { GITHUB_API_REPO } from "./site";
 
@@ -25,20 +25,19 @@ async function fetchGithubStars(fetchImpl: typeof fetch = fetch): Promise<number
   return typeof payload?.stargazers_count === "number" ? payload.stargazers_count : null;
 }
 
-// Last known count, shown when the build cannot reach GitHub.
-const GITHUB_STARS_FALLBACK = 6_000;
-let githubStars: Promise<number> | undefined;
+let githubStars: Promise<number | null> | undefined;
 
 /** One lookup per build: anonymous requests share a 60/hour limit, and every page shows the count. */
 export async function githubStarsLabel(): Promise<string> {
-  githubStars ??= fetchGithubStars().then((count) => count ?? GITHUB_STARS_FALLBACK);
-  return formatStarCount(await githubStars);
+  githubStars ??= fetchGithubStars();
+  const count = await githubStars;
+  return count === null ? "GitHub" : formatStarCount(count);
 }
 
-/** Desktop platforms to offer: macOS always, Windows and Linux once a release ships them. */
+/** Offer installer downloads only after an Ork release supplies them. */
 export function availableDesktopPlatforms(downloads: DesktopDownloads) {
   return (["mac", "windows", "linux"] as const).filter(
-    (platform) => platform === "mac" || Boolean(downloads[platform]),
+    (platform) => Boolean(downloads[platform]),
   );
 }
 
@@ -102,7 +101,7 @@ async function fetchGithubJson<T>(
   maxBytes: number,
   fetchImpl: typeof fetch,
 ): Promise<T | null> {
-  if (process.env.RAKAZO_GITHUB_API === "offline") return null;
+  if (process.env.ORKBOT_GITHUB_API === "offline") return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), GITHUB_STARS_TIMEOUT_MS);
   try {
@@ -110,7 +109,7 @@ async function fetchGithubJson<T>(
       fetchImpl(url, {
         headers: {
           Accept: "application/vnd.github+json",
-          "User-Agent": "rakazo-www",
+          "User-Agent": "orkbot-www",
           // Optional: anonymous requests share a 60/hour limit per IP.
           ...(process.env.GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
         },

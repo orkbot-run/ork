@@ -413,7 +413,7 @@ it("highlights the destination host after userinfo containing the same host text
 
 describe("withMentions", () => {
   const planner = { id: "bot-1", name: "Planner" };
-  const link = "[Planner](rakazo-mention:bot-1)";
+  const link = "[Planner](orkbot-mention:bot-1)";
 
   it("links the first appearance of the name across the message", () => {
     expect(
@@ -438,18 +438,18 @@ describe("withMentions", () => {
   });
 
   it("keeps a mention link already in the text as its name", () => {
-    expect(withMentions(["[Planner](rakazo-mention:bot-1) is ready."], [planner])).toEqual([
+    expect(withMentions(["[Planner](orkbot-mention:bot-1) is ready."], [planner])).toEqual([
       `${link} is ready.`,
     ]);
-    const code = "`[Planner](rakazo-mention:bot-1)`\n\n```\n[Planner](rakazo-mention:bot-1)\n```";
+    const code = "`[Planner](orkbot-mention:bot-1)`\n\n```\n[Planner](orkbot-mention:bot-1)\n```";
     expect(withMentions([code], [planner])).toEqual([`${link} ${code}`]);
   });
 
   it("escapes markdown in the name and encodes the id", () => {
     expect(withMentions(["hi"], [{ id: "a/b", name: "[x]_y" }])).toEqual([
-      "[\\[x\\]\\_y](rakazo-mention:a%2Fb) hi",
+      "[\\[x\\]\\_y](orkbot-mention:a%2Fb) hi",
     ]);
-    expect(markdownMentionId("rakazo-mention:a%2Fb")).toBe("a/b");
+    expect(markdownMentionId("orkbot-mention:a%2Fb")).toBe("a/b");
     expect(markdownMentionId("https://example.test")).toBeUndefined();
   });
 

@@ -13,8 +13,8 @@ type NativePdfViewProps = {
 
 // PDFKit on iOS, PdfRenderer on Android: Android's WebView cannot show a PDF at all. An
 // over-the-air update can reach a build made before this view existed, which gets the fallback.
-const NativePdfView = requireOptionalNativeModule("RakazoPdfView")
-  ? requireNativeView<NativePdfViewProps>("RakazoPdfView")
+const NativePdfView = requireOptionalNativeModule("OrkPdfView")
+  ? requireNativeView<NativePdfViewProps>("OrkPdfView")
   : null;
 
 /** A local PDF file shown in the app, so reading one never needs another app. */

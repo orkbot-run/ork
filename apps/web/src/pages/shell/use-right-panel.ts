@@ -1,4 +1,4 @@
-import type { Routine } from "@rakazo/contracts";
+import type { Routine } from "@orkbot/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SetURLSearchParams } from "react-router-dom";
 import type { Panel, RightPanelState } from "../../lib/right-panel-state";

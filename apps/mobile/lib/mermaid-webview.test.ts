@@ -1,5 +1,5 @@
-import { chatMermaidConfig } from "@rakazo/chat-ui/mermaid";
-import { darkTokens } from "@rakazo/ui-tokens";
+import { chatMermaidConfig } from "@orkbot/chat-ui/mermaid";
+import { darkTokens } from "@orkbot/ui-tokens";
 import { describe, expect, it, vi } from "vitest";
 import {
   diagramBootScript,
@@ -21,8 +21,8 @@ function policyOf(html: string) {
 
 describe("diagram WebView document", () => {
   it("loads Mermaid from the server the app talks to", () => {
-    expect(diagramScriptUrl("https://rakazo.example.test")).toBe(
-      "https://rakazo.example.test/api/v1/assets/mermaid.js",
+    expect(diagramScriptUrl("https://orkbot.example.test")).toBe(
+      "https://orkbot.example.test/api/v1/assets/mermaid.js",
     );
     expect(diagramScriptUrl("http://192.168.1.20:5173")).toBe(
       "http://192.168.1.20:5173/api/v1/assets/mermaid.js",
@@ -30,7 +30,7 @@ describe("diagram WebView document", () => {
   });
 
   it("allows that one script and nothing that reaches the network", () => {
-    const url = diagramScriptUrl("https://rakazo.example.test");
+    const url = diagramScriptUrl("https://orkbot.example.test");
     const html = diagramDocument(url);
     const policy = policyOf(html).split("; ");
     expect(policy).toContain("default-src 'none'");
@@ -92,7 +92,7 @@ describe("diagram boot script", () => {
     const source = "</script><script>alert(1)</script>\u2028\u2029";
     const boot = diagramBootScript(source, config);
     expect(boot).toContain(`var source = ${JSON.stringify(source)};`);
-    expect(diagramDocument(diagramScriptUrl("https://rakazo.example.test"))).not.toContain(source);
+    expect(diagramDocument(diagramScriptUrl("https://orkbot.example.test"))).not.toContain(source);
     const mermaid = {
       initialize: vi.fn(),
       parse: vi.fn(async () => true),

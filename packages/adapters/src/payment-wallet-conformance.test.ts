@@ -3,8 +3,8 @@ import type {
   PaymentWalletCredential,
   PaymentWalletProvider,
   PurchaseRequest,
-} from "@rakazo/adapter-kit";
-import { PaymentWalletDisconnected, PaymentWalletRequestRejected } from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
+import { PaymentWalletDisconnected, PaymentWalletRequestRejected } from "@orkbot/adapter-kit";
 import { Challenge, Credential } from "mppx";
 import { describe, expect, it } from "vitest";
 import { LinkWalletProvider } from "./link-wallet.js";
@@ -37,7 +37,7 @@ function purchase(overrides: Partial<PurchaseRequest> = {}): PurchaseRequest {
 }
 
 async function connect(provider: PaymentWalletProvider): Promise<PaymentWalletCredential> {
-  const start = await provider.beginConnect({ clientName: "Rakazo" }, ctx);
+  const start = await provider.beginConnect({ clientName: "Ork" }, ctx);
   expect(start.verificationUrl).toMatch(/^https:\/\//);
   expect(start.userCode).toBeTruthy();
   expect(start.expiresAt.getTime()).toBeGreaterThan(Date.now());
@@ -441,7 +441,7 @@ describe("Link wallet protocol", () => {
   it("signs in with the device flow and backs off on slow_down", async () => {
     const link = fakeLink();
     const provider = new LinkWalletProvider({ fetch: link.fetch });
-    const start = await provider.beginConnect({ clientName: "Rakazo" }, ctx);
+    const start = await provider.beginConnect({ clientName: "Ork" }, ctx);
     expect(start).toMatchObject({
       verificationUrl: "https://app.link.com/device?code=ABCD-EFGH",
       userCode: "ABCD-EFGH",

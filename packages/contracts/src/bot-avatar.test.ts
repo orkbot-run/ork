@@ -56,17 +56,31 @@ describe("bot avatar values", () => {
 });
 
 describe("per-bot avatar sets", () => {
+  it("normalizes the saved avatar set from before the product rename", () => {
+    expect(resolveBotAvatarSet("rakazo")).toBe("orkbot");
+    expect(CreateBotInput.parse({ name: "Scout", avatarSet: "rakazo" }).avatarSet).toBe("orkbot");
+    expect(UpdateBotInput.parse({ botId: "bot-1", avatarSet: "rakazo" }).avatarSet).toBe("orkbot");
+    expect(
+      AgentImportCreateInput.parse({
+        name: "Scout",
+        avatarSet: "rakazo",
+        files: [{ path: "SOUL.md", content: "Be helpful." }],
+        selection: { instructions: [], memory: [], skills: [] },
+      }).avatarSet,
+    ).toBe("orkbot");
+  });
+
   it("keeps missing or unknown legacy metadata on the original renderer", () => {
     expect(resolveBotAvatarSet()).toBe("organic");
     expect(resolveBotAvatarSet(null)).toBe("organic");
     expect(resolveBotAvatarSet("future-set")).toBe("organic");
     expect(resolveBotAvatarSet("organic")).toBe("organic");
-    expect(resolveBotAvatarSet("rakazo")).toBe("rakazo");
+    expect(resolveBotAvatarSet("orkbot")).toBe("orkbot");
     expect(DEFAULT_NEW_BOT_AVATAR_SET).toBe("organic");
   });
 
   it("accepts an explicit set on create/update and rejects unrecognised writes", () => {
-    for (const avatarSet of ["organic", "rakazo"] as const) {
+    for (const avatarSet of ["organic", "orkbot"] as const) {
       expect(CreateBotInput.parse({ name: "Scout", avatarSet }).avatarSet).toBe(avatarSet);
       expect(UpdateBotInput.parse({ botId: "bot-1", avatarSet }).avatarSet).toBe(avatarSet);
     }
@@ -97,7 +111,7 @@ describe("per-bot avatar sets", () => {
     for (const color of ["#8B5CF6::shape_3", "data:image/png;base64,aGVsbG8="]) {
       const exported = ExportManifestSchema.parse({
         ...base,
-        bot: { ...base.bot, avatarSet: "rakazo", color },
+        bot: { ...base.bot, avatarSet: "orkbot", color },
       });
       const imported = AgentImportCreateInput.parse({
         name: "Scout",
@@ -106,7 +120,7 @@ describe("per-bot avatar sets", () => {
         files: [{ path: "SOUL.md", content: "Be helpful." }],
         selection: { instructions: [], memory: [], skills: [] },
       });
-      expect(imported.avatarSet).toBe("rakazo");
+      expect(imported.avatarSet).toBe("orkbot");
       expect(imported.color).toBe(color);
     }
   });

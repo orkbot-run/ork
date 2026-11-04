@@ -12,7 +12,7 @@ test(
   "screen connection failures stay visible and can be retried",
   { tag: "@nightly" },
   async ({ page }, testInfo) => {
-    await signup(page, `screen-error-${Date.now()}@rakazo.test`, "password12", "Screen Error");
+    await signup(page, `screen-error-${Date.now()}@orkbot.test`, "password12", "Screen Error");
     await completeOnboarding(page);
     const botId = activeBotId(page);
     await rpc(page, "computer/boot", { botId });
@@ -92,7 +92,7 @@ test(
   "a running computer without a screen URL offers recovery",
   { tag: "@nightly" },
   async ({ page }, testInfo) => {
-    await signup(page, `screen-missing-${Date.now()}@rakazo.test`, "password12", "Screen Missing");
+    await signup(page, `screen-missing-${Date.now()}@orkbot.test`, "password12", "Screen Missing");
     await completeOnboarding(page);
     const botId = activeBotId(page);
     await rpc(page, "computer/boot", { botId });
@@ -128,7 +128,7 @@ test(
 test("a healthy running computer is not diagnosed while its screen URL loads", async ({
   page,
 }, testInfo) => {
-  await signup(page, `screen-loading-${Date.now()}@rakazo.test`, "password12", "Screen Loading");
+  await signup(page, `screen-loading-${Date.now()}@orkbot.test`, "password12", "Screen Loading");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await rpc(page, "computer/boot", { botId });
@@ -166,7 +166,7 @@ test("a healthy running computer is not diagnosed while its screen URL loads", a
 test("a takeover failure does not diagnose a screen connection failure", async ({
   page,
 }, testInfo) => {
-  await signup(page, `screen-control-${Date.now()}@rakazo.test`, "password12", "Screen Control");
+  await signup(page, `screen-control-${Date.now()}@orkbot.test`, "password12", "Screen Control");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await rpc(page, "computer/boot", { botId });
@@ -208,7 +208,7 @@ test("a takeover failure does not diagnose a screen connection failure", async (
 });
 
 test("a framed screen that drops after connecting loads again by itself once", async ({ page }) => {
-  await signup(page, `screen-drop-${Date.now()}@rakazo.test`, "password12", "Screen Drop");
+  await signup(page, `screen-drop-${Date.now()}@orkbot.test`, "password12", "Screen Drop");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await rpc(page, "computer/boot", { botId });
@@ -245,9 +245,9 @@ test("a framed screen that drops after connecting loads again by itself once", a
       contentType: "text/html",
       headers: { "content-security-policy": "sandbox allow-scripts allow-pointer-lock" },
       body: `<!doctype html><title>Test desktop</title><script>
-        parent.postMessage({ rakazoScreen: "loading" }, "*");
-        parent.postMessage({ rakazoScreen: "connected" }, "*");
-        ${drop ? 'setTimeout(() => parent.postMessage({ rakazoScreen: "disconnected" }, "*"), 300);' : ""}
+        parent.postMessage({ orkbotScreen: "loading" }, "*");
+        parent.postMessage({ orkbotScreen: "connected" }, "*");
+        ${drop ? 'setTimeout(() => parent.postMessage({ orkbotScreen: "disconnected" }, "*"), 300);' : ""}
       </script><p>Desktop</p>`,
     });
   });
@@ -273,7 +273,7 @@ test("a framed screen that drops after connecting loads again by itself once", a
 
   // Another drop within the half minute is left to the user.
   const frame = page.frames().find((candidate) => candidate.url().includes("1.drop-test"));
-  await frame?.evaluate(() => parent.postMessage({ rakazoScreen: "disconnected" }, "*"));
+  await frame?.evaluate(() => parent.postMessage({ orkbotScreen: "disconnected" }, "*"));
   await expect(preview.getByRole("alert")).toContainText("The screen connection closed.");
   await expect(preview.getByRole("button", { name: "Retry screen" })).toBeVisible();
   await page.waitForTimeout(1_500);

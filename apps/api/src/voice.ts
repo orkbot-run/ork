@@ -1,6 +1,5 @@
-import { ORPCError } from "@orpc/server";
-import type { AdapterContext, SecretStore } from "@rakazo/adapter-kit";
-import { VoiceAccountError } from "@rakazo/adapter-kit";
+import type { AdapterContext, SecretStore } from "@orkbot/adapter-kit";
+import { VoiceAccountError } from "@orkbot/adapter-kit";
 import {
   createVoiceProvider,
   isFishSpeechModelId,
@@ -13,17 +12,17 @@ import {
   openAiCompatibleVoiceServer,
   serializeOpenAiCompatibleVoiceSecret,
   voiceCatalogEntry,
-} from "@rakazo/adapters";
+} from "@orkbot/adapters";
 import type {
   Actor,
   SettingsScope,
   VoiceAccountErrorCode,
   VoiceCredential,
   VoiceStatus,
-} from "@rakazo/contracts";
-import { SettingsScopeSchema } from "@rakazo/contracts";
-import { speakable, toUtterances } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { SettingsScopeSchema } from "@orkbot/contracts";
+import { speakable, toUtterances } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import {
   deleteUnreferencedCredentialSecret,
   findDefaultVoiceCredential,
@@ -38,9 +37,10 @@ import {
   saveVoicePreference,
   selectVoicePreference,
   voicePreferenceTarget,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
-import { markExpectedFailure } from "@rakazo/logging/hono";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
+import { markExpectedFailure } from "@orkbot/logging/hono";
+import { ORPCError } from "@orpc/server";
 import type { Context, Hono } from "hono";
 import { readBoundedBody } from "./http-body.js";
 import { withSerializableRetry } from "./serializable-retry.js";

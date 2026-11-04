@@ -1,4 +1,4 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Traditional Chinese language selection persists
 # Run against a signed-in test account on an English device.
 ---
@@ -7,7 +7,7 @@ name: Traditional Chinese language selection persists
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 30000
-- openLink: "rakazo:///language"
+- openLink: "orkbot:///language"
 - extendedWaitUntil:
     visible: "Language"
     timeout: 10000
@@ -20,7 +20,7 @@ name: Traditional Chinese language selection persists
 - extendedWaitUntil:
     visible: "Researcher"
     timeout: 30000
-- openLink: "rakazo:///language"
+- openLink: "orkbot:///language"
 - extendedWaitUntil:
     visible: "語言"
     timeout: 10000

@@ -1,5 +1,5 @@
-import type { MessageBlock } from "@rakazo/contracts";
-import { newestPageCards, pageCardSuperseded } from "@rakazo/core";
+import type { MessageBlock } from "@orkbot/contracts";
+import { newestPageCards, pageCardSuperseded } from "@orkbot/core";
 
 export type PageBlock = Extract<MessageBlock, { kind: "page" }>;
 

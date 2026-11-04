@@ -1,4 +1,4 @@
-import { toolRequiresApproval, toolResultTaintsRun } from "@rakazo/core";
+import { toolRequiresApproval, toolResultTaintsRun } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import { selectBuiltinToolsForRun } from "./run-tool-selection.js";
 import { FEEDBACK_REPORTS_PER_HOUR, feedbackTools } from "./run-tools-feedback.js";

@@ -1,5 +1,5 @@
 import Module from "node:module";
-import { ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   pickFromLibrary as PickFromLibrary,

@@ -1,4 +1,4 @@
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import type { ComponentPropsWithoutRef, ReactElement, ReactNode } from "react";
 import {
   Children,

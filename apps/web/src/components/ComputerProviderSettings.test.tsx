@@ -14,7 +14,7 @@ vi.mock("@lingui/react/macro", () => {
     Trans: ({ children }: { children: ReactNode }) => children,
   };
 });
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({ size: _size, ...props }: ComponentProps<"button"> & { size?: string }) => (
     <button {...props} />
   ),

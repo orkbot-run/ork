@@ -1,11 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { AccountSecurity, BotAvatarSet, UsageSummary } from "@rakazo/contracts";
+import type { AccountSecurity, BotAvatarSet, UsageSummary } from "@orkbot/contracts";
 import {
   accountDisplay,
   displayName,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import {
   Button,
   Field,
@@ -18,7 +18,7 @@ import {
   Switch,
   ToggleGroup,
   ToggleGroupItem,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import {
   Table,
   TableBody,
@@ -26,7 +26,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@rakazo/ui-web/components/ui/table";
+} from "@orkbot/ui-web/components/ui/table";
 import type { RefObject } from "react";
 import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { AccountAccess, LinkSsoRow } from "../components/AccountAccess";
@@ -329,10 +329,10 @@ export function GeneralSettingsPanels({
                     <Trans>Original</Trans>
                   </ToggleGroupItem>
                   <ToggleGroupItem
-                    value="rakazo"
+                    value="orkbot"
                     className="text-[13px] aria-pressed:bg-background aria-pressed:shadow-sm"
                   >
-                    <Trans>Rakazo</Trans>
+                    <Trans>Ork</Trans>
                   </ToggleGroupItem>
                 </ToggleGroup>
                 {botStyleError ? (

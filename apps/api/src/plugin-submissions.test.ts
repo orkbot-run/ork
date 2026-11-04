@@ -1,14 +1,14 @@
-import { EmailEmulator } from "@rakazo/adapters";
+import { EmailEmulator } from "@orkbot/adapters";
 import {
   INTEGRATION_CLAIMS_PATH,
   PLUGIN_SUBMISSIONS_PATH,
   PluginSubmissionSchema,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const preview = vi.hoisted(() => vi.fn());
-vi.mock("@rakazo/adapters", async (original) => ({
-  ...(await original<typeof import("@rakazo/adapters")>()),
+vi.mock("@orkbot/adapters", async (original) => ({
+  ...(await original<typeof import("@orkbot/adapters")>()),
   previewPluginInstall: preview,
 }));
 
@@ -268,7 +268,7 @@ describe("reviewing submissions", () => {
       expect.objectContaining({
         name: "acme-tickets",
         displayName: "Acme Tickets",
-        registry: "Rakazo",
+        registry: "Ork",
         source: `https://github.com/acme/plugins@${SHA}#tickets`,
         installedSource: "https://github.com/acme/plugins#tickets",
         hasConnector: false,
@@ -398,7 +398,7 @@ describe("integration page claims", () => {
     const opened = await open(confirmLink(confirm!));
     expect(opened.status).toBe(303);
     expect(opened.headers.get("location")).toBe(
-      "https://rakazo.com/integrations/acme-tickets/claim/?confirmed",
+      "https://orkbot.run/integrations/acme-tickets/claim/?confirmed",
     );
     expect(rows[0]).toMatchObject({ status: "pending", confirmToken: null });
     await vi.waitFor(() => expect(email.sent).toHaveLength(2));
@@ -421,7 +421,7 @@ describe("integration page claims", () => {
     rows[0]!.confirmExpiresAt = new Date(Date.now() - 1);
     const opened = await open(confirmLink(email.sent[0]!));
     expect(opened.headers.get("location")).toBe(
-      "https://rakazo.com/integrations/acme-tickets/claim/?expired",
+      "https://orkbot.run/integrations/acme-tickets/claim/?expired",
     );
     expect(rows[0]!.status).toBe("unconfirmed");
   });

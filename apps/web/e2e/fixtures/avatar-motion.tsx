@@ -1,5 +1,5 @@
 import "../../src/styles.css";
-import { BotAvatar } from "@rakazo/ui-web";
+import { BotAvatar } from "@orkbot/ui-web";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 

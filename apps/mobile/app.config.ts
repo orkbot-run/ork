@@ -29,7 +29,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     // same list at runtime to hide passkeys on other servers. Developer mode makes a
     // development-signed build fetch the association file itself, for a server on a private
     // network or VPN that Apple's CDN cannot reach.
-    const mode = process.env.RAKAZO_PASSKEY_DEVELOPER_MODE === "1" ? "?mode=developer" : "";
+    const mode = process.env.ORKBOT_PASSKEY_DEVELOPER_MODE === "1" ? "?mode=developer" : "";
     result = {
       ...result,
       ios: {

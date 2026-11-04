@@ -3,8 +3,8 @@ import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import type { PortableFile } from "@rakazo/adapter-kit";
-import { WorkspaceTooLargeError } from "@rakazo/adapter-kit";
+import type { PortableFile } from "@orkbot/adapter-kit";
+import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it } from "vitest";
 import { readWorkspaceArchive } from "./workspace-archive.js";
 import type { TarEntry } from "./workspace-archive.test-support.js";
@@ -48,7 +48,7 @@ function archive(entries: TarEntry[]): Buffer {
 
 describe("readWorkspaceArchive", () => {
   it("reads every file a real tar archived, with names and bytes intact", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-archive-test-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-archive-test-"));
     temporary.push(root);
     const workspace = path.join(root, "workspace");
     const binary = Buffer.from(Array.from({ length: 70_000 }, (_, index) => (index * 31) % 256));

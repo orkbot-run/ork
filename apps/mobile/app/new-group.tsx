@@ -3,7 +3,7 @@ import {
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   GROUP_NAME_MAX_LENGTH,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { Stack, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useEffect, useRef, useState } from "react";

@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { I18nProvider } from "@lingui/react";
 import { useLingui } from "@lingui/react/macro";
-import { InputRevealLabelsProvider } from "@rakazo/ui-web";
+import { InputRevealLabelsProvider } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { bootstrapI18n, getActiveUiLocale } from "../lib/i18n";
@@ -26,7 +26,7 @@ export function I18nBootstrap({ children }: { children: ReactNode }) {
     return (
       <div
         className="grid h-full place-items-center text-muted-foreground/80"
-        data-rakazo-app-state="i18n-pending"
+        data-orkbot-app-state="i18n-pending"
       />
     );
   }

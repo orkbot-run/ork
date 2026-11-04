@@ -3,7 +3,7 @@ import type { ServiceWorkerScope } from "./service-worker.js";
 import { bypassesServiceWorker, installServiceWorker, SKIP_WAITING } from "./service-worker.js";
 
 const ORIGIN = "https://app.example.com";
-const CACHE = "rakazo-shell-current";
+const CACHE = "orkbot-shell-current";
 
 class FakeCache {
   readonly entries = new Map<string, Response>();
@@ -133,22 +133,22 @@ describe("service worker", () => {
   it("keeps only the current and newest previous shell caches on activate", async () => {
     network = async () => new Response("ok");
     const sw = setup();
-    await sw.scope.caches.open("rakazo-shell-20261022100000");
-    await sw.scope.caches.open("rakazo-shell-20261020100000");
+    await sw.scope.caches.open("orkbot-shell-20261022100000");
+    await sw.scope.caches.open("orkbot-shell-20261020100000");
     await sw.scope.caches.open("someone-else");
     await sw.scope.caches.open(CACHE);
     await sw.dispatch("activate", {});
-    expect([...sw.stores.keys()]).toEqual(["rakazo-shell-20261022100000", "someone-else", CACHE]);
+    expect([...sw.stores.keys()]).toEqual(["orkbot-shell-20261022100000", "someone-else", CACHE]);
   });
 
   it("prefers a build-named previous shell over a legacy hash-named one", async () => {
     network = async () => new Response("ok");
     const sw = setup();
-    await sw.scope.caches.open("rakazo-shell-abcdef0123456789");
-    await sw.scope.caches.open("rakazo-shell-20261022100000");
+    await sw.scope.caches.open("orkbot-shell-abcdef0123456789");
+    await sw.scope.caches.open("orkbot-shell-20261022100000");
     await sw.scope.caches.open(CACHE);
     await sw.dispatch("activate", {});
-    expect([...sw.stores.keys()]).toEqual(["rakazo-shell-20261022100000", CACHE]);
+    expect([...sw.stores.keys()]).toEqual(["orkbot-shell-20261022100000", CACHE]);
   });
 
   it("serves an old-version asset from the previous cache after activation while offline", async () => {
@@ -156,7 +156,7 @@ describe("service worker", () => {
       throw new TypeError("offline");
     });
     const sw = setup();
-    const previous = await sw.scope.caches.open("rakazo-shell-previous");
+    const previous = await sw.scope.caches.open("orkbot-shell-previous");
     await previous.put("/assets/old.js", new Response("previous bundle"));
     await sw.scope.caches.open(CACHE);
     await sw.dispatch("activate", {});

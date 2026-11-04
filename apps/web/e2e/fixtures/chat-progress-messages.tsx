@@ -1,5 +1,5 @@
 import { I18nProvider } from "@lingui/react";
-import type { ProductEvent } from "@rakazo/contracts";
+import type { ProductEvent } from "@orkbot/contracts";
 import { createRoot } from "react-dom/client";
 import { bootstrapI18n, i18n } from "../../src/lib/i18n";
 import "../../src/styles.css";

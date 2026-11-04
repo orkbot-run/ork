@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import type { ComputerAction, ComputerObservation, ComputerRef } from "@rakazo/adapter-kit";
-import type { ComputerMode } from "@rakazo/contracts";
+import type { ComputerAction, ComputerObservation, ComputerRef } from "@orkbot/adapter-kit";
+import type { ComputerMode } from "@orkbot/contracts";
 
 export function toComputerRef(computer: {
   homeKey: string;
@@ -155,10 +155,10 @@ function isTeamRootPath(value: string): boolean {
   );
 }
 
-// A leading ~ or /home/rakazo means the workspace root, the same as a leading /.
+// A leading ~ or /home/orkbot means the workspace root, the same as a leading /.
 function expandHomePrefix(value: string): string {
   return value.replace(
-    /^(?:~|[\\/]home[\\/]rakazo)([\\/]|$)/,
+    /^(?:~|[\\/]home[\\/]orkbot)([\\/]|$)/,
     (_, separator: string) => separator || "/",
   );
 }
@@ -169,4 +169,4 @@ function stripVirtualWorkspaceRoot(value: string): string | null {
   return portable.startsWith("/") ? portable.slice(1) : null;
 }
 
-export { shellQuote } from "@rakazo/core/node/desktop-runtime";
+export { shellQuote } from "@orkbot/core/node/desktop-runtime";

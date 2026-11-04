@@ -1,4 +1,4 @@
-import { ChatMarkdown, RemoteImagesContext } from "@rakazo/chat-ui/web";
+import { ChatMarkdown, RemoteImagesContext } from "@orkbot/chat-ui/web";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 

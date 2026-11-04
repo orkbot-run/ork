@@ -1,5 +1,5 @@
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
-import { DEFAULT_MODEL_CONTEXT_WINDOW } from "@rakazo/contracts";
+import { DEFAULT_MODEL_CONTEXT_WINDOW } from "@orkbot/contracts";
 
 /** Models endpoints often mix chat models with tools and media endpoints. */
 export function isChatModelId(id: string): boolean {

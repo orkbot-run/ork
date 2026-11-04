@@ -1,6 +1,6 @@
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
-import { cn } from "@rakazo/ui-web/lib/utils";
+import { cn } from "@orkbot/ui-web/lib/utils";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 

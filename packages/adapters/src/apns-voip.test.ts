@@ -79,6 +79,6 @@ describe("APNs VoIP", () => {
         APNS_VOIP_TEAM_ID: "test-team",
         APNS_VOIP_PRIVATE_KEY: "test-key-contents",
       }),
-    ).toMatchObject({ environment: "production", bundleId: "com.rakazo.app" });
+    ).toMatchObject({ environment: "production", bundleId: "run.orkbot.app" });
   });
 });

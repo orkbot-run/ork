@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { PageVisibility } from "@rakazo/contracts";
-import { accountDisplay } from "@rakazo/core";
+import type { PageVisibility } from "@orkbot/contracts";
+import { accountDisplay } from "@orkbot/core";
 import {
   Button,
   Popover,
@@ -9,7 +9,7 @@ import {
   PopoverTrigger,
   RadioGroup,
   RadioGroupItem,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { ArrowUpRight, Check, Globe, Lock, Share } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCopyText } from "../../lib/copy-text";

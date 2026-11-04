@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { ComputerBrowserProvider } from "./computer-browser.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
@@ -20,7 +20,7 @@ const ctx = {
 };
 
 describe("host-aware sandbox", () => {
-  const hostRoot = mkdtempSync(path.join(tmpdir(), "rakazo-host-root-"));
+  const hostRoot = mkdtempSync(path.join(tmpdir(), "orkbot-host-root-"));
 
   afterAll(() => {
     rmSync(hostRoot, { recursive: true, force: true });
@@ -196,7 +196,7 @@ describe("host-aware sandbox", () => {
     let code = 1;
     for await (const event of desktop.execute(
       computer,
-      { argv: ["echo", "ok"], cwd: "/home/rakazo" },
+      { argv: ["echo", "ok"], cwd: "/home/orkbot" },
       ctx,
     )) {
       if (event.type === "exit") code = event.code;

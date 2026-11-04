@@ -1,5 +1,5 @@
-import type { ChatModelChoice } from "@rakazo/core";
-import { chatModelChoices, connectedModelChoices } from "@rakazo/core";
+import type { ChatModelChoice } from "@orkbot/core";
+import { chatModelChoices, connectedModelChoices } from "@orkbot/core";
 import type { MobileMe, MobileModel, MobileModelCredential } from "./api";
 
 /** What a chat's model picker lists, with the space default named after its model. */

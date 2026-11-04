@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">Ongoing call</string>
+  <string name="orkbot_call_title">Ork call</string>
+  <string name="orkbot_call_text">Microphone is active</string>
+  <string name="orkbot_call_answer">Answer</string>
+  <string name="orkbot_call_decline">Decline</string>
+</resources>

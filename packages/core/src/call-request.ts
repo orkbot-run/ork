@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { CALL_CLIENT_NONCE_PREFIX } from "./call-nonce.js";
 
 /** Server settings shared by the API and worker. Calls require an explicit opt-in. */

@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMockAdapter, createTestMessage } from "@chat-adapter/tests";
-import type { AdapterContext, MessagingInboundEvent } from "@rakazo/adapter-kit";
+import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import type { Adapter, ChatInstance } from "chat";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
@@ -108,7 +108,7 @@ function createSurface(
 }
 
 function webhookRequest(payload: unknown): Request {
-  return new Request("https://rakazo.test/api/v1/messaging/webhook/mock", {
+  return new Request("https://orkbot.test/api/v1/messaging/webhook/mock", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
@@ -177,7 +177,7 @@ describe("ChatSdkMessagingSurface inbound", () => {
       try {
         const response = await surface.handleWebhook(
           "slack",
-          new Request("https://rakazo.test/api/v1/messaging/webhook/slack", {
+          new Request("https://orkbot.test/api/v1/messaging/webhook/slack", {
             method: "POST",
             headers: {
               "content-type": "application/json",
@@ -632,7 +632,7 @@ describe("ChatSdkMessagingSurface webhook plumbing", () => {
     const { surface, adapter } = createSurface();
     const response = await surface.handleWebhook(
       "mock",
-      new Request("https://rakazo.test/api/v1/messaging/webhook/mock", {
+      new Request("https://orkbot.test/api/v1/messaging/webhook/mock", {
         method: "POST",
         body: "x".repeat(MESSAGING_WEBHOOK_MAX_BODY_BYTES + 1),
       }),

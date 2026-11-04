@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
+import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { PiAgentRuntime } from "./pi-runtime.js";
 

@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ComputerRef, ProcessEvent } from "@rakazo/adapter-kit";
+import type { ComputerRef, ProcessEvent } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkpointComputerWorkspace,
@@ -45,7 +45,7 @@ describe("native host computer transport", () => {
   let url: string;
   let computer: ComputerRef;
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(path.join(tmpdir(), "rakazo-host-test-")));
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "orkbot-host-test-")));
     server = await startHostComputerServer({ root, token, hostname: "127.0.0.1" });
     url = `http://127.0.0.1:${server.port}`;
     client = new HostComputerSandbox(url, token);
@@ -149,11 +149,11 @@ describe("native host computer transport", () => {
           argv: [
             process.execPath,
             "-e",
-            "console.log(process.argv[1]); console.error(process.env.RAKAZO_TEST_REMOVED ?? 'unset')",
+            "console.log(process.argv[1]); console.error(process.env.ORKBOT_TEST_REMOVED ?? 'unset')",
             payload,
           ],
-          env: { ...nodeEnv, RAKAZO_TEST_REMOVED: "remove" },
-          unsetEnv: ["RAKAZO_TEST_REMOVED"],
+          env: { ...nodeEnv, ORKBOT_TEST_REMOVED: "remove" },
+          unsetEnv: ["ORKBOT_TEST_REMOVED"],
         },
         context,
       ),

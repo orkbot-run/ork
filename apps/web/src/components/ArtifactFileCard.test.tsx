@@ -25,7 +25,7 @@ vi.mock("@lingui/core/macro", () => ({
     `«${strings.reduce((text, part, index) => text + part + (values[index] ?? ""), "")}»`,
 }));
 vi.mock("./PdfViewer", () => ({ PdfViewer: () => null }));
-vi.mock("@rakazo/chat-ui/web", () => ({ ChatMarkdown: () => null }));
+vi.mock("@orkbot/chat-ui/web", () => ({ ChatMarkdown: () => null }));
 
 import { ArtifactFileCard } from "./ArtifactFileCard";
 

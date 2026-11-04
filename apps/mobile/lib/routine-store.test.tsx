@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Routine } from "@rakazo/contracts";
+import type { Routine } from "@orkbot/contracts";
 import { act, createElement } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";

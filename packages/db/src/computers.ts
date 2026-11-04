@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import type { ComputerMode } from "@rakazo/contracts";
-import { isTerminal } from "@rakazo/core";
+import type { ComputerMode } from "@orkbot/contracts";
+import { isTerminal } from "@orkbot/core";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import { runAsSystem, runAsSystemInTransaction } from "./row-security.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
-export type { ComputerMode } from "@rakazo/contracts";
+export type { ComputerMode } from "@orkbot/contracts";
 
 export function parseComputerMode(scope: string): ComputerMode {
   if (scope === "team" || scope === "dedicated") return scope;

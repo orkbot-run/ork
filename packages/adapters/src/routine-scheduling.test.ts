@@ -1,4 +1,4 @@
-import type { BackgroundJob, JobPublisher } from "@rakazo/adapter-kit";
+import type { BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { createRunExecutor } from "./executor.js";
 import { deferFutureRoutine } from "./run-routines.js";

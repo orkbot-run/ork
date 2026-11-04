@@ -99,7 +99,7 @@ beforeEach(() => {
   state.capture.mockReset().mockImplementation(async () => ({
     apiBase: state.apiBase,
     sessionGeneration: state.generation,
-    headers: { authorization: "Bearer account-a", "x-rakazo-space-id": state.spaceId },
+    headers: { authorization: "Bearer account-a", "x-orkbot-space-id": state.spaceId },
   }));
   state.rpc.mockReset().mockResolvedValue([]);
   container = document.createElement("div");
@@ -339,7 +339,7 @@ describe("screen-owned mention catalog", () => {
         return {
           apiBase: state.apiBase,
           sessionGeneration: state.generation,
-          headers: { "x-rakazo-space-id": state.spaceId },
+          headers: { "x-orkbot-space-id": state.spaceId },
         };
       });
       state.rpc.mockImplementation(async (proc: string, body: { botId?: string }) => {
@@ -362,7 +362,7 @@ describe("screen-owned mention catalog", () => {
         capture.resolve({
           apiBase: state.apiBase,
           sessionGeneration: state.generation,
-          headers: { "x-rakazo-space-id": state.spaceId },
+          headers: { "x-orkbot-space-id": state.spaceId },
         }),
       );
       expect(visible().routines).toHaveLength(2);
@@ -462,7 +462,7 @@ describe("screen-owned mention catalog", () => {
       capture.resolve({
         apiBase: state.apiBase,
         sessionGeneration: 1,
-        headers: { "x-rakazo-space-id": "space-a" },
+        headers: { "x-orkbot-space-id": "space-a" },
       }),
     );
     expect(state.rpc).not.toHaveBeenCalled();
@@ -476,7 +476,7 @@ describe("screen-owned mention catalog", () => {
         apiBase: identity === "server" ? "https://other.test" : state.apiBase,
         sessionGeneration: identity === "session" ? 2 : state.generation,
         headers: {
-          "x-rakazo-space-id": identity === "space" ? "space-b" : state.spaceId,
+          "x-orkbot-space-id": identity === "space" ? "space-b" : state.spaceId,
         },
       });
       await render("thread-a", roster);
@@ -525,7 +525,7 @@ describe("screen-owned mention catalog", () => {
         capture.resolve({
           apiBase: state.apiBase,
           sessionGeneration: state.generation,
-          headers: { "x-rakazo-space-id": "space-b" },
+          headers: { "x-orkbot-space-id": "space-b" },
         }),
       );
       expect(visible()).toEqual(fresh);
@@ -545,7 +545,7 @@ describe("screen-owned mention catalog", () => {
       capture.resolve({
         apiBase: state.apiBase,
         sessionGeneration: 1,
-        headers: { "x-rakazo-space-id": "space-a" },
+        headers: { "x-orkbot-space-id": "space-a" },
       }),
     );
     expect(state.rpc).not.toHaveBeenCalled();

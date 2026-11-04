@@ -84,7 +84,7 @@ function fakeDeps(hooks: { onUpdate?: (attempt: number) => void } = {}) {
       tokens.delete(ref);
     }),
   };
-  const deps = { prisma, secrets: store, webOrigin: "https://rakazo.test" } as never;
+  const deps = { prisma, secrets: store, webOrigin: "https://orkbot.test" } as never;
   return {
     deps,
     store,
@@ -164,7 +164,7 @@ describe("page links", () => {
     fake.store.load.mockRejectedValueOnce(new Error("provider down"));
     fake.store.delete.mockRejectedValueOnce(new Error("provider down"));
     const result = await share(fake.deps, "link");
-    expect(result.shareUrl).toMatch(/^https:\/\/rakazo\.test\//);
+    expect(result.shareUrl).toMatch(/^https:\/\/orkbot\.test\//);
     expect(fake.page()).toMatchObject({ visibility: "link", shareSecretId: "secret-2" });
     expect(fake.secretIds()).toEqual(["secret-2"]);
     expect(fake.store.delete).toHaveBeenCalledWith(

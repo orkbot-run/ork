@@ -178,7 +178,7 @@ describe("cards and people", () => {
       "Northwind, rated 4.6 out of 5 from 1,214 ratings",
     );
     click(q("a"));
-    expect(posted).toEqual([{ type: "rakazo-page:open-link", url: "https://example.com/shirt" }]);
+    expect(posted).toEqual([{ type: "orkbot-page:open-link", url: "https://example.com/shirt" }]);
     // The pill says only "View" so it never wraps; the link's name still says what it opens.
     expect(q("a")!.textContent).toBe("View");
     expect(q("a")!.getAttribute("aria-label")).toBe("View Linen shirt");
@@ -223,7 +223,7 @@ describe("cards and people", () => {
     render(<WatchCard title="Price drop" detail="Under $40" reply="Watch the shirt under $40" />);
     expect(q(".rk-watch-detail")!.textContent).toBe("Under $40");
     click(q("button"));
-    expect(posted).toEqual([{ type: "rakazo-page:reply", text: "Watch the shirt under $40" }]);
+    expect(posted).toEqual([{ type: "orkbot-page:reply", text: "Watch the shirt under $40" }]);
   });
 
   it("puts cards in a list or a carousel and skips empty children", () => {

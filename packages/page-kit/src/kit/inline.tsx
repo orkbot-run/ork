@@ -2,7 +2,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { Children, Fragment } from "react";
 
 /** The frame cannot open windows itself; the host opens web links it is asked to. */
-const OPEN_LINK_MESSAGE = "rakazo-page:open-link";
+const OPEN_LINK_MESSAGE = "orkbot-page:open-link";
 
 export function webUrl(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;

@@ -1,4 +1,4 @@
-import { runContinueJob } from "@rakazo/adapter-kit";
+import { runContinueJob } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { startNextWaitingRun } from "./run-lifecycle.js";

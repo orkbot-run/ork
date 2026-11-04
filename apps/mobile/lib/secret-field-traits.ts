@@ -1,4 +1,4 @@
-import type { SecretAskPurpose } from "@rakazo/contracts";
+import type { SecretAskPurpose } from "@orkbot/contracts";
 import type { TextInputProps } from "react-native";
 
 export type SecretFieldTraits = Required<Pick<TextInputProps, "textContentType" | "autoComplete">>;

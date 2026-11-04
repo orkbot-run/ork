@@ -1,7 +1,7 @@
-import { parseServerHeaders } from "@rakazo/contracts";
+import { parseServerHeaders } from "@orkbot/contracts";
 import * as SecureStore from "expo-secure-store";
 
-const SERVER_HEADERS_KEY = "rakazo.server_headers";
+const SERVER_HEADERS_KEY = "orkbot.server_headers";
 
 let saved: { apiBase: string; headers: Record<string, string> } | null = null;
 

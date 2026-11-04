@@ -1,5 +1,5 @@
 {
-  "name": "@rakazo/mobile",
+  "name": "@orkbot/mobile",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "main": "index.ts",
@@ -24,11 +24,11 @@
   "dependencies": {
     "@expo/metro-runtime": "57.0.17",
     "@expo/ui": "57.0.26",
-    "@rakazo/chat-ui": "workspace:*",
-    "@rakazo/contracts": "workspace:*",
-    "@rakazo/core": "workspace:*",
-    "@rakazo/logging": "workspace:*",
-    "@rakazo/ui-tokens": "workspace:*",
+    "@orkbot/chat-ui": "workspace:*",
+    "@orkbot/contracts": "workspace:*",
+    "@orkbot/core": "workspace:*",
+    "@orkbot/logging": "workspace:*",
+    "@orkbot/ui-tokens": "workspace:*",
     "@react-native-vector-icons/ionicons": "13.1.4",
     "@react-native-vector-icons/material-design-icons": "13.1.4",
     "@sentry/react-native": "7.11.0",

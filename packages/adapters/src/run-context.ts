@@ -7,13 +7,13 @@ import type {
   SandboxProvider,
   SemanticMemoryProvider,
   WebProvider,
-} from "@rakazo/adapter-kit";
-import type { ComputerMode, MessageBlock } from "@rakazo/contracts";
-import { createStreamingRedactor } from "@rakazo/core";
-import { toolEffectIdempotencyKey } from "@rakazo/core/node/approval-effect-key";
-import type { Bot, Computer, effectiveMemoryScope, Run, Task, Thread } from "@rakazo/db";
-import { dropRunTurnCheckpoint, saveRunTurnCheckpoint } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import type { ComputerMode, MessageBlock } from "@orkbot/contracts";
+import { createStreamingRedactor } from "@orkbot/core";
+import { toolEffectIdempotencyKey } from "@orkbot/core/node/approval-effect-key";
+import type { Bot, Computer, effectiveMemoryScope, Run, Task, Thread } from "@orkbot/db";
+import { dropRunTurnCheckpoint, saveRunTurnCheckpoint } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import type {
   ApprovalPausedToolResult,
   ApprovedEffectReplayQueue,

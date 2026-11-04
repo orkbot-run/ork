@@ -2,15 +2,15 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { JobPublisher, SandboxProvider } from "@rakazo/adapter-kit";
-import { LocalAgentHomeStore } from "@rakazo/adapters";
-import type { AccountExportRecord, Actor } from "@rakazo/contracts";
+import type { JobPublisher, SandboxProvider } from "@orkbot/adapter-kit";
+import { LocalAgentHomeStore } from "@orkbot/adapters";
+import type { AccountExportRecord, Actor } from "@orkbot/contracts";
 import {
   AccountExportManifestSchema,
   AccountExportRecordSchema,
   accountExportPaths,
-} from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import {
   createDb,
   createThreadMessage,
@@ -18,7 +18,7 @@ import {
   masterKeysFromEnv,
   readAccountExport,
   runAsSystem,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { unzipSync } from "fflate";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -57,7 +57,7 @@ describePostgres("account export (PostgreSQL)", () => {
         data: [exporter, other, importer].map((id) => ({
           id,
           name: id,
-          email: `${id}@rakazo.test`,
+          email: `${id}@orkbot.test`,
           emailVerified: false,
         })),
       });
@@ -278,7 +278,7 @@ describePostgres("account export (PostgreSQL)", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/zip");
     expect(response.headers.get("content-disposition")).toMatch(
-      /^attachment; filename="rakazo-export-\d{4}-\d{2}-\d{2}\.zip"$/,
+      /^attachment; filename="orkbot-export-\d{4}-\d{2}-\d{2}\.zip"$/,
     );
     const entries = unzipSync(new Uint8Array(await response.arrayBuffer()));
     const decode = (path: string) => new TextDecoder().decode(entries[path]);
@@ -422,12 +422,12 @@ describePostgres("account export (PostgreSQL)", () => {
       );
     const archive = await download(exporter);
 
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-account-roundtrip-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-account-roundtrip-"));
     const noop = new Proxy({}, { get: () => async () => undefined });
     const actor: Actor = {
       userId: importer,
       spaceId: importerSpace,
-      email: `${importer}@rakazo.test`,
+      email: `${importer}@orkbot.test`,
       isDeploymentOwner: false,
     };
     try {

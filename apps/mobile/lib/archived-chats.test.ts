@@ -54,7 +54,7 @@ it("loads the archive across spaces using each space's request context", async (
       options: { requestContext: { headers: Record<string, string> } },
     ) => {
       if (procedure === "spaces/list") return { spaces: [{ id: "a" }, { id: "b" }] };
-      const spaceId = options.requestContext.headers["x-rakazo-space-id"];
+      const spaceId = options.requestContext.headers["x-orkbot-space-id"];
       if (procedure === "bots/listArchived") return spaceId === "b" ? [{ id: "bot-b" }] : [];
       return spaceId === "a" ? [{ id: "group-a" }] : [];
     },
@@ -75,7 +75,7 @@ it("preserves the previous total for a failed list while refreshing the other ac
       if (procedure === "spaces/list") return { spaces: [{ id: "a" }, { id: "b" }] };
       if (
         procedure === "bots/listArchived" &&
-        options.requestContext.headers["x-rakazo-space-id"] === "b"
+        options.requestContext.headers["x-orkbot-space-id"] === "b"
       )
         throw new Error("offline");
       return procedure === "groups/listArchived" ? [{ id: "group" }] : [];

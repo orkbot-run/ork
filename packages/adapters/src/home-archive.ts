@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import { lstat, mkdir, open, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
-import { WorkspaceTooLargeError } from "@rakazo/adapter-kit";
+import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
 import { fileHandlePath } from "./file-handle-path.js";
 import { isContained } from "./home.js";
 import {

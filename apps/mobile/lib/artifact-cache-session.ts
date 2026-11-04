@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-const KEY = "rakazo.artifact-cache-session";
+const KEY = "orkbot.artifact-cache-session";
 let revision = 0;
 let writes: Promise<unknown> = Promise.resolve();
 type Entry = {

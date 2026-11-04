@@ -1,4 +1,4 @@
-import type { BillingStatus } from "@rakazo/contracts";
+import type { BillingStatus } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   currentPlan,

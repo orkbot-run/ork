@@ -1,8 +1,8 @@
-import { BillingEmulator } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import { BYOK_TIERS } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { asSystem, billingAccountForOrganization, createDb } from "@rakazo/db";
+import { BillingEmulator } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import { BYOK_TIERS } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { asSystem, billingAccountForOrganization, createDb } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createBillingService, TRIAL_DAYS } from "./billing.js";
 
@@ -16,7 +16,7 @@ dbTests("model credit billing service", () => {
   const actor: Actor = {
     userId,
     spaceId,
-    email: `credit-${stamp}@rakazo.test`,
+    email: `credit-${stamp}@orkbot.test`,
     isDeploymentOwner: false,
   };
   const provider = new BillingEmulator({ modelCredits: true, namespace: `credits-${stamp}` });

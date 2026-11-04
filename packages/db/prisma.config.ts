@@ -13,13 +13,13 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     // The migrate command passes a copy without the deferred migrations it holds back.
-    path: process.env.RAKAZO_MIGRATIONS_PATH || "prisma/migrations",
+    path: process.env.ORKBOT_MIGRATIONS_PATH || "prisma/migrations",
   },
   datasource: {
     // Migrations run as the owner role; DATABASE_URL may be the app's runtime login.
     url:
       process.env.DATABASE_MIGRATION_URL ||
       process.env.DATABASE_URL ||
-      "postgres://rakazo:rakazo@127.0.0.1:5433/rakazo",
+      "postgres://orkbot:orkbot@127.0.0.1:5433/orkbot",
   },
 });

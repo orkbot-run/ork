@@ -1,4 +1,4 @@
-import type { ObjectStorage } from "@rakazo/adapter-kit";
+import type { ObjectStorage } from "@orkbot/adapter-kit";
 import { expect, it } from "vitest";
 
 /** An in-memory bucket; `objects` is exposed so tests can tamper with stored bytes. */

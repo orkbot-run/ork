@@ -1,4 +1,4 @@
-import { BOT_COLORS, parseBotAvatarValue } from "@rakazo/contracts";
+import { BOT_COLORS, parseBotAvatarValue } from "@orkbot/contracts";
 
 /** The color a bot avatar value is drawn in; a photo falls back to the first palette color. */
 export function avatarColor(value: string): string {

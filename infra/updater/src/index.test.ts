@@ -1,7 +1,7 @@
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ServerUpdateRun } from "@rakazo/contracts";
+import type { ServerUpdateRun } from "@orkbot/contracts";
 import { afterEach, describe, expect, it } from "vitest";
 import type { UpdaterCommandRunner } from "./index.js";
 import {
@@ -15,8 +15,8 @@ import { resolveUpdaterConfig } from "./updater-logic.js";
 const token = "fake-review-updater-token-000000000000";
 const app = createUpdaterApp(
   resolveUpdaterConfig({
-    RAKAZO_DEPLOY_DIR: "/rakazo-updater-tests-no-such-directory",
-    RAKAZO_UPDATER_TOKEN: token,
+    ORKBOT_DEPLOY_DIR: "/orkbot-updater-tests-no-such-directory",
+    ORKBOT_UPDATER_TOKEN: token,
   }),
 );
 const authorized = { authorization: `Bearer ${token}`, "content-type": "application/json" };
@@ -30,13 +30,13 @@ afterEach(async () => {
   );
 });
 
-async function deployment(env = "RAKAZO_IMAGE_TAG=v1.0.0\nRAKAZO_IMAGE_TAG_PREVIOUS=v0.9.0\n") {
-  const deployDir = await mkdtemp(path.join(os.tmpdir(), "rakazo-updater-test-"));
+async function deployment(env = "ORKBOT_IMAGE_TAG=v1.0.0\nORKBOT_IMAGE_TAG_PREVIOUS=v0.9.0\n") {
+  const deployDir = await mkdtemp(path.join(os.tmpdir(), "orkbot-updater-test-"));
   temporaryDirectories.push(deployDir);
   await writeFile(path.join(deployDir, ".env"), env);
   return {
     deployDir,
-    config: resolveUpdaterConfig({ RAKAZO_DEPLOY_DIR: deployDir, RAKAZO_UPDATER_TOKEN: token }),
+    config: resolveUpdaterConfig({ ORKBOT_DEPLOY_DIR: deployDir, ORKBOT_UPDATER_TOKEN: token }),
   };
 }
 
@@ -108,7 +108,7 @@ describe("updater HTTP surface", () => {
     const response = await app.request("/apply", {
       method: "POST",
       headers: authorized,
-      body: JSON.stringify({ repoUrl: "https://github.com/elie222/rakazo", branch: "--exec=id" }),
+      body: JSON.stringify({ repoUrl: "https://github.com/orkbot-run/ork", branch: "--exec=id" }),
     });
     expect(response.status).toBe(400);
   });
@@ -118,7 +118,7 @@ describe("updater HTTP surface", () => {
     const response = await createUpdaterApp(fixture.config).request("/apply", {
       method: "POST",
       headers: authorized,
-      body: JSON.stringify({ repoUrl: "https://github.com/someone/rakazo", branch: "main" }),
+      body: JSON.stringify({ repoUrl: "https://github.com/someone/orkbot", branch: "main" }),
     });
     expect(response.status).toBe(400);
     const payload = (await response.json()) as { error: string };
@@ -126,7 +126,7 @@ describe("updater HTTP surface", () => {
   });
 
   it("refuses a rollback when no previous tag was recorded", async () => {
-    const fixture = await deployment("RAKAZO_IMAGE_TAG=v1.0.0\n");
+    const fixture = await deployment("ORKBOT_IMAGE_TAG=v1.0.0\n");
     const response = await createUpdaterApp(fixture.config).request("/rollback", {
       method: "POST",
       headers: authorized,
@@ -163,11 +163,11 @@ describe("updater HTTP surface", () => {
     try {
       const subject = createUpdaterApp(
         resolveUpdaterConfig({
-          RAKAZO_DEPLOY_DIR: "/rakazo-updater-tests-no-such-directory",
-          RAKAZO_UPDATER_TOKEN: token,
+          ORKBOT_DEPLOY_DIR: "/orkbot-updater-tests-no-such-directory",
+          ORKBOT_UPDATER_TOKEN: token,
         }),
       );
-      const input = { repoUrl: "https://github.com/elie222/rakazo", branch: "main" };
+      const input = { repoUrl: "https://github.com/orkbot-run/ork", branch: "main" };
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const response = await request(subject, "/plan", input);
         expect(response.status).toBe(400);
@@ -202,7 +202,7 @@ describe("updater orchestration", () => {
       return ok();
     };
     const subject = createUpdaterApp(fixture.config, { run });
-    const input = { repoUrl: "https://github.com/elie222/rakazo", branch: "main" };
+    const input = { repoUrl: "https://github.com/orkbot-run/ork", branch: "main" };
     const first = request(subject, "/apply", input);
     await atRemote;
     const second = await request(subject, "/apply", input);
@@ -255,7 +255,7 @@ describe("updater orchestration", () => {
     };
     const subject = createUpdaterApp(fixture.config, { run });
     const response = await request(subject, "/apply", {
-      repoUrl: "https://github.com/elie222/rakazo",
+      repoUrl: "https://github.com/orkbot-run/ork",
       branch: "main",
     });
     const record = (await response.json()) as ServerUpdateRun;
@@ -267,10 +267,10 @@ describe("updater orchestration", () => {
     expect(composeUp[0]?.args).toEqual(expect.arrayContaining(["--wait", "--pull", "never"]));
     expect(composeUp[0]?.args).toContain("--no-build");
     expect(composeUp[1]?.args).toContain("--no-build");
-    expect(composeUp[0]?.env?.RAKAZO_IMAGE_TAG).toBe(`sha-${targetCommit}`);
-    expect(composeUp[1]?.env?.RAKAZO_IMAGE_TAG).toBe("v1.0.0");
+    expect(composeUp[0]?.env?.ORKBOT_IMAGE_TAG).toBe(`sha-${targetCommit}`);
+    expect(composeUp[1]?.env?.ORKBOT_IMAGE_TAG).toBe("v1.0.0");
     expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
-      "RAKAZO_IMAGE_TAG=v1.0.0",
+      "ORKBOT_IMAGE_TAG=v1.0.0",
     );
 
     const state = await subject.request("/state", { method: "GET", headers: authorized });
@@ -282,7 +282,7 @@ describe("updater orchestration", () => {
   });
 
   it("resets a fork checkout when recreate fails after the fast-forward", async () => {
-    const fixture = await deployment("RAKAZO_IMAGE_TAG=local\n");
+    const fixture = await deployment("ORKBOT_IMAGE_TAG=local\n");
     await mkdir(path.join(fixture.deployDir, ".git"));
     const calls: string[][] = [];
     let upCalls = 0;
@@ -320,12 +320,12 @@ describe("updater orchestration", () => {
     ]);
     expect(calls).toContainEqual(["checkout", "-B", "main", currentCommit]);
     expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
-      "RAKAZO_IMAGE_TAG=local",
+      "ORKBOT_IMAGE_TAG=local",
     );
   });
 
   it("restores the prior branch when merge fails after checkout switches", async () => {
-    const fixture = await deployment("RAKAZO_IMAGE_TAG=local\n");
+    const fixture = await deployment("ORKBOT_IMAGE_TAG=local\n");
     await mkdir(path.join(fixture.deployDir, ".git"));
     const calls: string[][] = [];
     const run: UpdaterCommandRunner = async (_command, args) => {
@@ -371,14 +371,14 @@ describe("updater orchestration", () => {
   });
 
   it("preserves the environment owner and surrounding values with mode 0600", async () => {
-    const fixture = await deployment("FAKE_SETTING=kept\nRAKAZO_IMAGE_TAG=v1.0.0\n");
+    const fixture = await deployment("FAKE_SETTING=kept\nORKBOT_IMAGE_TAG=v1.0.0\n");
     const envFile = path.join(fixture.deployDir, ".env");
     await chmod(envFile, 0o644);
     const before = await lstat(envFile);
     const run: UpdaterCommandRunner = async (command) =>
       command === "git" ? ok(`${targetCommit}\trefs/tags/v1.1.0\n`) : ok();
     const response = await request(createUpdaterApp(fixture.config, { run }), "/apply", {
-      repoUrl: "https://github.com/elie222/rakazo",
+      repoUrl: "https://github.com/orkbot-run/ork",
       branch: "main",
     });
     expect(response.status).toBe(200);
@@ -393,7 +393,7 @@ describe("updater orchestration", () => {
   });
 
   it("adds a missing app database password before recreating, so newer Compose files start", async () => {
-    const fixture = await deployment("POSTGRES_PASSWORD=kept\nRAKAZO_IMAGE_TAG=v1.0.0\n");
+    const fixture = await deployment("POSTGRES_PASSWORD=kept\nORKBOT_IMAGE_TAG=v1.0.0\n");
     const envFile = path.join(fixture.deployDir, ".env");
     let envAtRecreate = "";
     const run: UpdaterCommandRunner = async (command, args) => {
@@ -402,7 +402,7 @@ describe("updater orchestration", () => {
       return ok();
     };
     const response = await request(createUpdaterApp(fixture.config, { run }), "/apply", {
-      repoUrl: "https://github.com/elie222/rakazo",
+      repoUrl: "https://github.com/orkbot-run/ork",
       branch: "main",
     });
     await expect(response.json()).resolves.toMatchObject({ ok: true });
@@ -414,13 +414,13 @@ describe("updater orchestration", () => {
     const fixture = await deployment();
     const envFile = path.join(fixture.deployDir, ".env");
     const target = path.join(fixture.deployDir, "fake-target");
-    await writeFile(target, "RAKAZO_IMAGE_TAG=v1.0.0\n");
+    await writeFile(target, "ORKBOT_IMAGE_TAG=v1.0.0\n");
     await rm(envFile);
     await symlink(target, envFile);
     const run: UpdaterCommandRunner = async (command) =>
       command === "git" ? ok(`${targetCommit}\trefs/tags/v1.1.0\n`) : ok();
     const response = await request(createUpdaterApp(fixture.config, { run }), "/apply", {
-      repoUrl: "https://github.com/elie222/rakazo",
+      repoUrl: "https://github.com/orkbot-run/ork",
       branch: "main",
     });
     expect(response.status).toBe(200);
@@ -428,7 +428,7 @@ describe("updater orchestration", () => {
       ok: false,
       error: expect.stringMatching(/persist/),
     });
-    expect(await readFile(target, "utf8")).toBe("RAKAZO_IMAGE_TAG=v1.0.0\n");
+    expect(await readFile(target, "utf8")).toBe("ORKBOT_IMAGE_TAG=v1.0.0\n");
   });
 
   it("fails closed when it cannot verify checkout cleanliness", async () => {
@@ -458,18 +458,18 @@ describe("child process environment", () => {
     // The child environment is rebuilt from an allowlist, so GIT_CONFIG_* set on the Compose
     // service never reaches git. Without these three, every git call exits 128 with "detected
     // dubious ownership" on the layout docs/self-host-production.md recommends.
-    const env = commandEnvironment({ RAKAZO_DEPLOY_DIR: "/srv/rakazo" });
+    const env = commandEnvironment({ ORKBOT_DEPLOY_DIR: "/srv/orkbot" });
     expect(env.GIT_CONFIG_COUNT).toBe("1");
     expect(env.GIT_CONFIG_KEY_0).toBe("safe.directory");
-    expect(env.GIT_CONFIG_VALUE_0).toBe("/srv/rakazo");
+    expect(env.GIT_CONFIG_VALUE_0).toBe("/srv/orkbot");
   });
 
   it("keeps the exemption scoped to the deployment directory, whoever calls it", () => {
     const env = commandEnvironment(
-      { RAKAZO_DEPLOY_DIR: "/opt/rakazo" },
+      { ORKBOT_DEPLOY_DIR: "/opt/orkbot" },
       { GIT_CONFIG_VALUE_0: "*", GIT_CONFIG_COUNT: "9" },
     );
-    expect(env.GIT_CONFIG_VALUE_0).toBe("/opt/rakazo");
+    expect(env.GIT_CONFIG_VALUE_0).toBe("/opt/orkbot");
     expect(env.GIT_CONFIG_COUNT).toBe("1");
   });
 
@@ -490,12 +490,12 @@ describe("child process environment", () => {
         AXIOM_TOKEN: "fake-axiom-token",
         LOG_LEVEL: "debug",
       },
-      { RAKAZO_IMAGE_TAG: "sha-123" },
+      { ORKBOT_IMAGE_TAG: "sha-123" },
     );
     expect(env).toMatchObject({
       PATH: "/usr/bin",
       HTTPS_PROXY: "http://proxy.invalid",
-      RAKAZO_IMAGE_TAG: "sha-123",
+      ORKBOT_IMAGE_TAG: "sha-123",
       GIT_TERMINAL_PROMPT: "0",
     });
     expect(env.BETTER_AUTH_SECRET).toBeUndefined();
@@ -526,7 +526,7 @@ describe("child process environment", () => {
 
 describe("runHostCommand", () => {
   it("passes shell syntax to git as one argument and refuses any other program", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "rakazo-host-command-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "orkbot-host-command-"));
     temporaryDirectories.push(dir);
     const bin = path.join(dir, "bin");
     await mkdir(bin);

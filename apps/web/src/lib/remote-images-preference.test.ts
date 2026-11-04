@@ -1,4 +1,4 @@
-import { REMOTE_IMAGES_STORAGE_KEY } from "@rakazo/core";
+import { REMOTE_IMAGES_STORAGE_KEY } from "@orkbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("web remote images preference", () => {

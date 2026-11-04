@@ -1,6 +1,6 @@
-import type { AdapterContext, ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { AdapterContext, ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { usesNativeShell } from "./native-shell.js";
 
 const MEASURE_TIMEOUT_MS = 5_000;

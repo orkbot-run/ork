@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { normalizeRunError } from "@rakazo/core";
+import { normalizeRunError } from "@orkbot/core";
 import * as Clipboard from "expo-clipboard";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";

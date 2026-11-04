@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, expectCardWidth, signup } from "
 test("a completed subagent card folds, opens from its header, and fills its width", async ({
   page,
 }, testInfo) => {
-  await signup(page, `subagent-card-${Date.now()}@rakazo.test`, "password12", "Subagent Card");
+  await signup(page, `subagent-card-${Date.now()}@orkbot.test`, "password12", "Subagent Card");
   await completeOnboarding(page);
 
   const composer = page.getByPlaceholder(/Message/);

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { AssistantMessage, Context, Model } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
-import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { providerContextPrefix } from "./context-selection.js";
 

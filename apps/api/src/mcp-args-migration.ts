@@ -1,7 +1,7 @@
-import type { SecretStore } from "@rakazo/adapter-kit";
-import { persistPreparedSecret } from "@rakazo/adapters";
-import type { PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { SecretStore } from "@orkbot/adapter-kit";
+import { persistPreparedSecret } from "@orkbot/adapters";
+import type { PrismaClient } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { serverSecretSpace } from "./availability.js";
 import type { McpSecretMaterial } from "./mcp-material.js";
 import { legacyMcpArgs } from "./mcp-material.js";

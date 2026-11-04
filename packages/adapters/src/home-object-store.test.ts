@@ -2,10 +2,10 @@ import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { PortableFile, SandboxProvider, StreamedPortableFile } from "@rakazo/adapter-kit";
-import { WorkspaceTooLargeError } from "@rakazo/adapter-kit";
-import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@rakazo/db";
-import { ContentDecryptionError, ContentKeyRing, LocalKeyProvider } from "@rakazo/db";
+import type { PortableFile, SandboxProvider, StreamedPortableFile } from "@orkbot/adapter-kit";
+import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
+import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
+import { ContentDecryptionError, ContentKeyRing, LocalKeyProvider } from "@orkbot/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { checkpointComputerWorkspace, restoreComputerWorkspace } from "./computer-workspace.js";
 import { LocalAgentHomeStore } from "./home.js";
@@ -107,7 +107,7 @@ function memoryRing() {
 }
 
 async function setup(homeKeys = ["bot-1"]) {
-  const root = await mkdtemp(path.join(tmpdir(), "rakazo-object-homes-"));
+  const root = await mkdtemp(path.join(tmpdir(), "orkbot-object-homes-"));
   dirs.push(root);
   const rows: ComputerRow[] = homeKeys.map((homeKey, index) => ({
     id: `computer-${index + 1}`,
@@ -124,7 +124,7 @@ async function setup(homeKeys = ["bot-1"]) {
   const store = new ObjectAgentHomeStore(root, storage, records);
   /** Another API or worker host: same bucket and database, its own empty cache. */
   const otherHost = async () => {
-    const otherRoot = await mkdtemp(path.join(tmpdir(), "rakazo-object-homes-"));
+    const otherRoot = await mkdtemp(path.join(tmpdir(), "orkbot-object-homes-"));
     dirs.push(otherRoot);
     return new ObjectAgentHomeStore(otherRoot, storage, records);
   };
@@ -133,7 +133,7 @@ async function setup(homeKeys = ["bot-1"]) {
 
 /** A sandbox export staged for `commit`. */
 async function staged(files: Record<string, string>) {
-  const dir = await mkdtemp(path.join(tmpdir(), "rakazo-object-staging-"));
+  const dir = await mkdtemp(path.join(tmpdir(), "orkbot-object-staging-"));
   dirs.push(dir);
   for (const [name, content] of Object.entries(files)) {
     await mkdir(path.dirname(path.join(dir, name)), { recursive: true });
@@ -980,7 +980,7 @@ describe("the local cache of object-backed homes", () => {
   });
 
   it("moves a local save into place instead of copying it", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-local-homes-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-local-homes-"));
     dirs.push(root);
     const store = new LocalAgentHomeStore(root);
     const { sandbox } = remoteSandbox(async function* () {
@@ -1141,7 +1141,7 @@ describe("the local cache of object-backed homes", () => {
     const now = Date.now();
     const old = new Date(now - 60 * 60_000);
     const leftovers = [
-      path.join(root, "staging", "rakazo-workspace-dead"),
+      path.join(root, "staging", "orkbot-workspace-dead"),
       path.join(root, "homes", ".bot-1.staging-dead"),
     ];
     for (const dir of leftovers) {

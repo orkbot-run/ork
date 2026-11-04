@@ -2,7 +2,7 @@ import type {
   AgentSkillCatalogEntry,
   CapabilityInstall,
   PluginMarketplaceEntry,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import {

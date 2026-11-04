@@ -1,10 +1,10 @@
-import type { NotificationMessage } from "@rakazo/adapter-kit";
+import type { NotificationMessage } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { notifyRun } from "./run-notifications.js";
 
 vi.mock("./notification-identity.js", () => ({ notificationIdentity: async () => undefined }));
-vi.mock("@rakazo/db", () => ({ countUnreadInboxChats: async () => 2 }));
+vi.mock("@orkbot/db", () => ({ countUnreadInboxChats: async () => 2 }));
 
 const run = {
   spaceId: "space-1",

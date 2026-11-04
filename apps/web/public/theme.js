@@ -1,6 +1,6 @@
 // Runs before first paint, as a file because the app's CSP blocks inline scripts.
 (() => {
-  const key = "rakazo.uiAppearance";
+  const key = "orkbot.uiAppearance";
   let preference = "system";
   try {
     const stored = localStorage.getItem(key);

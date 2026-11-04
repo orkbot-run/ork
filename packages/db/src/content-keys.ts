@@ -1,6 +1,6 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import type { KeyProvider, KeyWrapContext, WrappedDataKey } from "@rakazo/adapter-kit";
-import { resolveEncryptionKey } from "@rakazo/core";
+import type { KeyProvider, KeyWrapContext, WrappedDataKey } from "@orkbot/adapter-kit";
+import { resolveEncryptionKey } from "@orkbot/core";
 import type { DataKey } from "./content-crypto.js";
 import { createRowId } from "./row-id.js";
 import { runAsSystem } from "./row-security.js";
@@ -30,6 +30,7 @@ function parseKeyMaterial(value: string): Buffer {
  * and it is the active key when none are set.
  */
 export function masterKeysFromEnv(env: NodeJS.ProcessEnv = process.env): MasterKey[] {
+  // Keep the original derivation inputs so existing wrapped space keys remain readable.
   const derived: MasterKey = {
     id: DERIVED_MASTER_KEY_ID,
     key: Buffer.from(
@@ -59,6 +60,7 @@ export function masterKeysFromEnv(env: NodeJS.ProcessEnv = process.env): MasterK
 }
 
 function wrapAad(context: KeyWrapContext): Buffer {
+  // This domain identifies the stored key format, independent of the product name.
   return Buffer.from(`rakazo/space-key/v1\0${context.spaceId}\0${context.version}`);
 }
 

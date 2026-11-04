@@ -1,10 +1,10 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { AgentSkill, AgentSkillCatalogEntry, MemoryDocument } from "@orkbot/contracts";
+import { isDeletableMemoryDocument, isEmptyBotMemory } from "@orkbot/contracts";
+import { fetchFresh, writeSaved } from "@orkbot/core/query";
+import { Badge, Button, SectionHeading, Skeleton, Textarea } from "@orkbot/ui-web";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@orkbot/ui-web/components/ui/tooltip";
 import { ORPCError } from "@orpc/client";
-import type { AgentSkill, AgentSkillCatalogEntry, MemoryDocument } from "@rakazo/contracts";
-import { isDeletableMemoryDocument, isEmptyBotMemory } from "@rakazo/contracts";
-import { fetchFresh, writeSaved } from "@rakazo/core/query";
-import { Badge, Button, SectionHeading, Skeleton, Textarea } from "@rakazo/ui-web";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@rakazo/ui-web/components/ui/tooltip";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";

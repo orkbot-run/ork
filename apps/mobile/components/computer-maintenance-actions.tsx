@@ -1,5 +1,5 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { ComputerStatus } from "@rakazo/contracts";
+import type { ComputerStatus } from "@orkbot/contracts";
 import type { NativeStackNavigationOptions } from "expo-router";
 import { useNavigation } from "expo-router";
 import { useLayoutEffect, useState } from "react";

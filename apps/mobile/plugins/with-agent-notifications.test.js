@@ -14,7 +14,7 @@ const xcode = createRequire(require.resolve("@expo/config-plugins", { paths: [di
 );
 
 it("embeds one notification extension whose version follows the app across prebuilds", () => {
-  const directory = mkdtempSync(join(tmpdir(), "rakazo-notification-target-"));
+  const directory = mkdtempSync(join(tmpdir(), "orkbot-notification-target-"));
   try {
     const file = join(directory, "project.pbxproj");
     writeFileSync(
@@ -74,7 +74,7 @@ it("lists the extension for EAS signing with the communication entitlement", () 
 });
 
 it("gives the extension its own Info.plist reference and a bundle name", () => {
-  const directory = mkdtempSync(join(tmpdir(), "rakazo-notification-plist-"));
+  const directory = mkdtempSync(join(tmpdir(), "orkbot-notification-plist-"));
   try {
     const file = join(directory, "project.pbxproj");
     writeFileSync(

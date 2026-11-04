@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FakeSandboxProvider } from "@rakazo/adapters";
-import { runAsSystem } from "@rakazo/db";
+import { FakeSandboxProvider } from "@orkbot/adapters";
+import { runAsSystem } from "@orkbot/db";
 import { expect, it } from "vitest";
 import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
 import { createApp } from "./app.js";
@@ -14,7 +14,7 @@ it.skipIf(!databaseUrl).each([
   { sandboxProvider: "docker", nativeToken: false, expected: false },
   { sandboxProvider: "fake", nativeToken: true, expected: false },
 ])("exposes native host choice only on a managed Docker instance (%j)", async (fixture) => {
-  const dataDir = await mkdtemp(join(tmpdir(), "rakazo-host-choice-"));
+  const dataDir = await mkdtemp(join(tmpdir(), "orkbot-host-choice-"));
   const email = `host-choice-${fixture.sandboxProvider}-${fixture.nativeToken}@example.test`;
   const handles = await createApp({
     databaseUrl: databaseUrl!,

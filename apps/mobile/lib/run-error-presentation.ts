@@ -1,4 +1,4 @@
-import type { RunErrorTranslator } from "@rakazo/core";
+import type { RunErrorTranslator } from "@orkbot/core";
 
 /** The label of the one action that fixes the failure; transient failures have none. */
 export function runErrorActionLabel(

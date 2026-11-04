@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { lightTokens } from "@rakazo/ui-tokens";
+import { lightTokens } from "@orkbot/ui-tokens";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import type { Root } from "react-dom/client";

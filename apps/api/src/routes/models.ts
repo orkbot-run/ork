@@ -1,5 +1,4 @@
-import { ORPCError } from "@orpc/server";
-import { SecretStoreUnavailableError } from "@rakazo/adapter-kit";
+import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {
   listPiCatalog,
   ModelSignInError,
@@ -15,17 +14,17 @@ import {
   storedOpenAiCompatibleProbeHeaders,
   storedOpenAiCompatibleProbeKey,
   UNAVAILABLE_MODEL_FOR_AUTH_MESSAGE,
-} from "@rakazo/adapters";
-import type { ThinkingLevel } from "@rakazo/contracts";
+} from "@orkbot/adapters";
+import type { ThinkingLevel } from "@orkbot/contracts";
 import {
   backupChoiceKey,
   canonicalPiProviderId,
   isOllamaCloudBaseUrl,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
-} from "@rakazo/contracts";
-import { clampCatalogThinkingLevel } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { clampCatalogThinkingLevel } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import {
   appliedModelRole,
   comparePreferenceOrder,
@@ -41,7 +40,8 @@ import {
   saveModelPreference,
   updateModelRole,
   writeModelRole,
-} from "@rakazo/db";
+} from "@orkbot/db";
+import { ORPCError } from "@orpc/server";
 import { mayUsePrivateEndpoint } from "../mcp-servers.js";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {

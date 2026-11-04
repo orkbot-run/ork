@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">Actief gesprek</string>
+  <string name="orkbot_call_title">Ork-gesprek</string>
+  <string name="orkbot_call_text">Microfoon is actief</string>
+  <string name="orkbot_call_answer">Opnemen</string>
+  <string name="orkbot_call_decline">Weigeren</string>
+</resources>

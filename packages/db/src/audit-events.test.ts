@@ -1,4 +1,4 @@
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installAuditEventStore, listAuditEvents, recordAuditEvent } from "./audit-events.js";
 import { recordSecurityEvent, withSecurityRequest } from "./security-events.js";
@@ -32,7 +32,7 @@ let store: ReturnType<typeof fakeStore>;
 
 beforeEach(() => {
   sink = createTestSink();
-  installLogger(createLogger({ service: "rakazo-api", sinks: [sink], level: "debug" }));
+  installLogger(createLogger({ service: "orkbot-api", sinks: [sink], level: "debug" }));
   store = fakeStore();
   installAuditEventStore(store as never);
 });

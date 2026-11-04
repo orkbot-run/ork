@@ -10,7 +10,7 @@ function association(env: Record<string, string>) {
   mountAppAssociation(
     app,
     loadEnv({
-      DATABASE_URL: "postgres://rakazo:rakazo@127.0.0.1:5433/rakazo",
+      DATABASE_URL: "postgres://orkbot:orkbot@127.0.0.1:5433/orkbot",
       NODE_ENV: "test",
       ...env,
     }),
@@ -70,7 +70,7 @@ describe("native app association", () => {
         relation: ["delegate_permission/common.get_login_creds"],
         target: {
           namespace: "android_app",
-          package_name: "com.rakazo.app",
+          package_name: "run.orkbot.app",
           sha256_cert_fingerprints: [fingerprint],
         },
       },

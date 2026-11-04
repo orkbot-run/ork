@@ -18,7 +18,7 @@ export function shouldOfferPasskey(input: {
 
 /** Storage key that remembers a dismissed offer for one account on this device. */
 export function passkeyOfferDismissedKey(userId: string): string {
-  return `rakazo.passkey-offer-dismissed.${userId}`;
+  return `orkbot.passkey-offer-dismissed.${userId}`;
 }
 
 /** WebAuthn requires the page host to equal the relying party ID or be a subdomain of it. */

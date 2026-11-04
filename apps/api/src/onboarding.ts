@@ -1,17 +1,17 @@
-import type { ConnectorRegistry } from "@rakazo/adapters";
-import type { Actor, MessageBlock } from "@rakazo/contracts";
+import type { ConnectorRegistry } from "@orkbot/adapters";
+import type { Actor, MessageBlock } from "@orkbot/contracts";
 import {
   appConnectCard,
   connectedAppBlocks,
   matchAppCatalog,
   matchesAppConnection,
-} from "@rakazo/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@orkbot/core";
+import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { requireBotThread } from "./bot-thread.js";
 import { resolveThreadTarget } from "./thread-target.js";
 

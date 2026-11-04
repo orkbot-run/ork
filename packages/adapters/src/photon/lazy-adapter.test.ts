@@ -88,7 +88,7 @@ describe("LazyPhotonAdapter", () => {
   it("retries a stream delivery whose processing fails, then gives up", async () => {
     const adapter = new LazyPhotonAdapter({ ...credentials, pollInboundMessages: true });
     const real = new Chat({
-      userName: "rakazo",
+      userName: "orkbot",
       adapters: { imessage: adapter },
       state: createMemoryState(),
       concurrency: "concurrent",

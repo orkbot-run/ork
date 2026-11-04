@@ -1,5 +1,5 @@
-import { routineWakeupJob } from "@rakazo/adapter-kit";
-import { ONCE_ROUTINE_CRON } from "@rakazo/core";
+import { routineWakeupJob } from "@orkbot/adapter-kit";
+import { ONCE_ROUTINE_CRON } from "@orkbot/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cancelScheduleFromTool,

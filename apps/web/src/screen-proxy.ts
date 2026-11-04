@@ -1,17 +1,17 @@
 import type { IncomingHttpHeaders } from "node:http";
 import { connect } from "node:net";
-import type { ScreenProxyTarget } from "@rakazo/core/node/screen-capability";
+import type { ScreenProxyTarget } from "@orkbot/core/node/screen-capability";
 import {
   isScreenProxyTarget,
   SCREEN_RECHECK_MS,
   SCREEN_TARGET_ENDPOINT,
   SCREEN_UNCONFIRMED_MAX_MS,
-} from "@rakazo/core/node/screen-capability";
-import { SCREEN_PROBE_PARAM } from "@rakazo/core/screen-reconnect";
+} from "@orkbot/core/node/screen-capability";
+import { SCREEN_PROBE_PARAM } from "@orkbot/core/screen-reconnect";
 
 /**
  * The computer is untrusted, so only what noVNC's pages and socket need reaches it. Anything else,
- * such as credentials an access proxy in front of Rakazo expects, stays here.
+ * such as credentials an access proxy in front of Ork expects, stays here.
  */
 const FORWARDED_HEADERS = new Set([
   "accept",

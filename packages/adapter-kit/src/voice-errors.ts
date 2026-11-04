@@ -1,4 +1,4 @@
-import type { VoiceAccountErrorCode } from "@rakazo/contracts";
+import type { VoiceAccountErrorCode } from "@orkbot/contracts";
 
 /**
  * The user's voice provider account refused the request; not a server fault. Without a code,

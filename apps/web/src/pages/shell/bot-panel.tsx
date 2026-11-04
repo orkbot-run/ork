@@ -6,7 +6,7 @@ import type {
   ComputerMode,
   ModelCatalogEntry,
   ThinkingLevel,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   BOT_COMPUTER_MODES,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -14,7 +14,7 @@ import {
   BUILTIN_TOOL_NAMES,
   isBuiltinToolName,
   resolveBotAvatarSet,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   chatModelChoices,
   connectedModelChoices,
@@ -22,7 +22,7 @@ import {
   modelOptionKey,
   parseModelOptionKey,
   resolveSelectableModelId,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import {
   Button,
   Input,
@@ -36,7 +36,7 @@ import {
   TabsTrigger,
   Textarea,
   Toggle,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Settings, X } from "lucide-react";
 import type { ReactNode } from "react";

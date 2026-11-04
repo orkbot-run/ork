@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { RakazoDesktopDevice, UserDeviceSummary } from "@rakazo/contracts";
-import { Button, Label, Switch } from "@rakazo/ui-web";
+import type { OrkDesktopDevice, UserDeviceSummary } from "@orkbot/contracts";
+import { Button, Label, Switch } from "@orkbot/ui-web";
 import { Trash2 } from "lucide-react";
 import { useCallback, useEffect, useId, useState } from "react";
 import { desktopBridge } from "../lib/desktop";
@@ -11,7 +11,7 @@ export function ComputerDeviceSettings() {
   const { t } = useLingui();
   const desktop = desktopBridge()?.device;
   const [devices, setDevices] = useState<UserDeviceSummary[]>([]);
-  const [thisComputer, setThisComputer] = useState<RakazoDesktopDevice | null>(null);
+  const [thisComputer, setThisComputer] = useState<OrkDesktopDevice | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const switchId = useId();

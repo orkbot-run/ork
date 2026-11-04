@@ -1,4 +1,4 @@
-import type { Bot } from "@rakazo/contracts";
+import type { Bot } from "@orkbot/contracts";
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate } from "react-router-dom";
 import { useSpaceQueries } from "../../lib/query";

@@ -2,12 +2,12 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { EncryptedSecretStore } from "@rakazo/adapters";
-import type { createApp } from "@rakazo/api/app";
-import type { PageDetail, PageSummary, ThreadSnapshot } from "@rakazo/contracts";
-import { SHARED_PAGE_PATH_PREFIX } from "@rakazo/contracts";
-import { deletePageShareSecrets } from "@rakazo/db";
-import { pageViewerCode } from "@rakazo/page-kit/compile";
+import { EncryptedSecretStore } from "@orkbot/adapters";
+import type { createApp } from "@orkbot/api/app";
+import type { PageDetail, PageSummary, ThreadSnapshot } from "@orkbot/contracts";
+import { SHARED_PAGE_PATH_PREFIX } from "@orkbot/contracts";
+import { deletePageShareSecrets } from "@orkbot/db";
+import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { BotIntroHarness } from "./discard-bot-intro.js";
 import { discardBotIntroFromCreate } from "./discard-bot-intro.js";
@@ -34,10 +34,10 @@ describePages("pages", () => {
   const stamp = Date.now();
 
   beforeAll(async () => {
-    const { createApp } = await import("@rakazo/api/app");
+    const { createApp } = await import("@orkbot/api/app");
     const handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
-      dataDir: mkdtempSync(path.join(tmpdir(), "rakazo-pages-")),
+      dataDir: mkdtempSync(path.join(tmpdir(), "orkbot-pages-")),
       sandboxProvider: "fake",
       agentRuntime: "scripted",
     });
@@ -98,7 +98,7 @@ describePages("pages", () => {
   };
 
   it("saves, edits and guards pages through the bot's save_page", async () => {
-    const cookie = await signup(app, `pages-${stamp}@rakazo.test`, "Page Owner");
+    const cookie = await signup(app, `pages-${stamp}@orkbot.test`, "Page Owner");
     const bot = await createBot(app, cookie, "Reporter");
     const save = (args: unknown, botId = bot.id, as = cookie) =>
       sendAndWait(app, as, botId, { text: `call save_page with ${JSON.stringify(args)}` });
@@ -172,7 +172,7 @@ describePages("pages", () => {
     expect(await lastResult(bot.id)).toMatchObject({ version: 3, source: page("Fourth") });
 
     // Another account cannot read or write it by id.
-    const otherCookie = await signup(app, `pages-other-${stamp}@rakazo.test`, "Other");
+    const otherCookie = await signup(app, `pages-other-${stamp}@orkbot.test`, "Other");
     const intruder = await createBot(app, otherCookie, "Intruder");
     await save({ pageId, source: page("Stolen") }, intruder.id, otherCookie);
     expect(await lastResult(intruder.id)).toMatchObject({ error: expect.any(String) });
@@ -244,7 +244,7 @@ describePages("pages", () => {
   });
 
   it("keeps a page to the bot that made it, in any of its chats, and to its group", async () => {
-    const cookie = await signup(app, `pages-scope-${stamp}@rakazo.test`, "Scope Owner");
+    const cookie = await signup(app, `pages-scope-${stamp}@orkbot.test`, "Scope Owner");
     const maker = await createBot(app, cookie, "Maker");
     const other = await createBot(app, cookie, "Other");
     const save = (botId: string, args: unknown) =>
@@ -311,7 +311,7 @@ describePages("pages", () => {
   });
 
   it("shows a routine's new page once and refreshes it each run without a new card", async () => {
-    const cookie = await signup(app, `pages-routine-${stamp}@rakazo.test`, "Routine Owner");
+    const cookie = await signup(app, `pages-routine-${stamp}@orkbot.test`, "Routine Owner");
     const bot = await createBot(app, cookie, "Refresher");
     const routine = await rpc<{ id: string }>(app, cookie, "routines/create", {
       botId: bot.id,
@@ -366,7 +366,7 @@ describePages("pages", () => {
   });
 
   it("lists, renames, pins, shares and removes pages only for their owner", async () => {
-    const cookie = await signup(app, `pages-lib-${stamp}@rakazo.test`, "Library Owner");
+    const cookie = await signup(app, `pages-lib-${stamp}@orkbot.test`, "Library Owner");
     const bot = await createBot(app, cookie, "Librarian");
     const other = await createBot(app, cookie, "Other bot");
     const ids: string[] = [];
@@ -471,7 +471,7 @@ describePages("pages", () => {
     ).toBe(1);
 
     // Another account sees none of it and can change none of it.
-    const otherCookie = await signup(app, `pages-lib-other-${stamp}@rakazo.test`, "Outsider");
+    const otherCookie = await signup(app, `pages-lib-other-${stamp}@orkbot.test`, "Outsider");
     expect(await rpc(app, otherCookie, "pages/list", {})).toEqual({ items: [], nextCursor: null });
     for (const [proc, body] of [
       ["pages/get", { pageId: middle }],
@@ -504,7 +504,7 @@ describePages("pages", () => {
   });
 
   it("keeps one live link under racing share changes and deletes it with the page's group", async () => {
-    const cookie = await signup(app, `pages-race-${stamp}@rakazo.test`, "Race Owner");
+    const cookie = await signup(app, `pages-race-${stamp}@orkbot.test`, "Race Owner");
     const userId = (await me(app, cookie)).id;
     const bot = await createBot(app, cookie, "Racer");
     const partner = await createBot(app, cookie, "Partner");
@@ -571,7 +571,7 @@ describePages("pages", () => {
   });
 
   it("hands cleanup the link a swap commits while its pages' links are being deleted", async () => {
-    const cookie = await signup(app, `pages-swap-delete-${stamp}@rakazo.test`, "Swap Owner");
+    const cookie = await signup(app, `pages-swap-delete-${stamp}@orkbot.test`, "Swap Owner");
     const owner = await rpc<{ userId: string; spaceId: string }>(app, cookie, "me");
     const sealed = (ciphertext: string) =>
       db().secret.create({
@@ -625,7 +625,7 @@ describePages("pages", () => {
   });
 
   it("deletes a deleted bot's own pages and their links, and leaves its group's pages", async () => {
-    const cookie = await signup(app, `pages-bot-gone-${stamp}@rakazo.test`, "Bot Owner");
+    const cookie = await signup(app, `pages-bot-gone-${stamp}@orkbot.test`, "Bot Owner");
     const userId = (await me(app, cookie)).id;
     const bot = await createBot(app, cookie, "Leaving");
     const partner = await createBot(app, cookie, "Staying");
@@ -662,7 +662,7 @@ describePages("pages", () => {
   });
 
   it("shows a page a bot saved while answering another bot in that bot's history", async () => {
-    const cookie = await signup(app, `pages-peer-${stamp}@rakazo.test`, "Peer Owner");
+    const cookie = await signup(app, `pages-peer-${stamp}@orkbot.test`, "Peer Owner");
     const asker = await createBot(app, cookie, "Asker");
     const builder = await createBot(app, cookie, "Builder");
     const args = { title: "Peer report", source: page("Peer report") };
@@ -683,13 +683,13 @@ describePages("pages", () => {
   });
 
   it("ends a member's shared pages with their account, and any link whose sealed token is gone", async () => {
-    const ownerCookie = await signup(app, `pages-host-${stamp}@rakazo.test`, "Space Host");
+    const ownerCookie = await signup(app, `pages-host-${stamp}@orkbot.test`, "Space Host");
     const host = await rpc<{ userId: string; spaceId: string }>(app, ownerCookie, "me");
     const space = await db().space.findUniqueOrThrow({
       where: { id: host.spaceId },
       select: { organizationId: true },
     });
-    const leaverCookie = await signup(app, `pages-leaver-${stamp}@rakazo.test`, "Leaver");
+    const leaverCookie = await signup(app, `pages-leaver-${stamp}@orkbot.test`, "Leaver");
     const leaver = await rpc<{ userId: string }>(app, leaverCookie, "me");
     // The leaver joins the host's Space and shares a page there.
     await db().member.create({
@@ -747,7 +747,7 @@ describePages("pages", () => {
   });
 
   it("keeps a page from a co-member of its Space and from its owner's other Space", async () => {
-    const ownerCookie = await signup(app, `pages-cospace-${stamp}@rakazo.test`, "Space Owner");
+    const ownerCookie = await signup(app, `pages-cospace-${stamp}@orkbot.test`, "Space Owner");
     const owner = await rpc<{ userId: string; spaceId: string }>(app, ownerCookie, "me");
     const space = await db().space.findUniqueOrThrow({
       where: { id: owner.spaceId },
@@ -768,7 +768,7 @@ describePages("pages", () => {
         },
       },
     });
-    const memberCookie = await signup(app, `pages-cospace-member-${stamp}@rakazo.test`, "Member");
+    const memberCookie = await signup(app, `pages-cospace-member-${stamp}@orkbot.test`, "Member");
     const member = await rpc<{ userId: string }>(app, memberCookie, "me");
     await db().member.deleteMany({ where: { userId: member.userId } });
     await db().member.create({
@@ -812,13 +812,13 @@ describePages("pages", () => {
   });
 
   it("forgets every member's page links when the owner deletes their shared space", async () => {
-    const ownerCookie = await signup(app, `pages-space-owner-${stamp}@rakazo.test`, "Owner");
+    const ownerCookie = await signup(app, `pages-space-owner-${stamp}@orkbot.test`, "Owner");
     const shared = await rpc<{ id: string }>(app, ownerCookie, "spaces/create", { name: "Crew" });
     const { organizationId } = await db().space.findUniqueOrThrow({
       where: { id: shared.id },
       select: { organizationId: true },
     });
-    const memberCookie = await signup(app, `pages-space-member-${stamp}@rakazo.test`, "Member");
+    const memberCookie = await signup(app, `pages-space-member-${stamp}@orkbot.test`, "Member");
     const member = await rpc<{ userId: string }>(app, memberCookie, "me");
     await db().member.create({
       data: {
@@ -872,7 +872,7 @@ describePages("pages", () => {
   });
 
   it("lets only one of two saves built on the same version through", async () => {
-    const cookie = await signup(app, `pages-save-race-${stamp}@rakazo.test`, "Save Racer");
+    const cookie = await signup(app, `pages-save-race-${stamp}@orkbot.test`, "Save Racer");
     const first = await createBot(app, cookie, "First");
     const second = await createBot(app, cookie, "Second");
     await sendAndWait(app, cookie, first.id, {
@@ -927,7 +927,7 @@ describePages("pages", () => {
   });
 
   it("keeps a page editable after importing an export that a save raced", async () => {
-    const cookie = await signup(app, `pages-export-race-${stamp}@rakazo.test`, "Export Racer");
+    const cookie = await signup(app, `pages-export-race-${stamp}@orkbot.test`, "Export Racer");
     const bot = await createBot(app, cookie, "Builder");
     await sendAndWait(app, cookie, bot.id, {
       text: `call save_page with ${JSON.stringify({ title: "Plan", source: page("One") })}`,
@@ -973,7 +973,7 @@ describePages("pages", () => {
   });
 
   it("keeps a rename that lands while a bot's untitled save is in flight", async () => {
-    const cookie = await signup(app, `pages-rename-race-${stamp}@rakazo.test`, "Rename Racer");
+    const cookie = await signup(app, `pages-rename-race-${stamp}@orkbot.test`, "Rename Racer");
     const bot = await createBot(app, cookie, "Builder");
     await sendAndWait(app, cookie, bot.id, {
       text: `call save_page with ${JSON.stringify({ title: "Q3 plan", source: page("One") })}`,
@@ -1000,7 +1000,7 @@ describePages("pages", () => {
   });
 
   it("pages through pinned then unpinned pages one at a time with no gap or repeat, and finds titles", async () => {
-    const cookie = await signup(app, `pages-walk-${stamp}@rakazo.test`, "Walker");
+    const cookie = await signup(app, `pages-walk-${stamp}@orkbot.test`, "Walker");
     const owner = await rpc<{ userId: string; spaceId: string }>(app, cookie, "me");
     const at = (minute: number) => new Date(Date.UTC(2026, 9, 1, 12, minute));
     const made = async (title: string, updatedAt: Date, pinnedAt: Date | null) =>
@@ -1117,7 +1117,7 @@ async function raw(app: App, cookie: string, proc: string, body: unknown, spaceI
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",
-      ...(spaceId ? { "x-rakazo-space-id": spaceId } : {}),
+      ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}),
     },
     body: JSON.stringify({ json: body }),
   });

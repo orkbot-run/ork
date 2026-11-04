@@ -12,7 +12,7 @@ for (const [platform, nativeWindowFrame, controls] of [
   }, testInfo) => {
     await page.addInitScript(
       ({ platform, nativeWindowFrame }) => {
-        Object.defineProperty(window, "rakazoDesktop", {
+        Object.defineProperty(window, "orkbotDesktop", {
           value: {
             platform,
             nativeWindowFrame,

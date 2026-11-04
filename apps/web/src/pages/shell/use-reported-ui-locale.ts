@@ -1,4 +1,4 @@
-import { reportUiLocale } from "@rakazo/core";
+import { reportUiLocale } from "@orkbot/core";
 import { useEffect, useRef } from "react";
 import { i18n } from "../../lib/i18n";
 import type { createSpaceRpc } from "../../lib/rpc";

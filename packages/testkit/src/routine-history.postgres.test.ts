@@ -1,8 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { RoutineHistory } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+import type { RoutineHistory } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
 import { asSystem } from "./system-db.js";
@@ -21,10 +21,10 @@ describeHistory("routines.history late starts", () => {
   let prisma: PrismaClient;
   let stop: () => Promise<void>;
   const stamp = Date.now();
-  const dataDir = mkdtempSync(path.join(tmpdir(), "rakazo-routine-history-"));
+  const dataDir = mkdtempSync(path.join(tmpdir(), "orkbot-routine-history-"));
 
   beforeAll(async () => {
-    const { createApp } = await import("@rakazo/api/app");
+    const { createApp } = await import("@orkbot/api/app");
     const handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
@@ -41,7 +41,7 @@ describeHistory("routines.history late starts", () => {
   });
 
   it("returns the due time a late run recorded, unchanged by later schedule edits", async () => {
-    const cookie = await signup(app, `routine-late-${stamp}@rakazo.test`, "Late User");
+    const cookie = await signup(app, `routine-late-${stamp}@orkbot.test`, "Late User");
     const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Brief",
       title: "Brief",

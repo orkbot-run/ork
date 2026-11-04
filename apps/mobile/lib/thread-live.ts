@@ -4,7 +4,7 @@ import {
   isRetryableError,
   isRunTerminalEvent,
   retryDelayMs,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import type { RefObject } from "react";
 import { useEffect, useRef } from "react";
 import type { MobileSnapshot } from "./api";

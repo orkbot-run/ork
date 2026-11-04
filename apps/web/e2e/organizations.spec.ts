@@ -12,7 +12,7 @@ test.afterEach(async ({ page }) => {
 });
 
 function selectedSpace(page: Page) {
-  return page.evaluate(() => window.localStorage.getItem("rakazo:space-id"));
+  return page.evaluate(() => window.localStorage.getItem("orkbot:space-id"));
 }
 
 async function openAvatarMenu(page: Page) {
@@ -42,7 +42,7 @@ async function switchFromAvatarMenu(page: Page, name: string, spaceId: string) {
 
 test("create, switch, rename and delete an organization", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `organizations-${stamp}@rakazo.test`, "password12", "Org Owner");
+  await signup(page, `organizations-${stamp}@orkbot.test`, "password12", "Org Owner");
   await completeOnboarding(page);
 
   // One organization: the menu lists none, and creating one lives in settings.

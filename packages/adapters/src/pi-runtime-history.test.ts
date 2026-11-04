@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
+import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const captured = vi.hoisted(() => ({
@@ -121,15 +121,15 @@ describe("Pi history replay", () => {
     expect(reply).toEqual({
       role: "assistant",
       content: [{ type: "text", text: "Hello" }],
-      api: "rakazo-history",
-      provider: "rakazo-history",
+      api: "orkbot-history",
+      provider: "orkbot-history",
       model: "history",
       usage: expect.objectContaining({ input: 0, output: 0, totalTokens: 0 }),
       stopReason: "stop",
       timestamp: Date.parse("2026-01-02T03:04:06.000Z"),
-      rakazoHistory: true,
-      rakazoMessageId: "m2",
-      rakazoCreatedAt: "2026-01-02T03:04:06.000Z",
+      orkbotHistory: true,
+      orkbotMessageId: "m2",
+      orkbotCreatedAt: "2026-01-02T03:04:06.000Z",
     });
   });
 

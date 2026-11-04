@@ -1,4 +1,4 @@
-import type { ComputerSize } from "@rakazo/contracts";
+import type { ComputerSize } from "@orkbot/contracts";
 import type {
   AdapterContext,
   AdapterDescriptor,

@@ -5,7 +5,7 @@ import type {
   BotSection,
   MessageBlock,
   SpaceBot,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   canonicalPiProviderId,
   DEFAULT_NEW_BOT_AVATAR_SET,
@@ -13,7 +13,7 @@ import {
   InstructionVersionSchema,
   initialBotMemory,
   resolveBotAvatarSet,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   BACKGROUND_RUN_TRIGGERS,
   displayName,
@@ -21,7 +21,7 @@ import {
   phoneCallSettings,
   ringingCall,
   userVisibleMessages,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { chooseBotAvatar } from "./bot-avatar-choice.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import type { ComputerMode } from "./computers.js";

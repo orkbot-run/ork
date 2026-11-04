@@ -1,5 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
-import { Spinner } from "@rakazo/ui-web";
+import { Spinner } from "@orkbot/ui-web";
 
 /** A whole-page wait. The spinner fades in late, so a quick load paints nothing in between. */
 export function PageLoading(props: React.ComponentPropsWithoutRef<"div">) {

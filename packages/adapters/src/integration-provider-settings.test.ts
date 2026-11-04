@@ -1,5 +1,5 @@
-import type { AdapterContext, ManagedConnectorProvider } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { AdapterContext, ManagedConnectorProvider } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { InfisicalSecretStore } from "./infisical-secret-store.js";
 import {

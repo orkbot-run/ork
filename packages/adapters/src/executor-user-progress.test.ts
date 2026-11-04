@@ -1,12 +1,12 @@
-import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import type { AppendEventInput, Prisma } from "@rakazo/db";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import type { AppendEventInput, Prisma } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   partialReplyClientNonce,
   RunHistoryWriteError,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { PARTIAL_REPLY_NOTE } from "./automated-messages.js";
 import { loadBotMessageContext, returnBotMessageOutcome } from "./bot-messages.js";

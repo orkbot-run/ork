@@ -7,7 +7,10 @@ vi.mock("./live-notifications.js", () => ({
 }));
 vi.mock("./network-cache.js", () => ({ clearNetworkCache: vi.fn() }));
 vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
-vi.mock("expo-constants", () => ({ default: { easConfig: { projectId: "fake-project" } } }));
+const expo = vi.hoisted(() => ({
+  easConfig: { projectId: "fake-project" } as { projectId: string } | null,
+}));
+vi.mock("expo-constants", () => ({ default: expo }));
 vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: vi.fn(() => null) }));
 
 // Expo runs every module's async functions on one serial native queue, so a call
@@ -73,6 +76,7 @@ const fetch = vi.fn(async (url: string) => {
 let permission: ReturnType<typeof deferred<{ granted: boolean }>>;
 
 beforeEach(async () => {
+  expo.easConfig = { projectId: "fake-project" };
   native.reset();
   vi.mocked(requireOptionalNativeModule).mockReturnValue(null);
   vi.stubGlobal("fetch", fetch);
@@ -96,6 +100,14 @@ afterEach(() => {
 });
 
 describe("push registration on iOS", () => {
+  it("keeps unconfigured builds from prompting for permissions or registering upstream push", async () => {
+    expo.easConfig = null;
+    vi.mocked(Notifications.getExpoPushTokenAsync).mockClear();
+    await registerPushToken();
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(Notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
+  });
+
   it("loads the inbox while notification settings have not answered", async () => {
     void registerPushToken();
 

@@ -1,4 +1,4 @@
-import type { Routine } from "@rakazo/contracts";
+import type { Routine } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { createRoutineMentionBatcher } from "./routine-mention-batcher.js";
 

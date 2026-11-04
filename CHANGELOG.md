@@ -1,6 +1,6 @@
 # Changelog
 
-Notable product changes in Rakazo. See GitHub Releases for tagged builds.
+Notable product changes in Ork. See GitHub Releases for tagged builds.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Updated Better Auth to 1.7.16 for its November security fixes. The most serious one was in mobile sign-in, where the authorization proxy could sign values it did not issue. The others fix OAuth sign-in treating an unverified provider email as verified, email codes whose attempt limit could be raced, email-change links that stayed valid after the address changed hands, and passkey checks that skipped origin and user verification.
 - Signing out, signing in to another account, or switching server on mobile now stops read-aloud and clears the replies still waiting to be read. Before, the phone kept reading the previous account's bot replies over the sign-in screen.
 - Disconnecting an MCP server's OAuth stays in effect even when a sign-in was still finishing, including the first sign-in to a server. A late token no longer marks the server as connected again, and a sign-in the disconnect ended can't be completed.
-- A connected tool named `delete_bot` now runs on its own service. Before, it was sent to Rakazo's built-in bot archiving instead.
+- A connected tool named `delete_bot` now runs on its own service. Before, it was sent to Ork's built-in bot archiving instead.
 - After signing in as another account on mobile, the call card no longer shows the previous account's initial.
 - The Android app limits how much a notification check can download in the background, so a faulty server or proxy can't make it use unbounded memory.
 - When a computer's saved files are deleted after the retention period, a copy cached on a computer host is deleted too.
@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - One login can own several organizations, such as "Personal" and "Work", each with its own billing. Create one in **Settings → Organization** and switch between them from the account menu.
-- Rakazo is available in Polish on web, desktop and mobile, including account emails.
+- Ork is available in Polish on web, desktop and mobile, including account emails.
 - The own-model plan comes in three tiers. Standard is the existing plan. **Pro** and **Max** give bigger cloud computers and more computer hours each month. Choose a tier when you subscribe, and move between tiers from **Billing** on web and mobile.
 - Bots can hand screen and browser work to a second model. Set a **Computer-use model** in **Settings → Models** and a bot on a text-only or self-hosted model passes visual tasks to it in the middle of a reply, then answers you. When it's left empty, nothing changes.
 - The web and desktop app notifies you when an agent in another chat finishes a reply, asks you something, asks you to take over its screen, or fails. Clicking the notification opens that chat, and muted chats stay quiet. Web and desktop notifications now show the agent's avatar.
@@ -67,7 +67,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Dark mode has clearer contrast, chat text is a little larger, and each bot has one bright color shared by its avatar, name and your message bubbles.
-- How your bots look is now one account setting, **Bot style** in Settings (Original or Rakazo), instead of a choice on every new bot. Changing it restyles all your bots, except one you gave its own style in its avatar editor.
+- How your bots look is now one account setting, **Bot style** in Settings (Original or Ork), instead of a choice on every new bot. Changing it restyles all your bots, except one you gave its own style in its avatar editor.
 - Text fields no longer have a grey fill that made them look disabled.
 - A bot rewriting its own instructions no longer posts an "Instructions updated" card in the chat.
 - A failed daily check-in no longer notifies the bot's owner, and the bot isn't tried again for a week.
@@ -95,7 +95,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - A bot connected to Slack uses the owner's memory and notes, and its memory and note tools, only when the owner writes to it. Coworkers, guests in shared channels and other apps get group-chat treatment: no owner memory, no notes, and nothing that writes to them. Owners of workspaces connected before this update who never used **Link DMs** get these restricted replies until they link DMs or reconnect the workspace.
 - When a run has read outside content, such as a channel message, a webhook or another bot's reply, the bot still can't change your model, thinking level, voice, read-aloud or account settings. If it keeps trying, it now stops and tells you to make the change in Settings or ask again in a fresh chat, instead of repeating the same error.
 - Previews of files on a stopped computer now check that the file actually opened is inside the computer's home folder. A guest could swap a folder for a link while the computer was stopping and make the API read an unrelated file on the server.
-- Computer screen pages stay sandboxed when Rakazo runs behind another reverse proxy. A computer can no longer get a downstream proxy to strip the sandbox policy and run its content as the app.
+- Computer screen pages stay sandboxed when Ork runs behind another reverse proxy. A computer can no longer get a downstream proxy to strip the sandbox policy and run its content as the app.
 - The computer screen proxy now forwards only the request headers noVNC needs, so headers meant for an access proxy, such as a service token's client ID and secret, no longer reach the bot's computer. Its credential check no longer reveals the length of its secret through response timing.
 - One unusual input can no longer keep a shared server process busy for minutes or crash it. This covers very long Slack messages, web pages with unclosed tags, chart specs with very fine intervals, and large request bodies from signed-out callers. Slack messages over 8,000 characters reach the bot as raw Slack markup. Chart specs beyond the new limits fail with an error, and specs that set `aspectRatio` are asked to use `height` instead.
 - A remote MCP server can send back at most 16 MB per response, so one broken or hostile server can no longer use up the memory of the API or worker it talks to.
@@ -122,7 +122,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bots on Boat computers get the page tools (`browser_navigate`, `browser_snapshot`, `browser_act`), which Docker computers already had.
 - In **Settings → Computer**, admins can choose where new computers run without editing environment variables. Any account can also send its own Team Computers to a Wuying cloud desktop it brings ([Wuying cloud computers](docs/wuying-computers.md)).
 - `COMPUTER_MAX_ACTIVE_UNBILLED_MS` limits how long a Docker or Kubernetes computer stays up in one stretch, even if background work or an open screen is keeping it awake. The computer resumes the next time it is used. It is off by default ([sandbox providers](docs/self-host-sandbox-providers.md)).
-- Self-hosters can use a local model listed in `RAKAZO_LOCAL_MODELS` as the deployment default with no API key. Set `PI_DEFAULT_PROVIDER=local`, `PI_DEFAULT_MODEL` and `PI_DEFAULT_CREDENTIALS=host` ([models](docs/self-host-models.md)).
+- Self-hosters can use a local model listed in `ORKBOT_LOCAL_MODELS` as the deployment default with no API key. Set `PI_DEFAULT_PROVIDER=local`, `PI_DEFAULT_MODEL` and `PI_DEFAULT_CREDENTIALS=host` ([models](docs/self-host-models.md)).
 - On iPhone, a Record Message action for Shortcuts and the Action button. You talk, and the words go to the bot you talked to last, with a Live Activity in the Dynamic Island and on the Lock Screen showing its progress.
 - The mobile app opens text files, PDFs and videos inside the app on iOS and Android instead of a download or share screen, including attachments you tap in a chat. Android PDFs can be zoomed.
 - The own-key plan ("Your subscription or API key") can be paid yearly. A Monthly / Yearly switch on the paywall shows how much yearly saves, and monthly subscribers can switch from Billing on web and mobile with "Switch to yearly −20%".
@@ -135,7 +135,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Messaging your bot just "stop" or "stop now" while it works stops it, as if you had pressed Stop. This works in the app chat and in your private chat with the bot on a chat app, where it replies "Nothing is running." when the bot is idle.
 - Self-hosters can set `MODEL_STREAM_TIMEOUT_MS`, `MODEL_STREAM_IDLE_TIMEOUT_MS` and `MODEL_CONNECT_TIMEOUT_MS` (defaults 120 s, 180 s and 30 s), for example when bots share one local model server and queue for minutes.
 - Invited friends get two weeks free. A gift button in the chat header opens a short invite sheet on web and mobile, and tapping the bot's name opens a simpler bot profile that holds the actions the old menu had.
-- Self-hosters can list local models that support thinking in `RAKAZO_LOCAL_REASONING_MODELS`. Those models get thinking levels, and the chosen level is sent to the local server ([models](docs/self-host-models.md)).
+- Self-hosters can list local models that support thinking in `ORKBOT_LOCAL_REASONING_MODELS`. Those models get thinking levels, and the chosen level is sent to the local server ([models](docs/self-host-models.md)).
 
 ### Changed
 
@@ -149,7 +149,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Computer hours now reset when the team's billing period renews instead of on the 1st of the month. A free trial includes some computer time. Cancelling a trial stops computer time right away, but the rest of the trial keeps working. Owners on a trial can press "Start plan now" to start paying and get the full allowance.
 - The app now shows the price you actually pay for the own-key plan. Web billing settings show your plan with its price and renewal date, and the mobile plan picker marks the plan you're on.
 - When a Space has used up this month's computer allowance, routines that need the computer wait longer between attempts, up to a day, and stop sending a failure notice every few minutes.
-- Opening Rakazo while signed out goes straight to sign up, or to sign in if you have used the app on that browser or desktop before. The welcome screen is gone.
+- Opening Ork while signed out goes straight to sign up, or to sign in if you have used the app on that browser or desktop before. The welcome screen is gone.
 - When the server refuses an old web app version, the page no longer reloads at once if that would lose work: during a call, while a send is waiting, while you type, or while a dialog is open. A small notice offers to reload now.
 - When you pick a model provider, the popular ones still come first, and the rest are now in alphabetical order on web, onboarding and mobile.
 - Fenced blocks marked `text`, `txt` or `plaintext` in chat now wrap and use the message font, so drafts such as emails read without scrolling sideways.
@@ -172,7 +172,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Text a bot writes just before asking you a question is no longer lost. It now appears above the question card.
 - In group chats, bots no longer mistake another bot's earlier messages for their own, and can tell who said what.
 - A text you send your bot from Telegram, SMS, iMessage or a group while it is busy with something you started in the app is now answered in that chat, not inside the app.
-- When Rakazo fails to handle a Telegram message, Telegram's retry is now processed instead of being dropped.
+- When Ork fails to handle a Telegram message, Telegram's retry is now processed instead of being dropped.
 - Choosing "Always allow" for a site on a paid request card now saves that site, so later runs stop asking.
 - Pipedream read-only tools with hyphenated names, like `gmail-find-email`, no longer ask for approval in Ask mode. Pipedream apps connected before account pinning get their tools back when the person has exactly one account for that app.
 - Tools from connected servers whose input schema points to another part of itself can be called again instead of failing with "Reference not found". A stale or failed MCP session no longer blocks tool listing or a run until discovery times out.
@@ -223,12 +223,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Logs redact more sensitive data. Header values echoed in error messages, stacks and reasons are replaced with fixed text, the host audit shipper redacts sensitive free text before it truncates it, and caller IP and user agent are kept only on security events.
 - While someone is teaching a bot on its computer, `open_path` and `launch_app` are refused like the other screen tools. A routine, webhook or channel run can no longer open windows on the screen being recorded.
 - Log redaction now hides the credential after any HTTP auth scheme (`Basic`, `Digest`, `token`, not only `Bearer`), API keys in headers like `x-api-key`, and quoted JSON fields such as `access_token`, `refresh_token` and `client_secret`. A very long log message can no longer stall the server while it is being redacted.
-- The MCP SDK is upgraded to 1.32.2, which fixes two client-side advisories about OAuth credentials and cross-origin redirects. Rakazo already blocked both paths, so this is a second layer of protection.
+- The MCP SDK is upgraded to 1.32.2, which fixes two client-side advisories about OAuth credentials and cross-origin redirects. Ork already blocked both paths, so this is a second layer of protection.
 - When a batch of Composio actions includes a split-out Dropbox folder listing, that listing must now use an account the workspace connected. A call naming any other account is refused before anything in the batch runs.
 - Composio and Pipedream connections now record the exact external account you approved and use only that account, so people with several accounts on one app no longer get tools acting as whichever account the provider picks. Older Pipedream connections that never stored an account stop offering tools until they are reconnected.
 - A bot's memory tools remove the Serenity access token from errors and results before the model sees them, in case the server or a proxy repeats it.
 - Values you set for an MCP server's environment variables and headers are hidden from tool results and errors, whatever their names. Short values, numbers and common config words stay visible.
-- When stdio MCP servers are allowed through `npx`, Rakazo starts only a plain npm registry package (`npx <pkg>`, optionally with `-y`, or `npx -p <pkg> <bin>`) and installs it without running install scripts. Any other `npx` form is refused with "This npx command isn't supported here" ([integrations](docs/self-host-integrations.md#mcp-servers)).
+- When stdio MCP servers are allowed through `npx`, Ork starts only a plain npm registry package (`npx <pkg>`, optionally with `-y`, or `npx -p <pkg> <bin>`) and installs it without running install scripts. Any other `npx` form is refused with "This npx command isn't supported here" ([integrations](docs/self-host-integrations.md#mcp-servers)).
 - Saving a remote MCP server whose URL holds a credential in its query string (`?api_key=`, `?token=` and similar) is refused, with a message asking for it in a header, where it is stored encrypted. Servers already saved keep working.
 - In a shared Space, only the person who made a routine can delete it, the same rule as editing it.
 - The packaged desktop app labels a request to its local stack as coming from the app only when it really does. Sign-in popups and the sandboxed preview of bot-made HTML can no longer pass the API's origin checks as the app.
@@ -239,11 +239,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Auto Review shows its checker an action's full arguments, up to 8,000 characters, instead of only the first 1,200. Longer actions always ask the owner, with the reason "Too long to review.", so a batch can't get approved with its later steps unread.
 - Charts and diagrams a bot draws stay inside their own frame. They can no longer restyle or cover the app, load remote images, or open links without the "Open external link?" prompt, and Mermaid diagrams can't inject their own CSS or fonts.
 - Deploys set the runtime database login with a password hash instead of the plain password, so the password can't end up in database logs. The limits on plugin submissions and CSP reports group IPv6 callers by /64 network, and a flood of new callers no longer resets everyone's limit.
-- Connecting a Slack workspace now finishes on a signed-in Rakazo page, and only the person who started the connection can finish it. Before, anyone who opened your approval link could connect their workspace to your bot. The redirect URL registered in Slack does not change.
+- Connecting a Slack workspace now finishes on a signed-in Ork page, and only the person who started the connection can finish it. Before, anyone who opened your approval link could connect their workspace to your bot. The redirect URL registered in Slack does not change.
 - A web voice call ends when you sign out, another tab signs out, or another account signs in, and the page then reloads. A late hang-up or answer can no longer go out with the next user's session. Signing out now always goes to the sign-in page.
 - Stdio MCP servers can no longer be launched through package managers or runners other than `npx`: `npm`, `pnpm`, `yarn`, `bun`, `bunx`, `deno`, `uv`, `uvx`, `pipx` and `corepack` are refused even if the command allowlist includes them, because they can download and run any code. Install servers from other ecosystems on the host and allowlist their binary instead.
 - A mobile voice call now ends when you sign out, sign in to another account or switch server. Before, the call's later requests could go out under the new session.
-- When another worker takes over a bot's run, the worker it was taken from can no longer run tools that reach outside Rakazo, message other bots, request calls, launch cloud agents or change the takeover card. A stalled worker that woke up late could repeat an action the user only asked for once.
+- When another worker takes over a bot's run, the worker it was taken from can no longer run tools that reach outside Ork, message other bots, request calls, launch cloud agents or change the takeover card. A stalled worker that woke up late could repeat an action the user only asked for once.
 - The desktop app window now stays on its connected server when that server redirects to another site. The other site opens in the system browser instead of loading inside the app window, and the desktop sign-in and update actions only answer the server's own page.
 - A routine that watches a command's output now hides saved-login hidden fields and recent card numbers and payment tokens in its change note and pause message, the same way runs already do. A watch whose output contained one of these values fires once more after upgrading.
 - Computers that run as Kubernetes pods get the same container restrictions as Docker computers: every Linux capability dropped, privilege escalation off, and the runtime's default seccomp profile. This applies to newly started pods.
@@ -261,9 +261,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - When you add a custom MCP server, OpenAPI or GraphQL source on mobile, you can choose how it signs in: bearer token, an API key in a header you name, or OAuth in your browser for MCP servers.
 - `SANDBOX_COMPUTER_MOUNTS` (Docker computers only) mounts host folders into every bot computer as `source:target[:rw][:rslave]` entries. Mounts are read-only unless an entry adds `rw`, and every bot in every Space sees them. Risky source paths are refused at startup ([shared host folders](docs/self-host-docker-computers.md#shared-host-folders)).
 - `MAX_ATTACHMENTS_PER_MESSAGE` (1 to 100, default 4) sets how many files fit in one message. Web, desktop and mobile use the server's limit.
-- Plugin authors can submit a public GitHub repository to the Rakazo marketplace from the website or the API. Admins approve or reject submissions on `/admin/plugins`, and approved plugins are listed under "Rakazo" in the in-app marketplace. Admins are the verified accounts listed in the optional `RAKAZO_ADMIN_EMAILS`.
+- Plugin authors can submit a public GitHub repository to the Ork marketplace from the website or the API. Admins approve or reject submissions on `/admin/plugins`, and approved plugins are listed under "Ork" in the in-app marketplace. Admins are the verified accounts listed in the optional `ORKBOT_ADMIN_EMAILS`.
 - boxd as a remote computer provider: set `SANDBOX_PROVIDER=boxd` and `BOXD_API_KEY` (and optionally `BOXD_ORG`). Each computer runs in its own microVM, and stopping one suspends it with its memory, so open programs and pages are still there when it resumes.
-- Wuying as a computer provider (`SANDBOX_PROVIDER=wuying`): Team and Private Computers can run on an existing Alibaba Cloud Wuying Windows cloud computer, and people can watch or take over its screen in Rakazo. Set it up with the `WUYING_*` settings. Everything on it shares one Windows desktop and account, so it is only for trusted deployments.
+- Wuying as a computer provider (`SANDBOX_PROVIDER=wuying`): Team and Private Computers can run on an existing Alibaba Cloud Wuying Windows cloud computer, and people can watch or take over its screen in Ork. Set it up with the `WUYING_*` settings. Everything on it shares one Windows desktop and account, so it is only for trusted deployments.
 - The mobile and desktop apps can use a self-hosted server behind an access proxy such as Cloudflare Access. When choosing an existing server, add request headers (for example a service token). The apps send them only to that server, and the computer screen keeps working through the proxy.
 - On the macOS desktop app, dictation and the listening side of voice calls use the Mac's built-in speech recognition, so they work without a voice provider. When the language has a local model, recognition stays on the Mac.
 - Excel spreadsheets (XLS and XLSX) can be attached to chat messages on web and mobile.
@@ -273,11 +273,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - On mobile, swipe an unzoomed image down to close the image viewer.
 - A production API now logs a warning at startup when `ENCRYPTION_KEY` is shorter than 32 characters or still the example value from `.env.example`. The key is still accepted.
 - Bots can change their own instructions, model, thinking level, read-aloud and voice when you ask in a chat you started. Changes to model, thinking, read-aloud or voice post a "Settings updated" card with Undo. Bots can also read or change your timezone and marketing-email setting from chat. Instruction changes go through the usual approval, which Auto Review can grant, and are kept in instruction history. Runs someone else started cannot change instructions.
-- Bots answer questions about how Rakazo works, such as connecting Slack, credits, computers or self-hosting, by reading the matching published docs page instead of guessing.
+- Bots answer questions about how Ork works, such as connecting Slack, credits, computers or self-hosting, by reading the matching published docs page instead of guessing.
 - On a Mac running the desktop app, bots can see and use one app at a time in the background without moving your pointer or changing focus. You allow it once per space, covering every bot and chat of yours there. The first time a bot uses an app, the desktop app downloads a pinned, checksum-verified driver and asks macOS for Accessibility and Screen Recording permission.
 - Each organization has a permanent audit log of consequential bot actions, who approved or denied them, auto-review decisions, and changes to approval rules, credentials, secrets, spaces and sign-ins. Owners and admins can export it as JSON Lines. Self-hosters can set retention with `AUDIT_EVENT_RETENTION_DAYS` (default 365) and forward events with `AUDIT_LOG_WEBHOOK_URL` and `AUDIT_LOG_WEBHOOK_AUTHORIZATION`.
 - Self-hosters can run `docker compose -f docker-compose.images.yml exec api node dist/cli/diagnostics.js` to print a redacted report to paste into a GitHub issue. It covers the revision, enabled features, migration status, MCP server health and recent runs, and leaves out names, secrets and content ([reporting a problem](docs/self-host.md#reporting-a-problem)).
-- `RAKAZO_WEB_BIND` lets the self-hosted Compose stacks publish the web port on the local network, so a phone on the same Wi-Fi can connect. It defaults to `127.0.0.1`, and the API and all other ports stay on loopback.
+- `ORKBOT_WEB_BIND` lets the self-hosted Compose stacks publish the web port on the local network, so a phone on the same Wi-Fi can connect. It defaults to `127.0.0.1`, and the API and all other ports stay on loopback.
 - On deployments that sell model credits, admins can give free model credits or free own-key months to any email from `/admin/access`. The person receives the grant once their email is verified, whether they signed up before or after it was made.
 - On paid hosted billing, each organization gets a monthly allowance for cloud computers: $5 (25 hours) on own-key plans, and 20% of the monthly amount on credit plans. Billing shows "Computer hours left". Once the allowance is used up, computers don't start until next month, and a running computer is saved and stopped. Self-hosted installs without credit billing have no limit. Computer time for a computer the provider lost now ends when it was last seen running.
 - Custom endpoint model connections have a Protocol setting on web and mobile: Chat Completions, Responses or Anthropic Messages. This lets you use servers and gateways that don't serve Chat Completions. Existing connections keep Chat Completions.
@@ -291,7 +291,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Bots can now use apps on the owner's Windows PC through the desktop app, as they already could on a Mac. The first time a bot needs an app, the desktop downloads a small, checksum-verified screen driver. Windows security settings such as Smart App Control can stop that driver from starting.
 - New desktop keyboard shortcuts: Cmd/Ctrl+, opens Settings, Cmd+1–9 jumps to a bot, Esc in the message box stops the reply, Cmd+F searches, Cmd+B toggles the sidebar, and Cmd+[ / Cmd+] go back and forward. Typing anywhere moves focus to the message box, and the app menus now list these shortcuts, including a new Go menu.
 - iOS Shortcuts and Siri actions: Message Bot, Ask Bot (returns the reply), Run Routine, Open Bot and Start Voice Chat. They also work from the Action button.
-- Self-hosters who sign their own apps can set `RAKAZO_PASSKEY_RP_ID` at build time so the macOS app's passkeys work on their own domain. `RAKAZO_PASSKEY_DEVELOPER_MODE=1` lets iOS and macOS development builds use passkeys on a server that is only reachable on a private network.
+- Self-hosters who sign their own apps can set `ORKBOT_PASSKEY_RP_ID` at build time so the macOS app's passkeys work on their own domain. `ORKBOT_PASSKEY_DEVELOPER_MODE=1` lets iOS and macOS development builds use passkeys on a server that is only reachable on a private network.
 - Each MCP server has a **Keep tool results whole** option under Advanced, so long results such as email bodies are no longer cut in the middle. If a whole result cannot fit the model, the turn fails with a message naming the setting.
 - The bot's page tools can now read and act inside embedded frames, including filling saved logins in sign-in forms framed from the login's own site. `browser_navigate` returns the page, so no extra snapshot is needed. On Docker computers the page browser now runs on agent-browser. The computer image and API should be updated together.
 - Bots have a `feedback` tool for bug reports and suggestions. It follows the normal approval modes, is offered only in chats the user started, and saves reports on the server with the chat and run they came from. On a self-hosted server the reports stay with the operator.
@@ -299,24 +299,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
-- Only admins listed in `RAKAZO_ADMIN_EMAILS` can add or edit stdio MCP servers, and bots can add remote servers only. Deployments that use stdio servers should set `RAKAZO_ADMIN_EMAILS` before upgrading; existing stdio servers keep running ([integrations](docs/self-host-integrations.md)).
+- Only admins listed in `ORKBOT_ADMIN_EMAILS` can add or edit stdio MCP servers, and bots can add remote servers only. Deployments that use stdio servers should set `ORKBOT_ADMIN_EMAILS` before upgrading; existing stdio servers keep running ([integrations](docs/self-host-integrations.md)).
 - Messages between bots show up in a bot's chat as one centered line, such as "Messaged X", "Message from X" or "N messages with X". Tapping it opens the bot-to-bot conversation read-only. Replies meant for you stay in your chat.
 - A bot you tag in the message box appears as a card where you typed it, with its avatar and color, instead of as a separate pill. Backspace removes the whole mention. On mobile the mention is tinted in place.
 - Importing an agent from OpenClaw, Hermes or another assistant starts only from "Import an agent" in Settings → General, and always creates a new bot. Import no longer appears in onboarding, the New bot dialog or chat drag-and-drop, and it can no longer replace Chief, merge into an existing bot or be undone.
 - When a bot asks you to take over its computer, it now answers your other messages and other bots while it waits. A takeover request that nobody acts on ends after 30 minutes instead of a day.
 - Bots switch to the Space's backup model when the provider rejects the main model's key or sign-in, or that connection is gone, instead of failing. A main model with thinking turned on can now fall back to a backup that can't think, which runs with thinking off. Runs pinned to one model still fail as before.
-- When a provider rejects a subscription sign-in for good, Rakazo keeps the model connection and every Space's model choices, and marks the connection "Sign in again". Signing in again renews the same connection, so you don't have to set up each Space again.
+- When a provider rejects a subscription sign-in for good, Ork keeps the model connection and every Space's model choices, and marks the connection "Sign in again". Signing in again renews the same connection, so you don't have to set up each Space again.
 - An MCP server that only connects with a registered OAuth client now shows "Needs an OAuth client ID" instead of a raw error. Connect opens its Advanced settings with the client ID field focused. After you add a remote server, its first check result shows in place.
 - The desktop app on Windows uses the standard Windows title bar and window buttons instead of macOS-style colored buttons.
 - On Android, the inbox **+** opens a native dropdown with icons (New bot, New group chat, New private space) instead of an alert dialog.
-- New bots with the Rakazo avatar style get a color from the avatar color picker. Existing bots keep their saved color.
+- New bots with the Ork avatar style get a color from the avatar color picker. Existing bots keep their saved color.
 - Mobile voice prepares the next sentence's audio while the current one plays, so multi-sentence replies have no extra pause between sentences.
 - A computer can go to sleep while its run waits on an unanswered question or approval. Answering the card starts the computer again.
 - With object storage turned on, only Docker computers download their saved home before starting. Remote computers resume their own disk without waiting on that download and without failing when the stored copy can't be reached.
 - Account, product and marketplace emails share one branded layout. When welcome emails, a mail provider and referrals are all enabled, account owners get one email about Invite friends about a day after signing up.
 - Runs that need a computer keep retrying for about a quarter of an hour during a computer provider outage, instead of failing after about a minute and a half. More Boat failures count as provider outages, such as an account out of paid time and failed file transfers, so computers answer "unavailable, try again" instead of a server error.
 - Computer home saves leave out caches, dependencies, build output, logs and core dumps, and new saves are limited to 5 GiB and one million files. When a computer can't be saved, its chat gets a note saying so, and the computer keeps running unsaved.
-- A plugin with a skill that has the same name as a built-in skill can now be installed. Rakazo leaves out just that skill, and the plugin preview lists it under "Not added" with the reason, instead of refusing the whole plugin.
+- A plugin with a skill that has the same name as a built-in skill can now be installed. Ork leaves out just that skill, and the plugin preview lists it under "Not added" with the reason, instead of refusing the whole plugin.
 - The bot list loads faster for bots with long run histories, such as bots with frequent routines. The new index is built without blocking writes, but it can take a while to build during the deploy on a large database.
 - Opening a monthly checkout no longer holds a database connection while waiting on the payment provider, so slow checkouts can't stall other requests on the same server.
 - The read-only peer chat closes with an X in the header instead of a text button, and its title stays centered.
@@ -336,7 +336,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - In a routine's run history, a run that posted nothing says "No reply". Runs that did reply open at their first message.
 - General and Approvals settings use consistent titled groups. "Advanced" is now an always-open "Chat" group, export, import and delete account sit in a "Data" group, and "Link SSO" moves into Security.
 - A custom OpenAI-compatible connection can set a maximum output token limit above 131,072, up to the context window ceiling.
-- The monthly Rakazo credits picker adds a $30 option, which is now the default for new subscriptions. Existing subscribers keep their amount.
+- The monthly Ork credits picker adds a $30 option, which is now the default for new subscriptions. Existing subscribers keep their amount.
 - Bot avatars now hold still while their bot is idle and stop animating offscreen or when the page is hidden. The app also skips redrawing when the sidebar's background check finds nothing new. An idle desktop window uses far less CPU and GPU.
 
 ### Removed
@@ -345,17 +345,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- `RAKAZO_LOCAL_MAX_TOKENS` is now the output limit a local model is asked for. It was only a ceiling, so
+- `ORKBOT_LOCAL_MAX_TOKENS` is now the output limit a local model is asked for. It was only a ceiling, so
   every request still asked for 4096 tokens and a longer reply was cut off and retried. The limit stays
-  within a quarter of `RAKAZO_LOCAL_CONTEXT_WINDOW`, and a max-tokens value set on the connection
+  within a quarter of `ORKBOT_LOCAL_CONTEXT_WINDOW`, and a max-tokens value set on the connection
   overrides it.
 - A bot with more than twenty MCP tools reaches them through the lazy tool catalog, and every call through it arrived with empty arguments, so a search or scrape failed with "expected string, received undefined". A free-form object parameter no longer carries an empty `properties` map, which grammar-constrained providers read as "no keys allowed", so the arguments the model builds arrive intact.
 - Arguments of a stdio MCP server, which can carry tokens, are stored encrypted with its other credentials and are no longer returned to clients; leaving them blank when editing keeps them. Arguments saved earlier move into encrypted storage automatically when the API starts.
 - `MAX_UPLOAD_SIZE_MB` now applies to every API route. Before, uploads above 10 MiB were still rejected and clients were still told the limit was 10 MiB.
 - "Use my computer" now connects on deployments where the web server fronts the API, such as the Railway template. Before, pairing worked but the computer stayed Offline.
-- When the computer image is missing on the Docker host, the supervisor now pulls it or builds the stock `rakazo/computer` image, instead of failing every start until a restart. This covers a fresh host or one cleaned with `docker system prune -a`.
+- When the computer image is missing on the Docker host, the supervisor now pulls it or builds the stock `orkbot/computer` image, instead of failing every start until a restart. This covers a fresh host or one cleaned with `docker system prune -a`.
 - Boat, E2B, Novita, Daytona and CreateOS computers that are already running are reused by each run instead of reconnected. Open screens and takeovers no longer disconnect when a bot run starts.
-- When Boat's per-IP rate limit refuses a request, Rakazo waits the time Boat gives and sends it once more, instead of failing the run or marking the computer broken.
+- When Boat's per-IP rate limit refuses a request, Ork waits the time Boat gives and sends it once more, instead of failing the run or marking the computer broken.
 - A computer Update that fails while saving leaves the computer running instead of marking it broken. Before, the Recover that followed rebuilt it from the last save and lost newer work.
 - A lost database reply while saving a computer's home no longer lets a later start or Files read replace recent work with an older snapshot.
 - Deleting or replacing a Docker computer now reports an error when Docker fails to remove the container, and keeps the computer so it can be tried again. Before, the container could keep running with nothing tracking it.
@@ -396,7 +396,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - With several hostnames in `TRUSTED_PROXIES`, one that stops resolving no longer stops the others from refreshing. Before, a recreated proxy could stop being trusted, and every client then appeared to come from the proxy.
 - Only one chat app link code works at a time, even when two codes are requested at the same moment.
 - When a model can't use tools, or a ChatGPT sign-in token has expired, the run now shows the clear message offering another model or pointing to your connection settings, instead of a generic provider error.
-- The desktop app no longer closes its window and shows a setup error when a server takes more than 20 seconds to load at launch. Updates that fail because the app runs from its disk image or the disk is full now say "Move Rakazo to Applications to install updates." or "Free up disk space to install updates.", and a failed bot export shows an error.
+- The desktop app no longer closes its window and shows a setup error when a server takes more than 20 seconds to load at launch. Updates that fail because the app runs from its disk image or the disk is full now say "Move Ork to Applications to install updates." or "Free up disk space to install updates.", and a failed bot export shows an error.
 - Changing monthly credits after the monthly plan has ended now refreshes the billing screen so it offers Subscribe again, instead of failing with a server error.
 - MCP sign-in no longer gets cancelled while you are still signing in with providers whose login pages cut the popup's link to the app. Closing the popup still cancels right away.
 - The Android app no longer replaces a working computer screen with "Retry screen" after fifteen seconds.
@@ -426,7 +426,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Removing a bot from a group while it is working now frees its computer straight away, instead of leaving it "busy" elsewhere for up to 24 hours.
 - A run that finishes while you edit, archive or dissolve its group keeps its real result instead of being marked cancelled.
 - With `SANDBOX_PROVIDER=none`, chats no longer stay blank because the computer status fails to load.
-- The computer screen now connects when Rakazo sits behind an identity-aware reverse proxy such as Cloudflare Access.
+- The computer screen now connects when Ork sits behind an identity-aware reverse proxy such as Cloudflare Access.
 - Wuying computer screens fetch a new one-time login code each time they open or reconnect, instead of staying black after a reopen or bot switch.
 - Boat sandboxes that are slow to archive now put off going to sleep and try again later instead of failing. Boat errors behind Cloudflare (520–526, 530) are treated as a Boat outage and retried.
 - Remote MCP servers, GraphQL connectors and self-hosted memory services that answer with a redirect are now refused straight away instead of hanging until a timeout.
@@ -444,7 +444,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - When an MCP server sends a result as both structured data and a duplicate JSON text block, the bot receives it once. Large results no longer lose half their room to the copy.
 - An MCP server that rejects its OAuth token before it expires now gets a refreshed token, or shows as needing a reconnect, instead of failing every run.
 - Very large connector tool results no longer freeze the worker for tens of seconds, which used to make unrelated scheduled runs fail with database errors. Email code sign-in for unverified accounts works again.
-- An organization that switches Billing to its own key before connecting one keeps running on its remaining Rakazo credits instead of failing every run.
+- An organization that switches Billing to its own key before connecting one keeps running on its remaining Ork credits instead of failing every run.
 - A bot with its own model on one of your connections can now run even when no main model is set.
 - Long chats no longer pay for a new summary on every turn after a summary comes back over its size limit. Compaction retries after 50 more messages.
 - Windows desktop installs can download updates again, because the update feed now names the uploaded installer correctly. The Linux app no longer crash-loops when started by a launcher that closed its output.
@@ -466,7 +466,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Self-host upgrade notes
 
 - Production Compose hosts: rerun `harden-host.sh` and recreate Caddy now to block the remote path to CVE-2026-98432, then install the fixed kernel and reboot as soon as your distribution ships it.
-- If you run stdio MCP servers, list at least one admin in `RAKAZO_ADMIN_EMAILS` before upgrading. Without one nobody can add or edit them, though existing servers keep running.
+- If you run stdio MCP servers, list at least one admin in `ORKBOT_ADMIN_EMAILS` before upgrading. Without one nobody can add or edit them, though existing servers keep running.
 - If `SANDBOX_COMPUTER_DNS` is set, computers with restricted or `auto` egress now start only after one of those servers answers from a computer network. A private resolver that restricted egress blocks used to make every lookup time out without warning. Now the start fails with an error that names the setting, so point it at servers reachable from there, such as public resolvers ([self-hosting](docs/self-host.md)).
 - If you allow stdio MCP servers through `npx`, a server set up with any `npx` form other than `npx <pkg>` (optionally with `-y`) or `npx -p <pkg> <bin>` stops connecting until it is edited. A package that only works after its own install script runs also stops working ([integrations](docs/self-host-integrations.md#mcp-servers)).
 - If your stdio command allowlist includes a runner other than `npx` (for example `uvx`, `pnpm` or `bunx`), servers launched through it stop starting. Switch them to `npx` or to a binary installed on the host.
@@ -529,9 +529,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Stdio MCP servers can connect with OAuth from the MCP servers settings. Rakazo runs the authorization against the provider you name (for example Google), stores the grant encrypted, refreshes it, and passes it to the process through environment variables (`{{oauth.access_token}}` and similar references) or through credential files written to a private temporary directory, so packages that expect a browser login or a token file run unattended. Any client can also limit the scopes it requests.
+- Stdio MCP servers can connect with OAuth from the MCP servers settings. Ork runs the authorization against the provider you name (for example Google), stores the grant encrypted, refreshes it, and passes it to the process through environment variables (`{{oauth.access_token}}` and similar references) or through credential files written to a private temporary directory, so packages that expect a browser login or a token file run unattended. Any client can also limit the scopes it requests.
 - Stdio MCP servers can be given environment variables when added in **MCP servers**, under **Advanced**. Values are stored encrypted, like the other server credentials, so API keys a local server reads from its environment no longer have to be pasted into a chat. The form's secret fields no longer invite the browser to fill in a saved password.
-- Honcho memory can read an existing Honcho user peer. After entering the workspace another Honcho app already uses, a Space can name that app's user peer under User peer, and recall then includes what Honcho already knows about the user. Rakazo only reads that peer through Honcho's chat; it never creates it or writes conclusions to it.
+- Honcho memory can read an existing Honcho user peer. After entering the workspace another Honcho app already uses, a Space can name that app's user peer under User peer, and recall then includes what Honcho already knows about the user. Ork only reads that peer through Honcho's chat; it never creates it or writes conclusions to it.
 - Remote MCP servers whose OAuth provider does not offer dynamic client registration can now be connected: enter a client you created in the provider's console under **Advanced** when adding the server, and allow the **Redirect URI** shown there. The client is stored encrypted, its secret is never returned, and it survives **Disconnect**; switching to a different client drops the current grant.
 
 ### Fixed
@@ -544,12 +544,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Back up Postgres and `DATA_DIR` before upgrading, and store `ENCRYPTION_KEY` (and `ENCRYPTION_MASTER_KEYS`, if set) apart from them. New messages, events, memory and files are encrypted at rest with keys derived from them, and that content cannot be read without them. To roll back to an earlier release, first run `content-encryption decrypt` ([content encryption](docs/content-encryption.md#rollout)).
 - Content written before this release stays in plaintext until you run `content-encryption migrate` ([content encryption](docs/self-host-storage.md#content-encryption)); new content is encrypted from the first start. Set the new `CONTENT_ENCRYPTION=off` to store content readable instead: existing ciphertext still reads, and `content-encryption decrypt` converts it. Compose, published images and Railway default to `on`; the desktop app's **This computer** stack and local development default to `off`.
-- The API and worker connect as a separate database login, `rakazo_app`, whose password is `POSTGRES_APP_PASSWORD` in `.env`. `install-images.sh`, the updater, the desktop app and `deploy-main.sh` add it when it is missing. If you upgrade a source checkout (`docker-compose.yml`) or run the production Compose commands by hand, first run `echo "POSTGRES_APP_PASSWORD=$(openssl rand -hex 16)" >> .env`. Otherwise Compose stops with `Set POSTGRES_APP_PASSWORD in .env`.
+- The API and worker connect as a separate database login, `orkbot_app`, whose password is `POSTGRES_APP_PASSWORD` in `.env`. `install-images.sh`, the updater, the desktop app and `deploy-main.sh` add it when it is missing. If you upgrade a source checkout (`docker-compose.yml`) or run the production Compose commands by hand, first run `echo "POSTGRES_APP_PASSWORD=$(openssl rand -hex 16)" >> .env`. Otherwise Compose stops with `Set POSTGRES_APP_PASSWORD in .env`.
 - The API and worker containers receive only the settings they read, not the whole `.env`. A setting whose name you choose, such as `TELEGRAM_BOT_TOKEN_<NAME>`, needs an [override file](docs/self-host-configuration.md#settings-with-names-you-choose). `install-images.sh` names every `.env` setting that no container receives, and layers `docker-compose.override.yml` when it is present.
 - Unless `SANDBOX_COMPUTER_EGRESS` is set, Docker computers use restricted egress when the host firewall rules are installed, and open egress as before when they are not ([restricted computer egress](docs/self-host-docker-computers.md#restricted-computer-egress)).
-- Only the deployment owner can use an OpenAI-compatible model or voice server on a private address, such as a LAN Ollama, `host.docker.internal` or a host listed in `RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS`. Other users' runs on such a connection fail with "Private model endpoints are limited to the deployment owner." Set `MCP_ALLOW_PRIVATE_ENDPOINT=true` to allow them for every user, or serve the models to everyone with `RAKAZO_LOCAL_MODELS`.
+- Only the deployment owner can use an OpenAI-compatible model or voice server on a private address, such as a LAN Ollama, `host.docker.internal` or a host listed in `ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS`. Other users' runs on such a connection fail with "Private model endpoints are limited to the deployment owner." Set `MCP_ALLOW_PRIVATE_ENDPOINT=true` to allow them for every user, or serve the models to everyone with `ORKBOT_LOCAL_MODELS`.
 - A bot asks before fetching a site that it was not given in the run. This includes routines. Choose **Always allow** on the approval card or turn on Auto Review. Webhook runs refuse such sites.
-- The web app sends a strict Content-Security-Policy, which blocks scripts that a CDN or proxy injects. Search the API logs for `csp.violation` and add the origins with `RAKAZO_CSP_SCRIPT_SRC` and `RAKAZO_CSP_CONNECT_SRC`.
+- The web app sends a strict Content-Security-Policy, which blocks scripts that a CDN or proxy injects. Search the API logs for `csp.violation` and add the origins with `ORKBOT_CSP_SCRIPT_SRC` and `ORKBOT_CSP_CONNECT_SRC`.
 - Mobile app users need to sign in again once.
 
 ## [0.3.0] - 2026-10-20

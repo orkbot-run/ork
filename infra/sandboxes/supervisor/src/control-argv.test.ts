@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
-import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
+import { browserProfilePathForScreen } from "@orkbot/core/node/desktop-runtime";
 import { describe, expect, it } from "vitest";
 import { containerActionStep } from "./supervisor-logic.js";
 
@@ -104,7 +104,7 @@ describe.each([undefined, profile])(
             ((action.kind === "launch" || action.kind === "focus") &&
               action.application === "chromium"))
         ) {
-          expect(argv[2]).toBe(`RAKAZO_BROWSER_PROFILE=${browserProfile}`);
+          expect(argv[2]).toBe(`ORKBOT_BROWSER_PROFILE=${browserProfile}`);
         }
         expect(check(argv), JSON.stringify(action)).toEqual({
           allowed: true,
@@ -123,58 +123,58 @@ describe.each([undefined, profile])(
 
 describe("controller argv restrictions", () => {
   const unauthorized = [
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}`],
-    ["env", `DISPLAY=${display}`, "RAKAZO_BROWSER_PROFILE=", "rakazo-browser"],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}a`, "rakazo-browser"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}`],
+    ["env", `DISPLAY=${display}`, "ORKBOT_BROWSER_PROFILE=", "orkbot-browser"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}a`, "orkbot-browser"],
     [
       "env",
       `DISPLAY=${display}`,
-      `RAKAZO_BROWSER_PROFILE=${profile.toUpperCase()}`,
-      "rakazo-browser",
+      `ORKBOT_BROWSER_PROFILE=${profile.toUpperCase()}`,
+      "orkbot-browser",
     ],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}`, "xterm"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}`, "xterm"],
     [
       "env",
       `DISPLAY=${display}`,
-      `RAKAZO_BROWSER_PROFILE=${profile}`,
+      `ORKBOT_BROWSER_PROFILE=${profile}`,
       "/usr/bin/xdg-open",
       "https://example.com",
     ],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}`, "xdg-open"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}`, "xdg-open"],
     [
       "env",
       `DISPLAY=${display}`,
-      `RAKAZO_BROWSER_PROFILE=${profile}`,
-      "rakazo-browser",
+      `ORKBOT_BROWSER_PROFILE=${profile}`,
+      "orkbot-browser",
       "one",
       "two",
     ],
-    ["env", "DISPLAY=:8", `RAKAZO_BROWSER_PROFILE=${profile}`, "rakazo-browser"],
+    ["env", "DISPLAY=:8", `ORKBOT_BROWSER_PROFILE=${profile}`, "orkbot-browser"],
     ["env", "DISPLAY=:8", "xdg-open", "https://example.com"],
-    ["env", `DISPLAY=${display}`, "rakazo-focus-or-launch"],
-    ["env", `DISPLAY=${display}`, "rakazo-focus-or-launch", "sh"],
-    ["env", `DISPLAY=${display}`, "rakazo-focus-or-launch", "rakazo-focus-or-launch"],
-    ["env", `DISPLAY=${display}`, "rakazo-focus-or-launch", "/usr/bin/xterm"],
-    ["env", `DISPLAY=${display}`, "rakazo-focus-or-launch", "xterm", "one", "two"],
+    ["env", `DISPLAY=${display}`, "orkbot-focus-or-launch"],
+    ["env", `DISPLAY=${display}`, "orkbot-focus-or-launch", "sh"],
+    ["env", `DISPLAY=${display}`, "orkbot-focus-or-launch", "orkbot-focus-or-launch"],
+    ["env", `DISPLAY=${display}`, "orkbot-focus-or-launch", "/usr/bin/xterm"],
+    ["env", `DISPLAY=${display}`, "orkbot-focus-or-launch", "xterm", "one", "two"],
     [
       "env",
       `DISPLAY=${display}`,
-      `RAKAZO_BROWSER_PROFILE=${profile}`,
-      "rakazo-focus-or-launch",
+      `ORKBOT_BROWSER_PROFILE=${profile}`,
+      "orkbot-focus-or-launch",
       "xterm",
     ],
-    ["env", "DISPLAY=:8", "rakazo-focus-or-launch", "xterm"],
+    ["env", "DISPLAY=:8", "orkbot-focus-or-launch", "xterm"],
     ["env", `DISPLAY=${display}`, "LD_PRELOAD=/tmp/unsafe", "xdg-open", "https://example.com"],
-    ["env", `DISPLAY=${display}`, "RAKAZO_BROWSER_PROFILE=/tmp/unsafe", "rakazo-browser"],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}/../other`, "rakazo-browser"],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}`, "sh", "-c", "true"],
-    ["env", `DISPLAY=${display}`, `RAKAZO_BROWSER_PROFILE=${profile}`, "xdotool", "key", "Return"],
+    ["env", `DISPLAY=${display}`, "ORKBOT_BROWSER_PROFILE=/tmp/unsafe", "orkbot-browser"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}/../other`, "orkbot-browser"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}`, "sh", "-c", "true"],
+    ["env", `DISPLAY=${display}`, `ORKBOT_BROWSER_PROFILE=${profile}`, "xdotool", "key", "Return"],
     [
       "env",
       `DISPLAY=${display}`,
-      `RAKAZO_BROWSER_PROFILE=${profile}`,
-      `RAKAZO_BROWSER_PROFILE=${profile}`,
-      "rakazo-browser",
+      `ORKBOT_BROWSER_PROFILE=${profile}`,
+      `ORKBOT_BROWSER_PROFILE=${profile}`,
+      "orkbot-browser",
     ],
   ].map(register);
 

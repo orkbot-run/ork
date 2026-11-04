@@ -88,14 +88,14 @@ describe("parseNpxLaunch", () => {
 
 describe("defaultMcpPackagesRoot", () => {
   it("prefers MCP_PACKAGES_DIR, then a writable DATA_DIR, then the temp dir", async () => {
-    const data = await mkdtemp(join(tmpdir(), "rakazo-data-"));
+    const data = await mkdtemp(join(tmpdir(), "orkbot-data-"));
     try {
       expect(defaultMcpPackagesRoot({ MCP_PACKAGES_DIR: "/srv/pkgs", DATA_DIR: data })).toBe(
         "/srv/pkgs",
       );
       expect(defaultMcpPackagesRoot({ DATA_DIR: data })).toBe(join(data, "mcp-packages"));
       expect(defaultMcpPackagesRoot({ DATA_DIR: join(data, "missing") })).toBe(
-        join(tmpdir(), "rakazo-mcp-packages"),
+        join(tmpdir(), "orkbot-mcp-packages"),
       );
     } finally {
       await rm(data, { recursive: true, force: true });
@@ -141,7 +141,7 @@ describe("ensureMcpPackage", () => {
   let log: string;
 
   beforeEach(async () => {
-    work = await mkdtemp(join(tmpdir(), "rakazo-mcp-installer-"));
+    work = await mkdtemp(join(tmpdir(), "orkbot-mcp-installer-"));
     root = join(work, "packages");
     npm = join(work, "fake-npm");
     log = join(work, "npm.log");

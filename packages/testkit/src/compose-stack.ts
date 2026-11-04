@@ -20,7 +20,7 @@ export function postgresUp(root: string): boolean {
   try {
     execFileSync(
       "docker",
-      [...composeBaseArgs(root), "exec", "-T", "postgres", "pg_isready", "-U", "rakazo"],
+      [...composeBaseArgs(root), "exec", "-T", "postgres", "pg_isready", "-U", "orkbot"],
       { stdio: "ignore", timeout: 8_000 },
     );
     return true;

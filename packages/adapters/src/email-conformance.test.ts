@@ -1,4 +1,4 @@
-import type { TransactionalEmail, TransactionalEmailProvider } from "@rakazo/adapter-kit";
+import type { TransactionalEmail, TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { EmailEmulator } from "./email-emulator.js";
 import { ResendEmailProvider } from "./resend-email.js";

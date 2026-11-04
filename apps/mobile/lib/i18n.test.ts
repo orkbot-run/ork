@@ -63,7 +63,7 @@ describe("mobile i18n", () => {
     const { resetI18nForTests, t } = await import("./i18n");
     resetI18nForTests("zh-CN");
     expect(t("Account")).toBe("账户");
-    expect(t("Sign in to Rakazo")).toBe("登录 Rakazo");
+    expect(t("Sign in to Ork")).toBe("登录 Ork");
     expect(t("New bot")).toBe("新建 Bot");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "3 次运行，12 个 token",
@@ -72,7 +72,7 @@ describe("mobile i18n", () => {
 
     resetI18nForTests("ru");
     expect(t("Account")).toBe("Аккаунт");
-    expect(t("Sign in to Rakazo")).toBe("Войти в Rakazo");
+    expect(t("Sign in to Ork")).toBe("Войти в Ork");
     expect(t("New bot")).toBe("Новый бот");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "Запусков: 3, токенов: 12",
@@ -81,7 +81,7 @@ describe("mobile i18n", () => {
 
     resetI18nForTests("nl");
     expect(t("Account")).toBe("Account");
-    expect(t("Sign in to Rakazo")).toBe("Aanmelden bij Rakazo");
+    expect(t("Sign in to Ork")).toBe("Aanmelden bij Ork");
     expect(t("New bot")).toBe("Nieuwe bot");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "3 uitvoeringen, 12 tokens",
@@ -90,7 +90,7 @@ describe("mobile i18n", () => {
 
     resetI18nForTests("ja");
     expect(t("Account")).toBe("アカウント");
-    expect(t("Sign in to Rakazo")).toBe("Rakazoにログイン");
+    expect(t("Sign in to Ork")).toBe("Orkにログイン");
     expect(t("New bot")).toBe("新しいボット");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "3回の実行、12トークン",
@@ -99,7 +99,7 @@ describe("mobile i18n", () => {
 
     resetI18nForTests("de");
     expect(t("Account")).toBe("Konto");
-    expect(t("Sign in to Rakazo")).toBe("Bei Rakazo anmelden");
+    expect(t("Sign in to Ork")).toBe("Bei Ork anmelden");
     expect(t("New bot")).toBe("Neuer Bot");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "3 Ausführungen, 12 Token",
@@ -108,7 +108,7 @@ describe("mobile i18n", () => {
 
     resetI18nForTests("es");
     expect(t("Account")).toBe("Cuenta");
-    expect(t("Sign in to Rakazo")).toBe("Inicia sesión en Rakazo");
+    expect(t("Sign in to Ork")).toBe("Inicia sesión en Ork");
     expect(t("New bot")).toBe("Nuevo bot");
     expect(t("{runs} runs, {tokens} tokens", { runs: 3, tokens: 12 })).toBe(
       "3 ejecuciones, 12 tokens",
@@ -209,10 +209,10 @@ describe("mobile i18n", () => {
     const { ES_MESSAGES } = await import("./locales/es");
     const { PL_MESSAGES } = await import("./locales/pl");
     const { EMPTY_PLUGIN_CATALOG_MESSAGE, SLASH_ACTIONS, RUN_ERROR_LIMIT_MESSAGES } = await import(
-      "@rakazo/core"
+      "@orkbot/core"
     );
     const { AI_DATA_DISCLOSURES, OPENAI_COMPATIBLE_BASE_URL_HINT } = await import(
-      "@rakazo/contracts"
+      "@orkbot/contracts"
     );
     const { createMenuItems } = await import("./create-chooser");
     const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -228,7 +228,7 @@ describe("mobile i18n", () => {
       "Your model provider",
       "The model provider returned an error.",
       "Connect a model in Settings before running bots.",
-      "Connect your own API key in Models or choose Rakazo credits in Billing.",
+      "Connect your own API key in Models or choose Ork credits in Billing.",
       "{provider} is rate limiting requests. Try again shortly.",
       "{summary} Resets {date}.",
       "{provider} rejected the API key. Check your connection settings.",
@@ -295,7 +295,7 @@ describe("mobile i18n", () => {
     ["ru", "Ваш поставщик моделей не ответил вовремя. Повторите попытку."],
     ["zh-CN", "你的模型提供商响应超时。请重试。"],
   ] as const)("renders provider errors in %s", async (locale, expected) => {
-    const { normalizeRunError } = await import("@rakazo/core");
+    const { normalizeRunError } = await import("@orkbot/core");
     const { resetI18nForTests, t, dateLocaleForUi } = await import("./i18n");
     resetI18nForTests(locale);
     expect(normalizeRunError("Request timed out", t, dateLocaleForUi()).summary).toBe(expected);
@@ -315,7 +315,7 @@ describe("mobile i18n", () => {
     await setUiLocale("en");
     expect(getActiveUiLocale()).toBe("en");
     expect(t("Language")).toBe("Language");
-    expect(setItemAsync).toHaveBeenCalledWith("rakazo.uiLocale", "en");
+    expect(setItemAsync).toHaveBeenCalledWith("orkbot.uiLocale", "en");
     expect(applyMobileUiDirection).toHaveBeenCalledWith("en");
   });
 
@@ -329,7 +329,7 @@ describe("mobile i18n", () => {
     expect(applyMobileUiDirection).toHaveBeenLastCalledWith("pl");
     await setUiLocale("en");
     await setUiLocale("pl");
-    expect(setItemAsync).toHaveBeenLastCalledWith("rakazo.uiLocale", "pl");
+    expect(setItemAsync).toHaveBeenLastCalledWith("orkbot.uiLocale", "pl");
     expect(getActiveUiLocale()).toBe("pl");
   });
 
@@ -381,7 +381,7 @@ describe("mobile i18n", () => {
     await Promise.all([first, second]);
 
     expect(getActiveUiLocale()).toBe("zh-CN");
-    expect(setItemAsync).toHaveBeenLastCalledWith("rakazo.uiLocale", "zh-CN");
+    expect(setItemAsync).toHaveBeenLastCalledWith("orkbot.uiLocale", "zh-CN");
     expect(applyMobileUiDirection).toHaveBeenLastCalledWith("zh-CN");
   });
 });
@@ -394,7 +394,7 @@ it("restores Traditional Chinese after saving the language choice", async () => 
   );
   const { ZH_TW_MESSAGES } = await import("./locales/zh-TW");
   await setUiLocale("zh-TW");
-  expect(setItemAsync).toHaveBeenLastCalledWith("rakazo.uiLocale", "zh-TW");
+  expect(setItemAsync).toHaveBeenLastCalledWith("orkbot.uiLocale", "zh-TW");
   resetI18nForTests();
   vi.mocked(getItemAsync).mockResolvedValue("zh-TW");
   await expect(bootstrapI18n()).resolves.toBe("zh-TW");

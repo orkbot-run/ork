@@ -1,15 +1,15 @@
 /** @jsxRuntime automatic */
-import type { TransactionalEmail } from "@rakazo/adapter-kit";
-import { ANDROID_APP_STORE_URL, IOS_APP_STORE_URL } from "@rakazo/contracts";
+import type { TransactionalEmail } from "@orkbot/adapter-kit";
+import { ANDROID_APP_STORE_URL, IOS_APP_STORE_URL } from "@orkbot/contracts";
 import { Link, Text } from "react-email";
 import { emailText, greeting, linkStyle, message } from "./email.js";
 
 const APPS: Readonly<Record<string, string>> = {
   iPhone: IOS_APP_STORE_URL,
   Android: ANDROID_APP_STORE_URL,
-  Mac: "https://rakazo.com/api/download?platform=mac",
-  Windows: "https://rakazo.com/api/download?platform=windows",
-  Linux: "https://rakazo.com/api/download?platform=linux",
+  Mac: "https://orkbot.run/api/download?platform=mac",
+  Windows: "https://orkbot.run/api/download?platform=windows",
+  Linux: "https://orkbot.run/api/download?platform=linux",
 };
 
 export function welcomeEmail(
@@ -21,12 +21,12 @@ export function welcomeEmail(
   return message(
     user.email,
     locale,
-    say("Welcome to Rakazo"),
+    say("Welcome to Ork"),
     <>
       <Text>{greeting(say, user.name)}</Text>
-      <Text>{say("Thanks for signing up for Rakazo.")}</Text>
+      <Text>{say("Thanks for signing up for Ork.")}</Text>
       <Text>
-        {say("Rakazo also has apps for")}{" "}
+        {say("Ork also has apps for")}{" "}
         {/* The language's own list ("A, B, and C", "A, B y C"), with each app a link. */}
         {new Intl.ListFormat(locale, { type: "conjunction" })
           .formatToParts(Object.keys(APPS))
@@ -43,14 +43,14 @@ export function welcomeEmail(
       </Text>
       <Text>
         {say("Questions or ideas?")}{" "}
-        <Link href="https://discord.gg/RWwKa2Sn7h" style={linkStyle}>
-          {say("Join us on Discord")}
+        <Link href="https://github.com/orkbot-run/ork/issues" style={linkStyle}>
+          GitHub
         </Link>
         .
       </Text>
       <Text>
-        {say("Rakazo is open source. If you like it,")}{" "}
-        <Link href="https://github.com/elie222/rakazo" style={linkStyle}>
+        {say("Ork is open source. If you like it,")}{" "}
+        <Link href="https://github.com/orkbot-run/ork" style={linkStyle}>
           {say("a star on GitHub")}
         </Link>{" "}
         {say("helps others find it.")}
@@ -58,15 +58,15 @@ export function welcomeEmail(
       <Text>
         {say("Want to run it on your own servers?")}{" "}
         <Link
-          href="https://github.com/elie222/rakazo/blob/main/docs/self-host.md"
+          href="https://github.com/orkbot-run/ork/blob/main/docs/self-host.md"
           style={linkStyle}
         >
-          {say("Self-host Rakazo")}
+          {say("Self-host Ork")}
         </Link>
         .
       </Text>
       <Text>{say("Have any questions? Reply to this email.")}</Text>
-      <Text>Elie</Text>
+      <Text>Ork</Text>
     </>,
     unsubscribeUrl,
   );

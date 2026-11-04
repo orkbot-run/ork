@@ -1,24 +1,24 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Onboarding
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMPTY_EMAIL}
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMPTY_EMAIL}
 - extendedWaitUntil:
     visible: "Personal|Tap \\+ to create a bot"
     timeout: 20000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 01-empty-inbox
-- openLink: "rakazo:///artifacts"
+- openLink: "orkbot:///artifacts"
 - extendedWaitUntil:
     visible: "No artifacts yet|Artifacts"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 02-empty-artifacts
-- openLink: "rakazo:///"
+- openLink: "orkbot:///"
 - extendedWaitUntil:
     visible: "Create"
     timeout: 15000

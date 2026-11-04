@@ -5,8 +5,8 @@ import type {
   LoginFieldInput,
   MessageReaction,
   ThreadMessage,
-} from "@rakazo/contracts";
-import type { ChildBotBlock, FoldedTranscript } from "@rakazo/core";
+} from "@orkbot/contracts";
+import type { ChildBotBlock, FoldedTranscript } from "@orkbot/core";
 import {
   expandPeerReplies,
   groupVoiceChats,
@@ -19,9 +19,9 @@ import {
   timeSeparatorIds,
   unreadDividerMessageId,
   voiceChatHoldsMessage,
-} from "@rakazo/core";
-import type { GroupAvatarMember } from "@rakazo/ui-web";
-import { Button, cn, Spinner } from "@rakazo/ui-web";
+} from "@orkbot/core";
+import type { GroupAvatarMember } from "@orkbot/ui-web";
+import { Button, cn, Spinner } from "@orkbot/ui-web";
 import { ArrowDown } from "lucide-react";
 import type { CSSProperties, RefObject } from "react";
 import {

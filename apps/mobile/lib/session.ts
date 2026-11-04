@@ -10,8 +10,8 @@ import { forgetReferrals } from "./referral";
 import { rememberSignedIn } from "./returning-user";
 import { clearFailedSends } from "./thread-feedback";
 
-const SESSION_KEY = "rakazo.session_token";
-const INTEGRATIONS_SCOPE_KEY = "rakazo.integrations-scope";
+const SESSION_KEY = "orkbot.session_token";
+const INTEGRATIONS_SCOPE_KEY = "orkbot.integrations-scope";
 
 export type VerifiedIntegrationsScope = {
   apiBase: string;

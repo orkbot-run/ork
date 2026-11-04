@@ -7,7 +7,7 @@
 # Pin a published vX.Y.Z tag for a fixed version; `latest` moves to each new stable release.
 # Default SANDBOX_PROVIDER=docker boots a local computer via the in-stack supervisor (no E2B key).
 # Optional: set e2b / daytona / boat plus the matching API key for remote computers.
-name: rakazo
+name: orkbot
 
 # What the api and worker both read. Each service adds the keys only it reads, so a process
 # only sees what it uses instead of the whole .env. A key with no value is passed through
@@ -17,7 +17,7 @@ x-app-environment: &app-environment
   # Runtime
   NODE_ENV: production
   # The app's own login, subject to row-level security (docs/self-host-configuration.md#database-roles).
-  DATABASE_URL: postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rakazo}
+  DATABASE_URL: postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-orkbot}
   REALTIME_DATABASE_URL:
   DB_POOL_MAX:
   DATA_DIR: /data
@@ -42,16 +42,16 @@ x-app-environment: &app-environment
   API_URL: ${API_URL:-http://127.0.0.1:5173}
   MAX_UPLOAD_SIZE_MB:
   MAX_ATTACHMENTS_PER_MESSAGE:
-  RAKAZO_UPDATE_RESTART_SUPERVISOR:
+  ORKBOT_UPDATE_RESTART_SUPERVISOR:
   TICKET_BOARD_ENABLED:
   USER_DEVICES_ENABLED:
   BOT_MESSAGE_MAX_HOPS:
-  RAKAZO_MESSAGE_USER_MAX_CHARS:
+  ORKBOT_MESSAGE_USER_MAX_CHARS:
   TEACH_RECORDING_TTL_MS:
   PHONE_CALLS_ENABLED:
   PHONE_CALL_RING_SECONDS:
   PHONE_CALL_COOLDOWN_MINUTES:
-  RAKAZO_SECRETS_ALLOW_PRIVATE_HTTP:
+  ORKBOT_SECRETS_ALLOW_PRIVATE_HTTP:
   EXPO_ACCESS_TOKEN:
   APNS_VOIP_KEY_ID:
   APNS_VOIP_TEAM_ID:
@@ -96,7 +96,7 @@ x-app-environment: &app-environment
   PI_DEFAULT_MODEL:
   PI_DEFAULT_CREDENTIALS:
   PI_SESSION_RECORDING:
-  RAKAZO_LIVE_MODEL_CATALOG:
+  ORKBOT_LIVE_MODEL_CATALOG:
   OPENROUTER_API_KEY:
   ANTHROPIC_API_KEY:
   TYPESAFE_API_KEY:
@@ -105,19 +105,19 @@ x-app-environment: &app-environment
   MODEL_STREAM_TIMEOUT_MS:
   MODEL_CONNECT_TIMEOUT_MS:
   MODEL_STREAM_IDLE_TIMEOUT_MS:
-  RAKAZO_LOCAL_MODELS:
-  RAKAZO_LOCAL_MODELS_URL:
-  RAKAZO_LOCAL_VISION_MODELS:
-  RAKAZO_LOCAL_REASONING_MODELS:
-  RAKAZO_LOCAL_CONTEXT_WINDOW:
-  RAKAZO_LOCAL_MAX_TOKENS:
-  RAKAZO_OPENAI_COMPATIBLE_VISION_MODELS:
-  RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC:
-  RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS:
-  RAKAZO_AUTO_REVIEW_PROVIDER:
-  RAKAZO_AUTO_REVIEW_MODEL:
-  RAKAZO_AUTO_REVIEW_MIN_CONFIDENCE:
-  RAKAZO_AUTO_REVIEW_TIMEOUT_MS:
+  ORKBOT_LOCAL_MODELS:
+  ORKBOT_LOCAL_MODELS_URL:
+  ORKBOT_LOCAL_VISION_MODELS:
+  ORKBOT_LOCAL_REASONING_MODELS:
+  ORKBOT_LOCAL_CONTEXT_WINDOW:
+  ORKBOT_LOCAL_MAX_TOKENS:
+  ORKBOT_OPENAI_COMPATIBLE_VISION_MODELS:
+  ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC:
+  ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS:
+  ORKBOT_AUTO_REVIEW_PROVIDER:
+  ORKBOT_AUTO_REVIEW_MODEL:
+  ORKBOT_AUTO_REVIEW_MIN_CONFIDENCE:
+  ORKBOT_AUTO_REVIEW_TIMEOUT_MS:
   RELEASE_WATCH_EVAL_MODEL:
   FISH_TTS_MODEL:
   FISH_ASR_MODEL:
@@ -294,22 +294,22 @@ services:
     pids_limit: 200
     mem_limit: 2g
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-rakazo}
+      POSTGRES_USER: ${POSTGRES_USER:-orkbot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-rakazo}
+      POSTGRES_DB: ${POSTGRES_DB:-orkbot}
     volumes:
       - pgdata:/var/lib/postgresql/data
     networks:
       - data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rakazo} -d ${POSTGRES_DB:-rakazo}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orkbot} -d ${POSTGRES_DB:-orkbot}"]
       interval: 5s
       timeout: 5s
       retries: 20
 
   # Pull-only stub so `compose up` fetches the published desktop image without a checkout.
   computer:
-    image: ${RAKAZO_COMPUTER_IMAGE:-ghcr.io/elie222/rakazo/computer}:${RAKAZO_COMPUTER_IMAGE_TAG:-edge}
+    image: ${ORKBOT_COMPUTER_IMAGE:-ghcr.io/orkbot-run/ork/computer}:${ORKBOT_COMPUTER_IMAGE_TAG:-edge}
     command: ["true"]
     network_mode: none
     restart: "no"
@@ -326,9 +326,9 @@ services:
   # Runs from the app image. Not published as its own image and not exposed on the host:
   # access to the supervisor is equivalent to control of the Docker host.
   supervisor:
-    image: ${RAKAZO_IMAGE:-ghcr.io/elie222/rakazo/app}:${RAKAZO_IMAGE_TAG:-edge}
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
     restart: unless-stopped
-    command: ["pnpm", "--filter", "@rakazo/sandbox-supervisor", "start"]
+    command: ["pnpm", "--filter", "@orkbot/sandbox-supervisor", "start"]
     init: true
     user: root
     security_opt:
@@ -342,10 +342,10 @@ services:
       SUPERVISOR_HOST: "0.0.0.0"
       SUPERVISOR_PORT: "7091"
       DOCKER_SOCKET: /var/run/docker.sock
-      RAKAZO_COMPUTER_IMAGE: ${RAKAZO_COMPUTER_IMAGE:-ghcr.io/elie222/rakazo/computer}:${RAKAZO_COMPUTER_IMAGE_TAG:-edge}
-      RAKAZO_COMPUTER_MEMORY: ${RAKAZO_COMPUTER_MEMORY:-2g}
-      RAKAZO_COMPUTER_CPUS: ${RAKAZO_COMPUTER_CPUS:-2}
-      RAKAZO_COMPUTER_PIDS_LIMIT: ${RAKAZO_COMPUTER_PIDS_LIMIT:-2048}
+      ORKBOT_COMPUTER_IMAGE: ${ORKBOT_COMPUTER_IMAGE:-ghcr.io/orkbot-run/ork/computer}:${ORKBOT_COMPUTER_IMAGE_TAG:-edge}
+      ORKBOT_COMPUTER_MEMORY: ${ORKBOT_COMPUTER_MEMORY:-2g}
+      ORKBOT_COMPUTER_CPUS: ${ORKBOT_COMPUTER_CPUS:-2}
+      ORKBOT_COMPUTER_PIDS_LIMIT: ${ORKBOT_COMPUTER_PIDS_LIMIT:-2048}
       SANDBOX_COMMAND_TIMEOUT_MS: ${SANDBOX_COMMAND_TIMEOUT_MS:-300000}
       SANDBOX_SUPERVISOR_TOKEN: ${SANDBOX_SUPERVISOR_TOKEN:?Set SANDBOX_SUPERVISOR_TOKEN in .env}
       SANDBOX_SCREEN_NETWORK: isolated
@@ -385,7 +385,7 @@ services:
   # container gets the owner login: the API and worker connect as rakazo_app, which row-level
   # security binds, so code running in either cannot find a login that bypasses it.
   migrate:
-    image: ${RAKAZO_IMAGE:-ghcr.io/elie222/rakazo/app}:${RAKAZO_IMAGE_TAG:-edge}
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
     working_dir: /app/apps/api
     command: ["pnpm", "db:deploy"]
     restart: "no"
@@ -396,8 +396,8 @@ services:
     pids_limit: 256
     mem_limit: 1536m
     environment:
-      DATABASE_URL: postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rakazo}
-      DATABASE_MIGRATION_URL: postgres://${POSTGRES_USER:-rakazo}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rakazo}
+      DATABASE_URL: postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-orkbot}
+      DATABASE_MIGRATION_URL: postgres://${POSTGRES_USER:-orkbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-orkbot}
     networks:
       - data
     depends_on:
@@ -405,7 +405,7 @@ services:
         condition: service_healthy
 
   api:
-    image: ${RAKAZO_IMAGE:-ghcr.io/elie222/rakazo/app}:${RAKAZO_IMAGE_TAG:-edge}
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
     restart: unless-stopped
     # Node runs directly, not through pnpm: pnpm does not pass SIGTERM on, so a stop would kill the
     # process before its graceful shutdown finishes in-flight requests and jobs.
@@ -445,8 +445,8 @@ services:
       SIGNUPS_ENABLED:
       SIGNUP_ALLOWLIST:
       SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
-      RAKAZO_DESKTOP_STACK_TOKEN: ${RAKAZO_DESKTOP_STACK_TOKEN:-}
-      RAKAZO_GIT_SHA:
+      ORKBOT_DESKTOP_STACK_TOKEN: ${ORKBOT_DESKTOP_STACK_TOKEN:-}
+      ORKBOT_GIT_SHA:
       SENTRY_BROWSER_DSN: ${SENTRY_BROWSER_DSN:-}
       PRIVACY_POLICY_URL:
       EMAIL_PROVIDER:
@@ -461,16 +461,16 @@ services:
       CRISP_WEBSITE_ID:
       INTEGRATIONS_CATALOG_URL:
       TEAM_CHAT_BOT_ID:
-      SLACK_RAKAZO_BOT_ID:
+      SLACK_ORKBOT_BOT_ID:
       TEAM_CHAT_JUDGE_PROVIDER:
       TEAM_CHAT_JUDGE_MODEL:
       SPACE_TEARDOWN_TIMEOUT_MS:
-      RAKAZO_MIN_CLIENT_BUILD:
-      RAKAZO_NAV_LINKS:
-      RAKAZO_ADMIN_EMAILS:
+      ORKBOT_MIN_CLIENT_BUILD:
+      ORKBOT_NAV_LINKS:
+      ORKBOT_ADMIN_EMAILS:
       VOICE_SUMMARY_MIN_CHARS:
     ports:
-      - "127.0.0.1:${RAKAZO_API_PORT:-3100}:3100"
+      - "127.0.0.1:${ORKBOT_API_PORT:-3100}:3100"
     volumes:
       - appdata:/data
     networks:
@@ -496,7 +496,7 @@ services:
       retries: 20
 
   worker:
-    image: ${RAKAZO_IMAGE:-ghcr.io/elie222/rakazo/app}:${RAKAZO_IMAGE_TAG:-edge}
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
     restart: unless-stopped
     # Directly, not through pnpm, so a stop reaches it (see the api command).
     working_dir: /app/apps/worker
@@ -538,7 +538,7 @@ services:
         condition: service_healthy
 
   web:
-    image: ${RAKAZO_IMAGE:-ghcr.io/elie222/rakazo/app}:${RAKAZO_IMAGE_TAG:-edge}
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
     restart: unless-stopped
     # Directly, not through pnpm, so a stop reaches it (see the api command).
     working_dir: /app/apps/web
@@ -559,17 +559,17 @@ services:
       # Keep that fixed so pids_limit holds on many-core hosts (#2430).
       RAYON_NUM_THREADS: "4"
       API_PROXY_TARGET: http://api:3100
-      RAKAZO_HOST: ${RAKAZO_HOST:-localhost}
+      ORKBOT_HOST: ${ORKBOT_HOST:-localhost}
       # Set only by the packaged desktop app. Its authenticated probe prevents a
       # source dev server on the same host port from impersonating this stack.
-      RAKAZO_DESKTOP_STACK_TOKEN: ${RAKAZO_DESKTOP_STACK_TOKEN:-}
-      RAKAZO_IMAGE_TAG: ${RAKAZO_IMAGE_TAG:-edge}
+      ORKBOT_DESKTOP_STACK_TOKEN: ${ORKBOT_DESKTOP_STACK_TOKEN:-}
+      ORKBOT_IMAGE_TAG: ${ORKBOT_IMAGE_TAG:-edge}
       SCREEN_PROXY_SECRET: ${SCREEN_PROXY_SECRET:?Set SCREEN_PROXY_SECRET in .env}
-      RAKAZO_CSP_SCRIPT_SRC: ${RAKAZO_CSP_SCRIPT_SRC:-}
-      RAKAZO_CSP_CONNECT_SRC: ${RAKAZO_CSP_CONNECT_SRC:-}
+      ORKBOT_CSP_SCRIPT_SRC: ${ORKBOT_CSP_SCRIPT_SRC:-}
+      ORKBOT_CSP_CONNECT_SRC: ${ORKBOT_CSP_CONNECT_SRC:-}
       CRISP_WEBSITE_ID:
     ports:
-      - "${RAKAZO_WEB_BIND:-127.0.0.1}:${RAKAZO_WEB_PORT:-5173}:5173"
+      - "${ORKBOT_WEB_BIND:-127.0.0.1}:${ORKBOT_WEB_PORT:-5173}:5173"
     networks:
       - app
     depends_on:

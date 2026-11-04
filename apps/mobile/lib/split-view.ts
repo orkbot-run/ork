@@ -9,7 +9,7 @@ import { useFoldRegions } from "./fold-regions";
 const SPLIT_MIN_WIDTH = 600;
 const INBOX_MIN_WIDTH = 240;
 const CONTENT_MIN_WIDTH = 360;
-const INBOX_WIDTH_KEY = "rakazo.inbox-width";
+const INBOX_WIDTH_KEY = "orkbot.inbox-width";
 
 type SplitState = { hidden: boolean; chosenWidth: number | null };
 let state: SplitState = { hidden: false, chosenWidth: null };

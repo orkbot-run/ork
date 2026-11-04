@@ -7,22 +7,22 @@ import { UI_LOCALES } from "./ui-locale";
 const resources = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
-  "modules/rakazo-notifications/android/src/main/res",
+  "modules/orkbot-notifications/android/src/main/res",
 );
 const keys = [
-  "rakazo_channel_live",
-  "rakazo_channel_messages",
-  "rakazo_channel_scheduled",
-  "rakazo_channel_attention",
-  "rakazo_live_one",
-  "rakazo_live_many",
-  "rakazo_live_working",
-  "rakazo_scheduled_title",
-  "rakazo_replied_group",
-  "rakazo_replied",
-  "rakazo_attention_failed",
-  "rakazo_attention_takeover",
-  "rakazo_attention_input",
+  "orkbot_channel_live",
+  "orkbot_channel_messages",
+  "orkbot_channel_scheduled",
+  "orkbot_channel_attention",
+  "orkbot_live_one",
+  "orkbot_live_many",
+  "orkbot_live_working",
+  "orkbot_scheduled_title",
+  "orkbot_replied_group",
+  "orkbot_replied",
+  "orkbot_attention_failed",
+  "orkbot_attention_takeover",
+  "orkbot_attention_input",
 ];
 
 const resourceDirectories = {

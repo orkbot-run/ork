@@ -31,7 +31,7 @@ vi.mock("@lingui/react/macro", () => ({
       parts.reduce((text, part, index) => `${text}${index > 0 ? values[index - 1] : ""}${part}`),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => {
+vi.mock("@orkbot/ui-web", () => {
   const Button = ({
     variant: _variant,
     size: _size,

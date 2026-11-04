@@ -13,9 +13,9 @@ import type {
   ScreenRequest,
   ScreenSession,
   TerminalRequest,
-} from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import { sandboxIdleMs } from "./computer-idle.js";
 import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
@@ -25,7 +25,7 @@ import { isSandboxGoneError } from "./sandbox-errors.js";
 import { shouldSkipPortableWorkspaceFile } from "./workspace-save-policy.js";
 
 const DISPLAY_START = 20;
-const REMOTE_WORKSPACE = "/home/user/rakazo-home";
+const REMOTE_WORKSPACE = "/home/user/orkbot-home";
 const REMOTE_BROWSER_PROFILES = `${REMOTE_WORKSPACE}/.browser-profiles`;
 
 /** Common boundary used by the E2B and Novita desktop SDKs. */
@@ -93,7 +93,7 @@ export function remoteDesktopCreateOptions(botId: string, apiKey: string) {
   return {
     apiKey,
     timeoutMs: sandboxIdleMs(),
-    metadata: { botId, rakazo: "computer" },
+    metadata: { botId, orkbot: "computer" },
     resolution: [1280, 800] as [number, number],
     lifecycle: { onTimeout: "pause" as const, autoResume: false },
   };
@@ -688,7 +688,7 @@ function remoteCwd(cwd: string | undefined): string {
     !cwd ||
     cwd === "." ||
     cwd === "/" ||
-    cwd === "/home/rakazo" ||
+    cwd === "/home/orkbot" ||
     cwd === "/home/user" ||
     cwd === REMOTE_WORKSPACE
   ) {
@@ -696,8 +696,8 @@ function remoteCwd(cwd: string | undefined): string {
   }
   const relative = cwd.startsWith(`${REMOTE_WORKSPACE}/`)
     ? cwd.slice(REMOTE_WORKSPACE.length + 1)
-    : cwd.startsWith("/home/rakazo/")
-      ? cwd.slice("/home/rakazo/".length)
+    : cwd.startsWith("/home/orkbot/")
+      ? cwd.slice("/home/orkbot/".length)
       : cwd;
   return workspacePath(REMOTE_WORKSPACE, relative);
 }

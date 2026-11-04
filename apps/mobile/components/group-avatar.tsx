@@ -1,4 +1,4 @@
-import type { BotAvatarSet } from "@rakazo/contracts";
+import type { BotAvatarSet } from "@orkbot/contracts";
 import { memo } from "react";
 import type { ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";

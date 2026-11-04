@@ -1,9 +1,9 @@
-import type { RunErrorKind } from "@rakazo/contracts";
+import type { RunErrorKind } from "@orkbot/contracts";
 import {
   COMPUTER_ALLOWANCE_USED_ERROR,
   COMPUTER_RATE_LIMIT_ERROR,
   providerQuotaResetAt,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { stuckWorkStatusMessages } from "./stuck-work.js";
 
 export const MISSING_TOOL_FINAL_RESPONSE_ERROR =
@@ -32,9 +32,9 @@ export const MODEL_REQUEST_LIMIT_ERROR =
 
 export const MISSING_MODEL_RUN_ERROR = "Connect a model in Settings before running bots.";
 
-/** A deployment model run while the organization has not chosen Rakazo credits. */
+/** A deployment model run while the organization has not chosen Ork credits. */
 export const HOSTED_MODEL_CREDITS_REQUIRED_ERROR =
-  "Connect your own API key in Models or choose Rakazo credits in Billing.";
+  "Connect your own API key in Models or choose Ork credits in Billing.";
 
 /** A run in a billing organization without a paid plan, credits, or free period. */
 export const MODEL_ACCESS_REQUIRED_RUN_ERROR = "Subscribe in Billing to keep running bots.";

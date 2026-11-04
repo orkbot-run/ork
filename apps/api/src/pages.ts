@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { SecretStore } from "@rakazo/adapter-kit";
-import { forgetPageShareSecrets } from "@rakazo/adapters";
-import type { Actor, PageDetail, PageSummary, PageVisibility, SharedPage } from "@rakazo/contracts";
-import { pageShareTokenFromSlug, pageShareUrl } from "@rakazo/contracts";
-import type { PageShareSecret, PrismaClient } from "@rakazo/db";
-import { IsolationError, Prisma, runAsSystem } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { SecretStore } from "@orkbot/adapter-kit";
+import { forgetPageShareSecrets } from "@orkbot/adapters";
+import type { Actor, PageDetail, PageSummary, PageVisibility, SharedPage } from "@orkbot/contracts";
+import { pageShareTokenFromSlug, pageShareUrl } from "@orkbot/contracts";
+import type { PageShareSecret, PrismaClient } from "@orkbot/db";
+import { IsolationError, Prisma, runAsSystem } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 
 const PAGE_SHARE_SECRET_KIND = "page_share";
 const DEFAULT_LIST_LIMIT = 30;

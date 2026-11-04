@@ -3,7 +3,7 @@ export const NL_MESSAGES: Record<string, string> = {
   "Check for Updates…": "Zoek naar updates…",
   "Computer Access…": "Computertoegang…",
   "Revoke Local Computer Access": "Toegang tot lokale computer intrekken",
-  "Change Rakazo Server…": "Rakazo-server wijzigen…",
+  "Change Ork Server…": "Ork-server wijzigen…",
   "Stop Local Stack": "Lokale stack stoppen",
   "Hide {name}": "Verberg {name}",
   "Hide Others": "Verberg andere",
@@ -35,12 +35,12 @@ export const NL_MESSAGES: Record<string, string> = {
   Close: "Sluit",
   "Close Window": "Sluit venster",
   "Bring All to Front": "Alles op voorgrond",
-  "Rakazo {version} is ready to install.": "Rakazo {version} is klaar om te installeren.",
+  "Ork {version} is ready to install.": "Ork {version} is klaar om te installeren.",
   Restart: "Herstart",
   Later: "Later",
   "Could not install the update.": "De update kon niet worden geïnstalleerd.",
   "Could not check for updates.": "Er kon niet worden gezocht naar updates.",
-  "Rakazo is up to date.": "Rakazo is up-to-date.",
+  "Ork is up to date.": "Ork is up-to-date.",
   "Version {version}": "Versie {version}",
   "Automatic updates are turned off for this install.":
     "Automatische updates zijn uitgeschakeld voor deze installatie.",
@@ -48,11 +48,11 @@ export const NL_MESSAGES: Record<string, string> = {
     "Automatische updates werken alleen in een geïnstalleerde versie.",
   "No desktop releases are published for this build yet.":
     "Er zijn nog geen desktopversies gepubliceerd voor deze build.",
-  "Move Rakazo to Applications to install updates.":
-    "Verplaats Rakazo naar Apps om updates te installeren.",
+  "Move Ork to Applications to install updates.":
+    "Verplaats Ork naar Apps om updates te installeren.",
   "Free up disk space to install updates.": "Maak schijfruimte vrij om updates te installeren.",
-  "This update could not be verified. Reinstall Rakazo from a trusted download.":
-    "Deze update kon niet worden geverifieerd. Installeer Rakazo opnieuw vanaf een vertrouwde download.",
+  "This update could not be verified. Reinstall Ork from a trusted download.":
+    "Deze update kon niet worden geverifieerd. Installeer Ork opnieuw vanaf een vertrouwde download.",
   "The update could not be completed. Try again later.":
     "De update kon niet worden voltooid. Probeer het later opnieuw.",
   "Could not reach the update server.": "De updateserver is niet bereikbaar.",
@@ -71,13 +71,12 @@ export const NL_MESSAGES: Record<string, string> = {
     "Er loopt al een inlogpoging. Annuleer die en probeer het opnieuw.",
   "Could not open browser sign-in. Close other sign-in attempts and retry.":
     "Inloggen via de browser kon niet worden geopend. Sluit andere inlogpogingen en probeer het opnieuw.",
-  "Sign-in callback rejected. Return to Rakazo to retry.":
-    "Het inlogantwoord is geweigerd. Ga terug naar Rakazo om het opnieuw te proberen.",
-  "You can close this tab and return to Rakazo.":
-    "Je kunt dit tabblad sluiten en teruggaan naar Rakazo.",
-  "Set up Rakazo": "Rakazo instellen",
-  "Quit Rakazo": "Stop Rakazo",
-  "Welcome to Rakazo": "Welkom bij Rakazo",
+  "Sign-in callback rejected. Return to Ork to retry.":
+    "Het inlogantwoord is geweigerd. Ga terug naar Ork om het opnieuw te proberen.",
+  "You can close this tab and return to Ork.": "Je kunt dit tabblad sluiten en teruggaan naar Ork.",
+  "Set up Ork": "Ork instellen",
+  "Quit Ork": "Stop Ork",
+  "Welcome to Ork": "Welkom bij Ork",
   "Choose which server this app should use.": "Kies welke server deze app moet gebruiken.",
   Instance: "Instantie",
   "This computer": "Deze computer",
@@ -92,14 +91,14 @@ export const NL_MESSAGES: Record<string, string> = {
   "Check again": "Opnieuw controleren",
   Retry: "Opnieuw proberen",
   "Getting ready…": "Voorbereiden…",
-  "Downloading Rakazo…": "Rakazo downloaden…",
-  "Starting Rakazo…": "Rakazo starten…",
+  "Downloading Ork…": "Ork downloaden…",
+  "Starting Ork…": "Ork starten…",
   "Almost ready…": "Bijna klaar…",
-  "Rakazo is ready.": "Rakazo is klaar.",
+  "Ork is ready.": "Ork is klaar.",
   "{size} downloaded": "{size} gedownload",
   "Connecting…": "Verbinden…",
   "Checking…": "Controleren…",
-  "Rakazo answered at {url}.": "Rakazo antwoordde op {url}.",
+  "Ork answered at {url}.": "Ork antwoordde op {url}.",
   "Enter a server address first.": "Voer eerst een serveradres in.",
   "Could not save that address.": "Dat adres kon niet worden bewaard.",
   "Could not save that address. Try again.":
@@ -111,17 +110,17 @@ export const NL_MESSAGES: Record<string, string> = {
   "Could not run the connection check. Try again.":
     "De verbindingscontrole kon niet worden uitgevoerd. Probeer het opnieuw.",
   "Setup bridge unavailable.": "De installatiebrug is niet beschikbaar.",
-  "Setup could not start. Quit Rakazo and try again.":
-    "De installatie kon niet starten. Stop Rakazo en probeer het opnieuw.",
+  "Setup could not start. Quit Ork and try again.":
+    "De installatie kon niet starten. Stop Ork en probeer het opnieuw.",
   "Enter a server address.": "Voer een serveradres in.",
   "Enter a valid http:// or https:// address.": "Voer een geldig http://- of https://-adres in.",
   "Enter a valid server address. Public servers require HTTPS; a new local instance must use localhost.":
     "Voer een geldig serveradres in. Openbare servers vereisen HTTPS; een nieuwe lokale instantie moet localhost gebruiken.",
   "Invalid custom headers": "Ongeldige aangepaste headers",
-  "That address redirects elsewhere. Enter the final Rakazo server address.":
-    "Dat adres verwijst door naar een andere plek. Voer het uiteindelijke adres van de Rakazo-server in.",
-  "That address did not respond like a Rakazo server.":
-    "Dat adres antwoordde niet als een Rakazo-server.",
+  "That address redirects elsewhere. Enter the final Ork server address.":
+    "Dat adres verwijst door naar een andere plek. Voer het uiteindelijke adres van de Ork-server in.",
+  "That address did not respond like a Ork server.":
+    "Dat adres antwoordde niet als een Ork-server.",
   "The server answered with HTTP {status}.": "De server antwoordde met HTTP {status}.",
   "Timed out reaching that address.": "Time-out bij het bereiken van dat adres.",
   "Nothing is listening at that address yet.": "Er luistert nog niets op dat adres.",
@@ -147,8 +146,8 @@ export const NL_MESSAGES: Record<string, string> = {
     "De installatie kon niet worden bewaard. De vorige instantie is hersteld.",
   "Connected, but could not save setup for the next launch. Try Continue again.":
     "Verbonden, maar de installatie kon niet worden bewaard voor de volgende start. Klik nogmaals op Doorgaan.",
-  "The app-managed Rakazo services are not ready. Retry setup.":
-    "De Rakazo-services die de app beheert, zijn niet klaar. Start de installatie opnieuw.",
+  "The app-managed Ork services are not ready. Retry setup.":
+    "De Ork-services die de app beheert, zijn niet klaar. Start de installatie opnieuw.",
   "Docker is not installed on this computer.": "Docker is niet geïnstalleerd op deze computer.",
   "Docker is installed, but Docker Compose is missing. Install Docker Desktop or the docker-compose-plugin.":
     "Docker is geïnstalleerd, maar Docker Compose ontbreekt. Installeer Docker Desktop of de docker-compose-plugin.",
@@ -172,10 +171,10 @@ export const NL_MESSAGES: Record<string, string> = {
     "Docker reageert niet meer. Start Docker en probeer het opnieuw.",
   "Docker Compose is missing. Install Docker Desktop or the docker-compose-plugin, then retry.":
     "Docker Compose ontbreekt. Installeer Docker Desktop of de docker-compose-plugin en probeer het opnieuw.",
-  "Downloading Rakazo images failed. Check the output below, then retry.":
-    "Het downloaden van de Rakazo-images is mislukt. Bekijk de uitvoer hieronder en probeer het opnieuw.",
-  "Rakazo services did not start. Check the output below, then retry.":
-    "De Rakazo-services zijn niet gestart. Bekijk de uitvoer hieronder en probeer het opnieuw.",
+  "Downloading Ork images failed. Check the output below, then retry.":
+    "Het downloaden van de Ork-images is mislukt. Bekijk de uitvoer hieronder en probeer het opnieuw.",
+  "Ork services did not start. Check the output below, then retry.":
+    "De Ork-services zijn niet gestart. Bekijk de uitvoer hieronder en probeer het opnieuw.",
   "The stack started but the web app did not answer. Retry, and check the output below.":
     "De stack is gestart, maar de web-app reageerde niet. Probeer het opnieuw en bekijk de uitvoer hieronder.",
   "Could not prepare the local stack. Retry.":

@@ -1,5 +1,5 @@
-import type { RoutineRun } from "@rakazo/contracts";
-import { formatRoutineRunAt } from "@rakazo/core";
+import type { RoutineRun } from "@orkbot/contracts";
+import { formatRoutineRunAt } from "@orkbot/core";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator } from "react-native";

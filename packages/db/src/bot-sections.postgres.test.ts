@@ -55,7 +55,7 @@ describePostgres("deleteBotSection (PostgreSQL)", () => {
       data: {
         id: neighborId,
         name: "Section Neighbor",
-        email: `${neighborId}@rakazo.test`,
+        email: `${neighborId}@orkbot.test`,
         emailVerified: false,
       },
     });

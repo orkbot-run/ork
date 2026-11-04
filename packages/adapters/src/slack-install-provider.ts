@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { MessagingInstallProvider } from "@rakazo/adapter-kit";
+import type { MessagingInstallProvider } from "@orkbot/adapter-kit";
 import {
   ChatSdkMessagingSurface,
   MESSAGING_WEBHOOK_MAX_BODY_BYTES,

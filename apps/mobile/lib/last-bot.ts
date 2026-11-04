@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
-const LAST_BOT_KEY = "rakazo.last_bot_id";
-const LAST_BOT_SPACE_KEY = "rakazo.last_bot_space_id";
+const LAST_BOT_KEY = "orkbot.last_bot_id";
+const LAST_BOT_SPACE_KEY = "orkbot.last_bot_space_id";
 
 /** Kept with its Space, so a Shortcuts action still reaches the bot after a Space switch. */
 export async function saveLastBotId(botId: string, spaceId: string | null) {

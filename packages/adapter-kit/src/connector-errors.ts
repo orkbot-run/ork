@@ -1,4 +1,4 @@
-import { CONNECTOR_AUTH_UNAVAILABLE } from "@rakazo/contracts";
+import { CONNECTOR_AUTH_UNAVAILABLE } from "@orkbot/contracts";
 
 /** The connector cannot start a sign-in for this app until the app's own auth is set up there. */
 export class ConnectorAuthUnavailableError extends Error {

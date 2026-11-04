@@ -1,5 +1,5 @@
 import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
-import { approvalEffectKey } from "@rakazo/core/node/approval-effect-key";
+import { approvalEffectKey } from "@orkbot/core/node/approval-effect-key";
 import { describe, expect, it, vi } from "vitest";
 import {
   approvedCatalogReplay,
@@ -181,7 +181,7 @@ describe("OpenAPI connector import", () => {
       signal: new AbortController().signal,
     } as never;
     const execute = (await provider.discoverTools(context))[2]!;
-    const marker = "__rakazoCatalogTool";
+    const marker = "__orkbotCatalogTool";
     const approvedRequest = catalogApprovalRequest(
       execute.name,
       { id: "api-approved:operation_20", arguments: {} },

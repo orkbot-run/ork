@@ -6,13 +6,13 @@ import path from "node:path";
 import { performance } from "node:perf_hooks";
 import { brotliCompressSync, gzipSync } from "node:zlib";
 import { serve } from "@hono/node-server";
+import type { createApp } from "@orkbot/api/app";
+import { abortableDelay } from "@orkbot/core";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
+import type { PrismaClient } from "@orkbot/db";
+import { createThreadMessage } from "@orkbot/db";
 import type { ElectronApplication, Page } from "@playwright/test";
 import { _electron as electron, expect } from "@playwright/test";
-import type { createApp } from "@rakazo/api/app";
-import { abortableDelay } from "@rakazo/core";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
-import type { PrismaClient } from "@rakazo/db";
-import { createThreadMessage } from "@rakazo/db";
 import type { PerformanceReport } from "../performance-report.js";
 import {
   PERFORMANCE_REPORT_SCHEMA_VERSION,
@@ -58,7 +58,7 @@ if (webPort === apiPort) {
 const webOrigin = `http://127.0.0.1:${webPort}`;
 const apiOrigin = `http://127.0.0.1:${apiPort}`;
 const reportDirectory = path.join(root, ".context/performance");
-const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "rakazo-desktop-performance-"));
+const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "orkbot-desktop-performance-"));
 
 const container = await startPostgres();
 let preview: ChildProcess | undefined;
@@ -73,7 +73,7 @@ try {
   if (!skipBuild) buildProductionArtifacts(benchmarkEnv);
   migrateDatabase(benchmarkEnv);
 
-  const { createApp } = await import("@rakazo/api/app");
+  const { createApp } = await import("@orkbot/api/app");
   handles = await createApp({ databaseUrl, prisma: undefined });
   server = serve({
     fetch: (request) => handles!.app.fetch(request),
@@ -164,22 +164,22 @@ function performanceEnvironment(databaseUrl: string): NodeJS.ProcessEnv {
       apiPort,
       dataDir: path.join(temporaryRoot, "data"),
     }),
-    RAKAZO_DISABLE_BUNDLED_RENDERER: remoteRenderer ? "1" : "0",
-    RAKAZO_DISABLE_WARM_WINDOW: disableWarmWindow ? "1" : "0",
-    RAKAZO_PERFORMANCE_ASSET_DELAY_MS: String(assetDelayMs),
+    ORKBOT_DISABLE_BUNDLED_RENDERER: remoteRenderer ? "1" : "0",
+    ORKBOT_DISABLE_WARM_WINDOW: disableWarmWindow ? "1" : "0",
+    ORKBOT_PERFORMANCE_ASSET_DELAY_MS: String(assetDelayMs),
     CSC_IDENTITY_AUTO_DISCOVERY: "false",
   };
 }
 
 function buildProductionArtifacts(env: NodeJS.ProcessEnv) {
-  run("pnpm", ["--filter", "@rakazo/desktop", "pack:dir"], env);
+  run("pnpm", ["--filter", "@orkbot/desktop", "pack:dir"], env);
 }
 
 async function packagedExecutable() {
   const out = path.join(desktopRoot, "out");
-  const candidates = process.platform === "darwin" ? await findNamed(out, "Rakazo.app") : [];
+  const candidates = process.platform === "darwin" ? await findNamed(out, "Ork.app") : [];
   if (process.platform === "darwin" && candidates[0]) {
-    return path.join(candidates[0], "Contents/MacOS/Rakazo");
+    return path.join(candidates[0], "Contents/MacOS/Ork");
   }
   const desktopRequire = createRequire(path.join(desktopRoot, "package.json"));
   return desktopRequire("electron") as string;
@@ -216,7 +216,7 @@ async function prepareAuthenticatedProfile(benchmark: BenchmarkContext, profile:
     const stamp = Date.now();
     await page.goto(`${webOrigin}/sign-up`);
     await page.getByPlaceholder("Your name").fill("Benchmark User");
-    await page.getByPlaceholder("Your email address").fill(`benchmark-${stamp}@rakazo.test`);
+    await page.getByPlaceholder("Your email address").fill(`benchmark-${stamp}@orkbot.test`);
     await page.getByPlaceholder("Password").fill("password12");
     await page.getByRole("button", { name: "Create account" }).click();
     await page
@@ -307,8 +307,8 @@ async function launchDesktop(
     executablePath: benchmark.executablePath,
     env: {
       ...benchmark.env,
-      RAKAZO_PERFORMANCE_USER_DATA: profile,
-      RAKAZO_PERFORMANCE_CLEAR_CACHE: clearCache ? "1" : "0",
+      ORKBOT_PERFORMANCE_USER_DATA: profile,
+      ORKBOT_PERFORMANCE_CLEAR_CACHE: clearCache ? "1" : "0",
     },
   });
   const page = await app.firstWindow();
@@ -473,7 +473,7 @@ async function measureInteractions(app: ElectronApplication, page: Page) {
     const target = document.querySelector<HTMLInputElement>('input[placeholder^="Message "]');
     if (!target) throw new Error("Composer is missing");
     const samples: number[] = [];
-    (window as typeof window & { __rakazoKeyPaintSamples?: number[] }).__rakazoKeyPaintSamples =
+    (window as typeof window & { __orkbotKeyPaintSamples?: number[] }).__orkbotKeyPaintSamples =
       samples;
     target.addEventListener("keydown", () => {
       const started = performance.now();
@@ -483,13 +483,13 @@ async function measureInteractions(app: ElectronApplication, page: Page) {
   await page.keyboard.type("a".repeat(characterCount), { delay: 16 });
   await page.waitForFunction(
     (count) =>
-      ((window as typeof window & { __rakazoKeyPaintSamples?: number[] }).__rakazoKeyPaintSamples
+      ((window as typeof window & { __orkbotKeyPaintSamples?: number[] }).__orkbotKeyPaintSamples
         ?.length ?? 0) >= count,
     characterCount,
   );
   const keyPaintMs = await page.evaluate(
     () =>
-      (window as typeof window & { __rakazoKeyPaintSamples?: number[] }).__rakazoKeyPaintSamples ??
+      (window as typeof window & { __orkbotKeyPaintSamples?: number[] }).__orkbotKeyPaintSamples ??
       [],
   );
   const typingAfter = await cdpMetrics(session);
@@ -699,7 +699,7 @@ function environmentFingerprint(versions: { electron?: string; chrome?: string }
 
 async function measureBundles() {
   const web = await directorySize(path.join(webRoot, "dist"));
-  const applications = await findNamed(path.join(desktopRoot, "out"), "Rakazo.app");
+  const applications = await findNamed(path.join(desktopRoot, "out"), "Ork.app");
   const desktop = applications[0] ? await directorySize(applications[0]) : null;
   return { web, desktop };
 }
@@ -752,7 +752,7 @@ function summarizeReport(
 
 function renderMarkdown(report: PerformanceReport) {
   const summary = report.summary;
-  return `# Rakazo desktop performance — ${report.label}
+  return `# Ork desktop performance — ${report.label}
 
 - Commit: \`${report.environment.gitSha.slice(0, 12)}\`
 - Platform: ${report.environment.platform}/${report.environment.arch}

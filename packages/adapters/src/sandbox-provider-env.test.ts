@@ -158,23 +158,23 @@ describe("sandboxProviderOptionsFromEnv", () => {
   it("loads Kubernetes settings and parses labels, annotations and the ready timeout", () => {
     expect(
       sandboxProviderOptionsFromEnv({
-        KUBERNETES_SANDBOX_NAMESPACE: " rakazo-computers ",
+        KUBERNETES_SANDBOX_NAMESPACE: " orkbot-computers ",
         KUBERNETES_SANDBOX_RUNTIME_CLASS_NAME: "kata",
-        KUBERNETES_SANDBOX_COMPUTER_IMAGE: "ghcr.io/elie222/rakazo/computer@sha256:abc",
+        KUBERNETES_SANDBOX_COMPUTER_IMAGE: "ghcr.io/orkbot-run/ork/computer@sha256:abc",
         KUBERNETES_SANDBOX_CPU_LIMIT: "2",
         KUBERNETES_SANDBOX_MEMORY_LIMIT: "4Gi",
         KUBERNETES_SANDBOX_POD_LABELS: '{"team":"bots"}',
-        KUBERNETES_SANDBOX_POD_ANNOTATIONS: '{"example.test/owner":"rakazo"}',
+        KUBERNETES_SANDBOX_POD_ANNOTATIONS: '{"example.test/owner":"orkbot"}',
         KUBERNETES_SANDBOX_READY_TIMEOUT_MS: "90000",
       }),
     ).toMatchObject({
-      kubernetesNamespace: "rakazo-computers",
+      kubernetesNamespace: "orkbot-computers",
       kubernetesRuntimeClassName: "kata",
-      kubernetesComputerImage: "ghcr.io/elie222/rakazo/computer@sha256:abc",
+      kubernetesComputerImage: "ghcr.io/orkbot-run/ork/computer@sha256:abc",
       kubernetesCpuLimit: "2",
       kubernetesMemoryLimit: "4Gi",
       kubernetesPodLabels: { team: "bots" },
-      kubernetesPodAnnotations: { "example.test/owner": "rakazo" },
+      kubernetesPodAnnotations: { "example.test/owner": "orkbot" },
       kubernetesReadyTimeoutMs: 90_000,
     });
     expect(sandboxProviderOptionsFromEnv({}).kubernetesNamespace).toBeUndefined();
@@ -187,8 +187,8 @@ describe("sandboxProviderOptionsFromEnv", () => {
         INCUS_SANDBOX_CLIENT_CERT: "client-cert-line-1\\nclient-cert-line-2",
         INCUS_SANDBOX_CLIENT_KEY: "client-key-line-1\nclient-key-line-2",
         INCUS_SANDBOX_SERVER_CERT: "server-cert-line-1\\nserver-cert-line-2",
-        INCUS_SANDBOX_PROJECT: "rakazo",
-        INCUS_SANDBOX_COMPUTER_IMAGE: "ghcr.io/elie222/rakazo/computer:v1.2.3",
+        INCUS_SANDBOX_PROJECT: "orkbot",
+        INCUS_SANDBOX_COMPUTER_IMAGE: "ghcr.io/orkbot-run/ork/computer:v1.2.3",
         INCUS_SANDBOX_CPU_LIMIT: "1",
         INCUS_SANDBOX_MEMORY_LIMIT: "1536MiB",
         INCUS_SANDBOX_PROCESS_LIMIT: "1024",
@@ -198,8 +198,8 @@ describe("sandboxProviderOptionsFromEnv", () => {
       incusClientCert: "client-cert-line-1\nclient-cert-line-2",
       incusClientKey: "client-key-line-1\nclient-key-line-2",
       incusServerCert: "server-cert-line-1\nserver-cert-line-2",
-      incusProject: "rakazo",
-      incusComputerImage: "ghcr.io/elie222/rakazo/computer:v1.2.3",
+      incusProject: "orkbot",
+      incusComputerImage: "ghcr.io/orkbot-run/ork/computer:v1.2.3",
       incusCpuLimit: "1",
       incusMemoryLimit: "1536MiB",
       incusProcessLimit: "1024",
@@ -210,17 +210,17 @@ describe("sandboxProviderOptionsFromEnv", () => {
   it("loads the Kubernetes home claim and its pod-affinity target", () => {
     expect(
       sandboxProviderOptionsFromEnv({
-        KUBERNETES_SANDBOX_HOME_CLAIM: "rakazo-data",
-        KUBERNETES_SANDBOX_HOME_COLOCATE_NAMESPACE: "rakazo",
-        KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS: '{"app":"rakazo-api"}',
+        KUBERNETES_SANDBOX_HOME_CLAIM: "orkbot-data",
+        KUBERNETES_SANDBOX_HOME_COLOCATE_NAMESPACE: "orkbot",
+        KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS: '{"app":"orkbot-api"}',
       }),
     ).toMatchObject({
-      kubernetesHomeClaim: "rakazo-data",
-      kubernetesHomeColocateNamespace: "rakazo",
-      kubernetesHomeColocateLabels: { app: "rakazo-api" },
+      kubernetesHomeClaim: "orkbot-data",
+      kubernetesHomeColocateNamespace: "orkbot",
+      kubernetesHomeColocateLabels: { app: "orkbot-api" },
     });
     expect(() =>
-      sandboxProviderOptionsFromEnv({ KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS: "rakazo-api" }),
+      sandboxProviderOptionsFromEnv({ KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS: "orkbot-api" }),
     ).toThrow("KUBERNETES_SANDBOX_HOME_COLOCATE_LABELS must be a JSON object of string values");
   });
 

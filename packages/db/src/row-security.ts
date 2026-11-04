@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
-import { getLogger } from "@rakazo/logging";
+import { getLogger } from "@orkbot/logging";
 import type { Pool, PoolClient } from "pg";
 import type { PrismaClient } from "./generated/prisma/client.js";
 import { Prisma } from "./generated/prisma/client.js";
@@ -171,6 +171,7 @@ export const ROW_SECURITY_MODELS: ReadonlySet<string> = new Set([
  * Derived from the runtime login's password, so it needs no setting of its own.
  */
 export function rlsBypassKey(connectionString: string | undefined): string {
+  // Existing database policies store a digest derived with this stable message.
   const { password } = credentials(connectionString);
   return password ? createHmac("sha256", password).update("rakazo rls bypass").digest("hex") : "";
 }

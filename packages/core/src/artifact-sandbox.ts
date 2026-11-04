@@ -65,7 +65,7 @@ export function pageViewerDocument(input: {
       : "",
     inset,
     "</head>",
-    `<body><div id="root"></div><script>RakazoPage.mount(${boot})</script></body></html>`,
+    `<body><div id="root"></div><script>OrkPage.mount(${boot})</script></body></html>`,
   ].join("");
 }
 
@@ -86,7 +86,7 @@ export const PAGE_COPY_MAX_LENGTH = 20_000;
 export function pageCopyRequest(data: unknown): { id: string; text: string } | null {
   if (!data || typeof data !== "object") return null;
   const { type, id, text } = data as { type?: unknown; id?: unknown; text?: unknown };
-  if (type !== "rakazo-page:copy" || typeof id !== "string" || typeof text !== "string")
+  if (type !== "orkbot-page:copy" || typeof id !== "string" || typeof text !== "string")
     return null;
   if (id.length === 0 || id.length > 64 || text.length === 0) return null;
   return text.length <= PAGE_COPY_MAX_LENGTH ? { id, text } : null;
@@ -96,7 +96,7 @@ export function pageCopyRequest(data: unknown): { id: string; text: string } | n
 export function pageLinkRequest(data: unknown): string | null {
   if (!data || typeof data !== "object") return null;
   const { type, url } = data as { type?: unknown; url?: unknown };
-  if (type !== "rakazo-page:open-link" || typeof url !== "string" || url.length > 4096) return null;
+  if (type !== "orkbot-page:open-link" || typeof url !== "string" || url.length > 4096) return null;
   try {
     const parsed = new URL(url);
     return ["http:", "https:", "mailto:"].includes(parsed.protocol) ? parsed.href : null;
@@ -107,5 +107,5 @@ export function pageLinkRequest(data: unknown): string | null {
 
 /** The answer a page's copy button waits for. */
 export function pageCopyResult(id: string, ok: boolean) {
-  return { type: "rakazo-page:copied", id, ok };
+  return { type: "orkbot-page:copied", id, ok };
 }

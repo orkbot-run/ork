@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type * as UiWeb from "@rakazo/ui-web";
+import type * as UiWeb from "@orkbot/ui-web";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -32,12 +32,12 @@ vi.mock("@lingui/react/macro", () => {
     parts.reduce((text, part, index) => text + part + String(values[index] ?? ""), "");
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
-vi.mock("@rakazo/chat-ui/web", () => ({
+vi.mock("@orkbot/chat-ui/web", () => ({
   ChatMarkdown: ({ children }: { children?: ReactNode }) => (
     <div data-testid="chat-markdown">{children}</div>
   ),
 }));
-vi.mock("@rakazo/ui-web", async (importOriginal) => {
+vi.mock("@orkbot/ui-web", async (importOriginal) => {
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {
     Button: (props: ComponentProps<"button">) => <button {...props} />,

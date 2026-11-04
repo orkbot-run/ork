@@ -1,4 +1,4 @@
-import { MODEL_CONTEXT_TOO_SMALL_ERROR, VERBATIM_TOOL_RESULT_TOO_LARGE_ERROR } from "@rakazo/core";
+import { MODEL_CONTEXT_TOO_SMALL_ERROR, VERBATIM_TOOL_RESULT_TOO_LARGE_ERROR } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
   ContextBudgetError,

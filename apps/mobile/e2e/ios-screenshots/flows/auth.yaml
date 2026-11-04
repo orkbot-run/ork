@@ -1,27 +1,27 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Auth
 ---
 - runFlow: ../subflows/launch-app.yaml
 - runFlow:
     when:
-      visible: "Sign in to Rakazo"
+      visible: "Sign in to Ork"
     commands:
       - tapOn: "Sign up"
 - extendedWaitUntil:
-    visible: "Sign up for Rakazo"
+    visible: "Sign up for Ork"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 01-welcome
 - tapOn: "Sign in"
 - extendedWaitUntil:
-    visible: "Sign in to Rakazo"
+    visible: "Sign in to Ork"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 02-sign-in
 - tapOn: "Email"
-- inputText: ${RAKAZO_SCREENSHOT_EMAIL}
+- inputText: ${ORKBOT_SCREENSHOT_EMAIL}
 - tapOn: "Password"
 - inputText: "wrong-password"
 - hideKeyboard
@@ -46,7 +46,7 @@ name: Auth
 - inputText: "::::"
 - tapOn: "Save"
 - extendedWaitUntil:
-    visible: "That doesn.*look like a URL|Could not reach that server|That URL did not look like a Rakazo server|Enter a server URL"
+    visible: "That doesn.*look like a URL|Could not reach that server|That URL did not look like a Ork server|Enter a server URL"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000

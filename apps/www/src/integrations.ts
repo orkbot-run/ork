@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import type { PluginCategory } from "@rakazo/core";
-import { PLUGIN_CATEGORIES } from "@rakazo/core";
+import type { PluginCategory } from "@orkbot/core";
+import { PLUGIN_CATEGORIES } from "@orkbot/core";
 import { z } from "zod";
 import { CATALOG_URL, INTEGRATION_CLAIMS_URL, SITE_URL } from "./site";
 
@@ -47,16 +47,19 @@ async function loadClaims(): Promise<Map<string, z.infer<typeof ClaimsSchema>["c
 }
 
 async function loadIntegrations(): Promise<Integration[]> {
-  const [catalog, claims] = await Promise.all([loadCatalog(), loadClaims()]);
+  const catalog = await loadCatalog();
+  if (catalog.length === 0) return [];
+  const claims = await loadClaims();
   return catalog.map((integration) => {
     const claim = claims.get(integrationUrlSlug(integration.slug));
     return claim ? { ...integration, website: claim.website } : integration;
   });
 }
 
-/** Published weekly by a private sync job. `CATALOG_URL` may point at another URL or a local file. */
+/** Optional catalog: CATALOG_URL can name a remote URL or a local file. */
 async function loadCatalog(): Promise<Integration[]> {
   const source = process.env.CATALOG_URL?.trim() || CATALOG_URL;
+  if (!source) return [];
   try {
     const text = /^https?:\/\//.test(source)
       ? await fetch(source).then((response) => {
@@ -277,9 +280,9 @@ export function integrationsMarkdown(): string {
     (integration) =>
       `- [${integration.name}](${SITE_URL}${integrationPath(integration.slug)}): ${CATEGORY_LABELS[categoryOf(integration)]}, ${integration.actions.length} actions`,
   );
-  return `# Rakazo integrations
+  return `# Ork integrations
 
-Rakazo bots can connect to ${INTEGRATIONS.length} apps. Ask a bot to connect one and approve the sign-in it sends.
+Ork bots can connect to ${INTEGRATIONS.length} apps. Ask a bot to connect one and approve the sign-in it sends.
 
 ${lines.join("\n")}
 `;
@@ -294,7 +297,7 @@ export function integrationMarkdown(integration: Integration): string {
 
 ${integration.description}
 
-Category: ${CATEGORY_LABELS[categoryOf(integration)]}. Connect from any Rakazo bot at ${SITE_URL}${integrationPath(integration.slug)}.${integration.website ? ` Website: ${integration.website}.` : ""}
+Category: ${CATEGORY_LABELS[categoryOf(integration)]}. Connect from any Ork bot at ${SITE_URL}${integrationPath(integration.slug)}.${integration.website ? ` Website: ${integration.website}.` : ""}
 
 ## Actions
 

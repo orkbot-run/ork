@@ -1,5 +1,5 @@
 (() => {
-  const bridge = window.rakazoSetup;
+  const bridge = window.orkbotSetup;
   document.documentElement.dataset.platform = bridge?.platform ?? "browser";
   const messages = bridge?.locale?.messages ?? {};
 
@@ -54,10 +54,10 @@
   const PHASE_LABELS = {
     "checking-docker": t("Getting ready…"),
     preparing: t("Getting ready…"),
-    pulling: t("Downloading Rakazo…"),
-    starting: t("Starting Rakazo…"),
+    pulling: t("Downloading Ork…"),
+    starting: t("Starting Ork…"),
     "waiting-healthy": t("Almost ready…"),
-    ready: t("Rakazo is ready."),
+    ready: t("Ork is ready."),
   };
   const TERMINAL_PHASES = new Set([
     "idle",
@@ -339,7 +339,7 @@
       if (generation !== requestGeneration) return result;
       if (result.ok) {
         serverUrl.value = result.url;
-        setStatus(t("Rakazo answered at {url}.", { url: result.url }), "ok");
+        setStatus(t("Ork answered at {url}.", { url: result.url }), "ok");
       } else {
         setStatus(result.error ?? t("Could not reach that address."), "error");
       }
@@ -475,7 +475,7 @@
         continueButton.focus();
       }
     } catch {
-      setStatus(t("Setup could not start. Quit Rakazo and try again."), "error");
+      setStatus(t("Setup could not start. Quit Ork and try again."), "error");
       setBusy(true);
     }
   }

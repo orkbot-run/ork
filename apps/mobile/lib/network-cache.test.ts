@@ -14,7 +14,7 @@ it("clears the native cache when the module is present", async () => {
 
   clearNetworkCache();
 
-  expect(requireOptionalNativeModule).toHaveBeenCalledWith("RakazoNetworkCache");
+  expect(requireOptionalNativeModule).toHaveBeenCalledWith("OrkNetworkCache");
   expect(clear).toHaveBeenCalledOnce();
 });
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { DesktopUpdateState } from "@rakazo/contracts";
-import { Toaster } from "@rakazo/ui-web";
+import type { DesktopUpdateState } from "@orkbot/contracts";
+import { Toaster } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -25,7 +25,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
-  delete window.rakazoDesktop;
+  delete window.orkbotDesktop;
   vi.restoreAllMocks();
 });
 async function render(
@@ -35,7 +35,7 @@ async function render(
   onBoard?: () => void,
   logos?: Array<{ name: string; logo?: string }>,
 ) {
-  const email = "account@rakazo.test";
+  const email = "account@orkbot.test";
   await act(async () =>
     root.render(
       <DesktopUpdatesProvider>
@@ -76,7 +76,7 @@ function bridge(phase: DesktopUpdateState["phase"]) {
     checkedAt: null,
   };
   const install = vi.fn(async () => state);
-  window.rakazoDesktop = {
+  window.orkbotDesktop = {
     platform: "darwin",
     window: {
       close: async () => {},
@@ -159,13 +159,13 @@ it("omits Board when unavailable", async () => {
   );
 });
 
-it("offers Google Play on Android", async () => {
+it("offers the Ork download page on Android", async () => {
   vi.spyOn(navigator, "userAgent", "get").mockReturnValue("Android");
   await render();
   const mobile = [...document.querySelectorAll("a")].find(
     (link) => link.textContent === "Get the mobile app",
   )!;
-  expect(mobile.href).toBe("https://play.google.com/store/apps/details?id=com.rakazo.app");
+  expect(mobile.href).toBe("https://orkbot.run/download/");
 });
 
 it("falls back when app artwork fails and accepts replacement artwork", async () => {
@@ -190,7 +190,7 @@ it.each(["throw", "state"] as const)(
     if (failure === "throw") install.mockRejectedValueOnce(new Error("offline"));
     else
       install.mockResolvedValueOnce({
-        ...(await window.rakazoDesktop!.update.state()),
+        ...(await window.orkbotDesktop!.update.state()),
         phase: "error",
         message: "Update could not be installed",
       });
@@ -269,7 +269,7 @@ async function renderOrganizations(
         <SidebarFooter
           name="Demo User"
           initials="DU"
-          email="account@rakazo.test"
+          email="account@orkbot.test"
           open
           onOpenChange={() => {}}
           onIntegrations={() => {}}

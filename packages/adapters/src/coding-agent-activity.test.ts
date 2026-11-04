@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AdapterContext, ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
+import type { AdapterContext, ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activeCodingAgent } from "./coding-agent-activity.js";
 

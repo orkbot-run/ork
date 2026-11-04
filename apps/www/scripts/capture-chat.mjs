@@ -16,7 +16,7 @@ const shots = [
 
 mkdirSync(outDir, { recursive: true });
 
-const server = spawn("pnpm", ["--filter", "@rakazo/web", "exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+const server = spawn("pnpm", ["--filter", "@orkbot/web", "exec", "vite", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
   cwd: repoRoot,
   stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env },

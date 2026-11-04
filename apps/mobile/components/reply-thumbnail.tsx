@@ -1,4 +1,4 @@
-import type { ReplyPreview } from "@rakazo/contracts";
+import type { ReplyPreview } from "@orkbot/contracts";
 import { useEffect, useState } from "react";
 import { Image, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";

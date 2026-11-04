@@ -1,11 +1,11 @@
-import { AppLocaleSchema } from "@rakazo/contracts";
-import { matchUiLocale } from "@rakazo/core";
+import { AppLocaleSchema } from "@orkbot/contracts";
+import { matchUiLocale } from "@orkbot/core";
 
 export const UI_LOCALES = AppLocaleSchema.options;
 
 export type UiLocale = (typeof UI_LOCALES)[number];
 
-export const UI_LOCALE_STORAGE_KEY = "rakazo.uiLocale";
+export const UI_LOCALE_STORAGE_KEY = "orkbot.uiLocale";
 
 export const UI_LOCALE_LABELS: Record<UiLocale, string> = {
   en: "English",

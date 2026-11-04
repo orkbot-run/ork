@@ -1,9 +1,0 @@
-Ork is derived from Rakazo (https://github.com/elie222/rakazo).
-Copyright 2026 Rakazo contributors.
-Rakazo is distributed under the Apache License, Version 2.0. See LICENSE.
-
-The initial Ork fork is based on commit dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a.
-Ork changes the project identity and web app name, adds local setup commands,
-allows upstream/main as a development migration baseline, and replaces the
-active upstream automation with verification-only CI. Original workflows are
-preserved in .github/upstream-workflows and are inactive there.

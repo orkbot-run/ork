@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
-import type { BotAvatarSet, SpaceMemoryConfig, UsageSummary } from "@rakazo/contracts";
-import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
+import type { BotAvatarSet, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
+import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";

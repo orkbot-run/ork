@@ -1,4 +1,4 @@
-import { BOT_DESCRIPTION_MAX_LENGTH } from "@rakazo/contracts";
+import { BOT_DESCRIPTION_MAX_LENGTH } from "@orkbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_DELIBERATION_GUIDANCE,

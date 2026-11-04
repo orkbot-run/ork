@@ -1,8 +1,8 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import type { SearchHit } from "@rakazo/contracts";
-import { searchHitListKey } from "@rakazo/core";
-import { Button } from "@rakazo/ui-web";
+import type { SearchHit } from "@orkbot/contracts";
+import { searchHitListKey } from "@orkbot/core";
+import { Button } from "@orkbot/ui-web";
 
 export function SpaceSearchResults({
   hits,

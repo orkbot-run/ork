@@ -1,5 +1,5 @@
 /** Set once a session is seen, so a signed-out return to `/` opens sign-in instead of sign-up. */
-export const SIGNED_IN_BEFORE_KEY = "rakazo.signed-in-before";
+export const SIGNED_IN_BEFORE_KEY = "orkbot.signed-in-before";
 
 export function hasSignedInBefore(): boolean {
   try {

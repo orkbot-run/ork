@@ -1,4 +1,4 @@
-import type { DesktopUpdateState } from "@rakazo/contracts";
+import type { DesktopUpdateState } from "@orkbot/contracts";
 import { t } from "./i18n.js";
 import { reportDesktopError } from "./monitoring.js";
 
@@ -6,6 +6,19 @@ import { reportDesktopError } from "./monitoring.js";
 export const LAUNCH_CHECK_DELAY_MS = 8_000;
 /** A connected server drives the renderer, so a manual check cannot become a request loop. */
 export const MIN_CHECK_INTERVAL_MS = 60_000;
+
+/** Updates stay off until an operator opts in and Linux has its own signing key. */
+export function desktopUpdatesEnabled(
+  env: { ORKBOT_ENABLE_AUTO_UPDATE?: string; ORKBOT_DISABLE_AUTO_UPDATE?: string },
+  platform: string,
+  hasLinuxUpdateKey: boolean,
+): boolean {
+  return (
+    env.ORKBOT_ENABLE_AUTO_UPDATE === "1" &&
+    env.ORKBOT_DISABLE_AUTO_UPDATE !== "1" &&
+    (platform !== "linux" || hasLinuxUpdateKey)
+  );
+}
 
 export interface UpdaterEnvironment {
   packaged: boolean;
@@ -81,7 +94,7 @@ export function classifyUpdaterFailure(error: unknown): UpdaterFailure {
     return { kind: "offline", message: null };
   }
   if (READ_ONLY.some((needle) => text.includes(needle))) {
-    return { kind: "read-only", message: t("Move Rakazo to Applications to install updates.") };
+    return { kind: "read-only", message: t("Move Ork to Applications to install updates.") };
   }
   // Ahead of signatures: a full disk also leaves ditto unable to read the archive's signature.
   if (DISK_FULL.some((needle) => text.includes(needle))) {
@@ -90,7 +103,7 @@ export function classifyUpdaterFailure(error: unknown): UpdaterFailure {
   if (SIGNATURE.some((needle) => text.includes(needle))) {
     return {
       kind: "signature",
-      message: t("This update could not be verified. Reinstall Rakazo from a trusted download."),
+      message: t("This update could not be verified. Reinstall Ork from a trusted download."),
     };
   }
   return {

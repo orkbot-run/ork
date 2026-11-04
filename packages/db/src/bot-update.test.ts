@@ -12,7 +12,7 @@ describe("botProfileLabelsChanged", () => {
     expect(botProfileLabelsChanged({ name: "SEO" })).toBe(true);
     expect(botProfileLabelsChanged({ description: "Helps with SEO" })).toBe(true);
     expect(botProfileLabelsChanged({ color: "#8B5CF6::shape_1" })).toBe(true);
-    expect(botProfileLabelsChanged({ avatarSet: "rakazo" })).toBe(true);
+    expect(botProfileLabelsChanged({ avatarSet: "orkbot" })).toBe(true);
   });
 });
 

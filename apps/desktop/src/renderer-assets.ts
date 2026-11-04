@@ -1,10 +1,10 @@
 import path from "node:path";
-import { wuyingScreenPolicy } from "@rakazo/adapters/wuying-screen-policy";
+import { wuyingScreenPolicy } from "@orkbot/adapters/wuying-screen-policy";
 import {
   COMPUTER_SCREEN_RUNTIME_PATH,
   CSP_REPORTING_ENDPOINTS,
   contentSecurityPolicyFor,
-} from "@rakazo/contracts/content-security-policy";
+} from "@orkbot/contracts/content-security-policy";
 
 const PASSTHROUGH_PATHS = ["/api", "/rpc", "/novnc"];
 

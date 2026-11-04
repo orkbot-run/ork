@@ -1,4 +1,4 @@
-import type { AccountSecurity } from "@rakazo/contracts";
+import type { AccountSecurity } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { IdentityConfirmationDeps } from "./identity-confirmation";
 import { confirmIdentityOnDevice, NEW_CODE } from "./identity-confirmation";

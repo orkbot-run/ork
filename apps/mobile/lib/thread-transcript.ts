@@ -5,7 +5,7 @@ import {
   projectBotMentions,
   projectMessageReactions,
   shouldShowBotSenderName,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { useMemo, useState } from "react";
 import type { MobileMessage } from "./api";
 import { applyLocalChoiceDismissals, hasVisibleMessagePresentation } from "./message-presentation";

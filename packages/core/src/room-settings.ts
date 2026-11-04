@@ -3,7 +3,7 @@ import type {
   AutomatedSenderPolicies,
   AutomatedSenderPolicy,
   AutomatedSenderPolicyMode,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 
 /** How a room listens: follow the bot's default, listen to everything, or only mentions. */
 export type ListenMode = "inherit" | "listen" | "mentions";

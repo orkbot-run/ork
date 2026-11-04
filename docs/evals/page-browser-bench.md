@@ -1,11 +1,11 @@
 # Page-browser benchmark
 
-`pnpm bench:page-browser` measures the computer's page-browser driver (`rakazo-page-browser`, behind
+`pnpm bench:page-browser` measures the computer's page-browser driver (`orkbot-page-browser`, behind
 `browser_navigate`, `browser_snapshot` and `browser_act`) on a fixed suite of scripted tasks, so two
 drivers can be compared on equal terms. It is a manual tool: it needs Docker and never runs in unit
 tests or PR CI.
 
-It starts a fresh `rakazo/computer:local` container (`pnpm sandbox:build`), serves the fixture pages
+It starts a fresh `orkbot/computer:local` container (`pnpm sandbox:build`), serves the fixture pages
 in `packages/testkit/src/page-browser-bench/fixtures` inside it over HTTPS on two sites (`localhost`
 and `127.0.0.1`, so the partner frame is cross-site), and restarts its Chromium with a throwaway
 profile that accepts their self-signed certificate. The driver is called exactly as the supervisor

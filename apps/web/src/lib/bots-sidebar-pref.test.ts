@@ -13,7 +13,7 @@ import {
 describe("bots sidebar collapse preference", () => {
   it("builds a per-user storage key", () => {
     expect(botsSidebarCollapsedStorageKey(null)).toBeNull();
-    expect(botsSidebarCollapsedStorageKey("user-1")).toBe("rakazo:bots-sidebar-collapsed:user-1");
+    expect(botsSidebarCollapsedStorageKey("user-1")).toBe("orkbot:bots-sidebar-collapsed:user-1");
   });
 
   it("reads and writes collapsed state", () => {

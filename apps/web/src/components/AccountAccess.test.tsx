@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { AccountSecurity } from "@rakazo/contracts";
+import type { AccountSecurity } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,7 +15,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (strings: TemplateStringsArray) => strings.join("") }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
     <button {...props} />
   ),

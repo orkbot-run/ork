@@ -1,4 +1,4 @@
-import { MAX_FONT_SCALE } from "@rakazo/ui-tokens";
+import { MAX_FONT_SCALE } from "@orkbot/ui-tokens";
 import { createElement } from "react";
 import type * as ReactNative from "react-native";
 import type { TextInputProps, TextProps } from "react-native";
@@ -10,7 +10,7 @@ export function stacksAtTextScale(fontScale: number): boolean {
 
 // Marks the capped Text. It lives on the react-native module, which outlasts a Fast Refresh of
 // this file, and the global symbol registry gives the reloaded file the same key.
-const CAPPED = Symbol.for("rakazo.cappedText");
+const CAPPED = Symbol.for("orkbot.cappedText");
 
 /**
  * Caps every Text and TextInput at `MAX_FONT_SCALE` unless it sets its own limit. React Native

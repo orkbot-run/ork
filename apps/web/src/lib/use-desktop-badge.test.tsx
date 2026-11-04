@@ -3,7 +3,7 @@ import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { RakazoDesktop } from "./desktop";
+import type { OrkDesktop } from "./desktop";
 import { useDesktopBadge } from "./use-desktop-badge";
 
 let root: Root;
@@ -15,12 +15,12 @@ function Harness({ count, signedIn = true }: { count: number; signedIn?: boolean
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   set.mockReset().mockResolvedValue(true);
-  window.rakazoDesktop = { badge: { set } } as unknown as RakazoDesktop;
+  window.orkbotDesktop = { badge: { set } } as unknown as OrkDesktop;
   root = createRoot(document.createElement("div"));
 });
 afterEach(() => {
   act(() => root.unmount());
-  delete window.rakazoDesktop;
+  delete window.orkbotDesktop;
   vi.unstubAllGlobals();
 });
 
@@ -44,10 +44,10 @@ it("clears on unmount and tolerates rejected IPC calls", async () => {
   expect(set.mock.calls).toEqual([[4], [0]]);
 });
 
-it.each([undefined, {} as RakazoDesktop])(
+it.each([undefined, {} as OrkDesktop])(
   "does nothing without the optional badge bridge (%s)",
   (bridge) => {
-    window.rakazoDesktop = bridge;
+    window.orkbotDesktop = bridge;
     act(() => root.render(<Harness count={2} />));
     act(() => root.render(<Harness count={0} />));
     act(() => root.render(null));

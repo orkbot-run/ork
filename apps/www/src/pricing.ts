@@ -1,4 +1,4 @@
-import type { ByokTier, ComputerSize, SandboxKind } from "@rakazo/contracts";
+import type { ByokTier, ComputerSize, SandboxKind } from "@orkbot/contracts";
 import {
   BYOK_TIERS,
   byokTierPriceCents,
@@ -9,7 +9,7 @@ import {
   sandboxAllowanceHours,
   TRIAL_DAYS,
   TRIAL_SANDBOX_ALLOWANCE_CENTS,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { APP_URL, SELF_HOST_GUIDE_PATH } from "./site";
 
 /** Whole dollars when the amount is round ("$15"), otherwise cents ("$12.50"). */
@@ -96,7 +96,7 @@ export const PRICING_PLANS: PricingPlan[] = [
     action: { label: "Start free trial", href: APP_URL },
   },
   {
-    name: "Rakazo credits",
+    name: "Ork credits",
     price: CREDITS_PRICE,
     note: "Model usage included",
     features: [
@@ -137,15 +137,15 @@ export const PRICING_COMPARISON = {
   columns: [
     { name: "Self-hosted", price: "Free" },
     ...TIERS.map((tier) => ({ name: tier.name, price: tier.price })),
-    { name: "Rakazo credits", price: CREDITS_PRICE },
+    { name: "Ork credits", price: CREDITS_PRICE },
   ],
-  /** Most important first: what sets Rakazo apart, then the limits. */
+  /** Most important first: what sets Ork apart, then the limits. */
   rows: [
     {
       feature: "Any model",
       cells: [
         ...included(true).slice(1),
-        { label: "Our catalog", detail: "Credits cover the models Rakazo offers" },
+        { label: "Our catalog", detail: "Credits cover the models Ork offers" },
       ],
     },
     {
@@ -200,12 +200,6 @@ export const PRICING_COMPARISON = {
   ] satisfies { feature: string; hint?: string; cells: PricingCell[] }[],
 };
 
-function markdownCell(cell: PricingCell) {
-  if (cell === true) return "Yes";
-  if (cell === false) return "—";
-  return typeof cell === "string" ? cell.replaceAll("\n", ", ") : `${cell.label} (${cell.detail})`;
-}
-
 function planMarkdown(plan: PricingPlan) {
   return `## ${plan.name}
 
@@ -213,16 +207,12 @@ ${plan.price}${plan.note ? ` (${plan.note})` : ""}
 
 ${plan.features.map((feature) => `- ${feature}`).join("\n")}
 
-[${plan.action.label}](${new URL(plan.action.href, "https://rakazo.com").href})`;
+[${plan.action.label}](${new URL(plan.action.href, "https://orkbot.run").href})`;
 }
 
-export const PRICING_MARKDOWN = `# Rakazo pricing
+export const PRICING_MARKDOWN = `# Ork pricing
 
-${PRICING_PLANS.map(planMarkdown).join("\n\n")}
+${PRICING_PLANS.slice(0, 1).map(planMarkdown).join("\n\n")}
 
-## Compare plans
-
-| | ${PRICING_COMPARISON.columns.map((column) => `${column.name} (${column.price})`).join(" | ")} |
-| --- | ${PRICING_COMPARISON.columns.map(() => "---").join(" | ")} |
-${PRICING_COMPARISON.rows.map((row) => `| ${"hint" in row ? `${row.feature} (${row.hint})` : row.feature} | ${row.cells.map(markdownCell).join(" | ")} |`).join("\n")}
+You pay the model, computer, and integration providers you choose to use.
 `;

@@ -28,8 +28,8 @@ import type {
   ScreenRequest,
   ScreenSession,
   WorkspaceDirectoryRequest,
-} from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
+} from "@orkbot/adapter-kit";
+import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import {
   applyPlaceholderAction,
   boundedComputerActions,
@@ -881,7 +881,7 @@ async function* walkDesktopWorkspace(
 }
 
 function resolveExecuteCwd(requestCwd: string | undefined, home: string) {
-  if (!requestCwd || requestCwd === "/home/rakazo" || requestCwd === "/home/user") return home;
+  if (!requestCwd || requestCwd === "/home/orkbot" || requestCwd === "/home/user") return home;
   return path.resolve(home, requestCwd);
 }
 

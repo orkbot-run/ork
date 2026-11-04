@@ -5,7 +5,7 @@ import type {
   LoginFieldInput,
   VaultKind,
   VaultRevealed,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   BotSecretName,
   CardSecretValue,
@@ -23,7 +23,7 @@ import {
   vaultItemSubtitle as sharedSubtitle,
   VAULT_KINDS,
   vaultKind,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { t } from "./i18n";
 
 export type CredentialAuth = NonNullable<BotSecretMetadata["auth"]>;

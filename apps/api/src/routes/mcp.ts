@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { ORPCError } from "@orpc/server";
-import { runContinueJob } from "@rakazo/adapter-kit";
+import { runContinueJob } from "@orkbot/adapter-kit";
 import {
   createPluginMarketplace,
   isTransientFetchError,
@@ -13,19 +12,20 @@ import {
   recordMcpServerHealth,
   sanitizeComposioError,
   verifyMcpInstall,
-} from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import { signupSurveyAsksTeamSize } from "@rakazo/contracts";
-import { comparePlugins, containsSecret, matchesPluginQuery } from "@rakazo/core";
-import type { Prisma } from "@rakazo/db";
+} from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import { signupSurveyAsksTeamSize } from "@orkbot/contracts";
+import { comparePlugins, containsSecret, matchesPluginQuery } from "@orkbot/core";
+import type { Prisma } from "@orkbot/db";
 import {
   AVAILABILITY_SELECT,
   availableInSpace,
   IsolationError,
   itemSecretIn,
   spaceAvailability,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
+import { ORPCError } from "@orpc/server";
 import { requireAdmin } from "../admins.js";
 import {
   assertNameFreeWhereAvailable,

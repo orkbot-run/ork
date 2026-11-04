@@ -173,7 +173,7 @@ describe("browser monitoring", () => {
   it("stays off in a desktop build that does not report errors", async () => {
     vi.resetModules();
     const fresh = await import("./monitoring");
-    vi.stubGlobal("window", { rakazoDesktop: { monitoring: { enabled: async () => false } } });
+    vi.stubGlobal("window", { orkbotDesktop: { monitoring: { enabled: async () => false } } });
     try {
       expect(
         await fresh.startMonitoring(respond({ dsn: "https://key@errors.example.com/8" })),

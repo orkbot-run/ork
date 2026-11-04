@@ -20,11 +20,11 @@ import type {
   CommandRequest,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import { SandboxDamagedError } from "@rakazo/adapter-kit";
-import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
-import type { createRepos, PrismaClient } from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import { SandboxDamagedError } from "@orkbot/adapter-kit";
+import { browserProfilePathForScreen } from "@orkbot/core/node/desktop-runtime";
+import type { createRepos, PrismaClient } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import {
   archiveBot,
@@ -138,7 +138,7 @@ describe("spawned bot creation", () => {
       name: "Painter",
       threadId: "thread-2",
     });
-    const createReposSpy = vi.spyOn(await import("@rakazo/db"), "createRepos").mockReturnValue({
+    const createReposSpy = vi.spyOn(await import("@orkbot/db"), "createRepos").mockReturnValue({
       createBot,
     } as unknown as ReturnType<typeof createRepos>);
 
@@ -783,7 +783,7 @@ describe("destroyBot", () => {
           sandbox: {} as SandboxProvider,
           home: {} as AgentHomeStore,
           jobs: { cancel: vi.fn() } as unknown as JobPublisher,
-          dataDir: "/tmp/rakazo-destroy-bot-test",
+          dataDir: "/tmp/orkbot-destroy-bot-test",
         },
         {
           id: "bot-1",
@@ -840,7 +840,7 @@ describe("destroyBot", () => {
   });
 
   it("stops the deleted team bot's screen and removes only its browser profile", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-delete-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-delete-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -926,7 +926,7 @@ describe("destroyBot", () => {
   });
 
   it("unlinks a profile symlink instead of following it into another bot's profile", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-symlink-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-symlink-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -973,7 +973,7 @@ describe("destroyBot", () => {
   });
 
   it("refuses a symlinked profile directory instead of deleting the directory it points at", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-parent-symlink-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-parent-symlink-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1023,8 +1023,8 @@ describe("destroyBot", () => {
   it.each(["e2b", "novita", "createos"])(
     "removes the deleted bot's profile from a %s sandbox after the browser stops",
     async (kind) => {
-      const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-remote-delete-"));
-      const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-remote-workspace-"));
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-remote-delete-"));
+      const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-remote-workspace-"));
       try {
         const home = new LocalAgentHomeStore(root);
         const teamHome = home.pathFor("team-workspace-1");
@@ -1105,8 +1105,8 @@ describe("destroyBot", () => {
   );
 
   it("leaves a remote profile in place when its parent directory is a symlink", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-remote-symlink-"));
-    const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-remote-symlink-workspace-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-remote-symlink-"));
+    const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-remote-symlink-workspace-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1163,8 +1163,8 @@ describe("destroyBot", () => {
   });
 
   it("does not remove a profile when stopping the browser fails", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-release-failed-"));
-    const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-release-failed-workspace-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-release-failed-"));
+    const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-release-failed-workspace-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1215,8 +1215,8 @@ describe("destroyBot", () => {
   });
 
   it("removes local and remote profiles when the browser stopped but slot cleanup failed", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-slot-cleanup-"));
-    const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-slot-cleanup-workspace-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-slot-cleanup-"));
+    const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-slot-cleanup-workspace-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1274,7 +1274,7 @@ describe("destroyBot", () => {
     }
   });
   it("does not wake a stopped remote Team Computer to remove the deleted bot's profile", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-profile-stopped-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-profile-stopped-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1321,7 +1321,7 @@ describe("destroyBot", () => {
   });
 
   it("treats releasing the screen of a Team Computer whose sandbox is gone as done", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-profile-gone-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-profile-gone-"));
     const sink = createTestSink();
     installLogger(createLogger({ service: "test", sinks: [sink] }));
     try {
@@ -1376,7 +1376,7 @@ describe("destroyBot", () => {
   });
 
   it("removes the deleted bot's folder inside a running Docker Team Computer and keeps other folders", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-delete-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-delete-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1440,7 +1440,7 @@ describe("destroyBot", () => {
   });
 
   it("removes the Team Computer folder of a bot that moved to its own computer", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-moved-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-moved-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1510,7 +1510,7 @@ describe("destroyBot", () => {
         {
           prisma,
           sandbox: { execute } as unknown as SandboxProvider,
-          home: new LocalAgentHomeStore(path.join(tmpdir(), "rakazo-unused-home")),
+          home: new LocalAgentHomeStore(path.join(tmpdir(), "orkbot-unused-home")),
           jobs: { cancel: vi.fn() } as unknown as JobPublisher,
         },
         {
@@ -1548,7 +1548,7 @@ describe("destroyBot", () => {
 
     async function deleteWithBusyProfile(busyAttempts: number) {
       const sink = createTestSink();
-      installLogger(createLogger({ service: "rakazo-api", sinks: [sink] }));
+      installLogger(createLogger({ service: "orkbot-api", sinks: [sink] }));
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
       let profileAttempts = 0;
       const execute = vi.fn(async function* (_computer: unknown, request: CommandRequest) {
@@ -1570,7 +1570,7 @@ describe("destroyBot", () => {
               releaseScreen: vi.fn().mockResolvedValue(undefined),
               execute,
             } as unknown as SandboxProvider,
-            home: new LocalAgentHomeStore(path.join(tmpdir(), "rakazo-unused-home")),
+            home: new LocalAgentHomeStore(path.join(tmpdir(), "orkbot-unused-home")),
             jobs: { cancel: vi.fn() } as unknown as JobPublisher,
           },
           {
@@ -1589,7 +1589,7 @@ describe("destroyBot", () => {
         return { profileAttempts, events: sink.events };
       } finally {
         vi.useRealTimers();
-        installLogger(createLogger({ service: "rakazo-api", level: "off", sinks: [] }));
+        installLogger(createLogger({ service: "orkbot-api", level: "off", sinks: [] }));
       }
     }
 
@@ -1627,7 +1627,7 @@ describe("destroyBot", () => {
         {
           prisma,
           sandbox: {} as SandboxProvider,
-          home: new LocalAgentHomeStore(path.join(tmpdir(), "rakazo-unused-home")),
+          home: new LocalAgentHomeStore(path.join(tmpdir(), "orkbot-unused-home")),
           jobs: { cancel: vi.fn() } as unknown as JobPublisher,
         },
         {
@@ -1646,8 +1646,8 @@ describe("destroyBot", () => {
   });
 
   it("removes the deleted bot's folder from a running remote Team Computer", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-remote-"));
-    const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-remote-workspace-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-remote-"));
+    const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-remote-workspace-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1714,7 +1714,7 @@ describe("destroyBot", () => {
   });
 
   it("removes the deleted bot's folder and profile from the space's shared Team Computer from before each person got their own", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-legacy-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-legacy-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const legacyHome = home.pathFor("team-workspace-1");
@@ -1771,7 +1771,7 @@ describe("destroyBot", () => {
   });
 
   it("does not wake a stopped Team Computer to remove the deleted bot's folder", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-stopped-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-stopped-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1818,8 +1818,8 @@ describe("destroyBot", () => {
   });
 
   it("unlinks a symlinked bot folder instead of following it into another bot's folder", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-symlink-"));
-    const remote = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-symlink-workspace-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-symlink-"));
+    const remote = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-symlink-workspace-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1878,7 +1878,7 @@ describe("destroyBot", () => {
   });
 
   it("leaves the Team Computer home alone when its bots folder is a symlink", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-parent-symlink-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-parent-symlink-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -1923,7 +1923,7 @@ describe("destroyBot", () => {
   it.each(["docker", "desktop"])(
     "leaves a stopped %s Team Computer's stored home to its next boot",
     async (kind) => {
-      const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-docker-stopped-"));
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-docker-stopped-"));
       try {
         const home = new LocalAgentHomeStore(root);
         const teamHome = home.pathFor("team-workspace-1");
@@ -1968,7 +1968,7 @@ describe("destroyBot", () => {
   );
 
   it("does not delete outside a Docker home when a bot swaps bots/ for a symlink mid-cleanup", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-folder-swap-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-folder-swap-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -2019,7 +2019,7 @@ describe("destroyBot", () => {
   });
 
   it("does not delete outside a Docker home when a bot swaps .browser-profiles/ mid-cleanup", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-profile-swap-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-profile-swap-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");
@@ -2332,7 +2332,7 @@ describe("archiveBot", () => {
   );
 
   it("releases the archived bot's screen and keeps its browser profile", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "rakazo-team-archive-"));
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-team-archive-"));
     try {
       const home = new LocalAgentHomeStore(root);
       const teamHome = home.pathFor("team-workspace-1");

@@ -12,7 +12,7 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (strings: TemplateStringsArray) => strings.join("") }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({
     variant: _variant,
     size: _size,

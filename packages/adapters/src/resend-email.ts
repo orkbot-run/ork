@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { TransactionalEmail, TransactionalEmailProvider } from "@rakazo/adapter-kit";
-import { cancelResponseBody, readBoundedJsonResponse } from "@rakazo/core";
+import type { TransactionalEmail, TransactionalEmailProvider } from "@orkbot/adapter-kit";
+import { cancelResponseBody, readBoundedJsonResponse } from "@orkbot/core";
 
 interface ResendEmailConfig {
   apiKey: string;

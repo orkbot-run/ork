@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { HistorySearchInput } from "@rakazo/contracts";
+import type { HistorySearchInput } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { historyFixture } from "./evals/history-fixtures.js";
 import { runTrial } from "./evals/runner.js";
@@ -140,9 +140,9 @@ describe.skipIf(!enabled)("unfinished broad history search", () => {
         },
       ],
     });
-    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-history-continuation-"));
+    const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-history-continuation-"));
     try {
-      const { createApp } = await import("@rakazo/api/app");
+      const { createApp } = await import("@orkbot/api/app");
       const result = await runTrial(
         {
           id: "synthetic-history-continuation",

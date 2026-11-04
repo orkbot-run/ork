@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EmailEmulator, FakeSandboxProvider } from "@rakazo/adapters";
-import { runAsSystem } from "@rakazo/db";
+import { EmailEmulator, FakeSandboxProvider } from "@orkbot/adapters";
+import { runAsSystem } from "@orkbot/db";
 import { expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 
@@ -12,7 +12,7 @@ const webOrigin = "http://127.0.0.1:5173";
 it.skipIf(!databaseUrl)(
   "welcomes a new account once and honors its one-click unsubscribe",
   async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "rakazo-welcome-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "orkbot-welcome-"));
     const email = new EmailEmulator();
     const handles = await createApp({
       databaseUrl: databaseUrl!,
@@ -36,7 +36,7 @@ it.skipIf(!databaseUrl)(
         headers: { "content-type": "application/json", origin: webOrigin },
         body: JSON.stringify(body),
       });
-    const welcomes = () => email.sent.filter((message) => message.subject === "Welcome to Rakazo");
+    const welcomes = () => email.sent.filter((message) => message.subject === "Welcome to Ork");
     try {
       expect((await post("/api/auth/sign-up/email", { ...credentials, name: "New" })).status).toBe(
         200,

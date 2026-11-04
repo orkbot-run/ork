@@ -6,10 +6,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@rakazo/ui-web/components/ui/dialog";
-import { InputGroup, InputGroupAddon } from "@rakazo/ui-web/components/ui/input-group";
+} from "@orkbot/ui-web/components/ui/dialog";
+import { InputGroup, InputGroupAddon } from "@orkbot/ui-web/components/ui/input-group";
 
-import { cn } from "@rakazo/ui-web/lib/utils";
+import { cn } from "@orkbot/ui-web/lib/utils";
 import { Command as CommandPrimitive } from "cmdk";
 import { CheckIcon, SearchIcon } from "lucide-react";
 import type * as React from "react";

@@ -5,7 +5,7 @@ const loadRootEnv = vi.hoisted(() =>
     throw new Error("env-loader-sentinel");
   }),
 );
-vi.mock("@rakazo/core/node/load-root-env", () => ({ loadRootEnv }));
+vi.mock("@orkbot/core/node/load-root-env", () => ({ loadRootEnv }));
 
 it("loads the root environment before reading migration configuration", async () => {
   await expect(import("./secrets-infisical.js")).rejects.toThrow("env-loader-sentinel");

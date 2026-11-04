@@ -9,7 +9,7 @@ import type {
   ProcessEvent,
   SandboxProvider,
   ScreenRequest,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 
 export const NO_SANDBOX_MESSAGE =
   "Computers unavailable. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or use e2b, novita, daytona, or boat with its API key.";

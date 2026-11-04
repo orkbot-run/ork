@@ -34,7 +34,7 @@ describePostgres("default Space membership trigger (PostgreSQL)", () => {
       data: {
         id: userId,
         name: "Trigger Test User",
-        email: `${userId}@rakazo.test`,
+        email: `${userId}@orkbot.test`,
         emailVerified: false,
       },
     });

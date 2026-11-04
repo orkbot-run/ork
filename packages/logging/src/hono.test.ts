@@ -27,7 +27,7 @@ function appWith(logger: Logger) {
 describe("hono request logging", () => {
   it("validates or generates request ids and returns them", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = appWith(logger);
     const generated = await app.request("/health");
     expect(generated.headers.get("x-request-id")).toMatch(
@@ -43,7 +43,7 @@ describe("hono request logging", () => {
 
   it("accepts valid traceparent headers and generates a child span", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = appWith(logger);
     const traceId = "a".repeat(32);
     const parent = "b".repeat(16);
@@ -61,7 +61,7 @@ describe("hono request logging", () => {
 
   it("normalizes matched routes and records duration", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = appWith(logger);
     await app.request("/items/abc?secret=1");
     expect(sink.events[0]).toMatchObject({
@@ -76,7 +76,7 @@ describe("hono request logging", () => {
 
   it("uses info, warn, and error by status class", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = appWith(logger);
     await app.request("/health");
     await app.request("/bad");
@@ -86,7 +86,7 @@ describe("hono request logging", () => {
 
   it("warns for a 5xx the disconnected client never received", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const client = new AbortController();
     const app = new Hono();
     app.use("*", requestLogging(logger));
@@ -100,7 +100,7 @@ describe("hono request logging", () => {
 
   it("isolates concurrent requests", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = new Hono();
     app.use("*", requestLogging(logger));
     let release!: () => void;
@@ -130,7 +130,7 @@ describe("hono request logging", () => {
 
   it("completes an expected 5xx as a warning", async () => {
     const sink = createTestSink();
-    const app = appWith(createLogger({ service: "rakazo-api", sinks: [sink] }));
+    const app = appWith(createLogger({ service: "orkbot-api", sinks: [sink] }));
     expect((await app.request("/outage")).status).toBe(503);
     expect((await app.request("/crash")).status).toBe(500);
     expect(sink.events.map((event) => [event.level, event["http.route"]])).toEqual([
@@ -141,7 +141,7 @@ describe("hono request logging", () => {
 
   it("reports handler exceptions as failed requests", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-api", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-api", sinks: [sink] });
     const app = appWith(logger);
     const response = await app.request("/fail");
     expect(response.status).toBe(500);

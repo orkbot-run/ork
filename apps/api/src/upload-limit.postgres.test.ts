@@ -13,7 +13,7 @@ it.skipIf(!databaseUrl)(
   "applies the configured upload and attachment count limits through the composed app",
   async () => {
     const maxUploadSizeBytes = 20 * 1024 * 1024;
-    const dataDir = await mkdtemp(join(tmpdir(), "rakazo-upload-limit-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "orkbot-upload-limit-"));
     const handles = await createApp({
       databaseUrl: databaseUrl!,
       dataDir,

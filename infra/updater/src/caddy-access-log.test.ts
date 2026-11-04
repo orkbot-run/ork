@@ -7,7 +7,7 @@ const caddyfiles = ["Caddyfile.prod", "Caddyfile.cloudflare.example"];
 
 describe.each(caddyfiles)("%s access log", (filename) => {
   const config = readFileSync(path.join(composeDir, filename), "utf8");
-  const httpsSite = config.slice(config.lastIndexOf("{$RAKAZO_HOST:app.example.com} {"));
+  const httpsSite = config.slice(config.lastIndexOf("{$ORKBOT_HOST:app.example.com} {"));
   const uriFilter = /request>uri regexp "(.+)" "\$\{1\}\$\{2\}REDACTED"/.exec(config);
 
   it("logs every request on the HTTPS site as JSON to stdout", () => {

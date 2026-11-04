@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { RakazoDesktop } from "@rakazo/contracts";
+import type { OrkDesktop } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,7 +14,7 @@ vi.mock("@lingui/react/macro", () => ({
   }),
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({
     variant: _variant,
     size: _size,
@@ -53,14 +53,14 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
-  delete window.rakazoDesktop;
+  delete window.orkbotDesktop;
 });
 
 const laptop = { deviceId: "d1", name: "Laptop", connected: true };
 const desk = { deviceId: "d2", name: "Desk PC", connected: false };
 
-function desktopWith(device: NonNullable<RakazoDesktop["device"]>) {
-  window.rakazoDesktop = { platform: "darwin", device } as RakazoDesktop;
+function desktopWith(device: NonNullable<OrkDesktop["device"]>) {
+  window.orkbotDesktop = { platform: "darwin", device } as OrkDesktop;
 }
 
 it("stays hidden without any computer", async () => {

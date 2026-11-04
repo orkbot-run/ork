@@ -29,8 +29,8 @@ RUN set -eux; \
 FROM ${POSTGRES_IMAGE}
 COPY --from=tools /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=tools /usr/local/bin/age /usr/local/bin/age-keygen /usr/local/bin/rclone /usr/local/bin/
-COPY --chmod=755 pitr-agent.sh /usr/local/bin/rakazo-pitr
-RUN install -d -o postgres -g postgres -m 700 /var/lib/rakazo-pitr
+COPY --chmod=755 pitr-agent.sh /usr/local/bin/orkbot-pitr
+RUN install -d -o postgres -g postgres -m 700 /var/lib/orkbot-pitr
 ENV RCLONE_CONFIG=/dev/null
-ENTRYPOINT ["rakazo-pitr"]
+ENTRYPOINT ["orkbot-pitr"]
 CMD ["run"]

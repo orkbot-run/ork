@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { SandboxProvider } from "@rakazo/adapter-kit";
-import type { ComputerCommand } from "@rakazo/contracts";
-import { COMPUTER_COMMAND_OUTPUT_MAX_CHARS } from "@rakazo/contracts";
-import { redactSecrets, sandboxCommandTimeoutMs } from "@rakazo/core";
-import { RunHistoryWriteError } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { SandboxProvider } from "@orkbot/adapter-kit";
+import type { ComputerCommand } from "@orkbot/contracts";
+import { COMPUTER_COMMAND_OUTPUT_MAX_CHARS } from "@orkbot/contracts";
+import { redactSecrets, sandboxCommandTimeoutMs } from "@orkbot/core";
+import { RunHistoryWriteError } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { redactShellStreams } from "./agent-environment.js";
 import {
   resolveCodeFill,
@@ -409,7 +409,7 @@ export const computerTools: ToolHandlers = {
                   "bash",
                   "-c",
                   BACKGROUND_WORK_LAUNCH,
-                  "rakazo-background-launch",
+                  "orkbot-background-launch",
                   // Marker id must match sleepComputerIfIdle's probe (DB id), not ComputerRef.id
                   // (providerRef via toComputerRef). Scope launches to this run for cancel teardown.
                   ctx.computer.stored.id,

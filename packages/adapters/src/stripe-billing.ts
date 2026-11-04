@@ -9,19 +9,19 @@ import type {
   BillingProvider,
   BillingSubscriptionSnapshot,
   BillingSubscriptionStatus,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   BillingCheckoutCompletedError,
   BillingCustomerNotFoundError,
   BillingNoMonthlyCreditsError,
-} from "@rakazo/adapter-kit";
-import type { BillingCancellationReason, ByokTier } from "@rakazo/contracts";
+} from "@orkbot/adapter-kit";
+import type { BillingCancellationReason, ByokTier } from "@orkbot/contracts";
 import {
   BILLING_CANCELLATION_REASONS,
   BYOK_TIERS,
   ByokTierSchema,
   ModelCreditAmountSchema,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { z } from "zod";
 
 export const STRIPE_API_VERSION = "2026-09-30.endive";
@@ -204,7 +204,7 @@ export class StripeBillingProvider implements BillingProvider {
       )
         throw new BillingCheckoutCompletedError();
     }
-    const metadata = { rakazo_credit_cents: String(input.amountCents) };
+    const metadata = { orkbot_credit_cents: String(input.amountCents) };
     const session = urlSchema.parse(
       await this.request("POST", "/v1/checkout/sessions", {
         customer: input.customerId,
@@ -216,9 +216,9 @@ export class StripeBillingProvider implements BillingProvider {
             ? {
                 quantity: 1,
                 price: await this.recurringPrice(
-                  `rakazo_monthly_credits_${input.amountCents}`,
+                  `orkbot_monthly_credits_${input.amountCents}`,
                   input.amountCents,
-                  "Rakazo monthly model credits",
+                  "Ork monthly model credits",
                 ),
               }
             : {
@@ -226,7 +226,7 @@ export class StripeBillingProvider implements BillingProvider {
                 price_data: {
                   currency: "usd",
                   unit_amount: input.amountCents,
-                  product_data: { name: "Rakazo model credits" },
+                  product_data: { name: "Ork model credits" },
                 },
               },
         ],
@@ -245,11 +245,11 @@ export class StripeBillingProvider implements BillingProvider {
     if (!creditAmount(String(amountCents))) throw new Error("Invalid credit amount");
     const subscription = (await this.listSubscriptions(customerId)).find(
       (s) =>
-        creditAmount(s.metadata?.rakazo_credit_cents) &&
+        creditAmount(s.metadata?.orkbot_credit_cents) &&
         holdsBillingSubscription(mapStripeSubscriptionStatus(s.status)),
     );
     const item = subscription?.items.data[0];
-    const previousAmount = creditAmount(subscription?.metadata?.rakazo_credit_cents);
+    const previousAmount = creditAmount(subscription?.metadata?.orkbot_credit_cents);
     if (!subscription || !item || !previousAmount) throw new BillingNoMonthlyCreditsError();
     if (amountCents === previousAmount) return;
     const upgrading = amountCents > previousAmount;
@@ -258,14 +258,14 @@ export class StripeBillingProvider implements BillingProvider {
         {
           id: item.id,
           price: await this.recurringPrice(
-            `rakazo_monthly_credits_${amountCents}`,
+            `orkbot_monthly_credits_${amountCents}`,
             amountCents,
-            "Rakazo monthly model credits",
+            "Ork monthly model credits",
           ),
           quantity: 1,
         },
       ],
-      metadata: { rakazo_credit_cents: String(amountCents) },
+      metadata: { orkbot_credit_cents: String(amountCents) },
       proration_behavior: upgrading ? "always_invoice" : "none",
       payment_behavior: "error_if_incomplete",
     });
@@ -338,7 +338,7 @@ export class StripeBillingProvider implements BillingProvider {
       (item.price.recurring.interval_count ?? 1) !== 1 ||
       item.price.unit_amount !== from.amountCents ||
       byokTierOf(item.price.lookup_key) !== from.tier ||
-      subscriptions.some((s) => live(s) && creditAmount(s.metadata?.rakazo_credit_cents))
+      subscriptions.some((s) => live(s) && creditAmount(s.metadata?.orkbot_credit_cents))
     )
       return false;
     // A new interval restarts the billing cycle today; either way the unused part is credited.
@@ -359,9 +359,7 @@ export class StripeBillingProvider implements BillingProvider {
         ? `${BYOK_PRICE_KEY_PREFIX}${period}_${amountCents}`
         : `${BYOK_PRICE_KEY_PREFIX}${tier}_${period}_${amountCents}`,
       amountCents,
-      tier === "standard"
-        ? "Rakazo own-key plan"
-        : `Rakazo own-key plan (${BYOK_TIERS[tier].name})`,
+      tier === "standard" ? "Ork own-key plan" : `Ork own-key plan (${BYOK_TIERS[tier].name})`,
       interval,
     );
   }
@@ -517,7 +515,7 @@ export class StripeBillingProvider implements BillingProvider {
     }
     const purchases: BillingCreditPurchase[] = [];
     for (const session of sessions) {
-      const amount = creditAmount(session.metadata.rakazo_credit_cents);
+      const amount = creditAmount(session.metadata.orkbot_credit_cents);
       if (
         session.mode !== "payment" ||
         session.payment_status !== "paid" ||
@@ -534,7 +532,7 @@ export class StripeBillingProvider implements BillingProvider {
     }
     for (const invoice of invoices) {
       const amount = creditAmount(
-        invoice.parent?.subscription_details?.metadata.rakazo_credit_cents,
+        invoice.parent?.subscription_details?.metadata.orkbot_credit_cents,
       );
       if (
         !amount ||
@@ -630,7 +628,7 @@ export class StripeBillingProvider implements BillingProvider {
       const chosen = pickStripeSubscription(await this.listLiveSubscriptions(customerId));
       if (!chosen || !holdsBillingSubscription(chosen.status)) return;
       if (
-        creditAmount(chosen.subscription.metadata?.rakazo_credit_cents) ||
+        creditAmount(chosen.subscription.metadata?.orkbot_credit_cents) ||
         isByokPlan(chosen.subscription)
       )
         return;
@@ -697,7 +695,7 @@ export class StripeBillingProvider implements BillingProvider {
         description: "Referral reward",
         metadata: { [BALANCE_REFERENCE_METADATA]: referenceId },
       },
-      `rakazo-balance-${referenceId}`,
+      `orkbot-balance-${referenceId}`,
     );
   }
 
@@ -891,7 +889,7 @@ function toSnapshot(
   const reason = cancellationReason(subscription.cancellation_details?.feedback);
   const comment = subscription.cancellation_details?.comment?.trim();
   return {
-    creditAmountCents: creditAmount(subscription.metadata?.rakazo_credit_cents),
+    creditAmountCents: creditAmount(subscription.metadata?.orkbot_credit_cents),
     subscriptionId: subscription.id,
     subscriptionItemId: item.id,
     priceId: item.price.id,
@@ -1026,10 +1024,10 @@ export function stripeBillingConfigFromEnv(env: {
   };
 }
 
-const BYOK_PLAN_METADATA = "rakazo_plan";
-const BALANCE_REFERENCE_METADATA = "rakazo_reference";
+const BYOK_PLAN_METADATA = "orkbot_plan";
+const BALANCE_REFERENCE_METADATA = "orkbot_reference";
 
-const BYOK_PRICE_KEY_PREFIX = "rakazo_byok_";
+const BYOK_PRICE_KEY_PREFIX = "orkbot_byok_";
 
 /** The tier named in an own-key price's lookup key; Standard's keys name none. */
 export function byokTierOf(lookupKey: string | null | undefined): ByokTier {

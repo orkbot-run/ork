@@ -1,6 +1,6 @@
-import { MCP_OAUTH_CLIENT_REQUIRED } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MCP_DYNAMIC_REGISTRATION_UNSUPPORTED,
@@ -13,7 +13,7 @@ function fakePrisma(updateMany = vi.fn().mockResolvedValue({ count: 1 })) {
 }
 
 afterEach(() => {
-  installLogger(createLogger({ service: "rakazo", level: "off", sinks: [] }));
+  installLogger(createLogger({ service: "orkbot", level: "off", sinks: [] }));
 });
 
 describe("recordMcpServerHealth", () => {
@@ -89,7 +89,7 @@ describe("recordMcpServerHealth", () => {
 
   it("swallows and logs a failed write", async () => {
     const sink = createTestSink();
-    installLogger(createLogger({ service: "rakazo", level: "info", sinks: [sink] }));
+    installLogger(createLogger({ service: "orkbot", level: "info", sinks: [sink] }));
     const { prisma } = fakePrisma(vi.fn().mockRejectedValue(new Error("db down")));
 
     await expect(

@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ComposioConnector, FakeComposioClient } from "@rakazo/adapters";
-import { recordUsage, runAsSystem } from "@rakazo/db";
+import { ComposioConnector, FakeComposioClient } from "@orkbot/adapters";
+import { recordUsage, runAsSystem } from "@orkbot/db";
 import { describe, expect, it } from "vitest";
 import { runAutoReviewJudge } from "../../adapters/src/auto-review.js";
 import { compactHistory } from "../../adapters/src/history-compaction.js";
@@ -82,10 +82,10 @@ describe.skipIf(!enabled)("persisted Pi usage accounting", () => {
         },
       ],
     });
-    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-usage-fixture-"));
+    const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-usage-fixture-"));
     let stop: (() => Promise<void>) | undefined;
     try {
-      const { createApp } = await import("@rakazo/api/app");
+      const { createApp } = await import("@orkbot/api/app");
       const handles = await createApp({
         databaseUrl: process.env.DATABASE_URL!,
         realtimeDatabaseUrl: process.env.DATABASE_URL!,
@@ -106,7 +106,7 @@ describe.skipIf(!enabled)("persisted Pi usage accounting", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin },
         body: JSON.stringify({
-          email: `usage-${randomUUID()}@rakazo.test`,
+          email: `usage-${randomUUID()}@orkbot.test`,
           password: "password12",
           name: "Usage fixture",
         }),

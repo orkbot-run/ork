@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { AutoReviewProvider, ModelCallObserver } from "@rakazo/adapter-kit";
-import { ModelConnectInputSchema } from "@rakazo/contracts";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import type { AutoReviewProvider, ModelCallObserver } from "@orkbot/adapter-kit";
+import { ModelConnectInputSchema } from "@orkbot/contracts";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import type { ApprovalCaseResult } from "../evals/approval.js";
 import {
   APPROVAL_CASES,
@@ -137,7 +137,7 @@ export async function runApprovalSuite(
       );
     connection = { ...parsed.data, modelId: parsed.data.modelId, headers: parsed.data.headers };
   } else {
-    // The same selection the product makes from RAKAZO_AUTO_REVIEW_* and the deployment model.
+    // The same selection the product makes from ORKBOT_AUTO_REVIEW_* and the deployment model.
     const checker = autoReview.resolveAutoReviewChecker(process.env);
     const envKeys: Record<string, string | undefined> = {
       [autoReview.JEV_AUTO_REVIEW_PROVIDER]: autoReview.typesafeApiKey(process.env),

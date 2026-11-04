@@ -10,9 +10,9 @@ function run(code: string) {
   return exports;
 }
 
-const sources = (globalThis as { __rakazoPageSources?: unknown }).__rakazoPageSources;
+const sources = (globalThis as { __orkbotPageSources?: unknown }).__orkbotPageSources;
 afterEach(() => {
-  (globalThis as { __rakazoPageSources?: unknown }).__rakazoPageSources = sources;
+  (globalThis as { __orkbotPageSources?: unknown }).__orkbotPageSources = sources;
 });
 
 describe("pageViewerCode", () => {
@@ -21,7 +21,7 @@ describe("pageViewerCode", () => {
       '/* page-sources\n{"sales":{"rows":[1,2]}}\n*/\nexport default function App() {\n  undeclared = 1;\n}\n',
     );
     const exports = run(code);
-    expect((globalThis as { __rakazoPageSources?: unknown }).__rakazoPageSources).toEqual({
+    expect((globalThis as { __orkbotPageSources?: unknown }).__orkbotPageSources).toEqual({
       sales: { rows: [1, 2] },
     });
     // Strict like the source's own module code: the stray assignment throws, from line 5.

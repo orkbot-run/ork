@@ -1,4 +1,4 @@
-import type { TransactionalEmailProvider } from "@rakazo/adapter-kit";
+import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startHourlySweep } from "./hourly-sweep.js";
 import { unsubscribeUrl } from "./marketing-email.js";

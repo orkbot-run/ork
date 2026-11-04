@@ -1,5 +1,5 @@
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { RunHistoryWriteError } from "@rakazo/db";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { RunHistoryWriteError } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   callRequestRefusal,

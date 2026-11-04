@@ -1,4 +1,4 @@
-import type { OrganizationList } from "@rakazo/contracts";
+import type { OrganizationList } from "@orkbot/contracts";
 
 type Organization = OrganizationList["organizations"][number];
 

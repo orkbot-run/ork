@@ -1,7 +1,7 @@
-import type { BillingStatus } from "@rakazo/contracts";
+import type { BillingStatus } from "@orkbot/contracts";
 import { rpc } from "./rpc";
 
-const STORAGE_KEY = "rakazo:referral";
+const STORAGE_KEY = "orkbot:referral";
 // What a server-issued invite code can look like; anything else would make billing status fail.
 const CODE = /^[A-Za-z0-9_-]{1,64}$/;
 

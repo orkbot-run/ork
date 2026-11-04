@@ -3,7 +3,7 @@ import {
   APP_CONTENT_SECURITY_POLICY,
   CSP_REPORTING_ENDPOINTS,
   HTML_VIEWER_PATH,
-} from "@rakazo/contracts/content-security-policy";
+} from "@orkbot/contracts/content-security-policy";
 import { describe, expect, it } from "vitest";
 import {
   bundledRendererCandidates,
@@ -14,7 +14,7 @@ import {
   isRendererAssetMiss,
 } from "./renderer-assets.js";
 
-const root = path.resolve("/tmp/rakazo-renderer");
+const root = path.resolve("/tmp/orkbot-renderer");
 const origin = "https://app.example.com";
 
 describe("bundled desktop renderer", () => {

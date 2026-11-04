@@ -1,4 +1,4 @@
-import type { BrowserProvider } from "@rakazo/adapter-kit";
+import type { BrowserProvider } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import type { PurchaseApproval } from "./purchase-gate.js";
 import { detectPurchase, purchaseApprovalOf, purchaseCardSummary } from "./purchase-gate.js";

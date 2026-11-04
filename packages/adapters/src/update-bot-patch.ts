@@ -1,4 +1,4 @@
-import { BOT_DESCRIPTION_MAX_LENGTH, BOT_NAME_MAX_LENGTH } from "@rakazo/contracts";
+import { BOT_DESCRIPTION_MAX_LENGTH, BOT_NAME_MAX_LENGTH } from "@orkbot/contracts";
 
 export type UpdateBotPatch = {
   name?: string;

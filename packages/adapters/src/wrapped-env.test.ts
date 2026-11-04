@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { LocalKeyProvider } from "@rakazo/db";
+import { LocalKeyProvider } from "@orkbot/db";
 import { describe, expect, it } from "vitest";
 import { unwrapEnvFromKeyManager } from "./key-provider-factory.js";
 import { unwrapEnv, wrapEnvValue } from "./wrapped-env.js";

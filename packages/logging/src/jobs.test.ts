@@ -10,7 +10,7 @@ import { createLogger, installLogger } from "./logger.js";
 import { createTestSink } from "./test-sink.js";
 
 afterEach(() => {
-  installLogger(createLogger({ service: "rakazo", level: "off", sinks: [] }));
+  installLogger(createLogger({ service: "orkbot", level: "off", sinks: [] }));
 });
 
 describe("job correlation envelope", () => {
@@ -39,14 +39,14 @@ describe("job correlation envelope", () => {
 
   it("uses a nested envelope for reserved keys and non-plain objects", () => {
     const correlation = { jobId: "job-2", traceId: "d".repeat(32) };
-    const reserved = wrapJobPayload({ runId: "run-2", __rakazoLog: "keep" }, correlation);
+    const reserved = wrapJobPayload({ runId: "run-2", __orkbotLog: "keep" }, correlation);
     expect(reserved).toEqual({
       v: 1,
       correlation,
-      payload: { runId: "run-2", __rakazoLog: "keep" },
+      payload: { runId: "run-2", __orkbotLog: "keep" },
     });
     expect(unwrapJobPayload(reserved)).toEqual({
-      payload: { runId: "run-2", __rakazoLog: "keep" },
+      payload: { runId: "run-2", __orkbotLog: "keep" },
       correlation,
     });
 
@@ -76,7 +76,7 @@ describe("job correlation envelope", () => {
 
   it("restores context, logs completion, and rethrows failures", async () => {
     const sink = createTestSink();
-    installLogger(createLogger({ service: "rakazo-worker", sinks: [sink] }));
+    installLogger(createLogger({ service: "orkbot-worker", sinks: [sink] }));
     await runCorrelatedJob({
       name: "run.continue",
       payload: { runId: "run-9" },
@@ -111,7 +111,7 @@ describe("job correlation envelope", () => {
   });
   it("keeps failed queue outcomes without reporting an already reported cause twice", async () => {
     const sink = createTestSink();
-    const logger = createLogger({ service: "rakazo-worker", sinks: [sink] });
+    const logger = createLogger({ service: "orkbot-worker", sinks: [sink] });
     installLogger(logger);
     const error = new Error("setup failed");
     await expect(

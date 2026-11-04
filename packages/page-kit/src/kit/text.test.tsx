@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { pageKitPalette } from "@rakazo/ui-tokens";
+import { pageKitPalette } from "@orkbot/ui-tokens";
 import type { ReactElement } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -263,7 +263,7 @@ describe("links and legend", () => {
     const host = mount(<LinkCards links={[{ title: "Docs", href: "https://example.com/docs" }]} />);
     act(() => host.querySelector("a")!.click());
     expect(post).toHaveBeenCalledWith(
-      { type: "rakazo-page:open-link", url: "https://example.com/docs" },
+      { type: "orkbot-page:open-link", url: "https://example.com/docs" },
       "*",
     );
     post.mockRestore();
@@ -396,7 +396,7 @@ describe("helpers", () => {
   });
 
   it("returns declared source snapshots as not fresh and rejects unknown ids", () => {
-    (globalThis as { __rakazoPageSources?: unknown }).__rakazoPageSources = {
+    (globalThis as { __orkbotPageSources?: unknown }).__orkbotPageSources = {
       sales: { snapshot: { total: 4 }, asOf: "2026-10-30T00:00:00Z" },
     };
     function Uses({ id }: { id: string }) {
@@ -412,7 +412,7 @@ describe("helpers", () => {
       }).replace(/"/g, "&quot;"),
     );
     expect(() => html(<Uses id="other" />)).toThrow(/no source with that id/);
-    delete (globalThis as { __rakazoPageSources?: unknown }).__rakazoPageSources;
+    delete (globalThis as { __orkbotPageSources?: unknown }).__orkbotPageSources;
   });
 
   it("lays out a diagram for custom drawing", () => {

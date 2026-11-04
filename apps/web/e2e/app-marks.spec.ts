@@ -11,7 +11,7 @@ for (const theme of ["light", "dark"]) {
   test(`familiar app suggestions share a plate and separating ring in ${theme}`, async ({
     page,
   }, testInfo) => {
-    await page.addInitScript((theme) => localStorage.setItem("rakazo.uiAppearance", theme), theme);
+    await page.addInitScript((theme) => localStorage.setItem("orkbot.uiAppearance", theme), theme);
     for (const app of catalogApps) {
       await page.route(`https://logos.composio.dev/api/${app}`, (route) =>
         route.fulfill({
@@ -39,7 +39,7 @@ for (const theme of ["light", "dark"]) {
         },
       }),
     );
-    await signup(page, `app-marks-${theme}-${Date.now()}@rakazo.test`, "password12", "Demo User");
+    await signup(page, `app-marks-${theme}-${Date.now()}@orkbot.test`, "password12", "Demo User");
     await completeOnboarding(page);
     const footer = page.getByTestId("sidebar-footer");
     const pill = footer.getByRole("button", { name: "Connect apps", exact: true });

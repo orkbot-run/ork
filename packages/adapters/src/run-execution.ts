@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
 import { getHeapStatistics } from "node:v8";
-import type { BackgroundJobExecution } from "@rakazo/adapter-kit";
-import { ATTACHMENT_MAX_BYTES } from "@rakazo/contracts";
-import { getLogger } from "@rakazo/logging";
+import type { BackgroundJobExecution } from "@orkbot/adapter-kit";
+import { ATTACHMENT_MAX_BYTES } from "@orkbot/contracts";
+import { getLogger } from "@orkbot/logging";
 
 function admissionMemory(activeRuns: number) {
   // One incoming run needs room for an attachment and its decoding/copying.

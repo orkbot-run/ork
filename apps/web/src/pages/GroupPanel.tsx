@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { Bot, Group } from "@rakazo/contracts";
-import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, GROUP_NAME_MAX_LENGTH } from "@rakazo/contracts";
-import { BotAvatar, Button, Checkbox, Input, SectionHeading } from "@rakazo/ui-web";
+import type { Bot, Group } from "@orkbot/contracts";
+import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, GROUP_NAME_MAX_LENGTH } from "@orkbot/contracts";
+import { BotAvatar, Button, Checkbox, Input, SectionHeading } from "@orkbot/ui-web";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";

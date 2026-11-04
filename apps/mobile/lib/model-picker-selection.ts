@@ -1,4 +1,4 @@
-import type { ChatModelChoice } from "@rakazo/core";
+import type { ChatModelChoice } from "@orkbot/core";
 import type { Href } from "expo-router";
 
 export type ModelPickerRequest = {

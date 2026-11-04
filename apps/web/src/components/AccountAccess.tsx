@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { AccountSecurity } from "@rakazo/contracts";
-import { Button, Input, Label } from "@rakazo/ui-web";
+import type { AccountSecurity } from "@orkbot/contracts";
+import { Button, Input, Label } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { fetchAccountSecurity, requestAccountDeletionCode } from "../lib/account-security";
 import { authClient } from "../lib/auth";

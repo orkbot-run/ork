@@ -14,7 +14,7 @@ vi.mock("@lingui/react/macro", () => ({
   }),
 }));
 
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: ({ children, ...props }: React.ComponentProps<"button">) => (
     <button type="button" {...props}>
       {children}
@@ -295,7 +295,7 @@ it("hides server updates and never requests server authority", async () => {
 });
 
 it("shows Updates in the desktop app", async () => {
-  vi.stubGlobal("rakazoDesktop", { update: {} });
+  vi.stubGlobal("orkbotDesktop", { update: {} });
   const { container, cleanup } = await render({});
   try {
     expect(updatesNav(container)).not.toBeNull();

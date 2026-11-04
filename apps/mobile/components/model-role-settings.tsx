@@ -10,7 +10,7 @@ import type {
   ModelRoleSettings as Settings,
   SettingsScope,
   ThinkingLevel,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   backupChoiceKey,
   canonicalPiProviderId,
@@ -20,8 +20,8 @@ import {
   modelRoleChoiceKey,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   withConnectionName,
-} from "@rakazo/contracts";
-import { createModelRoleSettings, modelRoleListPatch } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { createModelRoleSettings, modelRoleListPatch } from "@orkbot/core";
 import type { Href } from "expo-router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";

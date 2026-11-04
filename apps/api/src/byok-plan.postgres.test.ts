@@ -1,21 +1,21 @@
-import type { SandboxProvider } from "@rakazo/adapter-kit";
-import type * as Adapters from "@rakazo/adapters";
-import { BillingEmulator, sandboxAllowance } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import { BYOK_TIERS } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+import type { SandboxProvider } from "@orkbot/adapter-kit";
+import type * as Adapters from "@orkbot/adapters";
+import { BillingEmulator, sandboxAllowance } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import { BYOK_TIERS } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import {
   asSystem,
   billingAccountForOrganization,
   createDb,
   planComputerSize,
   spaceHasModelAccess,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createBillingService } from "./billing.js";
 
 // Computer use is read from runs and deployment settings that other suites share; tests set it.
-vi.mock("@rakazo/adapters", async (importOriginal) => ({
+vi.mock("@orkbot/adapters", async (importOriginal) => ({
   ...(await importOriginal<typeof Adapters>()),
   sandboxAllowance: vi.fn(async () => null),
 }));
@@ -30,7 +30,7 @@ dbTests("own-key plan", () => {
   const actor: Actor = {
     userId,
     spaceId,
-    email: `byok-${stamp}@rakazo.test`,
+    email: `byok-${stamp}@orkbot.test`,
     isDeploymentOwner: false,
   };
   const provider = new BillingEmulator({ modelCredits: true, namespace: `byok-${stamp}` });

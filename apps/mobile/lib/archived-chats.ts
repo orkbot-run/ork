@@ -56,7 +56,7 @@ export async function loadAllArchivedChats(signal?: AbortSignal) {
       navigation.spaces.map(async (space) => {
         const loaded = await loadArchivedChats(signal, {
           ...context,
-          headers: { ...context.headers, "x-rakazo-space-id": space.id },
+          headers: { ...context.headers, "x-orkbot-space-id": space.id },
         });
         return {
           bots: loaded.bots?.map((bot) => ({ ...bot, spaceId: space.id })) ?? null,

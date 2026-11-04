@@ -58,7 +58,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Verify mobile project
-        run: pnpm --filter @rakazo/mobile check
+        run: pnpm --filter @orkbot/mobile check
 
       - name: Build iOS on EAS
         id: build

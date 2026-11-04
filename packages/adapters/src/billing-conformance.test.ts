@@ -1,5 +1,5 @@
-import type { BillingProvider, BillingSubscriptionStatus } from "@rakazo/adapter-kit";
-import { BillingCheckoutCompletedError, BillingCustomerNotFoundError } from "@rakazo/adapter-kit";
+import type { BillingProvider, BillingSubscriptionStatus } from "@orkbot/adapter-kit";
+import { BillingCheckoutCompletedError, BillingCustomerNotFoundError } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { BillingEmulator } from "./billing-emulator.js";
 import { StripeBillingProvider, signStripeWebhook } from "./stripe-billing.js";

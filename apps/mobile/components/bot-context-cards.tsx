@@ -1,5 +1,5 @@
-import type { MemoryDocument, ScratchpadItem } from "@rakazo/contracts";
-import { isEmptyBotMemory } from "@rakazo/contracts";
+import type { MemoryDocument, ScratchpadItem } from "@orkbot/contracts";
+import { isEmptyBotMemory } from "@orkbot/contracts";
 import { useEffect, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 import { rpc } from "../lib/api";

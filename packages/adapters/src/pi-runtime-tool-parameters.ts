@@ -1,7 +1,7 @@
 import { Type } from "@earendil-works/pi-ai";
-import type { ConnectorTool } from "@rakazo/adapter-kit";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, ThinkingLevelSchema } from "@rakazo/contracts";
-import { getLogger } from "@rakazo/logging";
+import type { ConnectorTool } from "@orkbot/adapter-kit";
+import { BOT_INSTRUCTIONS_MAX_LENGTH, ThinkingLevelSchema } from "@orkbot/contracts";
+import { getLogger } from "@orkbot/logging";
 import {
   normalizeOpenAiToolParameters,
   openAiToolParametersNeedNormalization,

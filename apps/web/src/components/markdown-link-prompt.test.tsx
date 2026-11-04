@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { ChatMarkdown } from "@rakazo/chat-ui/web";
+import { ChatMarkdown } from "@orkbot/chat-ui/web";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { act } from "react";

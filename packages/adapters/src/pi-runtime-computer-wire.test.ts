@@ -1,6 +1,6 @@
 import { zstdDecompressSync } from "node:zlib";
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
-import type { AgentRunModel } from "@rakazo/adapter-kit";
+import type { AgentRunModel } from "@orkbot/adapter-kit";
 import { expect, it, vi } from "vitest";
 import { computerTarget } from "./pi-runtime-computer-mode.js";
 

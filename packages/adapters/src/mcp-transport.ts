@@ -6,8 +6,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
-import { isLocalhostOrLoopbackIp } from "@rakazo/contracts";
-import { cancelResponseBody } from "@rakazo/core";
+import { isLocalhostOrLoopbackIp } from "@orkbot/contracts";
+import { cancelResponseBody } from "@orkbot/core";
 import { combineSignals } from "./connector-safety.js";
 import { closeMcpResource } from "./mcp-close.js";
 import type { InstalledMcpBin } from "./mcp-package-installer.js";
@@ -314,10 +314,10 @@ function stdioParams(options: McpStdioOptions): StdioServerParameters {
   }
   if (isPackageRunnerCommand(options.command)) throw new Error(PACKAGE_RUNNER_REFUSAL);
   if (options.installedBin !== undefined && !isInstalledMcpBin(options.installedBin)) {
-    throw new Error("MCP stdio bin was not installed by Rakazo");
+    throw new Error("MCP stdio bin was not installed by Ork");
   }
   if (options.installedBin === undefined && isNpxCommand(options.command)) {
-    throw new Error("npx only launches a package bin Rakazo installed");
+    throw new Error("npx only launches a package bin Ork installed");
   }
   const command = options.installedBin?.binPath ?? options.command.trim();
   const env: Record<string, string> = {};
@@ -350,7 +350,7 @@ export class McpSession {
 
   private newClient(): Client {
     return new Client(
-      { name: this.clientOptions.name ?? "rakazo", version: this.clientOptions.version ?? "0.1.0" },
+      { name: this.clientOptions.name ?? "orkbot", version: this.clientOptions.version ?? "0.1.0" },
       this.clientOptions.capabilities,
     );
   }

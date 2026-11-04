@@ -2,7 +2,6 @@
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import PlanCard from "../components/PlanCard.astro";
-import PricingComparison from "../components/PricingComparison.astro";
 import { githubStarsLabel } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { PRICING_PLANS } from "../pricing";
@@ -11,9 +10,9 @@ const starsLabel = await githubStarsLabel();
 ---
 
 <BaseLayout
-  title="Pricing · Rakazo"
+  title="Pricing · Ork"
   markdownAlternate="/pricing.md"
-  description="Self-host Rakazo for free, or let us host it with your own model or Rakazo credits."
+  description="Self-host Ork for free with the model and computer providers you choose."
 >
   <div class="container">
     <Header starsLabel={starsLabel} />
@@ -21,12 +20,11 @@ const starsLabel = await githubStarsLabel();
       <h1 class="section-heading">Pricing</h1>
       <div class="pricing__plans">
         {
-          PRICING_PLANS.map((plan, index) => (
+          PRICING_PLANS.slice(0, 1).map((plan, index) => (
             <PlanCard plan={plan} primary={index > 0} attr={`pricing-${index}`} />
           ))
         }
       </div>
-      <PricingComparison />
     </main>
     <Footer />
   </div>

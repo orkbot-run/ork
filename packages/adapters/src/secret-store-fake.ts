@@ -6,7 +6,7 @@ const errorNames = { GET: "GetSecretByName", POST: "CreateSecret", DELETE: "Dele
 /** Strict offline REST fake shared by provider and credential-boundary tests. */
 export function infisicalFake() {
   const values = new Map<string, string>();
-  const folders = new Set(["/rakazo"]);
+  const folders = new Set(["/orkbot"]);
   const statuses: number[] = [];
   const loginStatuses: number[] = [];
   let logins = 0;
@@ -44,7 +44,7 @@ export function infisicalFake() {
     expect(headers.get("authorization")).toMatch(/^Bearer token-[1-9][0-9]*$/);
     expect(Number(headers.get("authorization")?.split("-").at(-1))).toBeLessThanOrEqual(logins);
     expect(url.pathname).toMatch(
-      /^\/api\/v4\/secrets\/(rakazo_[a-f0-9]{24}_[a-f0-9-]{36}|rakazo_start_check)$/,
+      /^\/api\/v4\/secrets\/((?:orkbot|rakazo)_[a-f0-9]{24}_[a-f0-9-]{36}|orkbot_start_check)$/,
     );
     const key = url.pathname.split("/").at(-1)!;
     const method = init?.method as keyof typeof errorNames;
@@ -103,7 +103,7 @@ export function infisicalFake() {
     clientSecret: "fake-client-secret",
     projectId: "fake-project",
     environment: "test",
-    folder: "/rakazo",
+    folder: "/orkbot",
     fetch: fetcher,
     sleep,
   };

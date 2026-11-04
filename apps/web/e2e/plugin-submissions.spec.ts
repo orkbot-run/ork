@@ -1,5 +1,5 @@
+import type { PluginSubmission } from "@orkbot/contracts";
 import { expect, test } from "@playwright/test";
-import type { PluginSubmission } from "@rakazo/contracts";
 import { captureScreenshot, completeOnboarding, makeAdmin, signup } from "./helpers";
 
 const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#888"/></svg>`;
@@ -27,7 +27,7 @@ test("an admin reviews plugin submissions from the emailed admin link", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `plugin-admin-${stamp}@rakazo.test`, "password12", `Plugin Admin ${stamp}`);
+  await signup(page, `plugin-admin-${stamp}@orkbot.test`, "password12", `Plugin Admin ${stamp}`);
   await completeOnboarding(page);
 
   let submissions = [
@@ -89,7 +89,7 @@ test("an admin reviews plugin submissions from the emailed admin link", async ({
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText("github.com/example/planning-notes");
   const claim = panel.getByRole("listitem", { name: "Acme Tickets" });
-  await expect(claim).toContainText("rakazo.com/integrations/acme-tickets");
+  await expect(claim).toContainText("orkbot.run/integrations/acme-tickets");
   await expect(claim.getByRole("button", { name: "Testing" })).toHaveCount(0);
   await expect(rows.first()).toContainText("maker@example.test");
   await rows.first().getByRole("button", { name: "Testing" }).click();

@@ -1,10 +1,10 @@
 import type { ModelsSimpleStreamOptions } from "@earendil-works/pi-ai";
-import type { AgentRunModel } from "@rakazo/adapter-kit";
+import type { AgentRunModel } from "@orkbot/adapter-kit";
 import {
   cloudflareModelConfigMessage,
   cloudflareModelRouting,
   isCloudflareModelProvider,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 
 const CLOUDFLARE_ACCOUNT_ID_ENV = "CLOUDFLARE_ACCOUNT_ID";
 const CLOUDFLARE_GATEWAY_ID_ENV = "CLOUDFLARE_GATEWAY_ID";

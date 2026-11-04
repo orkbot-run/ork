@@ -2,7 +2,7 @@ import { connect } from "node:net";
 import {
   addScreenProxyCapability,
   openScreenCapability,
-} from "@rakazo/core/node/screen-capability";
+} from "@orkbot/core/node/screen-capability";
 import { afterEach, describe, expect, it } from "vitest";
 import { FakeScreenServer } from "./fake-screen.js";
 

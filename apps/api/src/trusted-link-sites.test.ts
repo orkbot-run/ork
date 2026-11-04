@@ -1,6 +1,6 @@
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
@@ -49,7 +49,7 @@ function setup() {
       screenProxySecret: "fake-test-secret",
       sandboxProvider: "fake",
     },
-    dataDir: "/tmp/rakazo-router-test",
+    dataDir: "/tmp/orkbot-router-test",
   } as unknown as RouterDeps;
   const client = (userId: string, spaceId = "space-1") =>
     createRouterClient(createRouter(deps), {
@@ -57,7 +57,7 @@ function setup() {
         actor: {
           userId,
           spaceId,
-          email: `${userId}@rakazo.test`,
+          email: `${userId}@orkbot.test`,
           isDeploymentOwner: false,
         } satisfies Actor,
       } as never,

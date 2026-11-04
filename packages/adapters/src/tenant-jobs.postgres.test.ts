@@ -4,9 +4,9 @@ import type {
   ArtifactStore,
   SandboxProvider,
   SecretStore,
-} from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { createDb, runAsSystem, runAsTenant } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createBackgroundJobHandlers } from "./background-job-handlers.js";
 import type { createRunExecutor } from "./executor.js";
@@ -49,7 +49,7 @@ describePostgres("tenant-scoped background jobs (PostgreSQL)", () => {
     });
     for (const t of tenants) {
       await o.user.create({
-        data: { id: t.userId, name: t.name, email: `${t.userId}@rakazo.test`, emailVerified: true },
+        data: { id: t.userId, name: t.name, email: `${t.userId}@orkbot.test`, emailVerified: true },
       });
       await o.space.create({ data: { id: t.spaceId, organizationId, name: t.name } });
       await o.bot.create({

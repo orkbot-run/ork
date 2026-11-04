@@ -1,7 +1,7 @@
 import type { ConnectedAccountStatus } from "@composio/core";
-import type { AdapterContext, ConnectorEvent } from "@rakazo/adapter-kit";
-import { ConnectorAuthUnavailableError } from "@rakazo/adapter-kit";
-import { CONNECTOR_AUTH_UNAVAILABLE } from "@rakazo/contracts";
+import type { AdapterContext, ConnectorEvent } from "@orkbot/adapter-kit";
+import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
+import { CONNECTOR_AUTH_UNAVAILABLE } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { ComposioConnector, createConnectorStack } from "./composio-connector.js";
 import { FakeComposioClient } from "./composio-fake.js";
@@ -217,7 +217,7 @@ describe("ComposioConnector over the fake Composio client", () => {
     const events = await run(
       connector,
       "GITHUB_LIST_RELEASES",
-      { owner: "elie222", repo: "rakazo" },
+      { owner: "orkbot-run", repo: "ork" },
       ctx,
     );
     expect(events).toEqual([
@@ -239,7 +239,7 @@ describe("ComposioConnector over the fake Composio client", () => {
     const ctx = context([connection("GMAIL", await connect(connector, "GMAIL"))]);
 
     await expect(
-      run(connector, "GITHUB_LIST_RELEASES", { owner: "elie222", repo: "rakazo" }, ctx),
+      run(connector, "GITHUB_LIST_RELEASES", { owner: "orkbot-run", repo: "ork" }, ctx),
     ).resolves.toEqual([
       {
         type: "error",

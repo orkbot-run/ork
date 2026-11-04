@@ -1,13 +1,13 @@
-import type { Actor, RunActivityRow } from "@rakazo/contracts";
-import { MessageBlock } from "@rakazo/contracts";
+import type { Actor, RunActivityRow } from "@orkbot/contracts";
+import { MessageBlock } from "@orkbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   BACKGROUND_RUN_TRIGGERS,
   botMessageContext,
   displayName,
   truncatePlainText,
-} from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 
 const RECENT_LIMIT = 20;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;

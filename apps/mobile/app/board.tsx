@@ -1,4 +1,4 @@
-import type { Ticket, TicketStatus } from "@rakazo/contracts";
+import type { Ticket, TicketStatus } from "@orkbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ActivityIndicator, Alert, StyleSheet, Text, View } from "react-native";

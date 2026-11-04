@@ -1,4 +1,4 @@
-import { MODEL_CONTEXT_TOO_SMALL_ERROR } from "@rakazo/core";
+import { MODEL_CONTEXT_TOO_SMALL_ERROR } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import { selectContext } from "./context-selection.js";
 import { resolveCompletionMaxTokens } from "./pi-runtime-limits.js";

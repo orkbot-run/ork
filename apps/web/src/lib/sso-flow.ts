@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import { newClientId } from "@rakazo/core";
+import { newClientId } from "@orkbot/core";
 import { desktopBridge } from "./desktop";
 
 type SsoResult = {
@@ -8,7 +8,7 @@ type SsoResult = {
 };
 
 export const SSO_CALLBACK_PATH = "/sso/callback";
-const SSO_CHANNEL = "rakazo-sso-oauth";
+const SSO_CHANNEL = "orkbot-sso-oauth";
 const SSO_TIMEOUT_MS = 5 * 60_000;
 let cancelActiveAttempt: (() => void) | undefined;
 

@@ -5,7 +5,7 @@ import type {
   ComputerRef,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   computerControlExpireJobKey,
   SandboxAllowanceUsedError,
@@ -13,24 +13,24 @@ import {
   SandboxSizeUnavailableError,
   SandboxUnavailableError,
   SandboxUnresponsiveError,
-} from "@rakazo/adapter-kit";
-import type { ComputerSize, ComputerUpdate } from "@rakazo/contracts";
+} from "@orkbot/adapter-kit";
+import type { ComputerSize, ComputerUpdate } from "@orkbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   abortableDelay,
   isRetryableError,
   parseScreenLeaseId,
   screenLeaseId,
-} from "@rakazo/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@orkbot/core";
+import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   expireComputerExecutionLeases,
   parseComputerMode,
   planComputerSize,
   recordComputerRunEnd,
   recordComputerRunStart,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import {
   clearInactiveUserComputerControl,
   expireComputerControl,

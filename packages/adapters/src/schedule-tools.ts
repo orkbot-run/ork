@@ -1,7 +1,7 @@
-import type { ConnectorProvider, JobPublisher } from "@rakazo/adapter-kit";
-import { routineJobKey, routineWakeupJob } from "@rakazo/adapter-kit";
-import type { RoutineWatch } from "@rakazo/contracts";
-import { RoutineWatchSchema, TimeZoneSchema } from "@rakazo/contracts";
+import type { ConnectorProvider, JobPublisher } from "@orkbot/adapter-kit";
+import { routineJobKey, routineWakeupJob } from "@orkbot/adapter-kit";
+import type { RoutineWatch } from "@orkbot/contracts";
+import { RoutineWatchSchema, TimeZoneSchema } from "@orkbot/contracts";
 import {
   cronFromPreset,
   formatCron,
@@ -13,10 +13,10 @@ import {
   unevenInterval,
   wallClock,
   zonedDateTime,
-} from "@rakazo/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { runAsSystemInTransaction } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/core";
+import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
+import { runAsSystemInTransaction } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 
 import { localDateTime } from "./current-time.js";
 import { validateRoutineWatch } from "./routine-watch.js";

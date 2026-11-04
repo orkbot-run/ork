@@ -2,7 +2,7 @@ import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import {
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { cloudflareProviderEnv, withCloudflareAuth } from "./cloudflare-ai-gateway.js";
 import { buildModelConnectPlaintext } from "./model-connect.js";

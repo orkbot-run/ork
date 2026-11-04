@@ -1,5 +1,5 @@
-import type { PrismaClient } from "@rakazo/db";
-import { runAsSystem, withTransactionRetry } from "@rakazo/db";
+import type { PrismaClient } from "@orkbot/db";
+import { runAsSystem, withTransactionRetry } from "@orkbot/db";
 import { credentialDigest } from "./credential-digest.js";
 import { EncryptedSecretStore } from "./secrets.js";
 

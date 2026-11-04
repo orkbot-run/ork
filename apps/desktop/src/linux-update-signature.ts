@@ -4,24 +4,31 @@ import { createReadStream } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
 
-/** Public half of the key the release workflow signs Linux AppImages with. */
-export const LINUX_UPDATE_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAklTbtzcfz7ZoFLioFRxwpa97Zs/N4/8oZNblx2Dfi/4=
------END PUBLIC KEY-----
-`;
+/** Ork's public release key, embedded by the desktop build when configured. */
+export const LINUX_UPDATE_PUBLIC_KEY = process.env.ORKBOT_LINUX_UPDATE_PUBLIC_KEY ?? "";
 
-const RELEASES = "https://github.com/elie222/rakazo/releases/download";
+const RELEASES = "https://github.com/orkbot-run/ork/releases/download";
 const MAX_SIGNATURE_BYTES = 1_024;
 const UPDATE_FILE = /^[A-Za-z0-9][A-Za-z0-9._-]*\.AppImage$/;
 const VERSION = /^\d+\.\d+\.\d+$/;
 const SIGNATURE = /^[A-Za-z0-9+/]{86}==$/;
+
+export function configuredLinuxUpdateKey(value = LINUX_UPDATE_PUBLIC_KEY): KeyObject | null {
+  try {
+    if (!value.trim().startsWith("-----BEGIN PUBLIC KEY-----")) return null;
+    const key = createPublicKey(value);
+    return key.asymmetricKeyType === "ed25519" ? key : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Signing a short message instead of the AppImage keeps verification streaming. The version is
  * signed so a feed cannot relabel an older signed build as a newer release.
  */
 export function linuxUpdateSignatureMessage(version: string, fileName: string, sha512Hex: string) {
-  return Buffer.from(`rakazo-linux-update-v1\n${version}\n${fileName}\n${sha512Hex}\n`, "utf8");
+  return Buffer.from(`orkbot-linux-update-v1\n${version}\n${fileName}\n${sha512Hex}\n`, "utf8");
 }
 
 export async function sha512File(file: string) {
@@ -40,8 +47,8 @@ export async function verifyLinuxUpdate(
   const encoded = signature.trim();
   if (!VERSION.test(version) || !UPDATE_FILE.test(fileName) || !SIGNATURE.test(encoded))
     return false;
-  const key = typeof publicKey === "string" ? createPublicKey(publicKey) : publicKey;
-  if (key.asymmetricKeyType !== "ed25519") return false;
+  const key = typeof publicKey === "string" ? configuredLinuxUpdateKey(publicKey) : publicKey;
+  if (key?.asymmetricKeyType !== "ed25519") return false;
   const message = linuxUpdateSignatureMessage(version, fileName, await sha512File(file));
   return verify(null, message, key, Buffer.from(encoded, "base64"));
 }

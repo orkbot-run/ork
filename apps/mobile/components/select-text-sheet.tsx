@@ -1,4 +1,4 @@
-import { typeScale } from "@rakazo/ui-tokens";
+import { typeScale } from "@orkbot/ui-tokens";
 import { Modal, Platform, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { mobileTokens } from "../lib/appearance";

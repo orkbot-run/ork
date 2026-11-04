@@ -1,4 +1,4 @@
-import type { Actor } from "@rakazo/contracts";
+import type { Actor } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createRepos } from "./repos.js";
@@ -48,7 +48,7 @@ function reposFor(memoryScope: string | null) {
 }
 
 describe("createRepos.listBots", () => {
-  it.each([undefined, "organic", "rakazo"])(
+  it.each([undefined, "organic", "orkbot"])(
     "preserves appearance metadata on reload (set=%s)",
     async (avatarSet) => {
       const rows = ["#8B5CF6", "#8B5CF6::shape_3", "data:image/png;base64,aGVsbG8="].map(

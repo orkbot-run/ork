@@ -5,14 +5,14 @@ import type {
   McpServer,
   PluginPart,
   PluginPreview,
-} from "@rakazo/contracts";
-import { PluginPreviewSchema } from "@rakazo/contracts";
+} from "@orkbot/contracts";
+import { PluginPreviewSchema } from "@orkbot/contracts";
 import {
   catalogItemKey,
   connectCatalogItem,
   installedPluginParts,
   isCatalogItemConnected,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import type { NativeStackNavigationOptions } from "expo-router";
 import {
   Redirect,

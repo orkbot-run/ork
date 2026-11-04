@@ -13,6 +13,8 @@
         "DATABASE_URL",
         "ENCRYPTION_KEY",
         "GIT_SHA",
+        "ORKBOT_LINUX_UPDATE_PUBLIC_KEY",
+        "ORKBOT_ENABLE_AUTO_UPDATE",
         "PUBLIC_CRISP_WEBSITE_ID",
         "PUBLIC_POSTHOG_HOST",
         "PUBLIC_POSTHOG_KEY"
@@ -30,7 +32,7 @@
       "cache": false,
       "env": ["PUBLIC_CRISP_WEBSITE_ID", "PUBLIC_POSTHOG_HOST", "PUBLIC_POSTHOG_KEY"],
       "persistent": true,
-      "passThroughEnv": ["RAKAZO_HOST", "RAKAZO_DEV_HOST", "RAKAZO_ALLOWED_HOSTS"]
+      "passThroughEnv": ["ORKBOT_HOST", "ORKBOT_DEV_HOST", "ORKBOT_ALLOWED_HOSTS"]
     }
   }
 }

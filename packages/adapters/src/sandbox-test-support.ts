@@ -1,4 +1,4 @@
-import type { AdapterContext, ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
+import type { AdapterContext, ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
 import { expect } from "vitest";
 
 export async function provisionPrepared(

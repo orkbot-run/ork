@@ -1,8 +1,8 @@
-import type { AuthCapabilities } from "@rakazo/contracts";
-import { authCapabilitiesSchema, legacyAuthCapabilitiesSchema } from "@rakazo/contracts";
-import { ResponseBodyTooLargeError, readBoundedJsonResponse } from "@rakazo/core";
+import type { AuthCapabilities } from "@orkbot/contracts";
+import { authCapabilitiesSchema, legacyAuthCapabilitiesSchema } from "@orkbot/contracts";
+import { ResponseBodyTooLargeError, readBoundedJsonResponse } from "@orkbot/core";
 
-export type { AuthCapabilities } from "@rakazo/contracts";
+export type { AuthCapabilities } from "@orkbot/contracts";
 
 const TIMEOUT_MS = 8_000;
 const MAX_RESPONSE_BYTES = 64 * 1024;

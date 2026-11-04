@@ -100,23 +100,23 @@ async function main() {
       outDir,
       databaseUrl,
       env: {
-        RAKAZO_SCREENSHOT_EMAIL: email,
-        RAKAZO_SCREENSHOT_EMPTY_EMAIL: emptyEmail,
-        RAKAZO_SCREENSHOT_FREE_EMAIL: freeEmail,
-        RAKAZO_SCREENSHOT_PASSWORD: password,
-        RAKAZO_SCREENSHOT_BOT_ID: fixture.botId,
-        RAKAZO_SCREENSHOT_PEER_BOT_ID: fixture.peerBotId,
-        RAKAZO_SCREENSHOT_GROUP_ID: fixture.groupId,
-        RAKAZO_SCREENSHOT_ROUTINE_ID: fixture.routineId,
-        RAKAZO_SCREENSHOT_ARTIFACT_ID: fixture.artifactId,
-        RAKAZO_SCREENSHOT_MARKDOWN_ID: fixture.markdownId,
-        RAKAZO_SCREENSHOT_IMAGE_ID: fixture.imageId,
-        RAKAZO_SCREENSHOT_PDF_ID: fixture.pdfId,
-        RAKAZO_SCREENSHOT_ARCHIVE_ID: fixture.archiveId,
-        RAKAZO_SCREENSHOT_VIDEO_ID: fixture.videoId,
-        RAKAZO_SCREENSHOT_TEAM_SPACE_ID: fixture.teamSpaceId,
-        RAKAZO_SCREENSHOT_CONVERSATION_ID: fixture.conversationId,
-        RAKAZO_SCREENSHOT_CARDS_BOT_ID: fixture.cardsBotId,
+        ORKBOT_SCREENSHOT_EMAIL: email,
+        ORKBOT_SCREENSHOT_EMPTY_EMAIL: emptyEmail,
+        ORKBOT_SCREENSHOT_FREE_EMAIL: freeEmail,
+        ORKBOT_SCREENSHOT_PASSWORD: password,
+        ORKBOT_SCREENSHOT_BOT_ID: fixture.botId,
+        ORKBOT_SCREENSHOT_PEER_BOT_ID: fixture.peerBotId,
+        ORKBOT_SCREENSHOT_GROUP_ID: fixture.groupId,
+        ORKBOT_SCREENSHOT_ROUTINE_ID: fixture.routineId,
+        ORKBOT_SCREENSHOT_ARTIFACT_ID: fixture.artifactId,
+        ORKBOT_SCREENSHOT_MARKDOWN_ID: fixture.markdownId,
+        ORKBOT_SCREENSHOT_IMAGE_ID: fixture.imageId,
+        ORKBOT_SCREENSHOT_PDF_ID: fixture.pdfId,
+        ORKBOT_SCREENSHOT_ARCHIVE_ID: fixture.archiveId,
+        ORKBOT_SCREENSHOT_VIDEO_ID: fixture.videoId,
+        ORKBOT_SCREENSHOT_TEAM_SPACE_ID: fixture.teamSpaceId,
+        ORKBOT_SCREENSHOT_CONVERSATION_ID: fixture.conversationId,
+        ORKBOT_SCREENSHOT_CARDS_BOT_ID: fixture.cardsBotId,
       },
       botId: fixture.botId,
     });
@@ -251,7 +251,7 @@ async function simulatorUdid() {
   if (booted.length === 1 && booted[0]) return booted[0].udid;
   throw new Error(
     booted.length === 0
-      ? "Boot an iPhone simulator with the Rakazo app installed, or set SIM_UDID."
+      ? "Boot an iPhone simulator with the Ork app installed, or set SIM_UDID."
       : `Several simulators are booted; set SIM_UDID to one of: ${booted.map((device) => `${device.name} ${device.udid}`).join(", ")}`,
   );
 }
@@ -265,7 +265,7 @@ function startMetro(apiUrl: string, outDir: string) {
     name: "Metro",
     args: [
       "--filter",
-      "@rakazo/mobile",
+      "@orkbot/mobile",
       "exec",
       "expo",
       "start",
@@ -289,14 +289,14 @@ function startMetro(apiUrl: string, outDir: string) {
 function startScreenRelay(apiUrl: string, outDir: string) {
   return startServer({
     name: "The screen relay",
-    args: ["--filter", "@rakazo/web", "exec", "vite"],
+    args: ["--filter", "@orkbot/web", "exec", "vite"],
     port: SCREEN_RELAY_PORT,
     log: path.join(outDir, "screen-relay.log"),
     // These win over any values in the repository's .env.
     env: {
       API_PROXY_TARGET: apiUrl,
       WEB_PORT: String(SCREEN_RELAY_PORT),
-      RAKAZO_DEV_HOST: "127.0.0.1",
+      ORKBOT_DEV_HOST: "127.0.0.1",
       SCREEN_PROXY_SECRET: process.env.SCREEN_PROXY_SECRET ?? "",
       BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "",
     },

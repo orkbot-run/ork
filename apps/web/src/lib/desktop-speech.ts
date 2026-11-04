@@ -1,4 +1,4 @@
-import type { RakazoDesktopSpeechEvent } from "@rakazo/contracts";
+import type { OrkDesktopSpeechEvent } from "@orkbot/contracts";
 import { desktopBridge } from "./desktop.js";
 
 let sessions = 0;
@@ -25,7 +25,7 @@ export class DesktopSpeechRecognition {
     if (this.session) throw new Error("Speech recognition has already started.");
     const session = ++sessions;
     this.session = session;
-    const handle = (event: RakazoDesktopSpeechEvent) => {
+    const handle = (event: OrkDesktopSpeechEvent) => {
       if (event.session !== session || this.session !== session) return;
       if (event.type === "result") {
         const results = [[{ transcript: event.text }]] as unknown as SpeechRecognitionResultList;

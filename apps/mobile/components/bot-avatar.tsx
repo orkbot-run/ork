@@ -1,5 +1,5 @@
-import type { BotAvatarSet } from "@rakazo/contracts";
-import type { AvatarEyes, AvatarMotionMode, LogoAvatarActivity } from "@rakazo/core";
+import type { BotAvatarSet } from "@orkbot/contracts";
+import type { AvatarEyes, AvatarMotionMode, LogoAvatarActivity } from "@orkbot/core";
 import {
   AVATAR_LID_CLOSE,
   AVATAR_MOTION_UNITS,
@@ -24,7 +24,7 @@ import {
   SHIPPED_BOT_AVATAR_EYES,
   SHIPPED_BOT_AVATAR_VIEWBOX,
   usesLogoAvatar,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { memo, useSyncExternalStore } from "react";
 import { Image, Pressable, View } from "react-native";
 import Animated, {
@@ -130,12 +130,12 @@ export interface BotAvatarProps {
 /** Missing set metadata deliberately preserves every existing avatar. */
 export const BotAvatar = memo(function BotAvatar(props: BotAvatarProps) {
   if (usesLogoAvatar(props)) {
-    return <RakazoBotAvatar {...props} />;
+    return <OrkBotAvatar {...props} />;
   }
   return <LegacyBotAvatar {...props} />;
 });
 
-function RakazoBotAvatar({
+function OrkBotAvatar({
   color,
   identity,
   size = 54,
@@ -152,7 +152,7 @@ function RakazoBotAvatar({
     (): LogoAvatarActivity => "idle",
   );
   const resolved = botAvatarActivity(
-    { color, avatarSet: "rakazo" },
+    { color, avatarSet: "orkbot" },
     activity ??
       (composing && (liveActivity === "working" || liveActivity === "idle")
         ? "writing"

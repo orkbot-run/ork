@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import type { BillingStatus, Bot } from "@rakazo/contracts";
-import { BOT_COLORS } from "@rakazo/contracts";
+import type { BillingStatus, Bot } from "@orkbot/contracts";
+import { BOT_COLORS } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -20,7 +20,7 @@ vi.mock("@lingui/react/macro", () => ({
   Plural: ({ value, one, other }: { value: number; one: string; other: string }) =>
     (value === 1 ? one : other).replace("#", String(value)),
 }));
-vi.mock("@rakazo/ui-web", () => {
+vi.mock("@orkbot/ui-web", () => {
   const Plain = ({ children }: { children?: ReactNode }) => <>{children}</>;
   return {
     BotAvatar: () => null,

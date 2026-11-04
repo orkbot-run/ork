@@ -1,5 +1,5 @@
 /** @jsxRuntime automatic */
-import type { TransactionalEmail } from "@rakazo/adapter-kit";
+import type { TransactionalEmail } from "@orkbot/adapter-kit";
 import { Link, Text } from "react-email";
 import { emailText, greeting, linkStyle, message } from "./email.js";
 
@@ -34,7 +34,7 @@ export function homeDeletionEmail(
       </Text>
       <Text>
         <Link href={appUrl} style={linkStyle}>
-          {say("Open Rakazo")}
+          {say("Open Ork")}
         </Link>
       </Text>
     </>,

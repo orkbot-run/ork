@@ -1,4 +1,4 @@
-import type { DecisionProviderOptions } from "@rakazo/adapter-kit";
+import type { DecisionProviderOptions } from "@orkbot/adapter-kit";
 import { DEFAULT_JEV_MODEL } from "./auto-review.js";
 import { DecisionAutoReviewProvider } from "./decision-auto-review.js";
 import { HttpDecisionProvider } from "./http-decisions.js";

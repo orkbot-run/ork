@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { MAX_FONT_SCALE } from "@rakazo/ui-tokens";
+import { MAX_FONT_SCALE } from "@orkbot/ui-tokens";
 import type { ReactElement, ReactNode } from "react";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";

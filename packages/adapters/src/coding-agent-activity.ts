@@ -1,4 +1,4 @@
-import type { AdapterContext, ComputerRef, SandboxProvider } from "@rakazo/adapter-kit";
+import type { AdapterContext, ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
 
 /**
  * A coding agent CLI and the session files, relative to the home folder, it writes while it
@@ -55,7 +55,7 @@ export async function activeCodingAgent(
           "bash",
           "-c",
           CODING_AGENT_PROBE,
-          "rakazo-coding-agent-probe",
+          "orkbot-coding-agent-probe",
           String(Math.max(1, Math.ceil(windowMs / 60_000))),
           ...entries,
         ],

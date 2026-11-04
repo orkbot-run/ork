@@ -12,6 +12,7 @@ export const SEALED_FIELD = "$sealed";
 
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
+// Persisted encryption domains remain stable across product renames.
 const AAD_VERSION = "rakazo/content/v1";
 
 export interface DataKey {

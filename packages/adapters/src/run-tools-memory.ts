@@ -1,10 +1,10 @@
-import { MEMORY_REVISION_CONFLICT_ERROR } from "@rakazo/adapter-kit";
+import { MEMORY_REVISION_CONFLICT_ERROR } from "@orkbot/adapter-kit";
 import {
   HistoryReadInputSchema,
   HistorySearchInputSchema,
   MEMORY_INDEX_PATH,
-} from "@rakazo/contracts";
-import { readHistory, searchHistory } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { readHistory, searchHistory } from "@orkbot/db";
 import { sharedMemorySaveError } from "./builtin-tools.js";
 import { redactConnectorPayload } from "./connector-safety.js";
 import { MAX_RECALLED_MEMORIES } from "./history-compaction.js";

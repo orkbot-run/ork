@@ -1,4 +1,4 @@
-import type { AdapterContext, ConnectorCall } from "@rakazo/adapter-kit";
+import type { AdapterContext, ConnectorCall } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import type { Evidence } from "./cases.js";
 import { EMPTY_SETTINGS, EVAL_CASES, HISTORY_EVAL_CASES } from "./cases.js";

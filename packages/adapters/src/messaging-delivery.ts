@@ -5,19 +5,19 @@ import type {
   MessagingOutboundAttachment,
   MessagingOutboundStatus,
   MessagingSurface,
-} from "@rakazo/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { botMessageHopExhausted, nextBotMessageHop, pageLinksAsTitles } from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import { botMessageHopExhausted, nextBotMessageHop, pageLinksAsTitles } from "@orkbot/core";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   CrossSpaceCommunicationBlockedError,
   createThreadMessageInTransaction,
   crossSpaceCommunicationAllowed,
   runAsSystem,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { MessagingSendError } from "./chat-sdk-surface.js";
 import { splitOutboundBody } from "./messaging-platforms.js";
 

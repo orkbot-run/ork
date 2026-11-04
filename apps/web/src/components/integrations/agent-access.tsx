@@ -1,5 +1,5 @@
 import { Trans } from "@lingui/react/macro";
-import type { BotAvatarSet } from "@rakazo/contracts";
+import type { BotAvatarSet } from "@orkbot/contracts";
 import {
   BotAvatar,
   Button,
@@ -8,7 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { ChevronDown } from "lucide-react";
 
 export type AgentAccess = { allBots: boolean; botIds: string[] };

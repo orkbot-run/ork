@@ -66,13 +66,13 @@ jobs:
         timeout-minutes: 5
         # Skip --with-deps: GitHub ubuntu-latest already has Chromium's OS libraries,
         # and apt-get against azure.archive.ubuntu.com can stall until the job timeout.
-        run: pnpm --filter @rakazo/web exec playwright install chromium
+        run: pnpm --filter @orkbot/web exec playwright install chromium
       - name: Install agent-browser
         timeout-minutes: 2
         # The page-browser tests run the computer image's helper, which drives Chromium through it.
         run: |
           infra/sandboxes/computer/install-agent-browser.sh "$RUNNER_TEMP/agent-browser"
-          echo "RAKAZO_AGENT_BROWSER=$RUNNER_TEMP/agent-browser/agent-browser" >> "$GITHUB_ENV"
+          echo "ORKBOT_AGENT_BROWSER=$RUNNER_TEMP/agent-browser/agent-browser" >> "$GITHUB_ENV"
       - name: Run Playwright tests
         id: playwright_tests
         env:
@@ -83,7 +83,7 @@ jobs:
       # Runs after product e2e so shared apps/web/test-results is not wiped by the product run.
       - name: Capture marketing homepage screenshots
         if: matrix.shard == 1 && always() && (steps.playwright_tests.outcome == 'success' || steps.playwright_tests.outcome == 'failure')
-        run: pnpm --filter @rakazo/www e2e
+        run: pnpm --filter @orkbot/www e2e
       - name: Upload shard results
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -155,7 +155,7 @@ jobs:
         env:
           PLAYWRIGHT_HTML_OUTPUT_DIR: ${{ github.workspace }}/playwright-report
           PLAYWRIGHT_HTML_OPEN: never
-        run: pnpm --filter @rakazo/web exec playwright merge-reports --reporter html "$GITHUB_WORKSPACE/blob-report"
+        run: pnpm --filter @orkbot/web exec playwright merge-reports --reporter html "$GITHUB_WORKSPACE/blob-report"
       - name: Record Playwright result
         if: ${{ !cancelled() && inputs.upload_artifacts }}
         env:

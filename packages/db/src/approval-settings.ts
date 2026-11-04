@@ -1,4 +1,4 @@
-import type { SettingsScope } from "@rakazo/contracts";
+import type { SettingsScope } from "@orkbot/contracts";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import { lockSpaceSettings, settingsTarget } from "./space-settings.js";

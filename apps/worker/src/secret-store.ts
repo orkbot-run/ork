@@ -1,6 +1,6 @@
-import type { RealtimeFanout, SecretStore } from "@rakazo/adapter-kit";
-import { createSecretStore } from "@rakazo/adapters";
-import { resolveEncryptionKey } from "@rakazo/core";
+import type { RealtimeFanout, SecretStore } from "@orkbot/adapter-kit";
+import { createSecretStore } from "@orkbot/adapters";
+import { resolveEncryptionKey } from "@orkbot/core";
 
 /** Worker composition without starting job hosts or database connections. */
 export async function createWorkerSecretStore(

@@ -2,8 +2,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { KMSClient } from "@aws-sdk/client-kms";
-import type { KeyProvider } from "@rakazo/adapter-kit";
-import { LocalKeyProvider, withLocalMasterKeys } from "@rakazo/db";
+import type { KeyProvider } from "@orkbot/adapter-kit";
+import { LocalKeyProvider, withLocalMasterKeys } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AwsKmsKeyProvider, awsKmsConfigFromEnv } from "./aws-kms-key-provider.js";
 import { contentKeyProviderFromEnv } from "./key-provider-factory.js";
@@ -151,7 +151,7 @@ describe("AWS KMS key provider", () => {
     kms.state.contexts.length = 0;
     await aws().wrap(randomBytes(32), { spaceId: "space-a", version: 3 });
     expect(kms.state.contexts).toEqual([
-      { "rakazo:purpose": "space-key/v1", "rakazo:space": "space-a", "rakazo:version": "3" },
+      { "orkbot:purpose": "space-key/v1", "orkbot:space": "space-a", "orkbot:version": "3" },
     ]);
   });
 
@@ -183,7 +183,7 @@ describe("AWS KMS key provider", () => {
       "AWS_KMS_PROFILE",
     );
     expect(() => awsKmsConfigFromEnv({ AWS_KMS_KEY_ARN: KEY_ARN })).toThrow("AWS_KMS_PROFILE");
-    const alias = "arn:aws:kms:eu-central-1:111122223333:alias/rakazo";
+    const alias = "arn:aws:kms:eu-central-1:111122223333:alias/orkbot";
     expect(() => new AwsKmsKeyProvider({ ...config, keyArn: alias })).toThrow("AWS_KMS_KEY_ARN");
   });
 });
@@ -191,7 +191,7 @@ describe("AWS KMS key provider", () => {
 describe("wrapped environment values under AWS KMS", () => {
   it("binds the variable name into the KMS encryption context", async () => {
     const env = { BETTER_AUTH_SECRET: await wrapEnvValue(aws(), "BETTER_AUTH_SECRET", "fake") };
-    expect(kms.state.contexts.at(-1)).toMatchObject({ "rakazo:space": "env:BETTER_AUTH_SECRET" });
+    expect(kms.state.contexts.at(-1)).toMatchObject({ "orkbot:space": "env:BETTER_AUTH_SECRET" });
     await unwrapEnv(env, aws());
     expect(env.BETTER_AUTH_SECRET).toBe("fake");
   });

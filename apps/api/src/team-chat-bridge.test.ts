@@ -3,10 +3,10 @@ import type {
   SandboxProvider,
   TeamChatInboundMessage,
   TeamChatSendRequest,
-} from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { userTurnMessageForRun } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import { userTurnMessageForRun } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { materializeCurrentTurnFiles } from "../../../packages/adapters/src/thread-artifacts.js";
 import type { MessagingReceipts } from "./messaging-receipts.js";

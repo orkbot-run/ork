@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { MinimumClientBuilds } from "@rakazo/contracts";
+import type { MinimumClientBuilds } from "@orkbot/contracts";
 import {
   CLIENT_BUILD_HEADER,
   CLIENT_UPDATE_REQUIRED,
@@ -7,7 +7,7 @@ import {
   clientUpdateRequired,
   isBuildId,
   SERVER_BUILD_HEADER,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import type { MiddlewareHandler } from "hono";
 
 /**

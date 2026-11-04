@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { ORPCError } from "@orpc/server";
 import {
   aiRecipient,
   cloudAgentsEnabled,
@@ -7,15 +6,15 @@ import {
   resolveMemberMainModel,
   selectConfiguredModel,
   toStringRecord,
-} from "@rakazo/adapters";
+} from "@orkbot/adapters";
 import type {
   Actor,
   AiConsentQuery,
   AiConsentStatus,
   AiRecipient,
   SettingsScope,
-} from "@rakazo/contracts";
-import { AI_DISCLOSURE_VERSION, AI_PRIVACY_URL } from "@rakazo/contracts";
+} from "@orkbot/contracts";
+import { AI_DISCLOSURE_VERSION, AI_PRIVACY_URL } from "@orkbot/contracts";
 import {
   findDefaultVoiceCredential,
   findModelCredential,
@@ -24,7 +23,8 @@ import {
   listVoicePreferences,
   modelRoleTarget,
   voicePreferenceTarget,
-} from "@rakazo/db";
+} from "@orkbot/db";
+import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 import { resolveThreadTarget } from "./thread-target.js";
 import { voiceCredentialServer } from "./voice.js";

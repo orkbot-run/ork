@@ -1,12 +1,12 @@
-import type { AdapterContext } from "@rakazo/adapter-kit";
+import type { AdapterContext } from "@orkbot/adapter-kit";
 import {
   destroyBot,
   forgetPageShareSecrets,
   removeAgentHome,
   removeDeletedBotsFromLegacyTeamHome,
   toComputerRef,
-} from "@rakazo/adapters";
-import type { Prisma } from "@rakazo/db";
+} from "@orkbot/adapters";
+import type { Prisma } from "@orkbot/db";
 import {
   claimOrganizationForDeletion,
   claimSpacesLeavingWithAccount,
@@ -16,8 +16,8 @@ import {
   keepOrganizationTrialUse,
   recordComputerRunEnd,
   releaseOrganizationDeletionClaim,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import type { BillingService } from "./billing.js";
 import type { SpaceDeletionDeps } from "./space-deletion.js";
 

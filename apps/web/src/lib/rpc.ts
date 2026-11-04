@@ -1,18 +1,18 @@
+import type { AppContract, ProductEvent } from "@orkbot/contracts";
+import { CLIENT_BUILD_HEADER, formatClientBuild } from "@orkbot/contracts";
+import { displayIdentityEvent, displayIdentityResult } from "@orkbot/core";
+import { clientCorrelationHeaders, responseCorrelation } from "@orkbot/logging/monitoring";
 import { createORPCClient } from "@orpc/client";
 import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
-import type { AppContract, ProductEvent } from "@rakazo/contracts";
-import { CLIENT_BUILD_HEADER, formatClientBuild } from "@rakazo/contracts";
-import { displayIdentityEvent, displayIdentityResult } from "@rakazo/core";
-import { clientCorrelationHeaders, responseCorrelation } from "@rakazo/logging/monitoring";
 import { authClient } from "./auth";
 import { CLIENT_BUILD } from "./client-build";
 import { i18n } from "./i18n";
 import { identityLabels } from "./identity-display";
 import { reportClientError } from "./monitoring";
 
-const SPACE_STORAGE_KEY = "rakazo:space-id";
-export const ORGANIZATION_SPACES_STORAGE_KEY = "rakazo:org-spaces";
+const SPACE_STORAGE_KEY = "orkbot:space-id";
+export const ORGANIZATION_SPACES_STORAGE_KEY = "orkbot:org-spaces";
 
 type RpcClientContext = { spaceId?: string | null };
 
@@ -26,7 +26,7 @@ export function selectedSpaceId(): string | null {
 }
 
 /** Fired after the selected Space changes, so per-organization state (billing) can reload. */
-export const SPACE_SELECTED_EVENT = "rakazo:space-selected";
+export const SPACE_SELECTED_EVENT = "orkbot:space-selected";
 
 export function selectSpace(id: string): boolean {
   let selected: boolean;
@@ -54,14 +54,14 @@ export function clearSpaceSelection(): void {
   }
 }
 
-/** Adds `x-rakazo-space-id` when a space is selected. */
+/** Adds `x-orkbot-space-id` when a space is selected. */
 export function withSpaceHeaders(
   init?: HeadersInit,
   spaceId: string | null = selectedSpaceId(),
 ): Headers {
   const headers = new Headers(init);
-  if (spaceId) headers.set("x-rakazo-space-id", spaceId);
-  else headers.delete("x-rakazo-space-id");
+  if (spaceId) headers.set("x-orkbot-space-id", spaceId);
+  else headers.delete("x-orkbot-space-id");
   return headers;
 }
 

@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import type { BotSecretDestination, MessageBlock } from "@rakazo/contracts";
-import { encodeCardSecret, encodeContactSecret, encodeLoginSecret } from "@rakazo/contracts";
-import { allocateTicketNumber, createDb, createThreadMessage, ensureBoard } from "@rakazo/db";
-import { pageViewerCode } from "@rakazo/page-kit/compile";
+import type { BotSecretDestination, MessageBlock } from "@orkbot/contracts";
+import { encodeCardSecret, encodeContactSecret, encodeLoginSecret } from "@orkbot/contracts";
+import { allocateTicketNumber, createDb, createThreadMessage, ensureBoard } from "@orkbot/db";
+import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { PNG } from "pngjs";
 import { sessionCookieHeader } from "../index.js";
 
@@ -803,7 +803,7 @@ async function ensureUser(apiUrl: string, email: string, password: string, name:
     headers: {
       authorization: `Bearer ${session.token}`,
       cookie: session.cookie,
-      origin: "rakazo://",
+      origin: "orkbot://",
     },
   };
 }
@@ -815,7 +815,7 @@ async function postAuth(
 ) {
   const response = await fetch(`${apiUrl}/api/auth/${action}/email`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin: "rakazo://" },
+    headers: { "content-type": "application/json", origin: "orkbot://" },
     body: JSON.stringify(body),
   });
   const text = await response.text();

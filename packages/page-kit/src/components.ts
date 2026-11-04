@@ -99,5 +99,5 @@ export const PAGE_GLOBALS = [
 ] as const;
 
 /** Modules a page may import from out of habit; both resolve to what is already in scope. */
-export const PAGE_KIT_MODULE = "rakazo/page";
+export const PAGE_KIT_MODULE = "orkbot/page";
 export const PAGE_MODULES: ReadonlySet<string> = new Set(["react", PAGE_KIT_MODULE]);

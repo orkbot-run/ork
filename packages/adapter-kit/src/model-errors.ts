@@ -1,4 +1,4 @@
-import { providerQuotaResetAt } from "@rakazo/contracts";
+import { providerQuotaResetAt } from "@orkbot/contracts";
 
 /** A model call failed for a reason that should clear on its own, such as an overloaded provider. */
 export class TransientModelError extends Error {

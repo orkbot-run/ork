@@ -1,8 +1,8 @@
-import type { AdapterContext, ManagedConnectorProvider } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { appConnectCard, matchAppCatalog, matchesAppConnection } from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { appendEventInTransaction, createThreadMessageInTransaction } from "@rakazo/db";
+import type { AdapterContext, ManagedConnectorProvider } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import { appConnectCard, matchAppCatalog, matchesAppConnection } from "@orkbot/core";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { appendEventInTransaction, createThreadMessageInTransaction } from "@orkbot/db";
 
 const RECENT_MESSAGES = 50;
 

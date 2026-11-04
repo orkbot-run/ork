@@ -1,6 +1,6 @@
 # Ork
 
-Ork starts from [Rakazo](https://github.com/elie222/rakazo), an open source assistant with persistent bots, shared conversations, and access to isolated computers. This fork keeps the web app, API, worker, Electron client, and Expo client together so we can develop our own product from that codebase.
+Ork is an open source assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Electron client, and Expo client in one repository. Its public domain is `orkbot.run`. Use `orkbot` in package names and technical identifiers.
 
 ## Run locally
 
@@ -25,13 +25,13 @@ corepack pnpm sandbox:build
 
 Stop development with Ctrl+C. `corepack pnpm db:stop` stops PostgreSQL and keeps its data. If port 5433 is occupied, change `POSTGRES_HOST_PORT` and both database URLs in `.env` before starting the database.
 
-## Fork boundary
+## Project identity
 
-The web app is named Ork. Internal packages still use `@rakazo/*`, and existing UI text, artwork, desktop/mobile identities, and provider configuration retain their upstream names. Native installers and published-image setup still belong to Rakazo and need their own Ork configuration before release. Use the source commands above for this checkout.
+The product name is Ork. Workspace packages use `@orkbot/*`, configuration uses the `ORKBOT_` prefix, and the web and native clients use Ork identities. Published images, store listings, signing credentials, and hosted services require their own release configuration. Use the source commands above for local development.
 
-The original GitHub workflows now sit outside `.github/workflows/`, under `.github/upstream-workflows/`, so GitHub cannot run them automatically or through a manual dispatch while we configure Ork's releases. The active workflow runs verification only.
+Imported release workflows are saved under `.github/upstream-workflows/`, where GitHub does not execute them, and use Ork identifiers for future release configuration. The active workflow runs verification only.
 
-Keep `origin` pointed at the Ork repository and `upstream` at Rakazo:
+Keep `origin` pointed at `orkbot-run/ork` and `upstream` at the original source repository:
 
 ```bash
 git fetch upstream main
@@ -39,7 +39,7 @@ git fetch upstream main
 git log --oneline HEAD..upstream/main
 ```
 
-Until Ork has an `origin/main` branch, the development script uses `upstream/main` as its migration baseline. The initial import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`.
+Until Ork has an `origin/main` branch, the development script uses `upstream/main` as its migration baseline. The initial import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`. Historical SQL migrations and cryptographic contexts keep their original identifiers so existing data remains readable.
 
 ## Checks and reference
 
@@ -48,9 +48,15 @@ corepack pnpm db:generate
 corepack pnpm lint
 corepack pnpm check
 corepack pnpm test
-corepack pnpm --filter @rakazo/web build
+corepack pnpm --filter @orkbot/web build
 ```
 
 Production-backup tests use Linux tools such as `flock` and GNU `find`. Run that suite in a Linux environment with Bash 5.
 
-[README.upstream.md](./README.upstream.md) contains the original setup and feature reference. The imported code retains its [Apache 2.0 license](./LICENSE) and attribution in [NOTICE](./NOTICE).
+[README.reference.md](./README.reference.md) contains the adapted setup and feature reference.
+
+## License and attribution
+
+Ork modifications: Copyright 2026 Ork contributors.
+
+Ork is based on [Rakazo](https://github.com/elie222/rakazo), Copyright 2026 Rakazo contributors. The imported code and our current modifications are distributed under the [Apache License, Version 2.0](./LICENSE).

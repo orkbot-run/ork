@@ -126,11 +126,11 @@ describe.skipIf(!databaseAvailable)("memory eval through the product", () => {
       const judge = vi.fn(async () => ({ pass: true, reason: "Offline fixture verdict" }));
       const scenario = MEMORY_EVAL_CASES.find((c) => c.id === id)!;
       const model = await startModelEmulator({ apiKey: fixtureKey, steps: steps() });
-      const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-memory-eval-"));
+      const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-memory-eval-"));
       let evidence: Evidence | undefined;
       try {
-        const { createApp } = await import("@rakazo/api/app");
-        const { PiAgentRuntime } = await import("@rakazo/adapters");
+        const { createApp } = await import("@orkbot/api/app");
+        const { PiAgentRuntime } = await import("@orkbot/adapters");
         const result = await runTrial(
           {
             ...scenario,

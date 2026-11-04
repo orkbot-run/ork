@@ -27,10 +27,10 @@ are running. Compose stops the old worker before it starts the new one, and the 
 jobs it is running to finish, for up to 45 minutes, instead of cutting them off; new jobs start once
 the new worker is up. The API starts only after the `migrate` container finishes, so a migration failure keeps the new API
 from starting. A failed CLI recreate does not auto-roll back; recover with the previous
-`RAKAZO_IMAGE_TAG` (or rebuild `local`) and `up -d --wait --pull never`.
+`ORKBOT_IMAGE_TAG` (or rebuild `local`) and `up -d --wait --pull never`.
 
 The updater sidecar has its own image and tag so an update never recreates the process performing
-it. Move it deliberately by setting `RAKAZO_UPDATER_IMAGE_TAG` to the full `sha-<commit>` tag, then
+it. Move it deliberately by setting `ORKBOT_UPDATER_IMAGE_TAG` to the full `sha-<commit>` tag, then
 running `docker compose … pull updater && docker compose … up -d --wait --pull never updater`.
 Sidecar `/apply` and `/rollback` recover a failed recreate by redeploying the previously cached
 image when possible; if that also fails, they report a possible mixed-version runtime.
@@ -73,16 +73,16 @@ Take a backup and run the drill on it first ([encrypted backups](./self-host-bac
 Then update the checkout and run the upgrade as root:
 
 ```bash
-cd /srv/rakazo
+cd /srv/orkbot
 git pull --ff-only
 sudo infra/compose/upgrade-postgres.sh
 ```
 
 When the stack uses other Compose files, such as the Docker computers overlay or the
 source-checkout stack, pass all of them:
-`sudo RAKAZO_DEPLOY_DIR="$PWD" infra/compose/upgrade-postgres.sh infra/compose/docker-compose.yml`.
+`sudo ORKBOT_DEPLOY_DIR="$PWD" infra/compose/upgrade-postgres.sh infra/compose/docker-compose.yml`.
 Set `COMPOSE_PROJECT_NAME` if the stack runs under a custom `-p`, and on restricted networks set
-`RAKAZO_POSTGRES_16_IMAGE` to your mirror of the previous Postgres 16 image (`POSTGRES_IMAGE` must
+`ORKBOT_POSTGRES_16_IMAGE` to your mirror of the previous Postgres 16 image (`POSTGRES_IMAGE` must
 now name a Postgres 18 image).
 
 The script stops the stack, copies every role (with its password) and database from Postgres 16
@@ -137,16 +137,16 @@ this repository that is:
 
 | Image | Contents |
 | --- | --- |
-| `ghcr.io/elie222/rakazo/app` | api, worker, web, and sandbox supervisor — one image, multiple commands |
-| `ghcr.io/elie222/rakazo/computer` | Linux desktop used as each bot computer |
-| `ghcr.io/elie222/rakazo/updater` | the updater sidecar, plus the Docker CLI |
+| `ghcr.io/orkbot-run/ork/app` | api, worker, web, and sandbox supervisor — one image, multiple commands |
+| `ghcr.io/orkbot-run/ork/computer` | Linux desktop used as each bot computer |
+| `ghcr.io/orkbot-run/ork/updater` | the updater sidecar, plus the Docker CLI |
 
 `infra/compose/docker-compose.images.yml` is the no-checkout path for those app and computer tags
 plus Postgres. The supervisor runs from the app image on the internal network only (not a separate
 published supervisor image, and no host port). Production Compose (`docker-compose.prod.yml`) can
-also pull the same app tags once `RAKAZO_IMAGE_TAG` is set to a published value.
+also pull the same app tags once `ORKBOT_IMAGE_TAG` is set to a published value.
 
-If you deploy from your own fork, set `RAKAZO_IMAGE` and `RAKAZO_UPDATER_IMAGE` to your namespace —
+If you deploy from your own fork, set `ORKBOT_IMAGE` and `ORKBOT_UPDATER_IMAGE` to your namespace —
 your CI cannot publish into someone else's.
 
 | Tag | Published on | Moves? |
@@ -183,7 +183,7 @@ not `latest` or a moving minor tag. A registry tag is not an OCI digest and GHCR
 replace it, so the trust boundary remains this repository's publishing credentials. The workflow
 reduces that boundary by using SHA-pinned actions, read-only pull-request jobs, digest-pinned base
 images, SBOM/provenance output, and a GitHub build attestation. Operators who require registry-level
-content addressing can pin `RAKAZO_IMAGE` outside the automatic updater to a verified digest.
+content addressing can pin `ORKBOT_IMAGE` outside the automatic updater to a verified digest.
 
 Rollback never contacts the registry: it redeploys the previous tag from the local Docker cache,
 so a later tag move cannot change rollback content. Do not prune the previous application image
@@ -199,7 +199,7 @@ and refuses the official path until a stable `vX.Y.Z` exists.
 
 Compose production deployments offer an opt-in `updater` profile on a private `control` network.
 Normal deployments do not start it or require its credential. To enable it, set a dedicated
-`RAKAZO_UPDATER_TOKEN` and explicitly start the profile:
+`ORKBOT_UPDATER_TOKEN` and explicitly start the profile:
 
 ```bash
 docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
@@ -207,7 +207,7 @@ docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
 ```
 
 It exposes `/health`, `/state`, `/plan`, `/apply`, and `/rollback` at `http://updater:7092` with
-`RAKAZO_UPDATER_TOKEN`. Operator CLI upgrades above do not need it; the sidecar is for automated
+`ORKBOT_UPDATER_TOKEN`. Operator CLI upgrades above do not need it; the sidecar is for automated
 apply/rollback over that private HTTP API. Only deployment tooling calls it; app accounts have no update endpoint, and the application API does not receive the updater token.
 
 The API cannot update itself — its image has no `.git`, and nothing inside the container would
@@ -215,10 +215,10 @@ restart it — so the work happens in a separate `updater` container that outliv
 
 - *Official repository:* resolves the newest stable release and its source commit with
   `git ls-remote --tags`, pins the corresponding full `sha-<commit>` image tag in `.env`, keeps the
-  outgoing tag in `RAKAZO_IMAGE_TAG_PREVIOUS`, explicitly pulls the new image, then runs
+  outgoing tag in `ORKBOT_IMAGE_TAG_PREVIOUS`, explicitly pulls the new image, then runs
   `up -d --wait --pull never`. No build runs on the server.
 - *Fork (Advanced):* a fork has no published images, so the sidecar fast-forwards the checkout in
-  `RAKAZO_DEPLOY_DIR` and runs `up -d --build`. This builds on the server and takes minutes rather
+  `ORKBOT_DEPLOY_DIR` and runs `up -d --build`. This builds on the server and takes minutes rather
   than seconds. Point it only at a fork you control and have reviewed — the sidecar runs that
   Compose file through a root-equivalent Docker socket.
 
@@ -234,17 +234,17 @@ untracked source tree fails closed before anything runs (the application Dockerf
 
 ## The deploy directory must be one path
 
-`RAKAZO_DEPLOY_DIR` is bind-mounted into the updater at the same path it is read from
-(`${RAKAZO_DEPLOY_DIR}:${RAKAZO_DEPLOY_DIR}`), and that is load-bearing rather than tidy. Production
-Compose defaults both sides to `/srv/rakazo`; set the variable for any other layout. When the
-updater runs `docker compose -p <project> --file $RAKAZO_DEPLOY_DIR/infra/compose/docker-compose.prod.yml up -d`,
+`ORKBOT_DEPLOY_DIR` is bind-mounted into the updater at the same path it is read from
+(`${ORKBOT_DEPLOY_DIR}:${ORKBOT_DEPLOY_DIR}`), and that is load-bearing rather than tidy. Production
+Compose defaults both sides to `/srv/orkbot`; set the variable for any other layout. When the
+updater runs `docker compose -p <project> --file $ORKBOT_DEPLOY_DIR/infra/compose/docker-compose.prod.yml up -d`,
 the Compose CLI *inside* the container expands this file's relative bind mounts — `../../.env`,
 `./Caddyfile.prod` — against that path and hands the results to the daemon. The daemon has to be
 able to resolve the same strings, or it silently creates empty directories where your `.env` and
 Caddyfile should be. Compose makes the effective `-p` value available for interpolation but does
 not automatically put it in a container's environment, so the production file explicitly assigns
 `COMPOSE_PROJECT_NAME` to the updater. A standalone sidecar can instead set
-`RAKAZO_COMPOSE_PROJECT_NAME`; the final fallback is `rakazo-prod`. Without that propagation, a
+`ORKBOT_COMPOSE_PROJECT_NAME`; the final fallback is `orkbot-prod`. Without that propagation, a
 stack started with `-p something-else` would be left alone while a second project with a new empty
 Postgres volume came up beside it.
 
@@ -252,15 +252,15 @@ The value therefore has to be the path **the daemon** sees, which is not always 
 sees:
 
 - **Linux.** The daemon shares the host filesystem, so the checkout path is the answer:
-  `/srv/rakazo` is the default and supported production layout. Set `RAKAZO_DEPLOY_DIR` explicitly
+  `/srv/orkbot` is the default and supported production layout. Set `ORKBOT_DEPLOY_DIR` explicitly
   when the checkout is elsewhere.
 - **Docker Desktop (Windows/macOS).** The daemon runs in a VM that mounts your drive somewhere else.
-  On Windows, `C:` appears at `/run/desktop/mnt/host/c`, so a checkout at `C:\Users\you\rakazo` is
-  `RAKAZO_DEPLOY_DIR=/run/desktop/mnt/host/c/Users/you/rakazo`. Host Git may use `core.autocrlf=true`; the updater ignores CR-only diffs so that does not block `/apply`. Verify the mount before deploying:
+  On Windows, `C:` appears at `/run/desktop/mnt/host/c`, so a checkout at `C:\Users\you\orkbot` is
+  `ORKBOT_DEPLOY_DIR=/run/desktop/mnt/host/c/Users/you/orkbot`. Host Git may use `core.autocrlf=true`; the updater ignores CR-only diffs so that does not block `/apply`. Verify the mount before deploying:
 
 ```bash
 docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
-  --profile updater run --rm updater git -C "$RAKAZO_DEPLOY_DIR" log --oneline -1
+  --profile updater run --rm updater git -C "$ORKBOT_DEPLOY_DIR" log --oneline -1
 ```
 
   That must print your checkout's HEAD. The two tempting wrong answers both fail: a native Windows
@@ -270,22 +270,22 @@ docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
 
 ## Deployments that layer a Compose overlay
 
-`RAKAZO_COMPOSE_FILE` takes a list, separated the way Compose's own `COMPOSE_FILE` is
+`ORKBOT_COMPOSE_FILE` takes a list, separated the way Compose's own `COMPOSE_FILE` is
 (`:` by default, or whatever `COMPOSE_PATH_SEPARATOR` says). Each entry becomes its own `--file`,
 in the order given, so the updater reconciles the same stack the operator runs by hand:
 
 ```
-RAKAZO_COMPOSE_FILE=infra/compose/docker-compose.prod.yml:ops/compose/overlay.yml
+ORKBOT_COMPOSE_FILE=infra/compose/docker-compose.prod.yml:ops/compose/overlay.yml
 ```
 
-Every entry is validated separately and must stay inside `RAKAZO_DEPLOY_DIR`.
+Every entry is validated separately and must stay inside `ORKBOT_DEPLOY_DIR`.
 
 If the overlay adds a service built from the application image, name it in
-`RAKAZO_UPDATE_SERVICES` (comma separated) so it is pulled, recreated and rolled back with the
+`ORKBOT_UPDATE_SERVICES` (comma separated) so it is pulled, recreated and rolled back with the
 rest. Otherwise an update leaves that service running the previous code:
 
 ```
-RAKAZO_UPDATE_SERVICES=supervisor
+ORKBOT_UPDATE_SERVICES=supervisor
 ```
 
 These names are appended to the built-in `api`, `worker`, `web`, never substituted for them, so no
@@ -300,13 +300,13 @@ as that allows:
 - Only on the dedicated `control` network shared with the API. Caddy is not attached, so the
   reverse proxy has no route to the updater.
 - Every route except `/health` requires the shared bearer token, compared in constant time.
-- The process environment carries only updater settings (`RAKAZO_UPDATER_TOKEN`, deploy path,
+- The process environment carries only updater settings (`ORKBOT_UPDATER_TOKEN`, deploy path,
   image name, project name). Application secrets stay in the bind-mounted `.env` that Compose
   reads for interpolation; they are not loaded into this container.
 - The Docker CLI lives only in the updater image. The api, worker, and web containers keep
   `cap_drop: ALL` and no socket.
 
-Enabling the `updater` profile requires `RAKAZO_UPDATER_TOKEN` to be a dedicated random value (at
+Enabling the `updater` profile requires `ORKBOT_UPDATER_TOKEN` to be a dedicated random value (at
 least 32 characters in production). It must differ from `BETTER_AUTH_SECRET`,
 `SANDBOX_SUPERVISOR_TOKEN`, and `SCREEN_PROXY_SECRET`. Leave the profile disabled if you would
 rather not grant the capability.

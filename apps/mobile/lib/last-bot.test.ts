@@ -18,10 +18,10 @@ describe("last bot shortcut target", () => {
   it("does not carry an explicit Space into a later default-Space chat", async () => {
     await saveLastBotId("researcher", "shared-space");
     expect(await loadLastBotId()).toBe("researcher");
-    expect(saved.get("rakazo.last_bot_space_id")).toBe("shared-space");
+    expect(saved.get("orkbot.last_bot_space_id")).toBe("shared-space");
 
     await saveLastBotId("writer", null);
     expect(await loadLastBotId()).toBe("writer");
-    expect(saved.has("rakazo.last_bot_space_id")).toBe(false);
+    expect(saved.has("orkbot.last_bot_space_id")).toBe(false);
   });
 });

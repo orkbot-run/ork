@@ -66,7 +66,7 @@ describe("cross-space organize", () => {
     );
     expect(rpc).toHaveBeenCalledWith("spaces/list", undefined, {
       requestContext: {
-        headers: { authorization: "Bearer fake", "x-rakazo-space-id": chat.spaceId },
+        headers: { authorization: "Bearer fake", "x-orkbot-space-id": chat.spaceId },
       },
       skipSpaceAuthRecovery: true,
     });

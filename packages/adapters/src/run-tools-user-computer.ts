@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { AgentToolExecutionResult, ProcessEvent } from "@rakazo/adapter-kit";
-import { redactSecrets, sandboxCommandTimeoutMs } from "@rakazo/core";
+import type { AgentToolExecutionResult, ProcessEvent } from "@orkbot/adapter-kit";
+import { redactSecrets, sandboxCommandTimeoutMs } from "@orkbot/core";
 import { z } from "zod";
 import type { HostComputerEnvironment } from "./host-computer-protocol.js";
 import type {
@@ -39,7 +39,7 @@ export {
 export type UserComputerState = "connected" | "offline" | undefined;
 
 const USER_COMPUTER_UNAVAILABLE =
-  "The user's computer is not connected. Ask them to open the Rakazo desktop app.";
+  "The user's computer is not connected. Ask them to open the Ork desktop app.";
 
 /**
  * Whose own computer this run may reach: the person whose message started it, when they own the

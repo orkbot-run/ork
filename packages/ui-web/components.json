@@ -13,11 +13,11 @@
   "iconLibrary": "lucide",
   "rtl": false,
   "aliases": {
-    "components": "@rakazo/ui-web/components",
-    "utils": "@rakazo/ui-web/lib/utils",
-    "ui": "@rakazo/ui-web/components/ui",
-    "lib": "@rakazo/ui-web/lib",
-    "hooks": "@rakazo/ui-web/hooks"
+    "components": "@orkbot/ui-web/components",
+    "utils": "@orkbot/ui-web/lib/utils",
+    "ui": "@orkbot/ui-web/components/ui",
+    "lib": "@orkbot/ui-web/lib",
+    "hooks": "@orkbot/ui-web/hooks"
   },
   "menuColor": "default",
   "menuAccent": "subtle",

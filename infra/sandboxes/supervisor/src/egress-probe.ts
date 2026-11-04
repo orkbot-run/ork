@@ -5,7 +5,7 @@ import type Docker from "dockerode";
  * Restricted egress is enforced by host firewall rules the supervisor cannot see
  * (infra/compose/restrict-computer-egress.sh); without them a restricted computer
  * network is as open as any other. Before the first restricted computer starts, a
- * throwaway container on a `rakazo-c*` bridge tries TCP to that bridge's gateway,
+ * throwaway container on a `orkbot-c*` bridge tries TCP to that bridge's gateway,
  * which is the Docker host. The ruleset's INPUT drop makes every attempt time out;
  * a refused or accepted connection means the host answered, so the rules are missing.
  * The script inserts that INPUT drop after its DOCKER-USER destination drops, so it
@@ -17,9 +17,9 @@ import type Docker from "dockerode";
  * bridge (which has no IPv6). Any reply counts, so a resolver that only knows internal
  * names still passes.
  */
-export const EGRESS_PROBE_NETWORK = "rakazo-egress-probe";
-// Matches the ruleset's `rakazo-c+` interface pattern and Linux's 15-byte limit.
-export const EGRESS_PROBE_BRIDGE = "rakazo-cprobe";
+export const EGRESS_PROBE_NETWORK = "orkbot-egress-probe";
+// Matches the ruleset's `orkbot-c+` interface pattern and Linux's 15-byte limit.
+export const EGRESS_PROBE_BRIDGE = "orkbot-cprobe";
 // 22 is open or allowed on most servers, 1 is closed nearly everywhere: either one
 // answering is enough to show the host takes connections from computer bridges.
 const PROBE_PORTS = [22, 1];
@@ -94,7 +94,7 @@ export async function verifyRestrictedEgress(docker: Docker, image: string, dns?
       Name: EGRESS_PROBE_NETWORK,
       Driver: "bridge",
       CheckDuplicate: true,
-      Labels: { "rakazo.egressProbe": "true" },
+      Labels: { "orkbot.egressProbe": "true" },
       Options: { "com.docker.network.bridge.name": EGRESS_PROBE_BRIDGE },
     })
     .catch((error) => {
@@ -113,7 +113,7 @@ export async function verifyRestrictedEgress(docker: Docker, image: string, dns?
       Image: image,
       Entrypoint: ["bash", "-c", egressProbeScript(gateway, dns)],
       Cmd: [],
-      Labels: { "rakazo.egressProbe": "true" },
+      Labels: { "orkbot.egressProbe": "true" },
       HostConfig: {
         NetworkMode: EGRESS_PROBE_NETWORK,
         CapDrop: ["ALL"],

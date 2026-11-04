@@ -1,8 +1,8 @@
 import { I18nProvider } from "@lingui/react";
-import type { MessageBlock, ThreadMessage } from "@rakazo/contracts";
-import { BOT_COLOR_LIST, instructionUpdateDiff } from "@rakazo/core";
-import type { GroupAvatarMember } from "@rakazo/ui-web";
-import { Button } from "@rakazo/ui-web";
+import type { MessageBlock, ThreadMessage } from "@orkbot/contracts";
+import { BOT_COLOR_LIST, instructionUpdateDiff } from "@orkbot/core";
+import type { GroupAvatarMember } from "@orkbot/ui-web";
+import { Button } from "@orkbot/ui-web";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";

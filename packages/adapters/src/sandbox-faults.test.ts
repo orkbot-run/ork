@@ -1,7 +1,7 @@
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { PortableFile, SandboxProvider, StreamedPortableFile } from "@rakazo/adapter-kit";
+import type { PortableFile, SandboxProvider, StreamedPortableFile } from "@orkbot/adapter-kit";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import {
   fakeBoatProvider as fakeBoat,
@@ -41,7 +41,7 @@ describe.each([
   [
     "native host bridge",
     async () => {
-      const root = await mkdtemp(path.join(tmpdir(), "rakazo-host-contract-"));
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-host-contract-"));
       temporaryRoots.push(root);
       const token = "ab".repeat(32);
       const server = await startHostComputerServer({
@@ -59,7 +59,7 @@ describe.each([
   [
     "desktop",
     async () => {
-      const root = await mkdtemp(path.join(tmpdir(), "rakazo-sandbox-faults-"));
+      const root = await mkdtemp(path.join(tmpdir(), "orkbot-sandbox-faults-"));
       temporaryRoots.push(root);
       return new DesktopSandboxProvider({ root: await realpath(root) });
     },
@@ -306,7 +306,7 @@ function faultOnce(provider: SandboxProvider, methods: FaultableMethod[]): Sandb
 }
 
 async function providerSet(label: string): Promise<Array<[string, SandboxProvider]>> {
-  const root = await mkdtemp(path.join(tmpdir(), `rakazo-sandbox-transfer-${label}-`));
+  const root = await mkdtemp(path.join(tmpdir(), `orkbot-sandbox-transfer-${label}-`));
   temporaryRoots.push(root);
   return [
     ["fake", new FakeSandboxProvider()],

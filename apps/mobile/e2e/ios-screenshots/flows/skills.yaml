@@ -1,20 +1,20 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Skills
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///skills"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///skills"
 - extendedWaitUntil:
     visible: ".*Review Kit.*"
     timeout: 20000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 01-skills
-- tapOn: "Rakazo"
+- tapOn: "Ork"
 - extendedWaitUntil:
-    visible: ".*name: Rakazo.*"
+    visible: ".*name: Ork.*"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
@@ -27,7 +27,7 @@ name: Skills
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 03-new-skill
-- openLink: "rakazo:///skills"
+- openLink: "orkbot:///skills"
 - tapOn: ".*Review Kit.*"
 - extendedWaitUntil:
     visible: ".*Install.*|.*Add.*"

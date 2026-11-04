@@ -3,12 +3,12 @@ import type {
   MemoryCommitRequest,
   MemoryReadRequest,
   MemorySnapshot,
-} from "@rakazo/adapter-kit";
-import { MEMORY_REVISION_CONFLICT_ERROR } from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
+import { MEMORY_REVISION_CONFLICT_ERROR } from "@orkbot/adapter-kit";
 import {
   legacyScopedToolEffectIdempotencyKey,
   toolEffectIdempotencyKey,
-} from "@rakazo/core/node/approval-effect-key";
+} from "@orkbot/core/node/approval-effect-key";
 import { describe, expect, it, vi } from "vitest";
 import type * as AutoReviewModule from "./auto-review.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";

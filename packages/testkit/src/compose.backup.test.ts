@@ -32,9 +32,9 @@ describeBackup("compose backup and restore", () => {
     execSync(`${path.join(repoRoot, "scripts/backup.sh")} ${stamp}`, {
       stdio: "pipe",
       timeout: 60_000,
-      env: { ...process.env, RAKAZO_BACKUP_SKIP_HOMES: "1" },
+      env: { ...process.env, ORKBOT_BACKUP_SKIP_HOMES: "1" },
     });
-    const dump = path.join(repoRoot, "backups", stamp, "rakazo.sql");
+    const dump = path.join(repoRoot, "backups", stamp, "orkbot.sql");
     expect(existsSync(dump)).toBe(true);
     const sql = readFileSync(dump, "utf8");
     expect(sql).toMatch(/CREATE TABLE|CREATE TABLE IF NOT EXISTS/i);
@@ -47,28 +47,28 @@ describeBackup("compose backup and restore", () => {
       "postgres",
       "psql",
       "-U",
-      "rakazo",
+      "orkbot",
       ...sqlArgs,
     ];
-    compose(psql(["-d", "postgres", "-c", "DROP DATABASE IF EXISTS rakazo_restore_test"]), {
+    compose(psql(["-d", "postgres", "-c", "DROP DATABASE IF EXISTS orkbot_restore_test"]), {
       stdio: "pipe",
       timeout: 20_000,
     });
-    compose(psql(["-d", "postgres", "-c", "CREATE DATABASE rakazo_restore_test"]), {
+    compose(psql(["-d", "postgres", "-c", "CREATE DATABASE orkbot_restore_test"]), {
       stdio: "pipe",
       timeout: 20_000,
     });
-    compose(psql(["-d", "rakazo_restore_test"]), {
+    compose(psql(["-d", "orkbot_restore_test"]), {
       input: sql,
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 60_000,
     });
-    const tables = compose(psql(["-d", "rakazo_restore_test", "-c", "\\dt"]), {
+    const tables = compose(psql(["-d", "orkbot_restore_test", "-c", "\\dt"]), {
       encoding: "utf8",
       timeout: 20_000,
     });
     expect(tables).toMatch(/bots/);
-    compose(psql(["-d", "postgres", "-c", "DROP DATABASE rakazo_restore_test"]), {
+    compose(psql(["-d", "postgres", "-c", "DROP DATABASE orkbot_restore_test"]), {
       stdio: "pipe",
       timeout: 20_000,
     });

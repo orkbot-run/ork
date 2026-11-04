@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Rakazo computer</title>
+    <title>Ork computer</title>
     <style>
       html,
       body,
@@ -145,12 +145,12 @@
         root.classList.add("noVNC_connected");
       });
       rfb.addEventListener("securityfailure", (event) => {
-        root.setAttribute("data-rakazo-screen-error", event.detail?.reason ?? "");
+        root.setAttribute("data-orkbot-screen-error", event.detail?.reason ?? "");
       });
       rfb.addEventListener("disconnect", (event) => {
         root.classList.remove("noVNC_connecting", "noVNC_connected");
-        if (!event.detail?.clean && !root.hasAttribute("data-rakazo-screen-error")) {
-          root.setAttribute("data-rakazo-screen-error", "");
+        if (!event.detail?.clean && !root.hasAttribute("data-orkbot-screen-error")) {
+          root.setAttribute("data-orkbot-screen-error", "");
         }
       });
       rfb.viewOnly = flag("view_only");
@@ -158,7 +158,7 @@
       rfb.clipViewport = false;
       attachRemoteClipboardCopy(rfb);
       if (!rfb.viewOnly) attachHostClipboardPaste(rfb);
-      if (!rfb.viewOnly && (isTouchBrowser() || window.__rakazoNativeKeys)) {
+      if (!rfb.viewOnly && (isTouchBrowser() || window.__orkbotNativeKeys)) {
         const keyboardInput = document.getElementById("mobile-keyboard-input");
         attachMobilePaste(rfb, {
           button: document.getElementById("mobile-paste"),

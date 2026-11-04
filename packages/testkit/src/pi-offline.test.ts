@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AgentRunRequest, AgentRuntimeEvent, ConnectorTool } from "@rakazo/adapter-kit";
-import { PiAgentRuntime } from "@rakazo/adapters";
-import * as Core from "@rakazo/core";
+import type { AgentRunRequest, AgentRuntimeEvent, ConnectorTool } from "@orkbot/adapter-kit";
+import { PiAgentRuntime } from "@orkbot/adapters";
+import * as Core from "@orkbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateTextTokens } from "../../adapters/src/context-selection.js";
 import type { ModelEmulatorRequest } from "./model-emulator.js";
@@ -399,7 +399,7 @@ describe("real Pi against an offline model HTTP endpoint", () => {
   });
 
   it("assembles fragmented tool arguments, executes the write, and sends its result back", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "rakazo-pi-offline-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "orkbot-pi-offline-"));
     cleanups.push(() => rm(dir, { recursive: true, force: true }));
     const calls: Array<{ name: string; args: Record<string, unknown>; id?: string }> = [];
     const server = await startModelEmulator({

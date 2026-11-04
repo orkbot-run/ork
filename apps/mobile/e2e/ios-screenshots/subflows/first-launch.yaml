@@ -1,4 +1,4 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 ---
 # A link left from building the app can leave iOS asking to open it.
 - tapOn:
@@ -9,5 +9,5 @@ appId: com.rakazo.app
     stopApp: true
 # The first bundle can take a few minutes to build.
 - extendedWaitUntil:
-    visible: "Sign up for Rakazo|Sign in to Rakazo|Account|.*How did you hear about us.*"
+    visible: "Sign up for Ork|Sign in to Ork|Account|.*How did you hear about us.*"
     timeout: 300000

@@ -24,15 +24,15 @@ function desktopWindow() {
   vi.stubGlobal("BroadcastChannel", FakeChannel);
   const popup = { closed: false, close: vi.fn(), location: { href: "about:blank" } };
   const location = {
-    href: "https://rakazo.example.test/sign-in",
-    origin: "https://rakazo.example.test",
+    href: "https://orkbot.example.test/sign-in",
+    origin: "https://orkbot.example.test",
     pathname: "/sign-in",
     search: "",
     assign: vi.fn(),
   };
   const open = vi.fn(() => popup);
   const close = vi.fn();
-  vi.stubGlobal("window", { rakazoDesktop: {}, location, open, close });
+  vi.stubGlobal("window", { orkbotDesktop: {}, location, open, close });
   const begin = vi.fn(async (_disableRedirect: boolean, callbackURL: (url: string) => string) => {
     returnTo = callbackURL("/app");
     return result;
@@ -73,13 +73,13 @@ it.each(["/app", "/onboarding", "/app?settings=account", "/sign-in?error=SSO_UNA
       ["/app", "/onboarding", "/sign-in"],
     );
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(open).toHaveBeenCalledWith("about:blank", "rakazo-sso-oauth", expect.any(String));
+    expect(open).toHaveBeenCalledWith("about:blank", "orkbot-sso-oauth", expect.any(String));
     expect(popup.location.href).toBe(result.data.url);
     expect(location.assign).not.toHaveBeenCalled();
     if (callback.includes("?error=")) landing += "&error=SSO_UNAVAILABLE";
     expect(land(landing)).toBe(true);
     await expect(flow).resolves.toBe(result);
-    expect(location.assign).toHaveBeenCalledWith(`https://rakazo.example.test${callback}`);
+    expect(location.assign).toHaveBeenCalledWith(`https://orkbot.example.test${callback}`);
     expect(close).toHaveBeenCalled();
     expect(popup.close).toHaveBeenCalled();
     expect(channels[0]?.close).toHaveBeenCalled();
@@ -97,9 +97,9 @@ it("ignores spoofed messages, mismatched nonces, foreign URLs and unrelated path
     null,
     {},
     { type: "mcp-oauth-complete", nonce },
-    { type: "sso-complete", nonce: "another-attempt", url: "https://rakazo.example.test/app" },
+    { type: "sso-complete", nonce: "another-attempt", url: "https://orkbot.example.test/app" },
     { type: "sso-complete", nonce, url: "https://other.example.test/app" },
-    { type: "sso-complete", nonce, url: "https://rakazo.example.test/unrelated" },
+    { type: "sso-complete", nonce, url: "https://orkbot.example.test/unrelated" },
     { type: "sso-complete", nonce, url: "invalid" },
   ])
     channels[0]?.onmessage?.({ data });
@@ -162,9 +162,9 @@ it("only broadcasts well-formed same-origin callback landings", () => {
     "?nonce=attempt",
     "?nonce=attempt&returnTo=invalid",
     "?nonce=attempt&returnTo=https://other.example.test/app",
-    `?nonce=attempt&returnTo=https://rakazo.example.test${SSO_CALLBACK_PATH}`,
+    `?nonce=attempt&returnTo=https://orkbot.example.test${SSO_CALLBACK_PATH}`,
   ]) {
-    expect(land(`https://rakazo.example.test${SSO_CALLBACK_PATH}${query}`)).toBe(true);
+    expect(land(`https://orkbot.example.test${SSO_CALLBACK_PATH}${query}`)).toBe(true);
   }
   expect(channels).toHaveLength(0);
 });
@@ -194,14 +194,14 @@ it("completes desktop SSO without crypto.randomUUID, as on a plain-HTTP server",
   expect(desktop.popup.location.href).toBe(result.data.url);
   desktop.land(landing);
   await expect(flow).resolves.toBe(result);
-  expect(desktop.location.assign).toHaveBeenCalledWith("https://rakazo.example.test/app");
+  expect(desktop.location.assign).toHaveBeenCalledWith("https://orkbot.example.test/app");
 });
 
 it("opens synchronously before beginning authorization", async () => {
   const { open, popup } = desktopWindow();
   await expect(
     runSsoFlow(async () => {
-      expect(open).toHaveBeenCalledWith("about:blank", "rakazo-sso-oauth", expect.any(String));
+      expect(open).toHaveBeenCalledWith("about:blank", "orkbot-sso-oauth", expect.any(String));
       expect(popup.location.href).toBe("about:blank");
       return { data: null, error: { code: "SSO_UNAVAILABLE" } };
     }, ["/app"]),
@@ -232,7 +232,7 @@ it.each([false, true])(
     await vi.advanceTimersByTimeAsync(0);
     expect(popup.location.href).toBe(result.data.url);
     channels[0]?.onmessage?.({
-      data: { type: "sso-complete", nonce: "old", url: "https://rakazo.example.test/app" },
+      data: { type: "sso-complete", nonce: "old", url: "https://orkbot.example.test/app" },
     });
     expect(location.assign).not.toHaveBeenCalled();
     land();

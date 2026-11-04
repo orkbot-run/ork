@@ -10,7 +10,7 @@ done
 
 (cd "${SNAPSHOT}" && sha256sum --check --quiet SHA256SUMS)
 # Read each stream to its end so age authenticates every chunk.
-age --decrypt -i "${IDENTITY}" "${SNAPSHOT}/rakazo.dump.age" \
+age --decrypt -i "${IDENTITY}" "${SNAPSHOT}/orkbot.dump.age" \
   | { pg_restore --list >/dev/null && cat >/dev/null; }
 age --decrypt -i "${IDENTITY}" "${SNAPSHOT}/appdata.tgz.age" \
   | { tar -tzf - >/dev/null && cat >/dev/null; }

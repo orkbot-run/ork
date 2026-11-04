@@ -1,13 +1,13 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ChatMarkdown } from "@rakazo/chat-ui/web";
-import type { LoginFieldInput } from "@rakazo/contracts";
+import { ChatMarkdown } from "@orkbot/chat-ui/web";
+import type { LoginFieldInput } from "@orkbot/contracts";
 import {
   commandVariableName,
   loginCardFields,
   normalizeOneTimeCode,
   vaultKind,
-} from "@rakazo/contracts";
-import { Button, Input } from "@rakazo/ui-web";
+} from "@orkbot/contracts";
+import { Button, Input } from "@orkbot/ui-web";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { AskBlock, AskCardProps } from "./AskCard";

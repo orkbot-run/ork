@@ -48,7 +48,7 @@ describe("notificationIcon", () => {
     expect(loads[0]).toMatch(/^data:image\/svg\+xml,/);
     expect(context?.drawImage).toHaveBeenCalledWith(expect.any(FakeImage), 0, 0, 96, 96);
 
-    const edited = { ...bot, avatarSet: "rakazo" };
+    const edited = { ...bot, avatarSet: "orkbot" };
     expect(notificationIcon(edited)).toBeUndefined();
     prepareNotificationIcons([edited]);
     expect(loads).toHaveLength(2);

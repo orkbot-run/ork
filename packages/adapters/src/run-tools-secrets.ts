@@ -1,8 +1,8 @@
-import { runContinueJob } from "@rakazo/adapter-kit";
-import { BotSecretName, botSecretSubmissionSchema } from "@rakazo/contracts";
-import { createStreamingRedactor, displayName } from "@rakazo/core";
-import { runCodeKind, runLoginKind, runSecretKind } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import { runContinueJob } from "@orkbot/adapter-kit";
+import { BotSecretName, botSecretSubmissionSchema } from "@orkbot/contracts";
+import { createStreamingRedactor, displayName } from "@orkbot/core";
+import { runCodeKind, runLoginKind, runSecretKind } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import {
   completeExternalEffect,
   replaceCompletedExternalEffectResult,

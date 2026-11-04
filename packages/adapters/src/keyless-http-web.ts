@@ -6,7 +6,7 @@ import type {
   WebProvider,
   WebSearchHit,
   WebSearchRequest,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import { JSDOM } from "jsdom";
 import { clampMaxChars, clampMaxResults, clampOffset, pageWindow } from "./web-limits.js";
 import type { ResolveHostname } from "./web-ssrf.js";
@@ -64,8 +64,7 @@ export class KeylessHttpWebProvider implements WebProvider {
     this.searchTimeoutMs = options.searchTimeoutMs ?? 15_000;
     this.fetchTimeoutMs = options.fetchTimeoutMs ?? 15_000;
     this.maxBufferBytes = options.maxBufferBytes ?? 5 * 1024 * 1024;
-    this.userAgent =
-      options.userAgent ?? "Rakazo/0.1 (+https://github.com/elie222/rakazo; web tools)";
+    this.userAgent = options.userAgent ?? "Ork/0.1 (+https://github.com/orkbot-run/ork; web tools)";
   }
 
   describe() {

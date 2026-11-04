@@ -2,7 +2,7 @@ import type { ToolChoiceCase } from "./tool-choice.js";
 import { toolChoiceEvalCase } from "./tool-choice.js";
 
 /** Synthetic prompts only. Production-derived cases belong in a local --cases-file. */
-const PRODUCT_HELP = { anyOf: [{ tool: "skill_read", args: { name: "~rakazo" } }] };
+const PRODUCT_HELP = { anyOf: [{ tool: "skill_read", args: { name: "~orkbot" } }] };
 
 export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
   // Bot settings the user asks for.
@@ -205,7 +205,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "user-settings",
     kind: "guard",
     purpose: "Opt out of marketing email when asked.",
-    prompt: "Unsubscribe me from Rakazo's marketing emails.",
+    prompt: "Unsubscribe me from Ork's marketing emails.",
     expect: { user: { marketingEmailOptOut: true } },
   },
   {
@@ -221,7 +221,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "user-settings",
     kind: "control",
     purpose: "Never delete the account from chat.",
-    prompt: "Delete my Rakazo account.",
+    prompt: "Delete my Ork account.",
     expect: { settingsUnchanged: true },
   },
   {
@@ -232,7 +232,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     prompt: "I'm flying to Tokyo next month for a conference. Any packing tips?",
     expect: { settingsUnchanged: true },
   },
-  // Questions about Rakazo itself.
+  // Questions about Ork itself.
   {
     id: "help-connect-slack",
     area: "product-help",
@@ -246,7 +246,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "product-help",
     kind: "guard",
     purpose: "Look up how credits work.",
-    prompt: "How do credits work in Rakazo?",
+    prompt: "How do credits work in Ork?",
     expect: PRODUCT_HELP,
   },
   {
@@ -262,7 +262,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "product-help",
     kind: "guard",
     purpose: "Look up what routines are.",
-    prompt: "What are routines in Rakazo and how do I make one?",
+    prompt: "What are routines in Ork and how do I make one?",
     expect: PRODUCT_HELP,
   },
   {
@@ -270,7 +270,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "product-help",
     kind: "guard",
     purpose: "Look up self-hosting.",
-    prompt: "Can I self-host Rakazo?",
+    prompt: "Can I self-host Ork?",
     expect: PRODUCT_HELP,
   },
   {
@@ -278,7 +278,7 @@ export const TOOL_CHOICE_DEFINITIONS: ToolChoiceCase[] = [
     area: "product-help",
     kind: "guard",
     purpose: "Look up product concepts.",
-    prompt: "What's the difference between a space and a group in Rakazo?",
+    prompt: "What's the difference between a space and a group in Ork?",
     expect: PRODUCT_HELP,
   },
   {

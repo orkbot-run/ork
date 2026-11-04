@@ -1,6 +1,6 @@
 import type { Novita } from "novita-sandbox";
 
-export const NOVITA_COMPUTER_TEMPLATE = "rakazo-computer";
+export const NOVITA_COMPUTER_TEMPLATE = "orkbot-computer";
 
 /** Build in the account that runs the computers; never fall back to the larger stock image. */
 export async function buildNovitaComputerTemplate(

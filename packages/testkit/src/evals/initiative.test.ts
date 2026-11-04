@@ -1,4 +1,4 @@
-import { ONCE_ROUTINE_CRON } from "@rakazo/core";
+import { ONCE_ROUTINE_CRON } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import type { Evidence } from "./cases.js";
 import { EMPTY_SETTINGS, wakesRoutines } from "./cases.js";

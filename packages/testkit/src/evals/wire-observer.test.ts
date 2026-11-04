@@ -1,5 +1,5 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
-import { dispatcherFetch, PiAgentRuntime } from "@rakazo/adapters";
+import type { AgentRunRequest } from "@orkbot/adapter-kit";
+import { dispatcherFetch, PiAgentRuntime } from "@orkbot/adapters";
 import { expect, it, vi } from "vitest";
 import type { ModelEmulatorRequest } from "../model-emulator.js";
 import { startModelEmulator } from "../model-emulator.js";

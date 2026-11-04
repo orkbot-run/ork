@@ -1,4 +1,4 @@
-import { McpServerConfigInput } from "@rakazo/contracts";
+import { McpServerConfigInput } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { deriveMcpSlug } from "./mcp.js";
 

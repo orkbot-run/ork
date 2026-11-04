@@ -1,5 +1,5 @@
+import type { Routine, RoutineHistory } from "@orkbot/contracts";
 import { expect, test } from "@playwright/test";
-import type { Routine, RoutineHistory } from "@rakazo/contracts";
 import {
   activeBotId,
   captureScreenshot,
@@ -15,7 +15,7 @@ test(
   async ({ page }, testInfo) => {
     const stamp = Date.now();
     const userName = `Korean Routine ${stamp}`;
-    await signup(page, `routine-ko-${stamp}@rakazo.test`, "password12", userName);
+    await signup(page, `routine-ko-${stamp}@orkbot.test`, "password12", userName);
     await completeOnboarding(page);
 
     await page.getByRole("button", { name: new RegExp(userName) }).click();
@@ -44,7 +44,7 @@ test(
 
 test("routine test-run completes and survives reload", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `routine-${stamp}@rakazo.test`, "password12", "Routine");
+  await signup(page, `routine-${stamp}@orkbot.test`, "password12", "Routine");
   await completeOnboarding(page);
   const botId = activeBotId(page);
 
@@ -117,7 +117,7 @@ test("a routine run that failed to start shows the error in Details", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `routine-failed-${stamp}@rakazo.test`, "password12", "Routine");
+  await signup(page, `routine-failed-${stamp}@orkbot.test`, "password12", "Routine");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await rpc<Routine>(page, "routines/create", {
@@ -172,7 +172,7 @@ test("a routine run that failed to start shows the error in Details", async ({
 
 test("run history links runs that replied and marks silent ones", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `routine-states-${stamp}@rakazo.test`, "password12", "Routine");
+  await signup(page, `routine-states-${stamp}@orkbot.test`, "password12", "Routine");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await rpc<Routine>(page, "routines/create", {

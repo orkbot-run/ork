@@ -1,4 +1,4 @@
-import type { DesktopSetup } from "@rakazo/contracts";
+import type { DesktopSetup } from "@orkbot/contracts";
 import type { Session } from "electron";
 import { describe, expect, it, vi } from "vitest";
 import { installServerHeaders } from "./server-request-headers.js";

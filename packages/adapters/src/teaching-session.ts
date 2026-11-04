@@ -4,21 +4,21 @@ import type {
   ControlLeaseRef,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import { computerControlExpireJobKey, skillTeachingExpireJobKey } from "@rakazo/adapter-kit";
-import type { Actor, MessageBlock, TaughtSkill } from "@rakazo/contracts";
-import type { SkillPlaybook, TeachRecordingEvent, TeachSnapshot } from "@rakazo/core";
+} from "@orkbot/adapter-kit";
+import { computerControlExpireJobKey, skillTeachingExpireJobKey } from "@orkbot/adapter-kit";
+import type { Actor, MessageBlock, TaughtSkill } from "@orkbot/contracts";
+import type { SkillPlaybook, TeachRecordingEvent, TeachSnapshot } from "@orkbot/core";
 import {
   buildPlaybookFromRecording,
   computerInputForDomKey,
   sanitizeTeachRecordingEvent,
-} from "@rakazo/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
+} from "@orkbot/core";
+import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   IsolationError,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { revokeScreenControl } from "./computer-control.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { toComputerRef } from "./computer-support.js";

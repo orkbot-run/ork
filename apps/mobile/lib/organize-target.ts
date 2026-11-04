@@ -1,4 +1,4 @@
-import type { SpaceBot, SpaceGroup } from "@rakazo/contracts";
+import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
 import type { MobileBot, MobileBotSection, MobileGroup, MobileSpace } from "./api";
 import { captureApiRequestContext, rpc } from "./api";
 
@@ -33,7 +33,7 @@ export async function findOrganizeTarget(
     // Independent of inbox polling: only a newer organize press supersedes this request.
     const context = await captureApiRequestContext();
     const navigation = await rpc("spaces/list", undefined, {
-      requestContext: { ...context, headers: { ...context.headers, "x-rakazo-space-id": spaceId } },
+      requestContext: { ...context, headers: { ...context.headers, "x-orkbot-space-id": spaceId } },
       skipSpaceAuthRecovery: true,
     });
     if (navigation.current.id !== spaceId) return null;

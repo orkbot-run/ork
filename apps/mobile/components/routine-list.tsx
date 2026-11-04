@@ -1,4 +1,4 @@
-import type { Routine } from "@rakazo/contracts";
+import type { Routine } from "@orkbot/contracts";
 import { ScrollView, StyleSheet } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { native, useThemedStyles } from "../lib/native";

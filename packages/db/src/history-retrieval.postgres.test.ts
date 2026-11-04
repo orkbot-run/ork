@@ -1,6 +1,6 @@
+import { HistorySearchInputSchema } from "@orkbot/contracts";
+import { escapeJsonSearchWildcards } from "@orkbot/core";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { HistorySearchInputSchema } from "@rakazo/contracts";
-import { escapeJsonSearchWildcards } from "@rakazo/core";
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "./client.js";

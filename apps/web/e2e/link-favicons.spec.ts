@@ -27,7 +27,7 @@ test("links in a bot reply show the site icon the API resolved", async ({ page }
     await route.abort();
   });
 
-  await signup(page, `link-favicons-${Date.now()}@rakazo.test`, "password12", "Link Icons");
+  await signup(page, `link-favicons-${Date.now()}@orkbot.test`, "password12", "Link Icons");
   await completeOnboarding(page);
   const composer = page.getByRole("combobox", { name: /^Message/ });
   await composer.fill(reply);

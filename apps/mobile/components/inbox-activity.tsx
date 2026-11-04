@@ -1,5 +1,5 @@
-import type { RunActivityRow } from "@rakazo/contracts";
-import { activitySections } from "@rakazo/core";
+import type { RunActivityRow } from "@orkbot/contracts";
+import { activitySections } from "@orkbot/core";
 import type { Href } from "expo-router";
 import type { ReactNode } from "react";
 import { useMemo } from "react";

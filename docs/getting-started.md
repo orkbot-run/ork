@@ -1,11 +1,11 @@
 # Getting started
 
-Rakazo gives you persistent AI bots. Each one has its own conversations, memory, routines, and
+Ork gives you persistent AI bots. Each one has its own conversations, memory, routines, and
 computer, and keeps working on the web, desktop, and mobile apps.
 
 ## Create your first bot
 
-1. Sign in at [app.rakazo.com](https://app.rakazo.com), or run your own instance with the
+1. Sign in at [app.orkbot.run](https://app.orkbot.run), or run your own instance with the
    [self-hosting guide](./self-host.md).
 2. Tell the bot its job in plain words. It asks for anything else it needs.
 

@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, openBotPanelTab, signup } from "
 
 test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `avatar-studio-${stamp}@rakazo.test`, "password12", "Avatar Studio");
+  await signup(page, `avatar-studio-${stamp}@orkbot.test`, "password12", "Avatar Studio");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);
@@ -32,13 +32,13 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   await wedge.click();
   await expect(wedge).toHaveAttribute("aria-pressed", "true");
   await expect(defaultLook).toHaveAttribute("aria-pressed", "false");
-  await expect(studio.locator(".rakazo-organic-avatar")).toHaveCount(0);
+  await expect(studio.locator(".orkbot-organic-avatar")).toHaveCount(0);
 
   await defaultLook.click();
   await expect(defaultLook).toHaveAttribute("aria-pressed", "true");
   await expect(wedge).toHaveAttribute("aria-pressed", "false");
-  await expect(studio.locator(".rakazo-organic-avatar")).toHaveCount(1);
-  await expect(studio.locator(".rakazo-organic-avatar-eyes").first()).toBeVisible();
+  await expect(studio.locator(".orkbot-organic-avatar")).toHaveCount(1);
+  await expect(studio.locator(".orkbot-organic-avatar-eyes").first()).toBeVisible();
 
   await studio.getByRole("button", { name: "Color #FFAF38" }).click();
   await expect(defaultLook).toHaveAttribute("aria-pressed", "true");
@@ -48,17 +48,17 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   await studio.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(defaultLook).toHaveAttribute("aria-pressed", "true");
   await expect(wedge).toHaveAttribute("aria-pressed", "false");
-  await expect(studio.locator(".rakazo-organic-avatar")).toHaveCount(1);
+  await expect(studio.locator(".orkbot-organic-avatar")).toHaveCount(1);
 
   await captureScreenshot(page, testInfo, "avatar-studio-bot-tab");
-  await studio.getByRole("tab", { name: "Rakazo", exact: true }).click();
-  await expect(studio.locator(".rakazo-logo-avatar").first()).toBeVisible();
+  await studio.getByRole("tab", { name: "Ork", exact: true }).click();
+  await expect(studio.locator(".orkbot-logo-avatar").first()).toBeVisible();
   await studio.getByRole("button", { name: "Done", exact: true }).click();
   await page.reload();
   await openBotPanelTab(page, "Computer");
   await page.getByTestId("bot-settings").getByTestId("avatar-studio-trigger").click();
   await expect(
-    page.getByTestId("avatar-studio").getByRole("tab", { name: "Rakazo", exact: true }),
+    page.getByTestId("avatar-studio").getByRole("tab", { name: "Ork", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  await captureScreenshot(page, testInfo, "avatar-studio-rakazo-set");
+  await captureScreenshot(page, testInfo, "avatar-studio-orkbot-set");
 });

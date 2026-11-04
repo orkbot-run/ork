@@ -6,8 +6,8 @@ import {
   isCloudMetadataAddress,
   isLocalhostOrLoopbackIp,
   isNonPublicAddress,
-} from "@rakazo/contracts";
-import { cancelResponseBody } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { cancelResponseBody } from "@orkbot/core";
 import { Agent } from "undici";
 import {
   combineSignals,
@@ -326,7 +326,7 @@ async function withSerenityClient<T>(
       return assertNotRateLimited(response);
     },
   });
-  const client = new Client({ name: "rakazo", version: "0.1.0" }, { capabilities: {} });
+  const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
   try {
     await client.connect(transport, { signal: requestSignal, timeout: SERENITY_TIMEOUT_MS });
     // A server or proxy may echo the bearer token it received; never hand it to the model.

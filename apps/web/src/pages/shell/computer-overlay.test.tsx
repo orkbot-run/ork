@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
-import type { Bot, ComputerStatus } from "@rakazo/contracts";
+import type { Bot, ComputerStatus } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   BotAvatar: () => null,
   Button: ({
     variant: _variant,

@@ -1,4 +1,4 @@
-import type { ComputerProviderDescriptor } from "@rakazo/contracts";
+import type { ComputerProviderDescriptor } from "@orkbot/contracts";
 import { boatComputerSettings } from "./boat-settings.js";
 import { boxdComputerSettings } from "./boxd-settings.js";
 import type { SettingsComputerProvider } from "./computer-provider-descriptor.js";

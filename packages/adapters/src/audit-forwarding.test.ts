@@ -1,4 +1,4 @@
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auditLogConfig, createAuditEventForwarder } from "./audit-forwarding.js";
 
@@ -62,7 +62,7 @@ function fakeDb(rows: ReturnType<typeof event>[]) {
 
 beforeEach(() => {
   installLogger(
-    createLogger({ service: "rakazo-worker", sinks: [createTestSink()], level: "debug" }),
+    createLogger({ service: "orkbot-worker", sinks: [createTestSink()], level: "debug" }),
   );
 });
 

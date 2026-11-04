@@ -1,8 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import { hasActiveComputerControl } from "@rakazo/adapters";
-import { openScreenCapability, SCREEN_TARGET_ENDPOINT } from "@rakazo/core/node/screen-capability";
-import type { PrismaClient } from "@rakazo/db";
-import { runAsSystem } from "@rakazo/db";
+import { hasActiveComputerControl } from "@orkbot/adapters";
+import { openScreenCapability, SCREEN_TARGET_ENDPOINT } from "@orkbot/core/node/screen-capability";
+import type { PrismaClient } from "@orkbot/db";
+import { runAsSystem } from "@orkbot/db";
 import type { Hono } from "hono";
 import { requestBodyLimit } from "./request-body-limit.js";
 

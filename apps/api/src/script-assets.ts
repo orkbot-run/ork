@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { PAGE_RUNTIME_PATH } from "@rakazo/core";
-import { buildPageRuntime } from "@rakazo/page-kit/runtime-build";
+import { PAGE_RUNTIME_PATH } from "@orkbot/core";
+import { buildPageRuntime } from "@orkbot/page-kit/runtime-build";
 import type { Hono } from "hono";
 
 /**

@@ -2,11 +2,11 @@ import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from
 import type { IncomingMessage } from "node:http";
 import { networkInterfaces } from "node:os";
 import type { Duplex } from "node:stream";
-import type { UserDeviceSummary } from "@rakazo/contracts";
-import { USER_DEVICE_CONNECT_PATH } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { recordSecurityEvent, runAsSystem } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { UserDeviceSummary } from "@orkbot/contracts";
+import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { recordSecurityEvent, runAsSystem } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
 import type { HostComputerFrame, HostComputerRequest } from "./host-computer-protocol.js";
@@ -30,9 +30,9 @@ import {
 export const USER_DEVICE_FORWARD_PATH = "/internal/user-devices/request";
 export const USER_DEVICE_DISCONNECT_PATH = "/internal/user-devices/disconnect";
 export const USER_DEVICE_OFFLINE_MESSAGE =
-  "Your computer is not connected. Open the Rakazo desktop app.";
+  "Your computer is not connected. Open the Ork desktop app.";
 const DISCONNECTED_MESSAGE = "Your computer disconnected. Check the result before retrying.";
-const REVOKED_MESSAGE = "This computer was disconnected from Rakazo.";
+const REVOKED_MESSAGE = "This computer was disconnected from Ork.";
 export const USER_DEVICE_LIMIT = 10;
 const PING_INTERVAL_MS = 25_000;
 /** A connection row older than this has lost its holding process. */
@@ -61,6 +61,7 @@ export function userDeviceBearer(header: string | null | undefined): string | nu
 
 /** API and worker share ENCRYPTION_KEY; forwarding uses a key derived from it for this purpose only. */
 export function userDeviceForwardSecret(encryptionKey: string): string {
+  // Preserve the protocol context used by already-paired device credentials.
   return createHmac("sha256", encryptionKey).update("rakazo:user-device-forward:v1").digest("hex");
 }
 

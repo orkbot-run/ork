@@ -1,0 +1,9 @@
+# Optional drop-in: /etc/systemd/system/orkbot-backup.service.d/alerts.conf
+[Unit]
+OnFailure=orkbot-backup-alert.service
+
+[Service]
+ExecStartPost=-/usr/local/sbin/orkbot-host-alert backup-failure ""
+ReadWritePaths=/var/lib/orkbot/alerts
+StateDirectory=orkbot/alerts
+StateDirectoryMode=0700

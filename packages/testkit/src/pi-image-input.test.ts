@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
-import { PiAgentRuntime } from "@rakazo/adapters";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
+import { PiAgentRuntime } from "@orkbot/adapters";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startModelEmulator } from "./model-emulator.js";
 

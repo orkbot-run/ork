@@ -1,41 +1,38 @@
-# Rakazo
+# Ork
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
 
-[![GitHub stars](https://img.shields.io/github/stars/elie222/rakazo?labelColor=black&style=for-the-badge&color=2563EB)](https://github.com/elie222/rakazo/stargazers)
-[![加入 Discord 社区](https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?labelColor=black&style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/RWwKa2Sn7h)
-[![在 App Store 下载 iPhone 版](https://img.shields.io/badge/App%20Store-Download%20for%20iPhone-black?labelColor=black&style=for-the-badge&logo=apple&logoColor=white)](https://apps.apple.com/app/rakazo/id6801531099)
-[![在 Google Play 下载 Android 版](https://img.shields.io/badge/Google%20Play-Get%20the%20app-black?labelColor=black&style=for-the-badge&logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.rakazo.app)
+[![GitHub stars](https://img.shields.io/github/stars/orkbot-run/ork?labelColor=black&style=for-the-badge&color=2563EB)](https://github.com/orkbot-run/ork/stargazers)
 
-![Rakazo：由你掌控的 AI 队友](./docs/readme-hero.png)
+![Ork：由你掌控的 AI 队友](./docs/readme-hero.png)
 
-Rakazo 是一个开源 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
-它提供网页版、Electron 桌面应用，以及 [iPhone](https://apps.apple.com/app/rakazo/id6801531099) 和
-[Android](https://play.google.com/store/apps/details?id=com.rakazo.app) 应用。
+Ork 是一个开源 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
+它提供网页版、Electron 桌面应用，以及 [iPhone](https://orkbot.run/download/) 和
+[Android](https://orkbot.run/download/) 应用。
 你可以接入自己的模型和计算环境提供商，也可以在本地运行完整服务。
 
 它是 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet 和 Hark Pro 的开源、自托管替代方案。
 
-Rakazo 目前处于测试阶段。详情见 [rakazo.com](https://rakazo.com)。
+Ork 目前处于测试阶段。详情见 [orkbot.run](https://orkbot.run)。
 
 本文是 [英文 README](./README.md) 的简体中文译文，链接指向的其他文档目前仍为英文。
 
 ## 与其他产品的比较
 
-Rakazo 启动后，你可以像使用 Grok Bot 一样，通过聊天设置和管理机器人。
+Ork 启动后，你可以像使用 Grok Bot 一样，通过聊天设置和管理机器人。
 Muse、Dots、Instinct、Claude Duet 和 Hark Pro 是托管式助手；OpenClaw 和 Hermes Agent 则同样是可以自行运行的开源智能体。
 后两者的文档介绍了安装器、配置文件和网关。Hermes Desktop 无需命令行即可开始第一次聊天；消息网关则是独立进程。
 
-- [Grok Bot](https://rakazo.com/grok-bot-alternative/)
-- [Muse](https://rakazo.com/muse-alternative/)
-- [Dots](https://rakazo.com/dots-alternative/)
-- [Instinct](https://rakazo.com/instinct-alternative/)，可通过短信或电话交流的个人助手
-- [OpenClaw](https://rakazo.com/openclaw-alternative/)
-- [Hermes Agent](https://rakazo.com/hermes-alternative/)，Nous Research 的开源智能体
-- [Claude Duet](https://rakazo.com/claude-duet-alternative/)，Anthropic 的主动式个人智能体
-- [Hark Pro](https://rakazo.com/hark-alternative/)，hark.com 提供的个人智能体
-- [全部对比](https://rakazo.com/alternatives/)
-- [自托管指南](https://rakazo.com/self-hosted-ai-agent/)
+- [Grok Bot](https://orkbot.run/grok-bot-alternative/)
+- [Muse](https://orkbot.run/muse-alternative/)
+- [Dots](https://orkbot.run/dots-alternative/)
+- [Instinct](https://orkbot.run/instinct-alternative/)，可通过短信或电话交流的个人助手
+- [OpenClaw](https://orkbot.run/openclaw-alternative/)
+- [Hermes Agent](https://orkbot.run/hermes-alternative/)，Nous Research 的开源智能体
+- [Claude Duet](https://orkbot.run/claude-duet-alternative/)，Anthropic 的主动式个人智能体
+- [Hark Pro](https://orkbot.run/hark-alternative/)，hark.com 提供的个人智能体
+- [全部对比](https://orkbot.run/alternatives/)
+- [自托管指南](https://orkbot.run/self-hosted-ai-agent/)
 
 ## 功能
 
@@ -67,9 +64,9 @@ https://github.com/user-attachments/assets/dccdeddb-2134-4a56-8eed-b2e591736b1c
 
 ## 部署到 Railway
 
-[![部署到 Railway](https://railway.com/button.svg)](https://railway.com/new/template/rakazo-template)
+[![部署到 Railway](https://railway.com/button.svg)](./infra/railway/README.md)
 
-部署包含 PostgreSQL、持久化存储和 Railway 计算机的私有 Rakazo 实例。
+部署包含 PostgreSQL、持久化存储和 Railway 计算机的私有 Ork 实例。
 填写邮箱和 Railway API 令牌，登录后再连接模型。
 参见[安装、安全默认设置与备份](./infra/railway/README.md)。
 
@@ -78,12 +75,12 @@ https://github.com/user-attachments/assets/dccdeddb-2134-4a56-8eed-b2e591736b1c
 需要 Docker Engine、Compose 插件、curl 和 OpenSSL。无需克隆仓库或安装 Node.js。
 
 ```bash
-mkdir -p rakazo && cd rakazo &&
-curl -fsSLO https://raw.githubusercontent.com/elie222/rakazo/main/infra/compose/install-images.sh &&
+mkdir -p orkbot && cd orkbot &&
+curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
 bash install-images.sh
 ```
 
-安装脚本会下载 Compose 文件，生成包含随机密钥的 `.env`，并启动 Rakazo。
+安装脚本会下载 Compose 文件，生成包含随机密钥的 `.env`，并启动 Ork。
 再次运行时会保留已有的 `.env`。
 
 打开 [http://127.0.0.1:5173](http://127.0.0.1:5173)，创建账号并连接模型。
@@ -93,8 +90,8 @@ bash install-images.sh
 默认镜像标签为 `edge`，由主分支构建，支持 `linux/amd64` 和 `linux/arm64`。
 镜像详情与标签见[自托管指南](./docs/self-host.md#published-images-no-checkout)。
 
-在受限网络中，可以覆盖安装器的下载地址前缀（`RAKAZO_DOWNLOAD_BASE`），跳过已有的 Compose 文件
-（`--local` / `RAKAZO_DOWNLOAD_SKIP_EXISTING`），或使用引导脚本的镜像地址。
+在受限网络中，可以覆盖安装器的下载地址前缀（`ORKBOT_DOWNLOAD_BASE`），跳过已有的 Compose 文件
+（`--local` / `ORKBOT_DOWNLOAD_SKIP_EXISTING`），或使用引导脚本的镜像地址。
 参见[受限网络与镜像下载](./docs/self-host.md#restricted-networks--mirror-downloads)。
 
 如需让智能体协助安装，请使用 [SETUP_PROMPT.md](./SETUP_PROMPT.md)。
@@ -106,7 +103,7 @@ bash install-images.sh
 
 ```bash
 bash install-images.sh --prepare-only
-# edit .env: SANDBOX_PROVIDER=boat (or e2b / daytona / createos) with its API key, RAKAZO_HOST=your.domain
+# edit .env: SANDBOX_PROVIDER=boat (or e2b / daytona / createos) with its API key, ORKBOT_HOST=your.domain
 bash install-images.sh
 ```
 
@@ -119,8 +116,8 @@ bash install-images.sh
 不支持 Node.js 23.x 和 25.x。
 
 ```bash
-git clone https://github.com/elie222/rakazo.git
-cd rakazo
+git clone https://github.com/orkbot-run/ork.git orkbot
+cd orkbot
 cp .env.example .env
 ```
 
@@ -150,7 +147,7 @@ pnpm dev
 ```
 
 `pnpm dev` 会使用 `DATABASE_URL` 指向且可连接的 Postgres；否则会通过 Docker 启动本地
-`rakazo-dev-postgres` 容器，所有检出目录共用该容器。启动服务前会应用数据库迁移并生成 Prisma 客户端。
+`orkbot-dev-postgres` 容器，所有检出目录共用该容器。启动服务前会应用数据库迁移并生成 Prisma 客户端。
 如果当前分支新增了 `main` 尚未包含的迁移，会在同一服务器上使用独立数据库，条件允许时从共享数据库复制，
 避免未合入的数据库结构变更影响共享数据库。默认端口被占用时（例如另一个 Git worktree 正在运行），
 会选择下一个空闲端口组并打印访问地址。
@@ -196,15 +193,15 @@ Railway 沙箱按用量计费。
 
 ## 桌面端与移动端
 
-Electron 和 Expo 应用都是 Rakazo API 的客户端，与网页版使用同一套 API。
+Electron 和 Expo 应用都是 Ork API 的客户端，与网页版使用同一套 API。
 
 开发服务启动后，使用以下命令启动 Electron：
 
 ```bash
-pnpm --filter @rakazo/desktop dev
+pnpm --filter @orkbot/desktop dev
 ```
 
-首次运行时，桌面应用会询问是在本机运行 Rakazo，还是连接已有服务器。
+首次运行时，桌面应用会询问是在本机运行 Ork，还是连接已有服务器。
 选择 **This computer**（本机）会在应用数据目录中，通过 Docker Compose 安装并启动已发布镜像，
 使用的文件与 `infra/compose/install-images.sh` 相同。
 因此需要先安装 Docker Desktop、OrbStack 或 Docker Engine；未安装时，应用会提供相应链接。
@@ -212,21 +209,21 @@ pnpm --filter @rakazo/desktop dev
 
 运行 `pnpm dev` 的开发者应选择 **Existing instance**（已有实例），地址填写终端打印的地址（默认为 `http://127.0.0.1:5173`）。
 公共服务器必须使用 HTTPS；只有回环地址和局域网私有地址允许 HTTP，不包括链路本地地址。
-应用会在保存地址前检查 Rakazo 的健康检查端点，之后启动时直接连接该实例。
+应用会在保存地址前检查 Ork 的健康检查端点，之后启动时直接连接该实例。
 退出应用后，服务仍会继续运行；可通过应用菜单中的 **Stop Local Stack**（停止本地服务）将其关闭。
 
 在 Linux 上，桌面应用以 AppImage 形式发布，需要 FUSE 2（`libfuse.so.2`）。只包含 FUSE 3 的发行版（例如 Fedora Silverblue 或 Ubuntu 24.04）会报错
 `dlopen(): error loading libfuse.so.2`。请安装 FUSE 2 库（Fedora 上为 `fuse-libs`，Ubuntu 24.04 上为 `libfuse2t64`，较早的 Ubuntu 和 Debian 上为 `libfuse2`），或者不借助 FUSE 运行 AppImage：
 
 ```bash
-chmod +x Rakazo-*.AppImage
-./Rakazo-*.AppImage --appimage-extract-and-run
+chmod +x Ork-*.AppImage
+./Ork-*.AppImage --appimage-extract-and-run
 ```
 
-使用应用菜单中的 **Change Rakazo Server…**（更换 Rakazo 服务器）重新选择服务器。
+使用应用菜单中的 **Change Ork Server…**（更换 Ork 服务器）重新选择服务器。
 关闭该窗口且不保存时，会返回之前的实例。
-开发自动化中，可以设置 `RAKAZO_WEB_URL`，让桌面应用连接其他地址而不改变已保存的实例；
-也可以设置 `RAKAZO_FORCE_SETUP=1`，再次运行设置流程。
+开发自动化中，可以设置 `ORKBOT_WEB_URL`，让桌面应用连接其他地址而不改变已保存的实例；
+也可以设置 `ORKBOT_FORCE_SETUP=1`，再次运行设置流程。
 
 移动端构建和发布说明见 [docs/mobile-release.md](./docs/mobile-release.md)。
 
@@ -277,6 +274,6 @@ pnpm test:e2e
 欢迎贡献。提交 PR 前，请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 发现安全漏洞时，请按照 [SECURITY.md](./SECURITY.md) 的说明报告，勿提交公开 Issue。
 
-Rakazo 采用 [Apache License 2.0](./LICENSE) 许可证。
+Ork 采用 [Apache License 2.0](./LICENSE) 许可证。
 
-欢迎在 [Rakazo Discord 社区](https://discord.gg/RWwKa2Sn7h)交流问题与想法。
+欢迎在 [Ork GitHub](https://github.com/orkbot-run/ork/issues)交流问题与想法。

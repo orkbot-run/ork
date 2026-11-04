@@ -9,7 +9,7 @@ const repoRoot = path.resolve(import.meta.dirname, "../../..");
 
 describe("compose stack reachability", () => {
   it("applies the root env file to every compose invocation, like scripts/backup.sh", () => {
-    const root = mkdtempSync(path.join(os.tmpdir(), "rakazo-compose-stack-"));
+    const root = mkdtempSync(path.join(os.tmpdir(), "orkbot-compose-stack-"));
     try {
       const composeFile = path.join(root, "infra/compose/docker-compose.yml");
       writeFileSync(path.join(root, ".env"), "POSTGRES_APP_PASSWORD=fake-value\n");
@@ -32,7 +32,7 @@ describe("compose stack reachability", () => {
   it("fails the opted-in backup suite instead of skipping when the stack is unreachable", {
     timeout: 180_000,
   }, () => {
-    const bin = mkdtempSync(path.join(os.tmpdir(), "rakazo-fake-docker-"));
+    const bin = mkdtempSync(path.join(os.tmpdir(), "orkbot-fake-docker-"));
     try {
       const log = path.join(bin, "docker.log");
       writeFileSync(

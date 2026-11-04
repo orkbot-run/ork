@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { COMPUTER_SCREEN_PREFIX } from "@rakazo/contracts/content-security-policy";
+import { COMPUTER_SCREEN_PREFIX } from "@orkbot/contracts/content-security-policy";
 
 /** Browser-side adapter files served alongside the separately downloaded SDK. */
 export const wuyingScreenAssets = Object.fromEntries(

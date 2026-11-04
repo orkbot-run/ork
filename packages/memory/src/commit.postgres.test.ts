@@ -1,6 +1,6 @@
-import type { AdapterContext, MemoryCommitRequest } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
-import { asSystem, createDb, runAsSystem } from "@rakazo/db";
+import type { AdapterContext, MemoryCommitRequest } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
+import { asSystem, createDb, runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { MarkdownMemoryStore } from "./index.js";
 

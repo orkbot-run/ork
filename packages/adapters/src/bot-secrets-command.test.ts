@@ -1,8 +1,8 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { BotSecretDestination } from "@rakazo/contracts";
-import { redactSecrets } from "@rakazo/core";
+import type { BotSecretDestination } from "@orkbot/contracts";
+import { redactSecrets } from "@orkbot/core";
 import { describe, expect, it, vi } from "vitest";
 import { redactAgentCommandResult } from "./agent-environment.js";
 import {
@@ -325,7 +325,7 @@ describe("shell command environment", () => {
       scope,
       registerRedactions: vi.fn(),
     });
-    const root = mkdtempSync(path.join(tmpdir(), "rakazo-command-env-"));
+    const root = mkdtempSync(path.join(tmpdir(), "orkbot-command-env-"));
     const desktop = new DesktopSandboxProvider({ root });
     const context = {
       operationId: "test",

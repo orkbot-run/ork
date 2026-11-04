@@ -6,7 +6,7 @@ import type {
   MessagingInstallationStore,
   MessagingInstallProvider,
   MessagingSurface,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { InstalledMessagingSurface } from "./installed-messaging-surface.js";
 

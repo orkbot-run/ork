@@ -1,5 +1,5 @@
-import type { TextDirection } from "@rakazo/core";
-import { matchUiLocale, textDirectionForLocale, translate } from "@rakazo/core";
+import type { TextDirection } from "@orkbot/core";
+import { matchUiLocale, textDirectionForLocale, translate } from "@orkbot/core";
 import type { IpcMainInvokeEvent } from "electron";
 import type { AppTarget } from "./app-frame.js";
 import { fromAppFrame } from "./app-frame.js";

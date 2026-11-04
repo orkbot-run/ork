@@ -2,7 +2,7 @@
 # Wrap firewall edits with a timed rollback; confirm from a fresh SSH connection.
 set -euo pipefail
 [[ "${EUID}" == 0 ]] || { echo "Run as root, preserving SSH_CONNECTION" >&2; exit 1; }
-STATE=/var/lib/rakazo/firewall-change
+STATE=/var/lib/orkbot/firewall-change
 install -d -m 700 "${STATE}"
 exec 9>"${STATE}/lock"
 action="${1:-}"; shift || true
@@ -32,14 +32,14 @@ case "${action}" in
     fi
     printf '%s\n' "${SSH_CONNECTION:-}" >"${STATE}/connection"
     printf '%s\n' "${token}" >"${STATE}/token"
-    if ! systemd-run --quiet --collect --unit=rakazo-firewall-rollback --on-active=180s \
+    if ! systemd-run --quiet --collect --unit=orkbot-firewall-rollback --on-active=180s \
       --timer-property=AccuracySec=1s --timer-property=RemainAfterElapse=no "$(readlink -f "$0")" rollback "${token}"; then
       rm -f "${STATE}/token"
       echo "Could not schedule rollback; firewall was not changed" >&2
       exit 1
     fi
     echo "Rollback armed. After verifying a NEW SSH connection, run:"
-    echo "sudo --preserve-env=SSH_CONNECTION /usr/local/sbin/rakazo-firewall-change confirm ${token}"
+    echo "sudo --preserve-env=SSH_CONNECTION /usr/local/sbin/orkbot-firewall-change confirm ${token}"
     # Children must not retain the operation lock (including long-lived services).
     timeout --kill-after=5s 120s "$@" 9>&-
     ;;
@@ -51,7 +51,7 @@ case "${action}" in
       [[ -n "${SSH_CONNECTION:-}" && "${SSH_CONNECTION}" != "$(cat "${STATE}/connection")" ]] || {
         echo "Confirm from a fresh SSH connection, preserving SSH_CONNECTION through sudo" >&2; exit 1;
       }
-      systemctl stop rakazo-firewall-rollback.timer
+      systemctl stop orkbot-firewall-rollback.timer
     else
       tar -xpf "${STATE}/before.tar" -C /etc
       if [[ "$(cat "${STATE}/enabled")" == 1 ]]; then
@@ -59,11 +59,11 @@ case "${action}" in
       else
         ufw --force disable
       fi
-      if ! systemctl stop rakazo-firewall-rollback.timer; then
-        timer_state="$(systemctl show rakazo-firewall-rollback.timer --property=ActiveState --value)" || exit 1
+      if ! systemctl stop orkbot-firewall-rollback.timer; then
+        timer_state="$(systemctl show orkbot-firewall-rollback.timer --property=ActiveState --value)" || exit 1
         [[ "${timer_state}" == inactive ]] || { echo "Rollback timer cleanup failed; pending state retained" >&2; exit 1; }
       fi
-      logger -p authpriv.warning -t rakazo-firewall-change "Restored firewall after an unconfirmed change"
+      logger -p authpriv.warning -t orkbot-firewall-change "Restored firewall after an unconfirmed change"
     fi
     rm -f "${STATE}/token"
     echo "Firewall change ${action} completed"

@@ -8,7 +8,7 @@ compose=(docker compose -f "$ROOT/infra/compose/docker-compose.yml")
 # repo root; point it at the root .env when one exists (vars may also come
 # from the environment, so its absence is not an error).
 if [[ -f "$ROOT/.env" ]]; then compose=(docker compose --env-file "$ROOT/.env" -f "$ROOT/infra/compose/docker-compose.yml"); fi
-[[ -f "$SRC/rakazo.sql" ]] || { echo "missing rakazo.sql" >&2; exit 1; }
+[[ -f "$SRC/orkbot.sql" ]] || { echo "missing orkbot.sql" >&2; exit 1; }
 [[ ! -L "$ROOT/data" && ( ! -e "$ROOT/data" || -d "$ROOT/data" ) ]] || {
   echo "data must be a directory, not a symlink" >&2
   exit 1
@@ -52,17 +52,17 @@ fi
 STOP_ON_FAILURE=1
 "${compose[@]}" stop api worker supervisor
 "${compose[@]}" up -d postgres
-until "${compose[@]}" exec -T postgres pg_isready -U rakazo >/dev/null 2>&1; do
+until "${compose[@]}" exec -T postgres pg_isready -U orkbot >/dev/null 2>&1; do
   sleep 1
 done
 # Roles live outside the dump, and its grants name the runtime role. The API's
 # start (its migration step) gives that role its login and grants afterwards.
-"${compose[@]}" exec -T postgres psql -X -U rakazo -d rakazo --set=ON_ERROR_STOP=on -c \
+"${compose[@]}" exec -T postgres psql -X -U orkbot -d orkbot --set=ON_ERROR_STOP=on -c \
   "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'rakazo_app') THEN CREATE ROLE rakazo_app NOLOGIN; END IF; END \$\$"
 # Stop on SQL errors and roll back the dump before restoring files or starting
 # the application. -f is required for psql's single-transaction mode.
-"${compose[@]}" exec -T postgres psql -X -U rakazo -d rakazo \
-  --set=ON_ERROR_STOP=on --single-transaction --file=- < "$SRC/rakazo.sql"
+"${compose[@]}" exec -T postgres psql -X -U orkbot -d orkbot \
+  --set=ON_ERROR_STOP=on --single-transaction --file=- < "$SRC/orkbot.sql"
 if [[ -n "$STAGE" && -d "$STAGE/data" ]]; then
   if [[ -e "$ROOT/data" ]]; then
     ROLLBACK="$(mktemp -d "$ROOT/data.rollback.XXXXXX")"

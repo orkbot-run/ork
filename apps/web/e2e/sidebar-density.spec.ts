@@ -8,13 +8,13 @@ import {
   signup,
 } from "./helpers";
 
-const DENSITY_KEY = "rakazo.botsSidebarDensity";
+const DENSITY_KEY = "orkbot.botsSidebarDensity";
 
 test("compact bot sidebar hides previews and preserves roster status accessibly", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `sidebar-density-${stamp}@rakazo.test`, "password12", "Sidebar Density");
+  await signup(page, `sidebar-density-${stamp}@orkbot.test`, "password12", "Sidebar Density");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);

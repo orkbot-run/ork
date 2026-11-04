@@ -1,11 +1,11 @@
+import { SandboxDamagedError } from "@orkbot/adapter-kit";
+import type * as Adapters from "@orkbot/adapters";
+import { ComputerBusyError } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { Prisma } from "@orkbot/db";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
-import { SandboxDamagedError } from "@rakazo/adapter-kit";
-import type * as Adapters from "@rakazo/adapters";
-import { ComputerBusyError } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { Prisma } from "@rakazo/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleRpcError } from "./app.js";
 import type { RouterDeps } from "./router.js";
@@ -18,7 +18,7 @@ const lifecycle = vi.hoisted(() => ({
   releaseComputerExecutionLease: vi.fn(),
 }));
 
-vi.mock("@rakazo/adapters", async (original) => {
+vi.mock("@orkbot/adapters", async (original) => {
   const adapters = await original<typeof Adapters>();
   lifecycle.realAcquire = adapters.acquireComputerExecutionLease;
   return {
@@ -47,7 +47,7 @@ function routerDeps(prisma: PrismaClient) {
       screenProxySecret: "fake-test-secret",
       sandboxProvider: "fake",
     },
-    dataDir: "/tmp/rakazo-router-test",
+    dataDir: "/tmp/orkbot-router-test",
   } as unknown as RouterDeps;
 }
 

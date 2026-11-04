@@ -1,8 +1,8 @@
 import type { AssistantMessage, Model } from "@earendil-works/pi-ai";
 import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
-import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
-import type * as Core from "@rakazo/core";
-import { MODEL_OUTPUT_CUT_ERROR, MODEL_OUTPUT_LIMIT_ERROR } from "@rakazo/core";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
+import type * as Core from "@orkbot/core";
+import { MODEL_OUTPUT_CUT_ERROR, MODEL_OUTPUT_LIMIT_ERROR } from "@orkbot/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const providerState = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ const providerState = vi.hoisted(() => ({
   delay: vi.fn<(delayMs: number, signal?: AbortSignal) => Promise<void>>(),
 }));
 
-vi.mock("@rakazo/core", async (importOriginal) => ({
+vi.mock("@orkbot/core", async (importOriginal) => ({
   ...(await importOriginal<typeof Core>()),
   abortableDelay: providerState.delay,
 }));

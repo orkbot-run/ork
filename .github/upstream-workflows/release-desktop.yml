@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+env:
+  ORKBOT_ENABLE_AUTO_UPDATE: ${{ vars.ORKBOT_ENABLE_AUTO_UPDATE || '0' }}
+  ORKBOT_LINUX_UPDATE_PUBLIC_KEY: ${{ vars.ORKBOT_LINUX_UPDATE_PUBLIC_KEY }}
+
 concurrency:
   # Stable releases must validate and publish serially. Per-tag concurrency would let an older
   # release validate before a newer one publishes, then overwrite GitHub's "latest" pointer.
@@ -124,12 +128,12 @@ jobs:
       - name: Generate the database client for desktop compilation
         run: pnpm db:generate
         env:
-          DATABASE_URL: postgres://rakazo:rakazo@127.0.0.1:5433/rakazo
+          DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
       - name: Build renderer and Electron main process
-        run: pnpm --filter @rakazo/web build && pnpm --filter @rakazo/desktop build
+        run: pnpm --filter @orkbot/web build && pnpm --filter @orkbot/desktop build
         env:
-          RAKAZO_ALLOW_DEV_SECRETS: "1"
-          RAKAZO_DESKTOP_RELEASE: "1"
+          ORKBOT_ALLOW_DEV_SECRETS: "1"
+          ORKBOT_DESKTOP_RELEASE: "1"
 
       - name: Require macOS signing and notarization credentials
         if: runner.os == 'macOS'
@@ -158,7 +162,7 @@ jobs:
         env:
           # Optional: without it the release still ships and hides passkeys on macOS.
           PROVISIONING_PROFILE: ${{ secrets.DESKTOP_MAC_PROVISIONING_PROFILE }}
-          PROFILE_PATH: ${{ runner.temp }}/rakazo.provisionprofile
+          PROFILE_PATH: ${{ runner.temp }}/orkbot.provisionprofile
           ENTITLEMENTS_PATH: ${{ runner.temp }}/entitlements.passkeys.plist
         run: |
           set -euo pipefail
@@ -204,7 +208,7 @@ jobs:
             # The main app alone gets the association; helpers keep entitlementsInherit.
             passkeys=("-c.mac.entitlements=$PASSKEY_ENTITLEMENTS" "-c.mac.provisioningProfile=$PASSKEY_PROFILE")
           fi
-          pnpm --filter @rakazo/desktop exec electron-builder \
+          pnpm --filter @orkbot/desktop exec electron-builder \
             --mac --universal --publish never -c.forceCodeSigning=true "${passkeys[@]}"
       - name: Remove the App Store Connect API key from the runner
         if: always() && runner.os == 'macOS'
@@ -219,7 +223,7 @@ jobs:
           PASSKEY_ENTITLEMENTS: ${{ steps.passkeys.outputs.entitlements }}
         run: |
           set -euo pipefail
-          app="apps/desktop/out/mac-universal/Rakazo.app"
+          app="apps/desktop/out/mac-universal/Ork.app"
           codesign --verify --deep --strict --verbose=2 "$app"
           # Without this entitlement the hardened runtime silences the microphone.
           # Check the app and every helper it signs, and require the value to be true.
@@ -249,28 +253,28 @@ jobs:
           xcrun stapler validate "$app"
           spctl --assess --type execute --verbose=2 "$app"
           grep -Fqx "provider: github" "$app/Contents/Resources/app-update.yml"
-          grep -Fqx "owner: elie222" "$app/Contents/Resources/app-update.yml"
-          grep -Fqx "repo: rakazo" "$app/Contents/Resources/app-update.yml"
+          grep -Fqx "owner: orkbot-run" "$app/Contents/Resources/app-update.yml"
+          grep -Fqx "repo: ork" "$app/Contents/Resources/app-update.yml"
 
       - name: Verify packaged native dependencies
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          app="apps/desktop/out/mac-universal/Rakazo.app"
+          app="apps/desktop/out/mac-universal/Ork.app"
           native="$app/Contents/Resources/app.asar.unpacked/node_modules"
           lipo "$native/@koromix/koffi-darwin-x64/darwin_x64/koffi.node" -verify_arch x86_64
           lipo "$native/@koromix/koffi-darwin-arm64/darwin_arm64/koffi.node" -verify_arch arm64
           lipo "$native/@oxc-parser/binding-darwin-x64/parser.darwin-x64.node" -verify_arch x86_64
           lipo "$native/@oxc-parser/binding-darwin-arm64/parser.darwin-arm64.node" -verify_arch arm64
           # Dictation's system recognizer captures audio itself, so it needs the microphone entitlement too.
-          speech="$app/Contents/Resources/speech/rakazo-speech"
+          speech="$app/Contents/Resources/speech/orkbot-speech"
           lipo "$speech" -verify_arch x86_64 arm64
           entitlements="$(mktemp)"
           codesign -d --entitlements :- "$speech" > "$entitlements" 2>/dev/null
           test "$(/usr/libexec/PlistBuddy -c "Print :com.apple.security.device.audio-input" "$entitlements")" = true
           rm -f "$entitlements"
           "$speech" xx < /dev/null | grep -Fq '"language-not-supported"'
-          ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/Rakazo" -e '
+          ELECTRON_RUN_AS_NODE=1 "$app/Contents/MacOS/Ork" -e '
             const { createRequire } = require("node:module");
             const appRequire = createRequire(`${process.argv[1]}/Contents/Resources/app.asar/package.json`);
             const koffi = appRequire("koffi");
@@ -319,7 +323,7 @@ jobs:
           SIGNING_PUBLISHER: ${{ vars.DESKTOP_WIN_PUBLISHER }}
         run: |
           set -euo pipefail
-          pnpm --filter @rakazo/desktop exec electron-builder \
+          pnpm --filter @orkbot/desktop exec electron-builder \
             --win --x64 --publish never -c.forceCodeSigning=true \
             "-c.win.azureSignOptions.endpoint=$SIGNING_ENDPOINT" \
             "-c.win.azureSignOptions.codeSigningAccountName=$SIGNING_ACCOUNT" \
@@ -339,7 +343,7 @@ jobs:
           if ($executables.Count -lt 2) { throw "Windows installer or application was not created." }
           $config = "apps/desktop/out/win-unpacked/resources/app-update.yml"
           $feed = Get-Content -Raw $config
-          foreach ($expected in @("provider: github", "owner: elie222", "repo: rakazo")) {
+          foreach ($expected in @("provider: github", "owner: orkbot-run", "repo: ork")) {
             if ($feed -notmatch "(?m)^$([regex]::Escape($expected))\r?$") {
               throw "Windows update config missing '$expected'."
             }
@@ -361,7 +365,7 @@ jobs:
       - name: Package x64 Linux AppImage
         if: runner.os == 'Linux'
         run: >-
-          pnpm --filter @rakazo/desktop exec electron-builder
+          pnpm --filter @orkbot/desktop exec electron-builder
           --linux --x64 --publish never
       - name: Verify Linux update feed is pinned to the official GitHub channel
         if: runner.os == 'Linux'
@@ -377,8 +381,8 @@ jobs:
           test -n "$config"
           test -f "$config"
           grep -Fqx "provider: github" "$config"
-          grep -Fqx "owner: elie222" "$config"
-          grep -Fqx "repo: rakazo" "$config"
+          grep -Fqx "owner: orkbot-run" "$config"
+          grep -Fqx "repo: ork" "$config"
           test -f apps/desktop/out/latest-linux.yml
           grep -Fqx "version: $RELEASE_VERSION" apps/desktop/out/latest-linux.yml
       - name: Sign Linux AppImage updates
@@ -514,7 +518,7 @@ jobs:
           ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
           gh release create "$RELEASE_TAG" release-artifacts/* \
             --draft --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes \
-            --title "Rakazo $RELEASE_TAG" --verify-tag
+            --title "Ork $RELEASE_TAG" --verify-tag
       - name: Publish the completed release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

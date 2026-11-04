@@ -1,10 +1,10 @@
-import type { AppearancePreference, ResolvedAppearance } from "@rakazo/ui-tokens";
+import type { AppearancePreference, ResolvedAppearance } from "@orkbot/ui-tokens";
 import {
   normalizeAppearancePreference,
   resolveAppearance,
   tokensForAppearance,
   UI_APPEARANCE_STORAGE_KEY,
-} from "@rakazo/ui-tokens";
+} from "@orkbot/ui-tokens";
 import * as SecureStore from "expo-secure-store";
 import type { ColorSchemeName } from "react-native";
 import { Appearance } from "react-native";

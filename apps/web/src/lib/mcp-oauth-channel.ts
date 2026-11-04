@@ -1,1 +1,1 @@
-export const MCP_OAUTH_CHANNEL = "rakazo-mcp-oauth";
+export const MCP_OAUTH_CHANNEL = "orkbot-mcp-oauth";

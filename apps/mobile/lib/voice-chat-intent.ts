@@ -5,7 +5,7 @@ import { requireOptionalNativeModule } from "expo-modules-core";
 const native = requireOptionalNativeModule<{
   takePendingVoiceChat(botId: string): boolean;
   addListener(event: "onPendingVoiceChat", listener: () => void): EventSubscription;
-}>("RakazoVoiceChat");
+}>("OrkVoiceChat");
 
 /** True once, when the action asked to call this bot. */
 export function takeShortcutVoiceChat(botId: string): boolean {

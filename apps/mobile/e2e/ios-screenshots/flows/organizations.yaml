@@ -1,12 +1,12 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Organizations
 ---
 # Last in the catalog: it leaves a second organization in the populated account.
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///account"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///account"
 - scrollUntilVisible:
     element: "Organization.*"
     direction: DOWN
@@ -50,7 +50,7 @@ name: Organizations
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 05-organization-inbox
-- openLink: "rakazo:///account"
+- openLink: "orkbot:///account"
 - extendedWaitUntil:
     visible: "Organization.*"
     timeout: 15000
@@ -67,7 +67,7 @@ name: Organizations
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 07-organization-delete-confirm
-- openLink: "rakazo:///"
+- openLink: "orkbot:///"
 - tapOn:
     id: "organization-menu"
 - extendedWaitUntil:

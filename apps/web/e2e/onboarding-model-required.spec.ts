@@ -22,7 +22,7 @@ test("onboarding cannot continue with an empty or failed model catalog", async (
     unavailable === "failed" ? route.abort() : route.fulfill({ json: { json: [] } }),
   );
   const stamp = Date.now();
-  await signup(page, `catalog-${stamp}@rakazo.test`, "password12", "Model setup");
+  await signup(page, `catalog-${stamp}@orkbot.test`, "password12", "Model setup");
 
   for (const next of ["empty", "failed"] as const) {
     if (next === "failed") {
@@ -43,7 +43,7 @@ test("Ollama Cloud onboarding requires a key before continuing", async ({ page }
     await route.fulfill({ response, json: { json: { ...body.json, needsModel: true } } });
   });
   const stamp = Date.now();
-  await signup(page, `ollama-${stamp}@rakazo.test`, "password12", "Model setup");
+  await signup(page, `ollama-${stamp}@orkbot.test`, "password12", "Model setup");
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
   await page.getByRole("combobox", { name: "Provider" }).click();
   await page.getByRole("option", { name: "Ollama Cloud", exact: true }).click();
@@ -59,7 +59,7 @@ test("Ollama Cloud onboarding requires a key before continuing", async ({ page }
   await expect(continueButton).toBeDisabled();
 });
 
-test("Rakazo credits are chosen like a provider, with nothing else to fill in", async ({
+test("Ork credits are chosen like a provider, with nothing else to fill in", async ({
   page,
 }, testInfo) => {
   await page.route("**/rpc/me", async (route) => {
@@ -75,15 +75,15 @@ test("Rakazo credits are chosen like a provider, with nothing else to fill in", 
     funding = route.request().postDataJSON().json;
     await route.fulfill({ json: { json: { ok: true } } });
   });
-  await signup(page, `credits-${Date.now()}@rakazo.test`, "password12", "Credits");
+  await signup(page, `credits-${Date.now()}@orkbot.test`, "password12", "Credits");
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible({
     timeout: 20_000,
   });
   await page.getByRole("combobox", { name: "Provider" }).click();
-  await page.getByRole("option", { name: "Rakazo credits", exact: true }).click();
+  await page.getByRole("option", { name: "Ork credits", exact: true }).click();
   await expect(page.getByRole("combobox", { name: "Model", exact: true })).toHaveCount(0);
   await expect(page.getByLabel(/API key/)).toHaveCount(0);
-  await captureScreenshot(page, testInfo, "onboarding-rakazo-credits");
+  await captureScreenshot(page, testInfo, "onboarding-orkbot-credits");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect.poll(() => funding).toEqual({ funding: "credits" });
 });

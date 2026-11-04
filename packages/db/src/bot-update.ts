@@ -1,5 +1,5 @@
-import { displayName } from "@rakazo/core";
-import { getLogger } from "@rakazo/logging";
+import { displayName } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import { writeBotInstructions } from "./bot-instructions.js";
 import type { Bot, Prisma, PrismaClient } from "./client.js";
 import { appendEventInTransaction } from "./events.js";

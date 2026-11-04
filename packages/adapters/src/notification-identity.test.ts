@@ -1,8 +1,15 @@
-import { notificationAvatarSource } from "@rakazo/core";
+import { notificationAvatarSource } from "@orkbot/core";
 import { expect, it, vi } from "vitest";
 import { notificationIdentity } from "./notification-identity.js";
 
-it.each(["organic", "rakazo"])("creates a bounded JPEG for the %s avatar", async (avatarSet) => {
+it("keeps the saved logo portrait identical after the product rename", () => {
+  const bot = { id: "agent-1", color: "#14b8a6" };
+  expect(notificationAvatarSource({ ...bot, avatarSet: "rakazo" })).toBe(
+    notificationAvatarSource({ ...bot, avatarSet: "orkbot" }),
+  );
+});
+
+it.each(["organic", "orkbot"])("creates a bounded JPEG for the %s avatar", async (avatarSet) => {
   const identity = await notificationIdentity({
     id: "agent-1",
     name: "Head of Marketing",

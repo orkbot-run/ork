@@ -1,4 +1,4 @@
-import { BOT_DESCRIPTION_MAX_LENGTH } from "@rakazo/contracts";
+import { BOT_DESCRIPTION_MAX_LENGTH } from "@orkbot/contracts";
 
 /** Instructions are edited separately; profile edits must preserve them. */
 export function botProfilePatch(stored: string, next: string): { description?: string } {

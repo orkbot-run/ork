@@ -5,8 +5,8 @@ import type {
   SpaceMemoryConfig,
   ThreadMessage,
   VoiceStatus,
-} from "@rakazo/contracts";
-import { DEFAULT_NEW_BOT_AVATAR_SET } from "@rakazo/contracts";
+} from "@orkbot/contracts";
+import { DEFAULT_NEW_BOT_AVATAR_SET } from "@orkbot/contracts";
 import {
   answerableAskMessageIds,
   channelMessageSender,
@@ -18,11 +18,11 @@ import {
   isRunWorking,
   memberName,
   newClientId,
-} from "@rakazo/core";
-import { fetchFresh, writeSaved } from "@rakazo/core/query";
-import type { GroupAvatarMember } from "@rakazo/ui-web";
-import { Button } from "@rakazo/ui-web";
-import { useIsMobile } from "@rakazo/ui-web/hooks/use-mobile";
+} from "@orkbot/core";
+import { fetchFresh, writeSaved } from "@orkbot/core/query";
+import type { GroupAvatarMember } from "@orkbot/ui-web";
+import { Button } from "@orkbot/ui-web";
+import { useIsMobile } from "@orkbot/ui-web/hooks/use-mobile";
 import { useQuery } from "@tanstack/react-query";
 import { Keyboard, Lock, Monitor, Moon, Plug, Plus, ScrollText, Sun, Users } from "lucide-react";
 import {

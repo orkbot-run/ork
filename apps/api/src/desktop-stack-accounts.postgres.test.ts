@@ -1,8 +1,8 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FakeSandboxProvider } from "@rakazo/adapters";
-import { runAsSystem } from "@rakazo/db";
+import { FakeSandboxProvider } from "@orkbot/adapters";
+import { runAsSystem } from "@orkbot/db";
 import { expect, it } from "vitest";
 import { createApp } from "./app.js";
 
@@ -13,7 +13,7 @@ const webOrigin = "http://127.0.0.1:5173";
 it.skipIf(!databaseUrl || !process.env.COPY_TEST_DATABASE)(
   "the app-managed stack on this computer admits only its first account",
   async () => {
-    const dataDir = await mkdtemp(join(tmpdir(), "rakazo-desktop-accounts-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "orkbot-desktop-accounts-"));
     const handles = await createApp({
       databaseUrl: databaseUrl!,
       dataDir,

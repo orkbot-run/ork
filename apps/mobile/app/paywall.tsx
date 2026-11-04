@@ -1,12 +1,12 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { BillingStatus, ByokInterval } from "@rakazo/contracts";
+import type { BillingStatus, ByokInterval } from "@orkbot/contracts";
 import {
   AI_PRIVACY_URL,
   DEFAULT_MONTHLY_CREDIT_AMOUNT,
   MODEL_CREDIT_AMOUNTS,
   ModelCreditAmountSchema,
-} from "@rakazo/contracts";
-import { botColors, botEyeColor, typeScale } from "@rakazo/ui-tokens";
+} from "@orkbot/contracts";
+import { botColors, botEyeColor, typeScale } from "@orkbot/ui-tokens";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -52,7 +52,7 @@ import { errorText } from "../lib/user-error";
 type Amount = (typeof MODEL_CREDIT_AMOUNTS)[number];
 type SymbolName = ComponentProps<typeof NativeSymbol>["android"];
 
-const TERMS_URL = "https://rakazo.com/terms/";
+const TERMS_URL = "https://orkbot.run/terms/";
 
 // Bots carry the app's only colour, so the paywall's colour is a small crew of them.
 const CREW = [
@@ -265,7 +265,7 @@ export default function Paywall() {
         </View>
         <View style={styles.footer}>
           <NativeActionButton
-            label={started === "byok" ? t("Connect your AI") : t("Start using Rakazo")}
+            label={started === "byok" ? t("Connect your AI") : t("Start using Ork")}
             onPress={() => {
               router.back();
               if (started === "byok") router.push("/models");
@@ -427,7 +427,7 @@ export default function Paywall() {
             <PlanCard
               selected={plan === "credits"}
               onPress={() => setPlan("credits")}
-              title={t("Rakazo credits")}
+              title={t("Ork credits")}
               badge={subscribed === "credits" ? t("Current plan") : undefined}
               price={{
                 label: t("{price} / month", { price: creditPrice }),

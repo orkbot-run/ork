@@ -1,5 +1,5 @@
 import type * as KmsSdk from "@aws-sdk/client-kms";
-import type { KeyProvider, KeyWrapContext, WrappedDataKey } from "@rakazo/adapter-kit";
+import type { KeyProvider, KeyWrapContext, WrappedDataKey } from "@orkbot/adapter-kit";
 
 export type AwsKmsKeyProviderConfig = {
   /** Key ARN, not an alias, which can be repointed without stored keys noticing. */
@@ -136,8 +136,8 @@ export class AwsKmsKeyProvider implements KeyProvider {
 
 function encryptionContext(context: KeyWrapContext): Record<string, string> {
   return {
-    "rakazo:purpose": "space-key/v1",
-    "rakazo:space": context.spaceId,
-    "rakazo:version": String(context.version),
+    "orkbot:purpose": "space-key/v1",
+    "orkbot:space": context.spaceId,
+    "orkbot:version": String(context.version),
   };
 }

@@ -1,4 +1,4 @@
-import type { ToolBatch } from "@rakazo/adapter-kit";
+import type { ToolBatch } from "@orkbot/adapter-kit";
 
 export const COMPOSIO_MULTI_EXECUTE_TOOL = "COMPOSIO_MULTI_EXECUTE_TOOL";
 const COMPOSIO_BATCH: ToolBatch = { items: "tools", action: "tool_slug", arguments: "arguments" };

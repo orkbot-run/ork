@@ -1,5 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
-import { SidebarProvider } from "@rakazo/ui-web";
+import { SidebarProvider } from "@orkbot/ui-web";
 import type { ComponentProps, CSSProperties } from "react";
 import { createContext, useContext } from "react";
 import { BOTS_SIDEBAR_DEFAULT_WIDTH } from "../../lib/bots-sidebar-pref";

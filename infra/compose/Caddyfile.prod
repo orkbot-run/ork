@@ -23,7 +23,7 @@
 	lb_try_interval 250ms
 }
 
-{$RAKAZO_HOST:app.example.com} {
+{$ORKBOT_HOST:app.example.com} {
 	import access_log
 	encode zstd gzip
 

@@ -141,8 +141,8 @@ describe("operator-added origins", () => {
     "https://cdn.example.com;script-src",
   ])("rejects %s and names the setting", (source) => {
     expect(() =>
-      parseContentSecuritySources("RAKAZO_CSP_SCRIPT_SRC", `https://ok.example.com ${source}`),
-    ).toThrow(/^RAKAZO_CSP_SCRIPT_SRC accepts only https:\/\/ origins.*Invalid: /);
+      parseContentSecuritySources("ORKBOT_CSP_SCRIPT_SRC", `https://ok.example.com ${source}`),
+    ).toThrow(/^ORKBOT_CSP_SCRIPT_SRC accepts only https:\/\/ origins.*Invalid: /);
   });
 
   it("adds them to script-src and connect-src only, after 'self'", () => {

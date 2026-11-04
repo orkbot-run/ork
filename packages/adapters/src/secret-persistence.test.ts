@@ -1,8 +1,8 @@
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
-import type { AdapterContext } from "@rakazo/adapter-kit";
-import { BOT_SECRET_VALUE_MAX_LENGTH, encodeLoginSecret } from "@rakazo/contracts";
-import type { Prisma, PrismaClient } from "@rakazo/db";
-import { withTransactionRetry } from "@rakazo/db";
+import type { AdapterContext } from "@orkbot/adapter-kit";
+import { BOT_SECRET_VALUE_MAX_LENGTH, encodeLoginSecret } from "@orkbot/contracts";
+import type { Prisma, PrismaClient } from "@orkbot/db";
+import { withTransactionRetry } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { findRunLogin } from "./bot-secrets.js";
 import { InfisicalSecretStore } from "./infisical-secret-store.js";

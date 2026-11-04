@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
-import type { ClientOperation } from "@rakazo/logging/monitoring";
+import type { ClientOperation } from "@orkbot/logging/monitoring";
 import { app, crashReporter } from "electron";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 

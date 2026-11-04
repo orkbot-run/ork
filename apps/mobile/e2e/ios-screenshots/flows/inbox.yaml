@@ -1,10 +1,10 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Inbox
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
 - extendedWaitUntil:
     visible: ".*Researcher.*"
     timeout: 20000
@@ -19,7 +19,7 @@ name: Inbox
     timeout: 3000
 - takeScreenshot: 02-activity
 - tapOn: "Activity"
-- openLink: "rakazo:///artifacts"
+- openLink: "orkbot:///artifacts"
 - extendedWaitUntil:
     visible: ".*launch-notes.txt.*|.*No artifacts yet.*|.*Artifacts.*"
     timeout: 15000

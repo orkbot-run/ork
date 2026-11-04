@@ -1,11 +1,11 @@
-import { listPiCatalog } from "@rakazo/adapters";
-import type { Actor, AnalyticsErrorKind, AnalyticsModelConnectMethod } from "@rakazo/contracts";
+import { listPiCatalog } from "@orkbot/adapters";
+import type { Actor, AnalyticsErrorKind, AnalyticsModelConnectMethod } from "@orkbot/contracts";
 import {
   canonicalPiProviderId,
   MODEL_KEY_REJECTED_ERROR,
   OPENAI_COMPATIBLE_PROVIDER_ID,
-} from "@rakazo/contracts";
-import { normalizeRunError } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { normalizeRunError } from "@orkbot/core";
 import type { RouterDeps } from "./router.js";
 import { modelSetup } from "./routes/shared.js";
 

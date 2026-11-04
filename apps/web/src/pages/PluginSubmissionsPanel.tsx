@@ -3,8 +3,8 @@ import type {
   PluginSubmission,
   PluginSubmissionReview,
   PluginSubmissionStatus,
-} from "@rakazo/contracts";
-import { integrationPageUrl } from "@rakazo/contracts";
+} from "@orkbot/contracts";
+import { integrationPageUrl } from "@orkbot/contracts";
 import {
   Button,
   Dialog,
@@ -19,7 +19,7 @@ import {
   TabsTrigger,
   Textarea,
   toast,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowUpRight } from "lucide-react";
 import type { FormEvent } from "react";

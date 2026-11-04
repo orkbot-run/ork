@@ -2,16 +2,15 @@ import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createRouterClient } from "@orpc/server";
 import type {
   ArtifactStore,
   ComputerRef,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import { BillingEmulator, ObjectAgentHomeStore, PrismaAgentHomeRecords } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import { BillingEmulator, ObjectAgentHomeStore, PrismaAgentHomeRecords } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
 import {
   asSystem,
   billingAccountForOrganization,
@@ -25,7 +24,8 @@ import {
   LocalKeyProvider,
   personalOrganizationIds,
   runAsSystem,
-} from "@rakazo/db";
+} from "@orkbot/db";
+import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryObjectStorage } from "../../../packages/adapters/src/object-storage.test-support.js";
 import { deleteAccountContent } from "./account-deletion.js";
@@ -68,7 +68,7 @@ describePostgres("organizations (PostgreSQL)", () => {
   async function signup(): Promise<Actor> {
     const userId = `orgs-${++sequence}-${suffix}`;
     users.push(userId);
-    const email = `${userId}@rakazo.test`;
+    const email = `${userId}@orkbot.test`;
     await system.user.create({ data: { id: userId, name: userId, email, emailVerified: false } });
     const { spaceId } = await bootstrapUserSpace(
       system,
@@ -112,7 +112,7 @@ describePostgres("organizations (PostgreSQL)", () => {
     prisma = db.prisma;
     system = asSystem(prisma);
     installAuditEventStore(prisma);
-    root = await mkdtemp(path.join(tmpdir(), "rakazo-organizations-"));
+    root = await mkdtemp(path.join(tmpdir(), "orkbot-organizations-"));
     home = new ObjectAgentHomeStore(
       root,
       new MemoryObjectStorage(),

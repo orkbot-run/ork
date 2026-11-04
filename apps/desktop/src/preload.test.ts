@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
-import type { RakazoDesktop, RakazoSetup } from "@rakazo/contracts";
+import type { OrkDesktop, OrkSetup } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 function runPreload(
@@ -33,7 +33,7 @@ describe("desktop preload bridge", () => {
     "advertises native framing only on Windows (%s)",
     (platform) => {
       const { exposeInMainWorld } = runPreload("preload.cjs", {}, platform);
-      const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+      const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
       expect(bridge.nativeWindowFrame).toBe(platform === "win32");
     },
   );
@@ -42,8 +42,8 @@ describe("desktop preload bridge", () => {
     const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
-    const [globalName, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
-    expect(globalName).toBe("rakazoDesktop");
+    const [globalName, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
+    expect(globalName).toBe("orkbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
       "badge",
@@ -117,7 +117,7 @@ describe("desktop preload bridge", () => {
     const off = vi.fn();
     const { exposeInMainWorld } = runPreload("preload.cjs", { on, off });
 
-    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
     const received: unknown[] = [];
     const unsubscribe = bridge.oauth.onCallback((callback) => received.push(callback));
 
@@ -136,7 +136,7 @@ describe("desktop preload bridge", () => {
     });
     const off = vi.fn();
     const { exposeInMainWorld } = runPreload("preload.cjs", { on, off });
-    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
 
     const opened: string[] = [];
     const unsubscribe = bridge.settings!.onOpen(() => opened.push("settings"));
@@ -156,7 +156,7 @@ describe("desktop preload bridge", () => {
     });
     const off = vi.fn();
     const { exposeInMainWorld } = runPreload("preload.cjs", { on, off });
-    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
 
     const received: unknown[] = [];
     const unsubscribe = bridge.menu!.onCommand((command) => received.push(command));
@@ -171,7 +171,7 @@ describe("desktop preload bridge", () => {
 
   it.each(["win32", "linux"])("offers system speech only on macOS (%s)", (platform) => {
     const { exposeInMainWorld } = runPreload("preload.cjs", {}, platform);
-    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
     expect(bridge.speech).toBeUndefined();
   });
 
@@ -182,7 +182,7 @@ describe("desktop preload bridge", () => {
     });
     const off = vi.fn();
     const { invoke, exposeInMainWorld } = runPreload("preload.cjs", { on, off }, "darwin");
-    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoDesktop];
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkDesktop];
     const speech = bridge.speech!;
 
     await speech.start("es-CL", 3);
@@ -209,8 +209,8 @@ describe("setup preload bridge", () => {
     const { invoke, on, exposeInMainWorld } = runPreload("setup-preload.cjs");
 
     expect(exposeInMainWorld).toHaveBeenCalledTimes(1);
-    const [globalName, bridge] = exposeInMainWorld.mock.calls[0] as [string, RakazoSetup];
-    expect(globalName).toBe("rakazoSetup");
+    const [globalName, bridge] = exposeInMainWorld.mock.calls[0] as [string, OrkSetup];
+    expect(globalName).toBe("orkbotSetup");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
       "locale",
@@ -254,13 +254,13 @@ describe("setup preload bridge", () => {
     const locale = { lang: "es", dir: "ltr", messages: { Continue: "Continuar" } };
     const sendSync = vi.fn(() => locale);
     const [, bridge] = runPreload("setup-preload.cjs", { sendSync }).exposeInMainWorld.mock
-      .calls[0] as [string, RakazoSetup];
+      .calls[0] as [string, OrkSetup];
     expect(sendSync).toHaveBeenCalledWith("desktop.setup.locale");
     expect(bridge.locale).toEqual(locale);
 
     const [, refused] = runPreload("setup-preload.cjs").exposeInMainWorld.mock.calls[0] as [
       string,
-      RakazoSetup,
+      OrkSetup,
     ];
     expect(refused.locale).toEqual({ lang: "en", dir: "ltr", messages: {} });
   });

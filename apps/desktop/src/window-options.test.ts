@@ -108,7 +108,7 @@ describe("development icon", () => {
 
 describe("window background", () => {
   it("matches the web dark background token so startup chrome does not flash", async () => {
-    const { webDarkTokens } = await import("@rakazo/ui-tokens");
+    const { webDarkTokens } = await import("@orkbot/ui-tokens");
     for (const platform of ["darwin", "win32", "linux"] as const) {
       expect(browserWindowOptions(platform, laptop).backgroundColor).toBe(webDarkTokens.background);
       expect(setupWindowOptions(platform, laptop).backgroundColor).toBe(webDarkTokens.background);

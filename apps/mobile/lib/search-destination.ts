@@ -1,4 +1,4 @@
-import type { SearchHit } from "@rakazo/contracts";
+import type { SearchHit } from "@orkbot/contracts";
 
 /**
  * Message id to open, if the hit is a row inside a thread.

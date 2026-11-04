@@ -1,4 +1,4 @@
-import type { AgentRunRequest } from "@rakazo/adapter-kit";
+import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { catalogExecuteToolName } from "./approval-effect.js";
 import { GROUP_SEPARATORS } from "./lazy-tool-catalog.js";
 

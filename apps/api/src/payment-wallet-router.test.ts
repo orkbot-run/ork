@@ -1,8 +1,8 @@
+import type { PaymentWalletProvider } from "@orkbot/adapter-kit";
+import { createPaymentWalletProvider } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
-import type { PaymentWalletProvider } from "@rakazo/adapter-kit";
-import { createPaymentWalletProvider } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
 import { describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
@@ -15,7 +15,7 @@ type Row = Record<string, unknown>;
 const actor = {
   spaceId: "space-1",
   userId: "user-1",
-  email: "user@rakazo.test",
+  email: "user@orkbot.test",
   isDeploymentOwner: false,
 } satisfies Actor;
 
@@ -78,7 +78,7 @@ function walletDeps(paymentWallet: PaymentWalletProvider | null) {
       screenProxySecret: "fake-test-secret",
       sandboxProvider: "fake",
     },
-    dataDir: "/tmp/rakazo-router-test",
+    dataDir: "/tmp/orkbot-router-test",
   } as unknown as RouterDeps;
   const handler = new RPCHandler(createRouter(deps));
   async function call(path: "status" | "connect" | "disconnect") {

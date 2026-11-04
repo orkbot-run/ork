@@ -1,5 +1,5 @@
-import type { VoiceProvider } from "@rakazo/adapter-kit";
-import type { VoiceCatalogEntry } from "@rakazo/contracts";
+import type { VoiceProvider } from "@orkbot/adapter-kit";
+import type { VoiceCatalogEntry } from "@orkbot/contracts";
 import { CartesiaVoiceProvider } from "./cartesia-voice.js";
 import { ElevenLabsVoiceProvider } from "./elevenlabs-voice.js";
 import { FishAudioVoiceProvider } from "./fish-audio-voice.js";

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">通話進行中</string>
+  <string name="orkbot_call_title">Ork 通話</string>
+  <string name="orkbot_call_text">麥克風已啟用</string>
+  <string name="orkbot_call_answer">接聽</string>
+  <string name="orkbot_call_decline">拒絕</string>
+</resources>

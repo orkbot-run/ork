@@ -1,11 +1,11 @@
-import type { AdapterContext, PurchaseSnapshot, PurchaseStatus } from "@rakazo/adapter-kit";
+import type { AdapterContext, PurchaseSnapshot, PurchaseStatus } from "@orkbot/adapter-kit";
 import {
   PaymentWalletDisconnected,
   PaymentWalletRequestRejected,
   runContinueJob,
-} from "@rakazo/adapter-kit";
-import type { Purchase } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import type { Purchase } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import type { PurchaseDeps } from "./purchase-service.js";
 import {
   enqueuePurchasePoll,

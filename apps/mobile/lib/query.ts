@@ -1,4 +1,4 @@
-import type { RpcInput, RpcOutput, RpcPath } from "@rakazo/contracts";
+import type { RpcInput, RpcOutput, RpcPath } from "@orkbot/contracts";
 import type { DataTag, QueryFunction, QueryKey } from "@tanstack/react-query";
 import { QueryClient } from "@tanstack/react-query";
 import type { RpcArgs } from "./api";

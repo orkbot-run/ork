@@ -12,7 +12,7 @@ vi.mock("@lingui/react/macro", () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) => String.raw(parts, ...values),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   BotAvatar: () => null,
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   defaultBotAvatarValue: () => "",

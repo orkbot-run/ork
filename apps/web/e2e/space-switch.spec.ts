@@ -5,14 +5,14 @@ test("opening a bot in another space switches in place, without a page reload", 
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `space-switch-${stamp}@rakazo.test`, "password12", "Space Switcher");
+  await signup(page, `space-switch-${stamp}@orkbot.test`, "password12", "Space Switcher");
   await completeOnboarding(page);
   const otherSpace = await page.request.post("/rpc/spaces/create", {
     data: { json: { name: "Second space" } },
   });
   const { json: space } = (await otherSpace.json()) as { json: { id: string } };
   const created = await page.request.post("/rpc/bots/create", {
-    headers: { "x-rakazo-space-id": space.id },
+    headers: { "x-orkbot-space-id": space.id },
     data: {
       json: {
         name: "Scout",
@@ -51,6 +51,6 @@ test("opening a bot in another space switches in place, without a page reload", 
   expect(
     await page.evaluate(() => (window as unknown as { visibleBlanks?: number }).visibleBlanks),
   ).toBe(0);
-  expect(await page.evaluate(() => window.localStorage.getItem("rakazo:space-id"))).toBe(space.id);
+  expect(await page.evaluate(() => window.localStorage.getItem("orkbot:space-id"))).toBe(space.id);
   await captureScreenshot(page, testInfo, "space-switch-in-place");
 });

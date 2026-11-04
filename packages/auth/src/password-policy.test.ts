@@ -1,4 +1,4 @@
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@rakazo/core";
+import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@orkbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
 
@@ -10,7 +10,7 @@ vi.mock("better-auth/adapters/prisma", async () => {
       memoryAdapter(prisma.authData),
   };
 });
-vi.mock("@rakazo/db", () => ({
+vi.mock("@orkbot/db", () => ({
   bootstrapUserSpace: vi.fn(async () => ({ spaceId: "space-1" })),
   recordSecurityEvent: vi.fn(async () => undefined),
 }));

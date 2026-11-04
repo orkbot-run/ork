@@ -17,7 +17,7 @@ describe("app document state", () => {
   it("waits while the session is pending", () => {
     expect(
       stateOf(
-        '<div id="root"><div data-rakazo-app-state="session-pending">Opening your Space…</div></div>',
+        '<div id="root"><div data-orkbot-app-state="session-pending">Opening your Space…</div></div>',
       ),
     ).toBe("pending");
   });
@@ -25,7 +25,7 @@ describe("app document state", () => {
   it("is ready once the session and a usable surface are mounted", () => {
     expect(
       stateOf(
-        '<div id="root"><div data-rakazo-app-state="ready"><div data-testid="shell-root" data-ready="true"></div></div></div>',
+        '<div id="root"><div data-orkbot-app-state="ready"><div data-testid="shell-root" data-ready="true"></div></div></div>',
       ),
     ).toBe("ready");
   });
@@ -33,7 +33,7 @@ describe("app document state", () => {
   it("is ready on the marked onboarding page in any language", () => {
     expect(
       stateOf(
-        '<div id="root"><div data-rakazo-app-state="ready"><div data-rakazo-surface="onboarding"><h1>Conectar un modelo</h1><div role="combobox" aria-label="Proveedor"></div></div></div></div>',
+        '<div id="root"><div data-orkbot-app-state="ready"><div data-orkbot-surface="onboarding"><h1>Conectar un modelo</h1><div role="combobox" aria-label="Proveedor"></div></div></div></div>',
       ),
     ).toBe("ready");
   });
@@ -42,7 +42,7 @@ describe("app document state", () => {
     "still finds an older server's unmarked English page: %s",
     (surface) => {
       expect(
-        stateOf(`<div id="root"><div data-rakazo-app-state="ready">${surface}</div></div>`),
+        stateOf(`<div id="root"><div data-orkbot-app-state="ready">${surface}</div></div>`),
       ).toBe("ready");
     },
   );
@@ -50,7 +50,7 @@ describe("app document state", () => {
   it("reports the web app's error screen so launch keeps its Refresh", () => {
     expect(
       stateOf(
-        '<div id="root"><div data-rakazo-app-state="failed"><p>Something went wrong. Try again.</p><button>Refresh</button></div></div>',
+        '<div id="root"><div data-orkbot-app-state="failed"><p>Something went wrong. Try again.</p><button>Refresh</button></div></div>',
       ),
     ).toBe("failed");
   });

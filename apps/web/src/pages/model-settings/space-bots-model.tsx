@@ -1,6 +1,6 @@
 import { Plural, Trans } from "@lingui/react/macro";
-import type { Bot } from "@rakazo/contracts";
-import { botsWithOwnModel } from "@rakazo/core";
+import type { Bot } from "@orkbot/contracts";
+import { botsWithOwnModel } from "@orkbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -11,7 +11,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   Button,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { useCallback, useEffect, useState } from "react";
 import { useSpaceRpc } from "../../lib/space-rpc";
 

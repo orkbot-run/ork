@@ -1,0 +1,10 @@
+{
+  "platforms": ["android", "apple"],
+  "android": {
+    "modules": ["com.orkbot.notifications.OrkNotificationsModule"]
+  },
+  "apple": {
+    "modules": ["OrkNotificationsModule"],
+    "appDelegateSubscribers": ["OrkCallsSubscriber"]
+  }
+}

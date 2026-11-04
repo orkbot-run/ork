@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { ORPCError } from "@orpc/server";
-import type { AdapterContext, SandboxProvider } from "@rakazo/adapter-kit";
-import { computerControlExpireJobKey } from "@rakazo/adapter-kit";
-import type { ComputerExecutionLease } from "@rakazo/adapters";
+import type { AdapterContext, SandboxProvider } from "@orkbot/adapter-kit";
+import { computerControlExpireJobKey } from "@orkbot/adapter-kit";
+import type { ComputerExecutionLease } from "@orkbot/adapters";
 import {
   acquireComputerExecutionLease,
   applyTeachingDesktopInput,
@@ -37,25 +36,26 @@ import {
   takeoverLeaseMs,
   toComputerRef,
   touchRunningComputer,
-} from "@rakazo/adapters";
-import type { Actor, ComputerReleaseReason, ComputerStatus } from "@rakazo/contracts";
+} from "@orkbot/adapters";
+import type { Actor, ComputerReleaseReason, ComputerStatus } from "@orkbot/contracts";
 import {
   attachmentMaxBytes,
   attachmentSizeLabel,
   ComputerCommandSchema,
   foldComputerCommands,
-} from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES, scrollDirection } from "@rakazo/core";
-import { addScreenProxyCapability } from "@rakazo/core/node/screen-capability";
-import type { ComputerRunEnd, PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { ACTIVE_RUN_STATUSES, scrollDirection } from "@orkbot/core";
+import { addScreenProxyCapability } from "@orkbot/core/node/screen-capability";
+import type { ComputerRunEnd, PrismaClient } from "@orkbot/db";
 import {
   createRepos,
   expireComputerExecutionLeases,
   IsolationError,
   parseComputerMode,
   recordComputerRunEnd,
-} from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
+import { ORPCError } from "@orpc/server";
 import { scrollPoint } from "../computer-input.js";
 import {
   executionBlocksUserTakeover,

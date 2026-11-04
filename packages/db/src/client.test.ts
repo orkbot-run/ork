@@ -1,4 +1,4 @@
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import type { Pool, PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -18,16 +18,16 @@ afterEach(async () => {
 
 describe("createDb", () => {
   it("caps the pg pool and swallows idle-client errors so they cannot crash the process", () => {
-    const { pool } = createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo", {
+    const { pool } = createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot", {
       poolMax: 3,
-      applicationName: "rakazo-test",
+      applicationName: "orkbot-test",
     });
     pools.push(pool);
 
     expect(pool.options.max).toBe(3);
     expect(pool.options.connectionTimeoutMillis).toBe(10_000);
     expect(pool.options.idleTimeoutMillis).toBe(0);
-    expect(pool.options.application_name).toBe("rakazo-test");
+    expect(pool.options.application_name).toBe("orkbot-test");
     expect(pool.listenerCount("error")).toBeGreaterThan(0);
     expect(pool.listenerCount("connect")).toBeGreaterThan(0);
 
@@ -35,13 +35,13 @@ describe("createDb", () => {
   });
 
   it("defaults to a four-connection pool", () => {
-    const { pool } = createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo");
+    const { pool } = createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot");
     pools.push(pool);
     expect(pool.options.max).toBe(4);
   });
 
   it("lets a transaction wait for a busy pool past Prisma's 2s default", async () => {
-    const { prisma, pool } = createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo");
+    const { prisma, pool } = createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot");
     pools.push(pool);
     const released = new Error("connection freed after 2.5s");
     pool.connect = (() =>
@@ -53,7 +53,7 @@ describe("createDb", () => {
   it("refuses local master keys when a key manager is configured", () => {
     vi.stubEnv("MASTER_KEY_PROVIDER", "aws-kms");
     try {
-      expect(() => createDb("postgres://rakazo:rakazo@127.0.0.1:9/rakazo")).toThrow(
+      expect(() => createDb("postgres://orkbot:orkbot@127.0.0.1:9/orkbot")).toThrow(
         "MASTER_KEY_PROVIDER needs createDb(url, { keyProvider })",
       );
     } finally {
@@ -134,7 +134,7 @@ describe("retryOnTooManyConnections", () => {
 describe("installSaturationReport", () => {
   it("warns once per interval when a checkout waited for a connection", async () => {
     const sink = createTestSink();
-    installLogger(createLogger({ service: "rakazo-api", sinks: [sink], level: "debug" }));
+    installLogger(createLogger({ service: "orkbot-api", sinks: [sink], level: "debug" }));
     let clock = 0;
     const waits = [1_500, 10, 2_000, 10_000];
     const pool = {
@@ -149,7 +149,7 @@ describe("installSaturationReport", () => {
         callback(undefined, client, () => undefined);
       },
     } as unknown as Pool;
-    installSaturationReport(pool, "rakazo-api", () => clock);
+    installSaturationReport(pool, "orkbot-api", () => clock);
 
     await pool.connect();
     pool.connect(() => undefined);
@@ -159,7 +159,7 @@ describe("installSaturationReport", () => {
     const warnings = sink.events.filter((event) => event.message === "db.pool.saturated");
     expect(warnings).toMatchObject([
       {
-        "db.pool.name": "rakazo-api",
+        "db.pool.name": "orkbot-api",
         "db.pool.max": 4,
         "db.pool.waiting": 3,
         "db.pool.wait_ms": 1_500,

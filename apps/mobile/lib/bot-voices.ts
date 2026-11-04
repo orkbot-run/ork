@@ -1,5 +1,5 @@
-import type { SpeechLocale } from "@rakazo/core";
-import { speechLocaleTag } from "@rakazo/core";
+import type { SpeechLocale } from "@orkbot/core";
+import { speechLocaleTag } from "@orkbot/core";
 import { File, Paths } from "expo-file-system";
 import { getLocales } from "expo-localization";
 import type * as ExpoSpeech from "expo-speech";
@@ -10,7 +10,7 @@ import { pickUnusedVoice } from "./voice-assignment";
 
 // Assignments stay on this device.
 function assignmentsFile(): File {
-  return new File(Paths.document, "rakazo-bot-voices.json");
+  return new File(Paths.document, "orkbot-bot-voices.json");
 }
 
 async function loadAssignments(): Promise<Record<string, string>> {

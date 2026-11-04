@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { Button } from "@rakazo/ui-web";
+import { Button } from "@orkbot/ui-web";
 import { Check, Link } from "lucide-react";
 import { useState } from "react";
 import { useCopyText } from "../../lib/copy-text";
@@ -10,7 +10,7 @@ import { ManualCopy } from "./SharePopover";
 const ACTION =
   "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] leading-[18px] font-medium whitespace-nowrap text-foreground ring-[0.5px] ring-border outline-none hover:bg-foreground/[0.08] focus-visible:ring-2 focus-visible:ring-ring";
 
-/** A shared page for someone without a Rakazo account: a slim header and the page. */
+/** A shared page for someone without a Ork account: a slim header and the page. */
 export function PublicPageShell({ title, document }: { title: string; document: string | null }) {
   const { t } = useLingui();
   const [copied, copy, copyFailed] = useCopyText();
@@ -28,7 +28,7 @@ export function PublicPageShell({ title, document }: { title: string; document: 
           className="inline-flex min-w-0 items-center gap-1.5 rounded-full py-1 pr-2 text-[13px] leading-[18px] text-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
           <img src="/favicon-32x32.png" alt="" className="size-4 rounded-full" />
-          <Trans>Open Rakazo</Trans>
+          <Trans>Open Ork</Trans>
         </a>
         <h1 className="sr-only">{title}</h1>
         <nav aria-label={t`Page actions`} className="flex shrink-0 items-center gap-1.5">

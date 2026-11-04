@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import type { Prisma } from "./client.js";
 
 /** Text only: progress, commands, secret prompts and tool traces are not retrieval content. */

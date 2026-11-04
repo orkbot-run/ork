@@ -38,6 +38,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
         env:
-          DATABASE_URL: postgres://rakazo:rakazo@127.0.0.1:5433/rakazo
+          DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
       - run: pnpm sandbox:build
       - run: pnpm test:computer-replay

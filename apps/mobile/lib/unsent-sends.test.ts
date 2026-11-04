@@ -1,4 +1,4 @@
-import { MODEL_REQUIRED_SEND_ERROR } from "@rakazo/core";
+import { MODEL_REQUIRED_SEND_ERROR } from "@orkbot/core";
 import { router } from "expo-router";
 import { Alert } from "react-native";
 import { beforeEach, describe, expect, it, vi } from "vitest";

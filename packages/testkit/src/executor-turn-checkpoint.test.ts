@@ -1,5 +1,5 @@
-import type { AgentRunModel } from "@rakazo/adapter-kit";
-import { APPROVED_ACTION_NOT_RUN_ERROR, isConversationalRun } from "@rakazo/core";
+import type { AgentRunModel } from "@orkbot/adapter-kit";
+import { APPROVED_ACTION_NOT_RUN_ERROR, isConversationalRun } from "@orkbot/core";
 import { describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycle from "../../adapters/src/computer-lifecycle.js";
 import { createRunExecutor } from "../../adapters/src/executor.js";

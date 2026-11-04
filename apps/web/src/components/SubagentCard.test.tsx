@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
-vi.mock("@rakazo/chat-ui/web", () => ({
+vi.mock("@orkbot/chat-ui/web", () => ({
   ChatMarkdown: ({ children }: { children: string }) => <p>{children}</p>,
 }));
 

@@ -5,9 +5,9 @@ import type {
   MediaGenerationInput,
   MediaGenerationProvider,
   MediaVideoJob,
-} from "@rakazo/adapter-kit";
-import { MediaGenerationError } from "@rakazo/adapter-kit";
-import { ATTACHMENT_MAX_BYTES } from "@rakazo/contracts";
+} from "@orkbot/adapter-kit";
+import { MediaGenerationError } from "@orkbot/adapter-kit";
+import { ATTACHMENT_MAX_BYTES } from "@orkbot/contracts";
 import { z } from "zod";
 import { FAKE_VIDEO_BASE64 } from "./fake-media-assets.js";
 import type { ResolveHostname } from "./web-ssrf.js";

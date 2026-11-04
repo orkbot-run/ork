@@ -1,5 +1,9 @@
 # Desktop releases
 
+The imported release workflow is archived under `.github/upstream-workflows/` and is inactive. The following sections describe the release template; configure Ork credentials and signing keys before enabling it.
+
+Desktop automatic updates are disabled by default. Set `ORKBOT_ENABLE_AUTO_UPDATE=1` at build time or runtime to enable a configured Ork update feed. Linux builds also require an Ed25519 public PEM key in `ORKBOT_LINUX_UPDATE_PUBLIC_KEY` at build time, matching the private key used to sign releases. `ORKBOT_DISABLE_AUTO_UPDATE=1` always disables updates.
+
 The `release-desktop` workflow builds, signs, notarizes, attests, and publishes
 the Electron app from a `vMAJOR.MINOR.PATCH` tag on `main`. Publishing the
 Docker images triggers from the same tag.

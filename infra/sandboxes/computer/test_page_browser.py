@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
-loader = importlib.machinery.SourceFileLoader("page_browser", str(HERE / "rakazo-page-browser"))
+loader = importlib.machinery.SourceFileLoader("page_browser", str(HERE / "orkbot-page-browser"))
 spec = importlib.util.spec_from_loader(loader.name, loader)
 helper = importlib.util.module_from_spec(spec)
 loader.exec_module(helper)
@@ -131,7 +131,7 @@ class FakeAgentBrowser:
                 return {"result": {"timeOrigin": 1, "href": "https://portal.example.test/"}}
             if script.startswith("({ timeOrigin"):
                 return {"result": {"timeOrigin": 1 if self.stuck else 2, "href": self.state["url"], "ready": "complete"}}
-            if "__rakazoTyping = " in script:
+            if "__orkbotTyping = " in script:
                 return self.typing
             if "Typing stopped" in script:
                 self.checks.append(script)
@@ -632,40 +632,40 @@ class PurchaseTest(unittest.TestCase):
                 helper.validate_actions([step])
 
     def test_a_purchase_check_with_no_browser_finds_nothing_and_one_that_cannot_list_tabs_fails(self):
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "browser_closed", return_value=True), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "browser_closed", return_value=True), \
                 patch("builtins.print") as printed:
-            helper.run(["rakazo-page-browser", "purchase_check", '{"desktop": true}'])
+            helper.run(["orkbot-page-browser", "purchase_check", '{"desktop": true}'])
         self.assertEqual(json.loads(printed.call_args.args[0])["purchase"], None)
         # A browser that is running but slow to answer is a failed check, which asks.
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "browser_closed", return_value=False), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "browser_closed", return_value=False), \
                 patch.object(helper, "wait_for_cdp", side_effect=RuntimeError("CDP not ready on port 1: timed out")), \
                 patch("builtins.print") as printed:
-            helper.run(["rakazo-page-browser", "purchase_check", '{"desktop": true}'])
+            helper.run(["orkbot-page-browser", "purchase_check", '{"desktop": true}'])
         self.assertEqual(json.loads(printed.call_args.args[0])["ok"], False)
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "page_tabs", side_effect=RuntimeError("tab list too large")), \
                 patch("builtins.print") as printed:
-            helper.run(["rakazo-page-browser", "purchase_check", '{"desktop": true}'])
+            helper.run(["orkbot-page-browser", "purchase_check", '{"desktop": true}'])
         self.assertEqual(json.loads(printed.call_args.args[0])["ok"], False)
 
     def test_a_purchase_check_leaves_the_tabs_alone(self):
         listing = [{"type": "page", "id": "tab-1", "url": "https://shop.example.test/pay"}]
         browser = FakeAgentBrowser()
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "http_get_json", return_value=listing), \
                 patch.object(helper, "AgentBrowser", return_value=browser), \
                 patch.object(browser, "use_tab", create=True), \
                 patch.object(helper, "Tabs") as tabs, patch("builtins.print") as printed:
-            helper.run(["rakazo-page-browser", "purchase_check", '{"desktop": true}'])
+            helper.run(["orkbot-page-browser", "purchase_check", '{"desktop": true}'])
         tabs.assert_not_called()
         self.assertEqual(json.loads(printed.call_args.args[0])["ok"], True)
 
     def test_a_purchase_check_with_no_page_or_a_browser_page_showing_finds_nothing_to_buy(self):
         for listing in ([], [{"type": "page", "id": "newtab", "url": "chrome://newtab/"}]):
-            with self.subTest(listing=listing), patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), \
+            with self.subTest(listing=listing), patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), \
                     patch.object(helper, "wait_for_cdp"), patch.object(helper, "http_get_json", return_value=listing), \
                     patch("builtins.print") as printed:
-                self.assertEqual(helper.run(["rakazo-page-browser", "purchase_check", '{"desktop": true}']), 0)
+                self.assertEqual(helper.run(["orkbot-page-browser", "purchase_check", '{"desktop": true}']), 0)
             self.assertEqual(json.loads(printed.call_args.args[0]),
                              {"ok": True, "site": "", "purchase": None, "url": listing[0]["url"] if listing else "",
                               "title": ""})
@@ -945,19 +945,19 @@ class ActTest(unittest.TestCase):
     def test_a_dialog_open_when_the_page_is_read_is_reported_in_place_of_the_failure(self):
         browser = FakeAgentBrowser()
         browser.dialog = {"type": "confirm", "message": "Delete this?"}
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "http_get_json", return_value=[{"type": "page", "id": "tab-1",
                                                                       "url": "https://portal.example.test/"}]), \
                 patch.object(helper, "AgentBrowser", return_value=browser), \
                 patch.object(browser, "use_tab", create=True), \
                 patch.object(helper.time, "sleep"), patch("builtins.print") as printed:
-            helper.run(["rakazo-page-browser", "snapshot"])
+            helper.run(["orkbot-page-browser", "snapshot"])
         self.assertEqual(json.loads(printed.call_args.args[0]), {
             "ok": False, "error": 'A confirm dialog is open on the screen: "Delete this?"', "dialog": "confirm",
             "fallback": "computer_act"})
 
     def test_the_snapshot_command_passes_its_query_on(self):
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1", "RAKAZO_BROWSER_ARGS_STDIN": "1"}), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1", "ORKBOT_BROWSER_ARGS_STDIN": "1"}), \
                 patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "read_stdin_line", return_value='{"command": "snapshot", "query": " zip "}'), \
                 patch.object(helper, "http_get_json", return_value=[{"type": "page", "id": "tab-1",
@@ -965,7 +965,7 @@ class ActTest(unittest.TestCase):
                 patch.object(helper, "AgentBrowser"), \
                 patch.object(helper.PageBrowser, "snapshot", return_value={"ok": True}) as snapshot, \
                 patch("builtins.print"):
-            helper.run(["rakazo-page-browser", "snapshot"])
+            helper.run(["orkbot-page-browser", "snapshot"])
         snapshot.assert_called_once_with(query="zip")
 
     def test_uploads_only_files_inside_the_trusted_roots(self):
@@ -1364,7 +1364,7 @@ class NewTabTest(unittest.TestCase):
             return {**result, "url": f"https://portal.example.test/{chromium.ids[0]}",
                     **({"note": note} if note and first else {})}
 
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "9222"}), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "9222"}), \
                 patch.object(helper, "wait_for_cdp", return_value={"webSocketDebuggerUrl": "ws://b/1"}), \
                 patch.object(helper, "page_tabs", chromium.list), \
                 patch.object(helper.urllib.request, "urlopen", chromium.urlopen), \
@@ -1375,7 +1375,7 @@ class NewTabTest(unittest.TestCase):
                              side_effect=lambda current, _: {**snapshot(current), "completed": 1}), \
                 patch("builtins.print") as printed:
             args = '{"actions": [{"kind": "click", "ref": "e1"}]}' if command == "act" else "{}"
-            self.assertEqual(helper.run(["rakazo-page-browser", command, args]), 0)
+            self.assertEqual(helper.run(["orkbot-page-browser", command, args]), 0)
         return json.loads(printed.call_args.args[0]), reads, use_tab
 
     def test_a_report_a_page_opened_after_the_last_call_is_named_in_the_next_result(self):
@@ -1456,10 +1456,10 @@ class NewTabTest(unittest.TestCase):
 
 class RunTest(unittest.TestCase):
     def test_without_a_browser_falls_back_to_the_desktop_without_doubt(self):
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp",
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp",
                                                                               side_effect=RuntimeError("CDP not ready on port 1: refused")), \
                 patch("builtins.print") as printed:
-            self.assertEqual(helper.run(["rakazo-page-browser", "act", '{"actions": []}']), 0)
+            self.assertEqual(helper.run(["orkbot-page-browser", "act", '{"actions": []}']), 0)
         self.assertEqual(json.loads(printed.call_args.args[0]), {
             "ok": False, "error": "CDP not ready on port 1: refused", "fallback": "computer_act", "uncertain": False})
 
@@ -1476,8 +1476,8 @@ class RunTest(unittest.TestCase):
             os.close(read)
 
     def test_closed_stdin_cancels_helper_without_a_browser(self):
-        env = {**os.environ, "RAKAZO_BROWSER_WATCH_STDIN": "1", "RAKAZO_CDP_PORT": "1"}
-        with subprocess.Popen([sys.executable, str(HERE / "rakazo-page-browser"), "snapshot", "{}"], env=env,
+        env = {**os.environ, "ORKBOT_BROWSER_WATCH_STDIN": "1", "ORKBOT_CDP_PORT": "1"}
+        with subprocess.Popen([sys.executable, str(HERE / "orkbot-page-browser"), "snapshot", "{}"], env=env,
                               stdin=subprocess.PIPE, stdout=subprocess.PIPE) as process:
             process.stdin.close()
             self.assertEqual(process.wait(timeout=5), 130)
@@ -1511,13 +1511,13 @@ class RunTest(unittest.TestCase):
         opened = [{"type": "page", "id": "site", "url": "https://portal.example.test/"}]
         browser = FakeAgentBrowser(requests=[])
         browser.stuck = True
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "http_get_json", side_effect=[listing, opened]), \
                 patch.object(helper.urllib.request, "urlopen"), \
                 patch.object(helper, "AgentBrowser", return_value=browser), \
                 patch.object(browser, "use_tab", create=True) as use_tab, \
                 patch.object(helper.time, "sleep"), patch("builtins.print") as printed:
-            self.assertEqual(helper.run(["rakazo-page-browser", "navigate", '{"url": "https://portal.example.test/"}']), 0)
+            self.assertEqual(helper.run(["orkbot-page-browser", "navigate", '{"url": "https://portal.example.test/"}']), 0)
         self.assertEqual(json.loads(printed.call_args.args[0])["ok"], True)
         self.assertEqual(browser.sent[0], ["tab", "new", "https://portal.example.test/"])
         use_tab.assert_called_once_with("site")
@@ -1529,14 +1529,14 @@ class RunTest(unittest.TestCase):
         browser.stuck = True
         original = browser.answer
         browser.answer = lambda command: {"targetId": "site"} if command[:2] == ["tab", "new"] else original(command)
-        with patch.dict(os.environ, {"RAKAZO_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
+        with patch.dict(os.environ, {"ORKBOT_CDP_PORT": "1"}), patch.object(helper, "wait_for_cdp"), \
                 patch.object(helper, "http_get_json", side_effect=[listing, listing]), \
                 patch.object(helper, "front_tab", side_effect=[("newtab", "chrome://newtab/"), ("pop-up", "x")]), \
                 patch.object(helper.urllib.request, "urlopen"), \
                 patch.object(helper, "AgentBrowser", return_value=browser), \
                 patch.object(browser, "use_tab", create=True) as use_tab, \
                 patch.object(helper.time, "sleep"), patch("builtins.print"):
-            helper.run(["rakazo-page-browser", "navigate", '{"url": "https://portal.example.test/"}'])
+            helper.run(["orkbot-page-browser", "navigate", '{"url": "https://portal.example.test/"}'])
         use_tab.assert_called_once_with("site")
 
     def test_a_navigation_that_never_reaches_a_new_page_is_left_to_the_desktop(self):
@@ -2118,7 +2118,7 @@ class DownloadTest(unittest.TestCase):
     def test_finish_command_reports_placement_failure(self):
         with patch.object(helper, "finish_later", side_effect=RuntimeError(helper.DOWNLOAD_FAILED)), \
                 patch("builtins.print") as output:
-            self.assertEqual(helper.run(["rakazo-page-browser", "finish", '{"downloads": []}']), 1)
+            self.assertEqual(helper.run(["orkbot-page-browser", "finish", '{"downloads": []}']), 1)
         self.assertEqual(json.loads(output.call_args.args[0]),
                          {"downloads": [{"error": helper.DOWNLOAD_FAILED}]})
 
@@ -2231,8 +2231,8 @@ class DownloadTest(unittest.TestCase):
         self.assertTrue(options["start_new_session"] and options["close_fds"])
         for stream in ("stdin", "stdout", "stderr"):
             self.assertEqual(options[stream], helper.subprocess.DEVNULL)
-        self.assertNotIn("RAKAZO_BROWSER_ARGS_STDIN", options["env"])
-        self.assertNotIn("RAKAZO_BROWSER_WATCH_STDIN", options["env"])
+        self.assertNotIn("ORKBOT_BROWSER_ARGS_STDIN", options["env"])
+        self.assertNotIn("ORKBOT_BROWSER_WATCH_STDIN", options["env"])
         self.assertFalse(Path(self.folder, "slow.pdf").exists())
 
     def test_the_finisher_names_a_download_only_once_it_is_complete_and_cancels_one_over_the_limit(self):
@@ -2282,7 +2282,7 @@ class DownloadTest(unittest.TestCase):
                 patch.object(helper.PageBrowser, command, side_effect=perform), \
                 patch.dict(os.environ, {"HOME": self.home}), patch("builtins.print") as output:
             os.makedirs(self.folder, exist_ok=True)
-            self.assertEqual(helper.run(["rakazo-page-browser", command, json.dumps(args)]), 0)
+            self.assertEqual(helper.run(["orkbot-page-browser", command, json.dumps(args)]), 0)
         return json.loads(output.call_args.args[0])
 
     def test_without_a_folder_the_helper_leaves_chromium_downloads_alone(self):
@@ -2330,7 +2330,7 @@ class DownloadTest(unittest.TestCase):
         # Waited for as a download link is, until Chromium begins the download.
         self.assertEqual(self.client.download_links, [1.0])
         self.assertIn('document.contentType !== "application/pdf"', helper.SAVE_PDF)
-        self.assertIn("window.__rakazoPdfSaved", helper.SAVE_PDF)
+        self.assertIn("window.__orkbotPdfSaved", helper.SAVE_PDF)
 
     def test_a_saved_pdf_is_named_after_its_title_made_safe_unless_that_is_only_its_address(self):
         browser = FakeAgentBrowser()

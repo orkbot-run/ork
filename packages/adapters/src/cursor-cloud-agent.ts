@@ -7,8 +7,8 @@ import type {
   CloudAgentReplyRequest,
   CloudAgentSnapshot,
   CloudAgentStatus,
-} from "@rakazo/adapter-kit";
-import { CloudAgentRequestRejected, CloudAgentRetryLater } from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
+import { CloudAgentRequestRejected, CloudAgentRetryLater } from "@orkbot/adapter-kit";
 import { z } from "zod";
 import { readBodyCapped } from "./web-ssrf.js";
 

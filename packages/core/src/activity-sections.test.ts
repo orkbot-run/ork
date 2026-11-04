@@ -1,4 +1,4 @@
-import type { RunStatus } from "@rakazo/contracts";
+import type { RunStatus } from "@orkbot/contracts";
 import { expect, it } from "vitest";
 import { activityAttention, activitySections } from "./activity-sections.js";
 import { STUCK_WORK_NOTIFY_AFTER_MS } from "./stuck-work.js";

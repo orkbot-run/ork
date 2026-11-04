@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
-import type { AgentRuntime, JobPublisher, NotificationProvider } from "@rakazo/adapter-kit";
-import { runJobKey } from "@rakazo/adapter-kit";
+import type { AgentRuntime, JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
+import { runJobKey } from "@orkbot/adapter-kit";
 import {
   CapturingNotificationProvider,
   MessagingTeamChatEmulator,
   messageBot,
-} from "@rakazo/adapters";
-import type { MessageBlock, ModelConnectInput, RunStatus } from "@rakazo/contracts";
-import { ACTIVE_RUN_STATUSES, isTerminal } from "@rakazo/core";
-import type { createDb } from "@rakazo/db";
-import { createThreadEvents } from "@rakazo/db";
+} from "@orkbot/adapters";
+import type { MessageBlock, ModelConnectInput, RunStatus } from "@orkbot/contracts";
+import { ACTIVE_RUN_STATUSES, isTerminal } from "@orkbot/core";
+import type { createDb } from "@orkbot/db";
+import { createThreadEvents } from "@orkbot/db";
 import { discardBotIntroRun } from "../discard-bot-intro.js";
 import { sessionCookieHeader } from "../index.js";
 import { asSystem } from "../system-db.js";

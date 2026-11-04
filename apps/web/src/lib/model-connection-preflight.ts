@@ -1,5 +1,5 @@
 import { plural, t } from "@lingui/core/macro";
-import type { ModelCredential } from "@rakazo/contracts";
+import type { ModelCredential } from "@orkbot/contracts";
 
 type ModelPreflightOutcome =
   | "timeout"

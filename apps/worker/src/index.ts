@@ -1,14 +1,14 @@
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
-import type { JobPublisher, JobWorkerHost } from "@rakazo/adapter-kit";
+import type { JobPublisher, JobWorkerHost } from "@orkbot/adapter-kit";
 import {
   ComposioConnector,
   IntegrationProviderSettings,
   unwrapEnvFromKeyManager,
-} from "@rakazo/adapters";
-import { phoneCallSettings } from "@rakazo/core";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
-import { stopOnShutdownSignals } from "@rakazo/core/node/shutdown-signals";
+} from "@orkbot/adapters";
+import { phoneCallSettings } from "@orkbot/core";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
+import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
 import { startWorkerHealth, watchEventLoopStalls } from "./health.js";
 import { createWorkerSecretStore } from "./secret-store.js";
 
@@ -82,8 +82,8 @@ import {
   userDeviceForwardSecret,
   withRunWorker,
   withSecretPersistence,
-} from "@rakazo/adapters";
-import { resolveEncryptionKey, resolveSupervisorToken, uploadSizeFromEnv } from "@rakazo/core";
+} from "@orkbot/adapters";
+import { resolveEncryptionKey, resolveSupervisorToken, uploadSizeFromEnv } from "@orkbot/core";
 import {
   createBoardEvents,
   createDb,
@@ -100,10 +100,10 @@ import {
   runAsSystem,
   securityEventRetentionDays,
   verifyContentKeys,
-} from "@rakazo/db";
-import { SERVICE_NAMES } from "@rakazo/logging";
-import { createRootLogger } from "@rakazo/logging/axiom";
-import { MarkdownMemoryStore } from "@rakazo/memory";
+} from "@orkbot/db";
+import { SERVICE_NAMES } from "@orkbot/logging";
+import { createRootLogger } from "@orkbot/logging/axiom";
+import { MarkdownMemoryStore } from "@orkbot/memory";
 
 const logger = createRootLogger(SERVICE_NAMES.worker);
 
@@ -121,7 +121,7 @@ async function main() {
   // A larger max competes for Postgres max_connections (53300).
   const created = createDb(databaseUrl, {
     poolMax,
-    applicationName: "rakazo-worker",
+    applicationName: "orkbot-worker",
     keyProvider: contentKeyProviderFromEnv(),
   });
   const { pool } = created;

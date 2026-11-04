@@ -1,7 +1,7 @@
 import {
   COMPUTER_SCREEN_PATH,
   contentSecurityPolicyFor as selectPolicy,
-} from "@rakazo/contracts/content-security-policy";
+} from "@orkbot/contracts/content-security-policy";
 import { describe, expect, it } from "vitest";
 import { wuyingScreenPolicy } from "./wuying-screen-policy.js";
 

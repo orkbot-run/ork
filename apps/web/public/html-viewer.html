@@ -13,7 +13,7 @@ let gestureAt = 0;
 const GESTURE_WINDOW_MS = 1000;
 function guard() {
   key = Array.from(crypto.getRandomValues(new Uint32Array(4)), (n) => n.toString(36)).join("");
-  return `<script>(() => { const up = parent, key = "${key}"; document.currentScript.remove(); const apply = Reflect.apply, repeat = Object.getOwnPropertyDescriptor(KeyboardEvent.prototype, "repeat").get; const tell = () => up.postMessage({ type: "rakazo-page:gesture", key }, "*"); addEventListener("pointerup", (event) => { if (event.isTrusted) tell(); }, true); addEventListener("keydown", (event) => { if (event.isTrusted && !apply(repeat, event, [])) tell(); }, true); })();</${"script"}>`;
+  return `<script>(() => { const up = parent, key = "${key}"; document.currentScript.remove(); const apply = Reflect.apply, repeat = Object.getOwnPropertyDescriptor(KeyboardEvent.prototype, "repeat").get; const tell = () => up.postMessage({ type: "orkbot-page:gesture", key }, "*"); addEventListener("pointerup", (event) => { if (event.isTrusted) tell(); }, true); addEventListener("keydown", (event) => { if (event.isTrusted && !apply(repeat, event, [])) tell(); }, true); })();</${"script"}>`;
 }
 addEventListener("message", (event) => {
   const preview = document.getElementById("preview");
@@ -23,7 +23,7 @@ addEventListener("message", (event) => {
     // A click or key in the page also activates this shell, which the page cannot fake; the guard
     // says which click or key it was, so the app acts once for it and not again for the same one.
     const active = navigator.userActivation ? navigator.userActivation.isActive : false;
-    if (data && data.type === "rakazo-page:gesture") {
+    if (data && data.type === "orkbot-page:gesture") {
       if (key && data.key === key && active) {
         gesture += 1;
         gestureAt = Date.now();
@@ -31,20 +31,20 @@ addEventListener("message", (event) => {
       return;
     }
     const fresh = active && gesture > 0 && Date.now() - gestureAt <= GESTURE_WINDOW_MS ? `${key}:${gesture}` : null;
-    if (data && data.type === "rakazo-page:open-link" && typeof data.url === "string") {
+    if (data && data.type === "orkbot-page:open-link" && typeof data.url === "string") {
       parent.postMessage({ type: data.type, url: data.url, gesture: fresh }, "*");
-    } else if (data && data.type === "rakazo-page:reply" && typeof data.text === "string") {
+    } else if (data && data.type === "orkbot-page:reply" && typeof data.text === "string") {
       parent.postMessage({ type: data.type, text: data.text.slice(0, 300), gesture: fresh }, "*");
-    } else if (data && data.type === "rakazo-page:copy" && typeof data.id === "string" && typeof data.text === "string") {
+    } else if (data && data.type === "orkbot-page:copy" && typeof data.id === "string" && typeof data.text === "string") {
       parent.postMessage({ type: data.type, id: data.id, text: data.text, gesture: fresh }, "*");
-    } else if (data && data.type === "rakazo-page:height" && Number.isFinite(data.height)) {
+    } else if (data && data.type === "orkbot-page:height" && Number.isFinite(data.height)) {
       parent.postMessage({ type: data.type, height: data.height }, "*");
     }
     return;
   }
   if (event.source !== parent || parent === window) return;
   // The app's answer to a copy: only whether it worked comes back down, never clipboard contents.
-  if (event.data && event.data.type === "rakazo-page:copied") {
+  if (event.data && event.data.type === "orkbot-page:copied") {
     preview.contentWindow.postMessage({ type: event.data.type, id: String(event.data.id), ok: event.data.ok === true }, "*");
     return;
   }

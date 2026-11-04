@@ -1,6 +1,6 @@
 import type * as TimersPromises from "node:timers/promises";
-import type { ComputerRef, ProcessEvent } from "@rakazo/adapter-kit";
-import { WorkspaceTooLargeError } from "@rakazo/adapter-kit";
+import type { ComputerRef, ProcessEvent } from "@orkbot/adapter-kit";
+import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { isSandboxGoneError } from "./sandbox-errors.js";
 import { assertSandboxWorkspaceContract, provisionPrepared } from "./sandbox-test-support.js";
@@ -42,10 +42,10 @@ describe("WuyingSandboxProvider", () => {
     const provider = desktop.provider();
     const computer = await provisionPrepared(provider, { botId: "bot-a", homePath: "/h" }, ctx);
     expect(computer).toMatchObject({ kind: "wuying", providerRef: "ecd-fake", fresh: true });
-    expect(desktop.has(`${FAKE_PROFILE}\\rakazo\\bot-a`)).toBe(true);
+    expect(desktop.has(`${FAKE_PROFILE}\\orkbot\\bot-a`)).toBe(true);
     expect(await provider.environment(computer, ctx)).toEqual({
       platform: "win32",
-      home: `${FAKE_PROFILE}\\rakazo\\bot-a`,
+      home: `${FAKE_PROFILE}\\orkbot\\bot-a`,
       shell: "powershell.exe",
     });
     const again = await provider.provision({ botId: "bot-a", homePath: "/h" }, ctx);
@@ -136,7 +136,7 @@ describe("WuyingSandboxProvider", () => {
     const exec = desktop.calls.findLast((call) => call.tool === "process_exec");
     expect(exec?.args).toMatchObject({
       program: "powershell.exe",
-      cwd: `${FAKE_PROFILE}\\rakazo\\bot`,
+      cwd: `${FAKE_PROFILE}\\orkbot\\bot`,
     });
     expect((exec?.args.args as string[] | undefined)?.at(-1)).toMatch(
       /^\[Console\]::OutputEncoding=.*Get-Date$/,
@@ -204,7 +204,7 @@ describe("WuyingSandboxProvider", () => {
     const dir = /'([^']+)\\run\.ps1'/.exec(
       String((launch?.args.args as string[] | undefined)?.at(-1)),
     )?.[1];
-    expect(dir?.startsWith(`${FAKE_PROFILE}\\rakazo\\.runs\\`)).toBe(true);
+    expect(dir?.startsWith(`${FAKE_PROFILE}\\orkbot\\.runs\\`)).toBe(true);
     expect(desktop.has(dir ?? "")).toBe(false);
   });
 
@@ -254,7 +254,7 @@ describe("WuyingSandboxProvider", () => {
     expect(desktop.sentKeys).toEqual(["^c", "^+{LEFT}"]);
     expect(
       [...desktop.calls].reverse().find((call) => call.tool === "fs_delete")?.args.path,
-    ).toMatch(/\\rakazo\\.runs\\/);
+    ).toMatch(/\\orkbot\\.runs\\/);
   });
 
   it("maps key names to the gateway's names and SendKeys codes", () => {
@@ -327,8 +327,8 @@ describe("WuyingSandboxProvider", () => {
     const a = await provisionPrepared(provider, { botId: "a", homePath: "/h" }, ctx);
     await provisionPrepared(provider, { botId: "b", homePath: "/h" }, ctx);
     await provider.destroy(a, ctx);
-    expect(desktop.has(`${FAKE_PROFILE}\\rakazo\\a`)).toBe(false);
-    expect(desktop.has(`${FAKE_PROFILE}\\rakazo\\b`)).toBe(true);
+    expect(desktop.has(`${FAKE_PROFILE}\\orkbot\\a`)).toBe(false);
+    expect(desktop.has(`${FAKE_PROFILE}\\orkbot\\b`)).toBe(true);
     expect(desktop.control).not.toContain("stop");
   });
 

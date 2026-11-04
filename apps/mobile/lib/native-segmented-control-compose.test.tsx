@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { tokensForAppearance } from "@rakazo/ui-tokens";
+import { tokensForAppearance } from "@orkbot/ui-tokens";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";

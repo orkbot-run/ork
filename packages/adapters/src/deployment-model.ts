@@ -1,5 +1,5 @@
 import { getEnvApiKey } from "@earendil-works/pi-ai/compat";
-import type { ModelUsageLookup } from "@rakazo/adapter-kit";
+import type { ModelUsageLookup } from "@orkbot/adapter-kit";
 import { OpenRouterUsageLookup } from "./openrouter-usage.js";
 import { LOCAL_PROVIDER_ID, localModelIds } from "./pi-local-provider-id.js";
 

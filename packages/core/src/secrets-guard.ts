@@ -10,7 +10,7 @@ export const EXAMPLE_SCREEN_PROXY_SECRET_PLACEHOLDER =
 const EXAMPLE_ENCRYPTION_KEY_PLACEHOLDER = "replace-with-64-random-hex-characters";
 
 const RUNTIME_SECRETS_ERROR =
-  "Set BETTER_AUTH_SECRET and ENCRYPTION_KEY to long random strings before starting Rakazo outside local development or tests.";
+  "Set BETTER_AUTH_SECRET and ENCRYPTION_KEY to long random strings before starting Ork outside local development or tests.";
 
 const DEDICATED_SECRET_PLACEHOLDERS = new Set([
   DEV_SUPERVISOR_TOKEN_PLACEHOLDER,
@@ -20,7 +20,7 @@ const DEDICATED_SECRET_PLACEHOLDERS = new Set([
 ]);
 
 export function isDevSecretAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
-  if (env.RAKAZO_ALLOW_DEV_SECRETS === "1") return true;
+  if (env.ORKBOT_ALLOW_DEV_SECRETS === "1") return true;
   if (env.VITEST === "true" || env.VITEST === "1") return true;
   const nodeEnv = env.NODE_ENV;
   return nodeEnv === "development" || nodeEnv === "test";
@@ -30,14 +30,14 @@ export function isDevSecretAllowed(env: NodeJS.ProcessEnv = process.env): boolea
  * `CONTENT_ENCRYPTION=on|off`: whether new content is encrypted at rest. Reads
  * decrypt existing ciphertext either way, so switching off never strands data.
  * Unset, it is on, except in local development (`NODE_ENV=development` or
- * `RAKAZO_ALLOW_DEV_SECRETS=1`). Tests keep the server default.
+ * `ORKBOT_ALLOW_DEV_SECRETS=1`). Tests keep the server default.
  */
 export function resolveContentEncryption(env: NodeJS.ProcessEnv = process.env): boolean {
   const value = env.CONTENT_ENCRYPTION?.trim().toLowerCase();
   if (value === "on") return true;
   if (value === "off") return false;
   if (value) throw new Error('CONTENT_ENCRYPTION must be "on" or "off".');
-  return env.NODE_ENV !== "development" && env.RAKAZO_ALLOW_DEV_SECRETS !== "1";
+  return env.NODE_ENV !== "development" && env.ORKBOT_ALLOW_DEV_SECRETS !== "1";
 }
 
 export function resolveAuthSecret(env: NodeJS.ProcessEnv = process.env): string {
@@ -135,11 +135,11 @@ export function resolveScreenProxySecret(env: NodeJS.ProcessEnv = process.env): 
  */
 export function resolveUpdaterToken(env: NodeJS.ProcessEnv = process.env): string {
   return resolveDedicatedSecret(env, {
-    name: "RAKAZO_UPDATER_TOKEN",
+    name: "ORKBOT_UPDATER_TOKEN",
     conflicts: ["BETTER_AUTH_SECRET", "SANDBOX_SUPERVISOR_TOKEN", "SCREEN_PROXY_SECRET"],
-    missingMessage: "Set RAKAZO_UPDATER_TOKEN to a dedicated random updater credential.",
+    missingMessage: "Set ORKBOT_UPDATER_TOKEN to a dedicated random updater credential.",
     conflictMessage:
-      "RAKAZO_UPDATER_TOKEN must differ from BETTER_AUTH_SECRET, SANDBOX_SUPERVISOR_TOKEN, and SCREEN_PROXY_SECRET.",
+      "ORKBOT_UPDATER_TOKEN must differ from BETTER_AUTH_SECRET, SANDBOX_SUPERVISOR_TOKEN, and SCREEN_PROXY_SECRET.",
   });
 }
 
@@ -164,7 +164,7 @@ export function timingSafeStringEqual(supplied: string | undefined, expected: st
  * Constant-time bearer comparison, shared by every privileged sidecar.
  *
  * Deliberately not `node:crypto`'s `timingSafeEqual`: this module is reachable from the web bundle
- * through `@rakazo/core`, and importing `node:crypto` here fails the production Vite build. The XOR
+ * through `@orkbot/core`, and importing `node:crypto` here fails the production Vite build. The XOR
  * accumulation inspects every byte no matter where the first difference falls. Length is compared
  * first because a length mismatch is already observable from the response.
  */

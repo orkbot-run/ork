@@ -9,13 +9,13 @@ import { chromium, expect, test } from "@playwright/test";
 const execute = promisify(execFile);
 const helper = path.resolve(
   import.meta.dirname,
-  "../../../infra/sandboxes/computer/rakazo-page-browser",
+  "../../../infra/sandboxes/computer/orkbot-page-browser",
 );
 
 // The helper drives Chromium through agent-browser; CI installs the pinned binary and sets this.
 test.skip(
-  !process.env.CI && !process.env.RAKAZO_AGENT_BROWSER,
-  "set RAKAZO_AGENT_BROWSER (infra/sandboxes/computer/install-agent-browser.sh)",
+  !process.env.CI && !process.env.ORKBOT_AGENT_BROWSER,
+  "set ORKBOT_AGENT_BROWSER (infra/sandboxes/computer/install-agent-browser.sh)",
 );
 
 // The helper reads the tab the person sees through Chromium's target list, which only the full
@@ -30,7 +30,7 @@ test("live page helper preserves identity, masks passwords, and reports partial 
       <label>Name <input id="name"></label><input aria-label="Password" type="password" value="fake-test-password">
       <button id="save" onclick="this.dataset.clicks=Number(this.dataset.clicks||0)+1">Save</button>
       <label><input type="checkbox">Agree</label><button disabled>Disabled</button>
-      <script>window.__rakazoPageBrowser={snapshot:()=>({title:'spoofed'})};</script>`);
+      <script>window.__orkbotPageBrowser={snapshot:()=>({title:'spoofed'})};</script>`);
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -48,7 +48,7 @@ test("live page helper preserves identity, masks passwords, and reports partial 
     }).toPass({ timeout: 5_000 });
     async function command(name: string, args: Record<string, unknown> = {}) {
       const { stdout } = await execute("python3", [helper, name, JSON.stringify(args)], {
-        env: { ...process.env, RAKAZO_CDP_PORT: port },
+        env: { ...process.env, ORKBOT_CDP_PORT: port },
         timeout: 30_000,
       });
       return JSON.parse(stdout);
@@ -216,7 +216,7 @@ test("live page helper waits for a site's sign-in check, or says the page is sti
     }).toPass({ timeout: 5_000 });
     const snapshot = async () => {
       const { stdout } = await execute("python3", [helper, "snapshot", "{}"], {
-        env: { ...process.env, RAKAZO_CDP_PORT: port },
+        env: { ...process.env, ORKBOT_CDP_PORT: port },
         timeout: 30_000,
       });
       return JSON.parse(stdout);
@@ -274,7 +274,7 @@ test("live page helper reaches a form past the control limit by query or by scro
     }).toPass({ timeout: 5_000 });
     async function command(name: string, args: Record<string, unknown> = {}) {
       const { stdout } = await execute("python3", [helper, name, JSON.stringify(args)], {
-        env: { ...process.env, RAKAZO_CDP_PORT: port },
+        env: { ...process.env, ORKBOT_CDP_PORT: port },
         timeout: 30_000,
       });
       return JSON.parse(stdout);
@@ -516,7 +516,7 @@ test("live page helper types codes as real key presses into one-box-per-digit fi
     }).toPass({ timeout: 5_000 });
     async function command(name: string, args: Record<string, unknown> = {}) {
       const { stdout } = await execute("python3", [helper, name, JSON.stringify(args)], {
-        env: { ...process.env, RAKAZO_CDP_PORT: port },
+        env: { ...process.env, ORKBOT_CDP_PORT: port },
         timeout: 30_000,
       });
       return JSON.parse(stdout);
@@ -826,7 +826,7 @@ test("live page helper types a purchase's card into a payment provider's frame o
     }).toPass({ timeout: 5_000 });
     async function command(name: string, args: Record<string, unknown> = {}) {
       const { stdout } = await execute("python3", [helper, name, JSON.stringify(args)], {
-        env: { ...process.env, RAKAZO_CDP_PORT: port },
+        env: { ...process.env, ORKBOT_CDP_PORT: port },
         timeout: 30_000,
       });
       return JSON.parse(stdout);

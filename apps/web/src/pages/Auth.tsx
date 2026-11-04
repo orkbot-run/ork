@@ -5,8 +5,8 @@ import {
   MIN_PASSWORD_LENGTH,
   signupRequiresEmailVerification,
   suggestEmailCorrection,
-} from "@rakazo/core";
-import { Button, Input, InputOTP, InputOTPGroup, InputOTPSlot, Label } from "@rakazo/ui-web";
+} from "@orkbot/core";
+import { Button, Input, InputOTP, InputOTPGroup, InputOTPSlot, Label } from "@orkbot/ui-web";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { PasskeySignIn } from "../components/PasskeySignIn";
@@ -57,9 +57,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     sent || codeStep ? (
       <Trans>Check your email</Trans>
     ) : mode === "in" ? (
-      <Trans>Sign in to Rakazo</Trans>
+      <Trans>Sign in to Ork</Trans>
     ) : mode === "up" ? (
-      <Trans>Create your Rakazo</Trans>
+      <Trans>Create your Ork</Trans>
     ) : (
       <Trans>Reset your password</Trans>
     );
@@ -553,7 +553,7 @@ export function AuthFrame({
   return (
     <div
       className="flex min-h-full flex-col bg-background text-foreground"
-      data-rakazo-surface="auth"
+      data-orkbot-surface="auth"
     >
       <div className="app-drag flex gap-2 px-5 py-[18px]">
         <WindowChrome />

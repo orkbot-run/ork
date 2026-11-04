@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { asSystem, bootstrapUserSpace, createDb, createOrganizationForUser } from "@rakazo/db";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { asSystem, bootstrapUserSpace, createDb, createOrganizationForUser } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { otherSpaceOfBot } from "./bot-space.js";
 
@@ -20,7 +20,7 @@ describePostgres("the Space of a linked bot (PostgreSQL)", () => {
   async function signup(): Promise<Actor> {
     const userId = `bot-space-${++sequence}-${suffix}`;
     users.push(userId);
-    const email = `${userId}@rakazo.test`;
+    const email = `${userId}@orkbot.test`;
     await system.user.create({ data: { id: userId, name: userId, email, emailVerified: false } });
     const { spaceId } = await bootstrapUserSpace(
       system,

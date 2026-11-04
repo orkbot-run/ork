@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asSystem, createDb, runAsTenant } from "@rakazo/db";
+import { asSystem, createDb, runAsTenant } from "@orkbot/db";
 import { afterAll, describe, expect, it } from "vitest";
 import type { OAuthMaterial } from "./mcp-oauth.js";
 import { McpOAuthBroker } from "./mcp-oauth.js";

@@ -6,7 +6,7 @@ import { wasReportedError } from "./reported-errors.js";
 import type { JobCorrelation, LogBindings } from "./types.js";
 import { JOB_CORRELATION_VERSION } from "./types.js";
 
-const CORRELATION_FIELD = "__rakazoLog";
+const CORRELATION_FIELD = "__orkbotLog";
 
 interface JobCorrelationMeta {
   v: typeof JOB_CORRELATION_VERSION;

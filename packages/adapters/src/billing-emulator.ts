@@ -8,12 +8,12 @@ import type {
   BillingProvider,
   BillingSubscriptionSnapshot,
   BillingSubscriptionStatus,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   BillingCheckoutCompletedError,
   BillingCustomerNotFoundError,
   BillingNoMonthlyCreditsError,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   holdsBillingSubscription,
   parseStripeWebhook,

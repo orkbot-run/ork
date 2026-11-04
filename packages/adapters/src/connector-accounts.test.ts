@@ -1,4 +1,4 @@
-import type { ConnectedConnector, ConnectorTool } from "@rakazo/adapter-kit";
+import type { ConnectedConnector, ConnectorTool } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { resolveAccountToolCall, scopeConnectorTools } from "./connector-accounts.js";
 import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";

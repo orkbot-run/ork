@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import appConfig from "../app.config";
@@ -29,6 +30,19 @@ const passkeys = {
 };
 
 describe("mobile app config", () => {
+  it("keeps the fork detached from an unconfigured Expo project and native stores", () => {
+    const manifest = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8")).expo;
+    expect(manifest.owner).toBeUndefined();
+    expect(manifest.extra.eas.projectId).toBeUndefined();
+    expect(manifest.updates).toEqual({ enabled: false });
+    expect(manifest.ios.bundleIdentifier).toBe("run.orkbot.app");
+    expect(manifest.android.package).toBe("run.orkbot.app");
+    expect(
+      manifest.extra.eas.build.experimental.ios.appExtensions.map(
+        (extension: { bundleIdentifier: string }) => extension.bundleIdentifier,
+      ),
+    ).toEqual(["run.orkbot.app.widgets", "run.orkbot.app.notifications"]);
+  });
   it("loads the Firebase file path while preserving the existing config", () => {
     vi.stubEnv("GOOGLE_SERVICES_JSON", "/build/google-services.json");
 
@@ -80,7 +94,7 @@ describe("mobile app config", () => {
 
   it("asks a development build to fetch the association itself in developer mode", () => {
     vi.stubEnv("EAS_BUILD_PROFILE", "development");
-    vi.stubEnv("RAKAZO_PASSKEY_DEVELOPER_MODE", "1");
+    vi.stubEnv("ORKBOT_PASSKEY_DEVELOPER_MODE", "1");
 
     expect(appConfig(context(config))).toEqual({
       ...config,

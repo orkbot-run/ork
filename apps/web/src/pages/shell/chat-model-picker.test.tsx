@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import type { ChatModelChoice } from "@rakazo/core";
-import type { PopoverContent } from "@rakazo/ui-web/components/ui/popover";
+import type { ChatModelChoice } from "@orkbot/core";
+import type { PopoverContent } from "@orkbot/ui-web/components/ui/popover";
 import type { ComponentProps, ReactNode } from "react";
 import { act, createElement } from "react";
 import type { Root } from "react-dom/client";
@@ -11,7 +11,7 @@ import { ChatModelPicker } from "./chat-model-picker";
 
 const { popoverProps } = vi.hoisted(() => ({ popoverProps: vi.fn() }));
 
-vi.mock("@rakazo/ui-web/components/ui/popover", async (importOriginal) => {
+vi.mock("@orkbot/ui-web/components/ui/popover", async (importOriginal) => {
   const actual = await importOriginal<{ PopoverContent: typeof PopoverContent }>();
   return {
     ...actual,

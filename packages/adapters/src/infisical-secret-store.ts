@@ -5,13 +5,13 @@ import type {
   SecretPutOptions,
   SecretRecord,
   SecretStore,
-} from "@rakazo/adapter-kit";
-import { SecretNotFoundError, SecretStoreUnavailableError } from "@rakazo/adapter-kit";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import { SecretNotFoundError, SecretStoreUnavailableError } from "@orkbot/adapter-kit";
+import { getLogger } from "@orkbot/logging";
 import { credentialDigest } from "./credential-digest.js";
 import { SecretChanges } from "./secret-changes.js";
 
-export { SecretNotFoundError, SecretStoreUnavailableError } from "@rakazo/adapter-kit";
+export { SecretNotFoundError, SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 
 export const INFISICAL_REF_PREFIX = "infisical:v1:";
 export interface InfisicalSecretStoreOptions {
@@ -73,7 +73,7 @@ export class InfisicalSecretStore extends SecretChanges implements SecretStore {
     try {
       await this.authenticate();
       // Reading an absent key fails differently when the project, environment or folder is missing.
-      await this.request(`${SECRETS_PATH}/rakazo_start_check?${this.readQuery()}`, "GET");
+      await this.request(`${SECRETS_PATH}/orkbot_start_check?${this.readQuery()}`, "GET");
     } catch (error) {
       if (error instanceof SecretNotFoundError) return;
       this.degraded = true;
@@ -135,12 +135,13 @@ export class InfisicalSecretStore extends SecretChanges implements SecretStore {
   }
   private key(ref: string, context: SecretContext): string {
     const recordId = typeof context === "string" ? context : context.recordId;
-    const prefix = `rakazo_${credentialDigest(recordId).slice(0, 24)}_`;
+    const digest = credentialDigest(recordId).slice(0, 24);
+    const prefixes = [`orkbot_${digest}_`, `rakazo_${digest}_`];
     const key = ref.slice(INFISICAL_REF_PREFIX.length);
     if (
       !ref.startsWith(INFISICAL_REF_PREFIX) ||
-      !key.startsWith(prefix) ||
-      !/^rakazo_[a-f0-9]{24}_[a-f0-9-]{36}$/.test(key)
+      !prefixes.some((prefix) => key.startsWith(prefix)) ||
+      !/^(?:orkbot|rakazo)_[a-f0-9]{24}_[a-f0-9-]{36}$/.test(key)
     )
       throw new SecretNotFoundError();
     return key;
@@ -168,7 +169,7 @@ export class InfisicalSecretStore extends SecretChanges implements SecretStore {
     context.signal.throwIfAborted();
     if (options.ephemeral) throw new Error("Ephemeral secrets require local encrypted storage");
     const recordId = options.recordId ?? randomUUID();
-    const key = `rakazo_${credentialDigest(recordId).slice(0, 24)}_${randomUUID()}`;
+    const key = `orkbot_${credentialDigest(recordId).slice(0, 24)}_${randomUUID()}`;
     const ref = INFISICAL_REF_PREFIX + key;
     try {
       await this.request(

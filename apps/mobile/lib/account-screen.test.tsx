@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { AccountSecurity } from "@rakazo/contracts";
+import type { AccountSecurity } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement, useEffect } from "react";
 import type { Root } from "react-dom/client";

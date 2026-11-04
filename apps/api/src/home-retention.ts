@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { TransactionalEmailProvider } from "@rakazo/adapter-kit";
-import type { HomeDeletionReason } from "@rakazo/auth";
-import { emailLocale, homeDeletionEmail } from "@rakazo/auth";
-import type { PrismaClient } from "@rakazo/db";
-import { hasModelAccess, needsBillingPortal, Prisma, runAsSystem } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
+import type { HomeDeletionReason } from "@orkbot/auth";
+import { emailLocale, homeDeletionEmail } from "@orkbot/auth";
+import type { PrismaClient } from "@orkbot/db";
+import { hasModelAccess, needsBillingPortal, Prisma, runAsSystem } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PLAN_ENDED_DAYS = 30;

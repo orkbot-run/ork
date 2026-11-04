@@ -66,7 +66,7 @@ it("runs a page from when its card nears view until newer previews push it out",
     act(() => {
       const source = cards()[index]!.querySelector("iframe")!.contentWindow;
       window.dispatchEvent(
-        new MessageEvent("message", { data: { type: "rakazo-page:height", height: 300 }, source }),
+        new MessageEvent("message", { data: { type: "orkbot-page:height", height: 300 }, source }),
       );
     });
   expect(observers.map((observer) => [observer.root, observer.margin])).toEqual(

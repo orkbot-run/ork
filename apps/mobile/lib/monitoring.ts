@@ -1,13 +1,13 @@
 // Import just the classifier: monitoring loads before the app, ahead of the full core barrel.
-import { isAbandonedRequest, isConnectionFailure } from "@rakazo/core/user-error";
-import type { ClientOperation, MonitoringConfig } from "@rakazo/logging/monitoring";
+import { isAbandonedRequest, isConnectionFailure } from "@orkbot/core/user-error";
+import type { ClientOperation, MonitoringConfig } from "@orkbot/logging/monitoring";
 import {
   createClientErrorReporter,
   isMonitoringUserId,
   nativeMonitoringDsn,
   sanitizeMonitoringBreadcrumb,
   sanitizeMonitoringEvent,
-} from "@rakazo/logging/monitoring";
+} from "@orkbot/logging/monitoring";
 import type * as NativeSentry from "@sentry/react-native";
 import type { NativeApplication, StartupErrorStorage } from "./startup-error";
 import {

@@ -6,15 +6,15 @@ import type {
   Me,
   Run,
   ThreadSnapshot,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   createScreenReconnects,
   isRetryableError,
   SCREEN_RECONNECT_DELAY_MS,
   screenProbeUrl,
   waitForScreenPage,
-} from "@rakazo/core";
-import { Button, Spinner } from "@rakazo/ui-web";
+} from "@orkbot/core";
+import { Button, Spinner } from "@orkbot/ui-web";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ComputerMaintenanceActions } from "../../components/ComputerMaintenanceActions";
@@ -153,19 +153,19 @@ export function useComputerState({
       if (!message) return;
       if (screenFrameStarted(message)) screenFrameReported.current = true;
       const wuying = Boolean(screenUrl?.startsWith("wuying:"));
-      if (wuying && message.rakazoScreen === "connected") {
+      if (wuying && message.orkbotScreen === "connected") {
         // The SDK can rejoin by itself, and a fresh read would sign that session out again.
         clearTimeout(reconnect);
         liveWuyingUrl.current = screenUrl;
       }
       if (
-        message.rakazoScreen === "connected" &&
+        message.orkbotScreen === "connected" &&
         screenRefocus.current.connected(document.activeElement, screenFrame, document.body)
       ) {
         screenFrame.focus();
-        screenFrame.contentWindow?.postMessage({ rakazoScreenFocus: true }, "*");
+        screenFrame.contentWindow?.postMessage({ orkbotScreenFocus: true }, "*");
       }
-      const ended = message.rakazoScreen === "failed" || message.rakazoScreen === "disconnected";
+      const ended = message.orkbotScreen === "failed" || message.orkbotScreen === "disconnected";
       if (wuying && ended) {
         // A Wuying login code works once, so a dropped session, such as one another viewer took
         // over, comes back only through a fresh read; remounting would replay the spent code.
@@ -173,7 +173,7 @@ export function useComputerState({
         liveWuyingUrl.current = null;
         if (
           document.visibilityState === "visible" &&
-          screenReconnect().report(message.rakazoScreen) === "reconnect"
+          screenReconnect().report(message.orkbotScreen) === "reconnect"
         ) {
           screenRefocus.current.dropped(document.activeElement === screenFrame);
           const botId = computerBotIdRef.current;
@@ -187,7 +187,7 @@ export function useComputerState({
         setScreenLoadError(screenFrameError(message, fallback));
         return;
       }
-      if (screenReconnect().report(message.rakazoScreen) === "reconnect") {
+      if (screenReconnect().report(message.orkbotScreen) === "reconnect") {
         screenRefocus.current.dropped(document.activeElement === screenFrame);
         clearTimeout(reconnect);
         const url = embeddableScreenUrl(screenUrl);

@@ -1,13 +1,13 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { BotAvatarSet } from "@rakazo/contracts";
-import { BOT_NAME_MAX_LENGTH } from "@rakazo/contracts";
+import type { BotAvatarSet } from "@orkbot/contracts";
+import { BOT_NAME_MAX_LENGTH } from "@orkbot/contracts";
 import {
   newClientId,
   ORGANIC_AVATAR_HEART_FAMILY,
   ORGANIC_AVATAR_LOOKS,
   organicAvatarFamily,
   organicAvatarSampleIdentity,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import {
   BOT_AVATAR_COLORS,
   BotAvatar,
@@ -19,7 +19,7 @@ import {
   DialogTitle,
   Input,
   parseBotAvatar,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { useRef, useState } from "react";
 import { errorText } from "../../lib/user-error";
 import { BotLookPicker } from "./avatar-studio-popover";
@@ -78,7 +78,7 @@ export function CreateBotDialog({
       await onCreate({
         name: trimmed,
         color: look.value,
-        ...(avatarSet === "rakazo" ? { id: previewId } : {}),
+        ...(avatarSet === "orkbot" ? { id: previewId } : {}),
         ...(organic ? { avatarFamily: organicAvatarFamily(look.identity) } : {}),
       });
     } catch (err) {
@@ -116,7 +116,7 @@ export function CreateBotDialog({
           <div className="flex justify-center py-2">
             <BotAvatar
               color={look.value}
-              identity={avatarSet === "rakazo" ? previewId : look.identity}
+              identity={avatarSet === "orkbot" ? previewId : look.identity}
               size={96}
               avatarSet={avatarSet}
             />
@@ -137,7 +137,7 @@ export function CreateBotDialog({
           ) : null}
           <BotLookPicker
             value={look.value}
-            identity={avatarSet === "rakazo" ? previewId : look.identity}
+            identity={avatarSet === "orkbot" ? previewId : look.identity}
             organicIdentities={ORGANIC_IDENTITIES}
             avatarSet={avatarSet}
             onChange={(value, identity) => {

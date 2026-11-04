@@ -1,5 +1,5 @@
-import type { MessagingInboundMessage } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { MessagingInboundMessage } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { TeamChatBridge } from "./team-chat-bridge.js";
 import {

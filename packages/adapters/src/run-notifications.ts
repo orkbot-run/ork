@@ -1,15 +1,15 @@
-import type { NotificationMessage } from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { NotificationMessage } from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
 import {
   isBackgroundRunTrigger,
   plainTextFromMarkdown,
   redactSecrets,
   truncatedPlainText,
   truncatePlainText,
-} from "@rakazo/core";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
-import { countUnreadInboxChats } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/core";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
+import { countUnreadInboxChats } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { notificationIdentity } from "./notification-identity.js";
 

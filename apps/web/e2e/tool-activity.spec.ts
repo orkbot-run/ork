@@ -5,7 +5,7 @@ import { captureScreenshot } from "./helpers";
 const fixture = "/e2e/fixtures/tool-activity.html";
 const REPLY_TEXT = "Tuesday at 2 pm is free.";
 const NOTE_TEXT = "Anna is free all Tuesday afternoon.";
-const STORAGE_KEY = "rakazo.showToolActivity";
+const STORAGE_KEY = "orkbot.showToolActivity";
 
 const viewports = [
   { name: "desktop-1440x900", width: 1440, height: 900 },

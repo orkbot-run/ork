@@ -1,5 +1,5 @@
-import type { ModelOAuthBegin, SettingsScope, ThinkingLevel } from "@rakazo/contracts";
-import { cancelModelOAuthAttempt, finishModelOAuthAttempt } from "@rakazo/core";
+import type { ModelOAuthBegin, SettingsScope, ThinkingLevel } from "@orkbot/contracts";
+import { cancelModelOAuthAttempt, finishModelOAuthAttempt } from "@orkbot/core";
 import { useEffect, useRef, useState } from "react";
 import { desktopBridge, oauthStateOf, onDesktopOAuthCallback } from "./desktop";
 import { waitForModelOAuth } from "./model-auth";

@@ -1,4 +1,4 @@
-import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@rakazo/contracts";
+import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@orkbot/contracts";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import type { MobileBot } from "../lib/api";

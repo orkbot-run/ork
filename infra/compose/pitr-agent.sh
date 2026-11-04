@@ -14,8 +14,8 @@
 set -Eeuo pipefail
 umask 077
 
-SLOT=rakazo_pitr
-SPOOL=/var/lib/rakazo-pitr
+SLOT=orkbot_pitr
+SPOOL=/var/lib/orkbot-pitr
 # pg_receivewal's directory. Segments from an earlier cluster or timeline move to held/<system id>
 # so pg_receivewal never resumes from them; they are still uploaded.
 WAL_DIR="${SPOOL}/wal"
@@ -404,7 +404,7 @@ health() {
 }
 
 restore() {
-  local target="${1:?usage: rakazo-pitr restore latest|TIMESTAMP}" target_epoch=latest target_pg=""
+  local target="${1:?usage: orkbot-pitr restore latest|TIMESTAMP}" target_epoch=latest target_pg=""
   storage_config
   if [[ "${target}" != latest ]]; then
     # One parser for both the base choice and Postgres, keeping fractions of a second.
@@ -462,7 +462,7 @@ recover() {
 
   touch "${PGDATA}/recovery.signal"
   local -a settings=(-c listen_addresses= -c unix_socket_directories=/tmp -c archive_mode=off
-    -c "restore_command=rakazo-pitr fetch-wal %f %p" -c recovery_target_action=promote)
+    -c "restore_command=orkbot-pitr fetch-wal %f %p" -c recovery_target_action=promote)
   [[ -z "${target_pg}" ]] || settings+=(-c "recovery_target_time=${target_pg}")
   log "Recovering to ${target_pg:-the end of the archive}"
   postgres -D "${PGDATA}" "${settings[@]}" >"${RESTORE_WAL}/recovery.log" 2>&1 &
@@ -499,5 +499,5 @@ case "${1:-}" in
   plan-prune) plan_prune "$2" "$3" ;;
   plan-restore) plan_restore "$2" ;;
   list-bases) storage_config && list_bases "${REMOTE}/$2" ;;
-  *) die "usage: rakazo-pitr run|health|restore TARGET" ;;
+  *) die "usage: orkbot-pitr run|health|restore TARGET" ;;
 esac

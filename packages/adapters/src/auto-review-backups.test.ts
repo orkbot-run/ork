@@ -1,4 +1,4 @@
-import type { AutoReviewResult } from "@rakazo/adapter-kit";
+import type { AutoReviewResult } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { reviewWithBackups } from "./auto-review-backups.js";
 

@@ -1,6 +1,6 @@
-import type * as DbModule from "@rakazo/db";
-import { RunHistoryWriteError } from "@rakazo/db";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import type * as DbModule from "@orkbot/db";
+import { RunHistoryWriteError } from "@orkbot/db";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { ComputerBusyError } from "./computer-lifecycle.js";
@@ -14,7 +14,7 @@ const leases = vi.hoisted(() => ({
 
 const settleTakeoverCards = vi.hoisted(() => vi.fn());
 
-vi.mock("@rakazo/db", async (importOriginal) => ({
+vi.mock("@orkbot/db", async (importOriginal) => ({
   ...(await importOriginal<typeof DbModule>()),
   settleReleasedTakeoverCards: settleTakeoverCards,
 }));

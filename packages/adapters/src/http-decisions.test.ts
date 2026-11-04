@@ -1,4 +1,4 @@
-import type { AdapterContext, DecisionRequest } from "@rakazo/adapter-kit";
+import type { AdapterContext, DecisionRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { HttpDecisionProvider } from "./http-decisions.js";
 

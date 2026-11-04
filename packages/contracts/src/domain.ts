@@ -948,8 +948,8 @@ export const PLUGIN_SUBMISSIONS_PATH = "/api/v1/plugin-submissions";
 export const INTEGRATION_CLAIMS_PATH = "/api/v1/integration-claims";
 /** Opened from the email that proves a claimant reads mail at the app's domain. */
 export const INTEGRATION_CLAIM_CONFIRM_PATH = "/api/v1/integration-claims/confirm";
-export const SUBMIT_PLUGIN_URL = "https://rakazo.com/plugins/submit/";
-export const integrationPageUrl = (slug: string) => `https://rakazo.com/integrations/${slug}/`;
+export const SUBMIT_PLUGIN_URL = "https://orkbot.run/plugins/submit/";
+export const integrationPageUrl = (slug: string) => `https://orkbot.run/integrations/${slug}/`;
 
 /** People type a bare domain like `acme.com`, so a URL without a scheme gets `https://`. */
 const HttpsUrlSchema = z
@@ -1107,7 +1107,7 @@ const McpOAuthClientFields = {
  * authorization server, so the client is bound to it on first use. */
 const McpOAuthClientInput = z.object(McpOAuthClientFields).nullable().optional();
 /** A stdio server has no URL to discover from, so its client names the
- * authorization server (its issuer, e.g. https://accounts.google.com). Rakazo
+ * authorization server (its issuer, e.g. https://accounts.google.com). Ork
  * runs the OAuth flow and passes the grant through `{{oauth.*}}` env references. */
 const McpStdioOAuthClientInput = z
   .object({ ...McpOAuthClientFields, authorizationServer: McpRemoteEndpointSchema })
@@ -1936,7 +1936,7 @@ export const MeSchema = z.object({
   spaceId: Id,
   /** Deprecated: app accounts never have server administrator privileges. Always false. */
   isDeploymentOwner: z.boolean(),
-  /** Listed in RAKAZO_ADMIN_EMAILS with a verified email: reviews plugins, adds stdio MCP servers, grants access. */
+  /** Listed in ORKBOT_ADMIN_EMAILS with a verified email: reviews plugins, adds stdio MCP servers, grants access. */
   isAdmin: z.boolean().default(false),
   needsModel: z.boolean(),
   defaultProvider: z.string().nullable(),
@@ -2083,7 +2083,7 @@ export function signupSurveyAsksTeamSize(use: SignupSurvey["use"]): boolean {
 /** Where checkout returns: the mobile app's in-app browser instead of the web app. */
 export const BillingClientSchema = z.literal("mobile").optional();
 /** The deep link the API sends a mobile checkout back to; it closes the in-app browser. */
-export const MOBILE_BILLING_CALLBACK_URL = "rakazo://billing";
+export const MOBILE_BILLING_CALLBACK_URL = "orkbot://billing";
 
 export const BILLING_CANCELLATION_REASONS = [
   "too_expensive",

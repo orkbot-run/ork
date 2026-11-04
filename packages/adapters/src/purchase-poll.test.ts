@@ -1,4 +1,4 @@
-import { PaymentWalletRequestRejected } from "@rakazo/adapter-kit";
+import { PaymentWalletRequestRejected } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakePaymentWallet, fakeJobs, fakePurchasePrisma } from "./fake-purchases.js";
 import { PURCHASE_POLL_DEADLINE_MS, pollPurchase, reconcilePurchases } from "./purchase-poll.js";

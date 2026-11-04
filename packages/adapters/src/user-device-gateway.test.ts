@@ -3,9 +3,9 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { connect } from "node:net";
 import type { Duplex } from "node:stream";
-import { USER_DEVICE_CONNECT_PATH } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import type { HostComputerRequest } from "./host-computer-protocol.js";
@@ -316,7 +316,7 @@ describe("user device gateway in the holding process", () => {
     const result = collect(devices.request("user-1", environment, new AbortController().signal));
     await socket.nextRequest();
     await devices.disconnect(device.id);
-    await expect(result).rejects.toThrow("disconnected from Rakazo");
+    await expect(result).rejects.toThrow("disconnected from Ork");
     expect(socket.sent).toContainEqual({ type: "revoked" });
     expect(socket.closed?.code).toBe(4001);
   });
@@ -519,7 +519,7 @@ describe("device socket upgrade", () => {
           headers: { authorization: `Bearer ${"a".repeat(64)}` },
         });
         ws.on("unexpected-response", (_request, response) =>
-          resolve(String(response.headers["x-rakazo-device-revoked"] ?? "none")),
+          resolve(String(response.headers["x-orkbot-device-revoked"] ?? "none")),
         );
         ws.on("open", () => {
           ws.close();

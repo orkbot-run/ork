@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { USER_DEVICE_CONNECT_PATH } from "@rakazo/contracts";
+import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebSocket } from "ws";
 import { WebSocketServer } from "ws";
@@ -36,7 +36,7 @@ describe("user device client", () => {
   const sockets: WebSocket[] = [];
 
   beforeEach(async () => {
-    root = await realpath(await mkdtemp(path.join(tmpdir(), "rakazo-device-test-")));
+    root = await realpath(await mkdtemp(path.join(tmpdir(), "orkbot-device-test-")));
     upgrades = [];
     reject401 = false;
     refusedBecause = undefined;
@@ -50,7 +50,7 @@ describe("user device client", () => {
         request.url !== USER_DEVICE_CONNECT_PATH ||
         request.headers.authorization !== `Bearer ${token}`
       ) {
-        const why = refusedBecause ? `x-rakazo-device-revoked: ${refusedBecause}\r\n` : "";
+        const why = refusedBecause ? `x-orkbot-device-revoked: ${refusedBecause}\r\n` : "";
         socket.end(`HTTP/1.1 401 Unauthorized\r\n${why}Content-Length: 0\r\n\r\n`);
         return;
       }

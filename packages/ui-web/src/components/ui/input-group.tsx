@@ -1,9 +1,9 @@
 "use client";
 
-import { Button } from "@rakazo/ui-web/components/ui/button";
-import { Input } from "@rakazo/ui-web/components/ui/input";
-import { Textarea } from "@rakazo/ui-web/components/ui/textarea";
-import { cn } from "@rakazo/ui-web/lib/utils";
+import { Button } from "@orkbot/ui-web/components/ui/button";
+import { Input } from "@orkbot/ui-web/components/ui/input";
+import { Textarea } from "@orkbot/ui-web/components/ui/textarea";
+import { cn } from "@orkbot/ui-web/lib/utils";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 import type * as React from "react";

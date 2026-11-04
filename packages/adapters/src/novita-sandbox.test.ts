@@ -59,7 +59,7 @@ describe("Novita computer backend", () => {
     expect(sdk.create).toHaveBeenCalledWith(NOVITA_COMPUTER_TEMPLATE, {
       apiKey: "test-novita-key",
       timeoutMs: sandboxIdleMs(),
-      metadata: { botId: "bot", rakazo: "computer" },
+      metadata: { botId: "bot", orkbot: "computer" },
       resolution: [1280, 800],
       lifecycle: { onTimeout: "pause", autoResume: false },
     });
@@ -258,12 +258,12 @@ describe("Novita adapter over the SDK emulator", () => {
     return events;
   }
 
-  it("creates an auto-pausing computer from the Rakazo template and rejects a revoked key", async () => {
+  it("creates an auto-pausing computer from the Ork template and rejects a revoked key", async () => {
     const { emulator, provider, computer } = await emulated();
     expect(emulator.computers.get(computer.id)).toMatchObject({
       state: "running",
       template: NOVITA_COMPUTER_TEMPLATE,
-      metadata: { botId: "bot", rakazo: "computer" },
+      metadata: { botId: "bot", orkbot: "computer" },
       lifecycle: { onTimeout: "pause", autoResume: false },
     });
     emulator.apiKey = "rotated-key";

@@ -1,4 +1,4 @@
-import type { PageDetail } from "@rakazo/contracts";
+import type { PageDetail } from "@orkbot/contracts";
 import { MutationObserver, QueryClient, QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { pageMutationOptions, relistPagesForBlocks } from "./page-actions";
@@ -38,17 +38,17 @@ describe("pageMutationOptions", () => {
     expect(client.getQueryState(linked)?.isInvalidated).toBe(true);
     expect(client.getQueryState(key("B"))?.isInvalidated).toBe(false);
     options.setVisibility.onSuccess(
-      { visibility: "link", shareUrl: "https://rakazo.example/p/a-x" },
+      { visibility: "link", shareUrl: "https://orkbot.example/p/a-x" },
       { pageId: "A" },
     );
 
     expect(client.getQueryData<PageDetail>(key("A"))).toMatchObject({
       title: "Renamed",
       visibility: "link",
-      shareUrl: "https://rakazo.example/p/a-x",
+      shareUrl: "https://orkbot.example/p/a-x",
     });
     expect(client.getQueryData<PageDetail>(linked)).toMatchObject({
-      shareUrl: "https://rakazo.example/p/a-x",
+      shareUrl: "https://orkbot.example/p/a-x",
     });
     expect(client.getQueryData<PageDetail>(key("B"))).toEqual(detail("B", "Beta"));
 
@@ -132,7 +132,7 @@ describe("a change whose answer is lost", () => {
         rename: { call: lost((page) => Object.assign(page, { title: "Renamed" })) },
         setVisibility: {
           call: lost((page) =>
-            Object.assign(page, { visibility: "link", shareUrl: "https://rakazo.example/p/a" }),
+            Object.assign(page, { visibility: "link", shareUrl: "https://orkbot.example/p/a" }),
           ),
         },
         pin: { call: lost((page) => Object.assign(page, { pinned: true })) },
@@ -173,7 +173,7 @@ describe("a change whose answer is lost", () => {
     await vi.waitFor(() =>
       expect(open.getCurrentResult().data).toMatchObject({
         visibility: "link",
-        shareUrl: "https://rakazo.example/p/a",
+        shareUrl: "https://orkbot.example/p/a",
       }),
     );
     await attempt("pin", { pageId: "A", pinned: true });

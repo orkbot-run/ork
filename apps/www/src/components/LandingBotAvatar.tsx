@@ -1,4 +1,4 @@
-import { BotAvatar } from "@rakazo/ui-web";
+import { BotAvatar } from "@orkbot/ui-web";
 
 export function LandingBotAvatar({
   color,

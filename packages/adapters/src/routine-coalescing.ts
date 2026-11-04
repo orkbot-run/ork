@@ -1,5 +1,5 @@
-import type { Prisma } from "@rakazo/db";
-import { appendEventInTransaction } from "@rakazo/db";
+import type { Prisma } from "@orkbot/db";
+import { appendEventInTransaction } from "@orkbot/db";
 
 /** Reserved provenance for recurring timer ticks; manual/event/retry runs never use it. */
 export function routineTimerNonce(routineId: string, scheduledFor: string): string {

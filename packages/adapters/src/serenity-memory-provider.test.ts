@@ -1,4 +1,4 @@
-import type { AdapterContext } from "@rakazo/adapter-kit";
+import type { AdapterContext } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as SerenityClientModule from "./serenity-client.js";
 import {
@@ -72,13 +72,13 @@ describe("SerenityMemoryProvider", () => {
   });
 
   it("keeps bot and space entity namespaces inside the adapter", () => {
-    expect(serenityBotEntity("bot-1")).toBe("rakazo-bot/bot-1");
-    expect(serenitySpaceEntity("workspace-1")).toBe("rakazo-space/workspace-1");
+    expect(serenityBotEntity("bot-1")).toBe("orkbot-bot/bot-1");
+    expect(serenitySpaceEntity("workspace-1")).toBe("orkbot-space/workspace-1");
     expect(serenityBotEntity("bot-1", "Personal Brain")).toBe(
-      `rakazo-bot/${PERSONAL_BRAIN}--bot-1`,
+      `orkbot-bot/${PERSONAL_BRAIN}--bot-1`,
     );
     expect(serenitySpaceEntity("workspace-1", "Personal Brain")).toBe(
-      `rakazo-space/${PERSONAL_BRAIN}--workspace-1`,
+      `orkbot-space/${PERSONAL_BRAIN}--workspace-1`,
     );
   });
 
@@ -174,7 +174,7 @@ describe("SerenityMemoryProvider", () => {
         {
           factId: "fact-1",
           fact: "Prefer conventional commits.",
-          provenance: "user told rakazo",
+          provenance: "user told orkbot",
         },
       ],
     });
@@ -191,15 +191,15 @@ describe("SerenityMemoryProvider", () => {
           memory: "Prefer conventional commits.",
           score: expect.closeTo(1 / 3),
           id: "fact-1",
-          provenance: "user told rakazo",
-          entity: "rakazo-bot/bot-1",
+          provenance: "user told orkbot",
+          entity: "orkbot-bot/bot-1",
         },
       ],
     });
     expect(recallSerenityMock).toHaveBeenCalledOnce();
     expect(recallSerenityMock).toHaveBeenCalledWith(
       expect.objectContaining({ endpoint: "http://127.0.0.1:8787/mcp" }),
-      expect.objectContaining({ entity: "rakazo-bot/bot-1" }),
+      expect.objectContaining({ entity: "orkbot-bot/bot-1" }),
     );
   });
 
@@ -228,7 +228,7 @@ describe("SerenityMemoryProvider", () => {
     };
 
     const tea = await recall("What tea does the user like?", 2);
-    expect(tea[0]).toMatchObject({ id: "fact-2", entity: "rakazo-bot/bot-1" });
+    expect(tea[0]).toMatchObject({ id: "fact-2", entity: "orkbot-bot/bot-1" });
     expect(tea[0]!.score).toBeLessThan(1);
     // Words every fact shares count for little.
     expect(tea[1]!.score).toBeLessThan(tea[0]!.score / 2);
@@ -262,7 +262,7 @@ describe("SerenityMemoryProvider", () => {
 
     expect(result).toEqual({ ok: true, value: undefined });
     expect(rememberSerenityMock.mock.calls.map((call) => call[3]?.entity)).toEqual([
-      "rakazo-space/workspace-1",
+      "orkbot-space/workspace-1",
     ]);
   });
 
@@ -281,7 +281,7 @@ describe("SerenityMemoryProvider", () => {
       context,
     );
     expect(rememberSerenityMock.mock.calls.map((call) => call[3]?.entity)).toEqual([
-      "rakazo-bot/bot-1",
+      "orkbot-bot/bot-1",
     ]);
   });
 
@@ -301,7 +301,7 @@ describe("SerenityMemoryProvider", () => {
     await provider().save(request, { ...run, operationId: "op-2" });
     await provider().save({ ...request, content: "Use imperial units." }, run);
     const keys = rememberSerenityMock.mock.calls.map((call) => call[3]?.operationKey);
-    expect(keys[0]).toMatch(/^rakazo:[0-9a-f]{48}$/);
+    expect(keys[0]).toMatch(/^orkbot:[0-9a-f]{48}$/);
     expect(keys[1]).toBe(keys[0]);
     expect(keys[2]).not.toBe(keys[0]);
   });
@@ -329,12 +329,12 @@ describe("SerenityMemoryProvider", () => {
     );
 
     expect(rememberSerenityMock.mock.calls.map((call) => call[3]?.entity)).toEqual([
-      `rakazo-space/${PERSONAL_BRAIN}--workspace-1`,
+      `orkbot-space/${PERSONAL_BRAIN}--workspace-1`,
     ]);
   });
 
   it("forgets a fact only after recall shows it in the cited bot entity", async () => {
-    const entity = `rakazo-bot/${PERSONAL_BRAIN}--bot-1`;
+    const entity = `orkbot-bot/${PERSONAL_BRAIN}--bot-1`;
     recallSerenityMock.mockResolvedValue({
       ok: true,
       value: [{ factId: "fact-9", fact: "Prefers tea.", provenance: "chat" }],
@@ -360,7 +360,7 @@ describe("SerenityMemoryProvider", () => {
   });
 
   it("refuses to forget a fact cited from another bot or Space", async () => {
-    for (const entity of ["rakazo-bot/bot-2", "rakazo-space/workspace-2", "person/someone"]) {
+    for (const entity of ["orkbot-bot/bot-2", "orkbot-space/workspace-2", "person/someone"]) {
       const result = await provider().forget(
         { id: "fact-9", scope: "shared", botId: "bot-1", entity },
         context,
@@ -369,7 +369,7 @@ describe("SerenityMemoryProvider", () => {
     }
     // An isolated bot cannot reach the shared Space namespace either.
     const isolated = await provider().forget(
-      { id: "fact-9", scope: "isolated", botId: "bot-1", entity: "rakazo-space/workspace-1" },
+      { id: "fact-9", scope: "isolated", botId: "bot-1", entity: "orkbot-space/workspace-1" },
       context,
     );
     expect(isolated.ok).toBe(false);
@@ -388,8 +388,8 @@ describe("SerenityMemoryProvider", () => {
     );
     expect(result.ok).toBe(false);
     expect(recallSerenityMock.mock.calls.map((call) => call[1]?.entity)).toEqual([
-      "rakazo-space/workspace-1",
-      "rakazo-bot/bot-1",
+      "orkbot-space/workspace-1",
+      "orkbot-bot/bot-1",
     ]);
     expect(forgetSerenityMock).not.toHaveBeenCalled();
   });
@@ -478,7 +478,7 @@ describe("SerenityMemoryProvider", () => {
           score: expect.closeTo(0.2),
           id: "fact-space-1",
           provenance: "space policy",
-          entity: `rakazo-space/${PERSONAL_BRAIN}--workspace-1`,
+          entity: `orkbot-space/${PERSONAL_BRAIN}--workspace-1`,
         },
       ],
     });

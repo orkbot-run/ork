@@ -15,8 +15,8 @@ from pathlib import Path
 def notify(
     key,
     message,
-    config_path=Path("/etc/rakazo/alerts.json"),
-    state_dir=Path("/var/lib/rakazo/alerts"),
+    config_path=Path("/etc/orkbot/alerts.json"),
+    state_dir=Path("/var/lib/orkbot/alerts"),
 ):
     state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
     state_file = state_dir / (hashlib.sha256(key.encode()).hexdigest() + ".json")
@@ -39,7 +39,7 @@ def _deliver(key, message, config_path, state_file):
     reminder = bool(message) and now - previous.get("sent_at", 0) >= 86400
     if not changed and not reminder:
         return
-    text = ("Rakazo alert: " + message) if message else ("Rakazo recovered: " + key)
+    text = ("Ork alert: " + message) if message else ("Ork recovered: " + key)
     try:
         config = json.loads(config_path.read_text())
     except FileNotFoundError:

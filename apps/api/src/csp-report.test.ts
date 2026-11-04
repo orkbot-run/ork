@@ -1,6 +1,6 @@
-import { CSP_REPORT_PATH } from "@rakazo/contracts/content-security-policy";
-import type { TestSink } from "@rakazo/logging";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { CSP_REPORT_PATH } from "@orkbot/contracts/content-security-policy";
+import type { TestSink } from "@orkbot/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cspReportRoutes, MAX_CSP_REPORT_BYTES, parseCspReports } from "./csp-report.js";
 
@@ -50,11 +50,11 @@ let sink: TestSink;
 
 beforeEach(() => {
   sink = createTestSink();
-  installLogger(createLogger({ service: "rakazo-api", sinks: [sink] }));
+  installLogger(createLogger({ service: "orkbot-api", sinks: [sink] }));
 });
 
 afterEach(() => {
-  installLogger(createLogger({ service: "rakazo-api", level: "off", sinks: [] }));
+  installLogger(createLogger({ service: "orkbot-api", level: "off", sinks: [] }));
 });
 
 function post(

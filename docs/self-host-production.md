@@ -1,6 +1,6 @@
 # Production deployment
 
-Run Rakazo on a public server with automatic HTTPS, hardened hosts and zero-downtime deploys.
+Run Ork on a public server with automatic HTTPS, hardened hosts and zero-downtime deploys.
 
 ## Public single-VM deployment
 
@@ -34,18 +34,18 @@ container logs, default no-new-privileges, and the kernel NAT path instead of Do
 2. Clone the repository on the VM and create a root `.env` with production-only values. At minimum set
    `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `SCREEN_PROXY_SECRET`,
    `OPENROUTER_API_KEY`, the API key for your selected sandbox provider,
-   `RAKAZO_HOST`, and the three public origins. Set `RAKAZO_DEPLOY_DIR` when the checkout is not at
-   the supported Linux default, `/srv/rakazo`. Use URL-safe random values for database credentials.
-   If you enable the `updater` profile, also set a dedicated `RAKAZO_UPDATER_TOKEN` (at least 32
+   `ORKBOT_HOST`, and the three public origins. Set `ORKBOT_DEPLOY_DIR` when the checkout is not at
+   the supported Linux default, `/srv/orkbot`. Use URL-safe random values for database credentials.
+   If you enable the `updater` profile, also set a dedicated `ORKBOT_UPDATER_TOKEN` (at least 32
    characters) that differs from `BETTER_AUTH_SECRET`, `SANDBOX_SUPERVISOR_TOKEN`, and
    `SCREEN_PROXY_SECRET`.
 3. Keep registration allowlisted while the service is private:
 
 ```env
 NODE_ENV=production
-RAKAZO_HOST=app.example.com
+ORKBOT_HOST=app.example.com
 # Optional operator-owned override, for example the Cloudflare allowlist file:
-# CADDYFILE_PATH=/etc/rakazo/Caddyfile.prod
+# CADDYFILE_PATH=/etc/orkbot/Caddyfile.prod
 BETTER_AUTH_URL=https://app.example.com
 WEB_ORIGIN=https://app.example.com
 API_URL=https://app.example.com
@@ -56,12 +56,12 @@ SANDBOX_PROVIDER=e2b
 AGENT_RUNTIME=pi
 WAKEUP_DRIVER=graphile
 DATA_DIR=/data
-# Absolute path of this checkout as the Docker daemon sees it. /srv/rakazo is the Linux default;
+# Absolute path of this checkout as the Docker daemon sees it. /srv/orkbot is the Linux default;
 # set this explicitly for every other layout. See "The deploy directory must be one path" in Upgrading.
-RAKAZO_DEPLOY_DIR=/srv/rakazo
-RAKAZO_IMAGE_TAG=local
+ORKBOT_DEPLOY_DIR=/srv/orkbot
+ORKBOT_IMAGE_TAG=local
 # Optional: required only with `--profile updater`.
-# RAKAZO_UPDATER_TOKEN=replace-with-32-plus-character-updater-token
+# ORKBOT_UPDATER_TOKEN=replace-with-32-plus-character-updater-token
 ```
 
 4. Build the images from your checkout and start the stack, then verify its public health endpoint:
@@ -74,7 +74,7 @@ docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
 curl --fail https://app.example.com/health
 ```
 
-**Build, do not pull, for a first deployment.** `RAKAZO_IMAGE_TAG` ships as `local`, a tag no
+**Build, do not pull, for a first deployment.** `ORKBOT_IMAGE_TAG` ships as `local`, a tag no
 registry serves, so the commands above build `api`, `worker`, and `web` from the checkout you just
 cloned. The opt-in command under [Updater sidecar](./self-host-upgrading.md#updater-sidecar) builds `updater` when needed.
 
@@ -92,7 +92,7 @@ switching to a release tag needs nothing more: the containers report the revisio
 from, not a `GIT_SHA` in `.env`.
 
 Once a release has been published you can switch this host to prebuilt images by setting
-`RAKAZO_IMAGE_TAG` to that release tag and running `pull` followed by `up -d --wait --pull never`.
+`ORKBOT_IMAGE_TAG` to that release tag and running `pull` followed by `up -d --wait --pull never`.
 See [Published images and tags](./self-host-upgrading.md#published-images-and-tags) for the tag contract.
 
 The root `.env` is excluded from both Git and the Docker build context. The database, application data,
@@ -130,8 +130,8 @@ example before this change, copy it again.
 ## Firewall changes
 
 Host hardening preserves existing firewall rules and installs `firewall-change.sh` as
-`/usr/local/sbin/rakazo-firewall-change`. For subsequent firewall edits, use
-`sudo --preserve-env=SSH_CONNECTION /usr/local/sbin/rakazo-firewall-change apply COMMAND...`.
+`/usr/local/sbin/orkbot-firewall-change`. For subsequent firewall edits, use
+`sudo --preserve-env=SSH_CONNECTION /usr/local/sbin/orkbot-firewall-change apply COMMAND...`.
 This requires `SSH_CONNECTION` to be preserved, saves both `/etc/ufw` and `/etc/default/ufw`,
 and arms a three-minute rollback before running the command.
 Open a **new SSH connection** and run the printed `confirm TOKEN` command; confirmation from the
@@ -140,34 +140,34 @@ The guard does not protect arbitrary direct `ufw` commands or SSH daemon configu
 
 ## Deploying from CI
 
-To deploy from CI, install `infra/compose/deploy-launcher.sh` as `/usr/local/sbin/rakazo-deploy-main`
+To deploy from CI, install `infra/compose/deploy-launcher.sh` as `/usr/local/sbin/orkbot-deploy-main`
 and give CI a key restricted to it in the deploy user's `authorized_keys`
-(`restrict,command="/usr/local/sbin/rakazo-deploy-main" ssh-ed25519 …`). CI deploys a main commit
+(`restrict,command="/usr/local/sbin/orkbot-deploy-main" ssh-ed25519 …`). CI deploys a main commit
 only after its checks pass and `ci.yml` has published its images, so the host pulls
-`<RAKAZO_DEPLOY_IMAGE>:sha-<commit>` instead of building next to live traffic.
-`RAKAZO_DEPLOY_IMAGE` defaults to `ghcr.io/<owner>/<repo>/app` for the GitHub repository the
+`<ORKBOT_DEPLOY_IMAGE>:sha-<commit>` instead of building next to live traffic.
+`ORKBOT_DEPLOY_IMAGE` defaults to `ghcr.io/<owner>/<repo>/app` for the GitHub repository the
 checkout tracks, so a fork pulls what its own CI published. If the pull fails or takes longer than
-`RAKAZO_DEPLOY_PULL_TIMEOUT` (default `5m`), the deploy logs a warning and builds the checkout on
-the host instead; set `RAKAZO_DEPLOY_IMAGE=` (empty) to always build. This repository's images are public, so the
+`ORKBOT_DEPLOY_PULL_TIMEOUT` (default `5m`), the deploy logs a warning and builds the checkout on
+the host instead; set `ORKBOT_DEPLOY_IMAGE=` (empty) to always build. This repository's images are public, so the
 host needs no registry login; for a private fork package, `docker login ghcr.io` as root with a
 token that can only read packages. The deploy
 starts each new API, web and worker container beside the running one and stops the old one only
 once the new one is healthy, so a deploy does not take the site offline or pause chat, then waits for
-`https://$RAKAZO_HOST/health` and rolls back on failure by restoring the image the previous
+`https://$ORKBOT_HOST/health` and rolls back on failure by restoring the image the previous
 containers ran. The old worker is not stopped: it finishes the jobs it is running, for up to 45
 minutes, while the new one takes new jobs, and the deploy waits for it before it exits. The
 previous release keeps running after migrations run, so a migration must keep working with it:
 add first, and drop or rename only in a later deploy. Pull, build and
 start are time-limited so a stuck step fails the deploy instead of holding its lock; a deploy that
 finds the lock held exits non-zero. A deploy refuses to start with less than
-`RAKAZO_DEPLOY_MIN_FREE_GB` (default `5`) free, and after a healthy rollout it keeps the current and
-previous app images (the previous ones tagged `rakazo-rollback`), removes untagged images, and
-trims the build cache that fallback builds leave to `RAKAZO_DEPLOY_BUILD_CACHE_GB` (8 GB by default).
-For a checkout outside `/srv/rakazo`, put `RAKAZO_DEPLOY_DIR=/absolute/path` (and any of these
-settings) in a root-owned `/etc/rakazo/deploy.env` readable by the deploy user. The launcher runs
+`ORKBOT_DEPLOY_MIN_FREE_GB` (default `5`) free, and after a healthy rollout it keeps the current and
+previous app images (the previous ones tagged `orkbot-rollback`), removes untagged images, and
+trims the build cache that fallback builds leave to `ORKBOT_DEPLOY_BUILD_CACHE_GB` (8 GB by default).
+For a checkout outside `/srv/orkbot`, put `ORKBOT_DEPLOY_DIR=/absolute/path` (and any of these
+settings) in a root-owned `/etc/orkbot/deploy.env` readable by the deploy user. The launcher runs
 `infra/compose/deploy-main.sh` from `origin/main`, so deploy changes apply on the next deploy; only
 a change to the launcher itself needs
-`sudo install -m 0755 infra/compose/deploy-launcher.sh /usr/local/sbin/rakazo-deploy-main`.
+`sudo install -m 0755 infra/compose/deploy-launcher.sh /usr/local/sbin/orkbot-deploy-main`.
 
 ## Docker computers on the production stack
 
@@ -197,7 +197,7 @@ file without the overlay. If `docker compose up --help` lacks `--wait-timeout`
 The overlay adds the supervisor (app image, `user: root`, Docker socket), the one-shot `computer`
 image build and `data-init` ownership fix, points the API and worker at `http://supervisor:7091`,
 and makes `SANDBOX_PROVIDER=docker` the default. It needs a dedicated `SANDBOX_SUPERVISOR_TOKEN`
-in `.env`; `RAKAZO_COMPUTER_*` and the `SANDBOX_*` limits apply as documented in `.env.example`.
+in `.env`; `ORKBOT_COMPUTER_*` and the `SANDBOX_*` limits apply as documented in `.env.example`.
 Like the updater, the supervisor is root-equivalent on the host: it publishes no port, joins only
 the internal `app` network, and Caddy has no route to it. Bot computers are sibling containers on
 per-bot networks that only the supervisor and the `web` screen proxy join.
@@ -206,8 +206,8 @@ When the `updater` profile is enabled too, give the sidecar the same file list a
 updates do not leave the supervisor on the previous app image:
 
 ```env
-RAKAZO_COMPOSE_FILE=infra/compose/docker-compose.prod.yml:infra/compose/docker-compose.prod.docker.yml
-RAKAZO_UPDATE_SERVICES=supervisor
+ORKBOT_COMPOSE_FILE=infra/compose/docker-compose.prod.yml:infra/compose/docker-compose.prod.docker.yml
+ORKBOT_UPDATE_SERVICES=supervisor
 ```
 
 The updater pulls and recreates services but cannot rebuild the `computer` stub image

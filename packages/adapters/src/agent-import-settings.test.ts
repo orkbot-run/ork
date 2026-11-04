@@ -1,4 +1,4 @@
-import { agentImportUpload, readAgentImportFolder } from "@rakazo/core";
+import { agentImportUpload, readAgentImportFolder } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
   intervalCron,
@@ -213,7 +213,7 @@ describe("OpenClaw settings", () => {
     });
   });
 
-  it("maps MCP servers and skips what Rakazo cannot express", () => {
+  it("maps MCP servers and skips what Ork cannot express", () => {
     const settings = openclaw(false);
     expect(settings.mcpServers.map((server) => [server.title, server.config])).toEqual([
       [

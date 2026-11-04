@@ -1,5 +1,5 @@
+import { getLogger } from "@orkbot/logging";
 import type { iMessageAdapter } from "@photon-ai/chat-adapter-imessage";
-import { getLogger } from "@rakazo/logging";
 import type {
   Adapter,
   AdapterPostableMessage,

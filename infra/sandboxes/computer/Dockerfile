@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
 COPY xcapture.c .
-RUN cc -O3 -fPIC -shared -Wall -Wextra -Werror -o librakazo-xcapture.so xcapture.c \
+RUN cc -O3 -fPIC -shared -Wall -Wextra -Werror -o liborkbot-xcapture.so xcapture.c \
     -lX11 -lXext -lXdamage -lXfixes -lXtst -lpng
 
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
@@ -61,9 +61,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && pdfinfo -v \
   && pandoc --version \
   && python3 -c 'import openpyxl; print(openpyxl.__version__)' \
-  && groupadd --gid 1000 rakazo \
-  && useradd --uid 1000 --gid rakazo --create-home --shell /bin/bash rakazo \
-  && mkdir -p /etc/rakazo/fluxbox /etc/chromium/policies/managed /etc/brave/policies/managed \
+  && groupadd --gid 1000 orkbot \
+  && useradd --uid 1000 --gid orkbot --create-home --shell /bin/bash orkbot \
+  && mkdir -p /etc/orkbot/fluxbox /etc/chromium/policies/managed /etc/brave/policies/managed \
   && printf '%s\n' '#!/bin/sh' 'exec xsetroot -solid "#111113" "$@"' > /usr/bin/fbsetbg \
   && chmod +x /usr/bin/fbsetbg \
   && ln -sfn /bin/true /usr/bin/xmessage
@@ -88,7 +88,7 @@ RUN set -eux; \
           '  "BraveVPNDisabled": true,' \
           '  "BraveNewsDisabled": true,' \
           '  "BraveTalkDisabled": true' \
-          '}' > /etc/brave/policies/managed/rakazo.json ;; \
+          '}' > /etc/brave/policies/managed/orkbot.json ;; \
       *) echo "unsupported BROWSER: $BROWSER (use chromium or brave)" >&2; exit 1 ;; \
     esac
 RUN ln -s "$(dpkg -L libnss-wrapper | grep '/libnss_wrapper.so$')" /usr/local/lib/libnss_wrapper.so
@@ -124,51 +124,51 @@ RUN set -eux; \
 # The page browser drives the visible Chromium through agent-browser, pinned and checked by sha256.
 COPY --chmod=755 install-agent-browser.sh /tmp/install-agent-browser.sh
 RUN /tmp/install-agent-browser.sh /usr/local/bin && rm /tmp/install-agent-browser.sh \
-  && mkdir -p /usr/local/lib/rakazo
+  && mkdir -p /usr/local/lib/orkbot
 ENV DISPLAY=:1
-ENV HOME=/home/rakazo
+ENV HOME=/home/orkbot
 # Keep UTF-8 explicit (an empty LANG broke non-ASCII file handling in the
 # file chooser for CJK-market users) and generate zh_CN.UTF-8 so deployments
 # that override the computer environment can opt in to a Chinese locale.
 RUN sed -i 's/^# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/' /etc/locale.gen && locale-gen
 ENV LANG=C.UTF-8
-ENV UV_TOOL_DIR=/home/rakazo/.local/share/uv/tools \
-    UV_TOOL_BIN_DIR=/home/rakazo/.local/bin \
-    UV_PYTHON_INSTALL_DIR=/home/rakazo/.local/share/uv/python
-WORKDIR /home/rakazo
+ENV UV_TOOL_DIR=/home/orkbot/.local/share/uv/tools \
+    UV_TOOL_BIN_DIR=/home/orkbot/.local/bin \
+    UV_PYTHON_INSTALL_DIR=/home/orkbot/.local/share/uv/python
+WORKDIR /home/orkbot
 # --chmod normalizes modes: a restrictive host umask (e.g. 077 on hardened hosts) would
 # otherwise leave these files unreadable to USER 1000 at runtime.
-COPY --chmod=755 start.sh /usr/local/bin/rakazo-computer
-COPY --chmod=644 user-env.sh /usr/local/lib/rakazo-user-env.sh
-COPY --chmod=755 control.py /usr/local/bin/rakazo-computer-control
+COPY --chmod=755 start.sh /usr/local/bin/orkbot-computer
+COPY --chmod=644 user-env.sh /usr/local/lib/orkbot-user-env.sh
+COPY --chmod=755 control.py /usr/local/bin/orkbot-computer-control
 # Tells the supervisor this control service accepts scrolls aimed at a point and sideways
 # scrolls; it sends those to older images through its fallback instead.
-LABEL rakazo.control.aimedScroll="1"
-COPY --from=capture-builder /build/librakazo-xcapture.so /usr/local/lib/librakazo-xcapture.so
-COPY --chmod=755 rakazo-browser /usr/local/bin/rakazo-browser
-COPY --chmod=755 rakazo-focus-or-launch /usr/local/bin/rakazo-focus-or-launch
-COPY --chmod=755 rakazo-page-browser /usr/local/bin/rakazo-page-browser
-COPY --chmod=644 page_secrets.py /usr/local/lib/rakazo/page_secrets.py
-COPY --chmod=644 rakazo-browser.desktop /usr/share/applications/rakazo-browser.desktop
-# Rakazo keeps credentials itself; the browser's save prompts would cover pages.
+LABEL orkbot.control.aimedScroll="1"
+COPY --from=capture-builder /build/liborkbot-xcapture.so /usr/local/lib/liborkbot-xcapture.so
+COPY --chmod=755 orkbot-browser /usr/local/bin/orkbot-browser
+COPY --chmod=755 orkbot-focus-or-launch /usr/local/bin/orkbot-focus-or-launch
+COPY --chmod=755 orkbot-page-browser /usr/local/bin/orkbot-page-browser
+COPY --chmod=644 page_secrets.py /usr/local/lib/orkbot/page_secrets.py
+COPY --chmod=644 orkbot-browser.desktop /usr/share/applications/orkbot-browser.desktop
+# Ork keeps credentials itself; the browser's save prompts would cover pages.
 # Pop-ups open: one a page opens after making a report would be blocked unseen.
-COPY --chmod=644 browser-policy.json /etc/chromium/policies/managed/rakazo-browser.json
-COPY --chmod=644 browser-policy.json /etc/brave/policies/managed/rakazo-browser.json
-COPY --chmod=644 fluxbox.init /etc/rakazo/fluxbox/init
-COPY --chmod=644 fluxbox.apps /etc/rakazo/fluxbox/apps
-COPY --chmod=644 fluxbox.menu /etc/rakazo/fluxbox/menu
+COPY --chmod=644 browser-policy.json /etc/chromium/policies/managed/orkbot-browser.json
+COPY --chmod=644 browser-policy.json /etc/brave/policies/managed/orkbot-browser.json
+COPY --chmod=644 fluxbox.init /etc/orkbot/fluxbox/init
+COPY --chmod=644 fluxbox.apps /etc/orkbot/fluxbox/apps
+COPY --chmod=644 fluxbox.menu /etc/orkbot/fluxbox/menu
 COPY --chmod=644 embed.html /usr/share/novnc/embed.html
 COPY --chmod=644 clipboard-bridge.js /usr/share/novnc/clipboard-bridge.js
 COPY --chmod=644 mobile-keyboard.js /usr/share/novnc/mobile-keyboard.js
 # Login shells source this after Debian's /etc/profile resets PATH. The home
 # volume hides /etc/skel, so ~/.local/bin has to be restored from the image.
-COPY --chmod=644 rakazo-local-bin.sh /etc/profile.d/rakazo-local-bin.sh
+COPY --chmod=644 orkbot-local-bin.sh /etc/profile.d/orkbot-local-bin.sh
 # Strip CR so shebangs work even if the build context came from a CRLF checkout.
 RUN ldconfig \
-  && sed -i 's/\r$//' /usr/local/bin/rakazo-computer /usr/local/lib/rakazo-user-env.sh /usr/local/bin/rakazo-computer-control /usr/local/bin/rakazo-browser /usr/local/bin/rakazo-focus-or-launch /usr/local/bin/rakazo-page-browser \
-    /usr/local/lib/rakazo/page_secrets.py \
-    /etc/rakazo/fluxbox/init /etc/rakazo/fluxbox/apps /etc/rakazo/fluxbox/menu \
-    /etc/profile.d/rakazo-local-bin.sh
+  && sed -i 's/\r$//' /usr/local/bin/orkbot-computer /usr/local/lib/orkbot-user-env.sh /usr/local/bin/orkbot-computer-control /usr/local/bin/orkbot-browser /usr/local/bin/orkbot-focus-or-launch /usr/local/bin/orkbot-page-browser \
+    /usr/local/lib/orkbot/page_secrets.py \
+    /etc/orkbot/fluxbox/init /etc/orkbot/fluxbox/apps /etc/orkbot/fluxbox/menu \
+    /etc/profile.d/orkbot-local-bin.sh
 # Agent-authored scripts often use the unversioned name. Keep it on the installed Python 3.
 RUN ln -s /usr/bin/python3 /usr/local/bin/python \
   && python -c 'import sys; assert sys.version_info.major == 3'
@@ -176,8 +176,8 @@ EXPOSE 7070 6080 6081 6082 6083 6084 6085 6086 6087 6088 6089 6090 6091 6092 609
 # Docker exec does not inherit PID 1's exports, so every process gets the same
 # identity lookup. Startup creates these private files for the effective UID/GID.
 ENV LD_PRELOAD=/usr/local/lib/libnss_wrapper.so \
-    NSS_WRAPPER_PASSWD=/tmp/rakazo-nss/passwd \
-    NSS_WRAPPER_GROUP=/tmp/rakazo-nss/group
+    NSS_WRAPPER_PASSWD=/tmp/orkbot-nss/passwd \
+    NSS_WRAPPER_GROUP=/tmp/orkbot-nss/group
 USER 1000:1000
 # Start Bash without the wrapper; user-env enables it once both files exist.
-CMD ["/usr/bin/env", "-u", "LD_PRELOAD", "/usr/local/bin/rakazo-computer"]
+CMD ["/usr/bin/env", "-u", "LD_PRELOAD", "/usr/local/bin/orkbot-computer"]

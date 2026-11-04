@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, InstructionVersionSchema } from "@rakazo/contracts";
+import { BOT_INSTRUCTIONS_MAX_LENGTH, InstructionVersionSchema } from "@orkbot/contracts";
 import type { Prisma } from "./client.js";
 
 export class InstructionConflictError extends Error {

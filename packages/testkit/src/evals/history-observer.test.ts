@@ -1,4 +1,4 @@
-import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@rakazo/adapter-kit";
+import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@orkbot/adapter-kit";
 import { expect, it, vi } from "vitest";
 import type { DiagnosticToolObservation, HistoryDiagnostic } from "./history-observer.js";
 import { observeSyntheticHistory } from "./history-observer.js";

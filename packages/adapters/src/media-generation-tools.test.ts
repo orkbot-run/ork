@@ -1,7 +1,7 @@
-import type { AdapterContext } from "@rakazo/adapter-kit";
-import { ATTACHMENT_MAX_BYTES } from "@rakazo/contracts";
-import { toolRequiresApproval } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+import type { AdapterContext } from "@orkbot/adapter-kit";
+import { ATTACHMENT_MAX_BYTES } from "@orkbot/contracts";
+import { toolRequiresApproval } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { FakeMediaGenerationProvider } from "./media-generation-provider.js";
 import { generateMediaFromTool } from "./media-generation-tools.js";

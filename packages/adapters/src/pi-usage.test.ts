@@ -2,7 +2,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type { AgentRuntimeEvent, AgentUsage } from "@rakazo/adapter-kit";
+import type { AgentRuntimeEvent, AgentUsage } from "@orkbot/adapter-kit";
 import { Agent } from "undici";
 import { describe, expect, it, vi } from "vitest";
 import {

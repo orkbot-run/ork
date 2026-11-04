@@ -1,4 +1,4 @@
-import { reportUiLocale } from "@rakazo/core";
+import { reportUiLocale } from "@orkbot/core";
 import { useState } from "react";
 import { ScrollView, StyleSheet, Text } from "react-native";
 import { Checkmark } from "../../components/row-accessories";

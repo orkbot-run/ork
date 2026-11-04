@@ -1,4 +1,4 @@
-import type { ApprovalMode } from "@rakazo/contracts";
+import type { ApprovalMode } from "@orkbot/contracts";
 import { View } from "react-native";
 import type { ApprovalSettings } from "../lib/approval-settings";
 import { useI18n } from "../lib/i18n";

@@ -1,7 +1,7 @@
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { Bot, BotSection, Group, Me, Space, ThreadSnapshot } from "@rakazo/contracts";
+import type { Bot, BotSection, Group, Me, Space, ThreadSnapshot } from "@orkbot/contracts";
 import {
   BotAvatar,
   Button,
@@ -13,7 +13,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
   GroupAvatar,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { ChevronDown, CircleAlert, Lock, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { Dispatch, ReactNode, RefObject, SetStateAction } from "react";
 import { Suspense } from "react";

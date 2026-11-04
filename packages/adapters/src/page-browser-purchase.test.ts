@@ -37,7 +37,7 @@ function nameOf(el: Element) {
 /** The live page helper's isolated-world script, run here against a page. */
 function page(html: string) {
   const source = readFileSync(
-    new URL("../../../infra/sandboxes/computer/rakazo-page-browser", import.meta.url),
+    new URL("../../../infra/sandboxes/computer/orkbot-page-browser", import.meta.url),
     "utf8",
   );
   const script = source.match(/PURCHASE_HELPERS = r"""\n([\s\S]*?)\n"""/)?.[1];
@@ -60,7 +60,7 @@ function page(html: string) {
     },
   });
   vm.runInContext(script, dom.getInternalVMContext());
-  const helper = (win as unknown as { __rakazoPurchase: Helper }).__rakazoPurchase;
+  const helper = (win as unknown as { __orkbotPurchase: Helper }).__orkbotPurchase;
   return {
     win,
     helper,

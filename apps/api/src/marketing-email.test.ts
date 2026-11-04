@@ -1,4 +1,4 @@
-import { EmailEmulator } from "@rakazo/adapters";
+import { EmailEmulator } from "@orkbot/adapters";
 import { describe, expect, it, vi } from "vitest";
 import { marketingEmailRoutes, sendWelcomeEmail, unsubscribeUrl } from "./marketing-email.js";
 
@@ -68,7 +68,7 @@ describe("sendWelcomeEmail", () => {
     const url = unsubscribeUrl(origin, secret, "user-1");
     expect(email.sent[0]).toMatchObject({
       to: "new@example.test",
-      subject: "Welcome to Rakazo",
+      subject: "Welcome to Ork",
       headers: {
         "List-Unsubscribe": `<${url}>`,
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
@@ -82,7 +82,7 @@ describe("sendWelcomeEmail", () => {
     const { email, deps: welcome } = deps(true);
     await sendWelcomeEmail(welcome, "user-1", new Headers({ "accept-language": "es-CL,es" }));
     await vi.waitFor(() => expect(email.sent).toHaveLength(1));
-    expect(email.sent[0]!.subject).toBe("Te damos la bienvenida a Rakazo");
+    expect(email.sent[0]!.subject).toBe("Te damos la bienvenida a Ork");
     expect(email.sent[0]!.text).toMatch(/Windows \S+ y Linux/);
   });
 

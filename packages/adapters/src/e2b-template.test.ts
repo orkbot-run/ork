@@ -8,7 +8,7 @@ import {
 } from "./e2b-template.js";
 
 describe("E2B computer template", () => {
-  it("builds the stock desktop at 2 vCPU and 4 GB under the Rakazo name", async () => {
+  it("builds the stock desktop at 2 vCPU and 4 GB under the Ork name", async () => {
     const build = vi.fn(async () => ({ name: E2B_COMPUTER_TEMPLATE }));
 
     await buildE2BComputerTemplate("e2b_test", { build });
@@ -19,7 +19,7 @@ describe("E2B computer template", () => {
       string,
       Record<string, unknown>,
     ];
-    expect(name).toBe("rakazo-computer");
+    expect(name).toBe("orkbot-computer");
     expect(options).toMatchObject({ apiKey: "e2b_test", cpuCount: 2, memoryMB: 4096 });
     expect(JSON.parse(await Template.toJSON(template, false))).toMatchObject({
       fromTemplate: E2B_DESKTOP_TEMPLATE,

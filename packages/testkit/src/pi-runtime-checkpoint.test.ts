@@ -1,4 +1,4 @@
-import type { AgentRunRequest, AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { approvalPausedToolResult } from "../../adapters/src/approval-effect.js";
 import { builtinAgentTools } from "../../adapters/src/builtin-tools.js";

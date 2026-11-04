@@ -1,7 +1,7 @@
-import { runContinueJob } from "@rakazo/adapter-kit";
-import { displayName } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+import { runContinueJob } from "@orkbot/adapter-kit";
+import { displayName } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { sleepDeferReason } from "./computer-idle.js";
 import { withComputerScreenAvailability } from "./computer-screens.js";

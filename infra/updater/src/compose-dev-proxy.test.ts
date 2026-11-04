@@ -51,16 +51,16 @@ describe("source-checkout compose postgres hardening", () => {
     expect(postgres?.environment?.POSTGRES_PASSWORD).toBe(
       "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}",
     );
-    expect(postgres?.environment?.POSTGRES_USER).toBe("${POSTGRES_USER:-rakazo}");
-    expect(postgres?.environment?.POSTGRES_DB).toBe("${POSTGRES_DB:-rakazo}");
+    expect(postgres?.environment?.POSTGRES_USER).toBe("${POSTGRES_USER:-orkbot}");
+    expect(postgres?.environment?.POSTGRES_DB).toBe("${POSTGRES_DB:-orkbot}");
     for (const name of ["api", "worker"] as const) {
       expect(compose.services[name]?.environment?.DATABASE_URL).toBe(
-        "postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rakazo}",
+        "postgres://rakazo_app:${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-orkbot}",
       );
     }
     // Only the migrate container gets the owner login; the API starts once it has finished.
     expect(compose.services.migrate?.environment?.DATABASE_MIGRATION_URL).toBe(
-      "postgres://${POSTGRES_USER:-rakazo}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-rakazo}",
+      "postgres://${POSTGRES_USER:-orkbot}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-orkbot}",
     );
     expect(compose.services.migrate?.command).toEqual(["pnpm", "db:deploy"]);
     for (const name of ["api", "worker"] as const)

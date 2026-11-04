@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AdapterContext, JobPublisher } from "@rakazo/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@rakazo/db";
+import type { AdapterContext, JobPublisher } from "@orkbot/adapter-kit";
+import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   asSystem,
   createDb,
@@ -12,7 +12,7 @@ import {
   recordComputerRunStart,
   runAsSystem,
   runAsTenant,
-} from "@rakazo/db";
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sleepComputerIfIdle } from "./computer-idle.js";
 import { provisionComputer } from "./computer-lifecycle.js";
@@ -33,7 +33,7 @@ describePostgres("computer runs (PostgreSQL)", () => {
   beforeAll(async () => {
     db = createDb(url!);
     system = asSystem(db.prisma);
-    dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-computer-runs-"));
+    dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-computer-runs-"));
   });
 
   afterAll(async () => {

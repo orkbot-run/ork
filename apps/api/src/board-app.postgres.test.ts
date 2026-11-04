@@ -13,7 +13,7 @@ const describePostgres =
 describePostgres("ticket board app wiring", () => {
   it.each([false, true])("threads the environment flag through HTTP (%s)", async (enabled) => {
     vi.stubEnv("TICKET_BOARD_ENABLED", String(enabled));
-    const dataDir = await mkdtemp(join(tmpdir(), "rakazo-board-test-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "orkbot-board-test-"));
     const handles = await createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
@@ -29,7 +29,7 @@ describePostgres("ticket board app wiring", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin: "http://127.0.0.1:5173" },
         body: JSON.stringify({
-          email: `board-${enabled}-${Date.now()}@rakazo.test`,
+          email: `board-${enabled}-${Date.now()}@orkbot.test`,
           password: "test-password-123",
           name: "Board tester",
         }),

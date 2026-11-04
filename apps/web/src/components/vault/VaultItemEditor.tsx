@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { CardSecretValue, ContactFields, LoginFieldInput, VaultKind } from "@rakazo/contracts";
+import type { CardSecretValue, ContactFields, LoginFieldInput, VaultKind } from "@orkbot/contracts";
 import {
   BotSecretName,
   CardSecretValue as CardSecretValueSchema,
@@ -12,7 +12,7 @@ import {
   encodeLoginSecret,
   LoginSecretValue,
   parseCardExpiry,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   Button,
   Dialog,
@@ -24,7 +24,7 @@ import {
   NativeSelect,
   NativeSelectOption,
   Switch,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import type { ComponentProps, ReactNode } from "react";
 import { useId, useRef, useState } from "react";
 import type { VaultAuth } from "./kinds";

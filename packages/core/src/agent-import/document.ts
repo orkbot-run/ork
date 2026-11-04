@@ -1,5 +1,5 @@
-import type { AgentImportMemory, AgentImportSkill } from "@rakazo/contracts";
-import { BOT_NAME_MAX_LENGTH } from "@rakazo/contracts";
+import type { AgentImportMemory, AgentImportSkill } from "@orkbot/contracts";
+import { BOT_NAME_MAX_LENGTH } from "@orkbot/contracts";
 import { buildSkillMd } from "../agent-skill.js";
 import type { AgentImportParse } from "./shared.js";
 import { freeName, memoryItem, skillItem } from "./shared.js";

@@ -29,7 +29,7 @@ function singleRouteParam(value: string | string[] | undefined): string | undefi
 
 function notificationField(data: Record<string, unknown>, key: string): string | undefined {
   const direct = data[key];
-  const prefixed = data[`rakazo.${key}`];
+  const prefixed = data[`orkbot.${key}`];
   const value = typeof direct === "string" ? direct : prefixed;
   return typeof value === "string" ? singleRouteParam(value) : undefined;
 }
@@ -63,7 +63,7 @@ export function notificationOpenTargetFromLink(url: string): NotificationRoute |
   } catch {
     return null;
   }
-  if (parsed.protocol !== "rakazo:") return null;
+  if (parsed.protocol !== "orkbot:") return null;
   const screen = (parsed.hostname || parsed.pathname.replace(/^\//, "")).replace(/\/$/, "");
   const data: Record<string, string> = {};
   for (const [key, value] of parsed.searchParams) data[key] = value;

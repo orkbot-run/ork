@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { displayMessageBlock, displayName } from "./display-name.js";
 import { identitySourceField, preserveIdentitySource } from "./identity-source.js";
 

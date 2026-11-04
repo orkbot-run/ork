@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { PageBrowserCommand, PageBrowserResult } from "@rakazo/adapter-kit";
+import type { PageBrowserCommand, PageBrowserResult } from "@orkbot/adapter-kit";
 import type { DriverRun, Submission } from "../page-browser-bench/tasks.js";
 import {
   comparisonTable,
@@ -16,7 +16,7 @@ import {
 
 const USAGE = `Usage: pnpm bench:page-browser [options]
   --driver=installed|<git-ref>   Driver to measure; repeat to compare (default: installed)
-  --image=<image>                Computer image for a fresh local container (default: rakazo/computer:local)
+  --image=<image>                Computer image for a fresh local container (default: orkbot/computer:local)
   --exec="<command prefix>"      Run in an existing computer instead, e.g. "docker exec -i my-computer"
   --repeat=<n>                   Runs of the suite per driver (default: 3)
   --live-sites                   Also size a few public pages (needs internet)
@@ -25,7 +25,7 @@ const USAGE = `Usage: pnpm bench:page-browser [options]
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const fixtures = path.join(root, "packages/testkit/src/page-browser-bench/fixtures");
-const DRIVER_SOURCE = "infra/sandboxes/computer/rakazo-page-browser";
+const DRIVER_SOURCE = "infra/sandboxes/computer/orkbot-page-browser";
 const SECRETS_SOURCE = "infra/sandboxes/computer/page_secrets.py";
 const WORK = "/tmp/page-browser-bench";
 
@@ -78,7 +78,7 @@ async function prepareComputer(exec: Exec) {
      && (pkill -f '^python3 site/server.py' || true) \
      && (setsid nohup python3 site/server.py cert.pem key.pem >server.log 2>&1 &) \
      && (pkill -f 'remote-debugging-port=922[2]' || true) && sleep 1 \
-     && (DISPLAY=:1 RAKAZO_BROWSER_PROFILE=${WORK}/profile setsid nohup rakazo-browser \
+     && (DISPLAY=:1 ORKBOT_BROWSER_PROFILE=${WORK}/profile setsid nohup orkbot-browser \
            --ignore-certificate-errors ${SITE}/index.html >browser.log 2>&1 &) \
      && for i in $(seq 1 60); do curl -sf http://127.0.0.1:9222/json/version >/dev/null \
            && curl -skf ${SITE}/index.html >/dev/null && exit 0; sleep 0.5; done; exit 1`,
@@ -87,7 +87,7 @@ async function prepareComputer(exec: Exec) {
 
 /** The driver as committed at a git ref, copied into the computer next to its helpers. */
 async function installDriver(exec: Exec, driver: string) {
-  if (driver === "installed") return "/usr/local/bin/rakazo-page-browser";
+  if (driver === "installed") return "/usr/local/bin/orkbot-page-browser";
   const sha = execFileSync("git", ["rev-parse", "--short", `${driver}^{commit}`], {
     cwd: root,
     encoding: "utf8",
@@ -117,7 +117,7 @@ async function installDriver(exec: Exec, driver: string) {
       file === DRIVER_SOURCE ? "755" : "644",
     );
   }
-  return `${directory}/rakazo-page-browser`;
+  return `${directory}/orkbot-page-browser`;
 }
 
 function driverRunner(exec: Exec, driverPath: string) {
@@ -125,10 +125,10 @@ function driverRunner(exec: Exec, driverPath: string) {
     // The same environment and stdin arguments the supervisor gives the helper.
     const env = [
       "DISPLAY=:1",
-      "RAKAZO_CDP_PORT=9222",
-      "HOME=/home/rakazo",
+      "ORKBOT_CDP_PORT=9222",
+      "HOME=/home/orkbot",
       "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      "RAKAZO_BROWSER_ARGS_STDIN=1",
+      "ORKBOT_BROWSER_ARGS_STDIN=1",
     ];
     try {
       const out = await exec(
@@ -210,7 +210,7 @@ async function main() {
   const repeat = Number(option("repeat") ?? 3);
   if (!Number.isInteger(repeat) || repeat < 1)
     throw new Error("--repeat must be a positive integer");
-  const image = option("image") ?? "rakazo/computer:local";
+  const image = option("image") ?? "orkbot/computer:local";
   const out = option("out") ?? "page-browser-bench.json";
 
   let container: string | undefined;

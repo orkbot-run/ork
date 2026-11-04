@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 
 const PAGE_ID = /^\(page:([A-Za-z0-9_-]{1,64})\)/;
 // Markdown escapes only ASCII punctuation; any other backslash is part of the title.

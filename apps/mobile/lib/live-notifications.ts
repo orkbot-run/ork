@@ -55,9 +55,7 @@ type NativeNotifications = {
 };
 
 const nativeNotifications =
-  Platform.OS === "android"
-    ? requireNativeModule<NativeNotifications>("RakazoNotifications")
-    : null;
+  Platform.OS === "android" ? requireNativeModule<NativeNotifications>("OrkNotifications") : null;
 
 export type NotificationThreadTarget = { botId?: string; threadId?: string; groupId?: string };
 
@@ -73,15 +71,15 @@ export function notificationTargetsThread(
   target: NotificationThreadTarget | null,
 ): boolean {
   if (!data || !target) return false;
-  const dataThreadId = data.threadId ?? data["rakazo.threadId"];
+  const dataThreadId = data.threadId ?? data["orkbot.threadId"];
   if (target.threadId && dataThreadId) return dataThreadId === target.threadId;
-  const dataGroupId = data.groupId ?? data["rakazo.groupId"];
+  const dataGroupId = data.groupId ?? data["orkbot.groupId"];
   if (target.groupId) return dataGroupId === target.groupId;
   // A bot's own chat, not a group it posted in.
   return Boolean(
     target.botId &&
       !dataGroupId &&
-      (data.botId === target.botId || data["rakazo.botId"] === target.botId),
+      (data.botId === target.botId || data["orkbot.botId"] === target.botId),
   );
 }
 

@@ -1,5 +1,5 @@
-import { SandboxAllowanceUsedError } from "@rakazo/adapter-kit";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { SandboxAllowanceUsedError } from "@orkbot/adapter-kit";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { replaceComputer } from "./computer-lifecycle.js";

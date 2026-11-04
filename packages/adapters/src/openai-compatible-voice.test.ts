@@ -81,12 +81,12 @@ describe("serializeOpenAiCompatibleVoiceSecret", () => {
   });
 
   it("blocks public hosts, metadata hosts, and cleartext keys to public servers", () => {
-    vi.stubEnv("RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC", "0");
+    vi.stubEnv("ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC", "0");
     expect(() => serializeAsOwner({ baseUrl: "https://speech.example.com" })).toThrow(
       /Public model endpoints are disabled/,
     );
     expect(() => serializeAsOwner({ baseUrl: "http://169.254.169.254" })).toThrow(/blocked/);
-    vi.stubEnv("RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC", "1");
+    vi.stubEnv("ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC", "1");
     expect(() =>
       serializeAsOwner({
         baseUrl: "http://speech.example.com",

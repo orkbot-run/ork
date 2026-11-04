@@ -1,7 +1,7 @@
 import type { ApnsVoipConfig } from "./apns-voip.js";
 
 /** The published app's bundle id (apps/mobile/app.json); self-built apps set their own. */
-const DEFAULT_BUNDLE_ID = "com.rakazo.app";
+const DEFAULT_BUNDLE_ID = "run.orkbot.app";
 
 export function apnsVoipConfig(
   source: Record<string, string | undefined>,

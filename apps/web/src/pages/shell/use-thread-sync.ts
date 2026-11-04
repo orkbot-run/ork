@@ -6,15 +6,15 @@ import type {
   ProductEvent,
   RoutineHistory,
   ThreadSnapshot,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   anySignal,
   createRefreshCoalescer,
   isRunTerminalEvent,
   isRunWorking,
   runThreadSubscription,
-} from "@rakazo/core";
-import { fetchFresh } from "@rakazo/core/query";
+} from "@orkbot/core";
+import { fetchFresh } from "@orkbot/core/query";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {

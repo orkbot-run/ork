@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { AutoReviewProvider, AutoReviewRequest, AutoReviewResult } from "@rakazo/adapter-kit";
+import type { AutoReviewProvider, AutoReviewRequest, AutoReviewResult } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import type { ApprovalCase } from "./approval.js";
 import {
@@ -189,7 +189,7 @@ describe("approval suite CLI", () => {
       import { registerHooks } from 'node:module';
       registerHooks({
         resolve(specifier, context, nextResolve) {
-          if (specifier === '@rakazo/db' || specifier === '@rakazo/adapters' || specifier.includes('adapters/src/'))
+          if (specifier === '@orkbot/db' || specifier === '@orkbot/adapters' || specifier.includes('adapters/src/'))
             throw new Error('Runtime imported for --list');
           return nextResolve(specifier, context);
         }

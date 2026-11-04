@@ -1,4 +1,4 @@
-import type { AgentImportFile } from "@rakazo/contracts";
+import type { AgentImportFile } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { combineImportedInstructions, isAgentHome, parseAgentImport } from "./index.js";
 import { openClawRuntimeMentions, parseOpenClawIdentity } from "./openclaw.js";

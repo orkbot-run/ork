@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { MessagingChannelMembership, MessagingInstallationsStatus } from "@rakazo/contracts";
-import { isRetryableError, messagingConnectOptions } from "@rakazo/core";
-import { fetchFresh, writeSaved } from "@rakazo/core/query";
+import type { MessagingChannelMembership, MessagingInstallationsStatus } from "@orkbot/contracts";
+import { isRetryableError, messagingConnectOptions } from "@orkbot/core";
+import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import {
   Button,
   DropdownMenu,
@@ -11,7 +11,7 @@ import {
   NativeSelect,
   NativeSelectOption,
   SectionHeading,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDownIcon, PlusIcon } from "lucide-react";
 import type { ReactNode } from "react";
@@ -217,7 +217,7 @@ export function MessagingSettingsPanel() {
   }
 
   function installSlack() {
-    const popup = window.open("about:blank", "rakazo-slack-install");
+    const popup = window.open("about:blank", "orkbot-slack-install");
     if (popup) popup.opener = null;
     void act(async () => {
       try {

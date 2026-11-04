@@ -1,5 +1,5 @@
-import type { MessageBlock } from "@rakazo/contracts";
-import { isToolActivityBlock } from "@rakazo/core";
+import type { MessageBlock } from "@orkbot/contracts";
+import { isToolActivityBlock } from "@orkbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { longWorkProgressGuidance } from "./run-replies.js";
@@ -54,15 +54,15 @@ describe("messageUserMaxLength", () => {
   };
 
   it("defaults to 500 characters everywhere the model sees the cap", () => {
-    vi.stubEnv("RAKAZO_MESSAGE_USER_MAX_CHARS", undefined);
+    vi.stubEnv("ORKBOT_MESSAGE_USER_MAX_CHARS", undefined);
     expect(messageUserMaxLength()).toBe(USER_PROGRESS_MESSAGE_MAX_LENGTH);
     expect(messageUserTool().inputSchema.properties.message.maxLength).toBe(500);
     expect(messageUserTool().description).toContain("cut off silently at 500 characters");
     expect(longWorkProgressGuidance()).toContain("message_user is capped at 500 characters");
   });
 
-  it("applies RAKAZO_MESSAGE_USER_MAX_CHARS to the schema, description, and guidance", () => {
-    vi.stubEnv("RAKAZO_MESSAGE_USER_MAX_CHARS", " 4000 ");
+  it("applies ORKBOT_MESSAGE_USER_MAX_CHARS to the schema, description, and guidance", () => {
+    vi.stubEnv("ORKBOT_MESSAGE_USER_MAX_CHARS", " 4000 ");
     expect(messageUserMaxLength()).toBe(4_000);
     expect(messageUserTool().inputSchema.properties.message.maxLength).toBe(4_000);
     expect(messageUserTool().description).toContain("cut off silently at 4000 characters");
@@ -70,9 +70,9 @@ describe("messageUserMaxLength", () => {
   });
 
   it.each(["", " ", "0", "-5", "12.5", "NaN", "Infinity", "lots", "4000chars", "1e3", "0x10"])(
-    "falls back to 500 for RAKAZO_MESSAGE_USER_MAX_CHARS=%j",
+    "falls back to 500 for ORKBOT_MESSAGE_USER_MAX_CHARS=%j",
     (value) => {
-      vi.stubEnv("RAKAZO_MESSAGE_USER_MAX_CHARS", value);
+      vi.stubEnv("ORKBOT_MESSAGE_USER_MAX_CHARS", value);
       expect(messageUserMaxLength()).toBe(USER_PROGRESS_MESSAGE_MAX_LENGTH);
     },
   );

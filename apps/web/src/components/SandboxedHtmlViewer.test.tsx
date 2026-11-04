@@ -2,7 +2,7 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { HTML_VIEWER_PATH } from "@rakazo/contracts/content-security-policy";
+import { HTML_VIEWER_PATH } from "@orkbot/contracts/content-security-policy";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
@@ -128,7 +128,7 @@ it("renders only string messages from the embedding app", () => {
   shellFrame.send(shellFrame.parent, "<p>Hello</p>");
   // The gesture guard goes first, ahead of anything the page runs.
   expect(shellFrame.preview.srcdoc).toMatch(
-    /^<script>[^<]*rakazo-page:gesture[^<]*<\/script><p>Hello<\/p>$/,
+    /^<script>[^<]*orkbot-page:gesture[^<]*<\/script><p>Hello<\/p>$/,
   );
 
   const topLevel = run(false);
@@ -157,8 +157,8 @@ it("vouches for one click or key the guard saw, never a forged, stale or inactiv
   listener?.({ source: parent, data: "<p>Page</p>" });
   const key = /key = "([^"]+)"/.exec(preview.srcdoc)?.[1];
   const page = (data: object) => listener?.({ source: preview.contentWindow, data });
-  const gesture = (value = key) => page({ type: "rakazo-page:gesture", key: value });
-  const copy = (id: string) => page({ type: "rakazo-page:copy", id, text: id });
+  const gesture = (value = key) => page({ type: "orkbot-page:gesture", key: value });
+  const copy = (id: string) => page({ type: "orkbot-page:copy", id, text: id });
 
   copy("on load");
   gesture("forged");
@@ -166,7 +166,7 @@ it("vouches for one click or key the guard saw, never a forged, stale or inactiv
   gesture();
   copy("first");
   copy("same click");
-  page({ type: "rakazo-page:height", height: 300 });
+  page({ type: "orkbot-page:height", height: 300 });
   gesture();
   copy("next click");
   now.mockReturnValue(1_001_001);

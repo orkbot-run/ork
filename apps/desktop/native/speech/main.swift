@@ -1,7 +1,7 @@
 // System speech recognition for desktop dictation on macOS: Electron's Web Speech has no
 // recognition service, so the main process runs this helper instead of asking for a key.
 //
-//   rakazo-speech <language>
+//   orkbot-speech <language>
 //
 // One JSON object per stdout line, shaped after Web Speech so the page treats both alike:
 //   {"type":"result","text":"…"}                 the whole session's text so far

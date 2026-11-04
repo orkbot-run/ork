@@ -1,6 +1,4 @@
 import { hostname } from "node:os";
-import { ORPCError, onError } from "@orpc/server";
-import { RPCHandler } from "@orpc/server/fetch";
 import type {
   AgentContextStrategy,
   AgentRuntime,
@@ -14,7 +12,7 @@ import type {
   RealtimeFanout,
   SandboxProvider,
   TransactionalEmailProvider,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   SandboxAllowanceUsedError,
   SandboxDamagedError,
@@ -22,7 +20,7 @@ import {
   SandboxUnavailableError,
   SandboxUnresponsiveError,
   VoiceAccountError,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import type {
   ComposioProvider,
   ConnectorRegistry,
@@ -30,7 +28,7 @@ import type {
   PluginTextReader,
   RemoteConnectorDependencies,
   UserDeviceGateway,
-} from "@rakazo/adapters";
+} from "@orkbot/adapters";
 import {
   applyMessagingOutboundStatus,
   auditLogConfig,
@@ -102,16 +100,16 @@ import {
   userDeviceInternalAddress,
   verifyModelServesAgents,
   withSecretPersistence,
-} from "@rakazo/adapters";
-import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@rakazo/auth";
-import type { Actor, AuthCapabilities } from "@rakazo/contracts";
+} from "@orkbot/adapters";
+import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@orkbot/auth";
+import type { Actor, AuthCapabilities } from "@orkbot/contracts";
 import {
   isLocalhostOrLoopbackIp,
   PLUGIN_SUBMISSIONS_PATH,
   SERVER_BUILD_HEADER,
-} from "@rakazo/contracts";
-import { encryptionKeyWarning, signupPolicyFromEnv } from "@rakazo/core";
-import type { Pool, PrismaClient } from "@rakazo/db";
+} from "@orkbot/contracts";
+import { encryptionKeyWarning, signupPolicyFromEnv } from "@orkbot/core";
+import type { Pool, PrismaClient } from "@orkbot/db";
 import {
   configureProviderTransactionPool,
   createBoardEvents,
@@ -132,17 +130,19 @@ import {
   runAsSystem,
   securityEventRetentionDays,
   verifyContentKeys,
-} from "@rakazo/db";
-import type { Logger } from "@rakazo/logging";
+} from "@orkbot/db";
+import type { Logger } from "@orkbot/logging";
 import {
   createServiceLogger,
   enrichLogContext,
   getLogger,
   installLogger,
   SERVICE_NAMES,
-} from "@rakazo/logging";
-import { markExpectedFailure, requestLogging } from "@rakazo/logging/hono";
-import { MarkdownMemoryStore } from "@rakazo/memory";
+} from "@orkbot/logging";
+import { markExpectedFailure, requestLogging } from "@orkbot/logging/hono";
+import { MarkdownMemoryStore } from "@orkbot/memory";
+import { ORPCError, onError } from "@orpc/server";
+import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { deleteAccountContent } from "./account-deletion.js";
@@ -208,7 +208,7 @@ import { mountWebhookHttpRoutes } from "./webhook.js";
  * The loopback entries are the Expo web dev server.
  */
 export const MOBILE_AUTH_ORIGINS = [
-  "rakazo://",
+  "orkbot://",
   "http://localhost:8081",
   "http://127.0.0.1:8081",
   "http://localhost:19006",
@@ -298,7 +298,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ? { prisma: prismaOverride, pool: undefined }
     : createDb(env.databaseUrl, {
         poolMax,
-        applicationName: "rakazo-api",
+        applicationName: "orkbot-api",
         keyProvider: contentKeyProviderFromEnv(),
         encryptContent: env.contentEncryption,
       });
@@ -365,7 +365,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   if (!inMemoryJobs && !created.pool) {
     ownedJobPool = createPool(env.databaseUrl, {
       poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 4),
-      applicationName: "rakazo-api-jobs",
+      applicationName: "orkbot-api-jobs",
     });
   }
   const jobPool = created.pool ?? ownedJobPool;
@@ -970,7 +970,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       requireMembership(
         prisma,
         session.user.id,
-        request.headers.get("x-rakazo-space-id"),
+        request.headers.get("x-orkbot-space-id"),
         session.session.id,
       ),
     );
@@ -1529,7 +1529,7 @@ export function isTrustedOrigin(
   env: Pick<AppEnv, "webOrigin" | "apiUrl" | "authUrl">,
 ) {
   if (!origin) return true;
-  if (origin.startsWith("rakazo://")) return true;
+  if (origin.startsWith("orkbot://")) return true;
   const allowed = new Set(
     [env.webOrigin, env.apiUrl, env.authUrl, ...MOBILE_AUTH_ORIGINS].flatMap(originVariants),
   );
@@ -1537,7 +1537,7 @@ export function isTrustedOrigin(
 }
 
 function originVariants(origin: string): string[] {
-  if (!origin || origin === "rakazo://") return [];
+  if (!origin || origin === "orkbot://") return [];
   const variants = [origin, ...loopbackTwinOrigins(origin)];
   try {
     const url = new URL(origin);

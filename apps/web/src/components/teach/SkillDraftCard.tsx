@@ -1,7 +1,7 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { SkillPlaybook } from "@rakazo/contracts";
-import { formatSkillRunPrompt } from "@rakazo/core";
-import { Button, Input, Label, Textarea } from "@rakazo/ui-web";
+import type { SkillPlaybook } from "@orkbot/contracts";
+import { formatSkillRunPrompt } from "@orkbot/core";
+import { Button, Input, Label, Textarea } from "@orkbot/ui-web";
 import { useEffect, useId, useRef, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { errorText } from "../../lib/user-error";

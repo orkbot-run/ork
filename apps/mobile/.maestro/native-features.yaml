@@ -1,4 +1,4 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Android native features
 tags:
   - android
@@ -14,7 +14,7 @@ tags:
 - runFlow: helpers/sign-in.yaml
 
 # Device speech (expo-speech): no voice provider is connected yet.
-- openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
+- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
 - extendedWaitUntil:
     visible: "The fixture workspace is ready."
     timeout: 10000
@@ -28,7 +28,7 @@ tags:
 - tapOn: "Stop"
 
 # Text shared in from another app opens the share sheet, then the chosen chat.
-- evalScript: ${output.share = http.get(RAKAZO_DEVICE_CONTROL_URL + '/share-text')}
+- evalScript: ${output.share = http.get(ORKBOT_DEVICE_CONTROL_URL + '/share-text')}
 - assertTrue: ${output.share.ok}
 - extendedWaitUntil:
     visible: "Share to"
@@ -43,11 +43,11 @@ tags:
 - tapOn: "Attach file"
 - tapOn: "Photo library"
 - extendedWaitUntil:
-    visible: "Photo taken on.*|.*rakazo-fixture.*"
+    visible: "Photo taken on.*|.*orkbot-fixture.*"
     timeout: 15000
 - takeScreenshot: "42-photo-picker"
 - tapOn:
-    text: "Photo taken on.*|.*rakazo-fixture.*"
+    text: "Photo taken on.*|.*orkbot-fixture.*"
     index: 0
 - runFlow:
     when:
@@ -63,17 +63,17 @@ tags:
 - tapOn: "File"
 - runFlow:
     when:
-      notVisible: "rakazo-fixture.pdf"
+      notVisible: "orkbot-fixture.pdf"
     commands:
       - tapOn: "Show roots"
       - tapOn: "Downloads"
 - extendedWaitUntil:
-    visible: "rakazo-fixture.pdf"
+    visible: "orkbot-fixture.pdf"
     timeout: 15000
 - takeScreenshot: "43-document-picker"
-- tapOn: "rakazo-fixture.pdf"
+- tapOn: "orkbot-fixture.pdf"
 - extendedWaitUntil:
-    visible: "Remove rakazo-fixture.pdf"
+    visible: "Remove orkbot-fixture.pdf"
     timeout: 15000
 
 # Camera permission (the emulator has no camera, so the flow denies the prompt).
@@ -91,15 +91,15 @@ tags:
 
 - tapOn: "Send"
 - extendedWaitUntil:
-    visible: ".*rakazo-fixture.pdf"
+    visible: ".*orkbot-fixture.pdf"
     timeout: 30000
 - extendedWaitUntil:
     visible: "Open image .*"
     timeout: 15000
 - takeScreenshot: "45-sent-attachments"
 
-# Native PDF viewer (rakazo-pdf-view): Share appears only after the file loaded.
-- tapOn: ".*rakazo-fixture.pdf"
+# Native PDF viewer (orkbot-pdf-view): Share appears only after the file loaded.
+- tapOn: ".*orkbot-fixture.pdf"
 - extendedWaitUntil:
     visible: "Share"
     timeout: 20000
@@ -112,7 +112,7 @@ tags:
     timeout: 10000
 
 # Vault's New item menu opens from a Compose-hosted trigger on Android.
-- openLink: "rakazo:///vault"
+- openLink: "orkbot:///vault"
 - extendedWaitUntil:
     visible: "New item"
     timeout: 15000
@@ -122,14 +122,14 @@ tags:
     timeout: 5000
 - takeScreenshot: "46b-vault-new-item"
 - back
-- openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
+- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
 - extendedWaitUntil:
     visible: "Message Researcher"
     timeout: 10000
 
 # An incoming call rings in the open app, then as a native call notification once the
-# app is in the background (rakazo-notifications IncomingCalls).
-- evalScript: ${output.ring = http.get(RAKAZO_DEVICE_CONTROL_URL + '/ring')}
+# app is in the background (orkbot-notifications IncomingCalls).
+- evalScript: ${output.ring = http.get(ORKBOT_DEVICE_CONTROL_URL + '/ring')}
 - assertTrue: ${output.ring.ok}
 - extendedWaitUntil:
     visible: "Answer"
@@ -141,7 +141,7 @@ tags:
     while:
       notVisible: "(?i)decline"
     commands:
-      - evalScript: ${output.expandNotifications = http.get(RAKAZO_EXPAND_NOTIFICATIONS_URL)}
+      - evalScript: ${output.expandNotifications = http.get(ORKBOT_EXPAND_NOTIFICATIONS_URL)}
       - assertTrue: ${output.expandNotifications.ok}
       - waitForAnimationToEnd:
           timeout: 2000
@@ -153,8 +153,8 @@ tags:
 
 # Answering a ring in the app starts the call without a voice provider check.
 - launchApp
-- openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
-- evalScript: ${output.ring = http.get(RAKAZO_DEVICE_CONTROL_URL + '/ring')}
+- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
+- evalScript: ${output.ring = http.get(ORKBOT_DEVICE_CONTROL_URL + '/ring')}
 - assertTrue: ${output.ring.ok}
 - extendedWaitUntil:
     visible: "Answer"
@@ -171,14 +171,14 @@ tags:
 
 # A voice call through a connected provider holds the microphone foreground service.
 # Picking the provider in Voice settings turns device speech off for calls.
-- evalScript: ${output.voice = http.get(RAKAZO_DEVICE_CONTROL_URL + '/connect-voice')}
+- evalScript: ${output.voice = http.get(ORKBOT_DEVICE_CONTROL_URL + '/connect-voice')}
 - assertTrue: ${output.voice.ok}
-- openLink: "rakazo:///voice"
+- openLink: "orkbot:///voice"
 - extendedWaitUntil:
     visible: "Scripted"
     timeout: 15000
 - tapOn: "Scripted"
-- openLink: "rakazo:///thread?botId=${RAKAZO_SCREENSHOT_BOT_ID}&name=Researcher"
+- openLink: "orkbot:///thread?botId=${ORKBOT_SCREENSHOT_BOT_ID}&name=Researcher"
 - extendedWaitUntil:
     visible: "Message Researcher"
     timeout: 10000
@@ -197,7 +197,7 @@ tags:
     while:
       notVisible: "Microphone is active"
     commands:
-      - evalScript: ${output.expandNotifications = http.get(RAKAZO_EXPAND_NOTIFICATIONS_URL)}
+      - evalScript: ${output.expandNotifications = http.get(ORKBOT_EXPAND_NOTIFICATIONS_URL)}
       - assertTrue: ${output.expandNotifications.ok}
       - waitForAnimationToEnd:
           timeout: 2000

@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EmailEmulator, FakeSandboxProvider } from "@rakazo/adapters";
-import { USER_DEVICE_PAIR_PATH, USER_DEVICE_PATH } from "@rakazo/contracts";
-import { runAsSystem } from "@rakazo/db";
+import { EmailEmulator, FakeSandboxProvider } from "@orkbot/adapters";
+import { USER_DEVICE_PAIR_PATH, USER_DEVICE_PATH } from "@orkbot/contracts";
+import { runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
 import type { AppHandles } from "./app.js";
@@ -20,7 +20,7 @@ describe.skipIf(!databaseUrl)("paired computers end with the sign-in that paired
   let account = 0;
 
   beforeAll(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "rakazo-device-sessions-"));
+    dataDir = await mkdtemp(join(tmpdir(), "orkbot-device-sessions-"));
     handles = await createApp({
       databaseUrl: databaseUrl!,
       dataDir,

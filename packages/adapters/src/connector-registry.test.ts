@@ -4,7 +4,7 @@ import type {
   ConnectorEvent,
   ConnectorProvider,
   ConnectorTool,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { ConnectorRegistry, createConnectorStack } from "./composio-connector.js";
 

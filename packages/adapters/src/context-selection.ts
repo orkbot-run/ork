@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import type { AgentContextStrategy, CacheCapabilities } from "@rakazo/adapter-kit";
+import type { AgentContextStrategy, CacheCapabilities } from "@orkbot/adapter-kit";
 import {
   MODEL_CONTEXT_TOO_SMALL_ERROR,
   shortenedTextLength,
   textBoundary,
   truncatePlainText,
   VERBATIM_TOOL_RESULT_TOO_LARGE_ERROR,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import type { VerbatimMcpServers } from "./verbatim-mcp-result.js";
 import { isVerbatimMcpResult, toolCallIdentity } from "./verbatim-mcp-result.js";
 

@@ -1,5 +1,5 @@
-import { REPLY_QUOTE_MAX_LENGTH } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
+import { REPLY_QUOTE_MAX_LENGTH } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 

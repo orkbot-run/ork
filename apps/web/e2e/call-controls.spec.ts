@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 test("an ongoing call stays in reach on a page outside the shell", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `call-controls-${stamp}@rakazo.test`, "password12", "Call Controls");
+  await signup(page, `call-controls-${stamp}@orkbot.test`, "password12", "Call Controls");
   await completeOnboarding(page);
   await rpc(page, "voice/connect", { provider: "scripted", apiKey: "fake-call-voice-key" });
   await page.goto("/app");

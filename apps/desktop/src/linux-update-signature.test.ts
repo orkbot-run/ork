@@ -1,12 +1,12 @@
-import { createPublicKey, generateKeyPairSync, sign } from "node:crypto";
+import { generateKeyPairSync, sign } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyUpdaterFailure } from "./auto-update.js";
 import {
+  configuredLinuxUpdateKey,
   fetchLinuxUpdateSignature,
-  LINUX_UPDATE_PUBLIC_KEY,
   linuxUpdateSignatureMessage,
   SignatureUnreachableError,
   sha512File,
@@ -20,7 +20,7 @@ const dirs: string[] = [];
 function appImage(contents = "fake appimage") {
   const dir = mkdtempSync(path.join(tmpdir(), "linux-update-"));
   dirs.push(dir);
-  const file = path.join(dir, "Rakazo-1.2.3.AppImage");
+  const file = path.join(dir, "Ork-1.2.3.AppImage");
   writeFileSync(file, contents);
   return file;
 }
@@ -41,8 +41,8 @@ afterEach(() => {
 describe("linuxUpdateSignatureMessage", () => {
   it("is the versioned three-line format the release workflow signs", () => {
     expect(
-      linuxUpdateSignatureMessage("1.2.3", "Rakazo-1.2.3.AppImage", "ab12").toString("utf8"),
-    ).toBe("rakazo-linux-update-v1\n1.2.3\nRakazo-1.2.3.AppImage\nab12\n");
+      linuxUpdateSignatureMessage("1.2.3", "Ork-1.2.3.AppImage", "ab12").toString("utf8"),
+    ).toBe("orkbot-linux-update-v1\n1.2.3\nOrk-1.2.3.AppImage\nab12\n");
   });
 
   it("hashes the whole file with SHA-512", async () => {
@@ -80,17 +80,34 @@ describe("verifyLinuxUpdate", () => {
     );
   });
 
-  it("rejects the test key against the embedded release key", async () => {
+  it("fails closed until an Ork release key is configured", async () => {
     const file = appImage();
-    expect(createPublicKey(LINUX_UPDATE_PUBLIC_KEY).asymmetricKeyType).toBe("ed25519");
-    expect(await verifyLinuxUpdate(file, await signatureFor(file), "1.2.3")).toBe(false);
+    expect(configuredLinuxUpdateKey("")).toBeNull();
+    expect(await verifyLinuxUpdate(file, await signatureFor(file), "1.2.3", "")).toBe(false);
+  });
+
+  it("accepts a configured Ed25519 public key and rejects invalid or private keys", () => {
+    const pem = publicKey.export({ type: "spki", format: "pem" }).toString();
+    expect(configuredLinuxUpdateKey(pem)?.asymmetricKeyType).toBe("ed25519");
+    expect(configuredLinuxUpdateKey("not a public key")).toBeNull();
+    expect(configuredLinuxUpdateKey("-----BEGIN PUBLIC KEY-----\ninvalid\n")).toBeNull();
+    expect(
+      configuredLinuxUpdateKey(privateKey.export({ type: "pkcs8", format: "pem" }).toString()),
+    ).toBeNull();
+    expect(
+      configuredLinuxUpdateKey(
+        generateKeyPairSync("rsa", { modulusLength: 2048 })
+          .publicKey.export({ type: "spki", format: "pem" })
+          .toString(),
+      ),
+    ).toBeNull();
   });
 
   it("rejects malformed signatures and file names", async () => {
     const file = appImage();
     expect(await verifyLinuxUpdate(file, "", "1.2.3", publicKey)).toBe(false);
     expect(await verifyLinuxUpdate(file, "not base64!", "1.2.3", publicKey)).toBe(false);
-    const renamed = path.join(path.dirname(file), "rakazo.sh");
+    const renamed = path.join(path.dirname(file), "orkbot.sh");
     writeFileSync(renamed, "fake appimage");
     expect(await verifyLinuxUpdate(renamed, await signatureFor(renamed), "1.2.3", publicKey)).toBe(
       false,
@@ -101,11 +118,11 @@ describe("verifyLinuxUpdate", () => {
 describe("fetchLinuxUpdateSignature", () => {
   it("reads the signature beside the AppImage in the official release", async () => {
     const fetchUrl = respond("signature\n");
-    expect(await fetchLinuxUpdateSignature("1.2.3", "Rakazo-1.2.3.AppImage", fetchUrl)).toBe(
+    expect(await fetchLinuxUpdateSignature("1.2.3", "Ork-1.2.3.AppImage", fetchUrl)).toBe(
       "signature\n",
     );
     expect(fetchUrl).toHaveBeenCalledWith(
-      "https://github.com/elie222/rakazo/releases/download/v1.2.3/Rakazo-1.2.3.AppImage.sig",
+      "https://github.com/orkbot-run/ork/releases/download/v1.2.3/Ork-1.2.3.AppImage.sig",
       expect.any(AbortSignal),
     );
   });
@@ -113,9 +130,9 @@ describe("fetchLinuxUpdateSignature", () => {
   it("refuses versions and names that could point elsewhere", async () => {
     const fetchUrl = respond("signature");
     for (const [version, name] of [
-      ["1.2.3/../../x", "Rakazo-1.2.3.AppImage"],
-      ["1.2.3", "../Rakazo-1.2.3.AppImage"],
-      ["1.2.3", "Rakazo-1.2.3.exe"],
+      ["1.2.3/../../x", "Ork-1.2.3.AppImage"],
+      ["1.2.3", "../Ork-1.2.3.AppImage"],
+      ["1.2.3", "Ork-1.2.3.exe"],
     ] as const) {
       await expect(fetchLinuxUpdateSignature(version, name, fetchUrl)).rejects.toThrow();
     }
@@ -125,7 +142,7 @@ describe("fetchLinuxUpdateSignature", () => {
   it("treats a missing signature as a signature failure", async () => {
     const error = await fetchLinuxUpdateSignature(
       "1.2.3",
-      "Rakazo-1.2.3.AppImage",
+      "Ork-1.2.3.AppImage",
       respond("Not Found", { status: 404 }),
     ).catch((caught: unknown) => caught);
     expect(classifyUpdaterFailure(error).kind).toBe("signature");
@@ -138,12 +155,9 @@ describe("fetchLinuxUpdateSignature", () => {
           signal.addEventListener("abort", () => reject(signal.reason)),
         ),
     );
-    const error = await fetchLinuxUpdateSignature(
-      "1.2.3",
-      "Rakazo-1.2.3.AppImage",
-      hanging,
-      10,
-    ).catch((caught: unknown) => caught);
+    const error = await fetchLinuxUpdateSignature("1.2.3", "Ork-1.2.3.AppImage", hanging, 10).catch(
+      (caught: unknown) => caught,
+    );
     expect(error).toBeInstanceOf(SignatureUnreachableError);
     expect(classifyUpdaterFailure(error).kind).not.toBe("signature");
   });
@@ -151,12 +165,12 @@ describe("fetchLinuxUpdateSignature", () => {
   it("stops reading an oversized signature", async () => {
     const large = "a".repeat(4_096);
     await expect(
-      fetchLinuxUpdateSignature("1.2.3", "Rakazo-1.2.3.AppImage", respond(large)),
+      fetchLinuxUpdateSignature("1.2.3", "Ork-1.2.3.AppImage", respond(large)),
     ).rejects.toThrow("too large");
     await expect(
       fetchLinuxUpdateSignature(
         "1.2.3",
-        "Rakazo-1.2.3.AppImage",
+        "Ork-1.2.3.AppImage",
         respond("small", { headers: { "content-length": "4096" } }),
       ),
     ).rejects.toThrow("too large");

@@ -1,4 +1,4 @@
-import { MAX_PASSWORD_LENGTH, PASSWORD_RULES } from "@rakazo/core";
+import { MAX_PASSWORD_LENGTH, PASSWORD_RULES } from "@orkbot/core";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {

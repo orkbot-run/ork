@@ -1,5 +1,5 @@
-import type { AdapterContext, SecretStore } from "@rakazo/adapter-kit";
-import { createLogger, createTestSink, getLogger, installLogger } from "@rakazo/logging";
+import type { AdapterContext, SecretStore } from "@orkbot/adapter-kit";
+import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import { InfisicalSecretStore, SecretStoreUnavailableError } from "./infisical-secret-store.js";
 import { InMemoryRealtimeFanout } from "./realtime.js";
@@ -68,6 +68,26 @@ conformance("encrypted", () => new EncryptedSecretStore("test-key"));
 conformance("Infisical", () => new InfisicalSecretStore(infisicalFake().options));
 
 describe("Infisical lifecycle and REST", () => {
+  it("reads and deletes older opaque refs without weakening their row binding", async () => {
+    const fake = infisicalFake();
+    const store = new InfisicalSecretStore(fake.options);
+    await store.start();
+    try {
+      const written = await store.put("saved value", secretTestContext, { recordId: "row" });
+      const currentKey = written.ref.slice("infisical:v1:".length);
+      const savedKey = currentKey.replace(/^orkbot_/, "rakazo_");
+      fake.values.set(savedKey, fake.values.get(currentKey)!);
+      fake.values.delete(currentKey);
+      const savedRef = `infisical:v1:${savedKey}`;
+      await expect(store.load(savedRef, "row")).resolves.toBe("saved value");
+      await expect(store.load(savedRef, "another-row")).rejects.toThrow();
+      await store.delete(savedRef, "row");
+      expect(fake.values.size).toBe(0);
+    } finally {
+      await store.close();
+    }
+  });
+
   it("reads a just-written ref from another process and reads legacy/ephemeral refs locally", async () => {
     const fake = infisicalFake();
     const a = new ComposedSecretStore(
@@ -386,7 +406,7 @@ describe("Infisical lifecycle and REST", () => {
     let first = true;
     const fetcher: typeof fetch = async (input, init) => {
       const response = await fake.fetcher(input, init);
-      if (init?.method === "GET" && !String(input).includes("rakazo_start_check") && first) {
+      if (init?.method === "GET" && !String(input).includes("orkbot_start_check") && first) {
         first = false;
         started();
         await gate;
@@ -523,7 +543,7 @@ describe("Infisical lifecycle and REST", () => {
     let gets = 0;
     const fetcher: typeof fetch = async (input, init) => {
       const response = await fake.fetcher(input, init);
-      if (init?.method === "GET" && !String(input).includes("rakazo_start_check") && ++gets === 1) {
+      if (init?.method === "GET" && !String(input).includes("orkbot_start_check") && ++gets === 1) {
         started();
         await gate;
       }

@@ -1,4 +1,4 @@
-import { sanitizeJsonValue, sanitizeUtf16ForJson } from "@rakazo/core";
+import { sanitizeJsonValue, sanitizeUtf16ForJson } from "@orkbot/core";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
 const WRITE_OPERATIONS = new Set([

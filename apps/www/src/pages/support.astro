@@ -8,33 +8,20 @@ import { GITHUB_URL, SELF_HOST_GUIDE_PATH } from "../site";
 const starsLabel = await githubStarsLabel();
 ---
 
-<BaseLayout title="Support · Rakazo" description="Get help with the Rakazo app and self-hosted Rakazo.">
+<BaseLayout title="Support · Ork" description="Documentation and issue reporting for self-hosted Ork.">
   <div class="container">
     <Header starsLabel={starsLabel} />
     <main id="main" class="privacy-copy">
-      <h1>Rakazo support</h1>
+      <h1>Ork support</h1>
       <p>
-        For help with the Rakazo mobile app or a hosted Rakazo account, email{" "}
-        <a href="mailto:hello@rakazo.com">hello@rakazo.com</a>. Include the email address on your
-        account, what you expected to happen, and any error message you saw. Do not send passwords, API keys,
-        access tokens, or other secrets.
+        Start with the <a href={SELF_HOST_GUIDE_PATH}>self-hosting guide</a>. For reproducible bugs or feature
+        requests, open an issue in the <a href={`${GITHUB_URL}/issues`}>Ork GitHub repository</a>.
+        Remove credentials and private content before posting.
       </p>
-      <h2>Self-hosted Rakazo</h2>
+      <h2 id="account-deletion">Your account and data</h2>
       <p>
-        Start with the <a href={SELF_HOST_GUIDE_PATH}>self-hosting guide</a>. For reproducible bugs or feature requests,
-        open an issue in the <a href={`${GITHUB_URL}/issues`}>Rakazo GitHub repository</a>.
-      </p>
-      <h2 id="account-deletion">Account deletion</h2>
-      <p>
-        In the mobile app, open <strong>Account</strong>, enter your current password under{" "}
-        <strong>Delete account</strong>, and confirm. On the web, sign in at{" "}
-        <a href="https://app.rakazo.com">app.rakazo.com</a> and do the same under{" "}
-        <strong>Settings</strong> → <strong>Account</strong>. This permanently deletes the hosted account and its
-        associated personal Space data.
-      </p>
-      <p>
-        Without access to the app, email <a href="mailto:hello@rakazo.com">hello@rakazo.com</a> from your account's
-        email address to ask us to delete it. Sign-in security records are kept for up to 90 days.
+        For account, billing, or privacy requests, contact the operator of the Ork server you use.
+        Account settings provide deletion controls for that deployment.
       </p>
     </main>
     <Footer />

@@ -1,12 +1,12 @@
-import { ORPCError } from "@orpc/client";
-import type { ProductEvent, ThreadMessage, ThreadSnapshot } from "@rakazo/contracts";
-import type * as CoreModule from "@rakazo/core";
+import type { ProductEvent, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
+import type * as CoreModule from "@orkbot/core";
 import {
   callIdFromClientNonce,
   groupVoiceChats,
   INTERIM_BARGE_IN_MS,
   runThreadSubscription,
-} from "@rakazo/core";
+} from "@orkbot/core";
+import { ORPCError } from "@orpc/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { pickUp } from "./call-pickup.js";
 import { ECHO_GUARD_MS, endCall, getSnapshot, startCall, toggleMute } from "./call-session";
@@ -20,7 +20,7 @@ vi.mock("@lingui/core/macro", () => ({
   t: (strings: TemplateStringsArray, ...values: unknown[]) => String.raw(strings, ...values),
 }));
 
-vi.mock("@rakazo/core", async (importOriginal) => ({
+vi.mock("@orkbot/core", async (importOriginal) => ({
   ...(await importOriginal<typeof CoreModule>()),
   runThreadSubscription: vi.fn(async () => undefined),
 }));
@@ -185,7 +185,7 @@ describe("call session", () => {
     "keeps live call work after overlapping recovery snapshots %s of the stream",
     async (position) => {
       const actual = await vi.importActual<{ runThreadSubscription: typeof runThreadSubscription }>(
-        "@rakazo/core",
+        "@orkbot/core",
       );
       vi.mocked(runThreadSubscription).mockImplementationOnce(actual.runThreadSubscription);
       const first = eventStream();

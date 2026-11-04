@@ -8,7 +8,7 @@ import {
   organicAvatarPath,
   SHIPPED_BOT_AVATAR_EYES,
   SHIPPED_BOT_AVATAR_VIEWBOX,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import type { ReactNode } from "react";
 import { memo, useId } from "react";
 import type { ColorValue } from "react-native";

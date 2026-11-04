@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { Ticket, TicketStatus } from "@rakazo/contracts";
-import { TICKET_STATUSES } from "@rakazo/contracts";
+import type { Ticket, TicketStatus } from "@orkbot/contracts";
+import { TICKET_STATUSES } from "@orkbot/contracts";
 import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, Text } from "react-native";
 import type { BoardSection } from "../lib/board";

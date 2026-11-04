@@ -10,10 +10,10 @@ import type {
   ComputerRef,
   JobPublisher,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import type { MessageBlock } from "@rakazo/contracts";
-import { WORKING_RUN_STATUSES } from "@rakazo/core";
-import type { createDb } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { MessageBlock } from "@orkbot/contracts";
+import { WORKING_RUN_STATUSES } from "@orkbot/core";
+import type { createDb } from "@orkbot/db";
 import type { EvalJudge, JudgeInput, Judgment } from "../evals/judge.js";
 import { createEvalJudge } from "../evals/judge.js";
 import { sessionCookieHeader } from "../index.js";

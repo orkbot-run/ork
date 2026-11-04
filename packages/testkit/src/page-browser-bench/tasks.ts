@@ -1,9 +1,9 @@
-import type { BrowserActStep, PageBrowserCommand, PageBrowserResult } from "@rakazo/adapter-kit";
+import type { BrowserActStep, PageBrowserCommand, PageBrowserResult } from "@orkbot/adapter-kit";
 import {
   browserResultForModel,
   serializeToolResult,
   TOOL_RESULT_TEXT_LIMIT,
-} from "@rakazo/adapters";
+} from "@orkbot/adapters";
 
 /** The site under test and a second site for cross-site frames, both served inside the computer. */
 export const SITE = "https://localhost:8443";

@@ -3,8 +3,8 @@ import type {
   ComputerRef,
   ProcessEvent,
   SandboxProvider,
-} from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   diskNoteInstruction,
@@ -16,7 +16,7 @@ import {
 } from "./computer-disk.js";
 
 const DF = `Filesystem     1024-blocks     Used Available Capacity Mounted on
-/dev/vda1         82045336 75000000   7045336      92% /home/rakazo
+/dev/vda1         82045336 75000000   7045336      92% /home/orkbot
 `;
 const GiB = 1024n ** 3n;
 const context = { signal: new AbortController().signal } as AdapterContext;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Actor, OrganizationList } from "@rakazo/contracts";
+import type { Actor, OrganizationList } from "@orkbot/contracts";
 import { createOrganizationWithDefaultSpace } from "./bootstrap-user.js";
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";

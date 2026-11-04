@@ -1,6 +1,6 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld("rakazoSetup", {
+contextBridge.exposeInMainWorld("orkbotSetup", {
   platform: process.platform,
   // Read before the page runs, so its first paint is already in the app's language.
   locale: ipcRenderer.sendSync("desktop.setup.locale") ?? { lang: "en", dir: "ltr", messages: {} },

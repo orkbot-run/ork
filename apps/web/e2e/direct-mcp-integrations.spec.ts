@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, openIntegrationsAdd, rpc, signup
 test("shows directly registered MCP servers in Integrations without catalog connections", async ({
   page,
 }, testInfo) => {
-  await signup(page, `direct-mcp-list-${Date.now()}@rakazo.test`, "password12", "Direct MCP List");
+  await signup(page, `direct-mcp-list-${Date.now()}@orkbot.test`, "password12", "Direct MCP List");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);

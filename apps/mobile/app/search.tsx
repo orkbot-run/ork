@@ -1,4 +1,4 @@
-import { botColors, typeScale } from "@rakazo/ui-tokens";
+import { botColors, typeScale } from "@orkbot/ui-tokens";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {

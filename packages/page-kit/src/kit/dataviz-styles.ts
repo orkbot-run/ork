@@ -1,4 +1,4 @@
-import { pageKitPalette } from "@rakazo/ui-tokens";
+import { pageKitPalette } from "@orkbot/ui-tokens";
 // Charts and data display. Kept apart from the base kit styles so each family reads on its own.
 export const DATAVIZ_CSS = `
 :root{--rk-axis:color-mix(in srgb,var(--foreground) 58%,transparent);--rk-hover:color-mix(in srgb,var(--foreground) 4%,transparent);--rk-hover-strong:color-mix(in srgb,var(--foreground) 12%,transparent);--rk-line-strong:color-mix(in srgb,var(--foreground) 30%,transparent);--rk-hairline-soft:color-mix(in srgb,var(--foreground) 6%,transparent);--rk-fill-strong:${pageKitPalette.dark.fillStrong};--rk-surface:color-mix(in srgb,var(--foreground) 7%,var(--background))}

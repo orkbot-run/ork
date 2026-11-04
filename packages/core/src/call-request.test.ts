@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { blocksToAgentHistoryText } from "./attachments.js";
 import { callIdFromClientNonce } from "./call-nonce.js";

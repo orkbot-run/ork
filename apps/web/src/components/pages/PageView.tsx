@@ -1,7 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
-import { PageIcon } from "@rakazo/chat-ui/web";
-import { PAGE_TITLE_MAX_LENGTH } from "@rakazo/contracts";
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@rakazo/ui-web";
+import { PageIcon } from "@orkbot/chat-ui/web";
+import { PAGE_TITLE_MAX_LENGTH } from "@orkbot/contracts";
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";

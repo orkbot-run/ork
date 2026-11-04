@@ -9,9 +9,9 @@ import type {
   AgentToolExecutionResult,
   ConnectorTool,
   ModelCallObserver,
-} from "@rakazo/adapter-kit";
-import { DEFAULT_CONTEXT_STRATEGY } from "@rakazo/adapter-kit";
-import { FLEET_TOOL_NAMES } from "@rakazo/contracts";
+} from "@orkbot/adapter-kit";
+import { DEFAULT_CONTEXT_STRATEGY } from "@orkbot/adapter-kit";
+import { FLEET_TOOL_NAMES } from "@orkbot/contracts";
 import {
   isInternalTermination,
   isTerminatingReplyResult,

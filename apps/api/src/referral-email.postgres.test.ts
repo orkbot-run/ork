@@ -1,6 +1,6 @@
-import type { TransactionalEmailProvider } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
-import { asSystem, createDb } from "@rakazo/db";
+import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
+import { asSystem, createDb } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sendReferralEmails } from "./referral-email.js";
 

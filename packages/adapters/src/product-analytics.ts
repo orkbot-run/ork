@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
-import type { ProductAnalytics } from "@rakazo/adapter-kit";
-import { AnalyticsEvent } from "@rakazo/contracts";
-import { getLogger } from "@rakazo/logging";
+import type { ProductAnalytics } from "@orkbot/adapter-kit";
+import { AnalyticsEvent } from "@orkbot/contracts";
+import { getLogger } from "@orkbot/logging";
 
 /** Vendor configuration and translation stay here; no SDK ever reads the UI or request context. */
 export function createProductAnalytics(

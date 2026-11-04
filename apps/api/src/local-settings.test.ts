@@ -1,4 +1,4 @@
-import { LOCAL_COMPUTER_HOST_PATH, LOCAL_SETTINGS_TOKEN_HEADER } from "@rakazo/contracts";
+import { LOCAL_COMPUTER_HOST_PATH, LOCAL_SETTINGS_TOKEN_HEADER } from "@orkbot/contracts";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { mountLocalComputerHost, validLocalSettingsToken } from "./local-settings.js";

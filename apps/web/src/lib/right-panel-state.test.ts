@@ -62,7 +62,7 @@ describe("right panel preferences", () => {
       setItem: (key: string, value: string) => entries.set(key, value),
     });
     const key = rightPanelStorageKey("user-a", "space-a", "bot", "bot-a");
-    expect(key).toBe("rakazo:right-panel-state:user-a:space-a:bot:bot-a");
+    expect(key).toBe("orkbot:right-panel-state:user-a:space-a:bot:bot-a");
     writeRightPanelState(key, "computer");
     writeRightPanelState(key, "create-group");
     // An import is not reopened after a reload either.

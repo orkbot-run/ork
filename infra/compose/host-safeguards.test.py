@@ -403,7 +403,7 @@ class AlertTests(unittest.TestCase):
             ):
                 alerts.notify("disk", "Low space", root / "absent.json", root / "state")
                 alerts.notify("disk", "Low space", root / "absent.json", root / "state")
-                self.assertEqual(output.getvalue().count("Rakazo alert: Low space"), 1)
+                self.assertEqual(output.getvalue().count("Ork alert: Low space"), 1)
                 send.assert_not_called()
 
     def test_concurrent_calls_deliver_once(self):
@@ -488,7 +488,7 @@ class FirewallTests(unittest.TestCase):
         source = (ROOT / "firewall-change.sh").read_text()
         source = source.replace('[[ "${EUID}" == 0 ]]', "true")
         source = source.replace(
-            "STATE=/var/lib/rakazo/firewall-change", "STATE=" + str(self.state)
+            "STATE=/var/lib/orkbot/firewall-change", "STATE=" + str(self.state)
         )
         source = source.replace("df -Pk /etc/ufw", "df -Pk " + str(self.etc / "ufw"))
         source = source.replace("-C /etc", "-C " + str(self.etc))
@@ -665,12 +665,12 @@ class HostCheckTests(unittest.TestCase):
             source = source.replace("/var/backups", str(backups))
             source = source.replace("/etc/ufw/user.rules", str(rules))
             audit_env = root / "audit-ship.env"
-            source = source.replace("/etc/rakazo/audit-ship.env", str(audit_env))
+            source = source.replace("/etc/orkbot/audit-ship.env", str(audit_env))
             source = source.replace("/usr/sbin/sshd", str(bin_dir / "sshd"))
             reboot_required = root / "reboot-required"
             source = source.replace("/run/reboot-required", str(reboot_required))
             source = source.replace(
-                "/usr/local/sbin/rakazo-host-alert", str(bin_dir / "alert")
+                "/usr/local/sbin/orkbot-host-alert", str(bin_dir / "alert")
             )
             script = root / "check.sh"
             script.write_text(source)
@@ -685,8 +685,8 @@ class HostCheckTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("No verified backup completed", alert_log.read_text())
             self.assertNotIn("SSH allow rule is missing", alert_log.read_text())
-            (backups / "rakazo" / "20261020T000000Z").mkdir(parents=True)
-            (backups / "rakazo" / "20261020T000000Z" / "SHA256SUMS").write_text(
+            (backups / "orkbot" / "20261020T000000Z").mkdir(parents=True)
+            (backups / "orkbot" / "20261020T000000Z" / "SHA256SUMS").write_text(
                 "verified"
             )
             result = subprocess.run(
@@ -694,7 +694,7 @@ class HostCheckTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
             # A plaintext latest snapshot alerts until it is encrypted or explicitly allowed.
-            plaintext = backups / "rakazo" / "20261020T000000Z" / "rakazo.dump"
+            plaintext = backups / "orkbot" / "20261020T000000Z" / "orkbot.dump"
             plaintext.write_text("dump")
             result = subprocess.run(
                 ["bash", str(script)], env=env, capture_output=True, text=True
@@ -703,7 +703,7 @@ class HostCheckTests(unittest.TestCase):
             self.assertIn("latest backup is not encrypted", alert_log.read_text())
             result = subprocess.run(
                 ["bash", str(script)],
-                env={**env, "RAKAZO_BACKUP_ALLOW_PLAINTEXT": "1"},
+                env={**env, "ORKBOT_BACKUP_ALLOW_PLAINTEXT": "1"},
                 capture_output=True,
                 text=True,
             )
@@ -748,7 +748,7 @@ class HostCheckTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             result = subprocess.run(
                 ["bash", str(script)],
-                env={**env, "RAKAZO_BACKUP_REQUIRE_VOLUME": "1"},
+                env={**env, "ORKBOT_BACKUP_REQUIRE_VOLUME": "1"},
                 capture_output=True,
                 text=True,
             )
@@ -757,7 +757,7 @@ class HostCheckTests(unittest.TestCase):
                 "Backup volume is not mounted separately", alert_log.read_text()
             )
             # A configured audit sink alerts while its shipper is not running.
-            audit_env.write_text("RAKAZO_AUDIT_SINK_URL=https://ingest.example.com/v1\n")
+            audit_env.write_text("ORKBOT_AUDIT_SINK_URL=https://ingest.example.com/v1\n")
             result = subprocess.run(
                 ["bash", str(script)], env=env, capture_output=True, text=True
             )

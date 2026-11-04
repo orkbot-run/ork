@@ -1,4 +1,4 @@
-import { cancelResponseBody } from "@rakazo/core";
+import { cancelResponseBody } from "@orkbot/core";
 
 /** Well above any legitimate tools/list page or tool result, which is projected to 1 MB anyway. */
 export const MAX_MCP_RESPONSE_BYTES = 16 * 1024 * 1024;

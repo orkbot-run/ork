@@ -1,4 +1,4 @@
-import { pageKitPalette, webDarkTokens, webLightTokens } from "@rakazo/ui-tokens";
+import { pageKitPalette, webDarkTokens, webLightTokens } from "@orkbot/ui-tokens";
 import { useSyncExternalStore } from "react";
 import type { DiagramEdge, DiagramNode } from "./diagram.js";
 import { layoutDiagram } from "./diagram.js";
@@ -166,8 +166,8 @@ type SourceRecord = {
  * labelled as not fresh, so pages written for them still render.
  */
 export function useSource(id: string): SourceRecord {
-  const declared = (globalThis as { __rakazoPageSources?: Record<string, unknown> })
-    .__rakazoPageSources;
+  const declared = (globalThis as { __orkbotPageSources?: Record<string, unknown> })
+    .__orkbotPageSources;
   if (!declared || !Object.hasOwn(declared, id)) {
     throw new Error(`useSource("${id}"): this page declares no source with that id.`);
   }

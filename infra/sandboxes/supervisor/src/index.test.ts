@@ -4,7 +4,7 @@ import http from "node:http";
 import net from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { resolveSupervisorToken } from "@rakazo/core";
+import { resolveSupervisorToken } from "@orkbot/core";
 import type Docker from "dockerode";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -137,7 +137,7 @@ describe("computer screen readiness", () => {
 
 describe("sandbox supervisor Docker endpoint", () => {
   it("discovers the unprivileged Docker Desktop socket on macOS", () => {
-    const home = mkdtempSync(path.join(tmpdir(), "rakazo-docker-home-"));
+    const home = mkdtempSync(path.join(tmpdir(), "orkbot-docker-home-"));
     try {
       expect(resolveDockerSocketPath({ HOME: home }, "darwin")).toBe("/var/run/docker.sock");
       const socket = path.join(home, ".docker", "run", "docker.sock");
@@ -299,8 +299,8 @@ describe("sandbox supervisor HTTP boundary", () => {
       headers: {
         authorization: `Bearer ${token}`,
         "content-type": "application/json",
-        "x-rakazo-bot-id": "other-bot",
-        "x-rakazo-space-id": "workspace",
+        "x-orkbot-bot-id": "other-bot",
+        "x-orkbot-space-id": "workspace",
       },
       body: JSON.stringify({
         botId: "bot",
@@ -337,11 +337,11 @@ describe("sandbox supervisor input containment", () => {
 
   it("accepts the legacy workspace label without weakening container identity", () => {
     expect(
-      hasComputerIdentity({ "rakazo.botId": "bot", "rakazo.workspaceId": "space" }, "bot", "space"),
+      hasComputerIdentity({ "orkbot.botId": "bot", "orkbot.workspaceId": "space" }, "bot", "space"),
     ).toBe(true);
     expect(
       hasComputerIdentity(
-        { "rakazo.botId": "bot", "rakazo.workspaceId": "other-space" },
+        { "orkbot.botId": "bot", "orkbot.workspaceId": "other-space" },
         "bot",
         "space",
       ),
@@ -349,9 +349,9 @@ describe("sandbox supervisor input containment", () => {
     expect(
       hasComputerIdentity(
         {
-          "rakazo.botId": "bot",
-          "rakazo.spaceId": "space",
-          "rakazo.workspaceId": "other-space",
+          "orkbot.botId": "bot",
+          "orkbot.spaceId": "space",
+          "orkbot.workspaceId": "other-space",
         },
         "bot",
         "space",
@@ -374,8 +374,8 @@ describe("sandbox supervisor input containment", () => {
     ];
     const aimed = [{ kind: "scroll" as const, direction: "down" as const, x: 600, y: 420 }];
     const sideways = [{ kind: "scroll" as const, direction: "left" as const }];
-    const current = { [AIMED_SCROLL_CONTROL_LABEL]: "1", "rakazo.botId": "bot" };
-    const older = { "rakazo.botId": "bot" };
+    const current = { [AIMED_SCROLL_CONTROL_LABEL]: "1", "orkbot.botId": "bot" };
+    const older = { "orkbot.botId": "bot" };
     expect(controlHandlesActions(older, plain)).toBe(true);
     expect(controlHandlesActions(older, aimed)).toBe(false);
     expect(controlHandlesActions(older, sideways)).toBe(false);
@@ -419,20 +419,20 @@ describe("sandbox supervisor input containment", () => {
     });
   });
 
-  it.each([undefined, "/home/rakazo/.browser-profiles/bot-test"])(
+  it.each([undefined, "/home/orkbot/.browser-profiles/bot-test"])(
     "opens workspace files in the assigned browser (profile=%s)",
     (profile) => {
       for (const [file, url] of [
-        ["screenshots/it's #1%.png", "file:///home/rakazo/screenshots/it's%20%231%25.png"],
-        ["/image.png", "file:///home/rakazo/image.png"],
-        ["screenshots/back\\slash.png", "file:///home/rakazo/screenshots/back/slash.png"],
+        ["screenshots/it's #1%.png", "file:///home/orkbot/screenshots/it's%20%231%25.png"],
+        ["/image.png", "file:///home/orkbot/image.png"],
+        ["screenshots/back\\slash.png", "file:///home/orkbot/screenshots/back/slash.png"],
       ] as const) {
         expect(containerActionStep({ kind: "open", path: file }, ":2", profile)).toEqual({
           argv: [
             "env",
             "DISPLAY=:2",
-            ...(profile ? [`RAKAZO_BROWSER_PROFILE=${profile}`] : []),
-            "rakazo-browser",
+            ...(profile ? [`ORKBOT_BROWSER_PROFILE=${profile}`] : []),
+            "orkbot-browser",
             url,
           ],
         });
@@ -445,7 +445,7 @@ describe("sandbox supervisor input containment", () => {
       expect(
         containerActionStep({ kind: "launch", application, uri: "https://example.com" }, ":2"),
       ).toEqual({
-        argv: ["env", "DISPLAY=:2", "rakazo-browser", "https://example.com"],
+        argv: ["env", "DISPLAY=:2", "orkbot-browser", "https://example.com"],
       });
     }
     expect(containerActionStep({ kind: "launch", application: "xterm" }, ":3")).toEqual({
@@ -458,7 +458,7 @@ describe("sandbox supervisor input containment", () => {
 
   it("routes focus actions through the focus-or-launch wrapper", () => {
     expect(containerActionStep({ kind: "focus", application: "xterm" }, ":3")).toEqual({
-      argv: ["env", "DISPLAY=:3", "rakazo-focus-or-launch", "xterm"],
+      argv: ["env", "DISPLAY=:3", "orkbot-focus-or-launch", "xterm"],
     });
     expect(
       containerActionStep(
@@ -469,8 +469,8 @@ describe("sandbox supervisor input containment", () => {
       argv: [
         "env",
         "DISPLAY=:2",
-        "rakazo-focus-or-launch",
-        "rakazo-browser",
+        "orkbot-focus-or-launch",
+        "orkbot-browser",
         "https://example.com",
       ],
     });
@@ -479,14 +479,14 @@ describe("sandbox supervisor input containment", () => {
       argv: [
         "env",
         "DISPLAY=:2",
-        `RAKAZO_BROWSER_PROFILE=${profile}`,
-        "rakazo-focus-or-launch",
-        "rakazo-browser",
+        `ORKBOT_BROWSER_PROFILE=${profile}`,
+        "orkbot-focus-or-launch",
+        "orkbot-browser",
       ],
     });
     // A non-browser application never receives the per-screen browser profile.
     expect(containerActionStep({ kind: "focus", application: "xterm" }, ":2", profile)).toEqual({
-      argv: ["env", "DISPLAY=:2", "rakazo-focus-or-launch", "xterm"],
+      argv: ["env", "DISPLAY=:2", "orkbot-focus-or-launch", "xterm"],
     });
   });
 
@@ -495,7 +495,7 @@ describe("sandbox supervisor input containment", () => {
       expect(
         containerActionStep({ kind: "launch", application, uri: "https://example.com" }, ":2"),
       ).toEqual({
-        argv: ["env", "DISPLAY=:2", "rakazo-browser", "https://example.com"],
+        argv: ["env", "DISPLAY=:2", "orkbot-browser", "https://example.com"],
       });
     }
     expect(containerActionStep({ kind: "launch", application: "XTerm" }, ":3")).toEqual({
@@ -511,8 +511,8 @@ describe("sandbox supervisor input containment", () => {
         argv: [
           "env",
           "DISPLAY=:2",
-          `RAKAZO_BROWSER_PROFILE=${profile}`,
-          "rakazo-browser",
+          `ORKBOT_BROWSER_PROFILE=${profile}`,
+          "orkbot-browser",
           "https://example.com",
         ],
       },
@@ -524,7 +524,7 @@ describe("sandbox supervisor input containment", () => {
         argv: [
           "env",
           "DISPLAY=:2",
-          `RAKAZO_BROWSER_PROFILE=${profile}`,
+          `ORKBOT_BROWSER_PROFILE=${profile}`,
           "xdg-open",
           "https://example.com",
         ],
@@ -702,7 +702,7 @@ describe("sandbox supervisor input containment", () => {
     expect(terminalCommand("control", "terminal", "/work")).toContain("0.0.0.0:6080 8>&-");
     expect(interactiveScreenCommand(true, "lease-new")).not.toContain("sockets/view-1-");
     expect(interactiveScreenCommand(false, "lease-old")).toContain("= 'lease-old'");
-    expect(interactiveScreenCommand(false, "lease-old")).toContain("RAKAZO_CONTROL_RELEASED");
+    expect(interactiveScreenCommand(false, "lease-old")).toContain("ORKBOT_CONTROL_RELEASED");
   });
 
   it("assigns distinct screen indexes per Team bot and starts extra displays", () => {
@@ -763,8 +763,8 @@ describe("sandbox supervisor input containment", () => {
   it("resets stale managed screens without killing unrelated container jobs", () => {
     const command = resetManagedScreensCommand();
     expect(command).toContain("chromium-bot-*");
-    expect(command).toContain("for marker in /tmp/rakazo/browser-profile-*");
-    expect(command).toContain("/tmp/rakazo/browser-pid-*");
+    expect(command).toContain("for marker in /tmp/orkbot/browser-profile-*");
+    expect(command).toContain("/tmp/orkbot/browser-pid-*");
     expect(command).not.toContain("pkill -9 -1");
   });
 
@@ -777,12 +777,12 @@ describe("sandbox supervisor input containment", () => {
     expect(command).toContain(writer);
     expect(ensureScreenCommand(3, "writer", "view-token")).toContain(writer);
     expect(ensureScreenCommand(0, "researcher", "view-token")).toContain(researcher);
-    expect(command).not.toContain("/home/rakazo/.browser-profiles/chromium/.");
-    expect(command).not.toContain(".rakazo-base-generation");
+    expect(command).not.toContain("/home/orkbot/.browser-profiles/chromium/.");
+    expect(command).not.toContain(".orkbot-base-generation");
     expect(command).toContain("browser-pid-");
     expect(command).toContain("tr '\\0' '\\n' <\"/proc/$1/cmdline\"");
     expect(browserProfilePathForScreen("../../writer")).toMatch(
-      /^\/home\/rakazo\/\.browser-profiles\/chromium-bot-[0-9a-f]+$/,
+      /^\/home\/orkbot\/\.browser-profiles\/chromium-bot-[0-9a-f]+$/,
     );
   });
 
@@ -1024,7 +1024,7 @@ describe("sandbox supervisor input containment", () => {
     expect(primary).not.toContain("websockify");
     expect(primary).toContain("sockets/view-1-");
     expect(primary).toContain("sockets/control-1-");
-    expect(primary).toContain("rm -f /tmp/rakazo/control-token-1");
+    expect(primary).toContain("rm -f /tmp/orkbot/control-token-1");
     expect(primary).toContain("transport failed to stop");
 
     const extra = stopExtraScreenCommand(1, "researcher");
@@ -1043,7 +1043,7 @@ describe("sandbox supervisor input containment", () => {
     });
     expect(stop).toContain(`sockets/view-${index + 1}-`);
     expect(stop).toContain(`sockets/control-${index + 1}-`);
-    expect(stop).toContain(`rm -f /tmp/rakazo/control-token-${index + 1}`);
+    expect(stop).toContain(`rm -f /tmp/orkbot/control-token-${index + 1}`);
     expect(stop).not.toContain("--user-data-dir");
     expect(stop).not.toContain("browser-profile-");
     expect(stop).not.toContain("browser-launch-");
@@ -1274,9 +1274,9 @@ describe("computer command identity", () => {
   it("gives commands the workspace user's home, PATH and package prefixes on the screen's display", () => {
     expect(computerCommandEnv({ display: ":2" })).toEqual([
       "DISPLAY=:2",
-      "HOME=/home/rakazo",
-      "PATH=/home/rakazo/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-      "NPM_CONFIG_PREFIX=/home/rakazo/.local",
+      "HOME=/home/orkbot",
+      "PATH=/home/orkbot/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+      "NPM_CONFIG_PREFIX=/home/orkbot/.local",
       "PIP_USER=1",
     ]);
   });
@@ -1290,7 +1290,7 @@ describe("computer name recovery", () => {
       Config: { Labels: labels, Image: image },
     } as Docker.ContainerInspectInfo;
   }
-  const owned = { "rakazo.botId": "bot", "rakazo.spaceId": "space", "rakazo.managed": "true" };
+  const owned = { "orkbot.botId": "bot", "orkbot.spaceId": "space", "orkbot.managed": "true" };
   function recovery(info: Docker.ContainerInspectInfo) {
     const remove = vi.fn().mockResolvedValue(undefined);
     const cleared = vi.fn();
@@ -1316,10 +1316,10 @@ describe("computer name recovery", () => {
   });
 
   it.each([
-    { ...owned, "rakazo.botId": "other" },
-    { ...owned, "rakazo.spaceId": "other" },
+    { ...owned, "orkbot.botId": "other" },
+    { ...owned, "orkbot.spaceId": "other" },
     {} as Record<string, string>,
-    { "rakazo.botId": "bot", "rakazo.spaceId": "space" },
+    { "orkbot.botId": "bot", "orkbot.spaceId": "space" },
   ])("preserves a non-owned name holder and the original error: %j", async (labels) => {
     const { reclaim, remove, cleared } = recovery(holder(labels, "unmanaged"));
     const create = vi.fn().mockRejectedValue(conflict);
@@ -1332,7 +1332,7 @@ describe("computer name recovery", () => {
   it("accepts the existing legacy identity and image management rule", () => {
     expect(
       isManagedComputer(
-        holder({ "rakazo.botId": "bot", "rakazo.workspaceId": "space" }),
+        holder({ "orkbot.botId": "bot", "orkbot.workspaceId": "space" }),
         "bot",
         "space",
         "computer",

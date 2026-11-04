@@ -41,7 +41,7 @@ const publishWorkflow = parse(readFileSync(publishWorkflowFile, "utf8")) as {
 };
 
 const appServices = ["api", "worker", "web", "supervisor", "migrate"] as const;
-const FIRST_PARTY_IMAGE = /ghcr\.io\/elie222\/rakazo\/([a-z0-9][a-z0-9._-]*)/g;
+const FIRST_PARTY_IMAGE = /ghcr\.io\/orkbot-run\/ork\/([a-z0-9][a-z0-9._-]*)/g;
 
 function firstPartyImageNames(value: unknown): string[] {
   if (typeof value !== "string") return [];
@@ -66,11 +66,11 @@ describe("the images compose file", () => {
       "worker",
     ]);
     for (const service of appServices) {
-      expect(compose.services[service]?.image).toContain("ghcr.io/elie222/rakazo/app");
-      expect(compose.services[service]?.image).toContain("RAKAZO_IMAGE_TAG");
+      expect(compose.services[service]?.image).toContain("ghcr.io/orkbot-run/ork/app");
+      expect(compose.services[service]?.image).toContain("ORKBOT_IMAGE_TAG");
     }
-    expect(compose.services.computer?.image).toContain("ghcr.io/elie222/rakazo/computer");
-    expect(compose.services.computer?.image).toContain("RAKAZO_COMPUTER_IMAGE_TAG");
+    expect(compose.services.computer?.image).toContain("ghcr.io/orkbot-run/ork/computer");
+    expect(compose.services.computer?.image).toContain("ORKBOT_COMPUTER_IMAGE_TAG");
     expect(compose.services.postgres?.image).toMatch(
       /^\$\{POSTGRES_IMAGE:-postgres:16@sha256:[0-9a-f]{64}\}$/,
     );
@@ -81,7 +81,7 @@ describe("the images compose file", () => {
     expect(firstPartyImageNames(null)).toEqual([]);
     expect(firstPartyImageNames(true)).toEqual([]);
     expect(firstPartyImageNames(7091)).toEqual([]);
-    expect(firstPartyImageNames("ghcr.io/elie222/rakazo/computer:edge")).toEqual(["computer"]);
+    expect(firstPartyImageNames("ghcr.io/orkbot-run/ork/computer:edge")).toEqual(["computer"]);
   });
 
   it("only references first-party images that the publish matrix publishes", () => {
@@ -177,9 +177,9 @@ describe("the images compose file", () => {
 
   it("defaults the configurable web bind to loopback and keeps the API private", () => {
     expect(compose.services.web?.ports).toEqual([
-      "${RAKAZO_WEB_BIND:-127.0.0.1}:${RAKAZO_WEB_PORT:-5173}:5173",
+      "${ORKBOT_WEB_BIND:-127.0.0.1}:${ORKBOT_WEB_PORT:-5173}:5173",
     ]);
-    expect(compose.services.api?.ports).toEqual(["127.0.0.1:${RAKAZO_API_PORT:-3100}:3100"]);
+    expect(compose.services.api?.ports).toEqual(["127.0.0.1:${ORKBOT_API_PORT:-3100}:3100"]);
     for (const key of ["BETTER_AUTH_URL", "WEB_ORIGIN", "API_URL"]) {
       expect(compose.services.api?.environment?.[key]).toBe(`\${${key}:-http://127.0.0.1:5173}`);
     }

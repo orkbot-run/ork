@@ -1,4 +1,4 @@
-import { BOT_COLOR_LIST, contrastRatio, seededLogoAvatarColor } from "@rakazo/core";
+import { BOT_COLOR_LIST, contrastRatio, seededLogoAvatarColor } from "@orkbot/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -12,7 +12,7 @@ describe("logo-derived avatar prototype", () => {
         `data-color="${expected}"`,
       );
       expect(
-        renderToString(<BotAvatar color="" identity={identity} avatarSet="rakazo" />),
+        renderToString(<BotAvatar color="" identity={identity} avatarSet="orkbot" />),
       ).toContain(`data-color="${expected}"`);
     }
   });
@@ -49,13 +49,13 @@ describe("logo-derived avatar prototype", () => {
   });
 
   it("leaves an uploaded avatar intact", () => {
-    const html = renderToString(<BotAvatar color="data:image/png;base64,abc" avatarSet="rakazo" />);
+    const html = renderToString(<BotAvatar color="data:image/png;base64,abc" avatarSet="orkbot" />);
     expect(html).toContain('src="data:image/png;base64,abc"');
     expect(html).not.toContain("bot-avatar-body.png");
   });
 
   it("leaves a manually selected shape intact", () => {
-    const html = renderToString(<BotAvatar color="#8B5CF6::shape_3" avatarSet="rakazo" />);
+    const html = renderToString(<BotAvatar color="#8B5CF6::shape_3" avatarSet="orkbot" />);
     expect(html).toContain("bot-character-eyes");
     expect(html).not.toContain("bot-avatar-body.png");
   });

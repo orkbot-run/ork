@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["OrkPdfViewModule"]
+  },
+  "android": {
+    "modules": ["com.orkbot.pdfview.OrkPdfViewModule"]
+  }
+}

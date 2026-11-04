@@ -1,5 +1,5 @@
-import type { JobPublisher, MessagingSurface, SecretStore } from "@rakazo/adapter-kit";
-import type { PrismaClient } from "@rakazo/db";
+import type { JobPublisher, MessagingSurface, SecretStore } from "@orkbot/adapter-kit";
+import type { PrismaClient } from "@orkbot/db";
 import { InstalledMessagingSurface } from "./installed-messaging-surface.js";
 import { MessagingInstallations } from "./messaging-installations.js";
 import { SlackInstallProvider } from "./slack-install-provider.js";

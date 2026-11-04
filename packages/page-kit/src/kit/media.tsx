@@ -1,4 +1,4 @@
-import { pageKitPalette } from "@rakazo/ui-tokens";
+import { pageKitPalette } from "@orkbot/ui-tokens";
 import type { CSSProperties, ReactNode } from "react";
 import { Children, useEffect, useId, useRef, useState } from "react";
 import { LinkButton, linkUrl, ReplyButton } from "./controls.js";

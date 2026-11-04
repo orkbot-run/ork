@@ -12,7 +12,7 @@ type FoldModule = {
 };
 
 const nativeFold =
-  Platform.OS === "ios" ? requireOptionalNativeModule<FoldModule>("RakazoFoldRegions") : null;
+  Platform.OS === "ios" ? requireOptionalNativeModule<FoldModule>("OrkFoldRegions") : null;
 
 /** Optional so an updated bundle also runs on binaries built before fold support. */
 export function useFoldRegions(): FoldRegion[] {

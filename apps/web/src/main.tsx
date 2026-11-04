@@ -1,6 +1,6 @@
 import "./zod-config";
 import "./monitoring-bootstrap";
-import { BotAvatarActivityProvider, Toaster, TooltipProvider } from "@rakazo/ui-web";
+import { BotAvatarActivityProvider, Toaster, TooltipProvider } from "@orkbot/ui-web";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode, useEffect, useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";

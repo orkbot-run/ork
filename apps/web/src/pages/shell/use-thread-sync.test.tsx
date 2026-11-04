@@ -1,15 +1,15 @@
 // @vitest-environment jsdom
 
-import type { ProductEvent, ThreadSnapshot } from "@rakazo/contracts";
-import { runThreadSubscription } from "@rakazo/core";
+import type { ProductEvent, ThreadSnapshot } from "@orkbot/contracts";
+import { runThreadSubscription } from "@orkbot/core";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { queryClient } from "../../lib/query";
 import { useThreadSync } from "./use-thread-sync";
 
-vi.mock("@rakazo/core", async (original) => ({
-  ...(await original<typeof import("@rakazo/core")>()),
+vi.mock("@orkbot/core", async (original) => ({
+  ...(await original<typeof import("@orkbot/core")>()),
   runThreadSubscription: vi.fn(async () => {}),
 }));
 vi.mock("../../lib/query", () => ({
@@ -19,7 +19,7 @@ vi.mock("../../lib/query", () => ({
     invalidateQueries: vi.fn(async () => {}),
   },
 }));
-vi.mock("@rakazo/core/query", () => ({ fetchFresh: vi.fn(async () => []) }));
+vi.mock("@orkbot/core/query", () => ({ fetchFresh: vi.fn(async () => []) }));
 
 const ref = <T,>(current: T) => ({ current });
 const flush = () => act(async () => {});

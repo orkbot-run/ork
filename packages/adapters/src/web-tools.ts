@@ -1,4 +1,4 @@
-import type { AdapterContext, WebFetchProvider, WebSearchProvider } from "@rakazo/adapter-kit";
+import type { AdapterContext, WebFetchProvider, WebSearchProvider } from "@orkbot/adapter-kit";
 import { clampMaxChars, clampMaxResults, clampOffset } from "./web-limits.js";
 
 export async function webSearchFromTool(

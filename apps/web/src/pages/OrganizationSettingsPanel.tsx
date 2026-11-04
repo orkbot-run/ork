@@ -12,7 +12,7 @@ import {
   Field,
   FieldLabel,
   Input,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { Plus } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { CreateOrganizationDialog } from "../components/CreateOrganizationDialog";

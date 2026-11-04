@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { ConnectedConnector, ConnectorCall, ConnectorTool } from "@rakazo/adapter-kit";
+import type { ConnectedConnector, ConnectorCall, ConnectorTool } from "@orkbot/adapter-kit";
 
 /** Older saved watches can use an action name only when it identifies one account. */
 export function resolveAccountToolCall(call: ConnectorCall, tools: ConnectorTool[]) {

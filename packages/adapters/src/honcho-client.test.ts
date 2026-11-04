@@ -34,14 +34,14 @@ describe("Honcho client boundaries", () => {
   it("rejects unsafe ids returned by a conclusion search", async () => {
     const fetch = vi.fn(async () =>
       Response.json([
-        { id: "..", content: "Fact", observer_id: "bot-1", observed_id: "rakazo-shared" },
+        { id: "..", content: "Fact", observer_id: "bot-1", observed_id: "orkbot-shared" },
       ]),
     );
     expect(
       await queryHonchoConclusions({ ...config, fetch }, "team", {
         query: "Fact",
         observerId: "bot-1",
-        observedId: "rakazo-shared",
+        observedId: "orkbot-shared",
         topK: 100,
       }),
     ).toEqual({ ok: false, error: "Honcho returned invalid conclusions." });

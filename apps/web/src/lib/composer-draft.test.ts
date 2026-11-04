@@ -25,8 +25,8 @@ function memoryStorage(initial: Record<string, string> = {}) {
 
 describe("composer drafts", () => {
   it("scopes stored drafts per thread", () => {
-    expect(composerDraftStorageKey("bot:1")).toBe("rakazo.composerDraft.bot:1");
-    expect(composerDraftStorageKey("group:2")).toBe("rakazo.composerDraft.group:2");
+    expect(composerDraftStorageKey("bot:1")).toBe("orkbot.runposerDraft.bot:1");
+    expect(composerDraftStorageKey("group:2")).toBe("orkbot.runposerDraft.group:2");
   });
 
   it("round-trips a draft and clears the key when empty", () => {

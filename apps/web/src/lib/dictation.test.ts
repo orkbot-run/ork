@@ -149,7 +149,7 @@ describe("Dictation recorder fallback", () => {
   });
 
   it("keeps transcription in the space where recording started", async () => {
-    const store = new Map<string, string>([["rakazo:space-id", "space-support"]]);
+    const store = new Map<string, string>([["orkbot:space-id", "space-support"]]);
     const localStorage = {
       getItem: (key: string) => store.get(key) ?? null,
       setItem: (key: string, value: string) => {
@@ -192,7 +192,7 @@ describe("Dictation recorder fallback", () => {
     const onFinal = vi.fn();
     const dictation = new Dictation();
     await dictation.listen({ mode: "hold", transcribe: true, onFinal });
-    store.set("rakazo:space-id", "space-other");
+    store.set("orkbot:space-id", "space-other");
     dictation.submitHold();
     await vi.waitFor(() => expect(onFinal).toHaveBeenCalledWith("hello"));
 
@@ -201,7 +201,7 @@ describe("Dictation recorder fallback", () => {
       expect.objectContaining({ credentials: "include" }),
     );
     const headers = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
-    expect(headers.get("x-rakazo-space-id")).toBe("space-support");
+    expect(headers.get("x-orkbot-space-id")).toBe("space-support");
     expect(headers.get("content-type")).toBe("application/json");
   });
 
@@ -921,7 +921,7 @@ describe("dictation engine choice", () => {
   it("listens through the desktop app's system recognizer when it offers one", () => {
     vi.stubGlobal("window", {
       webkitSpeechRecognition: class {},
-      rakazoDesktop: { platform: "darwin", speech: {} },
+      orkbotDesktop: { platform: "darwin", speech: {} },
     });
     expect(webSpeechAvailable()).toBe(true);
   });
@@ -929,7 +929,7 @@ describe("dictation engine choice", () => {
   it("treats Electron as having no usable Web Speech", () => {
     vi.stubGlobal("window", {
       webkitSpeechRecognition: class {},
-      rakazoDesktop: { platform: "darwin" },
+      orkbotDesktop: { platform: "darwin" },
     });
     expect(webSpeechAvailable()).toBe(false);
   });
@@ -965,7 +965,7 @@ describe("dictation engine choice", () => {
         },
       );
       const start = vi.fn();
-      vi.stubGlobal("window", { rakazoDesktop: { platform: "darwin", speech: { start } } });
+      vi.stubGlobal("window", { orkbotDesktop: { platform: "darwin", speech: { start } } });
       const dictation = new Dictation();
       await dictation.listen({ mode, transcribe: true, onFinal: vi.fn() });
       expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
@@ -983,7 +983,7 @@ describe("dictation engine choice", () => {
         start = start;
         abort() {}
       },
-      ...(host === "desktop" ? { rakazoDesktop: { platform: "darwin" } } : {}),
+      ...(host === "desktop" ? { orkbotDesktop: { platform: "darwin" } } : {}),
     });
     const dictation = new Dictation();
     await dictation.listen({ mode: "hold", transcribe: true, onFinal: vi.fn() });
@@ -1046,7 +1046,7 @@ describe("Dictation web speech", () => {
 
   it("listens in the language the app is set to", async () => {
     vi.stubGlobal("localStorage", {
-      getItem: (key: string) => (key === "rakazo.uiLocale" ? "nl" : null),
+      getItem: (key: string) => (key === "orkbot.uiLocale" ? "nl" : null),
       setItem: () => undefined,
       removeItem: () => undefined,
       clear: () => undefined,
@@ -1070,7 +1070,7 @@ describe("Dictation web speech", () => {
   it("keeps the app's language when the browser speaks another one", async () => {
     vi.stubGlobal("navigator", { language: "de-DE" });
     vi.stubGlobal("localStorage", {
-      getItem: (key: string) => (key === "rakazo.uiLocale" ? "es" : null),
+      getItem: (key: string) => (key === "orkbot.uiLocale" ? "es" : null),
       setItem: () => undefined,
       removeItem: () => undefined,
       clear: () => undefined,
@@ -1091,7 +1091,7 @@ describe("Dictation web speech", () => {
   ])("follows browser %s as %s when the UI is English", async (browser, expected) => {
     vi.stubGlobal("navigator", { language: browser });
     vi.stubGlobal("localStorage", {
-      getItem: (key: string) => (key === "rakazo.uiLocale" ? "en" : null),
+      getItem: (key: string) => (key === "orkbot.uiLocale" ? "en" : null),
       setItem: () => undefined,
       removeItem: () => undefined,
       clear: () => undefined,
@@ -1446,7 +1446,7 @@ describe("Dictation web speech", () => {
     }
     vi.stubGlobal("window", {
       webkitSpeechRecognition: FakeRecognition,
-      rakazoDesktop: { platform: "darwin" },
+      orkbotDesktop: { platform: "darwin" },
     });
     const fetchMock = vi.fn(async () => Response.json({ text: "from fish" }));
     stubRecorderFallback(fetchMock);

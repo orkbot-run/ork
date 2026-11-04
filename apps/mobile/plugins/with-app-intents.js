@@ -5,13 +5,9 @@ const { addPbxGroupWithOwnFiles } = require("./pbx-group");
 
 const INTENTS = path.join(__dirname, "..", "ios-intents");
 const WIDGETS = path.join(__dirname, "..", "ios-widgets");
-const APP_FILES = [
-  "RakazoIntents.swift",
-  "VoiceMessageRecorder.swift",
-  "VoiceMessageActivity.swift",
-];
-const WIDGET_TARGET = "RakazoWidgets";
-const WIDGET_FILES = ["RakazoWidgets.swift", "VoiceMessageActivity.swift"];
+const APP_FILES = ["OrkIntents.swift", "VoiceMessageRecorder.swift", "VoiceMessageActivity.swift"];
+const WIDGET_TARGET = "OrkWidgets";
+const WIDGET_FILES = ["OrkWidgets.swift", "VoiceMessageActivity.swift"];
 
 /**
  * Adds the Shortcuts and Siri actions. App Intents must be compiled into the app target for
@@ -24,7 +20,7 @@ const WIDGET_FILES = ["RakazoWidgets.swift", "VoiceMessageActivity.swift"];
 function withAppIntents(config) {
   config = withInfoPlist(config, (config) => {
     const plist = config.modResults;
-    plist.RakazoDefaultApiBase = process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:3100";
+    plist.OrkDefaultApiBase = process.env.EXPO_PUBLIC_API_URL ?? "http://127.0.0.1:3100";
     plist.NSSupportsLiveActivities = true;
     // Keeps the microphone, and so the app, running while a recorded message sends.
     plist.UIBackgroundModes = [...new Set([...(plist.UIBackgroundModes ?? []), "audio"])];

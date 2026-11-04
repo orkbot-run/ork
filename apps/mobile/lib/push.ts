@@ -1,4 +1,4 @@
-import { newClientId } from "@rakazo/core";
+import { newClientId } from "@orkbot/core";
 import Constants from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
@@ -17,16 +17,16 @@ async function notificationsAllowed() {
 }
 
 export async function registerPushToken() {
+  const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
+  if (!projectId) return;
   if (!(await notificationsAllowed())) return;
   try {
-    const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
-    if (!projectId) return;
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     if (!token) return;
     await rpc("notifications/registerPush", {
       token,
       ...(Platform.OS === "android" &&
-      requireOptionalNativeModule<{ supportsSenderAvatars?: boolean }>("RakazoNotifications")
+      requireOptionalNativeModule<{ supportsSenderAvatars?: boolean }>("OrkNotifications")
         ?.supportsSenderAvatars
         ? { presentation: "android_sender" as const }
         : {}),
@@ -48,10 +48,10 @@ let registeredKey: string | undefined;
 let deviceIdPromise: Promise<string> | undefined;
 async function installationId() {
   deviceIdPromise ??= (async () => {
-    const stored = await SecureStore.getItemAsync("rakazo.call-device");
+    const stored = await SecureStore.getItemAsync("orkbot.call-device");
     if (stored) return stored;
     const id = newClientId();
-    await SecureStore.setItemAsync("rakazo.call-device", id);
+    await SecureStore.setItemAsync("orkbot.call-device", id);
     return id;
   })();
   const pending = deviceIdPromise;
@@ -64,7 +64,7 @@ async function installationId() {
 }
 /** Builds without native call handling keep the account's ordinary push for incoming calls. */
 const nativeCalls = Boolean(
-  requireOptionalNativeModule<{ incomingState?: unknown }>("RakazoNotifications")?.incomingState,
+  requireOptionalNativeModule<{ incomingState?: unknown }>("OrkNotifications")?.incomingState,
 );
 
 export async function registerCallPushToken(tokens: { expoToken?: string; voipToken?: string }) {

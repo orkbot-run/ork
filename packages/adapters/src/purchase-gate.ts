@@ -1,4 +1,4 @@
-import { getLogger } from "@rakazo/logging";
+import { getLogger } from "@orkbot/logging";
 import type { FleetCardSummary } from "./approval-ask.js";
 import { redactConnectorPayload } from "./connector-safety.js";
 import { cardName } from "./fleet-tools.js";

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { TransactionalEmailProvider } from "@rakazo/adapter-kit";
+import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import type { BetterAuthPlugin } from "better-auth";
 import {
   APIError,

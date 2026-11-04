@@ -190,8 +190,8 @@ function keyboardFixture(
   }
   const pasteText = overrides.pasteText;
   const windowTarget: {
-    __rakazoNativeKeys: boolean;
-    rakazoComputerKeyboard?: {
+    __orkbotNativeKeys: boolean;
+    orkbotComputerKeyboard?: {
       run: (command: {
         type: string;
         name?: string;
@@ -200,7 +200,7 @@ function keyboardFixture(
         count?: number;
       }) => void;
     };
-  } = { __rakazoNativeKeys: overrides.nativeKeys === true };
+  } = { __orkbotNativeKeys: overrides.nativeKeys === true };
   const detach = attachMobileKeyboard(rfb, {
     button,
     input,
@@ -302,11 +302,11 @@ describe("mobile computer keyboard", () => {
     expect(embed).toMatch(/mobile-keyboard-open #screen/);
     expect(embed).toMatch(/mobile-key-bar/);
     expect(embed).toMatch(/data-key="Escape"/);
-    expect(embed).toMatch(/__rakazoNativeKeys/);
+    expect(embed).toMatch(/__orkbotNativeKeys/);
     expect(embed).toMatch(/--mobile-visual-height/);
     const keyboard = readFileSync(path.join(root, "mobile-keyboard.js"), "utf8");
-    expect(keyboard).toMatch(/rakazoComputerKeyboard/);
-    expect(keyboard).toMatch(/__rakazoNativeKeys/);
+    expect(keyboard).toMatch(/orkbotComputerKeyboard/);
+    expect(keyboard).toMatch(/__orkbotNativeKeys/);
     expect(start).toMatch(/mobile-keyboard\.js/);
     expect(COMPUTER_IMAGE_CONTEXT_FILES).toContain("mobile-keyboard.js");
   });
@@ -344,10 +344,10 @@ describe("mobile computer keyboard", () => {
       [97, undefined, undefined],
       [0xff0d, "Enter", undefined],
     ]);
-    windowTarget.rakazoComputerKeyboard?.run({ type: "key", name: "Escape" });
-    windowTarget.rakazoComputerKeyboard?.run({ type: "key", name: "Tab" });
-    windowTarget.rakazoComputerKeyboard?.run({ type: "key", name: "ArrowUp" });
-    windowTarget.rakazoComputerKeyboard?.run({ type: "char", text: "c", control: true });
+    windowTarget.orkbotComputerKeyboard?.run({ type: "key", name: "Escape" });
+    windowTarget.orkbotComputerKeyboard?.run({ type: "key", name: "Tab" });
+    windowTarget.orkbotComputerKeyboard?.run({ type: "key", name: "ArrowUp" });
+    windowTarget.orkbotComputerKeyboard?.run({ type: "char", text: "c", control: true });
     expect(keys.slice(2)).toEqual([
       [0xff1b, "Escape", undefined],
       [0xff09, "Tab", undefined],
@@ -358,7 +358,7 @@ describe("mobile computer keyboard", () => {
       [0xffe3, "ControlLeft", false],
     ]);
     detach();
-    expect(windowTarget.rakazoComputerKeyboard).toBeUndefined();
+    expect(windowTarget.orkbotComputerKeyboard).toBeUndefined();
   });
 
   it("keeps the in-page keyboard hidden when the native app supplies keys", () => {
@@ -368,7 +368,7 @@ describe("mobile computer keyboard", () => {
     });
     expect(button.hidden).toBe(true);
     expect(keyBar?.hidden).toBe(true);
-    windowTarget.rakazoComputerKeyboard?.run({ type: "key", name: "ArrowLeft" });
+    windowTarget.orkbotComputerKeyboard?.run({ type: "key", name: "ArrowLeft" });
     expect(keys).toEqual([[0xff51, "ArrowLeft", undefined]]);
   });
 

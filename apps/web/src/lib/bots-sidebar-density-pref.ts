@@ -1,6 +1,6 @@
 export type BotsSidebarDensity = "comfortable" | "compact";
 
-export const BOTS_SIDEBAR_DENSITY_STORAGE_KEY = "rakazo.botsSidebarDensity";
+export const BOTS_SIDEBAR_DENSITY_STORAGE_KEY = "orkbot.botsSidebarDensity";
 
 type DensityStorage = Pick<Storage, "getItem" | "setItem">;
 

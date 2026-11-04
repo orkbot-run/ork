@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { PiAgentRuntime } from "@rakazo/adapters";
+import { PiAgentRuntime } from "@orkbot/adapters";
 import { describe, expect, it } from "vitest";
 import { HISTORY_EVAL_CASES } from "./evals/cases.js";
 import { runTrial } from "./evals/runner.js";
@@ -145,9 +145,9 @@ describe.skipIf(!enabled)("product history diagnostic loop", () => {
         })),
       ],
     });
-    const dataDir = await mkdtemp(path.join(tmpdir(), "rakazo-product-loop-"));
+    const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-product-loop-"));
     try {
-      const { createApp } = await import("@rakazo/api/app");
+      const { createApp } = await import("@orkbot/api/app");
       const result = await runTrial(scenario, 1, {
         connection: {
           provider: model.model.provider,

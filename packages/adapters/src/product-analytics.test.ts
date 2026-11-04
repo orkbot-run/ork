@@ -1,4 +1,4 @@
-import { AnalyticsEvent, AnalyticsScreenInput } from "@rakazo/contracts";
+import { AnalyticsEvent, AnalyticsScreenInput } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createProductAnalytics } from "./product-analytics.js";
 

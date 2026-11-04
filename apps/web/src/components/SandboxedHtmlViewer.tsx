@@ -1,4 +1,4 @@
-import { HTML_VIEWER_PATH } from "@rakazo/contracts/content-security-policy";
+import { HTML_VIEWER_PATH } from "@orkbot/contracts/content-security-policy";
 import { useEffect, useRef, useState } from "react";
 
 export const PREVIEW_CSP =

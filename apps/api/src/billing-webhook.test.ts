@@ -1,5 +1,5 @@
-import type { BillingProvider } from "@rakazo/adapter-kit";
-import type { Actor } from "@rakazo/contracts";
+import type { BillingProvider } from "@orkbot/adapter-kit";
+import type { Actor } from "@orkbot/contracts";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import type { BillingService } from "./billing.js";
@@ -13,7 +13,7 @@ import {
 const actor: Actor = {
   userId: "user-1",
   spaceId: "space-1",
-  email: "user@rakazo.test",
+  email: "user@orkbot.test",
   isDeploymentOwner: false,
 };
 
@@ -96,7 +96,7 @@ describe("billing checkout return", () => {
     const { app, syncForActor } = mount(() => null, { actor: null });
     const res = await app.request(`${BILLING_RETURN_PATH}?client=mobile`);
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("rakazo://billing");
+    expect(res.headers.get("location")).toBe("orkbot://billing");
     expect(syncForActor).not.toHaveBeenCalled();
   });
 

@@ -1,4 +1,4 @@
-import { AGENT_IMPORT_MAX_FILE_LENGTH } from "@rakazo/contracts";
+import { AGENT_IMPORT_MAX_FILE_LENGTH } from "@orkbot/contracts";
 
 /** Up to four UTF-8 bytes per allowed character. */
 export const AGENT_DOCUMENT_MAX_BYTES = AGENT_IMPORT_MAX_FILE_LENGTH * 4;

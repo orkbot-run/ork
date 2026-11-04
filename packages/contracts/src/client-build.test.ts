@@ -1,16 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  ANDROID_APK_URL,
+  ANDROID_APP_STORE_URL,
   buildIdAt,
   CLIENT_UPDATE_REQUIRED,
   clientUpdateRequired,
   compareBuilds,
   formatClientBuild,
+  IOS_APP_STORE_URL,
   isClientUpdateRequiredError,
   parseClientBuild,
   parseMinimumClientBuilds,
 } from "./client-build.js";
 
 describe("client builds", () => {
+  it("links unlisted native clients to Ork downloads and its own APK release", () => {
+    expect(IOS_APP_STORE_URL).toBe("https://orkbot.run/download/");
+    expect(ANDROID_APP_STORE_URL).toBe("https://orkbot.run/download/");
+    expect(ANDROID_APK_URL).toBe(
+      "https://github.com/orkbot-run/ork/releases/download/android/orkbot.apk",
+    );
+  });
   it("names a build by its UTC build time", () => {
     expect(buildIdAt(new Date("2026-10-22T09:30:15.987Z"))).toBe("20261022093015");
   });
@@ -44,7 +54,7 @@ describe("client builds", () => {
       web: "20261022093015",
       mobile: "20261001000000",
     });
-    expect(() => parseMinimumClientBuilds("20261022093015")).toThrow(/RAKAZO_MIN_CLIENT_BUILD/);
+    expect(() => parseMinimumClientBuilds("20261022093015")).toThrow(/ORKBOT_MIN_CLIENT_BUILD/);
     expect(() => parseMinimumClientBuilds("desktop=20261022093015")).toThrow();
     expect(() => parseMinimumClientBuilds("web=2026-10-22")).toThrow();
   });

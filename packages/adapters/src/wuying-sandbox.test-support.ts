@@ -2,7 +2,7 @@ import type { WuyingControlPlane, WuyingDesktopStatus } from "./wuying-openapi.j
 import type { WuyingDesktopTools, WuyingToolResult } from "./wuying-sandbox.js";
 import { WuyingSandboxProvider, WuyingToolError } from "./wuying-sandbox.js";
 
-export const FAKE_PROFILE = "C:\\Users\\rakazo";
+export const FAKE_PROFILE = "C:\\Users\\orkbot";
 // A tiny real JPEG header is enough: the provider only forwards the bytes.
 const SCREEN = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]).toString("base64");
 

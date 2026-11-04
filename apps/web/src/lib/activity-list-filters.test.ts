@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import type { RunActivityRow } from "@rakazo/contracts";
+import type { RunActivityRow } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   activityFiltersActive,

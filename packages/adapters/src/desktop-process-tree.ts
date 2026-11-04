@@ -11,7 +11,7 @@ export interface NativeProcessTree {
 let windowsApi: ReturnType<typeof loadWindowsApi> | undefined;
 function loadWindowsApi() {
   const library = koffi.load("kernel32.dll");
-  const limits = koffi.struct("RakazoJobLimits", {
+  const limits = koffi.struct("OrkJobLimits", {
     PerProcessUserTimeLimit: "int64_t",
     PerJobUserTimeLimit: "int64_t",
     LimitFlags: "uint32_t",
@@ -22,7 +22,7 @@ function loadWindowsApi() {
     PriorityClass: "uint32_t",
     SchedulingClass: "uint32_t",
   });
-  const io = koffi.struct("RakazoJobIoCounters", {
+  const io = koffi.struct("OrkJobIoCounters", {
     ReadOperationCount: "uint64_t",
     WriteOperationCount: "uint64_t",
     OtherOperationCount: "uint64_t",
@@ -30,7 +30,7 @@ function loadWindowsApi() {
     WriteTransferCount: "uint64_t",
     OtherTransferCount: "uint64_t",
   });
-  const extended = koffi.struct("RakazoJobExtendedLimits", {
+  const extended = koffi.struct("OrkJobExtendedLimits", {
     BasicLimitInformation: limits,
     IoInfo: io,
     ProcessMemoryLimit: "size_t",

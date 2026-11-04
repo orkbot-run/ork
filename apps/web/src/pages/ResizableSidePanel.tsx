@@ -3,7 +3,7 @@ import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { useBotsSidebarWidth } from "./shell/sidebar-layout";
 
-const STORAGE_KEY = "rakazo:right-panel-width";
+const STORAGE_KEY = "orkbot:right-panel-width";
 const MIN_WIDTH = 320;
 const DEFAULT_WIDTH = 384;
 const ABSOLUTE_MAX = 1000;

@@ -1,4 +1,4 @@
-import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_BYTES, ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { requireOptionalNativeModule } from "expo-modules-core";
 
 export type DroppedFile = {
@@ -22,7 +22,7 @@ type FileDropModule = {
 
 // Android drops and iOS image pastes. Absent on web and in binaries built before the module existed.
 function nativeFileDrop(): FileDropModule | null {
-  return requireOptionalNativeModule<FileDropModule>("RakazoFileDrop");
+  return requireOptionalNativeModule<FileDropModule>("OrkFileDrop");
 }
 
 export async function releaseDroppedFile(uri: string): Promise<void> {

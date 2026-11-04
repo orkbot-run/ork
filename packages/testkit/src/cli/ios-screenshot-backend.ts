@@ -10,8 +10,8 @@ import {
   listPiCatalog,
   MessagingTeamChatEmulator,
   ThirdPartyConnectorEmulator,
-} from "@rakazo/adapters";
-import { createDb } from "@rakazo/db";
+} from "@orkbot/adapters";
+import { createDb } from "@orkbot/db";
 import { createModelConnectionFixtureFetch } from "../model-connection-fixture.js";
 import { PluginMarketplaceFixture } from "../plugin-marketplace-fixture.js";
 
@@ -36,7 +36,7 @@ export async function startIosScreenshotBackend(input: {
     SANDBOX_PROVIDER: "fake",
     AGENT_RUNTIME: "scripted",
     CLOUD_AGENT_PROVIDER: "emulator",
-    RAKAZO_LIVE_MODEL_CATALOG: "off",
+    ORKBOT_LIVE_MODEL_CATALOG: "off",
     COMPOSIO_API_KEY: "",
     BETTER_AUTH_URL: apiUrl,
     WEB_ORIGIN: "http://127.0.0.1:5180",
@@ -54,7 +54,7 @@ export async function startIosScreenshotBackend(input: {
 
   execFileSync("pnpm", ["db:migrate"], { cwd: input.root, env: process.env, stdio: "inherit" });
 
-  const { createApp } = await import("@rakazo/api/app");
+  const { createApp } = await import("@orkbot/api/app");
   // The same offline marketplace, app catalog, and model list the web end-to-end tests use.
   const thirdParties = new ThirdPartyConnectorEmulator();
   const marketplace = new PluginMarketplaceFixture(thirdParties.fetch);
@@ -98,7 +98,7 @@ export async function startIosScreenshotBackend(input: {
   };
 }
 
-const DATABASE = "rakazo_ios_screenshots";
+const DATABASE = "orkbot_ios_screenshots";
 
 /** A fresh database every run, so screenshots never depend on what an earlier run left. */
 async function recreateDatabase(serverUrl: string) {

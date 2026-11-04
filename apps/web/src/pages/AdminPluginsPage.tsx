@@ -1,5 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { buttonVariants } from "@rakazo/ui-web";
+import { buttonVariants } from "@orkbot/ui-web";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react";
 import { Link, Navigate } from "react-router-dom";

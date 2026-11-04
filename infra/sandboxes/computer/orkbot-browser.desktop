@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ork Browser
+Comment=Chromium with Ork container flags and profile isolation
+Exec=/usr/local/bin/orkbot-browser %U
+Terminal=false
+Categories=Network;WebBrowser;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;text/html;
+StartupNotify=false

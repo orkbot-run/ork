@@ -1,4 +1,4 @@
-import { isBackgroundRunTrigger, redactSecrets } from "@rakazo/core";
+import { isBackgroundRunTrigger, redactSecrets } from "@orkbot/core";
 import {
   connectAgent,
   messageConnectedAgent,

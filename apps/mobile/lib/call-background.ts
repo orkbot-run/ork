@@ -1,15 +1,13 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { Platform } from "react-native";
 
-type RakazoCallNative = {
+type OrkCallNative = {
   startCall(title: string): Promise<boolean>;
   stopCall(): Promise<void>;
 };
 
 const nativeCall =
-  Platform.OS === "android"
-    ? requireOptionalNativeModule<RakazoCallNative>("RakazoNotifications")
-    : null;
+  Platform.OS === "android" ? requireOptionalNativeModule<OrkCallNative>("OrkNotifications") : null;
 
 /** The native start answers from the service itself, which can take a moment. */
 const START_TIMEOUT_MS = 5000;

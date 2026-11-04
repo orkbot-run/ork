@@ -1,5 +1,5 @@
 /// <reference path="./sucrase-parser.d.ts" />
-import { PAGE_SOURCE_MAX_BYTES, pageSourceBytes } from "@rakazo/contracts";
+import { PAGE_SOURCE_MAX_BYTES, pageSourceBytes } from "@orkbot/contracts";
 // Sucrase's own parser, pinned with it, so the check reads the same tokens the compiler does.
 import { parse } from "sucrase/dist/parser/index.js";
 import { IdentifierRole } from "sucrase/dist/parser/tokenizer/index.js";

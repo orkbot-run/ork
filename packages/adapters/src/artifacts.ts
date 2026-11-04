@@ -9,15 +9,15 @@ import type {
   ArtifactStore,
   NotificationMessage,
   NotificationProvider,
-} from "@rakazo/adapter-kit";
-import type { ContentKeyRing } from "@rakazo/db";
+} from "@orkbot/adapter-kit";
+import type { ContentKeyRing } from "@orkbot/db";
 import {
   artifactKeyId,
   ContentDecryptionError,
   isSealedArtifact,
   openArtifact,
   sealArtifact,
-} from "@rakazo/db";
+} from "@orkbot/db";
 
 const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 const CREATE_FLAGS = constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | O_NOFOLLOW;

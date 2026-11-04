@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
@@ -84,7 +84,7 @@ describePostgres("content encryption (PostgreSQL)", () => {
         data: {
           id: userId,
           name: "Encryption",
-          email: `${userId}@rakazo.test`,
+          email: `${userId}@orkbot.test`,
           emailVerified: false,
         },
       });

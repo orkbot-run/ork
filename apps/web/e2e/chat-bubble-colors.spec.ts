@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 test("colored user bubbles keep white text in both themes", async ({ page }, testInfo) => {
-  await signup(page, `bubble-colors-${Date.now()}@rakazo.test`, "password12", "Bubble Demo");
+  await signup(page, `bubble-colors-${Date.now()}@orkbot.test`, "password12", "Bubble Demo");
   await completeOnboarding(page);
   await rpc(page, "bots/update", { botId: activeBotId(page), color: "#A855F7" });
   await page.reload();
@@ -15,7 +15,7 @@ test("colored user bubbles keep white text in both themes", async ({ page }, tes
   await expect(bubble).toBeVisible();
 
   for (const theme of ["dark", "light"]) {
-    await page.evaluate((theme) => localStorage.setItem("rakazo.uiAppearance", theme), theme);
+    await page.evaluate((theme) => localStorage.setItem("orkbot.uiAppearance", theme), theme);
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await expect(bubble).toHaveCSS("color", "rgb(255, 255, 255)");

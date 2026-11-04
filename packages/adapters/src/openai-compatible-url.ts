@@ -7,14 +7,14 @@ import {
   normalizeHost,
   normalizeOpenAiCompatibleBaseUrl,
   OPENAI_COMPATIBLE_PROVIDER_ID,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 
 export { normalizeOpenAiCompatibleBaseUrl, OPENAI_COMPATIBLE_PROVIDER_ID };
 
 const BUILT_IN_PUBLIC_MODEL_HOSTS = new Set(["ollama.com"]);
 
 export function openAiCompatAllowPublicHosts(): boolean {
-  return process.env.RAKAZO_OPENAI_COMPAT_ALLOW_PUBLIC !== "0";
+  return process.env.ORKBOT_OPENAI_COMPAT_ALLOW_PUBLIC !== "0";
 }
 
 export function isPrivateOpenAiCompatibleHostname(hostname: string): boolean {
@@ -22,7 +22,7 @@ export function isPrivateOpenAiCompatibleHostname(hostname: string): boolean {
   if (isLoopbackHost(normalized) || normalized === "host.docker.internal") return true;
   if (isCloudMetadataHost(normalized)) return false;
   if (ipVersion(normalized) !== 0) return isNonPublicAddress(normalized);
-  return (process.env.RAKAZO_OPENAI_COMPAT_PRIVATE_HOSTS ?? "")
+  return (process.env.ORKBOT_OPENAI_COMPAT_PRIVATE_HOSTS ?? "")
     .split(",")
     .some((entry) => entry.trim() !== "" && normalizeHost(entry.trim()) === normalized);
 }

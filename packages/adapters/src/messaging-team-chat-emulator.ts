@@ -8,7 +8,7 @@ import type {
   MessagingSendRequest,
   MessagingSendResult,
   MessagingSurface,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
 import { providerOfThreadId } from "./chat-sdk-surface.js";
 
@@ -166,7 +166,7 @@ export class MessagingTeamChatEmulator implements MessagingSurface {
       // focused send recording without Chat SDK wiring.
       adapter: {
         version: "1.0.0",
-        botUsername: "rakazo-emulator",
+        botUsername: "orkbot-emulator",
         postMessage: async (threadId: string, message: { text?: string }) => {
           const handle = this.recordSend(threadId, message.text ?? "", "outbound");
           return { id: handle, html_url: null };

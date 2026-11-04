@@ -1,12 +1,12 @@
-import { ORPCError } from "@orpc/server";
-import { PaymentWalletRequestRejected } from "@rakazo/adapter-kit";
-import type { PaymentWalletDeps } from "@rakazo/adapters";
+import { PaymentWalletRequestRejected } from "@orkbot/adapter-kit";
+import type { PaymentWalletDeps } from "@orkbot/adapters";
 import {
   connectPaymentWallet,
   disconnectPaymentWallet,
   paymentWalletStatus,
-} from "@rakazo/adapters";
-import { recordSecurityEvent } from "@rakazo/db";
+} from "@orkbot/adapters";
+import { recordSecurityEvent } from "@orkbot/db";
+import { ORPCError } from "@orpc/server";
 import { paymentWalletConnectedEvent } from "../security-audit.js";
 import type { RouterContext } from "./context.js";
 

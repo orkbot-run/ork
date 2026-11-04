@@ -59,13 +59,13 @@ cat >"$scratch/index.json" <<'JSON'
 ]}
 JSON
 export INDEX="$scratch/index.json"
-list="registry.example.test:5000/rakazo/app@sha256:list"
+list="registry.example.test:5000/orkbot/app@sha256:list"
 : >"$scratch/all-created"
 for platform in linux/amd64 linux/arm64; do
   output="$(check "$clean" "$list" "$platform")" || fail "$platform of a list: $output"
   cat "$scratch/created" >>"$scratch/all-created"
 done
-[[ "$(cat "$scratch/all-created")" == $'registry.example.test:5000/rakazo/app@sha256:amd\nregistry.example.test:5000/rakazo/app@sha256:arm' ]] ||
+[[ "$(cat "$scratch/all-created")" == $'registry.example.test:5000/orkbot/app@sha256:amd\nregistry.example.test:5000/orkbot/app@sha256:arm' ]] ||
   fail "did not check each platform's own manifest: $(cat "$scratch/all-created")"
 output="$(check "$clean" "$list" linux/s390x)" && fail "a platform missing from the list passed"
 grep -q "has no linux/s390x image" <<<"$output" || fail "unexpected output: $output"

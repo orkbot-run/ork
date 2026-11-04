@@ -1,4 +1,4 @@
-import type { ModelHeaderRow } from "@rakazo/contracts";
+import type { ModelHeaderRow } from "@orkbot/contracts";
 import { StyleSheet, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens, useThemedStyles } from "../lib/native";

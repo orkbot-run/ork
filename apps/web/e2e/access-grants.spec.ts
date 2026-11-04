@@ -1,10 +1,10 @@
+import type { AccessGrant } from "@orkbot/contracts";
 import { expect, test } from "@playwright/test";
-import type { AccessGrant } from "@rakazo/contracts";
 import { captureScreenshot, completeOnboarding, makeAdmin, signup } from "./helpers";
 
 test("an admin grants free access to an email", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  const admin = `access-admin-${stamp}@rakazo.test`;
+  const admin = `access-admin-${stamp}@orkbot.test`;
   await signup(page, admin, "password12", `Access Admin ${stamp}`);
   await completeOnboarding(page);
 

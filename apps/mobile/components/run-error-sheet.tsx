@@ -1,4 +1,4 @@
-import { normalizeRunError } from "@rakazo/core";
+import { normalizeRunError } from "@orkbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useEffect, useReducer, useState } from "react";
 import { Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";

@@ -4,7 +4,7 @@ export const PAGE_KIT_GUIDE = `# Pages
 A page is JSX source whose default export is a React component. It renders in an isolated viewer in the user's light or dark theme and prints cleanly.
 
 ## Rules
-- Everything below is already in scope: React, Fragment, useState, useMemo, useEffect, useRef, useCallback, useReducer, the kit components and its helpers. Imports are optional; only "react" and "rakazo/page" (the kit) are allowed. No require, network or CSS files.
+- Everything below is already in scope: React, Fragment, useState, useMemo, useEffect, useRef, useCallback, useReducer, the kit components and its helpers. Imports are optional; only "react" and "orkbot/page" (the kit) are allowed. No require, network or CSS files.
 - Exactly one \`export default\` (your top component). Helper components and data objects in the same file are fine.
 - Do not name your own component after a kit component (Page, Status, Table, Rows...): it replaces the kit's in the whole file, so using that kit component inside it renders itself forever, and the check refuses it. Call it StatusPage, BotTable and so on.
 - Gather data first and keep it in one object at the top. Write figures already formatted ("$12,400", "4.8%") and write plain characters, not HTML escapes ("<800ms", not "&lt;800ms").

@@ -1,4 +1,4 @@
-import { attachmentMaxBytes } from "@rakazo/contracts";
+import { attachmentMaxBytes } from "@orkbot/contracts";
 import * as DocumentPicker from "expo-document-picker";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

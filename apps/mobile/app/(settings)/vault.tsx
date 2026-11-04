@@ -1,11 +1,11 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { BotSecretMetadata, VaultKind, VaultRevealed } from "@rakazo/contracts";
+import type { BotSecretMetadata, VaultKind, VaultRevealed } from "@orkbot/contracts";
 import {
   cardExpiry,
   isIdentityConfirmationRequired,
   VAULT_KINDS,
   vaultKind,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import * as Clipboard from "expo-clipboard";
 import type { NativeStackNavigationOptions } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";

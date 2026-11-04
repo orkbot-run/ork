@@ -1,4 +1,4 @@
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@rakazo/adapter-kit";
+import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
 
 /** Desktop states the ECD API reports; anything else is treated as in transition. */
 export type WuyingDesktopStatus = string;

@@ -17,7 +17,7 @@ DEPENDENCY_TREE = pathlib.Path(__file__).with_name("mobile-dependency-tree.mjs")
 
 OLD_RUNTIME = "1.0.11"
 RUNTIME = "1.0.12"
-SWIFT_FILE = "apps/mobile/modules/rakazo-foo/ios/FooModule.swift"
+SWIFT_FILE = "apps/mobile/modules/orkbot-foo/ios/FooModule.swift"
 
 
 def app_json(version, icon_key=None):

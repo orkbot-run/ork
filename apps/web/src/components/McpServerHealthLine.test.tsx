@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { McpServerHealth } from "@rakazo/contracts";
+import type { McpServerHealth } from "@orkbot/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 

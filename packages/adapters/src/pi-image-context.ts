@@ -1,4 +1,4 @@
-import { ATTACHMENT_MAX_BASE64_LENGTH } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_BASE64_LENGTH } from "@orkbot/contracts";
 
 const IMAGE_MAX_EDGE = 2048;
 const IMAGE_TILE_PIXELS = 512;

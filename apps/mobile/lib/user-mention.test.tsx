@@ -33,7 +33,7 @@ vi.mock("react-native", () => ({
     createElement("i", { "data-style": JSON.stringify(style) }, children),
   useWindowDimensions: () => ({ fontScale: 1 }),
 }));
-vi.mock("@rakazo/chat-ui/native", () => {
+vi.mock("@orkbot/chat-ui/native", () => {
   // Stands in for the real link finder, which has its own tests: explicit URLs and emails.
   const plainTextLinkParts = (text: string) =>
     text

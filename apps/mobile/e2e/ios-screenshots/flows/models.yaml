@@ -1,11 +1,11 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Models
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///models"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///models"
 - extendedWaitUntil:
     visible: ".*Claude Fable 5.1.*"
     timeout: 15000
@@ -16,7 +16,7 @@ name: Models
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 02-model-picker
-- openLink: "rakazo:///models"
+- openLink: "orkbot:///models"
 - extendedWaitUntil:
     visible: "Add provider"
     timeout: 15000

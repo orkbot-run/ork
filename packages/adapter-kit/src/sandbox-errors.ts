@@ -1,4 +1,4 @@
-import { COMPUTER_ALLOWANCE_USED_ERROR, COMPUTER_RATE_LIMIT_ERROR } from "@rakazo/contracts";
+import { COMPUTER_ALLOWANCE_USED_ERROR, COMPUTER_RATE_LIMIT_ERROR } from "@orkbot/contracts";
 
 /** The sandbox provider refused the request because an account rate limit or quota was hit. */
 export class SandboxRateLimitError extends Error {

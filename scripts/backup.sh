@@ -15,15 +15,15 @@ if [[ -f "$ROOT/.env" ]]; then compose=(docker compose --env-file "$ROOT/.env" -
 [[ ! -L "$ROOT/backups" && ! -L "$OUT" ]] || { echo "backup directory must not be a symlink" >&2; exit 1; }
 mkdir -p "$OUT"
 chmod 700 "$ROOT/backups" "$OUT"
-for artifact in "$OUT/rakazo.sql" "$OUT/homes.tgz"; do
+for artifact in "$OUT/orkbot.sql" "$OUT/homes.tgz"; do
   [[ ! -L "$artifact" ]] || { echo "backup artifact must not be a symlink" >&2; exit 1; }
   if [[ -e "$artifact" ]]; then
     [[ -f "$artifact" ]] || { echo "backup artifact is not a file" >&2; exit 1; }
     chmod 600 "$artifact"
   fi
 done
-"${compose[@]}" exec -T postgres pg_dump -U rakazo rakazo > "$OUT/rakazo.sql"
-if [[ "${RAKAZO_BACKUP_SKIP_HOMES:-0}" == "1" ]] || [[ ! -e "$ROOT/data" && ! -L "$ROOT/data" ]]; then
+"${compose[@]}" exec -T postgres pg_dump -U orkbot orkbot > "$OUT/orkbot.sql"
+if [[ "${ORKBOT_BACKUP_SKIP_HOMES:-0}" == "1" ]] || [[ ! -e "$ROOT/data" && ! -L "$ROOT/data" ]]; then
   tar -czf "$OUT/homes.tgz" --files-from /dev/null
 else
   [[ ! -L "$ROOT/data" && -d "$ROOT/data" ]] || { echo "data must be a directory, not a symlink" >&2; exit 1; }

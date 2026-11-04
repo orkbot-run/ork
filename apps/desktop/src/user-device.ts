@@ -3,18 +3,18 @@ import { createHash } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
-import type { UserDeviceClientOptions } from "@rakazo/adapters/user-device-client";
+import type { UserDeviceClientOptions } from "@orkbot/adapters/user-device-client";
 import type {
-  RakazoDesktopDevice,
+  OrkDesktopDevice,
   UserDevicePairRequest,
   UserDevicePairResponse,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   USER_DEVICE_PAIR_PATH,
   USER_DEVICE_PATH,
   USER_DEVICE_SESSION_PATH,
-} from "@rakazo/contracts";
-import { secureHttpOrigin } from "@rakazo/contracts/network-host";
+} from "@orkbot/contracts";
+import { secureHttpOrigin } from "@orkbot/contracts/network-host";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface DeviceTokenCipher {
@@ -413,7 +413,7 @@ export function createUserDeviceAccess(deps: {
     },
     /** Pairs the current server when it is not paired yet, e.g. once the person signs in. */
     pair,
-    state(origin: string): Omit<RakazoDesktopDevice, "name"> | null {
+    state(origin: string): Omit<OrkDesktopDevice, "name"> | null {
       if (origin !== current) return null;
       return { deviceId: paired.get(origin)?.deviceId ?? null, allowed: isAllowed(origin) };
     },

@@ -3,12 +3,12 @@ import {
   ModelAccountError,
   ModelOutputError,
   TransientModelError,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   MODEL_OUTPUT_LIMIT_ERROR,
   normalizeRunError,
   parseModelFallbackFailure,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { terminalOAuthRefreshErrorMarker } from "./pi-oauth.js";
 import { isOpenCodeProvider } from "./pi-runtime-stream.js";
 

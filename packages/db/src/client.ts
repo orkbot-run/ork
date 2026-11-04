@@ -1,7 +1,7 @@
+import type { KeyProvider } from "@orkbot/adapter-kit";
+import { resolveContentEncryption } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import { PrismaPg } from "@prisma/adapter-pg";
-import type { KeyProvider } from "@rakazo/adapter-kit";
-import { resolveContentEncryption } from "@rakazo/core";
-import { getLogger } from "@rakazo/logging";
 import type { PoolClient } from "pg";
 import { Pool } from "pg";
 import { withContentEncryption } from "./content-encryption.js";
@@ -74,7 +74,7 @@ export function createDb(
   // master keys held on this host.
   if (!options.keyProvider && (process.env.MASTER_KEY_PROVIDER?.trim() || "local") !== "local")
     throw new Error(
-      "MASTER_KEY_PROVIDER needs createDb(url, { keyProvider }) from @rakazo/adapters",
+      "MASTER_KEY_PROVIDER needs createDb(url, { keyProvider }) from @orkbot/adapters",
     );
   const pool = createPool(connectionString, options);
   const keyPool = new Pool({

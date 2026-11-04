@@ -1,8 +1,8 @@
 import { Trans } from "@lingui/react/macro";
-import type { MessageBlock } from "@rakazo/contracts";
-import { cloudAgentHttpsUrl } from "@rakazo/core";
-import { Badge } from "@rakazo/ui-web/components/ui/badge";
-import { Card, CardContent } from "@rakazo/ui-web/components/ui/card";
+import type { MessageBlock } from "@orkbot/contracts";
+import { cloudAgentHttpsUrl } from "@orkbot/core";
+import { Badge } from "@orkbot/ui-web/components/ui/badge";
+import { Card, CardContent } from "@orkbot/ui-web/components/ui/card";
 
 export function CloudAgentCard({
   block,

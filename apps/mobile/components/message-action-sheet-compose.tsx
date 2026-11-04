@@ -11,7 +11,7 @@ import {
   selectable,
   size,
 } from "@expo/ui/jetpack-compose/modifiers";
-import { tokensForAppearance } from "@rakazo/ui-tokens";
+import { tokensForAppearance } from "@orkbot/ui-tokens";
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import {
   dismissMessageActionSheet,

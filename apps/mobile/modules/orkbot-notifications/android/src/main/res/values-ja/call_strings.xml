@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">通話中</string>
+  <string name="orkbot_call_title">Orkの通話</string>
+  <string name="orkbot_call_text">マイクがオンです</string>
+  <string name="orkbot_call_answer">応答</string>
+  <string name="orkbot_call_decline">拒否</string>
+</resources>

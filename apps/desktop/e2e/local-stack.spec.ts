@@ -8,10 +8,10 @@ import type { ElectronApplication } from "@playwright/test";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { prepareHostComputer } from "../src/host-computer.js";
 
-const APP_MARKER = "Local Rakazo stack ready";
+const APP_MARKER = "Local Ork stack ready";
 const IMAGE_TAG = "v9.9.9";
-const STACK_PROBE_PATH = "/.well-known/rakazo-desktop-stack";
-const STACK_TOKEN_HEADER = "x-rakazo-desktop-stack-token";
+const STACK_PROBE_PATH = "/.well-known/orkbot-desktop-stack";
+const STACK_TOKEN_HEADER = "x-orkbot-desktop-stack-token";
 const COMPOSE_DIR = path.resolve(import.meta.dirname, "..", "..", "..", "infra", "compose");
 
 type FakeDockerMode =
@@ -52,7 +52,7 @@ test.beforeAll(async () => {
     }
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     response.end(
-      `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Rakazo</title></head><body><main>${APP_MARKER}</main></body></html>`,
+      `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ork</title></head><body><main>${APP_MARKER}</main></body></html>`,
     );
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -69,7 +69,7 @@ test.afterAll(async () => {
 
 test.beforeEach(async () => {
   // The fake docker logs $PWD, which is the resolved path (macOS /var is a symlink).
-  userData = await realpath(await mkdtemp(path.join(tmpdir(), "rakazo-desktop-stack-")));
+  userData = await realpath(await mkdtemp(path.join(tmpdir(), "orkbot-desktop-stack-")));
   // Setup otherwise follows the machine's language; these specs read its English text.
   await writeFile(path.join(userData, "ui-locale.txt"), "en\n");
 });
@@ -85,23 +85,23 @@ function fakeDockerLog() {
 }
 
 /**
- * Stands in for the docker CLI: records `cwd | RAKAZO_IMAGE_TAG | argv` for every call and
+ * Stands in for the docker CLI: records `cwd | ORKBOT_IMAGE_TAG | argv` for every call and
  * answers the handful of commands the app issues. The log path and mode are baked into the
  * script because the app passes docker an allowlisted environment.
  */
 async function writeFakeDocker(mode: FakeDockerMode) {
   const script = path.join(userData, "fake-docker.sh");
-  let up = '  up) echo "Container rakazo-web-1 Started"; exit 0 ;;';
+  let up = '  up) echo "Container orkbot-web-1 Started"; exit 0 ;;';
   if (mode === "pool-exhausted") {
     up = '  up) echo "all predefined address pools have been fully subnetted" >&2; exit 1 ;;';
   } else if (mode === "ports-exhausted") {
     up = '  up) echo "port is already allocated" >&2; exit 1 ;;';
   } else if (mode === "port-conflict") {
-    up = `  up) if [ ! -f '${path.join(userData, "port-conflict")}' ]; then touch '${path.join(userData, "port-conflict")}'; echo "port is already allocated" >&2; exit 1; fi; echo "Container rakazo-web-1 Started"; exit 0 ;;`;
+    up = `  up) if [ ! -f '${path.join(userData, "port-conflict")}' ]; then touch '${path.join(userData, "port-conflict")}'; echo "port is already allocated" >&2; exit 1; fi; echo "Container orkbot-web-1 Started"; exit 0 ;;`;
   }
   const lines = [
     "#!/bin/sh",
-    `printf '%s | %s | %s\\n' "$PWD" "$RAKAZO_IMAGE_TAG" "$*" >> '${fakeDockerLog()}'`,
+    `printf '%s | %s | %s\\n' "$PWD" "$ORKBOT_IMAGE_TAG" "$*" >> '${fakeDockerLog()}'`,
     'case "$1 $2" in',
     mode === "compose-check-fails"
       ? '  "compose version") echo "Access is denied." >&2; exit 7 ;;'
@@ -111,7 +111,7 @@ async function writeFakeDocker(mode: FakeDockerMode) {
       ? '    echo "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?" >&2; exit 1 ;;'
       : '    echo "27.1.1"; exit 0 ;;',
     "esac",
-    "# compose --env-file .env -f docker-compose.images.yml --project-name rakazo-desktop <command> ...",
+    "# compose --env-file .env -f docker-compose.images.yml --project-name orkbot-desktop <command> ...",
     'case "$8" in',
     "  pull)",
     mode === "pull-fails"
@@ -128,18 +128,18 @@ async function writeFakeDocker(mode: FakeDockerMode) {
 }
 
 async function launch(mode: FakeDockerMode | "missing") {
-  const env: NodeJS.ProcessEnv = { ...process.env, RAKAZO_PERFORMANCE_USER_DATA: userData };
-  // A stale RAKAZO_WEB_URL from the developer's shell would bypass setup entirely.
-  delete env.RAKAZO_WEB_URL;
+  const env: NodeJS.ProcessEnv = { ...process.env, ORKBOT_PERFORMANCE_USER_DATA: userData };
+  // A stale ORKBOT_WEB_URL from the developer's shell would bypass setup entirely.
+  delete env.ORKBOT_WEB_URL;
   return electron.launch({
     args: ["."],
     cwd: path.resolve(import.meta.dirname, ".."),
     env: {
       ...env,
-      RAKAZO_DOCKER_BINARY:
+      ORKBOT_DOCKER_BINARY:
         mode === "missing" ? "/nonexistent/docker" : await writeFakeDocker(mode),
-      RAKAZO_LOCAL_WEB_URL: serverUrl,
-      RAKAZO_IMAGE_TAG: IMAGE_TAG,
+      ORKBOT_LOCAL_WEB_URL: serverUrl,
+      ORKBOT_IMAGE_TAG: IMAGE_TAG,
     },
   });
 }
@@ -173,7 +173,7 @@ test("This computer installs and starts the stack, then opens the app", async ()
 
   const appWindowPromise = app.waitForEvent("window");
   await setup.getByRole("button", { name: "Continue" }).click();
-  await expect(setup.locator("#stack-phase")).toHaveText("Downloading Rakazo…");
+  await expect(setup.locator("#stack-phase")).toHaveText("Downloading Ork…");
   await expect(setup.getByRole("button", { name: "Continue" })).toBeDisabled();
   // Docker output stays behind the details toggle; the phase, the bar, and the size show by default.
   await expect(setup.locator("#stack-detail")).toHaveText("412 MB downloaded");
@@ -200,14 +200,14 @@ test("This computer installs and starts the stack, then opens the app", async ()
   const env = await readFile(envFile, "utf8");
   expect(env).toMatch(/^POSTGRES_PASSWORD=[0-9a-f]{32}$/m);
   expect(env).toMatch(/^BETTER_AUTH_SECRET=[0-9a-f]{64}$/m);
-  expect(env).not.toContain("RAKAZO_IMAGE_TAG=");
-  expect(env).not.toContain("RAKAZO_COMPUTER_IMAGE_TAG=");
+  expect(env).not.toContain("ORKBOT_IMAGE_TAG=");
+  expect(env).not.toContain("ORKBOT_COMPUTER_IMAGE_TAG=");
   await expect(readFile(path.join(stackDir, "docker-compose.images.yml"), "utf8")).resolves.toBe(
     await readFile(path.join(COMPOSE_DIR, "docker-compose.images.yml"), "utf8"),
   );
 
   const compose =
-    "compose --env-file .env -f docker-compose.images.yml --project-name rakazo-desktop";
+    "compose --env-file .env -f docker-compose.images.yml --project-name orkbot-desktop";
   expect(await readLog()).toEqual([
     `${stackDir} | ${IMAGE_TAG} | compose version --short`,
     `${stackDir} | ${IMAGE_TAG} | info --format {{.ServerVersion}}`,
@@ -248,7 +248,7 @@ test("switching to Existing instance while the stack starts keeps that choice", 
   await setup.getByRole("radio", { name: /This computer/ }).check();
 
   await setup.getByRole("button", { name: "Continue" }).click();
-  await expect(setup.locator("#stack-phase")).toHaveText("Downloading Rakazo…");
+  await expect(setup.locator("#stack-phase")).toHaveText("Downloading Ork…");
 
   // Fake docker sleeps during pull; leave This computer before ready so followStack must not save.
   await setup.getByRole("radio", { name: /Existing instance/ }).check();
@@ -508,7 +508,7 @@ test("the desktop never exposes server administration or account impersonation",
   await setup.getByRole("button", { name: "Continue", exact: true }).click();
   const main = await nextWindow;
   await expect(main.getByText(APP_MARKER)).toBeVisible();
-  expect(await main.evaluate(() => "localSettings" in window.rakazoDesktop!)).toBe(false);
+  expect(await main.evaluate(() => "localSettings" in window.orkbotDesktop!)).toBe(false);
   expect(
     await app.evaluate(({ Menu }) =>
       Boolean(Menu.getApplicationMenu()?.getMenuItemById("local-server-settings")),

@@ -1,6 +1,6 @@
 ---
 import IntegrationLogo from "../../components/IntegrationLogo.astro";
-import { PLUGIN_CATEGORIES } from "@rakazo/core";
+import { PLUGIN_CATEGORIES } from "@orkbot/core";
 import SiteFrame from "../../components/SiteFrame.astro";
 import {
   CATEGORY_LABELS,
@@ -13,8 +13,8 @@ import {
 import { PLUGIN_SUBMIT_PATH } from "../../site";
 
 const count = integrationCountLabel();
-const title = `Rakazo integrations: connect your AI bots to ${count} apps`;
-const description = `Gmail, Slack, Notion, GitHub, HubSpot and ${count} more apps your Rakazo bots can read and act in.`;
+const title = `Ork integrations: connect your AI bots to ${count} apps`;
+const description = `Gmail, Slack, Notion, GitHub, HubSpot and ${count} more apps your Ork bots can read and act in.`;
 ---
 
 <SiteFrame title={title} description={description} markdownAlternate="/integrations.md" wide>

@@ -4,7 +4,7 @@ import { WindowChrome } from "./WindowChrome";
 
 export function NotFoundPage() {
   return (
-    <div className="flex min-h-full flex-col bg-background" data-rakazo-surface="not-found">
+    <div className="flex min-h-full flex-col bg-background" data-orkbot-surface="not-found">
       <div className="app-drag flex gap-2 px-5 py-[18px]">
         <WindowChrome />
       </div>

@@ -1,5 +1,5 @@
 import { createTelegramAdapter } from "@chat-adapter/telegram";
-import type { AdapterContext, MessagingInboundEvent } from "@rakazo/adapter-kit";
+import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatSdkMessagingSurface } from "./chat-sdk-surface.js";
 import type { MessagingEnvironmentValues } from "./messaging-platforms.js";
@@ -232,7 +232,7 @@ describe("Telegram bots side by side", () => {
   }
 
   const webhook = (secret: string, text: string) =>
-    new Request("https://rakazo.test/api/v1/messaging/webhook/x", {
+    new Request("https://orkbot.test/api/v1/messaging/webhook/x", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -334,7 +334,7 @@ describe("Telegram groups", () => {
   }
 
   const webhook = (secret: string, update: unknown) =>
-    new Request("https://rakazo.test/api/v1/messaging/webhook/x", {
+    new Request("https://orkbot.test/api/v1/messaging/webhook/x", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -671,7 +671,7 @@ describe("Telegram redelivery", () => {
         if (inbound.length === 1) throw new Error("database unavailable");
       });
       const update = () =>
-        new Request("https://rakazo.test/api/v1/messaging/webhook/telegram", {
+        new Request("https://orkbot.test/api/v1/messaging/webhook/telegram", {
           method: "POST",
           headers: {
             "content-type": "application/json",

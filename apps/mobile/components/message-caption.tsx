@@ -1,6 +1,6 @@
-import { ChatMarkdown, LinkifiedText } from "@rakazo/chat-ui/native";
-import { splitMentionText } from "@rakazo/core";
-import type { ColorTokens, ResolvedAppearance } from "@rakazo/ui-tokens";
+import { ChatMarkdown, LinkifiedText } from "@orkbot/chat-ui/native";
+import { splitMentionText } from "@orkbot/core";
+import type { ColorTokens, ResolvedAppearance } from "@orkbot/ui-tokens";
 import { useContext } from "react";
 import type { MobileMessage } from "../lib/api";
 import {

@@ -192,7 +192,7 @@ describe("pr-digest", () => {
           id: 42,
           user: "github-actions[bot]",
           kind: "Bot",
-          body: "<!-- rakazo-playwright-screenshots -->\n### Playwright screenshots\n",
+          body: "<!-- orkbot-playwright-screenshots -->\n### Playwright screenshots\n",
         }),
         comment({
           id: 43,

@@ -1,4 +1,4 @@
-import type { Actor } from "@rakazo/contracts";
+import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "./client.js";
 import { runAsSystem } from "./row-security.js";
 

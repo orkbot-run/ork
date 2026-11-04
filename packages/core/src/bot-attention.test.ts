@@ -8,7 +8,7 @@ import {
 } from "./logo-avatar-activity.js";
 import { createLogoAvatarActivityStore } from "./logo-avatar-activity-store.js";
 
-const bot = { avatarSet: "rakazo", color: "orange" };
+const bot = { avatarSet: "orkbot", color: "orange" };
 const needsAttention = (activity: ReturnType<typeof logoAvatarActivity>) =>
   logoAvatarNeedsAttention(botAvatarActivity(bot, activity));
 
@@ -73,5 +73,11 @@ describe("avatar attention", () => {
   it("uses the same avatar selection as rendering", () => {
     expect(usesLogoAvatar(bot)).toBe(true);
     expect(botAvatarActivity(bot, "waiting")).toBe("waiting");
+  });
+
+  it("keeps activity on the saved logo avatar set from before the rename", () => {
+    const saved = { ...bot, avatarSet: "rakazo" };
+    expect(usesLogoAvatar(saved)).toBe(true);
+    expect(botAvatarActivity(saved, "waiting")).toBe("waiting");
   });
 });

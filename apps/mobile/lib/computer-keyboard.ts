@@ -1,4 +1,4 @@
-export const NATIVE_COMPUTER_KEYBOARD_BOOT = "window.__rakazoNativeKeys=true;true;";
+export const NATIVE_COMPUTER_KEYBOARD_BOOT = "window.__orkbotNativeKeys=true;true;";
 
 export type ComputerKeyName =
   | "Escape"
@@ -90,10 +90,10 @@ export function computerKeyboardScript(command: ComputerKeyboardCommand): string
     .replace(/</g, "\\u003c")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
-  return `window.rakazoComputerKeyboard?.run(${json});true;`;
+  return `window.orkbotComputerKeyboard?.run(${json});true;`;
 }
 
-export const COMPUTER_KEYBOARD_READY_MESSAGE = "rakazo-computer-keyboard-ready";
+export const COMPUTER_KEYBOARD_READY_MESSAGE = "orkbot-computer-keyboard-ready";
 
 const COMPUTER_KEYBOARD_READY_POLLS = 300;
 
@@ -102,7 +102,7 @@ export function computerKeyboardReadyProbe(session: string): string {
     .replace(/</g, "\\u003c")
     .replace(/\u2028/g, "\\u2028")
     .replace(/\u2029/g, "\\u2029");
-  return `(function(){var left=${COMPUTER_KEYBOARD_READY_POLLS};function tick(){var bridge=window.rakazoComputerKeyboard;if(bridge&&typeof bridge.run==="function"&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(${message});return;}left-=1;if(left>0)setTimeout(tick,100);}tick();})();true;`;
+  return `(function(){var left=${COMPUTER_KEYBOARD_READY_POLLS};function tick(){var bridge=window.orkbotComputerKeyboard;if(bridge&&typeof bridge.run==="function"&&window.ReactNativeWebView){window.ReactNativeWebView.postMessage(${message});return;}left-=1;if(left>0)setTimeout(tick,100);}tick();})();true;`;
 }
 
 export function isComputerKeyboardReadyMessage(data: string, session: string): boolean {

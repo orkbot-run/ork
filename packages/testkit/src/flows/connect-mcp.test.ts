@@ -1,4 +1,4 @@
-import { McpSession } from "@rakazo/adapters";
+import { McpSession } from "@orkbot/adapters";
 import { afterEach, describe, expect, it } from "vitest";
 import type { TrackerState } from "./connect-mcp.js";
 import { connectMcp, startTaskTracker } from "./connect-mcp.js";

@@ -7,7 +7,9 @@ const packageJson = JSON.parse(
 ) as {
   productName?: string;
   build?: {
+    appId?: string;
     productName?: string;
+    publish?: { provider: string; owner: string; repo: string }[];
     mac?: {
       extendInfo?: Record<string, string>;
       extraResources?: { from: string; to: string }[];
@@ -16,8 +18,15 @@ const packageJson = JSON.parse(
 };
 
 describe("desktop package metadata", () => {
+  it("packages the Ork identity and its own update feed", () => {
+    expect(packageJson.build?.appId).toBe("run.orkbot.desktop");
+    expect(packageJson.build?.publish).toEqual([
+      { provider: "github", owner: "orkbot-run", repo: "ork" },
+    ]);
+  });
+
   it("shares the customer-facing name between Electron and electron-builder", () => {
-    expect(packageJson.productName).toBe("Rakazo");
+    expect(packageJson.productName).toBe("Ork");
     expect(packageJson.build?.productName).toBeUndefined();
   });
 

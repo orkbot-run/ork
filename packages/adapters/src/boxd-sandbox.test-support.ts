@@ -14,7 +14,7 @@ import type { BoxdSandboxClient } from "./boxd-sandbox.js";
 import { BOXD_COMPUTER_SNAPSHOT, BoxdSandboxProvider } from "./boxd-sandbox.js";
 import { desktopCommandResponder, simpleCommand } from "./linux-desktop.test-support.js";
 
-export const BOXD_WORKSPACE = "/home/boxd/rakazo-home";
+export const BOXD_WORKSPACE = "/home/boxd/orkbot-home";
 
 interface FakeMachine {
   id: string;

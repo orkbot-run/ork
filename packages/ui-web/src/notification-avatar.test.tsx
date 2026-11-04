@@ -1,4 +1,4 @@
-import { notificationAvatarSource } from "@rakazo/core";
+import { notificationAvatarSource } from "@orkbot/core";
 import { renderToString } from "react-dom/server";
 import { expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -16,10 +16,10 @@ function tags(svg: string, name: string): Attributes[] {
   );
 }
 
-it.each<[string, { color: string; avatarSet?: "rakazo" }]>([
+it.each<[string, { color: string; avatarSet?: "orkbot" }]>([
   ["organic", { color: "#14b8a6" }],
   ["shipped shape", { color: "#8B5CF6::shape_3" }],
-  ["rakazo", { color: "#14b8a6", avatarSet: "rakazo" }],
+  ["orkbot", { color: "#14b8a6", avatarSet: "orkbot" }],
 ])("draws the %s notification portrait from the chat avatar's geometry", (_, avatar) => {
   const bot = { id: "agent-1", ...avatar };
   const source = notificationAvatarSource(bot);
@@ -31,9 +31,9 @@ it.each<[string, { color: string; avatarSet?: "rakazo" }]>([
   const [svg] = tags(portrait, "svg");
   expect(tags(chat, "svg")).toContainEqual(expect.objectContaining({ viewBox: svg!.viewBox }));
   const [body] = tags(portrait, "path");
-  const bodyGeometry = bot.avatarSet === "rakazo" ? { d: body!.d } : body!;
+  const bodyGeometry = bot.avatarSet === "orkbot" ? { d: body!.d } : body!;
   expect(tags(chat, "path")).toContainEqual(expect.objectContaining(bodyGeometry));
-  if (bot.avatarSet === "rakazo") expect(chat).toContain(`data-color="${body!.fill}"`);
+  if (bot.avatarSet === "orkbot") expect(chat).toContain(`data-color="${body!.fill}"`);
   for (const transform of tags(portrait, "g").flatMap((group) => group.transform ?? [])) {
     expect(chat).toContain(`transform="${transform}"`);
   }

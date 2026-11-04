@@ -1,7 +1,7 @@
-import type { Actor } from "@rakazo/contracts";
-import { GROUP_MEMBER_MIN } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { Prisma } from "@rakazo/db";
+import type { Actor } from "@orkbot/contracts";
+import { GROUP_MEMBER_MIN } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { Prisma } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { querySpaceSearch } from "./search.js";
 

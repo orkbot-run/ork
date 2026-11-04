@@ -1,9 +1,9 @@
+import type { CodexLiveCatalog, parseModelSecret } from "@orkbot/adapters";
+import { findConnectedModelCredential, validateConnectedModelChoice } from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import { OPENAI_COMPATIBLE_PROVIDER_ID, usableModelId } from "@orkbot/contracts";
+import { modelRoleTarget, runAsSystem } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { CodexLiveCatalog, parseModelSecret } from "@rakazo/adapters";
-import { findConnectedModelCredential, validateConnectedModelChoice } from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import { OPENAI_COMPATIBLE_PROVIDER_ID, usableModelId } from "@rakazo/contracts";
-import { modelRoleTarget, runAsSystem } from "@rakazo/db";
 import type { RouterDeps } from "./router.js";
 
 /**

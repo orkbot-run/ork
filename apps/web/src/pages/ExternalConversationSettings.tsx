@@ -5,8 +5,8 @@ import type {
   Bot,
   ExternalConversation,
   ExternalConversationPolicy,
-} from "@rakazo/contracts";
-import type { ListenMode } from "@rakazo/core";
+} from "@orkbot/contracts";
+import type { ListenMode } from "@orkbot/core";
 import {
   AUTOMATED_SENDER_MODES,
   ambientValue,
@@ -15,7 +15,7 @@ import {
   senderPolicy,
   withRollupHours,
   withSenderMode,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import {
   Button,
   Input,
@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
   Textarea,
-} from "@rakazo/ui-web";
+} from "@orkbot/ui-web";
 import { RotateCcw } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { SuccessPop } from "../components/ai/primitives";

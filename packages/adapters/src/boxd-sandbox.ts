@@ -17,14 +17,14 @@ import type {
   ScreenRequest,
   TerminalRequest,
   WorkspaceExportLimits,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import {
   SandboxRateLimitError,
   SandboxUnavailableError,
   WorkspaceTooLargeError,
-} from "@rakazo/adapter-kit";
-import { boundedSandboxCommandTimeoutMs } from "@rakazo/core";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
 import {
@@ -43,10 +43,10 @@ import {
 
 const DISPLAY_START = 20;
 const HOME = "/home/boxd";
-const WORKSPACE = `${HOME}/rakazo-home`;
+const WORKSPACE = `${HOME}/orkbot-home`;
 const BROWSER_PROFILES = `${WORKSPACE}/.browser-profiles`;
 /** Outside the workspace so checkpoints never carry it. */
-const COMMAND_ENV = `${HOME}/.rakazo-command-env`;
+const COMMAND_ENV = `${HOME}/.orkbot-command-env`;
 /** The desktop gateway serves every screen and terminal on this port, each behind its own token. */
 const SCREEN_PORT = 6100;
 const SCREEN_PROXY = "screen";
@@ -171,13 +171,13 @@ export class BoxdSandboxProvider implements SandboxProvider {
       }
     }
     const fromSnapshot = await this.computerSnapshot(context.signal);
-    const name = `rakazo-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    const name = `orkbot-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     const params = {
       name,
       ...(this.org ? { org: this.org } : {}),
       // Bots run untrusted code: no boxd credentials inside, and no route to other machines.
       isolated: true,
-      // Rakazo's idle sleep stops the computer; boxd's own counts only network traffic and would
+      // Ork's idle sleep stops the computer; boxd's own counts only network traffic and would
       // freeze a long command that prints nothing.
       config: { autoSuspendTimeout: 0 },
     };
@@ -209,7 +209,7 @@ export class BoxdSandboxProvider implements SandboxProvider {
     // A save already in progress, from another process or an earlier run, may finish it.
     if ((await this.settledSnapshot(name, signal)) === "ready") return { name, built: false };
     const machine = await this.client.machines.create({
-      name: `rakazo-snapshot-${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+      name: `orkbot-snapshot-${randomUUID().replaceAll("-", "").slice(0, 12)}`,
       ...(this.org ? { org: this.org } : {}),
       isolated: true,
       config: { autoSuspendTimeout: 0 },
@@ -814,12 +814,12 @@ function commandFailure(result: BoxdCommandResult): string {
 }
 
 function boxdCwd(cwd: string | undefined): string {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/rakazo" || cwd === HOME)
+  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/orkbot" || cwd === HOME)
     return WORKSPACE;
   const relative = cwd.startsWith(`${WORKSPACE}/`)
     ? cwd.slice(WORKSPACE.length + 1)
-    : cwd.startsWith("/home/rakazo/")
-      ? cwd.slice("/home/rakazo/".length)
+    : cwd.startsWith("/home/orkbot/")
+      ? cwd.slice("/home/orkbot/".length)
       : cwd;
   return workspacePath(WORKSPACE, relative);
 }
@@ -863,7 +863,7 @@ const BOXD_COMPUTER_SETUP = [
 ] as const;
 
 /** A snapshot name that changes with the setup it captures, so older computers keep theirs. */
-export const BOXD_COMPUTER_SNAPSHOT = `rakazo-computer-${createHash("sha256")
+export const BOXD_COMPUTER_SNAPSHOT = `orkbot-computer-${createHash("sha256")
   .update(BOXD_COMPUTER_SETUP.join("\0"))
   .digest("hex")
   .slice(0, 12)}`;

@@ -1,8 +1,8 @@
 import type { Credential, OAuthCredential } from "@earendil-works/pi-ai";
-import type { ModelCredentialFailedState, ModelCredentialRetireReason } from "@rakazo/adapter-kit";
-import { isModelCredentialRejected } from "@rakazo/adapter-kit";
-import { containsSecret, redactSecrets } from "@rakazo/core";
-import type { PrismaClient } from "@rakazo/db";
+import type { ModelCredentialFailedState, ModelCredentialRetireReason } from "@orkbot/adapter-kit";
+import { isModelCredentialRejected } from "@orkbot/adapter-kit";
+import { containsSecret, redactSecrets } from "@orkbot/core";
+import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PiOAuthBegin } from "./pi-oauth.js";
 import {

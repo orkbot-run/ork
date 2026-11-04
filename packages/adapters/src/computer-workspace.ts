@@ -10,13 +10,13 @@ import type {
   StreamedPortableFile,
   WorkspaceDirectoryRequest,
   WorkspaceExportLimits,
-} from "@rakazo/adapter-kit";
-import { WorkspaceTooLargeError } from "@rakazo/adapter-kit";
-import type { ComputerMode } from "@rakazo/contracts";
-import { parseScreenLeaseId } from "@rakazo/core";
-import { browserProfilePathForScreen } from "@rakazo/core/node/desktop-runtime";
-import type { PrismaClient } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
+import type { ComputerMode } from "@orkbot/contracts";
+import { parseScreenLeaseId } from "@orkbot/core";
+import { browserProfilePathForScreen } from "@orkbot/core/node/desktop-runtime";
+import type { PrismaClient } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { normalizeWorkspacePath, teamBotWorkspaceDirectory } from "./computer-support.js";
 import { createStagingDirectory, LocalAgentHomeStore } from "./home.js";
 import { isSandboxDamagedError } from "./sandbox-errors.js";

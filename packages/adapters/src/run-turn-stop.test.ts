@@ -1,4 +1,4 @@
-import type { AgentRuntimeEvent } from "@rakazo/adapter-kit";
+import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunContext } from "./run-context.js";
 import { createReplyState } from "./run-progress.js";

@@ -5,8 +5,8 @@ import {
   isInternalHostname,
   isNonPublicAddress,
   normalizeHost,
-} from "@rakazo/contracts";
-import { readBoundedResponseBytes } from "@rakazo/core";
+} from "@orkbot/contracts";
+import { readBoundedResponseBytes } from "@orkbot/core";
 import type { Dispatcher } from "undici";
 import { EnvHttpProxyAgent, Pool } from "undici";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
@@ -16,7 +16,7 @@ import { fetchPairedWithDispatcher } from "./undici-fetch.js";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
-const DEFAULT_USER_AGENT = "Rakazo/0.1 (+https://github.com/elie222/rakazo)";
+const DEFAULT_USER_AGENT = "Ork/0.1 (+https://github.com/orkbot-run/ork)";
 
 export type { ResolveHostname } from "./network-address.js";
 

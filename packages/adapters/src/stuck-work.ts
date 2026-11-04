@@ -1,6 +1,6 @@
-import type { JobPublisher, NotificationMessage, NotificationProvider } from "@rakazo/adapter-kit";
-import { runContinueJob } from "@rakazo/adapter-kit";
-import type { StuckWorkStatus } from "@rakazo/core";
+import type { JobPublisher, NotificationMessage, NotificationProvider } from "@orkbot/adapter-kit";
+import { runContinueJob } from "@orkbot/adapter-kit";
+import type { StuckWorkStatus } from "@orkbot/core";
 import {
   isStuckWorkStatus,
   STUCK_WORK_NOTICE,
@@ -10,10 +10,10 @@ import {
   stuckWorkDueAfterMs,
   stuckWorkReminder,
   stuckWorkStoppedNotification,
-} from "@rakazo/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@rakazo/db";
-import { appendEventInTransaction, expireStuckRun, withTransactionRetry } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/core";
+import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
+import { appendEventInTransaction, expireStuckRun, withTransactionRetry } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { ExpoPushProvider } from "./expo-push.js";
 import { notificationIdentity } from "./notification-identity.js";
 import { publishChatAlert } from "./run-notifications.js";

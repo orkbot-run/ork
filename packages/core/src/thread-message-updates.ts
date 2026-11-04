@@ -1,4 +1,4 @@
-import type { MessageBlock } from "@rakazo/contracts";
+import type { MessageBlock } from "@orkbot/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
 
 /** Computer-card state while a takeover is still waiting on the user. */

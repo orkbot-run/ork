@@ -1,10 +1,10 @@
-import type { VoiceCatalogEntry, VoiceCredential, VoiceInfo, VoiceStatus } from "@rakazo/contracts";
+import type { VoiceCatalogEntry, VoiceCredential, VoiceInfo, VoiceStatus } from "@orkbot/contracts";
 import {
   DEFAULT_COMPATIBLE_STT_MODEL,
   DEFAULT_COMPATIBLE_TTS_MODEL,
   OPENAI_COMPATIBLE_PROVIDER_ID,
-} from "@rakazo/contracts";
-import { fetchFresh, writeSaved } from "@rakazo/core/query";
+} from "@orkbot/contracts";
+import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import { isCancelledError } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";

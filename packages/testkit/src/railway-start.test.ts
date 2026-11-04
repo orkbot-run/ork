@@ -5,7 +5,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
-const OWNER_URL = "postgres://owner:fake-owner-password@postgres:5432/rakazo";
+const OWNER_URL = "postgres://owner:fake-owner-password@postgres:5432/orkbot";
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
@@ -25,7 +25,7 @@ function write(file: string, content: string) {
  * on Linux the shell that started it, still holds the owner login.
  */
 function start(overrides: Record<string, string> = {}) {
-  const root = mkdtempSync(path.join(os.tmpdir(), "rakazo-railway-"));
+  const root = mkdtempSync(path.join(os.tmpdir(), "orkbot-railway-"));
   temporaryDirectories.push(root);
   const bin = path.join(root, "bin");
   const log = path.join(root, "commands.log");
@@ -51,7 +51,7 @@ exit 0
       HOME: root,
       COMMAND_LOG: log,
       DATABASE_MIGRATION_URL: OWNER_URL,
-      DATABASE_URL: "postgres://app:fake-app-password@postgres:5432/rakazo",
+      DATABASE_URL: "postgres://app:fake-app-password@postgres:5432/orkbot",
       ...overrides,
     },
     encoding: "utf8",

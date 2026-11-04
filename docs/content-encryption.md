@@ -1,6 +1,6 @@
 # Content encryption at rest
 
-Rakazo encrypts user content before it reaches PostgreSQL or the artifact
+Ork encrypts user content before it reaches PostgreSQL or the artifact
 directory, so a copied database dump, backup or disk does not reveal it.
 
 ## What is encrypted
@@ -134,9 +134,9 @@ Does not protect against:
 4. Encrypt existing content, then check nothing is left:
 
    ```bash
-   pnpm --filter @rakazo/api content-encryption migrate --dry-run
-   pnpm --filter @rakazo/api content-encryption migrate
-   pnpm --filter @rakazo/api content-encryption status
+   pnpm --filter @orkbot/api content-encryption migrate --dry-run
+   pnpm --filter @orkbot/api content-encryption migrate
+   pnpm --filter @orkbot/api content-encryption status
    ```
 
    `migrate` works in batches, locks each batch while rewriting it, and can be
@@ -154,7 +154,7 @@ Rotate the master key:
 1. Generate a key and put it first: `ENCRYPTION_MASTER_KEYS="k2:<new>,k1:<old>"`
    (omit `k1` if you never set one; the derived `env` key stays available).
 2. Deploy the API and worker with the new value.
-3. `pnpm --filter @rakazo/api content-encryption rotate` re-wraps every space
+3. `pnpm --filter @orkbot/api content-encryption rotate` re-wraps every space
    key under `k2`. Each new wrap is verified before it replaces the old one.
 4. `status` should list space keys only under `k2`. Remove `k1` once backups
    that depend on it have expired.
@@ -205,8 +205,8 @@ be set, so leave the pair out of the laptop's `.env`, and the key policy must
 allow that principal:
 
 ```bash
-aws login --profile rakazo-kms
-AWS_KMS_PROFILE=rakazo-kms pnpm -s --filter @rakazo/api content-encryption export --bot <bot id> > rakazo-export.jsonl
+aws login --profile orkbot-kms
+AWS_KMS_PROFILE=orkbot-kms pnpm -s --filter @orkbot/api content-encryption export --bot <bot id> > orkbot-export.jsonl
 ```
 
 ### Wrapped settings
@@ -234,7 +234,7 @@ read, such as `POSTGRES_PASSWORD`, `POSTGRES_APP_PASSWORD` and `SCREEN_PROXY_SEC
 without a key manager stops startup with the variable's name.
 
 Other key managers implement the `KeyProvider` interface in
-`@rakazo/adapter-kit` (`activeKeyId`, `wrap`, `unwrap`), pass the shared suite in
+`@orkbot/adapter-kit` (`activeKeyId`, `wrap`, `unwrap`), pass the shared suite in
 `packages/adapters/src/key-provider-conformance.test.ts`, and are selected in
 `keyManagerFromEnv`. A provider only wraps 32-byte data keys: one per space
 key and one per wrapped setting, never per stored message or file.

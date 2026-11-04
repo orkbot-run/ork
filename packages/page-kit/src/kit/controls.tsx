@@ -1,11 +1,11 @@
-import { pageKitPalette } from "@rakazo/ui-tokens";
+import { pageKitPalette } from "@orkbot/ui-tokens";
 import type { ReactNode } from "react";
 import { useEffect, useId, useState } from "react";
 import { openViaHost } from "./inline.js";
 import { useWords } from "./labels.js";
 
 /** The page asks the host to put text in the chat's composer; the reader still presses Send. */
-const REPLY_MESSAGE = "rakazo-page:reply";
+const REPLY_MESSAGE = "orkbot-page:reply";
 const REPLY_MAX_LENGTH = 300;
 
 /** Only hosts with a composer beside the page mark the document; public pages have none. */
@@ -24,8 +24,8 @@ function sendReply(text: string) {
   window.parent?.postMessage({ type: REPLY_MESSAGE, text }, "*");
 }
 
-const COPY_MESSAGE = "rakazo-page:copy";
-const COPIED_MESSAGE = "rakazo-page:copied";
+const COPY_MESSAGE = "orkbot-page:copy";
+const COPIED_MESSAGE = "orkbot-page:copied";
 /** The app copies no more than this for a page. */
 const COPY_MAX_LENGTH = 20_000;
 let copies = 0;

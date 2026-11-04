@@ -4,7 +4,7 @@ import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from 
 
 test("shows peer lines in transcript and opens view-only peer chat", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `peer-msg-${stamp}@rakazo.test`, "password12", "Peer Msg");
+  await signup(page, `peer-msg-${stamp}@orkbot.test`, "password12", "Peer Msg");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);
@@ -54,7 +54,7 @@ test("shows peer lines in transcript and opens view-only peer chat", async ({ pa
   await expect(chip).toHaveAccessibleName(
     /Messaged Researcher|Message from Researcher|messages with Researcher/,
   );
-  await expect(chip.locator(".rakazo-organic-avatar")).toBeVisible();
+  await expect(chip.locator(".orkbot-organic-avatar")).toBeVisible();
   await expect(chip).not.toContainText("{peer}");
   // User bubble still contains the phrase; peer body must not appear outside the chip.
   await expect(chip).not.toContainText("peer-exchange-alpha");
@@ -180,7 +180,7 @@ test("shows peer lines in transcript and opens view-only peer chat", async ({ pa
       message: null,
       checkedAt: null,
     };
-    Object.defineProperty(window, "rakazoDesktop", {
+    Object.defineProperty(window, "orkbotDesktop", {
       value: {
         platform: "darwin",
         window: {
@@ -220,7 +220,7 @@ const relayText = "Here's what Researcher found: done. i handled: peer-fold-alph
  * marker in Researcher's chat.
  */
 async function openFoldedPeerReply(page: Page, name: string, testInfo: TestInfo) {
-  await signup(page, `${name}-${Date.now()}@rakazo.test`, "password12", "Peer Fold");
+  await signup(page, `${name}-${Date.now()}@orkbot.test`, "password12", "Peer Fold");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);
@@ -335,7 +335,7 @@ test(
 test("answers a message sent while the bot works on another bot's request", async ({
   page,
 }, testInfo) => {
-  await signup(page, `peer-busy-${Date.now()}@rakazo.test`, "password12", "Peer Busy");
+  await signup(page, `peer-busy-${Date.now()}@orkbot.test`, "password12", "Peer Busy");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);

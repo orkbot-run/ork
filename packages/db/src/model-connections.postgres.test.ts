@@ -70,7 +70,7 @@ describePostgres("model connections (PostgreSQL)", () => {
       data: {
         id: userId,
         name: "Connections",
-        email: `${userId}@rakazo.test`,
+        email: `${userId}@orkbot.test`,
         emailVerified: false,
       },
     });

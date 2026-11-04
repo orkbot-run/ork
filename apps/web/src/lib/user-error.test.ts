@@ -1,5 +1,5 @@
-import { CONNECTOR_AUTH_UNAVAILABLE, MCP_OAUTH_CLIENT_REQUIRED } from "@rakazo/contracts";
-import { MODEL_IMAGE_INPUT_ERROR } from "@rakazo/core";
+import { CONNECTOR_AUTH_UNAVAILABLE, MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
+import { MODEL_IMAGE_INPUT_ERROR } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import { authErrorText, errorText } from "./user-error";
 

@@ -1,4 +1,4 @@
-import type { PageDetail } from "@rakazo/contracts";
+import type { PageDetail } from "@orkbot/contracts";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useAppForeground } from "./app-foreground";

@@ -26,7 +26,7 @@ export function declaredSources(source: string): string {
     throw new Error("The page-sources comment at the top of the page is not valid JSON.");
   }
   return declared && typeof declared === "object" && !Array.isArray(declared)
-    ? `globalThis.__rakazoPageSources=${JSON.stringify(declared)};`
+    ? `globalThis.__orkbotPageSources=${JSON.stringify(declared)};`
     : "";
 }
 

@@ -5,11 +5,11 @@ import type {
   MessagingInstallationStore,
   MessagingInstallProvider,
   SecretStore,
-} from "@rakazo/adapter-kit";
-import type { Actor, MessagingInstallationSummary } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { IsolationError, runAsSystem } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/adapter-kit";
+import type { Actor, MessagingInstallationSummary } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { IsolationError, runAsSystem } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { credentialDigest } from "./credential-digest.js";
 import { installationSenderAddress } from "./installed-messaging-surface.js";
 

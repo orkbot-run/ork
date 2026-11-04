@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ThreadMessage } from "@rakazo/contracts";
+import type { ThreadMessage } from "@orkbot/contracts";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";

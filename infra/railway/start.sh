@@ -12,13 +12,13 @@ fi
 # Migrate, then start over without the owner login: unset alone would leave it in this
 # shell's original environment, which any process running as node can read from /proc.
 if [[ "${1:-}" != serve ]]; then
-  pnpm --filter @rakazo/api db:deploy
+  pnpm --filter @orkbot/api db:deploy
   exec env -u DATABASE_MIGRATION_URL bash "$0" serve
 fi
 
 export RAILWAY_ENVIRONMENT_ID
 RAILWAY_ENVIRONMENT_ID=$(node infra/railway/sandbox-environment.mjs)
-pnpm --filter @rakazo/api exec node dist/cli/bootstrap-owner.js
+pnpm --filter @orkbot/api exec node dist/cli/bootstrap-owner.js
 unset OWNER_PASSWORD
 # Personal template: registration is operator configuration, never an app-account permission.
 export SIGNUPS_ENABLED=false
@@ -33,8 +33,8 @@ trap 'exit 130' INT
 export CONTENT_ENCRYPTION="${CONTENT_ENCRYPTION:-on}"
 export TRUSTED_PROXIES="${TRUSTED_PROXIES:-127.0.0.1}"
 export CLIENT_IP_HEADER="${CLIENT_IP_HEADER:-x-real-ip}"
-pnpm --filter @rakazo/api start &
-pnpm --filter @rakazo/worker start &
+pnpm --filter @orkbot/api start &
+pnpm --filter @orkbot/worker start &
 (
   node --input-type=module -e '
   for (let attempt = 0; attempt < 60; attempt++) {
@@ -45,7 +45,7 @@ pnpm --filter @rakazo/worker start &
   throw new Error("API did not become ready");
 '
   exec env -u RAILWAY_API_TOKEN -u DATABASE_URL -u ENCRYPTION_KEY -u ENCRYPTION_MASTER_KEYS -u OBJECT_STORAGE_SECRET_ACCESS_KEY -u BETTER_AUTH_SECRET \
-    pnpm --filter @rakazo/web preview --host 0.0.0.0 --port 5173
+    pnpm --filter @orkbot/web preview --host 0.0.0.0 --port 5173
 ) &
 wait -n
 exit 1

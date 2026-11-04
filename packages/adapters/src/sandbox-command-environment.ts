@@ -1,4 +1,4 @@
-import type { CommandRequest } from "@rakazo/adapter-kit";
+import type { CommandRequest } from "@orkbot/adapter-kit";
 
 /** Unsets win over both inherited and explicitly supplied values. */
 export function sandboxCommandEnvironment(

@@ -1,10 +1,10 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Search
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
 - tapOn:
     id: "home-search-button"
     optional: true

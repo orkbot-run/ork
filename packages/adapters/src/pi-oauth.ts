@@ -10,7 +10,7 @@ import type {
   ModelCredentialFailedState,
   ModelCredentialRetireReason,
   SecretStore,
-} from "@rakazo/adapter-kit";
+} from "@orkbot/adapter-kit";
 import type {
   ModelApiProtocol,
   ModelContextLimits,
@@ -18,7 +18,7 @@ import type {
   ModelOAuthSignInMode,
   SettingsScope,
   ThinkingLevel,
-} from "@rakazo/contracts";
+} from "@orkbot/contracts";
 import {
   canonicalPiProviderId,
   MAX_MODEL_CONTEXT_WINDOW,
@@ -27,10 +27,10 @@ import {
   ModelContextLimitsSchema,
   parseModelHeaders,
   ThinkingLevelSchema,
-} from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { retireModelCredential, runAsSystem, runAsTenant } from "@rakazo/db";
-import { getLogger } from "@rakazo/logging";
+} from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { retireModelCredential, runAsSystem, runAsTenant } from "@orkbot/db";
+import { getLogger } from "@orkbot/logging";
 import { createManualAnthropicOAuthLogin } from "./pi-anthropic-oauth.js";
 
 export const CHATGPT_OAUTH_PROVIDER = "openai-codex";
@@ -51,20 +51,19 @@ export const SUBSCRIPTION_SIGN_IN_PROVIDERS: Record<
     mode: "device-code",
     loginLabel: "Sign in with ChatGPT",
     hint: "ChatGPT Plus/Pro",
-    billing:
-      "Sign in with ChatGPT Plus or Pro. Uses your OpenAI subscription. Rakazo does not pay.",
+    billing: "Sign in with ChatGPT Plus or Pro. Uses your OpenAI subscription. Ork does not pay.",
   },
   [COPILOT_OAUTH_PROVIDER]: {
     mode: "device-code",
     loginLabel: "Sign in with GitHub Copilot",
     hint: "Copilot",
-    billing: "Sign in with GitHub Copilot. Uses your Copilot subscription. Rakazo does not pay.",
+    billing: "Sign in with GitHub Copilot. Uses your Copilot subscription. Ork does not pay.",
   },
   [XAI_OAUTH_PROVIDER]: {
     mode: "device-code",
     loginLabel: "Sign in with SuperGrok or X Premium",
     hint: "SuperGrok / key",
-    billing: "Sign in with SuperGrok or X Premium, or paste an xAI API key. Rakazo does not pay.",
+    billing: "Sign in with SuperGrok or X Premium, or paste an xAI API key. Ork does not pay.",
   },
   [ANTHROPIC_OAUTH_PROVIDER]: {
     mode: "auth-url",

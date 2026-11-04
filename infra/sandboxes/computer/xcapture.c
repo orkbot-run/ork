@@ -149,7 +149,7 @@ static int open_capture(XCapture *capture, const char *display_name) {
   return 0;
 }
 
-void *rakazo_xcapture_open(const char *display_name) {
+void *orkbot_xcapture_open(const char *display_name) {
   XCapture *volatile capture = calloc(1, sizeof(*capture));
   if (!capture) return NULL;
   XSetIOErrorHandler(xio_error_handler);
@@ -171,7 +171,7 @@ void *rakazo_xcapture_open(const char *display_name) {
   return capture;
 }
 
-int rakazo_xcapture_copy(void *context, const unsigned char **rgb, int *width, int *height) {
+int orkbot_xcapture_copy(void *context, const unsigned char **rgb, int *width, int *height) {
   XCapture *volatile capture = context;
   if (!capture || !rgb || !width || !height || !display_alive(capture->display)) return -1;
   XSetIOErrorHandler(xio_error_handler);
@@ -211,12 +211,12 @@ int rakazo_xcapture_copy(void *context, const unsigned char **rgb, int *width, i
   return 0;
 }
 
-int rakazo_xcapture_png(void *context, const unsigned char **png_bytes, size_t *png_size,
+int orkbot_xcapture_png(void *context, const unsigned char **png_bytes, size_t *png_size,
     int *width, int *height) {
   XCapture *capture = context;
   if (!png_bytes || !png_size) return -1;
   const unsigned char *rgb = NULL;
-  if (rakazo_xcapture_copy(context, &rgb, width, height)) return -1;
+  if (orkbot_xcapture_copy(context, &rgb, width, height)) return -1;
   png_structp png = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
   if (!png) return -1;
   png_infop info = png_create_info_struct(png);
@@ -243,7 +243,7 @@ int rakazo_xcapture_png(void *context, const unsigned char **png_bytes, size_t *
   return 0;
 }
 
-int rakazo_xcapture_damage(void *context, int *x, int *y, int *width, int *height) {
+int orkbot_xcapture_damage(void *context, int *x, int *y, int *width, int *height) {
   XCapture *volatile capture = context;
   if (!capture || !capture->damage_supported || !capture->damage || !display_alive(capture->display)) return 0;
   XSetIOErrorHandler(xio_error_handler);
@@ -278,7 +278,7 @@ int rakazo_xcapture_damage(void *context, int *x, int *y, int *width, int *heigh
   return 1;
 }
 
-void rakazo_xcapture_close(void *context) {
+void orkbot_xcapture_close(void *context) {
   XCapture *volatile capture = context;
   if (!capture) return;
   const int alive = display_alive(capture->display);
@@ -308,7 +308,7 @@ static KeySym key_symbol(const char *name) {
 
 static int xinput_argv_locked(XCapture *capture, int argc, const char *const *argv);
 
-int rakazo_xinput_argv(void *context, int argc, const char *const *argv) {
+int orkbot_xinput_argv(void *context, int argc, const char *const *argv) {
   XCapture *volatile capture = context;
   if (!capture || !capture->display) return 0;
   if (!display_alive(capture->display)) return -1;

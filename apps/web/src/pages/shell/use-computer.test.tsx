@@ -12,7 +12,7 @@ vi.mock("@lingui/react/macro", () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) => String.raw(parts, ...values),
   }),
 }));
-vi.mock("@rakazo/ui-web", () => ({
+vi.mock("@orkbot/ui-web", () => ({
   Button: (props: ComponentProps<"button">) => <button type="button" {...props} />,
   Spinner: () => null,
 }));
@@ -52,11 +52,11 @@ async function read() {
   });
 }
 
-async function report(rakazoScreen: string) {
+async function report(orkbotScreen: string) {
   const frame = container.querySelector("iframe");
   await act(async () => {
     window.dispatchEvent(
-      new MessageEvent("message", { data: { rakazoScreen }, source: frame?.contentWindow }),
+      new MessageEvent("message", { data: { orkbotScreen }, source: frame?.contentWindow }),
     );
   });
 }

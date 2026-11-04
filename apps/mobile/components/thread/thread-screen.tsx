@@ -1,4 +1,4 @@
-import type { AgentSkillCatalogEntry } from "@rakazo/contracts";
+import type { AgentSkillCatalogEntry } from "@orkbot/contracts";
 import {
   buildComposerMentionOptions,
   channelMessageSender,
@@ -11,7 +11,7 @@ import {
   newClientId,
   newestPageCards,
   displayName as safeDisplayName,
-} from "@rakazo/core";
+} from "@orkbot/core";
 import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
 import { useHeaderHeight } from "expo-router/react-navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

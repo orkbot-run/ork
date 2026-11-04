@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import type { ProductEvent } from "@rakazo/contracts";
-import { BotAvatar, BotAvatarActivityProvider } from "@rakazo/ui-web";
+import type { ProductEvent } from "@orkbot/contracts";
+import { BotAvatar, BotAvatarActivityProvider } from "@orkbot/ui-web";
 import { act } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
@@ -56,18 +56,18 @@ async function mount(status?: string) {
     root.render(
       <BotAvatarActivityProvider source={webLogoAvatarActivity}>
         <div data-testid="live">
-          <BotAvatar identity="bot-a" color="#10B981" avatarSet="rakazo" status={status} />
+          <BotAvatar identity="bot-a" color="#10B981" avatarSet="orkbot" status={status} />
         </div>
         <BotAvatar identity="old-bot" color="#8B5CF6" />
-        <BotAvatar identity="photo" color="data:image/png;base64,YQ==" avatarSet="rakazo" />
-        <BotAvatar identity="shape" color="#8B5CF6::shape_2" avatarSet="rakazo" />
-        <BotAvatar identity="explicit" color="#F97316" avatarSet="rakazo" activity="reading" />
+        <BotAvatar identity="photo" color="data:image/png;base64,YQ==" avatarSet="orkbot" />
+        <BotAvatar identity="shape" color="#8B5CF6::shape_2" avatarSet="orkbot" />
+        <BotAvatar identity="explicit" color="#F97316" avatarSet="orkbot" activity="reading" />
       </BotAvatarActivityProvider>,
     ),
   );
 }
 const live = () => container.querySelector<SVGSVGElement>('[data-testid="live"] svg')!;
-it("projects production feed events into the live avatar and subscribes only live Rakazo consumers", async () => {
+it("projects production feed events into the live avatar and subscribes only live Ork consumers", async () => {
   const subscribe = vi.spyOn(webLogoAvatarActivity, "subscribe");
   await mount();
   expect(subscribe).toHaveBeenCalledTimes(1);
@@ -142,7 +142,7 @@ it("keeps static SVG artwork mounted through rapid live activity changes", async
   await act(async () =>
     root.render(
       <BotAvatarActivityProvider source={webLogoAvatarActivity}>
-        <BotAvatar identity="bot-a" color="#10B981" avatarSet="rakazo" size={22} status="running" />
+        <BotAvatar identity="bot-a" color="#10B981" avatarSet="orkbot" size={22} status="running" />
       </BotAvatarActivityProvider>,
     ),
   );
@@ -156,7 +156,7 @@ it("keeps static SVG artwork mounted through rapid live activity changes", async
         event(seq, "thread.meta", { activity: { thinking: seq % 2 === 0 } }),
       ),
     );
-    expect(container.querySelector(".rakazo-logo-avatar")!.getAttribute("data-activity")).toBe(
+    expect(container.querySelector(".orkbot-logo-avatar")!.getAttribute("data-activity")).toBe(
       seq % 2 === 0 ? "thinking" : "working",
     );
     expect(container.querySelector(".logo-avatar-art")).toBe(body);

@@ -7,7 +7,7 @@ import { afterEach, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({ me: vi.fn(), status: vi.fn() }));
 vi.mock("../lib/rpc", () => ({
   rpc: { me: api.me, billing: { status: api.status } },
-  SPACE_SELECTED_EVENT: "rakazo:space-selected",
+  SPACE_SELECTED_EVENT: "orkbot:space-selected",
 }));
 vi.mock("../lib/bootstrap", () => ({ peekInitialBootstrap: () => undefined }));
 vi.mock("../pages/Paywall", () => ({ PaywallPage: () => <div>paywall</div> }));
@@ -95,7 +95,7 @@ it("reloads billing for a newly selected Space", async () => {
 
   api.status.mockResolvedValue({ access: true });
   await act(async () => {
-    window.dispatchEvent(new Event("rakazo:space-selected"));
+    window.dispatchEvent(new Event("orkbot:space-selected"));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(container.textContent).toBe("app");
@@ -110,7 +110,7 @@ it("keeps checking billing after a newly selected Space's read fails", async () 
 
   api.status.mockRejectedValueOnce(new Error("offline"));
   await act(async () => {
-    window.dispatchEvent(new Event("rakazo:space-selected"));
+    window.dispatchEvent(new Event("orkbot:space-selected"));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   expect(container.textContent).toBe("app");

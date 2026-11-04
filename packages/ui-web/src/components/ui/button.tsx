@@ -1,5 +1,5 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button";
-import { cn } from "@rakazo/ui-web/lib/utils";
+import { cn } from "@orkbot/ui-web/lib/utils";
 import type { VariantProps } from "class-variance-authority";
 import { cva } from "class-variance-authority";
 

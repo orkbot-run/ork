@@ -1,6 +1,6 @@
 import { MenuView } from "@expo/ui/community/menu";
-import type { ActionApprovalRule } from "@rakazo/contracts";
-import { humanizeToolName, toolNameFromLabel } from "@rakazo/core";
+import type { ActionApprovalRule } from "@orkbot/contracts";
+import { humanizeToolName, toolNameFromLabel } from "@orkbot/core";
 import { useFocusEffect, useLocalSearchParams, useNavigation } from "expo-router";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Alert, Platform, ScrollView, StyleSheet, Text } from "react-native";

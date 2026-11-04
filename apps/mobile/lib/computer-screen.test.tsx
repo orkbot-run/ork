@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { ComputerStatus } from "@rakazo/contracts";
+import type { ComputerStatus } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement, Fragment, useEffect } from "react";
 import type { Root } from "react-dom/client";
@@ -388,7 +388,7 @@ describe("computer screen", () => {
     await act(async () => {
       screens.onLoadStart?.({ nativeEvent: { url: screen } });
       screens.onMessage?.({
-        nativeEvent: { url: "null", data: '{"rakazoScreen":"connected"}' },
+        nativeEvent: { url: "null", data: '{"orkbotScreen":"connected"}' },
       });
     });
     await act(async () => vi.advanceTimersByTimeAsync(16_000));
@@ -405,7 +405,7 @@ describe("computer screen", () => {
     await act(async () => {
       screens.onLoadStart?.({ nativeEvent: { url: "https://elsewhere.example.test/" } });
       screens.onMessage?.({
-        nativeEvent: { url: "null", data: '{"rakazoScreen":"connected"}' },
+        nativeEvent: { url: "null", data: '{"orkbotScreen":"connected"}' },
       });
     });
     await act(async () => vi.advanceTimersByTimeAsync(16_000));
@@ -426,7 +426,7 @@ describe("computer screen", () => {
     const view = await render();
     act(() =>
       screens.onMessage?.({
-        nativeEvent: { data: JSON.stringify({ rakazoScreen: "connected" }), url: screens.source },
+        nativeEvent: { data: JSON.stringify({ orkbotScreen: "connected" }), url: screens.source },
       }),
     );
     token = "second";
@@ -466,7 +466,7 @@ describe("computer screen", () => {
       );
     expect(view.textContent).not.toContain("Could not connect to the computer screen");
     expect(screens.onMessage).toBeTypeOf("function");
-    report({ rakazoScreen: "failed" });
+    report({ orkbotScreen: "failed" });
     expect(view.textContent).toContain("Could not connect to the computer screen");
     const mounted = screens.mounts;
     const retry = Array.from(view.querySelectorAll("button")).find(
@@ -476,12 +476,12 @@ describe("computer screen", () => {
     await act(async () => retry?.click());
     await settle();
     expect(screens.mounts).toBeGreaterThan(mounted);
-    report({ rakazoScreen: "connected" });
+    report({ orkbotScreen: "connected" });
     expect(view.textContent).not.toContain("Could not connect to the computer screen");
     // The first drop after connecting reconnects by itself; only a drop it can't ride out shows.
-    report({ rakazoScreen: "disconnected" });
+    report({ orkbotScreen: "disconnected" });
     expect(view.textContent).not.toContain("The screen connection closed.");
-    report({ rakazoScreen: "disconnected" });
+    report({ orkbotScreen: "disconnected" });
     expect(view.textContent).toContain("The screen connection closed.");
     vi.useRealTimers();
   });
@@ -819,21 +819,21 @@ describe("computer screen", () => {
       vi.stubGlobal("fetch", fetchStub);
       await openScreen();
       await load();
-      await post('{"rakazoScreen":"connected"}');
+      await post('{"orkbotScreen":"connected"}');
       const opened = screens.mounts;
-      await post('{"rakazoScreen":"disconnected"}');
+      await post('{"orkbotScreen":"disconnected"}');
       expect(screens.mounts).toBe(opened);
       await wait(1100);
       await settle();
       expect(screens.mounts).toBe(opened + 1);
       expect(fetchStub).toHaveBeenCalledTimes(1);
       // It asks the server's status-only probe, never the computer's page itself.
-      expect(String((fetchStub.mock.calls[0] as unknown[])[0])).toContain("rakazo_probe=1");
+      expect(String((fetchStub.mock.calls[0] as unknown[])[0])).toContain("orkbot_probe=1");
 
       // A second drop soon after is left showing; Retry is the user's.
       await load();
-      await post('{"rakazoScreen":"connected"}');
-      await post('{"rakazoScreen":"disconnected"}');
+      await post('{"orkbotScreen":"connected"}');
+      await post('{"orkbotScreen":"disconnected"}');
       await wait(1100);
       await settle();
       expect(screens.mounts).toBe(opened + 1);
@@ -845,9 +845,9 @@ describe("computer screen", () => {
       vi.stubGlobal("fetch", fetchStub);
       await openScreen();
       await load();
-      await post('{"rakazoScreen":"connected"}');
+      await post('{"orkbotScreen":"connected"}');
       const opened = screens.mounts;
-      await post('{"rakazoScreen":"disconnected"}');
+      await post('{"orkbotScreen":"disconnected"}');
       await wait(2200);
       await settle();
       // Still waiting: two unavailable answers, no reload yet.
@@ -863,8 +863,8 @@ describe("computer screen", () => {
       vi.stubGlobal("fetch", fetchStub);
       const view = await openScreen();
       await load();
-      await post('{"rakazoScreen":"connected"}');
-      await post('{"rakazoScreen":"disconnected"}');
+      await post('{"orkbotScreen":"connected"}');
+      await post('{"orkbotScreen":"disconnected"}');
       await wait(1100);
       await settle();
       const asked = fetchStub.mock.calls.length;
@@ -885,13 +885,13 @@ describe("computer screen", () => {
         vi.stubGlobal("fetch", fetchStub);
         await openScreen("http://192.168.1.10:5173/novnc/session/control/1.t/vnc.html");
         await load();
-        await post('{"rakazoScreen":"connected"}');
+        await post('{"orkbotScreen":"connected"}');
         const opened = screens.mounts;
-        await post('{"rakazoScreen":"disconnected"}');
+        await post('{"orkbotScreen":"disconnected"}');
         await wait(1100);
         await settle();
         expect(String((fetchStub.mock.calls[0] as unknown[])[0])).toBe(
-          "http://192.168.1.10:5173/novnc/session/control/1.t/vnc.html?rakazo_probe=1",
+          "http://192.168.1.10:5173/novnc/session/control/1.t/vnc.html?orkbot_probe=1",
         );
         expect(screens.mounts).toBe(opened + 1);
       } finally {
@@ -904,9 +904,9 @@ describe("computer screen", () => {
       vi.stubGlobal("fetch", fetchStub);
       await openScreen("https://screen.example.test/embed");
       await load();
-      await post('{"rakazoScreen":"connected"}');
+      await post('{"orkbotScreen":"connected"}');
       const opened = screens.mounts;
-      await post('{"rakazoScreen":"disconnected"}');
+      await post('{"orkbotScreen":"disconnected"}');
       await wait(1100);
       await settle();
       expect(screens.mounts).toBe(opened + 1);
@@ -921,9 +921,9 @@ describe("computer screen", () => {
       await openScreen();
       await load();
       const opened = screens.mounts;
-      await post('{"rakazoScreen":"connected"}', "https://elsewhere.example.test/page");
-      await post('{"rakazoScreen":"disconnected"}', "https://elsewhere.example.test/page");
-      await post('{"rakazoScreen":"connected"}', undefined as unknown as string);
+      await post('{"orkbotScreen":"connected"}', "https://elsewhere.example.test/page");
+      await post('{"orkbotScreen":"disconnected"}', "https://elsewhere.example.test/page");
+      await post('{"orkbotScreen":"connected"}', undefined as unknown as string);
       await wait(1100);
       await settle();
       expect(screens.mounts).toBe(opened);
@@ -933,10 +933,10 @@ describe("computer screen", () => {
       await openScreen();
       await load();
       const opened = screens.mounts;
-      await post('{"rakazoScreen":"disconnected"}');
-      await post('{"rakazoScreen":"connected","detail":"x"}');
-      await post('{"rakazoScreen":"disconnected"}');
-      await post('{"rakazoScreen":"reconnect"}');
+      await post('{"orkbotScreen":"disconnected"}');
+      await post('{"orkbotScreen":"connected","detail":"x"}');
+      await post('{"orkbotScreen":"disconnected"}');
+      await post('{"orkbotScreen":"reconnect"}');
       await post("not json");
       await wait(1100);
       await settle();

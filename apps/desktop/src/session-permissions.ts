@@ -1,4 +1,4 @@
-import { secureHttpOrigin as httpOrigin } from "@rakazo/contracts/network-host";
+import { secureHttpOrigin as httpOrigin } from "@orkbot/contracts/network-host";
 import type { Session, WebContents } from "electron";
 
 type AppPermissionTarget = {

@@ -1,4 +1,4 @@
-import { ATTACHMENT_MAX_COUNT } from "@rakazo/contracts";
+import { ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { readDroppedFiles as ReadDroppedFiles } from "./pick-attachments";
 

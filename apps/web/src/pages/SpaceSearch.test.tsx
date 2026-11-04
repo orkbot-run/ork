@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import type { SearchHit } from "@rakazo/contracts";
+import type { SearchHit } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";

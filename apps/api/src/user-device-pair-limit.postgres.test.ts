@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EmailEmulator, FakeSandboxProvider, USER_DEVICE_LIMIT } from "@rakazo/adapters";
-import { USER_DEVICE_PAIR_PATH } from "@rakazo/contracts";
-import { runAsSystem } from "@rakazo/db";
+import { EmailEmulator, FakeSandboxProvider, USER_DEVICE_LIMIT } from "@orkbot/adapters";
+import { USER_DEVICE_PAIR_PATH } from "@orkbot/contracts";
+import { runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
 import type { AppHandles } from "./app.js";
@@ -20,7 +20,7 @@ describe.skipIf(!databaseUrl)("pairing holds the per-user device limit under rac
   let account = 0;
 
   beforeAll(async () => {
-    dataDir = await mkdtemp(join(tmpdir(), "rakazo-device-pair-limit-"));
+    dataDir = await mkdtemp(join(tmpdir(), "orkbot-device-pair-limit-"));
     handles = await createApp({
       databaseUrl: databaseUrl!,
       dataDir,

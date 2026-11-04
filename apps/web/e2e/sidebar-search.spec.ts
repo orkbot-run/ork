@@ -4,7 +4,7 @@ import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 test("sidebar search opens from its icon and closes without moving chats mid-click", async ({
   page,
 }, testInfo) => {
-  await signup(page, `sidebar-search-${Date.now()}@rakazo.test`, "password12", "Search Sample");
+  await signup(page, `sidebar-search-${Date.now()}@orkbot.test`, "password12", "Search Sample");
   await completeOnboarding(page);
   const sidebar = page.locator("aside").first();
   const trigger = sidebar.getByTestId("sidebar-search-trigger");
@@ -63,7 +63,7 @@ test("sidebar search opens from its icon and closes without moving chats mid-cli
 test("a failed space search says so instead of No results", async ({ page }, testInfo) => {
   await signup(
     page,
-    `sidebar-search-failed-${Date.now()}@rakazo.test`,
+    `sidebar-search-failed-${Date.now()}@orkbot.test`,
     "password12",
     "Search Fail",
   );

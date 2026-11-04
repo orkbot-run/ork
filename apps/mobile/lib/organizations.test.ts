@@ -1,4 +1,4 @@
-import type { OrganizationList } from "@rakazo/contracts";
+import type { OrganizationList } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adoptDeletedSpaceFallback } from "./api";
 import type { Organization } from "./organizations";

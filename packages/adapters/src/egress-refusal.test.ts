@@ -1,4 +1,4 @@
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { beforeEach, describe, expect, it } from "vitest";
 import { assertSafeRemoteUrl, createSafeLookup } from "./remote-mcp.js";
 import { assertSafeWebUrl } from "./web-ssrf.js";
@@ -7,7 +7,7 @@ let sink: ReturnType<typeof createTestSink>;
 
 beforeEach(() => {
   sink = createTestSink();
-  installLogger(createLogger({ service: "rakazo-worker", sinks: [sink] }));
+  installLogger(createLogger({ service: "orkbot-worker", sinks: [sink] }));
 });
 
 const refusals = () =>

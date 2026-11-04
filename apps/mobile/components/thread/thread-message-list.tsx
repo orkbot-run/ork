@@ -1,5 +1,5 @@
-import type { ThreadItem } from "@rakazo/core";
-import { threadWindowMessages } from "@rakazo/core";
+import type { ThreadItem } from "@orkbot/core";
+import { threadWindowMessages } from "@orkbot/core";
 import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 import type { ListRenderItem } from "react-native";

@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 
 /** Set once a session is seen, so a signed-out relaunch opens sign-in instead of sign-up. */
-export const SIGNED_IN_BEFORE_KEY = "rakazo.signed-in-before";
+export const SIGNED_IN_BEFORE_KEY = "orkbot.signed-in-before";
 
 export async function hasSignedInBefore(): Promise<boolean> {
   try {

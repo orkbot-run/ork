@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { createLogger, createTestSink, installLogger } from "@rakazo/logging";
+import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startWorkerHealth, watchEventLoopStalls, workerHealthIsFresh } from "./health.js";
 
@@ -57,7 +57,7 @@ describe("worker health", () => {
   it("reports a blocked event loop with heap figures, and not ordinary timer jitter", async () => {
     vi.useFakeTimers();
     const sink = createTestSink();
-    installLogger(createLogger({ service: "rakazo-worker", sinks: [sink], level: "debug" }));
+    installLogger(createLogger({ service: "orkbot-worker", sinks: [sink], level: "debug" }));
     let clock = 0;
     const stop = watchEventLoopStalls(() => clock);
     const tick = async (elapsed: number) => {

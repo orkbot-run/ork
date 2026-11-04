@@ -1,5 +1,5 @@
 import { t } from "@lingui/core/macro";
-import type { RunActivityRow, RunStatus } from "@rakazo/contracts";
+import type { RunActivityRow, RunStatus } from "@orkbot/contracts";
 
 export type ActivityStatusFilter = RunStatus | "all";
 

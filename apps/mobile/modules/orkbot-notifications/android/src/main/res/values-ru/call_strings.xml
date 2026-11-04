@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="orkbot_call_channel">Текущий звонок</string>
+  <string name="orkbot_call_title">Звонок Ork</string>
+  <string name="orkbot_call_text">Микрофон активен</string>
+  <string name="orkbot_call_answer">Ответить</string>
+  <string name="orkbot_call_decline">Отклонить</string>
+</resources>

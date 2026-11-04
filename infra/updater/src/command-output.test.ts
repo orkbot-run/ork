@@ -37,18 +37,18 @@ afterEach(async () => {
 });
 
 async function plan(route = "/plan", currentTag = "v1.0.0") {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "rakazo-command-output-"));
+  const dir = await mkdtemp(path.join(os.tmpdir(), "orkbot-command-output-"));
   directories.push(dir);
-  await writeFile(path.join(dir, ".env"), `RAKAZO_IMAGE_TAG=${currentTag}\n`);
+  await writeFile(path.join(dir, ".env"), `ORKBOT_IMAGE_TAG=${currentTag}\n`);
   const app = createUpdaterApp({
-    ...resolveUpdaterConfig({ RAKAZO_DEPLOY_DIR: "/fixture", RAKAZO_UPDATER_TOKEN: token }),
+    ...resolveUpdaterConfig({ ORKBOT_DEPLOY_DIR: "/fixture", ORKBOT_UPDATER_TOKEN: token }),
     deployDir: dir,
     envFile: path.join(dir, ".env"),
   });
   return app.request(route, {
     method: "POST",
     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-    body: JSON.stringify({ repoUrl: "https://github.com/elie222/rakazo", branch: "main" }),
+    body: JSON.stringify({ repoUrl: "https://github.com/orkbot-run/ork", branch: "main" }),
   });
 }
 

@@ -1,4 +1,4 @@
-import type { ModelCatalogEntry } from "@rakazo/contracts";
+import type { ModelCatalogEntry } from "@orkbot/contracts";
 
 /** Protocol/pricing belongs to the adapter catalog, never approval policy. */
 const models = [

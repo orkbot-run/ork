@@ -27,7 +27,7 @@ vi.mock("../../lib/query", () => ({
             code: "",
             owner: { name: "" },
             visibility: "link",
-            shareUrl: input.link === true ? "https://rakazo.example/p/1" : null,
+            shareUrl: input.link === true ? "https://orkbot.example/p/1" : null,
           }),
         }),
       },
@@ -111,7 +111,7 @@ it("shows the link when Share opens on a page that is already shared", async () 
   await act(async () => await new Promise((resolve) => setTimeout(resolve, 0)));
   const share = document.querySelector('[data-testid="page-share"]');
   expect(share?.textContent).toContain("Open link");
-  expect(share?.querySelector("a")?.getAttribute("href")).toBe("https://rakazo.example/p/1");
+  expect(share?.querySelector("a")?.getAttribute("href")).toBe("https://orkbot.example/p/1");
   root.unmount();
 });
 

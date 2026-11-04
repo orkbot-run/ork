@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { PageDetail } from "@rakazo/contracts";
+import type { PageDetail } from "@orkbot/contracts";
 import { act, createElement, useEffect } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";

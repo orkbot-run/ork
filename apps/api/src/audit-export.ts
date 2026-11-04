@@ -1,7 +1,7 @@
-import type { Actor } from "@rakazo/contracts";
-import { AuditEventFilterSchema } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { auditLogOrganization, exportAuditEvents, recordAuditEvent } from "@rakazo/db";
+import type { Actor } from "@orkbot/contracts";
+import { AuditEventFilterSchema } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { auditLogOrganization, exportAuditEvents, recordAuditEvent } from "@orkbot/db";
 import type { Hono } from "hono";
 
 /** `GET /api/audit-events/export`: the organization's audit log as JSON Lines, newest first. */
@@ -39,7 +39,7 @@ export function mountAuditExportRoute(
       headers: {
         ...headers,
         "content-type": "application/x-ndjson",
-        "content-disposition": `attachment; filename="rakazo-audit-log-${new Date().toISOString().slice(0, 10)}.jsonl"`,
+        "content-disposition": `attachment; filename="orkbot-audit-log-${new Date().toISOString().slice(0, 10)}.jsonl"`,
       },
     });
   });

@@ -1,13 +1,13 @@
-import { parseBotAvatarValue } from "@rakazo/contracts";
-import type { LogoAvatarActivity } from "@rakazo/core";
+import { parseBotAvatarValue } from "@orkbot/contracts";
+import type { LogoAvatarActivity } from "@orkbot/core";
 import {
   LOGO_AVATAR_BODY_Y,
   LOGO_AVATAR_EYES,
   LOGO_AVATAR_VIEWBOX,
   logoAvatarEyeInk,
   logoAvatarTraits,
-} from "@rakazo/core";
-import { botEyeColor, tokens } from "@rakazo/ui-tokens";
+} from "@orkbot/core";
+import { botEyeColor, tokens } from "@orkbot/ui-tokens";
 import type { CSSProperties } from "react";
 import { memo, useId, useMemo } from "react";
 import { useAvatarMotionVisibility } from "./hooks/use-avatar-motion-visibility.js";
@@ -64,7 +64,7 @@ export const LogoAvatar = memo(function LogoAvatar({
       viewBox={LOGO_AVATAR_VIEWBOX}
       width={size}
       height={size}
-      className={cn("rakazo-logo-avatar shrink-0", className)}
+      className={cn("orkbot-logo-avatar shrink-0", className)}
       data-activity={activity}
       data-working={activity !== "idle" && activity !== "error"}
       data-vector-body="true"

@@ -1,5 +1,5 @@
+import type { McpServer } from "@orkbot/contracts";
 import { expect, test } from "@playwright/test";
-import type { McpServer } from "@rakazo/contracts";
 import { captureScreenshot, completeOnboarding, openIntegrationsAdd, rpc, signup } from "./helpers";
 
 const server: McpServer = {
@@ -29,7 +29,7 @@ const server: McpServer = {
 test("a server the user adds reaches every bot until they pick some", async ({
   page,
 }, testInfo) => {
-  await signup(page, `mcp-agents-${Date.now()}@rakazo.test`, "password12", "MCP agents");
+  await signup(page, `mcp-agents-${Date.now()}@orkbot.test`, "password12", "MCP agents");
   await completeOnboarding(page);
   const writer = await rpc<{ id: string }>(page, "bots/create", {
     name: "Writer",
@@ -92,7 +92,7 @@ test("a server the user adds reaches every bot until they pick some", async ({
 
 test("shows each server's bots and state with several bots", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
-  await signup(page, `mcp-states-${Date.now()}@rakazo.test`, "password12", "MCP states");
+  await signup(page, `mcp-states-${Date.now()}@orkbot.test`, "password12", "MCP states");
   await completeOnboarding(page);
   const bots: Record<string, string> = {};
   for (const name of ["Writer", "Researcher", "Support", "Ops", "Designer", "Sales"]) {

@@ -1,6 +1,6 @@
-import type { ConnectorCall, ConnectorTool } from "@rakazo/adapter-kit";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, BotSecretAuth } from "@rakazo/contracts";
-import { redactSecrets } from "@rakazo/core";
+import type { ConnectorCall, ConnectorTool } from "@orkbot/adapter-kit";
+import { BOT_INSTRUCTIONS_MAX_LENGTH, BotSecretAuth } from "@orkbot/contracts";
+import { redactSecrets } from "@orkbot/core";
 import { prepareAgentConnectionResponse } from "./agent-connections.js";
 import type { FleetCardSummary } from "./approval-ask.js";
 import type { TerminatingToolResult } from "./approval-effect.js";

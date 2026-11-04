@@ -1,25 +1,25 @@
-appId: com.rakazo.app
+appId: run.orkbot.app
 name: Workspace
 ---
 - runFlow:
     file: ../subflows/sign-in.yaml
     env:
-      RAKAZO_ACTIVE_EMAIL: ${RAKAZO_SCREENSHOT_EMAIL}
-- openLink: "rakazo:///board"
+      ORKBOT_ACTIVE_EMAIL: ${ORKBOT_SCREENSHOT_EMAIL}
+- openLink: "orkbot:///board"
 - extendedWaitUntil:
     visible: ".*Draft the launch announcement.*"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 01-board
-- openLink: "rakazo:///approvals"
+- openLink: "orkbot:///approvals"
 - extendedWaitUntil:
     visible: ".*example.com.*"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 02-approval-rules
-- openLink: "rakazo:///vault"
+- openLink: "orkbot:///vault"
 - extendedWaitUntil:
     visible: ".*deploy_token.*"
     timeout: 15000
@@ -45,14 +45,14 @@ name: Workspace
     timeout: 3000
 - takeScreenshot: 07-vault-new-card
 - tapOn: "Cancel"
-- openLink: "rakazo:///archived-bots"
+- openLink: "orkbot:///archived-bots"
 - extendedWaitUntil:
     visible: ".*Archived fixture.*"
     timeout: 15000
 - waitForAnimationToEnd:
     timeout: 3000
 - takeScreenshot: 08-archived-bots
-- openLink: "rakazo:///space?spaceId=${RAKAZO_SCREENSHOT_TEAM_SPACE_ID}"
+- openLink: "orkbot:///space?spaceId=${ORKBOT_SCREENSHOT_TEAM_SPACE_ID}"
 - extendedWaitUntil:
     visible: ".*Customize.*"
     timeout: 15000

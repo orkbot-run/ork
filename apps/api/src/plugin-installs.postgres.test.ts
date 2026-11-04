@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { createRouterClient } from "@orpc/server";
 import {
   EncryptedSecretStore,
   previewPluginInstall,
   withSecretPersistence,
-} from "@rakazo/adapters";
-import type { Actor } from "@rakazo/contracts";
-import type { PrismaClient } from "@rakazo/db";
-import { createDb, runAsSystem, runAsTenant } from "@rakazo/db";
+} from "@orkbot/adapters";
+import type { Actor } from "@orkbot/contracts";
+import type { PrismaClient } from "@orkbot/db";
+import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
+import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAgentSkillsService } from "./agent-skills.js";
 import { installPlugin } from "./plugin-installs.js";

@@ -1,5 +1,5 @@
 {
-  "name": "@rakazo/db",
+  "name": "@orkbot/db",
   "version": "0.1.0",
   "license": "Apache-2.0",
   "type": "module",
@@ -18,12 +18,12 @@
     "test": "vitest run --root ../.. packages/db/src"
   },
   "dependencies": {
-    "@rakazo/adapter-kit": "workspace:*",
+    "@orkbot/adapter-kit": "workspace:*",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
-    "@rakazo/contracts": "workspace:*",
-    "@rakazo/core": "workspace:*",
-    "@rakazo/logging": "workspace:*",
+    "@orkbot/contracts": "workspace:*",
+    "@orkbot/core": "workspace:*",
+    "@orkbot/logging": "workspace:*",
     "pg": "8.23.1",
     "dotenv": "17.4.2"
   },

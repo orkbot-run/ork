@@ -1,4 +1,4 @@
-import { fontWeight, typeScale } from "@rakazo/ui-tokens";
+import { fontWeight, typeScale } from "@orkbot/ui-tokens";
 import { StyleSheet, Text, View } from "react-native";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";

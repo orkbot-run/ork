@@ -1,4 +1,4 @@
-import { VoiceAccountError } from "@rakazo/adapter-kit";
+import { VoiceAccountError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_VOICE_JSON_BYTES,

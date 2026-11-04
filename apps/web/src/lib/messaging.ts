@@ -1,4 +1,4 @@
-import { messagingProviderLabel, messagingProviderName } from "@rakazo/core";
+import { messagingProviderLabel, messagingProviderName } from "@orkbot/core";
 
 /** User-facing name of a messaging provider (falls back to the raw id). */
 export const providerLabel = messagingProviderName;

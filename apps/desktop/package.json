@@ -1,9 +1,9 @@
 {
-  "name": "@rakazo/desktop",
-  "productName": "Rakazo",
+  "name": "@orkbot/desktop",
+  "productName": "Ork",
   "version": "0.7.0",
   "author": {
-    "name": "Rakazo"
+    "name": "Ork"
   },
   "license": "Apache-2.0",
   "type": "module",
@@ -11,25 +11,25 @@
   "scripts": {
     "dev": "pnpm build && electron .",
     "build": "node scripts/build.mjs && node scripts/copy-static.mjs && node scripts/build-speech.mjs",
-    "pack": "pnpm --filter @rakazo/web build && pnpm build && electron-builder --mac --win --linux",
-    "pack:dir": "pnpm --filter @rakazo/web build && pnpm build && electron-builder --dir",
+    "pack": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --mac --win --linux",
+    "pack:dir": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.jsdom.json",
     "test": "vitest run --root ../.. apps/desktop/src",
     "test:e2e": "pnpm build && playwright test --config e2e/playwright.config.ts",
-    "release": "pnpm --filter @rakazo/web build && pnpm build && electron-builder --publish never"
+    "release": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --publish never"
   },
   "dependencies": {
-    "@rakazo/contracts": "workspace:*",
-    "@rakazo/logging": "workspace:*",
+    "@orkbot/contracts": "workspace:*",
+    "@orkbot/logging": "workspace:*",
     "@sentry/electron": "8.3.0",
     "electron-updater": "6.8.11",
     "koffi": "3.3.6"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
-    "@rakazo/adapters": "workspace:*",
-    "@rakazo/core": "workspace:*",
-    "@rakazo/ui-tokens": "workspace:*",
+    "@orkbot/adapters": "workspace:*",
+    "@orkbot/core": "workspace:*",
+    "@orkbot/ui-tokens": "workspace:*",
     "electron": "45.2.2",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
@@ -38,7 +38,7 @@
     "yaml": "2.9.1"
   },
   "build": {
-    "appId": "dev.rakazo.desktop",
+    "appId": "run.orkbot.desktop",
     "directories": {
       "output": "out",
       "buildResources": "assets"
@@ -62,23 +62,23 @@
       }
     ],
     "extraMetadata": {
-      "name": "rakazo",
+      "name": "orkbot",
       "main": "dist/main.js"
     },
     "mac": {
-      "icon": "../../packages/ui-tokens/assets/Rakazo.icon",
+      "icon": "../../packages/ui-tokens/assets/Ork.icon",
       "category": "public.app-category.productivity",
       "x64ArchFiles": "{**/node_modules/@koromix/koffi-darwin-*/darwin_*/koffi.node,**/node_modules/@oxc-parser/binding-darwin-*/parser.darwin-*.node}",
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "Rakazo uses the microphone for dictation and voice calls with your bots.",
-        "NSSpeechRecognitionUsageDescription": "Rakazo turns what you say into text for dictation and voice calls with your bots."
+        "NSMicrophoneUsageDescription": "Ork uses the microphone for dictation and voice calls with your bots.",
+        "NSSpeechRecognitionUsageDescription": "Ork turns what you say into text for dictation and voice calls with your bots."
       },
       "extraResources": [
         {
-          "from": "build/speech/rakazo-speech",
-          "to": "speech/rakazo-speech"
+          "from": "build/speech/orkbot-speech",
+          "to": "speech/orkbot-speech"
         },
         {
           "from": "assets/es.lproj",
@@ -127,7 +127,7 @@
       "verifyUpdateCodeSignature": true
     },
     "linux": {
-      "executableName": "rakazo",
+      "executableName": "orkbot",
       "icon": "assets/icon.png",
       "target": [
         "AppImage"
@@ -136,8 +136,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "elie222",
-        "repo": "rakazo"
+        "owner": "orkbot-run",
+        "repo": "ork"
       }
     ]
   }

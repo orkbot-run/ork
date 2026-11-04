@@ -1,4 +1,4 @@
-import { botsWithOwnModel } from "@rakazo/core";
+import { botsWithOwnModel } from "@orkbot/core";
 import { useState } from "react";
 import { Alert, StyleSheet, Text, View } from "react-native";
 import type { MobileBot } from "../lib/api";

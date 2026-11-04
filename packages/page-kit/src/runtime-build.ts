@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
  */
 export async function buildPageRuntime(): Promise<string> {
   const result = await build({
-    entryPoints: [require.resolve("@rakazo/page-kit/runtime")],
+    entryPoints: [require.resolve("@orkbot/page-kit/runtime")],
     bundle: true,
     write: false,
     format: "iife",

@@ -1,4 +1,4 @@
-import { isModelRequiredSendError } from "@rakazo/core";
+import { isModelRequiredSendError } from "@orkbot/core";
 import { Alert, AppState } from "react-native";
 import type { RpcArgs } from "./api";
 import {
@@ -73,8 +73,8 @@ configureUnsentSends({
     const context = await captureApiRequestContext();
     if (generation !== currentSessionGeneration()) throw new Error("Session changed");
     const headers = { ...context.headers };
-    if (spaceId) headers["x-rakazo-space-id"] = spaceId;
-    else delete headers["x-rakazo-space-id"];
+    if (spaceId) headers["x-orkbot-space-id"] = spaceId;
+    else delete headers["x-orkbot-space-id"];
     return rpc(
       proc,
       ...([body, { ...options, requestContext: { ...context, headers } }] as RpcArgs<typeof proc>),

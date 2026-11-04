@@ -1,14 +1,14 @@
 import type { Socket } from "node:net";
-import { unwrapEnvFromKeyManager } from "@rakazo/adapters";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
-import { stopOnShutdownSignals } from "@rakazo/core/node/shutdown-signals";
+import { unwrapEnvFromKeyManager } from "@orkbot/adapters";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
+import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
 
 import { serve } from "@hono/node-server";
-import { SERVICE_NAMES } from "@rakazo/logging";
-import { createRootLogger } from "@rakazo/logging/axiom";
+import { SERVICE_NAMES } from "@orkbot/logging";
+import { createRootLogger } from "@orkbot/logging/axiom";
 import { createApp } from "./app.js";
 import { loadEnv } from "./env.js";
 

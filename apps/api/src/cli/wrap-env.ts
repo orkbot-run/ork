@@ -1,8 +1,8 @@
 // `printf %s "$VALUE" | node dist/cli/wrap-env.js NAME` prints NAME's value wrapped by the
 // configured key manager. The value comes from stdin so it never lands in argv or history.
 import { text } from "node:stream/consumers";
-import { KEY_PROVIDER_SETTINGS, keyManagerFromEnv, wrapEnvValue } from "@rakazo/adapters";
-import { loadRootEnv } from "@rakazo/core/node/load-root-env";
+import { KEY_PROVIDER_SETTINGS, keyManagerFromEnv, wrapEnvValue } from "@orkbot/adapters";
+import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 
 loadRootEnv();
 const [name, ...rest] = process.argv.slice(2);

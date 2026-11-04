@@ -1,0 +1,13 @@
+[Unit]
+Description=Check host storage, backup health and SSH access rules
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/orkbot/backup.env
+ExecStart=/usr/local/sbin/orkbot-host-check
+StateDirectory=orkbot/alerts
+StateDirectoryMode=0700
+ProtectSystem=strict
+ReadWritePaths=/var/lib/orkbot/alerts
+ProtectHome=true
+PrivateTmp=true
