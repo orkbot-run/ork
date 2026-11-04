@@ -9,8 +9,8 @@ await unwrapEnvFromKeyManager();
 import { serve } from "@hono/node-server";
 import { SERVICE_NAMES } from "@orkbot/logging";
 import { createRootLogger } from "@orkbot/logging/axiom";
+import { loadEnv } from "#modules/platform/env";
 import { createApp } from "./app.js";
-import { loadEnv } from "./env.js";
 
 const logger = createRootLogger(SERVICE_NAMES.api);
 

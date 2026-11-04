@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
 import type { PrismaClient } from "@orkbot/db";
 import { createDb, runAsSystem } from "@orkbot/db";
-import type { DiagnosticsInput } from "../diagnostics.js";
-import { renderDiagnostics } from "../diagnostics.js";
-import type { AppEnv } from "../env.js";
-import { loadEnv } from "../env.js";
+import type { DiagnosticsInput } from "#modules/platform/diagnostics";
+import { renderDiagnostics } from "#modules/platform/diagnostics";
+import type { AppEnv } from "#modules/platform/env";
+import { loadEnv } from "#modules/platform/env";
 
 const RECENT_RUNS = 10;
 const serverFields = {

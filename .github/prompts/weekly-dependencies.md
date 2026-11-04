@@ -1,4 +1,6 @@
 Update Ork's dependencies in one small, reviewable batch. Follow AGENTS.md.
+For API changes, also follow apps/api/AGENTS.md and keep the offline and
+Postgres test projects separate. Preserve the root Biome configuration.
 
 Use npm-check-updates to inspect the workspaces, review relevant release notes,
 and apply worthwhile patch releases. You own the investigation, edits, lockfile,

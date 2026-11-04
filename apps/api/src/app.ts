@@ -145,62 +145,66 @@ import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { deleteAccountContent } from "./account-deletion.js";
-import { mountAccountExportRoute } from "./account-export.js";
-import { mountAccountImportRoute } from "./account-import.js";
-import { mountAppAssociation, nativePasskeys } from "./app-association.js";
-import { storeInboundAttachment } from "./artifacts.js";
-import { mountAuditExportRoute } from "./audit-export.js";
-import { createBillingService } from "./billing.js";
-import { mountBillingRoutes } from "./billing-webhook.js";
-import { clientBuildMiddleware, readDeployedWebBuild } from "./client-build.js";
-import {
-  clientIpMiddleware,
-  createClientIpResolver,
-  defaultTrustedProxies,
-  requestClientIp,
-  withClientIp,
-} from "./client-ip.js";
-import { cspReportRoutes } from "./csp-report.js";
-import { configuredEmailProvider } from "./email.js";
-import type { AppEnv } from "./env.js";
-import { loadEnv } from "./env.js";
-import { healthRoutes } from "./health.js";
-import { homeRetentionSweep } from "./home-retention.js";
-import { startHourlySweep } from "./hourly-sweep.js";
-import { trackInFlightRequests } from "./in-flight-requests.js";
-import { mountLocalComputerHost } from "./local-settings.js";
-import { marketingEmailRoutes, sendWelcomeEmail } from "./marketing-email.js";
-import { moveMcpArgsIntoSecrets } from "./mcp-args-migration.js";
-import {
-  createMessagingInboundHandler,
-  teamChatSenderCanWakeMessageRoutines,
-  wakeMessageRoutines,
-} from "./messaging-inbound.js";
-import { createMessagingReceipts } from "./messaging-receipts.js";
-import { mountMessagingWebhookRoutes } from "./messaging-webhook.js";
-import { monitoringRoutes } from "./monitoring.js";
-import { pluginSubmissionRoutes } from "./plugin-submissions.js";
-import { sendReferralEmails } from "./referral-email.js";
-import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
-import { createRouter } from "./router.js";
-import { mountScreenTarget } from "./screen-proxy.js";
-import { mountScriptAssets } from "./script-assets.js";
-import { createAuthResponseAudit } from "./security-audit.js";
-import { mountSharedPages } from "./shared-pages.js";
-import { createSpeechSummarizer } from "./speech-summary.js";
-import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
-import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
+import { deleteAccountContent } from "#modules/accounts/account-deletion";
+import { mountAccountExportRoute } from "#modules/accounts/account-export";
+import { mountAccountImportRoute } from "#modules/accounts/account-import";
+import { createBillingService } from "#modules/billing/billing";
+import { mountBillingRoutes } from "#modules/billing/billing-webhook";
+import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
+import { sendReferralEmails } from "#modules/billing/referral-email";
+import { isDeferredReservationLost, TeamChatBridge } from "#modules/bots/team-chat-bridge";
+import { ModelTeamChatEngagementJudge } from "#modules/bots/team-chat-judge";
 import {
   PendingTeamChatInbound,
   prefersTeamChatSurface,
   settleWithTimeout,
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
   TeamChatStartupRetries,
-} from "./team-chat-startup.js";
-import { endUserDeviceSession, mountUserDeviceRoutes } from "./user-devices.js";
-import { mountVoiceHttpRoutes, transcribeInboundVoice, voiceAccountErrorStatus } from "./voice.js";
-import { mountWebhookHttpRoutes } from "./webhook.js";
+} from "#modules/bots/team-chat-startup";
+import { homeRetentionSweep } from "#modules/computers/home-retention";
+import { mountLocalComputerHost } from "#modules/computers/local-settings";
+import { mountScreenTarget } from "#modules/computers/screen-proxy";
+import { storeInboundAttachment } from "#modules/content/artifacts";
+import { mountScriptAssets } from "#modules/content/script-assets";
+import { mountSharedPages } from "#modules/content/shared-pages";
+import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
+import { pluginSubmissionRoutes } from "#modules/integrations/plugin-submissions";
+import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
+import { configuredEmailProvider } from "#modules/messaging/email";
+import {
+  createMessagingInboundHandler,
+  teamChatSenderCanWakeMessageRoutines,
+  wakeMessageRoutines,
+} from "#modules/messaging/messaging-inbound";
+import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
+import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
+import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
+import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
+import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
+import {
+  clientIpMiddleware,
+  createClientIpResolver,
+  defaultTrustedProxies,
+  requestClientIp,
+  withClientIp,
+} from "#modules/platform/client-ip";
+import type { AppEnv } from "#modules/platform/env";
+import { loadEnv } from "#modules/platform/env";
+import { healthRoutes } from "#modules/platform/health";
+import { startHourlySweep } from "#modules/platform/hourly-sweep";
+import { trackInFlightRequests } from "#modules/platform/in-flight-requests";
+import { monitoringRoutes } from "#modules/platform/monitoring";
+import { mountApiRequestBodyLimits, rpcBodyLimit } from "#modules/platform/request-body-limit";
+import { createRouter } from "#modules/platform/router";
+import { mountAuditExportRoute } from "#modules/security/audit-export";
+import { cspReportRoutes } from "#modules/security/csp-report";
+import { createAuthResponseAudit } from "#modules/security/security-audit";
+import { createSpeechSummarizer } from "#modules/voice/speech-summary";
+import {
+  mountVoiceHttpRoutes,
+  transcribeInboundVoice,
+  voiceAccountErrorStatus,
+} from "#modules/voice/voice";
 
 /**
  * Native clients always send the app scheme, including in Expo Go, so no
@@ -1001,7 +1005,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.use(
     "/rpc/*",
     clientBuildMiddleware({
-      webBuild: readDeployedWebBuild(),
+      webBuild: readDeployedWebBuild(new URL("../../web/dist/build-id", import.meta.url)),
       minimums: env.minimumClientBuilds ?? {},
     }),
   );

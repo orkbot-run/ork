@@ -26,6 +26,7 @@
     },
     "test": {
       "dependsOn": ["^generate"],
+      "env": ["COPY_TEST_DATABASE", "VERIFY_DATABASE"],
       "outputs": ["coverage/**"]
     },
     "dev": {
