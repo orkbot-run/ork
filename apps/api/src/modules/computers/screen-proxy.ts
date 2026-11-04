@@ -4,7 +4,7 @@ import { openScreenCapability, SCREEN_TARGET_ENDPOINT } from "@orkbot/core/node/
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import type { Hono } from "hono";
-import { requestBodyLimit } from "./request-body-limit.js";
+import { requestBodyLimit } from "../../request-body-limit.js";
 
 export function mountScreenTarget(app: Hono, prisma: PrismaClient, secret: string) {
   app.post(SCREEN_TARGET_ENDPOINT, requestBodyLimit(16 * 1024), async (c) => {

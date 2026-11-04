@@ -7,9 +7,9 @@ import { Prisma } from "@orkbot/db";
 import { onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { handleRpcError } from "./app.js";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import { handleRpcError } from "../../app.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 const lifecycle = vi.hoisted(() => ({
   realAcquire: undefined as typeof Adapters.acquireComputerExecutionLease | undefined,

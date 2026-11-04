@@ -3,7 +3,7 @@ import { LOCAL_COMPUTER_HOST_PATH, LOCAL_SETTINGS_TOKEN_HEADER } from "@orkbot/c
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import type { Hono } from "hono";
-import { readBoundedBody } from "./http-body.js";
+import { readBoundedBody } from "../../http-body.js";
 
 export function validLocalSettingsToken(
   expected: string | undefined,

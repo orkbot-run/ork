@@ -50,13 +50,13 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
+import { resolveBusyBotName, toComputerStatus } from "#modules/computers/computer-status";
 import {
   buildSendPrompt,
   buildUserMessageBlocks,
   resolveGroupSendAttachments,
   resolveSendAttachments,
 } from "../../artifacts.js";
-import { resolveBusyBotName, toComputerStatus } from "../../computer-status.js";
 import { withSerializableRetry } from "../../serializable-retry.js";
 import type { ImageAdmissionRun } from "./thread-image-admission.js";
 import { assertThreadImageInput } from "./thread-image-admission.js";

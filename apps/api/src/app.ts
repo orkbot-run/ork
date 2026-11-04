@@ -157,6 +157,9 @@ import {
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
   TeamChatStartupRetries,
 } from "#modules/bots/team-chat-startup";
+import { homeRetentionSweep } from "#modules/computers/home-retention";
+import { mountLocalComputerHost } from "#modules/computers/local-settings";
+import { mountScreenTarget } from "#modules/computers/screen-proxy";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
@@ -184,17 +187,14 @@ import { cspReportRoutes } from "./csp-report.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
-import { homeRetentionSweep } from "./home-retention.js";
 import { startHourlySweep } from "./hourly-sweep.js";
 import { trackInFlightRequests } from "./in-flight-requests.js";
-import { mountLocalComputerHost } from "./local-settings.js";
 import { marketingEmailRoutes, sendWelcomeEmail } from "./marketing-email.js";
 import { monitoringRoutes } from "./monitoring.js";
 import { pluginSubmissionRoutes } from "./plugin-submissions.js";
 import { sendReferralEmails } from "./referral-email.js";
 import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
-import { mountScreenTarget } from "./screen-proxy.js";
 import { mountScriptAssets } from "./script-assets.js";
 import { createAuthResponseAudit } from "./security-audit.js";
 import { mountSharedPages } from "./shared-pages.js";

@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { FakeSandboxProvider } from "@orkbot/adapters";
 import { runAsSystem } from "@orkbot/db";
 import { expect, it } from "vitest";
-import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
-import { createApp } from "./app.js";
+import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
+import { createApp } from "../../app.js";
 
 const databaseUrl = process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined;
 

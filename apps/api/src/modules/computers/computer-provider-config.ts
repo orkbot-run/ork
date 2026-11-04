@@ -17,8 +17,8 @@ import { Prisma, runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { requireAdmin } from "#modules/accounts/admins";
-import type { RouterDeps } from "./router.js";
-import { withSerializableRetry } from "./serializable-retry.js";
+import type { RouterDeps } from "../../router.js";
+import { withSerializableRetry } from "../../serializable-retry.js";
 
 export interface ComputerProviderConfigDeps {
   prisma: PrismaClient;

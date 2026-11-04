@@ -7,8 +7,8 @@ import type * as Db from "@orkbot/db";
 import type { PrismaClient } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 // The plan's size is read from billing, which these Prisma doubles do not model.
 vi.mock("@orkbot/db", async (importOriginal) => ({

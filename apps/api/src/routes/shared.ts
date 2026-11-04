@@ -15,7 +15,7 @@ import {
   resolveBotAvatarSet,
 } from "@orkbot/contracts";
 import { isAdmin } from "#modules/accounts/admins";
-import { effectiveSandboxProvider } from "../computer-provider-config.js";
+import { effectiveSandboxProvider } from "#modules/computers/computer-provider-config";
 import type { RouterDeps } from "../router.js";
 
 export { createAdapterContext as computerContext } from "@orkbot/adapter-kit";

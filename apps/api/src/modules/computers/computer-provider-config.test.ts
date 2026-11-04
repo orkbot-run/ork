@@ -432,6 +432,6 @@ it("retains previous deployment connections when changing providers", async () =
 });
 
 vi.mock(
-  "../../../packages/adapters/src/computer-provider-registry.js",
-  () => import("../../../packages/adapters/src/fake-computer-settings.test-support.js"),
+  "../../../../../packages/adapters/src/computer-provider-registry.js",
+  () => import("../../../../../packages/adapters/src/fake-computer-settings.test-support.js"),
 );

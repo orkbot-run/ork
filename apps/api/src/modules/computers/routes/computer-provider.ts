@@ -1,10 +1,10 @@
+import type { RouterContext } from "../../../routes/context.js";
 import {
   getAccountComputerSettings,
   getComputerProviderSettings,
   updateAccountComputerSettings,
   updateComputerProviderSettings,
 } from "../computer-provider-config.js";
-import type { RouterContext } from "./context.js";
 
 export function computerProviderRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

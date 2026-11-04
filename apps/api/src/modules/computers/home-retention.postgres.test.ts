@@ -7,7 +7,7 @@ import { EmailEmulator, ObjectAgentHomeStore, PrismaAgentHomeRecords } from "@or
 import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
 import { asSystem, ContentKeyRing, createDb, LocalKeyProvider } from "@orkbot/db";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryObjectStorage } from "../../../packages/adapters/src/object-storage.test-support.js";
+import { MemoryObjectStorage } from "../../../../../packages/adapters/src/object-storage.test-support.js";
 import { homeRetentionSweep } from "./home-retention.js";
 
 const databaseUrl = process.env.DATABASE_URL;

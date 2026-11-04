@@ -23,8 +23,8 @@ import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
 import { mapBotSecretInputError } from "#modules/bots/routes/bots";
+import { releaseComputerControl } from "#modules/computers/routes/computer";
 import type { RouterDeps } from "../../../router.js";
-import { releaseComputerControl } from "../../../routes/computer.js";
 import type { RouterContext } from "../../../routes/context.js";
 import {
   botsRunOwnModels,
