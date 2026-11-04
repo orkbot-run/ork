@@ -36,8 +36,8 @@ import {
 import { MarkdownMemoryStore } from "@orkbot/memory";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 const describePostgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL

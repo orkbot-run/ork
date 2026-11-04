@@ -12,8 +12,8 @@ import {
 } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(databaseUrl);

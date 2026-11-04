@@ -2,9 +2,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
-import { discardBotIntroRun } from "../../../packages/testkit/src/discard-bot-intro.js";
-import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
-import { createApp } from "./app.js";
+import { discardBotIntroRun } from "../../../../../packages/testkit/src/discard-bot-intro.js";
+import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
+import { createApp } from "../../app.js";
 
 const databaseUrl = process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined;
 const origin = "http://127.0.0.1:5173";

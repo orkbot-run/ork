@@ -7,7 +7,7 @@ import {
   IsolationError,
   withTransactionRetry,
 } from "@orkbot/db";
-import { requireBotThread } from "./bot-thread.js";
+import { requireBotThread } from "#modules/threads/bot-thread";
 
 export type McpApprovalDeps = {
   prisma: PrismaClient;

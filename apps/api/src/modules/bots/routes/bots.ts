@@ -54,6 +54,7 @@ import {
   previewAgentImport,
 } from "#modules/agents/agent-import";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "#modules/agents/agent-secrets";
+import { loadMessagePage } from "#modules/threads/thread-message-pages";
 import type { RouterDeps } from "../../../router.js";
 import type { RouterContext } from "../../../routes/context.js";
 import {
@@ -62,7 +63,6 @@ import {
   modelSetup,
   THREAD_MESSAGE_PAGE_SIZE,
 } from "../../../routes/shared.js";
-import { loadMessagePage } from "../../../thread-message-pages.js";
 import { changedBotSettings } from "../bot-setting-analytics.js";
 
 /** Surface a Space deletion race as a retryable conflict instead of a generic failure. */

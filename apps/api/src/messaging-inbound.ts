@@ -36,8 +36,12 @@ import {
   MESSAGE_ROUTING_REASON,
   MESSAGE_ROUTING_RESERVATION_MS,
 } from "#modules/bots/team-chat-startup";
+import {
+  cancelThreadRuns,
+  finishThreadStop,
+  STOPPED_BY_MESSAGE_NOTE,
+} from "#modules/threads/thread-target";
 import type { MessagingReceipts } from "./messaging-receipts.js";
-import { cancelThreadRuns, finishThreadStop, STOPPED_BY_MESSAGE_NOTE } from "./thread-target.js";
 import {
   deliverWebhookEvent,
   formatUntrustedDeliveryPayload,

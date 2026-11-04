@@ -12,10 +12,10 @@ import {
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { assertThreadImageInput } from "#modules/threads/thread-image-admission";
 import { queueMcpConnectedRun } from "./mcp-approval.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
-import { assertThreadImageInput } from "./thread-image-admission.js";
 import type { WebhookDeps } from "./webhook.js";
 import { mountWebhookHttpRoutes, WEBHOOK_SECRET_KIND } from "./webhook.js";
 

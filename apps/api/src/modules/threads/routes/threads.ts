@@ -23,9 +23,20 @@ import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
 import { mapBotSecretInputError } from "#modules/bots/routes/bots";
-import type { RouterDeps } from "../router.js";
-import { createRoutineTestRun, routineTestRunNonce, routineTestTarget } from "../routines.js";
-import { withSerializableRetry } from "../serializable-retry.js";
+import type { RouterDeps } from "../../../router.js";
+import { releaseComputerControl } from "../../../routes/computer.js";
+import type { RouterContext } from "../../../routes/context.js";
+import {
+  botsRunOwnModels,
+  computerContext,
+  HEARTBEAT_MS,
+  isUniqueViolation,
+  modelSetup,
+  SESSION_RECHECK_MS,
+  THREAD_MESSAGE_PAGE_SIZE,
+} from "../../../routes/shared.js";
+import { createRoutineTestRun, routineTestRunNonce, routineTestTarget } from "../../../routines.js";
+import { withSerializableRetry } from "../../../serializable-retry.js";
 import {
   isBackgroundRun,
   isPeerRun,
@@ -48,17 +59,6 @@ import {
   threadHead,
   threadSnapshot,
 } from "../thread-target.js";
-import { releaseComputerControl } from "./computer.js";
-import type { RouterContext } from "./context.js";
-import {
-  botsRunOwnModels,
-  computerContext,
-  HEARTBEAT_MS,
-  isUniqueViolation,
-  modelSetup,
-  SESSION_RECHECK_MS,
-  THREAD_MESSAGE_PAGE_SIZE,
-} from "./shared.js";
 
 /** Deterministic nonce for a call's marker message. The unique (threadId, clientNonce)
  * index makes it the hang-up idempotency key, and the "call:" prefix lets clients derive

@@ -9,8 +9,8 @@ import {
   runAsSystem,
 } from "@orkbot/db";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { STOPPED_BY_MESSAGE_NOTE } from "#modules/threads/thread-target";
 import { createMessagingInboundHandler } from "./messaging-inbound.js";
-import { STOPPED_BY_MESSAGE_NOTE } from "./thread-target.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(databaseUrl);

@@ -36,6 +36,7 @@ import type { BoardEvents, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { accountRoutes } from "#modules/accounts/routes/account";
 import { organizationsRoutes } from "#modules/accounts/routes/organizations";
 import { botsRoutes } from "#modules/bots/routes/bots";
+import { threadsRoutes } from "#modules/threads/routes/threads";
 import type { BillingService } from "./billing.js";
 import { availabilityRoutes } from "./routes/availability.js";
 import { boardsRoutes } from "./routes/boards.js";
@@ -52,13 +53,12 @@ import { pagesRoutes } from "./routes/pages.js";
 import { paymentWalletRoutes } from "./routes/payment-wallet.js";
 import { routinesRoutes } from "./routes/routines.js";
 import { spacesRoutes } from "./routes/spaces.js";
-import { threadsRoutes } from "./routes/threads.js";
 import type { VoiceDeps } from "./voice.js";
 
 export { botIntroPrompt, enqueueBotIntroRun } from "#modules/bots/routes/bots";
+export { callMarkerClientNonce } from "#modules/threads/routes/threads";
 export { nextConnectionLabel } from "./model-credentials.js";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
-export { callMarkerClientNonce } from "./routes/threads.js";
 
 export interface RouterDeps {
   pushTokens: PushTokenStore;

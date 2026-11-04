@@ -1,11 +1,13 @@
 import type { Actor } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../router.js";
+import type { RouterDeps } from "../../../router.js";
+import { releaseComputerControl } from "../../../routes/computer.js";
 import type { ThreadTarget } from "../thread-target.js";
-import { releaseComputerControl } from "./computer.js";
 import { takeoverReleaser } from "./threads.js";
 
-vi.mock("./computer.js", () => ({ releaseComputerControl: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../../../routes/computer.js", () => ({
+  releaseComputerControl: vi.fn().mockResolvedValue(undefined),
+}));
 
 const actor = { spaceId: "space-1", userId: "user-1" } as Actor;
 

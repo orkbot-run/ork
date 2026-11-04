@@ -2,7 +2,7 @@ import type { Actor } from "@orkbot/contracts";
 import { AI_DISCLOSURE_VERSION } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../thread-target.js", () => ({
+vi.mock("#modules/threads/thread-target", () => ({
   resolveThreadTarget: async () => ({ kind: "bot", botId: "bot" }),
 }));
 
