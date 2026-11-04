@@ -16,7 +16,7 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import { connectionCreatedEvent } from "../security-audit.js";
+import { connectionCreatedEvent } from "#modules/security/security-audit";
 import type { RouterContext } from "./context.js";
 
 async function reconcileConnections(

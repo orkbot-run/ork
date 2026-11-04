@@ -175,6 +175,9 @@ import {
 import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
+import { mountAuditExportRoute } from "#modules/security/audit-export";
+import { cspReportRoutes } from "#modules/security/csp-report";
+import { createAuthResponseAudit } from "#modules/security/security-audit";
 import { createSpeechSummarizer } from "#modules/voice/speech-summary";
 import {
   mountVoiceHttpRoutes,
@@ -183,7 +186,6 @@ import {
 } from "#modules/voice/voice";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";
 import { storeInboundAttachment } from "./artifacts.js";
-import { mountAuditExportRoute } from "./audit-export.js";
 import { clientBuildMiddleware, readDeployedWebBuild } from "./client-build.js";
 import {
   clientIpMiddleware,
@@ -192,7 +194,6 @@ import {
   requestClientIp,
   withClientIp,
 } from "./client-ip.js";
-import { cspReportRoutes } from "./csp-report.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
@@ -203,7 +204,6 @@ import { pluginSubmissionRoutes } from "./plugin-submissions.js";
 import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScriptAssets } from "./script-assets.js";
-import { createAuthResponseAudit } from "./security-audit.js";
 import { mountSharedPages } from "./shared-pages.js";
 
 /**

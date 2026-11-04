@@ -11,7 +11,7 @@ import {
 import { resolveEncryptionKey } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { createDb, runAsSystem } from "@orkbot/db";
-import { createSecretMigrationRepository } from "../secret-migration.js";
+import { createSecretMigrationRepository } from "#modules/security/secret-migration";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
