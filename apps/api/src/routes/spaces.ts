@@ -21,7 +21,7 @@ import {
   spaceSettingOverrides,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { otherSpaceOfBot } from "../bot-space.js";
+import { otherSpaceOfBot } from "#modules/bots/bot-space";
 import type { RouterDeps } from "../router.js";
 import { listRoutinesDto } from "../routines.js";
 import { deleteSpaceWithContent } from "../space-deletion.js";

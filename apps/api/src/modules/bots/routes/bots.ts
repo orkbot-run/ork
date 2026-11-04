@@ -54,16 +54,16 @@ import {
   previewAgentImport,
 } from "#modules/agents/agent-import";
 import { deleteAgentSecret, listAgentSecrets, putAgentSecret } from "#modules/agents/agent-secrets";
-import { changedBotSettings } from "../bot-setting-analytics.js";
-import type { RouterDeps } from "../router.js";
-import { loadMessagePage } from "../thread-message-pages.js";
-import type { RouterContext } from "./context.js";
+import type { RouterDeps } from "../../../router.js";
+import type { RouterContext } from "../../../routes/context.js";
 import {
   computerContext,
   isRecordNotFound,
   modelSetup,
   THREAD_MESSAGE_PAGE_SIZE,
-} from "./shared.js";
+} from "../../../routes/shared.js";
+import { loadMessagePage } from "../../../thread-message-pages.js";
+import { changedBotSettings } from "../bot-setting-analytics.js";
 
 /** Surface a Space deletion race as a retryable conflict instead of a generic failure. */
 function mapSpaceLifecycleError(error: unknown): unknown {

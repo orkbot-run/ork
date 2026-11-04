@@ -12,7 +12,8 @@ import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } 
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { clearEndedRunState, teamChatRunClientNonce } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import type { MessagingReceipts } from "./messaging-receipts.js";
+import type { MessagingReceipts } from "../../messaging-receipts.js";
+import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "../../webhook-inbound.js";
 import type { TeamChatEngagementJudge } from "./team-chat-judge.js";
 import {
   MESSAGE_ROUTING_REARMED_REASON,
@@ -22,7 +23,6 @@ import {
   TEAM_CHAT_STARTUP_SHUTDOWN_MS,
   TEAMCHAT_AGENT_OWNERSHIP_REASON,
 } from "./team-chat-startup.js";
-import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "./webhook-inbound.js";
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 1_000;
 const DEFAULT_AMBIENT_DEBOUNCE_MS = 15_000;

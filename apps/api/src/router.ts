@@ -35,10 +35,10 @@ import type { NavLink } from "@orkbot/contracts";
 import type { BoardEvents, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { accountRoutes } from "#modules/accounts/routes/account";
 import { organizationsRoutes } from "#modules/accounts/routes/organizations";
+import { botsRoutes } from "#modules/bots/routes/bots";
 import type { BillingService } from "./billing.js";
 import { availabilityRoutes } from "./routes/availability.js";
 import { boardsRoutes } from "./routes/boards.js";
-import { botsRoutes } from "./routes/bots.js";
 import { computerRoutes } from "./routes/computer.js";
 import { computerProviderRoutes } from "./routes/computer-provider.js";
 import { connectionsRoutes } from "./routes/connections.js";
@@ -55,8 +55,8 @@ import { spacesRoutes } from "./routes/spaces.js";
 import { threadsRoutes } from "./routes/threads.js";
 import type { VoiceDeps } from "./voice.js";
 
+export { botIntroPrompt, enqueueBotIntroRun } from "#modules/bots/routes/bots";
 export { nextConnectionLabel } from "./model-credentials.js";
-export { botIntroPrompt, enqueueBotIntroRun } from "./routes/bots.js";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 export { callMarkerClientNonce } from "./routes/threads.js";
 

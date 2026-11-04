@@ -22,6 +22,7 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
+import { mapBotSecretInputError } from "#modules/bots/routes/bots";
 import type { RouterDeps } from "../router.js";
 import { createRoutineTestRun, routineTestRunNonce, routineTestTarget } from "../routines.js";
 import { withSerializableRetry } from "../serializable-retry.js";
@@ -47,7 +48,6 @@ import {
   threadHead,
   threadSnapshot,
 } from "../thread-target.js";
-import { mapBotSecretInputError } from "./bots.js";
 import { releaseComputerControl } from "./computer.js";
 import type { RouterContext } from "./context.js";
 import {

@@ -41,7 +41,7 @@ import { implement, ORPCError } from "@orpc/server";
 import { createAgentImportServices } from "#modules/agents/agent-import-services";
 import { createAgentSkillsService } from "#modules/agents/agent-skills";
 import { createTaughtSkillsService } from "#modules/agents/taught-skills";
-import { createBotRemoval } from "../bot-removal.js";
+import { createBotRemoval } from "#modules/bots/bot-removal";
 import { createMcpServers } from "../mcp-servers.js";
 import { createModelConnector, prepareAllowedThinkingLevels } from "../model-credentials.js";
 import type { RouterDeps } from "../router.js";

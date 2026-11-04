@@ -15,7 +15,7 @@ import {
 } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { mapBotSecretInputError } from "../../routes/bots.js";
+import { mapBotSecretInputError } from "#modules/bots/routes/bots";
 
 type AgentSecretDeps = {
   prisma: PrismaClient;

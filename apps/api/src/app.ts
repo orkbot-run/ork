@@ -148,6 +148,15 @@ import { cors } from "hono/cors";
 import { deleteAccountContent } from "#modules/accounts/account-deletion";
 import { mountAccountExportRoute } from "#modules/accounts/account-export";
 import { mountAccountImportRoute } from "#modules/accounts/account-import";
+import { isDeferredReservationLost, TeamChatBridge } from "#modules/bots/team-chat-bridge";
+import { ModelTeamChatEngagementJudge } from "#modules/bots/team-chat-judge";
+import {
+  PendingTeamChatInbound,
+  prefersTeamChatSurface,
+  settleWithTimeout,
+  TEAM_CHAT_STARTUP_SHUTDOWN_MS,
+  TeamChatStartupRetries,
+} from "#modules/bots/team-chat-startup";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";
 import { storeInboundAttachment } from "./artifacts.js";
 import { mountAuditExportRoute } from "./audit-export.js";
@@ -189,15 +198,6 @@ import { mountScriptAssets } from "./script-assets.js";
 import { createAuthResponseAudit } from "./security-audit.js";
 import { mountSharedPages } from "./shared-pages.js";
 import { createSpeechSummarizer } from "./speech-summary.js";
-import { isDeferredReservationLost, TeamChatBridge } from "./team-chat-bridge.js";
-import { ModelTeamChatEngagementJudge } from "./team-chat-judge.js";
-import {
-  PendingTeamChatInbound,
-  prefersTeamChatSurface,
-  settleWithTimeout,
-  TEAM_CHAT_STARTUP_SHUTDOWN_MS,
-  TeamChatStartupRetries,
-} from "./team-chat-startup.js";
 import { endUserDeviceSession, mountUserDeviceRoutes } from "./user-devices.js";
 import { mountVoiceHttpRoutes, transcribeInboundVoice, voiceAccountErrorStatus } from "./voice.js";
 import { mountWebhookHttpRoutes } from "./webhook.js";

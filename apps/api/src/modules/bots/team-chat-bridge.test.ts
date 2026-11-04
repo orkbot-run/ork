@@ -8,15 +8,15 @@ import type { MessageBlock } from "@orkbot/contracts";
 import { userTurnMessageForRun } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { materializeCurrentTurnFiles } from "../../../packages/adapters/src/thread-artifacts.js";
-import type { MessagingReceipts } from "./messaging-receipts.js";
+import { materializeCurrentTurnFiles } from "../../../../../packages/adapters/src/thread-artifacts.js";
+import type { MessagingReceipts } from "../../messaging-receipts.js";
+import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "../../webhook-inbound.js";
 import {
   TeamChatBridge,
   teamChatAmbientPrompt,
   teamChatPrompt,
   teamChatResponseText,
 } from "./team-chat-bridge.js";
-import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "./webhook-inbound.js";
 
 describe("team chat bridge", () => {
   it("attributes an external speaker without changing their message", () => {

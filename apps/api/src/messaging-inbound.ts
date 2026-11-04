@@ -31,12 +31,12 @@ import {
   redeemMessagingLinkCode,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import type { MessagingReceipts } from "./messaging-receipts.js";
 import {
   MESSAGE_ROUTING_REARMED_REASON,
   MESSAGE_ROUTING_REASON,
   MESSAGE_ROUTING_RESERVATION_MS,
-} from "./team-chat-startup.js";
+} from "#modules/bots/team-chat-startup";
+import type { MessagingReceipts } from "./messaging-receipts.js";
 import { cancelThreadRuns, finishThreadStop, STOPPED_BY_MESSAGE_NOTE } from "./thread-target.js";
 import {
   deliverWebhookEvent,
