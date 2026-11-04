@@ -47,9 +47,9 @@ import {
   createModelConnector,
   prepareAllowedThinkingLevels,
 } from "#modules/models/model-credentials";
+import { createRoutineAnnouncer } from "#modules/routines/routines";
 import { procedureSecurityEvent } from "#modules/security/security-audit";
 import type { RouterDeps } from "../router.js";
-import { createRoutineAnnouncer } from "../routines.js";
 import { meDto } from "./shared.js";
 
 /**

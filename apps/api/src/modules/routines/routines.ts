@@ -11,8 +11,8 @@ import {
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import { IsolationError } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { RouterDeps } from "./router.js";
-import type { RouterContext } from "./routes/context.js";
+import type { RouterDeps } from "../../router.js";
+import type { RouterContext } from "../../routes/context.js";
 
 export function assertRoutineSchedule(input: CreateRoutineInput): void {
   if (hasMixedOneShotSchedule(input.crons)) {

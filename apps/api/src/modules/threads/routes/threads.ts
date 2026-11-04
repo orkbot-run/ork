@@ -24,6 +24,11 @@ import { ORPCError } from "@orpc/server";
 import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
 import { mapBotSecretInputError } from "#modules/bots/routes/bots";
 import { releaseComputerControl } from "#modules/computers/routes/computer";
+import {
+  createRoutineTestRun,
+  routineTestRunNonce,
+  routineTestTarget,
+} from "#modules/routines/routines";
 import type { RouterDeps } from "../../../router.js";
 import type { RouterContext } from "../../../routes/context.js";
 import {
@@ -35,7 +40,6 @@ import {
   SESSION_RECHECK_MS,
   THREAD_MESSAGE_PAGE_SIZE,
 } from "../../../routes/shared.js";
-import { createRoutineTestRun, routineTestRunNonce, routineTestTarget } from "../../../routines.js";
 import { withSerializableRetry } from "../../../serializable-retry.js";
 import {
   isBackgroundRun,
