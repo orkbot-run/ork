@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// Modified for Ork: allow the upstream baseline before origin has its first main branch.
 // `pnpm dev`: start the API, worker, web app, and sandbox supervisor for this checkout.
 //
 // Several checkouts (git worktrees) can run at once. Each gets the first free block of ports,
@@ -181,12 +182,14 @@ function migrationNames(ref) {
 }
 
 function mainMigrations() {
-  try {
-    return migrationNames("origin/main");
-  } catch {
-    // Without main to compare against, any migration may be unmerged.
-    throw new Error("Could not read origin/main. Run `git fetch origin main` and try again.");
+  for (const ref of ["origin/main", "upstream/main"]) {
+    try {
+      return migrationNames(ref);
+    } catch {
+      // A new fork may not have an origin/main branch yet.
+    }
   }
+  throw new Error("No migration baseline found. Fetch origin main or upstream main and try again.");
 }
 
 /** Migration folders in a checkout's working tree, committed or not. */

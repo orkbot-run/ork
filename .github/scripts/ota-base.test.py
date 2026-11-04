@@ -9,7 +9,8 @@ import tempfile
 import unittest
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
+# Validate the archived upstream workflow definition.
+WORKFLOW = REPO / ".github" / "upstream-workflows" / "ci.yml"
 OTA_BASE = pathlib.Path(__file__).with_name("ota-base.sh").resolve()
 OTA_CLASSIFY = pathlib.Path(__file__).with_name("ota-classify.sh").resolve()
 DEPENDENCY_TREE = pathlib.Path(__file__).with_name("mobile-dependency-tree.mjs").resolve()

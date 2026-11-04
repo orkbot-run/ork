@@ -1,3 +1,4 @@
+// Modified for Ork: identify the installed web app as Ork.
 import { fileURLToPath } from "node:url";
 import { isBuildId } from "@rakazo/contracts/client-build";
 import { webDarkTokens } from "@rakazo/ui-tokens";
@@ -17,8 +18,8 @@ export function webManifest() {
   }));
   return {
     id: "/",
-    name: "Rakazo",
-    short_name: "Rakazo",
+    name: "Ork",
+    short_name: "Ork",
     description: "Your team of always-on agents.",
     start_url: "/",
     scope: "/",

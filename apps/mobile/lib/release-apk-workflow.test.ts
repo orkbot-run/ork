@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
+// Validate the archived upstream workflow definition.
 const workflow = readFileSync(
-  path.resolve(import.meta.dirname, "../../../.github/workflows/release-android-apk.yml"),
+  path.resolve(import.meta.dirname, "../../../.github/upstream-workflows/release-android-apk.yml"),
   "utf8",
 );
 const easConfig = JSON.parse(

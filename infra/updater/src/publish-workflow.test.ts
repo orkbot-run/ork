@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-const workflowsDir = path.resolve(import.meta.dirname, "../../../.github/workflows");
+// Validate the archived upstream workflow definitions.
+const workflowsDir = path.resolve(import.meta.dirname, "../../../.github/upstream-workflows");
 const workflowText = readFileSync(path.join(workflowsDir, "publish-server-image.yml"), "utf8");
 const publisherDir = path.resolve(workflowsDir, "../actions/publish-image");
 const publisherText = readFileSync(path.join(publisherDir, "action.yml"), "utf8");

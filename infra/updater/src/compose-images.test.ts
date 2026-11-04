@@ -20,7 +20,11 @@ interface ComposeService {
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const composeFile = path.resolve(repoRoot, "infra/compose/docker-compose.images.yml");
-const publishWorkflowFile = path.resolve(repoRoot, ".github/workflows/publish-server-image.yml");
+// Validate the archived upstream workflow definition.
+const publishWorkflowFile = path.resolve(
+  repoRoot,
+  ".github/upstream-workflows/publish-server-image.yml",
+);
 const compose = parse(readFileSync(composeFile, "utf8"), { merge: true }) as {
   services: Record<string, ComposeService>;
 };
