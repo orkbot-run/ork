@@ -29,7 +29,10 @@ interface WorkflowJob {
 const definition = parse(workflow) as {
   on: { workflow_dispatch: { inputs: { signed_release: { default: boolean } } } };
   permissions: Record<string, string>;
-  jobs: Record<string, WorkflowJob>;
+  jobs: Record<
+    "configuration" | "diagnostic-build" | "validate" | "build" | "publish",
+    WorkflowJob
+  >;
 };
 const signedBuild = definition.jobs.build;
 const signedBuildText = signedBuild.steps
