@@ -26,8 +26,8 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { resolveThreadTarget } from "#modules/threads/thread-target";
+import { voiceCredentialServer } from "#modules/voice/voice";
 import type { RouterDeps } from "../../router.js";
-import { voiceCredentialServer } from "../../voice.js";
 
 export async function aiConsentStatus(
   deps: RouterDeps,

@@ -44,6 +44,7 @@ import { mcpRoutes } from "#modules/mcp/routes/mcp";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
 import { threadsRoutes } from "#modules/threads/routes/threads";
+import type { VoiceDeps } from "#modules/voice/voice";
 import { availabilityRoutes } from "./routes/availability.js";
 import { boardsRoutes } from "./routes/boards.js";
 import { connectionsRoutes } from "./routes/connections.js";
@@ -53,7 +54,6 @@ import { memoryRoutes } from "./routes/memory.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { routinesRoutes } from "./routes/routines.js";
 import { spacesRoutes } from "./routes/spaces.js";
-import type { VoiceDeps } from "./voice.js";
 
 export { botIntroPrompt, enqueueBotIntroRun } from "#modules/bots/routes/bots";
 export { nextConnectionLabel } from "#modules/models/model-credentials";

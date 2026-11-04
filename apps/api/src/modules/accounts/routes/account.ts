@@ -39,10 +39,6 @@ import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { BillingService } from "#modules/billing/billing";
 import { firstModelConnectAnalytics } from "#modules/models/model-connect-analytics";
-import type { RouterDeps } from "../../../router.js";
-import type { RouterContext } from "../../../routes/context.js";
-import { HEARTBEAT_MS, meDto, SESSION_RECHECK_MS } from "../../../routes/shared.js";
-import { withSerializableRetry } from "../../../serializable-retry.js";
 import {
   disconnectVoiceCredential,
   listVoiceCatalog,
@@ -56,7 +52,11 @@ import {
   voiceContext,
   voiceCredentialServer,
   voiceProviderFor,
-} from "../../../voice.js";
+} from "#modules/voice/voice";
+import type { RouterDeps } from "../../../router.js";
+import type { RouterContext } from "../../../routes/context.js";
+import { HEARTBEAT_MS, meDto, SESSION_RECHECK_MS } from "../../../routes/shared.js";
+import { withSerializableRetry } from "../../../serializable-retry.js";
 import { createAccessGrant, listAccessGrants, revokeAccessGrant } from "../access-grants.js";
 import { requireAdmin } from "../admins.js";
 import { aiConsentStatus, allowAiConsent } from "../ai-consent.js";

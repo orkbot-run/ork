@@ -175,6 +175,12 @@ import {
 import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
+import { createSpeechSummarizer } from "#modules/voice/speech-summary";
+import {
+  mountVoiceHttpRoutes,
+  transcribeInboundVoice,
+  voiceAccountErrorStatus,
+} from "#modules/voice/voice";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";
 import { storeInboundAttachment } from "./artifacts.js";
 import { mountAuditExportRoute } from "./audit-export.js";
@@ -199,8 +205,6 @@ import { createRouter } from "./router.js";
 import { mountScriptAssets } from "./script-assets.js";
 import { createAuthResponseAudit } from "./security-audit.js";
 import { mountSharedPages } from "./shared-pages.js";
-import { createSpeechSummarizer } from "./speech-summary.js";
-import { mountVoiceHttpRoutes, transcribeInboundVoice, voiceAccountErrorStatus } from "./voice.js";
 
 /**
  * Native clients always send the app scheme, including in Expo Go, so no
