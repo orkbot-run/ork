@@ -4742,6 +4742,20 @@ msgstr "Original"
 msgid "Original message unavailable"
 msgstr "Mensaje original no disponible"
 
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Ork"
+msgstr "Ork"
+
+#: src/components/ModelCredits.tsx
+#: src/pages/Onboarding.tsx
+msgid "Ork credits"
+msgstr "Créditos de Ork"
+
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
+msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
+msgstr "orkbot-shared y los ID que empiezan con bot- están reservados para Ork."
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
@@ -5052,20 +5066,6 @@ msgstr "Solicitud de incorporación"
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "En cola"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
-
-#: src/components/ModelCredits.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ork credits"
-msgstr "Créditos de Ork"
-
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
-msgstr "orkbot-shared y los ID que empiezan con bot- están reservados para Ork."
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "React"
@@ -6898,13 +6898,13 @@ msgstr "Usar en este bot"
 msgid "Use my subscription or API key"
 msgstr "Usar mi suscripción o clave de API"
 
-#: src/components/teach/TeachRecordingChrome.tsx
-msgid "Use Protected input for passwords."
-msgstr "Usa Entrada protegida para las contraseñas."
-
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "Usar créditos de Ork"
+
+#: src/components/teach/TeachRecordingChrome.tsx
+msgid "Use Protected input for passwords."
+msgstr "Usa Entrada protegida para las contraseñas."
 
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
