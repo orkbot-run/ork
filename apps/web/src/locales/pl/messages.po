@@ -4742,6 +4742,20 @@ msgstr "Oryginał"
 msgid "Original message unavailable"
 msgstr "Oryginalna wiadomość jest niedostępna"
 
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Ork"
+msgstr "Ork"
+
+#: src/components/ModelCredits.tsx
+#: src/pages/Onboarding.tsx
+msgid "Ork credits"
+msgstr "Środki Ork"
+
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
+msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
+msgstr "Nazwy orkbot-shared i identyfikatory zaczynające się od bot- są zastrzeżone dla Ork."
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
@@ -5052,20 +5066,6 @@ msgstr "Pull request"
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "W kolejce"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
-
-#: src/components/ModelCredits.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ork credits"
-msgstr "Środki Ork"
-
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
-msgstr "Nazwy orkbot-shared i identyfikatory zaczynające się od bot- są zastrzeżone dla Ork."
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "React"
@@ -6898,13 +6898,13 @@ msgstr "Użyj w tym bocie"
 msgid "Use my subscription or API key"
 msgstr "Użyj mojej subskrypcji lub klucza API"
 
-#: src/components/teach/TeachRecordingChrome.tsx
-msgid "Use Protected input for passwords."
-msgstr "Do haseł używaj opcji Chronione wprowadzanie."
-
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "Użyj środków Ork"
+
+#: src/components/teach/TeachRecordingChrome.tsx
+msgid "Use Protected input for passwords."
+msgstr "Do haseł używaj opcji Chronione wprowadzanie."
 
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
