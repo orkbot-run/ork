@@ -1,6 +1,6 @@
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { ResendEmailProvider, SmtpEmailProvider } from "@orkbot/adapters";
-import type { AppEnv } from "./env.js";
+import type { AppEnv } from "../../env.js";
 
 export function configuredEmailProvider(
   env: Pick<AppEnv, "emailProvider" | "emailApiKey" | "emailFrom" | "emailReplyTo" | "smtpUrl">,

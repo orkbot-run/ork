@@ -8,9 +8,12 @@ import type { MessageBlock } from "@orkbot/contracts";
 import { userTurnMessageForRun } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
+import type { MessagingReceipts } from "#modules/messaging/messaging-receipts";
+import {
+  inboundDeliveryClientNonce,
+  messagingWakeIdempotencyKey,
+} from "#modules/messaging/webhook-inbound";
 import { materializeCurrentTurnFiles } from "../../../../../packages/adapters/src/thread-artifacts.js";
-import type { MessagingReceipts } from "../../messaging-receipts.js";
-import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "../../webhook-inbound.js";
 import {
   TeamChatBridge,
   teamChatAmbientPrompt,

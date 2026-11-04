@@ -1,8 +1,8 @@
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import { hasValidBearerToken } from "@orkbot/core";
 import type { Hono } from "hono";
+import { readBoundedBody } from "../../http-body.js";
 import { mountGithubWebhookRoute } from "./github-webhook.js";
-import { readBoundedBody } from "./http-body.js";
 import type { WebhookDeps, WebhookSecretCache } from "./webhook-inbound.js";
 import {
   deliverWebhookEvent,

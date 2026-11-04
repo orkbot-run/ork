@@ -12,8 +12,11 @@ import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } 
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { clearEndedRunState, teamChatRunClientNonce } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import type { MessagingReceipts } from "../../messaging-receipts.js";
-import { inboundDeliveryClientNonce, messagingWakeIdempotencyKey } from "../../webhook-inbound.js";
+import type { MessagingReceipts } from "#modules/messaging/messaging-receipts";
+import {
+  inboundDeliveryClientNonce,
+  messagingWakeIdempotencyKey,
+} from "#modules/messaging/webhook-inbound";
 import type { TeamChatEngagementJudge } from "./team-chat-judge.js";
 import {
   MESSAGE_ROUTING_REARMED_REASON,

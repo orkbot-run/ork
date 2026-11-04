@@ -12,12 +12,12 @@ import {
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { WebhookDeps } from "#modules/messaging/webhook";
+import { mountWebhookHttpRoutes, WEBHOOK_SECRET_KIND } from "#modules/messaging/webhook";
 import { assertThreadImageInput } from "#modules/threads/thread-image-admission";
 import { queueMcpConnectedRun } from "./mcp-approval.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
-import type { WebhookDeps } from "./webhook.js";
-import { mountWebhookHttpRoutes, WEBHOOK_SECRET_KIND } from "./webhook.js";
 
 const describePostgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL
