@@ -9,13 +9,13 @@ import {
 import { isDeletableMemoryDocument } from "@orkbot/contracts";
 import { findSpaceMemoryConfig, IsolationError } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
+import type { RouterContext } from "../../../routes/context.js";
 import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,
   serializeSpaceMemoryConfig,
   updateMemoryProviderDefaultScope,
 } from "../memory-provider-config.js";
-import type { RouterContext } from "./context.js";
 
 export function memoryRoutes(ctx: RouterContext) {
   const { deps, repos, taughtSkills, agentSkills, authed } = ctx;

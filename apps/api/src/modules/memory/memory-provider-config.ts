@@ -10,7 +10,7 @@ import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { findSpaceMemoryConfig, Prisma } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { withSerializableRetry } from "./serializable-retry.js";
+import { withSerializableRetry } from "../../serializable-retry.js";
 
 export interface MemoryProviderConfigDeps {
   prisma: PrismaClient;
