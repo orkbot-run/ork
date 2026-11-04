@@ -34,19 +34,23 @@ import {
   promptFocus,
   startOnboarding,
 } from "#modules/accounts/onboarding";
+import { searchIntegrationCatalog } from "#modules/integrations/integration-catalog";
+import {
+  installPlugin,
+  lockPluginInstalls,
+  setPluginParts,
+} from "#modules/integrations/plugin-installs";
+import {
+  approvedPluginEntries,
+  listPluginSubmissions,
+  reviewPluginSubmission,
+} from "#modules/integrations/plugin-submissions";
 import {
   assertNameFreeWhereAvailable,
   lockOwner,
   serverAvailability,
   serverSecretSpace,
 } from "#modules/spaces/availability";
-import { searchIntegrationCatalog } from "../../../integration-catalog.js";
-import { installPlugin, lockPluginInstalls, setPluginParts } from "../../../plugin-installs.js";
-import {
-  approvedPluginEntries,
-  listPluginSubmissions,
-  reviewPluginSubmission,
-} from "../../../plugin-submissions.js";
 import type { RouterContext } from "../../../routes/context.js";
 import { computerContext, isUniqueViolation } from "../../../routes/shared.js";
 import {

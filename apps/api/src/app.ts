@@ -168,6 +168,7 @@ import { storeInboundAttachment } from "#modules/content/artifacts";
 import { mountScriptAssets } from "#modules/content/script-assets";
 import { mountSharedPages } from "#modules/content/shared-pages";
 import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
+import { pluginSubmissionRoutes } from "#modules/integrations/plugin-submissions";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
@@ -202,7 +203,6 @@ import { healthRoutes } from "./health.js";
 import { startHourlySweep } from "./hourly-sweep.js";
 import { trackInFlightRequests } from "./in-flight-requests.js";
 import { monitoringRoutes } from "./monitoring.js";
-import { pluginSubmissionRoutes } from "./plugin-submissions.js";
 import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 

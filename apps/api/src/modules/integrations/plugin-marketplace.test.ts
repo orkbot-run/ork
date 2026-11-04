@@ -2,8 +2,8 @@ import type { PluginRepoFetcher } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 const actor: Actor = {
   spaceId: "space-fixture",

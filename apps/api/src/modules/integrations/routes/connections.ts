@@ -17,7 +17,7 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { connectionCreatedEvent } from "#modules/security/security-audit";
-import type { RouterContext } from "./context.js";
+import type { RouterContext } from "../../../routes/context.js";
 
 async function reconcileConnections(
   prisma: PrismaClient,

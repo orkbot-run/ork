@@ -10,9 +10,9 @@ import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createAgentSkillsService } from "#modules/agents/agent-skills";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 import { installPlugin } from "./plugin-installs.js";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 const sha = "a".repeat(40);

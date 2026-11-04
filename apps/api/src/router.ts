@@ -43,6 +43,7 @@ import { computerProviderRoutes } from "#modules/computers/routes/computer-provi
 import { boardsRoutes } from "#modules/content/routes/boards";
 import { contentRoutes } from "#modules/content/routes/content";
 import { pagesRoutes } from "#modules/content/routes/pages";
+import { connectionsRoutes } from "#modules/integrations/routes/connections";
 import { mcpRoutes } from "#modules/mcp/routes/mcp";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
@@ -51,7 +52,6 @@ import { availabilityRoutes } from "#modules/spaces/routes/availability";
 import { spacesRoutes } from "#modules/spaces/routes/spaces";
 import { threadsRoutes } from "#modules/threads/routes/threads";
 import type { VoiceDeps } from "#modules/voice/voice";
-import { connectionsRoutes } from "./routes/connections.js";
 import { createRouterContext } from "./routes/context.js";
 import { memoryRoutes } from "./routes/memory.js";
 

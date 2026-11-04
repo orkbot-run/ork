@@ -3,9 +3,9 @@ import { BUILTIN_AGENT_SKILLS, previewPluginInstall } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 import { installPlugin, setPluginParts } from "./plugin-installs.js";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
 
 const actor: Actor = {
   spaceId: "space-test",

@@ -29,9 +29,9 @@ import { ORPCError } from "@orpc/server";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { assertMcpRemoteEndpoint } from "#modules/mcp/mcp-servers";
-import { readBoundedBody } from "./http-body.js";
-import type { RouterDeps } from "./router.js";
-import { throttleKey, windowCounter } from "./window-counter.js";
+import { readBoundedBody } from "../../http-body.js";
+import type { RouterDeps } from "../../router.js";
+import { throttleKey, windowCounter } from "../../window-counter.js";
 
 const PLUGIN_REGISTRY = "Ork";
 const MAX_BODY_BYTES = 32 * 1024;
