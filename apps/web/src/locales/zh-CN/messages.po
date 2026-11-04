@@ -4742,6 +4742,20 @@ msgstr "原始"
 msgid "Original message unavailable"
 msgstr "原消息不可用"
 
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Ork"
+msgstr "Ork"
+
+#: src/components/ModelCredits.tsx
+#: src/pages/Onboarding.tsx
+msgid "Ork credits"
+msgstr "Ork 额度"
+
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
+msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
+msgstr "orkbot-shared 和以 bot- 开头的 ID 保留给 Ork 使用。"
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
@@ -5052,20 +5066,6 @@ msgstr "拉取请求"
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "排队中"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
-
-#: src/components/ModelCredits.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ork credits"
-msgstr "Ork 额度"
-
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
-msgstr "orkbot-shared 和以 bot- 开头的 ID 保留给 Ork 使用。"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "React"
@@ -6898,13 +6898,13 @@ msgstr "用于此 Bot"
 msgid "Use my subscription or API key"
 msgstr "使用我的订阅或 API 密钥"
 
-#: src/components/teach/TeachRecordingChrome.tsx
-msgid "Use Protected input for passwords."
-msgstr "输入密码时请用受保护输入。"
-
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "使用 Ork 额度"
+
+#: src/components/teach/TeachRecordingChrome.tsx
+msgid "Use Protected input for passwords."
+msgstr "输入密码时请用受保护输入。"
 
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
