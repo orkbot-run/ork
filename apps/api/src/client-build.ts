@@ -14,9 +14,7 @@ import type { MiddlewareHandler } from "hono";
  * The web build ships in the same image as the API, so reading its id from its assets keeps one
  * source of truth. Dev servers and images without a web build have none; the handshake stays quiet.
  */
-export function readDeployedWebBuild(
-  file: URL = new URL("../../web/dist/build-id", import.meta.url),
-): string | undefined {
+export function readDeployedWebBuild(file: URL): string | undefined {
   try {
     const build = readFileSync(file, "utf8").trim();
     return isBuildId(build) ? build : undefined;

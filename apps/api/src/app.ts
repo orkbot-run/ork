@@ -1001,7 +1001,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.use(
     "/rpc/*",
     clientBuildMiddleware({
-      webBuild: readDeployedWebBuild(),
+      webBuild: readDeployedWebBuild(new URL("../../web/dist/build-id", import.meta.url)),
       minimums: env.minimumClientBuilds ?? {},
     }),
   );
