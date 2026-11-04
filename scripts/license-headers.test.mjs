@@ -11,7 +11,8 @@ import { checkLicenseHeaders } from "./license-headers.mjs";
 
 const APACHE = "Apache baseline text\n";
 const POLYFORM = "PolyForm-Noncommercial-1.0.0";
-const header = (license = POLYFORM) => `// SPDX-License-Identifier: ${license}\n`;
+const header = (license = POLYFORM) =>
+  `// SPDX-License-Identifier: ${license}\n// SPDX-FileCopyrightText: 2026 Example contributors\n`;
 const sidecar = (license = POLYFORM) =>
   `SPDX-FileCopyrightText: 2026 Example contributors\nSPDX-License-Identifier: ${license}\n`;
 
@@ -65,11 +66,41 @@ test("accepts source headers, imported licenses, and sidecars for JSON and binar
 
 test("recognizes Markdown, shell, XML, Astro, and block comment headers", (t) => {
   const repo = repository(t);
-  repo.write("guide.md", `<!-- SPDX-License-Identifier: ${POLYFORM} -->\n# Guide\n`);
-  repo.write("tool.sh", `#!/bin/sh\n# SPDX-License-Identifier: ${POLYFORM}\necho ready\n`);
-  repo.write("style.css", `/* SPDX-License-Identifier: ${POLYFORM} */\nbody {}\n`);
+  repo.write(
+    "guide.md",
+    `<!-- SPDX-License-Identifier: ${POLYFORM} -->\n<!-- SPDX-FileCopyrightText: 2026 Example contributors -->\n# Guide\n`,
+  );
+  repo.write(
+    "tool.sh",
+    `#!/bin/sh\n# SPDX-License-Identifier: ${POLYFORM}\n# SPDX-FileCopyrightText: 2026 Example contributors\necho ready\n`,
+  );
+  repo.write(
+    "style.css",
+    `/* SPDX-License-Identifier: ${POLYFORM} */\n/* SPDX-FileCopyrightText: 2026 Example contributors */\nbody {}\n`,
+  );
   repo.write("page.astro", `---\n${header()}---\n<p>Example</p>\n`);
-  repo.write("asset.svg", `<?xml version="1.0"?>\n<!-- SPDX-License-Identifier: MIT -->\n<svg/>\n`);
+  repo.write(
+    "asset.svg",
+    `<?xml version="1.0"?>\n<!-- SPDX-License-Identifier: MIT -->\n<!-- SPDX-FileCopyrightText: 2026 Example contributors -->\n<svg/>\n`,
+  );
+  assert.deepEqual(repo.check().errors, []);
+});
+
+test("requires source copyright attribution in the header or a matching sidecar", (t) => {
+  const repo = repository(t);
+  repo.write("own.ts", `// SPDX-License-Identifier: ${POLYFORM}\nexport const own = true;\n`);
+  repo.write(
+    "vendor.ts",
+    '// SPDX-License-Identifier: MIT\nconst copyright = "SPDX-FileCopyrightText: 2026 Example contributors";\n',
+  );
+  assert.deepEqual(
+    repo.check().errors,
+    ["own.ts", "vendor.ts"].map(
+      (file) => `${file}: include SPDX-FileCopyrightText in the header or .license sidecar.`,
+    ),
+  );
+  repo.write("own.ts", `${header()}export const own = true;\n`);
+  repo.write("vendor.ts.license", sidecar("MIT"));
   assert.deepEqual(repo.check().errors, []);
 });
 

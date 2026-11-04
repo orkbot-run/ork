@@ -113,6 +113,9 @@ export function checkLicenseHeaders({ cwd = process.cwd(), base = LICENSE_BASELI
       if (sidecar && sidecar.identifiers[0] !== header.identifiers[0]) {
         errors.push(`${file}: the header and sidecar disagree. Preserve third-party notices.`);
       }
+      if (!header.copyright && !sidecar?.copyright) {
+        errors.push(`${file}: include SPDX-FileCopyrightText in the header or .license sidecar.`);
+      }
     } else if (sidecar?.identifiers.length !== 1 || !sidecar.copyright) {
       errors.push(`${file}: add an SPDX header or a .license sidecar with copyright attribution.`);
     }
