@@ -5,9 +5,9 @@ import { EmailEmulator, FakeSandboxProvider } from "@orkbot/adapters";
 import { USER_DEVICE_PAIR_PATH, USER_DEVICE_PATH } from "@orkbot/contracts";
 import { runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
-import type { AppHandles } from "./app.js";
-import { createApp } from "./app.js";
+import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
+import type { AppHandles } from "../../app.js";
+import { createApp } from "../../app.js";
 
 const databaseUrl = process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined;
 const webOrigin = "http://127.0.0.1:5173";

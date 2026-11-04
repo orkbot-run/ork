@@ -164,6 +164,7 @@ import {
 import { homeRetentionSweep } from "#modules/computers/home-retention";
 import { mountLocalComputerHost } from "#modules/computers/local-settings";
 import { mountScreenTarget } from "#modules/computers/screen-proxy";
+import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { configuredEmailProvider } from "#modules/messaging/email";
 import {
@@ -199,7 +200,6 @@ import { mountScriptAssets } from "./script-assets.js";
 import { createAuthResponseAudit } from "./security-audit.js";
 import { mountSharedPages } from "./shared-pages.js";
 import { createSpeechSummarizer } from "./speech-summary.js";
-import { endUserDeviceSession, mountUserDeviceRoutes } from "./user-devices.js";
 import { mountVoiceHttpRoutes, transcribeInboundVoice, voiceAccountErrorStatus } from "./voice.js";
 
 /**
