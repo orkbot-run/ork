@@ -18,7 +18,7 @@ import {
   releaseOrganizationDeletionClaim,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import type { BillingService } from "../../billing.js";
+import type { BillingService } from "#modules/billing/billing";
 import type { SpaceDeletionDeps } from "../../space-deletion.js";
 
 /**

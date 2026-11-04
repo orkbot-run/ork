@@ -28,8 +28,8 @@ import {
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteAccountContent } from "#modules/accounts/account-deletion";
+import { createBillingService } from "#modules/billing/billing";
 import { MemoryObjectStorage } from "../../../../../packages/adapters/src/object-storage.test-support.js";
-import { createBillingService } from "../../billing.js";
 import type { RouterDeps } from "../../router.js";
 import { createRouter } from "../../router.js";
 

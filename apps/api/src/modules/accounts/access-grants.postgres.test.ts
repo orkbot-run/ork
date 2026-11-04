@@ -3,7 +3,7 @@ import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { asSystem, createDb } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createBillingService } from "../../billing.js";
+import { createBillingService } from "#modules/billing/billing";
 import { createAccessGrant, revokeAccessGrant } from "./access-grants.js";
 
 const DAY_MS = 86_400_000;

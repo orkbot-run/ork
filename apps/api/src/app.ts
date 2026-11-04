@@ -148,6 +148,10 @@ import { cors } from "hono/cors";
 import { deleteAccountContent } from "#modules/accounts/account-deletion";
 import { mountAccountExportRoute } from "#modules/accounts/account-export";
 import { mountAccountImportRoute } from "#modules/accounts/account-import";
+import { createBillingService } from "#modules/billing/billing";
+import { mountBillingRoutes } from "#modules/billing/billing-webhook";
+import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
+import { sendReferralEmails } from "#modules/billing/referral-email";
 import { isDeferredReservationLost, TeamChatBridge } from "#modules/bots/team-chat-bridge";
 import { ModelTeamChatEngagementJudge } from "#modules/bots/team-chat-judge";
 import {
@@ -173,8 +177,6 @@ import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";
 import { storeInboundAttachment } from "./artifacts.js";
 import { mountAuditExportRoute } from "./audit-export.js";
-import { createBillingService } from "./billing.js";
-import { mountBillingRoutes } from "./billing-webhook.js";
 import { clientBuildMiddleware, readDeployedWebBuild } from "./client-build.js";
 import {
   clientIpMiddleware,
@@ -189,10 +191,8 @@ import { loadEnv } from "./env.js";
 import { healthRoutes } from "./health.js";
 import { startHourlySweep } from "./hourly-sweep.js";
 import { trackInFlightRequests } from "./in-flight-requests.js";
-import { marketingEmailRoutes, sendWelcomeEmail } from "./marketing-email.js";
 import { monitoringRoutes } from "./monitoring.js";
 import { pluginSubmissionRoutes } from "./plugin-submissions.js";
-import { sendReferralEmails } from "./referral-email.js";
 import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
 import { mountScriptAssets } from "./script-assets.js";

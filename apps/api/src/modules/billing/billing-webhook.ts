@@ -3,9 +3,9 @@ import type { Actor } from "@orkbot/contracts";
 import { MOBILE_BILLING_CALLBACK_URL } from "@orkbot/contracts";
 import { getLogger } from "@orkbot/logging";
 import type { Hono } from "hono";
+import { readBoundedBody } from "../../http-body.js";
 import type { BillingService } from "./billing.js";
 import { BILLING_RETURN_PATH } from "./billing.js";
-import { readBoundedBody } from "./http-body.js";
 
 export const BILLING_WEBHOOK_PATH = "/api/v1/billing/webhook";
 export const BILLING_WEBHOOK_MAX_BODY_BYTES = 512 * 1024;
