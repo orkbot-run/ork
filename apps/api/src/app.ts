@@ -164,6 +164,9 @@ import {
 import { homeRetentionSweep } from "#modules/computers/home-retention";
 import { mountLocalComputerHost } from "#modules/computers/local-settings";
 import { mountScreenTarget } from "#modules/computers/screen-proxy";
+import { storeInboundAttachment } from "#modules/content/artifacts";
+import { mountScriptAssets } from "#modules/content/script-assets";
+import { mountSharedPages } from "#modules/content/shared-pages";
 import { endUserDeviceSession, mountUserDeviceRoutes } from "#modules/devices/user-devices";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { configuredEmailProvider } from "#modules/messaging/email";
@@ -185,7 +188,6 @@ import {
   voiceAccountErrorStatus,
 } from "#modules/voice/voice";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";
-import { storeInboundAttachment } from "./artifacts.js";
 import { clientBuildMiddleware, readDeployedWebBuild } from "./client-build.js";
 import {
   clientIpMiddleware,
@@ -203,8 +205,6 @@ import { monitoringRoutes } from "./monitoring.js";
 import { pluginSubmissionRoutes } from "./plugin-submissions.js";
 import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
 import { createRouter } from "./router.js";
-import { mountScriptAssets } from "./script-assets.js";
-import { mountSharedPages } from "./shared-pages.js";
 
 /**
  * Native clients always send the app scheme, including in Expo Go, so no

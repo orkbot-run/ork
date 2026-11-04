@@ -56,7 +56,7 @@ import {
   buildUserMessageBlocks,
   resolveGroupSendAttachments,
   resolveSendAttachments,
-} from "../../artifacts.js";
+} from "#modules/content/artifacts";
 import { withSerializableRetry } from "../../serializable-retry.js";
 import type { ImageAdmissionRun } from "./thread-image-admission.js";
 import { assertThreadImageInput } from "./thread-image-admission.js";

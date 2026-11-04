@@ -2,8 +2,8 @@ import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 type Row = { userId: string; site: string };
 

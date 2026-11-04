@@ -4,8 +4,8 @@ import type { PrismaClient } from "@orkbot/db";
 import { allocateTicketNumber, createDb, ensureBoard, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { RouterDeps } from "./router.js";
-import { createRouter } from "./router.js";
+import type { RouterDeps } from "../../router.js";
+import { createRouter } from "../../router.js";
 
 // The runtime login, so row-level security applies exactly as it does in a deployment.
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);

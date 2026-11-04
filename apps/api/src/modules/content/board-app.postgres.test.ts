@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { sessionCookieHeader } from "../../../packages/testkit/src/index.js";
-import { createApp } from "./app.js";
+import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
+import { createApp } from "../../app.js";
 
 const describePostgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL

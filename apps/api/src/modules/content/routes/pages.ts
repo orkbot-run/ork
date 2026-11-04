@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import type { RouterContext } from "../../../routes/context.js";
 import {
   getPage,
   listPages,
@@ -9,7 +10,6 @@ import {
   renamePage,
   setPageVisibility,
 } from "../pages.js";
-import type { RouterContext } from "./context.js";
 
 export function pagesRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

@@ -8,6 +8,7 @@ import { ORPCError } from "@orpc/server";
 import { requireIdentityConfirmation } from "#modules/accounts/identity-confirmation";
 import { listSpaceRuns } from "#modules/agents/runs";
 import { loadAllMessages } from "#modules/threads/thread-message-pages";
+import type { RouterContext } from "../../../routes/context.js";
 import {
   ArtifactListCursorError,
   createOwnedArtifact,
@@ -19,7 +20,6 @@ import {
   listSpaceArtifacts,
 } from "../artifacts.js";
 import { querySpaceSearch } from "../search.js";
-import type { RouterContext } from "./context.js";
 
 const EXPORT_MESSAGE_PAGE_SIZE = 500;
 

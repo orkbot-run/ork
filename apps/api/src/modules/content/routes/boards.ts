@@ -14,8 +14,8 @@ import {
   toTicketDto,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { RouterContext } from "./context.js";
-import { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./shared.js";
+import type { RouterContext } from "../../../routes/context.js";
+import { HEARTBEAT_MS, SESSION_RECHECK_MS } from "../../../routes/shared.js";
 
 async function resolveSpaceBoard(
   prisma: PrismaClient,
