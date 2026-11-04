@@ -46,7 +46,10 @@ import { createRouterClient } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { providerScopeKey } from "#modules/integrations/routes/connections";
-import { mainRole, withModelRoles } from "../../../packages/adapters/src/testing/model-roles.js";
+import {
+  mainRole,
+  withModelRoles,
+} from "../../../../../packages/adapters/src/testing/model-roles.js";
 import type { RouterDeps } from "./router.js";
 import {
   botIntroPrompt,

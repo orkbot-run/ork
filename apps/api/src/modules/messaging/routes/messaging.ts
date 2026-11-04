@@ -9,8 +9,8 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import type { RouterContext } from "../../../routes/context.js";
-import { isUniqueViolation } from "../../../routes/shared.js";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { isUniqueViolation } from "#modules/platform/routes/shared";
 
 export function messagingRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

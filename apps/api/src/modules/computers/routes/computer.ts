@@ -56,9 +56,9 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import type { RouterDeps } from "../../../router.js";
-import type { RouterContext } from "../../../routes/context.js";
-import { computerContext, isRecordNotFound } from "../../../routes/shared.js";
+import type { RouterDeps } from "#modules/platform/router";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { computerContext, isRecordNotFound } from "#modules/platform/routes/shared";
 import { scrollPoint } from "../computer-input.js";
 import {
   executionBlocksUserTakeover,

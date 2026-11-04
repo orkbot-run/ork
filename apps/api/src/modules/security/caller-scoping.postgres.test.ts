@@ -15,9 +15,9 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { queueMcpConnectedRun } from "#modules/mcp/mcp-approval";
 import type { WebhookDeps } from "#modules/messaging/webhook";
 import { mountWebhookHttpRoutes, WEBHOOK_SECRET_KIND } from "#modules/messaging/webhook";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 import { assertThreadImageInput } from "#modules/threads/thread-image-admission";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
 
 const describePostgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL

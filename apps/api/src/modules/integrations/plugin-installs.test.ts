@@ -3,8 +3,8 @@ import { BUILTIN_AGENT_SKILLS, previewPluginInstall } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 import { installPlugin, setPluginParts } from "./plugin-installs.js";
 
 const actor: Actor = {

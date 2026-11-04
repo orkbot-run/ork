@@ -42,8 +42,8 @@ import { getLogger } from "@orkbot/logging";
 import { markExpectedFailure } from "@orkbot/logging/hono";
 import { ORPCError } from "@orpc/server";
 import type { Context, Hono } from "hono";
-import { readBoundedBody } from "../../http-body.js";
-import { withSerializableRetry } from "../../serializable-retry.js";
+import { readBoundedBody } from "#modules/platform/http-body";
+import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import type { SpeechSummarizer } from "./speech-summary.js";
 
 export interface VoiceDeps {

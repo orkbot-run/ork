@@ -40,9 +40,9 @@ import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { checkPageSource } from "@orkbot/page-kit/validate";
 import { Unzip, UnzipInflate } from "fflate";
 import type { Hono } from "hono";
+import { cancelBody } from "#modules/platform/http-body";
 import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
 import { deleteSpaceWithContent } from "#modules/spaces/space-deletion";
-import { cancelBody } from "../../http-body.js";
 
 export const ACCOUNT_IMPORT_LIMITS = {
   /** The uploaded zip as sent. */

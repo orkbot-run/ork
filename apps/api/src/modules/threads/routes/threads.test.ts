@@ -1,7 +1,7 @@
 import type { Actor } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { releaseComputerControl } from "#modules/computers/routes/computer";
-import type { RouterDeps } from "../../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
 import type { ThreadTarget } from "../thread-target.js";
 import { takeoverReleaser } from "./threads.js";
 

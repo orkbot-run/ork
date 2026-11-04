@@ -14,7 +14,7 @@ import { ORPCError, onError, os } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it } from "vitest";
-import { handleRpcError, logUnexpectedRpcError } from "./app.js";
+import { handleRpcError, logUnexpectedRpcError } from "../../app.js";
 
 describe("logUnexpectedRpcError", () => {
   afterEach(() => {

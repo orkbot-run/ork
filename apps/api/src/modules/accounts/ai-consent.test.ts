@@ -6,7 +6,7 @@ vi.mock("#modules/threads/thread-target", () => ({
   resolveThreadTarget: async () => ({ kind: "bot", botId: "bot" }),
 }));
 
-import type { RouterDeps } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
 import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 
 function setup() {

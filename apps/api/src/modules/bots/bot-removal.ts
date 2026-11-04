@@ -1,7 +1,7 @@
 import { destroyBot } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { createRepos } from "@orkbot/db";
-import type { RouterDeps } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
 
 export function createBotRemoval(deps: RouterDeps, repos: ReturnType<typeof createRepos>) {
   const removeBot = async (

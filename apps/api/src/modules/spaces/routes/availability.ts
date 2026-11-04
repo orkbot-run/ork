@@ -1,4 +1,4 @@
-import type { RouterContext } from "../../../routes/context.js";
+import type { RouterContext } from "#modules/platform/routes/context";
 import { chooseForSpace, listOwnItems, setAvailability } from "../availability.js";
 
 export function availabilityRoutes(ctx: RouterContext) {

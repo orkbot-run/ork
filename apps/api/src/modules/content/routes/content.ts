@@ -7,8 +7,8 @@ import { IsolationError, parseComputerMode } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { requireIdentityConfirmation } from "#modules/accounts/identity-confirmation";
 import { listSpaceRuns } from "#modules/agents/runs";
+import type { RouterContext } from "#modules/platform/routes/context";
 import { loadAllMessages } from "#modules/threads/thread-message-pages";
-import type { RouterContext } from "../../../routes/context.js";
 import {
   ArtifactListCursorError,
   createOwnedArtifact,

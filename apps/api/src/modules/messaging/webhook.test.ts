@@ -8,8 +8,8 @@ import {
 } from "@orkbot/adapters";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
+import { readBoundedBody } from "#modules/platform/http-body";
 import { infisicalFake } from "../../../../../packages/adapters/src/secret-store-fake.js";
-import { readBoundedBody } from "../../http-body.js";
 import type { WebhookDeps } from "./webhook.js";
 import {
   formatGithubEventPrompt,

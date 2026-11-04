@@ -57,7 +57,7 @@ import {
   resolveGroupSendAttachments,
   resolveSendAttachments,
 } from "#modules/content/artifacts";
-import { withSerializableRetry } from "../../serializable-retry.js";
+import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import type { ImageAdmissionRun } from "./thread-image-admission.js";
 import { assertThreadImageInput } from "./thread-image-admission.js";
 import { loadMessagePage } from "./thread-message-pages.js";

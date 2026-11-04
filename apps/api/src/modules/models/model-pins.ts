@@ -4,7 +4,7 @@ import type { Actor } from "@orkbot/contracts";
 import { OPENAI_COMPATIBLE_PROVIDER_ID, usableModelId } from "@orkbot/contracts";
 import { modelRoleTarget, runAsSystem } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { RouterDeps } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
 
 /**
  * The actor's active compatible bot, routine and role pins on `modelId`. Role rows come from the

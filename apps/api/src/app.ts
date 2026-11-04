@@ -179,6 +179,23 @@ import {
 import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
+import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
+import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
+import {
+  clientIpMiddleware,
+  createClientIpResolver,
+  defaultTrustedProxies,
+  requestClientIp,
+  withClientIp,
+} from "#modules/platform/client-ip";
+import type { AppEnv } from "#modules/platform/env";
+import { loadEnv } from "#modules/platform/env";
+import { healthRoutes } from "#modules/platform/health";
+import { startHourlySweep } from "#modules/platform/hourly-sweep";
+import { trackInFlightRequests } from "#modules/platform/in-flight-requests";
+import { monitoringRoutes } from "#modules/platform/monitoring";
+import { mountApiRequestBodyLimits, rpcBodyLimit } from "#modules/platform/request-body-limit";
+import { createRouter } from "#modules/platform/router";
 import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
 import { createAuthResponseAudit } from "#modules/security/security-audit";
@@ -188,23 +205,6 @@ import {
   transcribeInboundVoice,
   voiceAccountErrorStatus,
 } from "#modules/voice/voice";
-import { mountAppAssociation, nativePasskeys } from "./app-association.js";
-import { clientBuildMiddleware, readDeployedWebBuild } from "./client-build.js";
-import {
-  clientIpMiddleware,
-  createClientIpResolver,
-  defaultTrustedProxies,
-  requestClientIp,
-  withClientIp,
-} from "./client-ip.js";
-import type { AppEnv } from "./env.js";
-import { loadEnv } from "./env.js";
-import { healthRoutes } from "./health.js";
-import { startHourlySweep } from "./hourly-sweep.js";
-import { trackInFlightRequests } from "./in-flight-requests.js";
-import { monitoringRoutes } from "./monitoring.js";
-import { mountApiRequestBodyLimits, rpcBodyLimit } from "./request-body-limit.js";
-import { createRouter } from "./router.js";
 
 /**
  * Native clients always send the app scheme, including in Expo Go, so no

@@ -1,8 +1,8 @@
 import type { Actor } from "@orkbot/contracts";
 import { createRouterClient } from "@orpc/server";
 import { describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 
 const actor: Actor = {
   spaceId: "space-1",

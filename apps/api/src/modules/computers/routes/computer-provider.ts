@@ -1,4 +1,4 @@
-import type { RouterContext } from "../../../routes/context.js";
+import type { RouterContext } from "#modules/platform/routes/context";
 import {
   getAccountComputerSettings,
   getComputerProviderSettings,

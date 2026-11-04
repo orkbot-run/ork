@@ -9,7 +9,7 @@ import {
 import { isDeletableMemoryDocument } from "@orkbot/contracts";
 import { findSpaceMemoryConfig, IsolationError } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { RouterContext } from "../../../routes/context.js";
+import type { RouterContext } from "#modules/platform/routes/context";
 import {
   disconnectMemoryProvider,
   persistMemoryProviderConfig,

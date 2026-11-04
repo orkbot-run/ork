@@ -1,6 +1,6 @@
 import { InfisicalSecretStore } from "@orkbot/adapters";
 import { describe, expect, it, vi } from "vitest";
-import { infisicalFake } from "../../../packages/adapters/src/secret-store-fake.js";
+import { infisicalFake } from "../../../../../packages/adapters/src/secret-store-fake.js";
 import { DATABASE_CHECK_TIMEOUT_MS, healthRoutes } from "./health.js";
 
 const app = healthRoutes(() => ({ runtime: "pi", sandbox: "docker", revision: "abc123" }));

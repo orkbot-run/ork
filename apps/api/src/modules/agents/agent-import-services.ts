@@ -13,14 +13,14 @@ import {
   createImportedModelCredential,
   prepareModelCredential,
 } from "#modules/models/model-credentials";
+import type { RouterDeps } from "#modules/platform/router";
+import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import type { createRoutineAnnouncer } from "#modules/routines/routines";
 import {
   assertRoutineSchedule,
   routineNextRunAt,
   routineRowData,
 } from "#modules/routines/routines";
-import type { RouterDeps } from "../../router.js";
-import { withSerializableRetry } from "../../serializable-retry.js";
 import type { AgentImportServices } from "./agent-import.js";
 
 export function createAgentImportServices({

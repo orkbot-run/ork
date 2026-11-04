@@ -3,8 +3,8 @@ import { encodeLoginSecret } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 
 const events = vi.hoisted(() => ({ record: vi.fn() }));
 vi.mock("@orkbot/db", async (original) => ({

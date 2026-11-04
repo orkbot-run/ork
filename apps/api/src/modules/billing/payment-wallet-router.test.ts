@@ -4,8 +4,8 @@ import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 
 // Offline boundary: a fake Prisma table and secret store drive the real router handlers and the
 // real wallet service against the deterministic emulator wallet.

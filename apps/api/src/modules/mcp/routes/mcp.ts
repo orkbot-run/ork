@@ -45,14 +45,14 @@ import {
   listPluginSubmissions,
   reviewPluginSubmission,
 } from "#modules/integrations/plugin-submissions";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { computerContext, isUniqueViolation } from "#modules/platform/routes/shared";
 import {
   assertNameFreeWhereAvailable,
   lockOwner,
   serverAvailability,
   serverSecretSpace,
 } from "#modules/spaces/availability";
-import type { RouterContext } from "../../../routes/context.js";
-import { computerContext, isUniqueViolation } from "../../../routes/shared.js";
 import {
   queueMcpConnectedRun,
   resolveMcpApprovalCards,

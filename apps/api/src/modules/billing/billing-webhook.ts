@@ -3,7 +3,7 @@ import type { Actor } from "@orkbot/contracts";
 import { MOBILE_BILLING_CALLBACK_URL } from "@orkbot/contracts";
 import { getLogger } from "@orkbot/logging";
 import type { Hono } from "hono";
-import { readBoundedBody } from "../../http-body.js";
+import { readBoundedBody } from "#modules/platform/http-body";
 import type { BillingService } from "./billing.js";
 import { BILLING_RETURN_PATH } from "./billing.js";
 

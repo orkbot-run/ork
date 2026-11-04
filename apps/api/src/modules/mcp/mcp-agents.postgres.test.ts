@@ -5,8 +5,8 @@ import type { PrismaClient } from "@orkbot/db";
 import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 

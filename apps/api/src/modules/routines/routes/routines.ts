@@ -10,8 +10,8 @@ import { IsolationError, Prisma } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertRoutineModel } from "#modules/models/model-pins";
-import type { RouterContext } from "../../../routes/context.js";
-import { isRecordNotFound } from "../../../routes/shared.js";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { isRecordNotFound } from "#modules/platform/routes/shared";
 import { listRoutineRuns } from "../routine-runs.js";
 import {
   assertRoutineSchedule,

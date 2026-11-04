@@ -22,11 +22,11 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { otherSpaceOfBot } from "#modules/bots/bot-space";
+import type { RouterDeps } from "#modules/platform/router";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { meDto } from "#modules/platform/routes/shared";
 import { listRoutinesDto } from "#modules/routines/routines";
 import { resolveThreadTarget, threadSnapshot } from "#modules/threads/thread-target";
-import type { RouterDeps } from "../../../router.js";
-import type { RouterContext } from "../../../routes/context.js";
-import { meDto } from "../../../routes/shared.js";
 import { deleteSpaceWithContent } from "../space-deletion.js";
 
 /**

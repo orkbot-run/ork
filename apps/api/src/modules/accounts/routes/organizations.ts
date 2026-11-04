@@ -12,7 +12,7 @@ import {
   SpaceDeletionInProgressError,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import type { RouterContext } from "../../../routes/context.js";
+import type { RouterContext } from "#modules/platform/routes/context";
 import { deleteOrganization } from "../account-deletion.js";
 
 export function organizationsRoutes(ctx: RouterContext) {

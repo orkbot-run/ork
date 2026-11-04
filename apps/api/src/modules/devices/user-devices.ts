@@ -20,8 +20,8 @@ import {
 import type { PrismaClient } from "@orkbot/db";
 import { recordSecurityEvent, runAsSystem } from "@orkbot/db";
 import type { Hono } from "hono";
+import { readBoundedBody } from "#modules/platform/http-body";
 import { lockOwner } from "#modules/spaces/availability";
-import { readBoundedBody } from "../../http-body.js";
 
 const FORWARD_BODY_MAX_BYTES = 13 * 1024 * 1024;
 

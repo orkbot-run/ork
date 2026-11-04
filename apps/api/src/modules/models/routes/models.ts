@@ -43,8 +43,8 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
-import type { RouterContext } from "../../../routes/context.js";
-import { withSerializableRetry } from "../../../serializable-retry.js";
+import type { RouterContext } from "#modules/platform/routes/context";
+import { withSerializableRetry } from "#modules/platform/serializable-retry";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {
   modelConnectionTarget,

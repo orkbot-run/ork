@@ -1,7 +1,7 @@
 import { SHARED_PAGE_PATH_PREFIX } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import type { Context, Hono } from "hono";
-import { throttleKey, windowCounter } from "../../window-counter.js";
+import { throttleKey, windowCounter } from "#modules/platform/window-counter";
 import { readSharedPage } from "./pages.js";
 
 const MINUTE_MS = 60_000;

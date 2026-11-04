@@ -7,8 +7,8 @@ import {
 } from "@orkbot/adapters";
 import { recordSecurityEvent } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
+import type { RouterContext } from "#modules/platform/routes/context";
 import { paymentWalletConnectedEvent } from "#modules/security/security-audit";
-import type { RouterContext } from "../../../routes/context.js";
 
 export function paymentWalletRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

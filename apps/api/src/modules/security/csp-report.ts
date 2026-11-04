@@ -2,8 +2,8 @@ import { CSP_REPORT_PATH } from "@orkbot/contracts/content-security-policy";
 import { getLogger, redactSensitiveText } from "@orkbot/logging";
 import type { Context } from "hono";
 import { Hono } from "hono";
-import { readBoundedBody } from "../../http-body.js";
-import { throttleKey, windowCounter } from "../../window-counter.js";
+import { readBoundedBody } from "#modules/platform/http-body";
+import { throttleKey, windowCounter } from "#modules/platform/window-counter";
 
 /**
  * Content-Security-Policy violation reports. Browsers post them without credentials, so the

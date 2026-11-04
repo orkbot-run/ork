@@ -29,9 +29,9 @@ import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { deleteAccountContent } from "#modules/accounts/account-deletion";
 import { createBillingService } from "#modules/billing/billing";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 import { MemoryObjectStorage } from "../../../../../packages/adapters/src/object-storage.test-support.js";
-import type { RouterDeps } from "../../router.js";
-import { createRouter } from "../../router.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =

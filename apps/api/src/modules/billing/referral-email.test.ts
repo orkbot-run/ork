@@ -1,6 +1,6 @@
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { startHourlySweep } from "../../hourly-sweep.js";
+import { startHourlySweep } from "#modules/platform/hourly-sweep";
 import { unsubscribeUrl } from "./marketing-email.js";
 import { sendReferralEmails } from "./referral-email.js";
 
