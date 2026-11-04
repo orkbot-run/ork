@@ -49,7 +49,9 @@ describe("package test scripts", () => {
       .filter(Boolean)
       .map((file) => file.replaceAll("\\", "/").replace(/^\[postgres\] /, ""))
       .sort();
-    const expected = globSync("apps/api/src/**/*.postgres.test.ts", { cwd: repoRoot }).sort();
+    const expected = globSync("apps/api/src/**/*.postgres.test.ts", { cwd: repoRoot })
+      .map((file) => file.replaceAll("\\", "/"))
+      .sort();
     expect(expected.length).toBeGreaterThan(0);
     expect(files).toEqual(expected);
   });
