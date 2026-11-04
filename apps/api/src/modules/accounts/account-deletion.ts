@@ -19,7 +19,7 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { BillingService } from "#modules/billing/billing";
-import type { SpaceDeletionDeps } from "../../space-deletion.js";
+import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
 
 /**
  * In shared spaces, the account's bot folders also live on the space's Team Computer from before

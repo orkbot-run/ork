@@ -23,11 +23,11 @@ import {
 import { ORPCError } from "@orpc/server";
 import { otherSpaceOfBot } from "#modules/bots/bot-space";
 import { resolveThreadTarget, threadSnapshot } from "#modules/threads/thread-target";
-import type { RouterDeps } from "../router.js";
-import { listRoutinesDto } from "../routines.js";
+import type { RouterDeps } from "../../../router.js";
+import type { RouterContext } from "../../../routes/context.js";
+import { meDto } from "../../../routes/shared.js";
+import { listRoutinesDto } from "../../../routines.js";
 import { deleteSpaceWithContent } from "../space-deletion.js";
-import type { RouterContext } from "./context.js";
-import { meDto } from "./shared.js";
 
 /**
  * Runs `fn` scoped to another of the actor's Spaces. Membership is checked first,

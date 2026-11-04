@@ -2,7 +2,7 @@ import type { SecretStore } from "@orkbot/adapter-kit";
 import { persistPreparedSecret } from "@orkbot/adapters";
 import type { PrismaClient } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import { serverSecretSpace } from "../../availability.js";
+import { serverSecretSpace } from "#modules/spaces/availability";
 import type { McpSecretMaterial } from "./mcp-material.js";
 import { legacyMcpArgs } from "./mcp-material.js";
 

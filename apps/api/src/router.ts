@@ -46,14 +46,14 @@ import { pagesRoutes } from "#modules/content/routes/pages";
 import { mcpRoutes } from "#modules/mcp/routes/mcp";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
+import { availabilityRoutes } from "#modules/spaces/routes/availability";
+import { spacesRoutes } from "#modules/spaces/routes/spaces";
 import { threadsRoutes } from "#modules/threads/routes/threads";
 import type { VoiceDeps } from "#modules/voice/voice";
-import { availabilityRoutes } from "./routes/availability.js";
 import { connectionsRoutes } from "./routes/connections.js";
 import { createRouterContext } from "./routes/context.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { routinesRoutes } from "./routes/routines.js";
-import { spacesRoutes } from "./routes/spaces.js";
 
 export { botIntroPrompt, enqueueBotIntroRun } from "#modules/bots/routes/bots";
 export { nextConnectionLabel } from "#modules/models/model-credentials";

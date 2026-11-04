@@ -16,7 +16,7 @@ import {
   spaceAvailability,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { assertNameFreeWhereAvailable, userAddedAvailability } from "../../availability.js";
+import { assertNameFreeWhereAvailable, userAddedAvailability } from "#modules/spaces/availability";
 
 type AgentSkillRow = {
   id: string;

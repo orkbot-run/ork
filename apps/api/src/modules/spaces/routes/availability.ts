@@ -1,5 +1,5 @@
+import type { RouterContext } from "../../../routes/context.js";
 import { chooseForSpace, listOwnItems, setAvailability } from "../availability.js";
-import type { RouterContext } from "./context.js";
 
 export function availabilityRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;

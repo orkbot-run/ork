@@ -39,7 +39,7 @@ import {
   lockOwner,
   serverAvailability,
   serverSecretSpace,
-} from "../../../availability.js";
+} from "#modules/spaces/availability";
 import { searchIntegrationCatalog } from "../../../integration-catalog.js";
 import { installPlugin, lockPluginInstalls, setPluginParts } from "../../../plugin-installs.js";
 import {

@@ -17,7 +17,7 @@ import {
   spaceAvailability,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
-import { assertNameFreeWhereAvailable, lockOwner } from "./availability.js";
+import { assertNameFreeWhereAvailable, lockOwner } from "#modules/spaces/availability";
 
 export type PluginInstallDeps = {
   prisma: PrismaClient;

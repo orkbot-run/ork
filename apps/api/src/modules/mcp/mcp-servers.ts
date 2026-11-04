@@ -14,7 +14,7 @@ import { itemSecretIn, spaceAvailability } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { isAdmin } from "#modules/accounts/admins";
-import { assertNameFreeWhereAvailable, userAddedAvailability } from "../../availability.js";
+import { assertNameFreeWhereAvailable, userAddedAvailability } from "#modules/spaces/availability";
 import type { RouterDeps } from "../../router.js";
 import { computerContext } from "../../routes/shared.js";
 import { dismissMcpServerApprovals } from "./mcp-approval.js";

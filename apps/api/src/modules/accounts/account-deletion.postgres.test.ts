@@ -30,8 +30,8 @@ import {
   SpaceDeletionInProgressError,
 } from "@orkbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
 import { MemoryObjectStorage } from "../../../../../packages/adapters/src/object-storage.test-support.js";
-import type { SpaceDeletionDeps } from "../../space-deletion.js";
 import { deleteAccountContent } from "./account-deletion.js";
 
 const databaseUrl = process.env.DATABASE_URL;
