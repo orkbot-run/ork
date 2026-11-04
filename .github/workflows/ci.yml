@@ -217,7 +217,8 @@ jobs:
   native-computer:
     name: Native computer (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.native == 'true'
+    # Required matrix checks must register on every PR, including server-only changes.
+    if: github.event_name == 'pull_request'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
