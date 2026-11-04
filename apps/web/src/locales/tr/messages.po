@@ -4742,6 +4742,20 @@ msgstr "Orijinal"
 msgid "Original message unavailable"
 msgstr "Orijinal mesaj kullanılamıyor"
 
+#: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Ork"
+msgstr "Ork"
+
+#: src/components/ModelCredits.tsx
+#: src/pages/Onboarding.tsx
+msgid "Ork credits"
+msgstr "Ork kredileri"
+
+#: src/pages/memory-providers/HonchoSettingsForm.tsx
+msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
+msgstr "orkbot-shared ve bot- ile başlayan kimlikler Ork için ayrılmıştır."
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
@@ -5052,20 +5066,6 @@ msgstr "Çekme isteği"
 #: src/pages/ActivityList.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
-
-#: src/components/ModelCredits.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ork credits"
-msgstr "Ork kredileri"
-
-#: src/pages/memory-providers/HonchoSettingsForm.tsx
-msgid "orkbot-shared and IDs starting with bot- are reserved for Ork."
-msgstr "orkbot-shared ve bot- ile başlayan kimlikler Ork için ayrılmıştır."
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "React"
@@ -6898,13 +6898,13 @@ msgstr "Bu botta kullan"
 msgid "Use my subscription or API key"
 msgstr "Aboneliğimi veya API anahtarımı kullan"
 
-#: src/components/teach/TeachRecordingChrome.tsx
-msgid "Use Protected input for passwords."
-msgstr "Parolalar için Korumalı giriş'i kullan."
-
 #: src/components/ModelCredits.tsx
 msgid "Use Ork credits"
 msgstr "Ork kredilerini kullan"
+
+#: src/components/teach/TeachRecordingChrome.tsx
+msgid "Use Protected input for passwords."
+msgstr "Parolalar için Korumalı giriş'i kullan."
 
 #: src/pages/model-settings/space-bots-model.tsx
 msgid "Use space default"
