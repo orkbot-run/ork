@@ -393,7 +393,7 @@ class OrkNotificationService : Service() {
     private const val LIVE_NOTIFICATION_ID = 1101
     private const val ACTION_THREAD_CHANGED = "com.orkbot.notifications.THREAD_CHANGED"
     private const val PROMOTED_ONGOING_EXTRA = "android.requestPromotedOngoing"
-    private const val RECENT_LIMIT = 20 // Keep in sync with apps/api/src/runs.ts.
+    private const val RECENT_LIMIT = 20 // Keep in sync with apps/api/src/modules/agents/runs.ts.
     private const val EXTRA_RESET_TOKEN = "com.orkbot.notifications.RESET_TOKEN"
     private const val EXTRA_MUTED_BOT_ID = "com.orkbot.notifications.MUTED_BOT_ID"
     private const val STATE_PREFERENCES = "com.orkbot.notification_state"

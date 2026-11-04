@@ -4,7 +4,7 @@ import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { createDb, itemSecretIn, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createAgentSkillsService } from "./agent-skills.js";
+import { createAgentSkillsService } from "#modules/agents/agent-skills";
 import {
   chooseForSpace,
   listOwnItems,

@@ -21,10 +21,10 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
+import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
 import type { RouterDeps } from "../router.js";
 import { createRoutineTestRun, routineTestRunNonce, routineTestTarget } from "../routines.js";
 import { withSerializableRetry } from "../serializable-retry.js";
-import { assertTeachingSendAllowed } from "../taught-skills.js";
 import {
   isBackgroundRun,
   isPeerRun,

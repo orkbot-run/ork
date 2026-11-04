@@ -38,15 +38,15 @@ import {
 } from "@orkbot/contracts";
 import { createGroupRepos, createRepos, recordSecurityEvent, runAsTenant } from "@orkbot/db";
 import { implement, ORPCError } from "@orpc/server";
-import { createAgentImportServices } from "../agent-import-services.js";
-import { createAgentSkillsService } from "../agent-skills.js";
+import { createAgentImportServices } from "#modules/agents/agent-import-services";
+import { createAgentSkillsService } from "#modules/agents/agent-skills";
+import { createTaughtSkillsService } from "#modules/agents/taught-skills";
 import { createBotRemoval } from "../bot-removal.js";
 import { createMcpServers } from "../mcp-servers.js";
 import { createModelConnector, prepareAllowedThinkingLevels } from "../model-credentials.js";
 import type { RouterDeps } from "../router.js";
 import { createRoutineAnnouncer } from "../routines.js";
 import { procedureSecurityEvent } from "../security-audit.js";
-import { createTaughtSkillsService } from "../taught-skills.js";
 import { meDto } from "./shared.js";
 
 /**

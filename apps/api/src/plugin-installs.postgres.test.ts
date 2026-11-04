@@ -9,7 +9,7 @@ import type { PrismaClient } from "@orkbot/db";
 import { createDb, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createRouterClient } from "@orpc/server";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { createAgentSkillsService } from "./agent-skills.js";
+import { createAgentSkillsService } from "#modules/agents/agent-skills";
 import { installPlugin } from "./plugin-installs.js";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
