@@ -15,7 +15,6 @@ import {
 export {
   formatGithubEventPrompt,
   githubEventName,
-  githubWebhookPath,
   hasValidGithubSignature,
 } from "./github-webhook.js";
 export {
@@ -27,10 +26,6 @@ export {
   type WebhookEvents,
   type WebhookTarget,
 } from "./webhook-inbound.js";
-
-export function webhookPath(botId: string): string {
-  return `/api/v1/bots/${botId}/webhook`;
-}
 
 export function mountWebhookHttpRoutes(app: Hono, deps: WebhookDeps) {
   const secretCache: WebhookSecretCache = new Map();
