@@ -40,8 +40,8 @@ function metadata(text, sidecar = false) {
     if (!line || line.startsWith("#!") || line === "---" || /^<\?xml\b.*\?>$/.test(line)) {
       continue;
     }
-    if (/^(\/\*|\*\/|<!--|-->)$/.test(line)) continue;
-    const comment = line.match(/^(?:\/\/|#|--|\/\*|\*|<!--)\s*(.*?)\s*(?:\*\/|-->)?$/);
+    if (/^(\/\*|\*\/|<!--|--!?>)$/.test(line)) continue;
+    const comment = line.match(/^(?:\/\/|#|--|\/\*|\*|<!--)\s*(.*?)\s*(?:\*\/|--!?>)?$/);
     if (!comment) break;
     lines.push(comment[1]);
   }

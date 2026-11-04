@@ -86,6 +86,24 @@ test("recognizes Markdown, shell, XML, Astro, and block comment headers", (t) =>
   assert.deepEqual(repo.check().errors, []);
 });
 
+test("recognizes HTML notices with standard and alternate comment endings", (t) => {
+  const repo = repository(t);
+  for (const [name, ending] of [
+    ["standard", "-->"],
+    ["alternate", "--!>"],
+  ]) {
+    repo.write(
+      `${name}-single.html`,
+      `<!-- SPDX-License-Identifier: ${POLYFORM} ${ending}\n<!-- SPDX-FileCopyrightText: 2026 Example contributors ${ending}\n<p>Example</p>\n`,
+    );
+    repo.write(
+      `${name}-multiline.html`,
+      `<!--\n * SPDX-License-Identifier: ${POLYFORM}\n * SPDX-FileCopyrightText: 2026 Example contributors\n${ending}\n<p>Example</p>\n`,
+    );
+  }
+  assert.deepEqual(repo.check().errors, []);
+});
+
 test("requires source copyright attribution in the header or a matching sidecar", (t) => {
   const repo = repository(t);
   repo.write("own.ts", `// SPDX-License-Identifier: ${POLYFORM}\nexport const own = true;\n`);
