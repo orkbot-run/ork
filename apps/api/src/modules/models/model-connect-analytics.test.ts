@@ -1,15 +1,15 @@
 import type { Actor } from "@orkbot/contracts";
 import { MODEL_KEY_REJECTED_ERROR, OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RouterDeps } from "../../router.js";
 import {
   firstModelConnectAnalytics,
   modelConnectErrorKind,
   modelConnectProperties,
 } from "./model-connect-analytics.js";
-import type { RouterDeps } from "./router.js";
 
 const modelSetup = vi.hoisted(() => vi.fn());
-vi.mock("./routes/shared.js", () => ({ modelSetup }));
+vi.mock("../../routes/shared.js", () => ({ modelSetup }));
 
 const actor = { userId: "user-1", spaceId: "space-1" } as Actor;
 

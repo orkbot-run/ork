@@ -9,7 +9,7 @@ import {
 import { IsolationError, Prisma } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
-import { assertRoutineModel } from "../model-pins.js";
+import { assertRoutineModel } from "#modules/models/model-pins";
 import { listRoutineRuns } from "../routine-runs.js";
 import {
   assertRoutineSchedule,

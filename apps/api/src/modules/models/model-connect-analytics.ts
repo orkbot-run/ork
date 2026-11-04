@@ -6,8 +6,8 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@orkbot/contracts";
 import { normalizeRunError } from "@orkbot/core";
-import type { RouterDeps } from "./router.js";
-import { modelSetup } from "./routes/shared.js";
+import type { RouterDeps } from "../../router.js";
+import { modelSetup } from "../../routes/shared.js";
 
 type ModelConnectOutcome =
   | { name: "model_connect_started" | "model_connected" }

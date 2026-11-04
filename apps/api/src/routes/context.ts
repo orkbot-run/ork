@@ -43,7 +43,10 @@ import { createAgentSkillsService } from "#modules/agents/agent-skills";
 import { createTaughtSkillsService } from "#modules/agents/taught-skills";
 import { createBotRemoval } from "#modules/bots/bot-removal";
 import { createMcpServers } from "#modules/mcp/mcp-servers";
-import { createModelConnector, prepareAllowedThinkingLevels } from "../model-credentials.js";
+import {
+  createModelConnector,
+  prepareAllowedThinkingLevels,
+} from "#modules/models/model-credentials";
 import type { RouterDeps } from "../router.js";
 import { createRoutineAnnouncer } from "../routines.js";
 import { procedureSecurityEvent } from "../security-audit.js";

@@ -43,6 +43,8 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
+import type { RouterContext } from "../../../routes/context.js";
+import { withSerializableRetry } from "../../../serializable-retry.js";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {
   modelConnectionTarget,
@@ -51,8 +53,6 @@ import {
   throwIfAborted,
 } from "../model-credentials.js";
 import { assertCompatibleDefaultChange } from "../model-pins.js";
-import { withSerializableRetry } from "../serializable-retry.js";
-import type { RouterContext } from "./context.js";
 
 export function modelsRoutes(ctx: RouterContext) {
   const {

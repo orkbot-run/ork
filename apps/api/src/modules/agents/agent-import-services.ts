@@ -8,8 +8,11 @@ import { getLogger } from "@orkbot/logging";
 import { isAdmin } from "#modules/accounts/admins";
 import type { createMcpServers } from "#modules/mcp/mcp-servers";
 import { mcpCredentialRecords, mcpStdioPolicy } from "#modules/mcp/mcp-servers";
-import type { createModelConnector } from "../../model-credentials.js";
-import { createImportedModelCredential, prepareModelCredential } from "../../model-credentials.js";
+import type { createModelConnector } from "#modules/models/model-credentials";
+import {
+  createImportedModelCredential,
+  prepareModelCredential,
+} from "#modules/models/model-credentials";
 import type { RouterDeps } from "../../router.js";
 import type { createRoutineAnnouncer } from "../../routines.js";
 import { assertRoutineSchedule, routineNextRunAt, routineRowData } from "../../routines.js";

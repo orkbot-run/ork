@@ -34,9 +34,9 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
+import type { RouterDeps } from "../../router.js";
+import { withSerializableRetry } from "../../serializable-retry.js";
 import { assertNoDanglingModelPins } from "./model-pins.js";
-import type { RouterDeps } from "./router.js";
-import { withSerializableRetry } from "./serializable-retry.js";
 
 export function prepareAllowedThinkingLevels(
   deps: RouterDeps,

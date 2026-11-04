@@ -38,6 +38,7 @@ import { organizationsRoutes } from "#modules/accounts/routes/organizations";
 import { botsRoutes } from "#modules/bots/routes/bots";
 import { mcpRoutes } from "#modules/mcp/routes/mcp";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
+import { modelsRoutes } from "#modules/models/routes/models";
 import { threadsRoutes } from "#modules/threads/routes/threads";
 import type { BillingService } from "./billing.js";
 import { availabilityRoutes } from "./routes/availability.js";
@@ -48,7 +49,6 @@ import { connectionsRoutes } from "./routes/connections.js";
 import { contentRoutes } from "./routes/content.js";
 import { createRouterContext } from "./routes/context.js";
 import { memoryRoutes } from "./routes/memory.js";
-import { modelsRoutes } from "./routes/models.js";
 import { pagesRoutes } from "./routes/pages.js";
 import { paymentWalletRoutes } from "./routes/payment-wallet.js";
 import { routinesRoutes } from "./routes/routines.js";
@@ -56,8 +56,8 @@ import { spacesRoutes } from "./routes/spaces.js";
 import type { VoiceDeps } from "./voice.js";
 
 export { botIntroPrompt, enqueueBotIntroRun } from "#modules/bots/routes/bots";
+export { nextConnectionLabel } from "#modules/models/model-credentials";
 export { callMarkerClientNonce } from "#modules/threads/routes/threads";
-export { nextConnectionLabel } from "./model-credentials.js";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 
 export interface RouterDeps {

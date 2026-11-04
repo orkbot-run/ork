@@ -37,8 +37,8 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
+import { firstModelConnectAnalytics } from "#modules/models/model-connect-analytics";
 import type { BillingService } from "../../../billing.js";
-import { firstModelConnectAnalytics } from "../../../model-connect-analytics.js";
 import type { RouterDeps } from "../../../router.js";
 import type { RouterContext } from "../../../routes/context.js";
 import { HEARTBEAT_MS, meDto, SESSION_RECHECK_MS } from "../../../routes/shared.js";
