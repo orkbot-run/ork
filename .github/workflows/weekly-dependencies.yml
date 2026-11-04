@@ -13,8 +13,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  configuration:
+    name: Check dependency updater configuration
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.config.outputs.ready }}
+    steps:
+      - name: Check required credentials
+        id: config
+        env:
+          CODEX_SUBSCRIPTION_AUTH: ${{ secrets.CODEX_SUBSCRIPTION_AUTH }}
+          GH_DEPENDENCY_UPDATES_PAT: ${{ secrets.GH_DEPENDENCY_UPDATES_PAT }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          missing=()
+          for name in CODEX_SUBSCRIPTION_AUTH GH_DEPENDENCY_UPDATES_PAT; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            printf 'Dependency updates are not configured. Add repository secrets: %s. See docs/github-actions.md.\n' "${missing[*]}" >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+              echo "Missing repository secrets: ${missing[*]}" >&2
+              exit 1
+            fi
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
   update:
-    if: github.ref == 'refs/heads/main'
+    needs: configuration
+    if: github.ref == 'refs/heads/main' && needs.configuration.outputs.ready == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 55
     permissions:

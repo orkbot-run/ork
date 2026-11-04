@@ -13,10 +13,10 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-// Validate the archived upstream workflow definition.
+// Validate the active workflow definition.
 const workflow = parse(
   readFileSync(
-    path.resolve(import.meta.dirname, "../../../.github/upstream-workflows/model-catalog-bump.yml"),
+    path.resolve(import.meta.dirname, "../../../.github/workflows/model-catalog-bump.yml"),
     "utf8",
   ),
 ) as { jobs: { publish: { steps: Array<{ name?: string; run?: string }> } } };

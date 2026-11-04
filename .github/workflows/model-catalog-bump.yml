@@ -60,6 +60,9 @@ jobs:
             echo "ai_version=$(node -p "require('./$pkg').dependencies['@earendil-works/pi-ai']")" >> "$GITHUB_OUTPUT"
             echo "core_version=$(node -p "require('./$pkg').dependencies['@earendil-works/pi-agent-core']")" >> "$GITHUB_OUTPUT"
           fi
+      - name: Generate database client
+        if: steps.changed.outputs.changed == 'true'
+        run: pnpm db:generate
       - name: Typecheck and test adapters
         if: steps.changed.outputs.changed == 'true'
         run: |
@@ -111,7 +114,7 @@ jobs:
           done
       - name: Push branch and open PR
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_DEPENDENCY_UPDATES_PAT || github.token }}
           OLD_AI: ${{ needs.update.outputs.old_ai_version }}
           NEW_AI: ${{ needs.update.outputs.ai_version }}
           OLD_CORE: ${{ needs.update.outputs.old_core_version }}
@@ -146,21 +149,27 @@ jobs:
             gh pr close "$pr" --comment "Superseded by the pi-ai ${NEW_AI} / pi-agent-core ${NEW_CORE} catalog bump." || true
           done < <(gh pr list --state open --limit 1000 --json number,headRefName,isCrossRepository \
             --jq '.[] | select(.isCrossRepository == false and (.headRefName | startswith("deps/pi-catalog-"))) | "\(.number) \(.headRefName)"')
-          gh pr create --title "Bump model catalog to pi-ai ${NEW_AI} / pi-agent-core ${NEW_CORE}" --body "$(cat <<EOF
+          body_file=$(mktemp)
+          trap 'rm -f "$body_file"' EXIT
+          cat > "$body_file" <<EOF
+          ## What
+
+          Update pi-ai from ${OLD_AI} to ${NEW_AI} and pi-agent-core from ${OLD_CORE}
+          to ${NEW_CORE}, refreshing the model catalog available to Ork.
+
           ## Why
 
-          The model catalog is compiled into the pinned \`@earendil-works/pi-ai\` /
-          \`pi-agent-core\` packages, so provider models only appear after a bump.
-          This automated PR moves pi-ai from ${OLD_AI} to ${NEW_AI} and
-          pi-agent-core from ${OLD_CORE} to ${NEW_CORE}.
+          The catalog is compiled into the pinned packages. Updating them makes
+          their provider models available in Ork's connection settings.
+
+          ## Changes
+
+          Review the pi release notes for renamed or removed models before merging.
+          GitHub may require a maintainer to approve this PR's workflow runs.
 
           ## Tested
 
-          \`pnpm --filter @orkbot/adapters check\` and \`pnpm --filter @orkbot/adapters test\`
-          pass in the update job. Review the pi release notes for renamed or removed
-          models before merging.
-
-          Note: this PR is opened by GITHUB_TOKEN, so its checks do not start on
-          their own. Close and reopen the PR (or push a commit) to trigger CI.
+          The update job passed the adapters type check and tests. Live model
+          calls were not tested.
           EOF
-          )"
+          gh pr create --title "Bump model catalog to pi-ai ${NEW_AI} / pi-agent-core ${NEW_CORE}" --body-file "$body_file"

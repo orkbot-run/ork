@@ -4,6 +4,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      signed_release:
+        description: Publish a signed stable release using configured signing accounts
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,8 +24,87 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  configuration:
+    name: Check desktop release configuration
+    runs-on: ubuntu-24.04
+    outputs:
+      signed: ${{ steps.mode.outputs.signed }}
+    steps:
+      - name: Select signed release or unsigned diagnostics
+        id: mode
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_SIGNED: ${{ inputs.signed_release }}
+          TAG_SIGNED_ENABLED: ${{ vars.DESKTOP_SIGNED_RELEASE_ENABLED }}
+        run: |
+          set -euo pipefail
+          signed=false
+          if [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            [[ "$REQUESTED_SIGNED" != true ]] || signed=true
+          elif [[ "$TAG_SIGNED_ENABLED" == true ]]; then
+            signed=true
+          fi
+          echo "signed=$signed" >> "$GITHUB_OUTPUT"
+          if [[ "$signed" == true ]]; then
+            echo "Signed stable release selected. macOS, Windows, and Linux signing credentials are required; missing credentials fail their platform build." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Unsigned diagnostic installers selected. They use GitHub-hosted runners and are uploaded as Actions artifacts. Signing, notarization, and a stable automatic-update feed are not published." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  diagnostic-build:
+    name: Unsigned desktop diagnostics (${{ matrix.os }})
+    needs: configuration
+    if: needs.configuration.outputs.signed != 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, ubuntu-24.04, windows-2022]
+    env:
+      ORKBOT_ENABLE_AUTO_UPDATE: "0"
+      ORKBOT_LINUX_UPDATE_PUBLIC_KEY: ""
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - name: Build diagnostic renderer and desktop
+        run: pnpm --filter @orkbot/web build && pnpm --filter @orkbot/desktop build
+        env:
+          ORKBOT_ALLOW_DEV_SECRETS: "1"
+      - name: Package unsigned macOS installers
+        if: runner.os == 'macOS'
+        run: pnpm --filter @orkbot/desktop exec electron-builder --mac --publish never -c.mac.identity=null -c.mac.notarize=false -c.forceCodeSigning=false
+      - name: Package unsigned Windows installer
+        if: runner.os == 'Windows'
+        run: pnpm --filter @orkbot/desktop exec electron-builder --win --x64 --publish never -c.forceCodeSigning=false -c.win.signAndEditExecutable=false
+      - name: Package unsigned Linux AppImage
+        if: runner.os == 'Linux'
+        run: pnpm --filter @orkbot/desktop exec electron-builder --linux --x64 --publish never
+      - name: Upload unsigned diagnostic installers
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-desktop-unsigned-${{ matrix.os }}-${{ github.run_id }}
+          path: |
+            apps/desktop/out/*.AppImage
+            apps/desktop/out/*.dmg
+            apps/desktop/out/*.exe
+            apps/desktop/out/*.zip
+          if-no-files-found: error
+          retention-days: 7
+
   validate:
     name: Validate stable release
+    needs: configuration
+    if: needs.configuration.outputs.signed == 'true'
     runs-on: ubuntu-24.04
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -116,6 +200,38 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.validate.outputs.platforms) }}
     steps:
+      - name: Require signing credentials for the selected stable release
+        shell: bash
+        env:
+          PLATFORM: ${{ runner.os }}
+          DESKTOP_MAC_CSC_LINK: ${{ secrets.DESKTOP_MAC_CSC_LINK }}
+          DESKTOP_MAC_CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          DESKTOP_WIN_AZURE_CLIENT_ID: ${{ secrets.DESKTOP_WIN_AZURE_CLIENT_ID }}
+          DESKTOP_WIN_AZURE_TENANT_ID: ${{ secrets.DESKTOP_WIN_AZURE_TENANT_ID }}
+          DESKTOP_WIN_SIGNING_ENDPOINT: ${{ vars.DESKTOP_WIN_SIGNING_ENDPOINT }}
+          DESKTOP_WIN_SIGNING_ACCOUNT: ${{ vars.DESKTOP_WIN_SIGNING_ACCOUNT }}
+          DESKTOP_WIN_SIGNING_PROFILE: ${{ vars.DESKTOP_WIN_SIGNING_PROFILE }}
+          DESKTOP_WIN_PUBLISHER: ${{ vars.DESKTOP_WIN_PUBLISHER }}
+          DESKTOP_LINUX_UPDATE_SIGNING_KEY: ${{ secrets.DESKTOP_LINUX_UPDATE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          case "$PLATFORM" in
+            macOS) required=(DESKTOP_MAC_CSC_LINK DESKTOP_MAC_CSC_KEY_PASSWORD APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_API_KEY_P8) ;;
+            Windows) required=(DESKTOP_WIN_AZURE_CLIENT_ID DESKTOP_WIN_AZURE_TENANT_ID DESKTOP_WIN_SIGNING_ENDPOINT DESKTOP_WIN_SIGNING_ACCOUNT DESKTOP_WIN_SIGNING_PROFILE DESKTOP_WIN_PUBLISHER) ;;
+            Linux) required=(DESKTOP_LINUX_UPDATE_SIGNING_KEY ORKBOT_LINUX_UPDATE_PUBLIC_KEY) ;;
+            *) echo "Unsupported release platform." >&2; exit 1 ;;
+          esac
+          missing=()
+          for name in "${required[@]}"; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "Signed release requires these platform credentials and variables: ${missing[*]}" >&2
+            exit 1
+          fi
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: ${{ needs.validate.outputs.sha }}

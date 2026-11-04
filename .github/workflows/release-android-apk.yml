@@ -2,7 +2,17 @@ name: release-android-apk
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: Diagnostic Actions artifact or configured EAS production release
+        type: choice
+        options: [diagnostic, eas]
+        default: diagnostic
   workflow_call:
+    inputs:
+      mode:
+        type: string
+        default: diagnostic
 
 permissions:
   contents: read
@@ -12,19 +22,113 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  configuration:
+    name: Check Android release configuration
+    runs-on: ubuntu-24.04
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+    steps:
+      - name: Validate selected Android build mode
+        id: mode
+        shell: bash
+        env:
+          REQUESTED_MODE: ${{ inputs.mode }}
+          RELEASE_REF: ${{ github.ref }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+        run: |
+          set -euo pipefail
+          mode="${REQUESTED_MODE:-diagnostic}"
+          case "$mode" in
+            diagnostic)
+              echo "Android diagnostic APK selected. GitHub builds it locally with development signing and uploads an Actions artifact. Expo, Firebase push, store submission, and production signing are not configured by this mode." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            eas)
+              [[ "$RELEASE_REF" == refs/heads/main ]] || { echo "EAS releases must run from main." >&2; exit 1; }
+              missing=()
+              for name in EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL; do
+                [[ -n "${!name}" ]] || missing+=("$name")
+              done
+              if (( ${#missing[@]} )); then
+                echo "EAS release requires configured Ork credentials and repository variables: ${missing[*]}" >&2
+                exit 1
+              fi
+              [[ "$EXPO_PROJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo "EXPO_PROJECT_ID must be the Ork project's UUID." >&2; exit 1; }
+              [[ "$EXPO_PUBLIC_API_URL" == https://* ]] || { echo "EXPO_PUBLIC_API_URL must use HTTPS for production." >&2; exit 1; }
+              echo "Configured EAS production build selected. The project's own Android keystore and Firebase configuration are required." >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *) echo "Unknown Android mode: $mode" >&2; exit 1 ;;
+          esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+  diagnostic:
+    name: Build diagnostic Android APK on GitHub
+    needs: configuration
+    if: needs.configuration.outputs.mode == 'diagnostic'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CI: "1"
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'http://127.0.0.1:3100' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4.4.3
+      - run: pnpm install --frozen-lockfile
+      - name: Generate local Android project
+        run: |
+          pnpm --filter @orkbot/mobile exec expo prebuild --platform android --no-install
+          sed -i 's/MaxMetaspaceSize=512m/MaxMetaspaceSize=1g/' apps/mobile/android/gradle.properties
+      - name: Build development-signed standalone APK
+        working-directory: apps/mobile/android
+        run: ./gradlew app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon
+      - name: Upload diagnostic APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-android-diagnostic-arm64-${{ github.run_id }}
+          path: apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     name: Build and publish the Android APK
-    if: github.ref == 'refs/heads/main'
+    needs: configuration
+    if: github.ref == 'refs/heads/main' && needs.configuration.outputs.mode == 'eas'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:
       contents: write
     env:
       RELEASE_TAG: android
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
+
+      - name: Bind the runner checkout to the configured Ork Expo project
+        env:
+          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+        run: |
+          jq --arg project "$EXPO_PROJECT_ID" --arg owner "$EXPO_OWNER" \
+            '.expo.owner = $owner | .expo.extra.eas.projectId = $project | .expo.updates.enabled = true | .expo.updates.url = ("https://u.expo.dev/" + $project)' \
+            apps/mobile/app.json > "$RUNNER_TEMP/ork-mobile-app.json"
+          cp "$RUNNER_TEMP/ork-mobile-app.json" apps/mobile/app.json
+          jq --arg api "$EXPO_PUBLIC_API_URL" '.build.production.env.EXPO_PUBLIC_API_URL = $api' \
+            apps/mobile/eas.json > "$RUNNER_TEMP/ork-mobile-eas.json"
+          cp "$RUNNER_TEMP/ork-mobile-eas.json" apps/mobile/eas.json
 
       - name: Require Expo automation token
         env:

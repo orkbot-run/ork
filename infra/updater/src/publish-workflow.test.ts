@@ -3,8 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
-// Validate the archived upstream workflow definitions.
-const workflowsDir = path.resolve(import.meta.dirname, "../../../.github/upstream-workflows");
+// Validate the active workflow definitions.
+const workflowsDir = path.resolve(import.meta.dirname, "../../../.github/workflows");
 const workflowText = readFileSync(path.join(workflowsDir, "publish-server-image.yml"), "utf8");
 const publisherDir = path.resolve(workflowsDir, "../actions/publish-image");
 const publisherText = readFileSync(path.join(publisherDir, "action.yml"), "utf8");
@@ -106,7 +106,10 @@ describe("server image publish workflow", () => {
     const fallback = workflow.jobs.build;
     expect(fallback.needs).toEqual(["build-depot"]);
     expect(fallback.if).toContain("!cancelled()");
-    expect(fallback.if).toContain("contains(needs.build-depot.outputs.*, 'failed')");
+    expect(fallback.if).toContain("needs.build-depot.result == 'failure'");
+    for (const image of ["app", "updater", "computer"]) {
+      expect(fallback.if).toContain(`needs.build-depot.outputs.${image} == 'failed'`);
+    }
   });
 
   it("checks credentials before publishing Depot tags or making native digests available", () => {

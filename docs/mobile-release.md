@@ -1,12 +1,13 @@
 # Mobile builds and store releases
 
-Ork's public repository does not contain production App Store Connect,
-Google Play, Apple team, or private EAS submission identifiers. Those values
-belong in the release operator's private configuration.
+GitHub can build a diagnostic Android APK without Expo or store credentials.
+Production EAS builds and iOS submission use the release operator's own Expo
+and store accounts. Keep production App Store Connect, Google Play, Apple team,
+and private EAS submission identifiers in that operator's private configuration.
 
-Self-hosters normally do not need to publish their own mobile app: the Ork
-client can select a compatible server from the sign-in screen. If you distribute
-your own branded build, use your own Expo and store accounts.
+The mobile client can select a compatible self-hosted server from the sign-in
+screen. Publishing a branded build requires the corresponding Expo and store
+configuration described below.
 
 ## Configure a build
 
@@ -41,7 +42,7 @@ and review account on a physical device.
 
 ## Release
 
-The imported workflows are archived under `.github/upstream-workflows/` and are inactive. Configure Ork accounts and restore the required workflow only when preparing a release. Expo over-the-air updates are disabled until Ork has its own project and update URL.
+The active mobile workflows can build a diagnostic Android APK using GitHub runners. Production EAS releases and iOS store submission require explicit mode selection and Ork-owned credentials. Expo over-the-air updates remain disabled until Ork has its own project and update URL. See [GitHub Actions configuration](./github-actions.md).
 
 Bump `expo.version` in `apps/mobile/app.json` when native code changes (see
 Over-the-air updates below), then run the `release-mobile` workflow from `main`

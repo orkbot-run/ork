@@ -61,12 +61,31 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+      - name: Check optional screenshot storage
+        id: storage
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          PLAYWRIGHT_PUBLIC_BASE_URL: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL }}
+        shell: bash
+        run: |
+          configured=false
+          if [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" &&
+                -n "$S3_BUCKET" && -n "$S3_ENDPOINT" && -n "$PLAYWRIGHT_PUBLIC_BASE_URL" ]]; then
+            configured=true
+          fi
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        if: steps.storage.outputs.configured == 'true'
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: steps.storage.outputs.configured == 'true'
         with:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        if: steps.storage.outputs.configured == 'true'
       - name: Resolve pull request
         id: pull_request
         env:
@@ -102,15 +121,15 @@ jobs:
           if [[ "$count" == "1" ]]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "id=$(jq -r --arg name "$ARTIFACT_NAME" '.artifacts[] | select(.name == $name and .expired == false) | .id' <<<"$artifacts")" >> "$GITHUB_OUTPUT"
-          elif [[ "$count" == "0" && "$PLAYWRIGHT_JOB_RESULT" == "timed_out" ]]; then
-            echo "::warning::The timed-out Playwright job ended before it uploaded an artifact. Publishing an empty gallery."
+          elif [[ "$count" == "0" && ("$PLAYWRIGHT_JOB_RESULT" == "timed_out" || "$PLAYWRIGHT_JOB_RESULT" == "failure") ]]; then
+            echo "::warning::The Playwright job ended before it uploaded an artifact. Linking the workflow run."
             echo "exists=false" >> "$GITHUB_OUTPUT"
           else
             echo "Expected exactly one unexpired Playwright artifact; found $count." >&2
             exit 1
           fi
       - name: Download Playwright artifacts
-        if: steps.artifact.outputs.exists == 'true'
+        if: steps.storage.outputs.configured == 'true' && steps.artifact.outputs.exists == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ steps.artifact.outputs.id }}
@@ -123,10 +142,11 @@ jobs:
             "$RUNNER_TEMP/playwright-artifacts.zip" "$RUNNER_TEMP/playwright-artifacts"
       - name: Publish trusted Playwright screenshot gallery
         id: publish
+        if: steps.storage.outputs.configured == 'true'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
+          AWS_DEFAULT_REGION: ${{ vars.S3_REGION || 'us-east-1' }}
           AWS_EC2_METADATA_DISABLED: "true"
           S3_BUCKET: ${{ vars.S3_BUCKET }}
           S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
@@ -147,6 +167,7 @@ jobs:
         run: bash scripts/publish-playwright-report.sh
       - name: Link screenshot gallery from pull request
         if: >-
+          steps.storage.outputs.configured == 'true' &&
           steps.pull_request.outputs.number != '' &&
           steps.publish.outputs.latest_pr_run == 'true'
         env:
@@ -191,4 +212,46 @@ jobs:
             gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input - <<<"$payload"
           else
             gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - <<<"$payload"
+          fi
+      - name: Link native Actions report and screenshots
+        if: steps.storage.outputs.configured != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_ID: ${{ steps.artifact.outputs.id }}
+          HAS_ARTIFACT: ${{ steps.artifact.outputs.exists }}
+          PLAYWRIGHT_RESULT: ${{ needs.result.outputs.result }}
+          PR_NUMBER: ${{ steps.pull_request.outputs.number }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          body_path="$RUNNER_TEMP/playwright-artifact-comment.md"
+          {
+            printf '<!-- orkbot-playwright-screenshots -->\n\n'
+            printf 'Playwright: **%s** for `%s`.\n\n' "$PLAYWRIGHT_RESULT" "$SHA"
+            if [[ "$HAS_ARTIFACT" == true ]]; then
+              [[ "$ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid artifact ID." >&2; exit 1; }
+              artifact_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts/$ARTIFACT_ID"
+              printf '[Download report and screenshots](%s)\n\n' "$artifact_url"
+            else
+              printf 'The test job ended before it uploaded a report artifact.\n\n'
+            fi
+            printf '[Workflow run](%s)\n' "$RUN_URL"
+          } > "$body_path"
+          cat "$body_path" >> "$GITHUB_STEP_SUMMARY"
+          if [[ -z "$PR_NUMBER" ]]; then exit 0; fi
+          [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid pull request number." >&2; exit 1; }
+          marker="<!-- orkbot-playwright-screenshots -->"
+          comment_id="$(gh api --paginate --slurp \
+            "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" | \
+            jq -r --arg marker "$marker" \
+              '[.[][] | select(.user.login == "github-actions[bot]" and (.body | contains($marker)))] | last | .id // empty')"
+          payload_path="$RUNNER_TEMP/playwright-artifact-comment.json"
+          jq -n --rawfile body "$body_path" '{body: $body}' > "$payload_path"
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" --input "$payload_path"
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input "$payload_path"
           fi

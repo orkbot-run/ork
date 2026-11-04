@@ -16,9 +16,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const extractor = path.join(repoRoot, "scripts/extract-playwright-artifacts.py");
-// Validate the archived upstream workflow definition.
+// Validate the active workflow definition.
 const workflow = readFileSync(
-  path.join(repoRoot, ".github/upstream-workflows/publish-playwright-report.yml"),
+  path.join(repoRoot, ".github/workflows/publish-playwright-report.yml"),
   "utf8",
 );
 const temporaryDirectories: string[] = [];

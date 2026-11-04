@@ -1,20 +1,80 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
-// Validate the archived upstream workflow definition.
+// Validate the active workflow definition.
 const workflow = readFileSync(
-  path.resolve(import.meta.dirname, "../../../.github/upstream-workflows/release-desktop.yml"),
+  path.resolve(import.meta.dirname, "../../../.github/workflows/release-desktop.yml"),
   "utf8",
 );
 
 const expression = (inner: string) => `\${{ ${inner} }}`;
 
+interface WorkflowStep {
+  id?: string;
+  uses?: string;
+  run?: string;
+  env?: Record<string, string>;
+  with?: Record<string, unknown>;
+}
+interface WorkflowJob {
+  if?: string;
+  needs?: string | string[];
+  environment?: string;
+  env?: Record<string, string>;
+  permissions?: Record<string, string>;
+  steps: WorkflowStep[];
+}
+const definition = parse(workflow) as {
+  on: { workflow_dispatch: { inputs: { signed_release: { default: boolean } } } };
+  permissions: Record<string, string>;
+  jobs: Record<string, WorkflowJob>;
+};
+const signedBuild = definition.jobs.build;
+const signedBuildText = signedBuild.steps
+  .map((step) => [step.uses, step.run].filter(Boolean).join("\n"))
+  .join("\n");
+
 describe("desktop release workflow", () => {
   it("cannot execute contributor pull-request code with release credentials", () => {
     expect(workflow).not.toMatch(/^\s*pull_request:/m);
     expect(workflow).toContain("permissions:\n  contents: read");
-    expect(workflow.match(/persist-credentials: false/g)).toHaveLength(3);
+    const checkouts = Object.values(definition.jobs)
+      .flatMap((job) => job.steps)
+      .filter((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkouts.length).toBeGreaterThan(0);
+    for (const step of checkouts) expect(step.with?.["persist-credentials"]).toBe(false);
+  });
+
+  it("defaults to diagnostic artifacts with updates off and no release publication", () => {
+    expect(definition.on.workflow_dispatch.inputs.signed_release.default).toBe(false);
+    const diagnostic = definition.jobs["diagnostic-build"];
+    expect(diagnostic.needs).toBe("configuration");
+    expect(diagnostic.if).toBe("needs.configuration.outputs.signed != 'true'");
+    expect(diagnostic.env?.ORKBOT_ENABLE_AUTO_UPDATE).toBe("0");
+    expect(diagnostic.env?.ORKBOT_LINUX_UPDATE_PUBLIC_KEY).toBe("");
+    expect(diagnostic.permissions?.contents ?? definition.permissions.contents).toBe("read");
+    const artifact = diagnostic.steps.find((step) =>
+      step.uses?.startsWith("actions/upload-artifact@"),
+    );
+    expect(artifact).toBeDefined();
+    expect(artifact?.with?.path).toContain("apps/desktop/out/*.AppImage");
+    expect(artifact?.with?.path).not.toContain(".yml");
+    expect(diagnostic.steps.map((step) => step.run ?? "").join("\n")).not.toMatch(
+      /gh release|--publish always/,
+    );
+  });
+
+  it("gates stable publication on explicit signed mode and completed signed builds", () => {
+    const mode = definition.jobs.configuration.steps.find((step) => step.id === "mode");
+    expect(mode?.env?.REQUESTED_SIGNED).toBe(expression("inputs.signed_release"));
+    expect(mode?.env?.TAG_SIGNED_ENABLED).toBe(expression("vars.DESKTOP_SIGNED_RELEASE_ENABLED"));
+    expect(definition.jobs.validate.needs).toBe("configuration");
+    expect(definition.jobs.validate.if).toBe("needs.configuration.outputs.signed == 'true'");
+    expect(signedBuild.needs).toBe("validate");
+    expect(definition.jobs.publish.needs).toEqual(["validate", "build"]);
+    expect(definition.jobs.publish.permissions?.contents).toBe("write");
   });
 
   it("pins every third-party action to an immutable commit", () => {
@@ -57,15 +117,16 @@ describe("desktop release workflow", () => {
     );
   });
 
-  it("always signs Windows with Azure Artifact Signing and has no unsigned fallback", () => {
-    expect(workflow).toContain('test -n "$AZURE_CLIENT_ID"');
-    expect(workflow).not.toMatch(/windows_signed|WINDOWS_SIGNING|unsigned/i);
+  it("requires Azure signing for Windows in the stable release path", () => {
+    expect(signedBuildText).toContain('test -n "$AZURE_CLIENT_ID"');
+    expect(signedBuildText).not.toMatch(/windows_signed|WINDOWS_SIGNING|\bunsigned\b/i);
+    expect(signedBuildText).not.toContain("-c.forceCodeSigning=false");
     expect(workflow).not.toContain("AZURE_CLIENT_SECRET");
     expect(workflow).toContain("environment: desktop-release");
     expect(workflow).toContain("id-token: write");
     expect(workflow).toContain("azure/login@");
     expect(workflow).toContain("TimeStamperCertificate");
-    expect(workflow.match(/--win --x64/g)).toHaveLength(1);
+    expect(signedBuildText.match(/--win --x64/g)).toHaveLength(1);
     for (const option of [
       "endpoint",
       "codeSigningAccountName",
@@ -81,7 +142,10 @@ describe("desktop release workflow", () => {
     expect(workflow).toContain(
       `include='[{"os":"macos-26","artifact":"macos"},{"os":"ubuntu-24.04","artifact":"linux"},{"os":"windows-2022","artifact":"windows"}]'`,
     );
-    expect(workflow.split("windows-2022")).toHaveLength(2);
+    const platformSelection = definition.jobs.validate.steps.find(
+      (step) => step.id === "platforms",
+    );
+    expect(platformSelection?.run?.match(/windows-2022/g)).toHaveLength(1);
     expect(workflow).toContain("test -f release-artifacts/latest.yml");
     expect(workflow).toContain("compgen -G 'release-artifacts/*.exe' >/dev/null");
   });

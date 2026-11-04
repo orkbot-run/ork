@@ -1,0 +1,168 @@
+name: release-mobile
+
+# Diagnostic Android artifacts need only GitHub. Production releases use explicitly configured
+# Ork Expo and store accounts.
+on:
+  workflow_dispatch:
+    inputs:
+      submit_ios:
+        description: Build and submit iOS using configured Ork Expo and Apple accounts
+        type: boolean
+        default: false
+      android_mode:
+        description: Android build mode
+        type: choice
+        options: [diagnostic, eas]
+        default: diagnostic
+      notes:
+        description: What's New on the App Store
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-mobile
+  cancel-in-progress: false
+
+jobs:
+  configuration:
+    name: Check mobile release configuration
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report available mobile release modes
+        shell: bash
+        env:
+          SUBMIT_IOS: ${{ inputs.submit_ios }}
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+          EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          echo "Android diagnostic builds run on GitHub without Expo or store credentials. EAS production builds require the Ork Expo project and signing configuration." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$SUBMIT_IOS" != true ]]; then
+            echo "iOS App Store submission was not requested. It requires an Ork Expo project and Apple Developer/App Store Connect credentials." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          [[ "$RELEASE_REF" == refs/heads/main ]] || { echo "iOS submission must run from main." >&2; exit 1; }
+          missing=()
+          for name in EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL ASC_APP_ID ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY RELEASE_NOTES; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "iOS submission requires configured Ork credentials, variables, and release notes: ${missing[*]}" >&2
+            exit 1
+          fi
+          [[ "$EXPO_PROJECT_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || { echo "EXPO_PROJECT_ID must be the Ork project's UUID." >&2; exit 1; }
+          [[ "$EXPO_PUBLIC_API_URL" == https://* ]] || { echo "EXPO_PUBLIC_API_URL must use HTTPS for production." >&2; exit 1; }
+
+  ios:
+    name: Build iOS and submit it for App Store review
+    needs: configuration
+    if: github.ref == 'refs/heads/main' && inputs.submit_ios
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Bind the runner checkout to the configured Ork Expo project
+        env:
+          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
+        run: |
+          jq --arg project "$EXPO_PROJECT_ID" --arg owner "$EXPO_OWNER" \
+            '.expo.owner = $owner | .expo.extra.eas.projectId = $project | .expo.updates.enabled = true | .expo.updates.url = ("https://u.expo.dev/" + $project)' \
+            apps/mobile/app.json > "$RUNNER_TEMP/ork-mobile-app.json"
+          cp "$RUNNER_TEMP/ork-mobile-app.json" apps/mobile/app.json
+          jq --arg api "$EXPO_PUBLIC_API_URL" '.build.production.env.EXPO_PUBLIC_API_URL = $api' \
+            apps/mobile/eas.json > "$RUNNER_TEMP/ork-mobile-eas.json"
+          cp "$RUNNER_TEMP/ork-mobile-eas.json" apps/mobile/eas.json
+
+      - name: Require release secrets
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          missing=()
+          for name in EXPO_TOKEN ASC_APP_ID ASC_KEY_ID ASC_ISSUER_ID ASC_PRIVATE_KEY; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "Add these repository secrets (see docs/mobile-release.md): ${missing[*]}" >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Set up Expo
+        uses: expo/expo-github-action@eab7a230208c952974db8c3245cfd78402c7b385 # v9
+        with:
+          eas-version: latest
+          packager: pnpm
+          token: ${{ secrets.EXPO_TOKEN }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Verify mobile project
+        run: pnpm --filter @orkbot/mobile check
+
+      - name: Build iOS on EAS
+        id: build
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          eas build --platform ios --profile production --non-interactive --wait --json > "$RUNNER_TEMP/build.json"
+          {
+            echo "id=$(jq -r '.[0].id' "$RUNNER_TEMP/build.json")"
+            echo "version=$(jq -r '.[0].appVersion' "$RUNNER_TEMP/build.json")"
+            echo "build_number=$(jq -r '.[0].appBuildVersion' "$RUNNER_TEMP/build.json")"
+          } >> "$GITHUB_OUTPUT"
+
+      # The App Store app ID stays out of the public eas.json; it is added only for this upload.
+      - name: Upload to App Store Connect
+        working-directory: apps/mobile
+        env:
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          BUILD_ID: ${{ steps.build.outputs.id }}
+        run: |
+          set -euo pipefail
+          jq --arg id "$ASC_APP_ID" '.submit.production.ios.ascAppId = $id' eas.json > "$RUNNER_TEMP/eas.json"
+          cp "$RUNNER_TEMP/eas.json" eas.json
+          eas submit --platform ios --profile production --id "$BUILD_ID" --non-interactive --wait
+
+      - name: Submit for App Store review
+        env:
+          ASC_APP_ID: ${{ secrets.ASC_APP_ID }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          APP_VERSION: ${{ steps.build.outputs.version }}
+          BUILD_NUMBER: ${{ steps.build.outputs.build_number }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+        run: node .github/scripts/app-store-review.mjs
+
+  android:
+    name: Android APK
+    needs: configuration
+    uses: ./.github/workflows/release-android-apk.yml
+    with:
+      mode: ${{ inputs.android_mode || 'diagnostic' }}
+    permissions:
+      contents: write
+    secrets: inherit

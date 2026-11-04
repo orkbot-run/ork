@@ -29,7 +29,7 @@ Stop development with Ctrl+C. `corepack pnpm db:stop` stops PostgreSQL and keeps
 
 The product name is Ork. Workspace packages use `@orkbot/*`, configuration uses the `ORKBOT_` prefix, and the web and native clients use Ork identities. Published images, store listings, signing credentials, and hosted services require their own release configuration. Use the source commands above for local development.
 
-Imported release workflows are saved under `.github/upstream-workflows/`, where GitHub does not execute them, and use Ork identifiers for future release configuration. The active workflow runs verification only.
+GitHub Actions workflows are active under `.github/workflows/`. CI, test reports, image publishing, and diagnostic native builds use GitHub infrastructure. [GitHub Actions configuration](./docs/github-actions.md) lists the accounts and credentials needed for signed releases, store submissions, OTA, deployment, and optional integrations.
 
 Keep `origin` pointed at `orkbot-run/ork` and `upstream` at the original source repository:
 

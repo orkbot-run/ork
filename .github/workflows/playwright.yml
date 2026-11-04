@@ -44,8 +44,8 @@ jobs:
   shard:
     name: Web E2E (${{ matrix.shard }}/${{ inputs.nightly && 4 || 2 }})
     if: ${{ !inputs.skip }}
-    runs-on: incredibuild-ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -102,7 +102,7 @@ jobs:
     name: Web E2E
     needs: shard
     if: ${{ !cancelled() && !inputs.skip }}
-    runs-on: incredibuild-ubuntu-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
       group: ${{ inputs.publish_report && 'playwright-publication' || format('playwright-{0}', github.run_id) }}
@@ -157,7 +157,7 @@ jobs:
           PLAYWRIGHT_HTML_OPEN: never
         run: pnpm --filter @orkbot/web exec playwright merge-reports --reporter html "$GITHUB_WORKSPACE/blob-report"
       - name: Record Playwright result
-        if: ${{ !cancelled() && inputs.upload_artifacts }}
+        if: ${{ !cancelled() && (inputs.upload_artifacts || inputs.publish_report || inputs.nightly || github.event_name == 'workflow_dispatch') }}
         env:
           PLAYWRIGHT_RESULT: ${{ needs.shard.result == 'success' && job.status == 'success' && 'success' || 'failure' }}
         run: |
@@ -168,7 +168,7 @@ jobs:
             printf 'failure\n' > test-report/e2e/outcome.txt
           fi
       - name: Upload Playwright artifacts
-        if: ${{ !cancelled() && inputs.upload_artifacts }}
+        if: ${{ !cancelled() && (inputs.upload_artifacts || inputs.publish_report || inputs.nightly || github.event_name == 'workflow_dispatch') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: playwright-artifacts-${{ github.run_id }}-${{ github.run_attempt }}
@@ -179,12 +179,36 @@ jobs:
             test-report/e2e
           retention-days: 7
           if-no-files-found: warn
-      - name: Publish Playwright visual report
+      - name: Check visual report publication configuration
+        id: publication
         if: ${{ !cancelled() && inputs.publish_report }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ${{ vars.S3_REGION }}
+          S3_BUCKET: ${{ vars.S3_BUCKET }}
+          S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
+          PLAYWRIGHT_PUBLIC_BASE_URL: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          configured=true
+          for name in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY S3_BUCKET S3_ENDPOINT PLAYWRIGHT_PUBLIC_BASE_URL; do
+            if [[ -z "${!name}" ]]; then configured=false; fi
+          done
+          echo "configured=$configured" >> "$GITHUB_OUTPUT"
+          if [[ "$configured" != true ]]; then
+            {
+              echo "### Playwright report"
+              echo
+              echo "External report storage is not configured. Reports and screenshots are retained in this run's GitHub artifacts."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Publish Playwright visual report
+        if: ${{ !cancelled() && inputs.publish_report && steps.publication.outputs.configured == 'true' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.S3_REGION || 'us-east-1' }}
           AWS_EC2_METADATA_DISABLED: "true"
           S3_BUCKET: ${{ vars.S3_BUCKET }}
           S3_ENDPOINT: ${{ vars.S3_ENDPOINT }}
