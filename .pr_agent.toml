@@ -1,3 +1,7 @@
-# Qodo is the default reviewer (see .github/workflows/review-bot.yml).
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# Modified to remove the retired fallback workflow reference. Inherited material remains Apache-2.0.
+
+# GitHub App review settings.
 [github_app]
 handle_push_trigger = true
