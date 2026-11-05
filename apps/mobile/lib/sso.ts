@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
+
 import { authHeaders, clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import { t } from "./i18n";
 import {
@@ -91,7 +95,11 @@ export async function continueWithSso(
     try {
       if (action === "sign-in" && !(await clearSpace()))
         throw new Error(t("Could not save your sign-in on this device. Try again."));
-      return await replaceSessionTokenIfCurrent(generation, token, action === "reauthenticate");
+      return await replaceSessionTokenIfCurrent(
+        generation,
+        token,
+        action === "reauthenticate" ? "reauthentication" : "sign_in",
+      );
     } catch (error) {
       throw new Error(sessionSaveErrorText(error));
     }

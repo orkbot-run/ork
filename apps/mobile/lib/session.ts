@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
+
 import * as SecureStore from "expo-secure-store";
 import {
   invalidateArtifactCacheSession,
@@ -9,6 +13,14 @@ import { clearNetworkCache } from "./network-cache";
 import { forgetReferrals } from "./referral";
 import { rememberSignedIn } from "./returning-user";
 import { clearFailedSends } from "./thread-feedback";
+
+type SessionClearReason = "session_rejected" | "logout" | "account_switch";
+type SessionSaveReason = "sign_in" | "reauthentication";
+type SessionChangeReason =
+  | SessionClearReason
+  | SessionSaveReason
+  | "session_restore"
+  | "password_change";
 
 const SESSION_KEY = "orkbot.session_token";
 const INTEGRATIONS_SCOPE_KEY = "orkbot.integrations-scope";
@@ -40,22 +52,24 @@ export function registerSessionDiskCache(
   sessionDiskCaches.add(clear);
 }
 
-/** `keepUnsent` is for a new token of the same account and server; its unsent messages stay. */
-function invalidateSessionCaches(keepUnsent = false, sameAccount = keepUnsent): Promise<void> {
+function invalidateSessionCaches(reason: SessionChangeReason): Promise<void> {
   scopeInvalidated = true;
-  if (!keepUnsent) clearFailedSends();
+  if (reason !== "session_rejected" && reason !== "password_change") clearFailedSends();
   clearNetworkCache();
   // Another account must never see, or share, the previous owner's invite link.
   forgetReferrals();
   for (const clear of sessionDiskCaches) {
     try {
       // Optional caches must never hold up credential writes, even if their storage stalls.
-      void Promise.resolve(clear(sameAccount)).catch(() => undefined);
+      void Promise.resolve(
+        clear(reason === "reauthentication" || reason === "password_change"),
+      ).catch(() => undefined);
     } catch {
       // A failed disk wipe must not block the session change or the other wipes.
     }
   }
-  const clearingArtifacts = keepUnsent ? undefined : invalidateArtifactCacheSession();
+  const clearingArtifacts =
+    reason === "password_change" ? undefined : invalidateArtifactCacheSession();
   return enqueueScopeWrite(async () => {
     await clearingArtifacts;
     try {
@@ -166,13 +180,13 @@ export async function loadSessionToken() {
   return snapshot.ok ? snapshot.value : "";
 }
 
-/** `sameAccount` requires a verified replacement on the current server. */
-export async function saveSessionToken(token: string, sameAccount = false) {
+/** Reauthentication requires a verified replacement on the current server for the same account. */
+export async function saveSessionToken(token: string, reason: SessionSaveReason = "sign_in") {
   const generation = ++sessionGeneration;
   publishSessionGeneration(false);
   sessionInvalidated = true;
   sessionFallback = undefined;
-  const clearingScope = invalidateSessionCaches(false, sameAccount);
+  const clearingScope = invalidateSessionCaches(reason);
   // Marked before the token lands, so an account deletion that clears it afterwards also clears the mark.
   await rememberSignedIn();
   await enqueueScopeWrite(() => SecureStore.setItemAsync(SESSION_KEY, token));
@@ -184,12 +198,12 @@ export async function saveSessionToken(token: string, sameAccount = false) {
 }
 
 /** Clears the session. Returns false only when SecureStore could neither delete nor overwrite. */
-export async function clearSessionToken(): Promise<boolean> {
+export async function clearSessionToken(reason: SessionClearReason = "logout"): Promise<boolean> {
   const generation = ++sessionGeneration;
   publishSessionGeneration(false);
   sessionInvalidated = true;
   sessionFallback = undefined;
-  const clearingScope = invalidateSessionCaches();
+  const clearingScope = invalidateSessionCaches(reason);
   const clearingToken = clearStoredSessionToken(generation);
   await stopLiveNotifications(true).catch(() => undefined);
   const tokenCleared = await clearingToken;
@@ -224,7 +238,7 @@ async function clearStoredSessionToken(generation: number): Promise<boolean> {
 export async function restoreSessionToken(token: string) {
   const generation = ++sessionGeneration;
   publishSessionGeneration(false);
-  const clearingScope = invalidateSessionCaches();
+  const clearingScope = invalidateSessionCaches("session_restore");
   if (!token) {
     await clearingScope;
     if (generation !== sessionGeneration) return;
@@ -251,11 +265,11 @@ export async function restoreSessionToken(token: string) {
 export async function replaceSessionTokenIfCurrent(
   generation: number,
   token: string,
-  sameAccount = false,
+  reason: SessionSaveReason = "sign_in",
 ): Promise<boolean> {
   if (generation !== sessionGeneration) return false;
   try {
-    await saveSessionToken(token, sameAccount);
+    await saveSessionToken(token, reason);
   } catch (error) {
     // The server already revoked the stored token; keep the replacement in memory unless
     // something else changed the session meanwhile, and still report that it was not saved.
@@ -290,7 +304,7 @@ export async function rotateSessionTokenIfCurrent(
   sessionInvalidated = true;
   sessionFallback = undefined;
   unsavedRotation = undefined;
-  const clearingScope = invalidateSessionCaches(true);
+  const clearingScope = invalidateSessionCaches("password_change");
   try {
     await rotateArtifactCacheSession(previous, token);
     await saveRotatedToken(rotation, token);

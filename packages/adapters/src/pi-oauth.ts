@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import { randomBytes, randomUUID } from "node:crypto";
 import type {
   AuthInteraction,
@@ -31,7 +34,9 @@ import {
 import type { PrismaClient } from "@orkbot/db";
 import { retireModelCredential, runAsSystem, runAsTenant } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { oauthRefreshSignal, withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import { createManualAnthropicOAuthLogin } from "./pi-anthropic-oauth.js";
+import { holdSecretNotifications } from "./secret-store-factory.js";
 
 export const CHATGPT_OAUTH_PROVIDER = "openai-codex";
 export const COPILOT_OAUTH_PROVIDER = "github-copilot";
@@ -670,18 +675,18 @@ type ResolveModelOpts = {
   now?: number;
   oauth?: Pick<OAuthAuth, "refresh" | "toAuth">;
   signal?: AbortSignal;
+  forceRefresh?: boolean;
+  allowRefresh?: boolean;
 };
 
-export async function resolveModelAuth(
+async function refreshModelAuth(
   plaintext: string,
   provider: string,
   opts?: ResolveModelOpts,
-): Promise<{ secret: Exclude<StoredModelSecret, { reconnectRequired: true }>; apiKey: string }> {
+): Promise<Exclude<StoredModelSecret, { reconnectRequired: true }>> {
   const parsed = parseModelSecret(plaintext);
-  if (parsed.kind === "api_key") return { secret: parsed, apiKey: parsed.key };
-  if (parsed.kind === "openai_compatible") {
-    return { secret: parsed, apiKey: parsed.apiKey ?? "" };
-  }
+  if (parsed.kind === "api_key") return parsed;
+  if (parsed.kind === "openai_compatible") return parsed;
   if (parsed.reconnectRequired) {
     throw new RetiredModelCredentialError(OAUTH_RECONNECT_REQUIRED_ERROR);
   }
@@ -692,9 +697,14 @@ export async function resolveModelAuth(
   const now = opts?.now ?? Date.now();
   let credential = parsed.credential;
   const maxTokens = parsed.maxTokens;
-  if (credential.expires - now < MIN_OAUTH_VALIDITY_MS) {
+  if (
+    opts?.allowRefresh !== false &&
+    (opts?.forceRefresh || credential.expires - now < MIN_OAUTH_VALIDITY_MS)
+  ) {
     try {
-      credential = await oauth.refresh(credential, opts?.signal ?? new AbortController().signal);
+      // Cancellation may stop the wait, but an issued rotation must still be saved.
+      opts?.signal?.throwIfAborted();
+      credential = await oauth.refresh(credential, oauthRefreshSignal());
     } catch (error) {
       const marker = terminalOAuthRefreshErrorMarker(error);
       if (marker && opts?.retire) {
@@ -748,18 +758,36 @@ export async function resolveModelAuth(
       }),
     );
   }
-  const auth = await oauth.toAuth(credential);
+  return {
+    kind: "oauth",
+    credential,
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+  };
+}
+
+/** Derive request authentication after any rotated token has committed. */
+async function modelAuth(
+  secret: Exclude<StoredModelSecret, { reconnectRequired: true }>,
+  provider: string,
+  opts?: ResolveModelOpts,
+): Promise<{ secret: typeof secret; apiKey: string }> {
+  if (secret.kind === "api_key") return { secret, apiKey: secret.key };
+  if (secret.kind === "openai_compatible") return { secret, apiKey: secret.apiKey ?? "" };
+  const oauth = opts?.oauth ?? loadProviderOAuth(provider);
+  if (!oauth) throw new Error(`No OAuth handler for ${provider}. Sign in again from onboarding.`);
+  const auth = await oauth.toAuth(secret.credential);
   if (!auth.apiKey) {
     throw new Error("Subscription sign-in did not produce a usable token. Sign in again.");
   }
-  return {
-    secret: {
-      kind: "oauth",
-      credential,
-      ...(maxTokens !== undefined ? { maxTokens } : {}),
-    },
-    apiKey: auth.apiKey,
-  };
+  return { secret, apiKey: auth.apiKey };
+}
+
+export async function resolveModelAuth(
+  plaintext: string,
+  provider: string,
+  opts?: ResolveModelOpts,
+): Promise<{ secret: Exclude<StoredModelSecret, { reconnectRequired: true }>; apiKey: string }> {
+  return modelAuth(await refreshModelAuth(plaintext, provider, opts), provider, opts);
 }
 
 export async function resolveModelApiKey(
@@ -861,6 +889,7 @@ export function persistStoredModelSecret(
   secretStore: Pick<SecretStore, "put">,
   scope: { userId: string; spaceId: string },
   secretId: string,
+  expectedCiphertext?: string,
 ): (next: string) => Promise<void> {
   return async (next) => {
     const stored = await secretStore.put(
@@ -874,51 +903,171 @@ export function persistStoredModelSecret(
       },
       { recordId: secretId },
     );
-    await prisma.secret.update({
-      where: { id: secretId },
-      data: { ciphertext: stored.ciphertext },
-    });
+    if (expectedCiphertext !== undefined) {
+      const written = await prisma.secret.updateMany({
+        where: {
+          id: secretId,
+          userId: scope.userId,
+          spaceId: null,
+          ciphertext: expectedCiphertext,
+        },
+        data: { ciphertext: stored.ciphertext },
+      });
+      if (written.count !== 1) throw new Error("Model credentials changed during refresh; retry");
+    } else {
+      await prisma.secret.update({
+        where: { id: secretId },
+        data: { ciphertext: stored.ciphertext },
+      });
+    }
   };
 }
 
-/**
- * `resolveModelAuth` refreshes only a near-expiry credential, so a kick queued
- * behind a run's own refresh is a no-op once the stored token is fresh.
- */
+/** Resolve the latest stored credential while serializing only refreshes for one user/provider. */
+export async function resolveStoredModelAuth(
+  prisma: Pick<PrismaClient, "$transaction" | "secret">,
+  secretStore: Pick<SecretStore, "load" | "put">,
+  scope: { userId: string; spaceId: string },
+  secretId: string,
+  provider: string,
+  opts?: ResolveModelOpts & {
+    plaintext?: string;
+    modify?: (current: OAuthCredential) => Promise<OAuthCredential | undefined>;
+  },
+): Promise<Awaited<ReturnType<typeof resolveModelAuth>> | undefined> {
+  if (opts?.plaintext !== undefined && !opts.modify) {
+    const parsed = parseModelSecret(opts.plaintext);
+    if (
+      parsed.kind !== "oauth" ||
+      parsed.reconnectRequired ||
+      parsed.credential.expires - (opts.now ?? Date.now()) >= MIN_OAUTH_VALIDITY_MS
+    ) {
+      return resolveModelAuth(opts.plaintext, provider, opts);
+    }
+  }
+  let rotated: { plaintext: string; previous: string } | undefined;
+  let retirement:
+    | { reason: ModelCredentialRetireReason; detail?: string; failed?: ModelCredentialFailedState }
+    | undefined;
+  let recovering = false;
+  let replacementObserved = false;
+  let observedPlaintext: string | undefined;
+  const run = () =>
+    withOAuthRefreshLock(
+      prisma,
+      "model-oauth-refresh",
+      JSON.stringify([scope.userId, canonicalPiProviderId(provider)]),
+      async (tx) => {
+        const row = await tx.secret.findFirst({
+          where: { id: secretId, userId: scope.userId, spaceId: null },
+          select: { id: true, ciphertext: true },
+        });
+        if (!row) return undefined;
+        if (recovering && rotated && row.ciphertext !== rotated.previous)
+          replacementObserved = true;
+        let plaintext = await secretStore.load(row.ciphertext, row.id);
+        if (recovering) observedPlaintext = plaintext;
+        if (rotated && row.ciphertext === rotated.previous) {
+          await persistStoredModelSecret(
+            tx,
+            secretStore,
+            scope,
+            secretId,
+            row.ciphertext,
+          )(rotated.plaintext);
+          plaintext = rotated.plaintext;
+        }
+        const oauth = opts?.oauth ?? loadProviderOAuth(provider);
+        let modified = false;
+        return refreshModelAuth(plaintext, provider, {
+          ...opts,
+          forceRefresh: opts?.modify ? !recovering : false,
+          allowRefresh: !recovering,
+          ...(opts?.modify && oauth
+            ? {
+                oauth: {
+                  toAuth: (current) => oauth.toAuth(current),
+                  refresh: async (current) => {
+                    const next = await opts.modify!(current);
+                    modified = next !== undefined;
+                    return next ?? current;
+                  },
+                },
+              }
+            : {}),
+          persist: async (next) => {
+            if (opts?.modify && !modified) return;
+            // Record the issued token before encryption or database writes can fail.
+            rotated = { plaintext: next, previous: row.ciphertext };
+            await persistStoredModelSecret(tx, secretStore, scope, secretId, row.ciphertext)(next);
+          },
+          retire: opts?.retire
+            ? async (reason, detail, failed) => {
+                // Retirement owns its own transaction and must run after releasing this one.
+                retirement = { reason, detail, failed };
+                return false;
+              }
+            : undefined,
+        });
+      },
+    );
+  const secret = await holdSecretNotifications(async () => {
+    try {
+      return await run();
+    } catch (error) {
+      if (retirement && opts?.retire) {
+        const retired = await opts.retire(retirement.reason, retirement.detail, retirement.failed);
+        if (retired) {
+          throw new RetiredModelCredentialError(
+            retirement.reason === "account-changed"
+              ? OAUTH_ACCOUNT_CHANGED_ERROR
+              : OAUTH_RECONNECT_REQUIRED_ERROR,
+          );
+        }
+        throw error;
+      }
+      if (!rotated) throw error;
+      // A late commit or store error must not leave the single-use refresh token spent.
+      // Rereading under the same lock preserves a concurrent replacement or deletion.
+      getLogger().warn("Model OAuth refresh commit failed; storing the rotated credential again");
+      recovering = true;
+      try {
+        return await run();
+      } catch (fallbackError) {
+        // Respect any replacement we could observe. A failure to read a different
+        // secret must not revive the credential a reconnect or disconnect replaced.
+        if (replacementObserved && observedPlaintext === undefined) throw fallbackError;
+        const kept = replacementObserved ? observedPlaintext! : rotated.plaintext;
+        return refreshModelAuth(kept, provider, {
+          ...opts,
+          forceRefresh: false,
+          allowRefresh: false,
+          persist: undefined,
+          retire: undefined,
+        });
+      }
+    }
+  });
+  return secret ? modelAuth(secret, provider, opts) : undefined;
+}
+
+/** A queued refresh adopts any token another process already rotated. */
 export async function refreshExpiredModelCredential(
-  prisma: Pick<PrismaClient, "secret">,
+  prisma: Pick<PrismaClient, "$transaction" | "secret">,
   secretStore: Pick<SecretStore, "load" | "put">,
   scope: { userId: string; spaceId: string },
   secretId: string,
   provider: string,
   opts?: Pick<ResolveModelOpts, "oauth" | "signal" | "now">,
 ): Promise<void> {
-  await withModelCredentialLock(secretId, async () => {
-    const row = await prisma.secret.findFirst({
-      where: { id: secretId, userId: scope.userId, spaceId: null },
-      select: { id: true, ciphertext: true },
-    });
-    if (!row) return;
-    let plaintext: string;
-    try {
-      plaintext = await secretStore.load(row.ciphertext, row.id);
-      const parsed = parseModelSecret(plaintext);
-      if (parsed.kind !== "oauth" || parsed.reconnectRequired) return;
-    } catch {
-      return;
-    }
-    await resolveModelAuth(plaintext, provider, {
-      ...opts,
-      persist: persistStoredModelSecret(prisma, secretStore, scope, row.id),
-    });
-  });
+  await resolveStoredModelAuth(prisma, secretStore, scope, secretId, provider, opts);
 }
 
 const credentialRefreshKicks = new Map<string, Promise<void>>();
 
 /** Concurrent kicks for one credential collapse into a single refresh. */
 export function kickModelCredentialRefresh(
-  prisma: Pick<PrismaClient, "secret">,
+  prisma: Pick<PrismaClient, "$transaction" | "secret">,
   secretStore: Pick<SecretStore, "load" | "put">,
   scope: { userId: string; spaceId: string },
   secretId: string,

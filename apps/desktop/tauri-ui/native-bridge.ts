@@ -17,6 +17,7 @@ declare const config: {
   proof: string;
   platform: string;
   speech: boolean;
+  computer: boolean;
   label: string;
 };
 
@@ -71,6 +72,16 @@ if (
     },
     platform: config.platform,
     nativeWindowFrame: config.platform !== "darwin",
+    ...(config.computer
+      ? {
+          computer: {
+            managesHostChoice: true,
+            requestAccess: () => call<boolean>("computer.requestAccess"),
+            revokeAccess: () => call<void>("computer.revokeAccess"),
+            onConfigure: (listener: () => void) => subscribe("computer", listener),
+          },
+        }
+      : {}),
     badge: { set: (count) => call<boolean>("badge.set", { count }) },
     window: {
       close: () => call("window.close"),

@@ -39,6 +39,10 @@ pub enum Command {
     PairingSync,
     #[serde(rename = "pairing.clear")]
     PairingClear,
+    #[serde(rename = "computer.requestAccess")]
+    ComputerRequestAccess,
+    #[serde(rename = "computer.revokeAccess")]
+    ComputerRevokeAccess,
     #[serde(rename = "window.state")]
     WindowState,
     #[serde(rename = "window.close")]
@@ -259,12 +263,19 @@ pub fn grant<R: tauri::Runtime>(
     )
 }
 
-pub fn initialization_script(label: &str, origin: &Url, proof: &str, speech: bool) -> String {
+pub fn initialization_script(
+    label: &str,
+    origin: &Url,
+    proof: &str,
+    speech: bool,
+    computer: bool,
+) -> String {
     let config = serde_json::json!({
         "origin": origin.origin().ascii_serialization(),
         "proof": proof,
         "platform": if cfg!(target_os = "macos") { "darwin" } else if cfg!(windows) { "win32" } else { "linux" },
         "speech": speech,
+        "computer": computer,
         "label": label,
     });
     format!(
@@ -859,7 +870,7 @@ mod tests {
         std::fs::write(
             directory.path().join("payload.json"),
             serde_json::to_vec(&serde_json::json!([
-                initialization_script("server-1", &origin, &"a".repeat(64), false),
+                initialization_script("server-1", &origin, &"a".repeat(64), false, false),
                 event_script(&stale, "menu", "private stale payload"),
                 event_script(&current, "menu", "find")
             ]))

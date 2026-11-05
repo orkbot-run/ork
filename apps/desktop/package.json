@@ -19,7 +19,7 @@
     "release": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --publish never",
     "tauri:prepare": "node scripts/prepare-tauri.mjs",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "tsx scripts/build-tauri-passkeys.ts",
     "tauri:test": "pnpm tauri:prepare && cargo test --locked --manifest-path src-tauri/Cargo.toml",
     "tauri:check": "pnpm tauri:prepare && tsc --ignoreConfig --noEmit --strict --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --lib es2022,dom tauri-ui/setup.ts tauri-ui/native-bridge.ts && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings"
   },

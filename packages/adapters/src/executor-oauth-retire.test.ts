@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors for coordinated OAuth refresh tests. See LICENSE.md.
+
 import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRunExecutor } from "./executor.js";
@@ -48,6 +52,7 @@ function oauthPrisma() {
     ],
   };
   const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(1),
     userModelCredential: {
       findFirst: vi.fn(
         async (args: { where: { id: string; userId: string } }) =>
@@ -254,8 +259,8 @@ describe("OAuth credential retirement on terminal refresh rejection", () => {
   });
 
   it("keeps a credential a concurrent refresh already rewrote", async () => {
-    // The refresh raced a sibling run that persisted rotated tokens into the
-    // same secret row; the stale failure must not delete the newer material.
+    // A sibling run rotated the secret between the initial read and taking the
+    // database lock. Reuse the reread token without contacting the provider.
     const fetchMock = vi.fn(
       async () =>
         new Response(JSON.stringify({ error: "invalid_grant", error_description: "gone" }), {
@@ -270,20 +275,18 @@ describe("OAuth credential retirement on terminal refresh rejection", () => {
       .mockImplementation(() => rotatedOAuthPlaintext());
     const { executor, secretStore } = oauthExecutor(prisma, load);
 
-    await expect(executor.resolveConnectedModel(SCOPE, PROVIDER, MODEL_ID)).rejects.toThrow(
-      /invalid_grant/,
-    );
+    await expect(executor.resolveConnectedModel(SCOPE, PROVIDER, MODEL_ID)).resolves.toMatchObject({
+      oauth: { credential: { access: "rotated-access" } },
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
 
     expect(state.credentials).toHaveLength(1);
     expect(state.preferences).toHaveLength(1);
     expect(state.secrets).toEqual([
       expect.objectContaining({ id: "secret-codex", ciphertext: "cipher-codex" }),
     ]);
-    // The marker sealed for the skipped replacement is not left behind.
-    expect(secretStore.delete).toHaveBeenCalledExactlyOnceWith(
-      expect.stringMatching(/^sealed:.*reconnectRequired/),
-      "secret-codex",
-    );
+    expect(secretStore.put).not.toHaveBeenCalled();
+    expect(secretStore.delete).not.toHaveBeenCalled();
     const auth = await modelCredentialAuthKindsForSpace(
       prisma,
       { load: vi.fn(async () => rotatedOAuthPlaintext()) },

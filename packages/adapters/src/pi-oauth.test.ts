@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors for coordinated OAuth refresh tests. See LICENSE.md.
+
 import type { Credential, OAuthCredential } from "@earendil-works/pi-ai";
 import type { ModelCredentialFailedState, ModelCredentialRetireReason } from "@orkbot/adapter-kit";
 import { isModelCredentialRejected } from "@orkbot/adapter-kit";
@@ -22,6 +26,7 @@ import {
   refreshExpiredModelCredential,
   resolveModelApiKey,
   resolveModelAuth,
+  resolveStoredModelAuth,
   secretValuesToRedact,
   serializeModelSecret,
   terminalOAuthRefreshErrorMarker,
@@ -1005,11 +1010,25 @@ describe("refreshExpiredModelCredential", () => {
 
   function secretRow(initial: string) {
     let current = initial;
-    const prisma = {
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
       secret: {
         findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "cipher" })),
         update: vi.fn(async () => ({})),
+        updateMany: vi.fn(async () => ({ count: 1 })),
       },
+    };
+    let tail = Promise.resolve();
+    const prisma = {
+      ...tx,
+      $transaction: vi.fn((callback: (client: typeof tx) => Promise<unknown>) => {
+        const operation = tail.then(() => callback(tx));
+        tail = operation.then(
+          () => undefined,
+          () => undefined,
+        );
+        return operation;
+      }),
     } as unknown as PrismaClient;
     const secretStore = {
       load: vi.fn(async () => current),
@@ -1025,7 +1044,7 @@ describe("refreshExpiredModelCredential", () => {
     return {
       prisma,
       secretStore,
-      update: prisma.secret.update as unknown as ReturnType<typeof vi.fn>,
+      update: prisma.secret.updateMany as unknown as ReturnType<typeof vi.fn>,
     };
   }
 
@@ -1057,7 +1076,7 @@ describe("refreshExpiredModelCredential", () => {
     expect(oauth.refresh).toHaveBeenCalledTimes(1);
     expect(secretStore.put).toHaveBeenCalledTimes(1);
     expect(update).toHaveBeenCalledWith({
-      where: { id: "secret-1" },
+      where: { id: "secret-1", userId: scope.userId, spaceId: null, ciphertext: "cipher" },
       data: { ciphertext: expect.any(String) },
     });
 
@@ -1154,11 +1173,17 @@ describe("kickModelCredentialRefresh", () => {
       kind: "oauth",
       credential: oauthCred({ access: "old", expires: 1 }),
     });
-    const prisma = {
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
       secret: {
         findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "cipher" })),
         update: vi.fn(async () => ({})),
+        updateMany: vi.fn(async () => ({ count: 1 })),
       },
+    };
+    const prisma = {
+      ...tx,
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
     } as unknown as PrismaClient;
     const secretStore = {
       load: vi.fn(async () => current),
@@ -2355,5 +2380,361 @@ describe("PiOAuthLogins hand-off between API processes", () => {
     await logins.begin({ ...member, provider: CHATGPT_OAUTH_PROVIDER });
     expect(rows.size).toBe(0);
     logins.abortAll();
+  });
+});
+
+describe("resolveStoredModelAuth database coordination", () => {
+  const scope = { userId: "user-locked", spaceId: "space-locked" };
+  const expired = oauthCred({ access: "old-access", refresh: "old-refresh", expires: 1 });
+  const fresh = () =>
+    oauthCred({ access: "new-access", refresh: "new-refresh", expires: Date.now() + 3_600_000 });
+  const plaintext = (credential: OAuthCredential) =>
+    serializeModelSecret({ kind: "oauth", credential, maxTokens: 4096 });
+
+  function database(initial: OAuthCredential = expired) {
+    const material = new Map([["original", plaintext(initial)]]);
+    let row: { id: string; ciphertext: string } | null = {
+      id: "secret-locked",
+      ciphertext: "original",
+    };
+    let transactionActive = false;
+    let sequence = 0;
+    let failCommit = false;
+    let failPut = false;
+    let afterFailure: (() => void) | undefined;
+    const update = vi.fn(async ({ data }: { data: { ciphertext: string } }) => {
+      if (!transactionActive) throw new Error("Token must be written on the lock transaction");
+      if (row) row = { ...row, ciphertext: data.ciphertext };
+      return row;
+    });
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      secret: {
+        findFirst: vi.fn(async () => row && { ...row }),
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { ciphertext: string };
+            data: { ciphertext: string };
+          }) => {
+            if (!row || row.ciphertext !== where.ciphertext) return { count: 0 };
+            await update({ data });
+            return { count: 1 };
+          },
+        ),
+      },
+    };
+    const prisma = {
+      secret: {
+        findFirst: vi.fn(async () => row && { ...row }),
+        update: vi.fn(async () => {
+          throw new Error("A root-client write would consume another pool connection");
+        }),
+      },
+      $transaction: vi.fn(async (work: (client: typeof tx) => Promise<unknown>) => {
+        const before = row && { ...row };
+        transactionActive = true;
+        try {
+          const result = await work(tx);
+          if (failCommit) {
+            failCommit = false;
+            throw new Error("commit failed after refresh");
+          }
+          return result;
+        } catch (error) {
+          row = before;
+          afterFailure?.();
+          afterFailure = undefined;
+          throw error;
+        } finally {
+          transactionActive = false;
+        }
+      }),
+    };
+    const store = {
+      load: vi.fn(async (ciphertext: string) => material.get(ciphertext)!),
+      put: vi.fn(async (next: string, context?: { signal: AbortSignal }) => {
+        context?.signal.throwIfAborted();
+        if (failPut) {
+          failPut = false;
+          throw new Error("store failed after refresh");
+        }
+        const ciphertext = `rotated-${++sequence}`;
+        material.set(ciphertext, next);
+        return { id: "secret-locked", ciphertext, ref: ciphertext };
+      }),
+    };
+    return {
+      prisma: prisma as unknown as PrismaClient,
+      raw: prisma,
+      tx,
+      store,
+      get active() {
+        return transactionActive;
+      },
+      current: () => (row ? parseModelSecret(material.get(row.ciphertext)!) : undefined),
+      remove: () => {
+        row = null;
+      },
+      replace: (credential: OAuthCredential) => {
+        material.set("replacement", plaintext(credential));
+        row = { id: "secret-locked", ciphertext: "replacement" };
+      },
+      failNext: (kind: "commit" | "put", onFailure?: () => void) => {
+        failCommit = kind === "commit";
+        failPut = kind === "put";
+        afterFailure = onFailure;
+      },
+    };
+  }
+
+  function oauth(next = fresh()) {
+    return {
+      refresh: vi.fn(async () => next),
+      toAuth: vi.fn(async (value: OAuthCredential) => ({ apiKey: value.access })),
+    };
+  }
+
+  it("rereads under the lock and adopts a token another process already refreshed", async () => {
+    const db = database();
+    const handler = oauth();
+    db.tx.$executeRaw.mockImplementationOnce(async () => {
+      db.replace(fresh());
+      return 1;
+    });
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler, plaintext: plaintext(expired) },
+    );
+
+    expect(result?.apiKey).toBe("new-access");
+    expect(handler.refresh).not.toHaveBeenCalled();
+    expect(db.tx.secret.findFirst).toHaveBeenCalledWith({
+      where: { id: "secret-locked", userId: scope.userId, spaceId: null },
+      select: { id: true, ciphertext: true },
+    });
+    expect(db.raw.secret.findFirst).not.toHaveBeenCalled();
+    expect(db.store.put).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh or recreate a secret deleted before the lock was acquired", async () => {
+    const db = database();
+    const handler = oauth();
+    db.remove();
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler, plaintext: plaintext(expired) },
+    );
+
+    expect(result).toBeUndefined();
+    expect(handler.refresh).not.toHaveBeenCalled();
+    expect(db.store.put).not.toHaveBeenCalled();
+  });
+
+  it.each(["commit", "put"] as const)(
+    "retains the rotated token after a late %s failure",
+    async (failure) => {
+      const db = database();
+      const next = fresh();
+      const handler = oauth(next);
+      db.failNext(failure);
+
+      const result = await resolveStoredModelAuth(
+        db.prisma,
+        db.store,
+        scope,
+        "secret-locked",
+        CHATGPT_OAUTH_PROVIDER,
+        { oauth: handler },
+      );
+
+      expect(result?.apiKey).toBe(next.access);
+      expect(handler.refresh).toHaveBeenCalledTimes(1);
+      expect(db.raw.$transaction).toHaveBeenCalledTimes(2);
+      expect(db.raw.secret.update).not.toHaveBeenCalled();
+      expect(db.current()).toEqual({ kind: "oauth", credential: next, maxTokens: 4096 });
+    },
+  );
+
+  it("returns the issued token when both commit attempts fail without refreshing again", async () => {
+    const db = database();
+    const next = fresh();
+    const handler = oauth(next);
+    db.failNext("commit", () => db.failNext("commit"));
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler },
+    );
+
+    expect(result?.apiKey).toBe(next.access);
+    expect(result?.secret).toEqual({ kind: "oauth", credential: next, maxTokens: 4096 });
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.raw.$transaction).toHaveBeenCalledTimes(2);
+    expect(db.current()).toEqual({ kind: "oauth", credential: expired, maxTokens: 4096 });
+  });
+
+  it("commits the rotated token when the caller cancels after the provider issued it", async () => {
+    const db = database();
+    const next = fresh();
+    const handler = oauth(next);
+    const caller = new AbortController();
+    handler.refresh.mockImplementation(async () => {
+      caller.abort(new Error("run cancelled after token rotation"));
+      return next;
+    });
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler, signal: caller.signal },
+    );
+
+    expect(caller.signal.aborted).toBe(true);
+    expect(result?.apiKey).toBe(next.access);
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.raw.$transaction).toHaveBeenCalledTimes(1);
+    expect(db.current()).toEqual({ kind: "oauth", credential: next, maxTokens: 4096 });
+  });
+
+  it("does not refresh a short-lived rotated token again while recovering a failed commit", async () => {
+    const db = database();
+    const next = { ...fresh(), expires: Date.now() + 60_000 };
+    const handler = oauth(next);
+    db.failNext("commit");
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler },
+    );
+
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(result?.apiKey).toBe(next.access);
+    expect(db.current()).toEqual({ kind: "oauth", credential: next, maxTokens: 4096 });
+  });
+
+  it("keeps a rotated token committed when converting it to request auth fails", async () => {
+    const db = database();
+    const next = fresh();
+    const handler = oauth(next);
+    const failure = new Error("provider auth could not be constructed");
+    handler.toAuth.mockRejectedValue(failure);
+
+    await expect(
+      resolveStoredModelAuth(db.prisma, db.store, scope, "secret-locked", CHATGPT_OAUTH_PROVIDER, {
+        oauth: handler,
+      }),
+    ).rejects.toBe(failure);
+
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.current()).toEqual({ kind: "oauth", credential: next, maxTokens: 4096 });
+  });
+
+  it("preserves a concurrent replacement when retrying a failed commit", async () => {
+    const db = database();
+    const replacement = fresh();
+    replacement.access = "replacement-access";
+    const handler = oauth();
+    db.failNext("commit", () => db.replace(replacement));
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler },
+    );
+
+    expect(result?.apiKey).toBe("replacement-access");
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.tx.secret.updateMany).toHaveBeenCalledTimes(1);
+    expect(db.current()).toMatchObject({ credential: replacement });
+  });
+
+  it("preserves a deletion when retrying a failed commit", async () => {
+    const db = database();
+    const handler = oauth();
+    db.failNext("commit", () => db.remove());
+
+    await expect(
+      resolveStoredModelAuth(db.prisma, db.store, scope, "secret-locked", CHATGPT_OAUTH_PROVIDER, {
+        oauth: handler,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.current()).toBeUndefined();
+  });
+
+  it("retires rejected credentials after releasing the lock transaction", async () => {
+    const db = database();
+    const failure = new Error('refresh failed (400): {"error":"invalid_grant"}');
+    const handler = oauth();
+    handler.refresh.mockRejectedValue(failure);
+    const retire = vi.fn(async () => {
+      expect(db.active).toBe(false);
+      return true;
+    });
+
+    await expect(
+      resolveStoredModelAuth(db.prisma, db.store, scope, "secret-locked", CHATGPT_OAUTH_PROVIDER, {
+        oauth: handler,
+        retire,
+      }),
+    ).rejects.toBeInstanceOf(RetiredModelCredentialError);
+
+    expect(retire).toHaveBeenCalledExactlyOnceWith(
+      "terminal-refresh-failure",
+      "invalid_grant",
+      expired,
+    );
+    expect(db.store.put).not.toHaveBeenCalled();
+  });
+
+  it("runs the runtime refresh callback under the lock and persists its result", async () => {
+    const held = fresh();
+    const db = database(held);
+    const handler = oauth({ ...held, access: "runtime-access", refresh: "runtime-refresh" });
+    const modify = vi.fn(async () => {
+      expect(db.active).toBe(true);
+      return handler.refresh();
+    });
+
+    const result = await resolveStoredModelAuth(
+      db.prisma,
+      db.store,
+      scope,
+      "secret-locked",
+      CHATGPT_OAUTH_PROVIDER,
+      { oauth: handler, modify },
+    );
+
+    expect(result?.apiKey).toBe("runtime-access");
+    expect(handler.refresh).toHaveBeenCalledTimes(1);
+    expect(db.current()).toMatchObject({ credential: { access: "runtime-access" } });
   });
 });

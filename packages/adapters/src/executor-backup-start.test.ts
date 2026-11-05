@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors for coordinated OAuth refresh tests. See LICENSE.md.
+
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
@@ -98,6 +102,7 @@ async function runTurn({
       (row) => row.userId === where.userId && matchesProvider(where.provider, row.provider),
     );
   const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(1),
     userModelCredential: {
       findFirst: vi.fn(
         async (args: { where: { id: string } }) =>

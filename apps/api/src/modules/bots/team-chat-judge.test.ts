@@ -1,9 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refresh tests. See LICENSE.md.
 
+import type { AgentModelOAuthCredential, AgentRunRequest } from "@orkbot/adapter-kit";
+import type { toOAuthCredential } from "@orkbot/adapters";
+import { parseModelSecret, serializeModelSecret } from "@orkbot/adapters";
 import { createLogger, createTestSink, getLogger, installLogger } from "@orkbot/logging";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   mainRole,
   withModelRoles,
@@ -380,4 +384,195 @@ describe("team chat engagement judge", () => {
       }
     },
   );
+});
+
+describe("team chat judge OAuth refresh coordination", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const input = {
+    bot: {
+      id: "bot-oauth",
+      spaceId: "space-oauth",
+      userId: "user-oauth",
+      name: "Assistant",
+      modelProvider: "openai-codex",
+      modelId: "gpt-6-luna",
+    },
+    channelId: "channel-oauth",
+    rules: "",
+    messages: [],
+  };
+  type OAuthCredential = ReturnType<typeof toOAuthCredential>;
+  const expired: OAuthCredential = {
+    type: "oauth",
+    access: "expired-access",
+    refresh: "expired-refresh",
+    expires: 1,
+  };
+  const fresh = (access: string): OAuthCredential => ({
+    type: "oauth",
+    access: `fake.${Buffer.from(
+      JSON.stringify({
+        fixture: access,
+        "https://api.openai.com/auth": { chatgpt_account_id: "fixture-account" },
+      }),
+    ).toString("base64")}.fake`,
+    refresh: `${access}-refresh`,
+    expires: Date.now() + 3_600_000,
+    accountId: "fixture-account",
+  });
+
+  function fixture() {
+    const material = new Map([
+      ["original", serializeModelSecret({ kind: "oauth", credential: expired, maxTokens: 2048 })],
+    ]);
+    let row = { id: "secret-oauth", ciphertext: "original" };
+    let active = false;
+    let sequence = 0;
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      secret: {
+        findFirst: vi.fn(async () => ({ ...row })),
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { id: string; ciphertext: string };
+            data: { ciphertext: string };
+          }) => {
+            expect(active).toBe(true);
+            if (where.id !== row.id || where.ciphertext !== row.ciphertext) return { count: 0 };
+            row = { ...row, ciphertext: data.ciphertext };
+            return { count: 1 };
+          },
+        ),
+      },
+    };
+    const prisma = {
+      user: { findUnique: vi.fn(async () => null) },
+      deploymentSettings: { findUnique: vi.fn(async () => null) },
+      userModelPreference: {
+        findFirst: vi.fn(async () => ({
+          credential: { id: "credential-oauth", provider: "openai-codex", secretId: row.id },
+          modelId: "gpt-6-luna",
+        })),
+      },
+      secret: {
+        findFirst: vi.fn(async () => ({ ...row })),
+        update: vi.fn(async () => {
+          throw new Error("Token write escaped refresh transaction");
+        }),
+      },
+      $transaction: vi.fn(async (work: (client: typeof tx) => Promise<unknown>) => {
+        active = true;
+        try {
+          return await work(tx);
+        } finally {
+          active = false;
+        }
+      }),
+    };
+    const secrets = {
+      load: vi.fn(async (ciphertext: string) => material.get(ciphertext)!),
+      put: vi.fn(async (plaintext: string) => {
+        const ciphertext = `rotation-${++sequence}`;
+        material.set(ciphertext, plaintext);
+        return { id: row.id, ciphertext, ref: ciphertext };
+      }),
+      delete: vi.fn(async () => undefined),
+    };
+    return {
+      prisma,
+      tx,
+      secrets,
+      isLocked: () => active,
+      current: () => parseModelSecret(material.get(row.ciphertext)!),
+      replace: (credential: OAuthCredential) => {
+        material.set(
+          "replacement",
+          serializeModelSecret({ kind: "oauth", credential, maxTokens: 2048 }),
+        );
+        row = { ...row, ciphertext: "replacement" };
+      },
+    };
+  }
+
+  it("takes the database lock for both initial and runtime OAuth refreshes", async () => {
+    const db = fixture();
+    const initial = fresh("initial-access");
+    const runtime = fresh("runtime-access");
+    const fetch = vi.fn(async () => {
+      expect(db.isLocked()).toBe(true);
+      return Response.json({
+        access_token: initial.access,
+        refresh_token: initial.refresh,
+        expires_in: 3600,
+      });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const runtimeRefresh = vi.fn(async (current: AgentModelOAuthCredential) => {
+      expect(db.isLocked()).toBe(true);
+      expect(current).toMatchObject({ access: initial.access, refresh: initial.refresh });
+      return runtime;
+    });
+    const run = vi.fn(async function* (request: AgentRunRequest) {
+      expect(request.model.oauth?.credential).toMatchObject({ access: initial.access });
+      expect(request.model.oauth?.refresh).toBeTypeOf("function");
+      await expect(request.model.oauth!.refresh!(runtimeRefresh)).resolves.toMatchObject({
+        access: runtime.access,
+        refresh: runtime.refresh,
+      });
+      yield { type: "done", text: '{"act":false}' };
+    });
+    const judge = new ModelTeamChatEngagementJudge({
+      prisma: db.prisma as never,
+      runtime: { run } as never,
+      secrets: db.secrets as never,
+      deploymentProvider: "openai-codex",
+      deploymentModel: "gpt-6-luna",
+    });
+
+    await expect(judge.decide(input)).resolves.toEqual({ act: false });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(runtimeRefresh).toHaveBeenCalledTimes(1);
+    expect(db.prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(
+      db.tx.$executeRaw.mock.calls.filter(([sql]) => String(sql).includes("pg_advisory_xact_lock")),
+    ).toHaveLength(2);
+    expect(db.prisma.secret.update).not.toHaveBeenCalled();
+    expect(db.current()).toMatchObject({ kind: "oauth", credential: runtime, maxTokens: 2048 });
+  });
+
+  it("adopts a token rotated before the judge acquired its database lock", async () => {
+    const db = fixture();
+    const replacement = fresh("another-process-access");
+    db.tx.$executeRaw.mockImplementationOnce(async () => {
+      db.replace(replacement);
+      return 1;
+    });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const run = vi.fn(async function* (_request: AgentRunRequest) {
+      yield { type: "done", text: '{"act":false}' };
+    });
+    const judge = new ModelTeamChatEngagementJudge({
+      prisma: db.prisma as never,
+      runtime: { run } as never,
+      secrets: db.secrets as never,
+      deploymentProvider: "openai-codex",
+      deploymentModel: "gpt-6-luna",
+    });
+
+    await expect(judge.decide(input)).resolves.toEqual({ act: false });
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run.mock.calls[0]?.[0].model.oauth?.credential).toEqual(replacement);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(db.secrets.put).not.toHaveBeenCalled();
+    expect(db.tx.secret.findFirst).toHaveBeenCalledTimes(1);
+    expect(db.prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
 });

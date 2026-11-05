@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type {
   AgentModelOAuthCredential,
   AgentRunRequest,
@@ -42,7 +45,7 @@ import {
   kickModelCredentialRefresh,
   parseModelSecret,
   persistStoredModelSecret,
-  resolveModelAuth,
+  resolveStoredModelAuth,
   retireToReconnectMarker,
   secretValuesToRedact,
   serializeModelSecret,
@@ -217,6 +220,7 @@ async function resolveModelKeyMaterial(
   maxImagesPerPrompt?: number;
   oauth?: AgentModelOAuthCredential;
   persistOAuth?: (credential: AgentModelOAuthCredential) => Promise<void>;
+  refreshOAuth?: NonNullable<AgentRunRequest["model"]["oauth"]>["refresh"];
   retireOAuth?: (
     reason: ModelCredentialRetireReason,
     detail?: string,
@@ -256,8 +260,18 @@ async function resolveModelKeyMaterial(
         credential,
         parseModelSecret(plaintext).maxTokens,
       );
-      const resolveAuth = () =>
-        resolveModelAuth(plaintext, credential.provider, { persist, retire });
+      const resolveAuth = async () => {
+        const auth = await resolveStoredModelAuth(
+          deps.prisma,
+          deps.secretStore,
+          { userId, spaceId },
+          row.id,
+          credential.provider,
+          { plaintext, retire },
+        );
+        if (!auth) throw new Error("Connect that model provider again.");
+        return auth;
+      };
       let resolved: Awaited<ReturnType<typeof resolveAuth>> | undefined;
       let liveCodex: Awaited<ReturnType<typeof codexLiveModel>> | undefined;
       const authError = validateModelAuthAvailability(provider, modelId, plaintext);
@@ -364,6 +378,26 @@ async function resolveModelKeyMaterial(
               });
             }
           : undefined,
+        refreshOAuth: oauth
+          ? async (update, signal) => {
+              const auth = await resolveStoredModelAuth(
+                deps.prisma,
+                deps.secretStore,
+                { userId, spaceId },
+                credential.secretId,
+                credential.provider,
+                {
+                  modify: async (current) => {
+                    const next = await update(current);
+                    return next ? toOAuthCredential(next) : undefined;
+                  },
+                  signal,
+                  retire,
+                },
+              );
+              return auth?.secret.kind === "oauth" ? auth.secret.credential : undefined;
+            }
+          : undefined,
         retireOAuth: retire,
         ownCredential: true,
         redact: [...secretValuesToRedact(resolved.secret), resolved.apiKey].filter(
@@ -400,6 +434,7 @@ export function resolvedModelRunFields(
       ? {
           credential: resolved.oauth,
           persist: resolved.persistOAuth,
+          refresh: resolved.refreshOAuth,
           retire: resolved.retireOAuth,
         }
       : undefined,

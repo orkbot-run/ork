@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type { AgentRunRequest, ComputerRef, SemanticMemoryProvider } from "@orkbot/adapter-kit";
 import {
   DEFAULT_CONTEXT_STRATEGY,
@@ -1054,6 +1057,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                     callObserver: pinnedComputerModels.main.callObserver,
                     oauth: pinnedComputerModels.main.oauth?.credential,
                     persistOAuth: pinnedComputerModels.main.oauth?.persist,
+                    refreshOAuth: pinnedComputerModels.main.oauth?.refresh,
                     retireOAuth: pinnedComputerModels.main.oauth?.retire,
                     redact: [],
                   }

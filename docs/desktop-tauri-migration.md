@@ -97,7 +97,7 @@ with remaining checks, and **Pending** covers missing implementation or evidence
 | Remote host access | `user-device.ts`, `main.ts`, `packages/adapters/src/user-device-client.ts`: account-bound pairing and cancellation on revocation/sign-out | **Pending**: native transport, OS keyring storage and account/origin isolation tests |
 | Screen control | `host-screen.ts`, `main.ts`: pinned drivers on macOS/Windows, checksum verification, OS consent and locked-screen refusal | **Pending**: preserve driver verification and permission attribution, retain explicit Linux limitations |
 | System dictation | `system-speech.ts`, `apps/desktop/native/speech/main.swift`: macOS helper, session ownership, final result and cancellation | **Partial**: universal helper bundled as a macOS sidecar with verified ad-hoc signatures, process/protocol tests pass and invalid sessions are refused natively, real recognition, permissions and production signing pending |
-| Passkeys | `passkeys.ts`, `main.ts`: associated domains, provisioning profile and system credential UI on macOS | **Pending**: bridge returns no native relying-party IDs, platform WebAuthn and native credential integration remain unverified |
+| Passkeys | `passkeys.ts`, `main.ts`: associated domains, provisioning profile and system credential UI on macOS | **Partial**: signed macOS domain/profile configuration and fail-closed native RP discovery implemented with offline tests, installed WebAuthn ceremonies and Windows/Linux runtime checks pending |
 | Error/crash reporting | `monitoring.ts`, `native-crashes.ts`: optional native reporting tied to server configuration and account changes | **Pending**: bridge reports native monitoring disabled, Electron-specific crash reporting still needs replacement and consent/configuration checks |
 | Auto-update | `auto-update.ts`, `linux-update-signature.ts`: background check/download, progress, verified installation, retry and install-on-quit | **Partial**: state/check/download/install contract, verified cache, background checks and confirmation tested headlessly, disabled native actions return Unsupported, signed release feed, installed updates and install-on-quit pending |
 | CI and native tests | `.github/workflows/ci.yml`, `.github/workflows/release-desktop.yml`, `.github/workflows/desktop-macos-screenshot.yml`, `apps/desktop/e2e/` | **Partial**: separate three-platform diagnostic workflow added, native macOS exercised locally, hosted builds and full cross-platform runtime checks pending |
@@ -139,6 +139,44 @@ it beside the main executable in `Contents/MacOS/orkbot-speech` so the bundler c
 executables before the enclosing app. Staging uses a local ad-hoc signature, with production
 certificate signing and notarization of the complete bundle still unverified. The universal
 sidecar and complete application passed strict ad-hoc code-signature verification.
+
+## Passkeys
+
+WKWebView handles registration and sign-in through standard WebAuthn. On macOS 13.3 or
+later, Preview reports relying parties from its signed `webcredentials:` entitlements only
+after checking the app signature, provisioning profile and selected HTTPS server.
+Missing metadata, expired profiles and mismatched domains return an empty list.
+Unsigned builds hide macOS passkeys.
+
+A passkey build needs a provisioning profile for `run.orkbot.desktop.preview` with the
+Associated Domains capability and an Apple signing certificate from the same team.
+Use the existing desktop signing settings:
+
+```sh
+PASSKEY_PROFILE='<provisioning profile path>' \
+APPLE_SIGNING_IDENTITY='<Apple signing identity>' \
+ORKBOT_PASSKEY_RP_ID=app.example.com \
+pnpm --filter @orkbot/desktop tauri:build --bundles app
+```
+
+Before Tauri runs, the build prepares its configuration overlay and signs the speech
+helper with the base entitlements, keeping the passkey association on the main app.
+This overlay applies only to the current invocation, so a later build without
+`PASSKEY_PROFILE` uses the base configuration. The RP defaults to the Electron build's
+hosted domain.
+
+Private domains need a development profile. Set `ORKBOT_PASSKEY_DEVELOPER_MODE=1` and
+enable associated-domain developer mode on the test Mac, as described in
+[self-hosted accounts](self-host-accounts.md#passkeys).
+
+Configure the server's `PASSKEY_APPLE_APP_IDS` to include
+`<TEAM_ID>.run.orkbot.desktop.preview` and serve its AASA file through the web origin.
+Keep existing app identifiers too. macOS verifies the website association during WebAuthn.
+
+Manual QA remains. Install the signed app and test registration, sign-in and cancellation,
+then switch to an unrelated server and confirm passkeys disappear. Repeat with a missing
+AASA entry and an unsigned build. Windows and Linux retain standard WebAuthn capability
+probing and need installed-platform checks. This desktop target has no Android package.
 
 ## Signing and update transition
 

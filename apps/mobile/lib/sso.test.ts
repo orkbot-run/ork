@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
+
 import { openAuthSessionAsync, WebBrowserResultType } from "expo-web-browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authHeaders, clearSpace, currentApiBase, fetchMobileJson } from "./api";
@@ -50,7 +54,7 @@ it("uses the Expo proxy, validates the session, and saves the existing session s
   expect(callback).toBe("orkbot://sign-in");
   expect(new URL(url).pathname).toBe("/api/auth/expo-authorization-proxy");
   expect(new URL(url).searchParams.get("oauthState")).toBe("encrypted-state");
-  expect(replaceSessionTokenIfCurrent).toHaveBeenCalledWith(1, "new-session", false);
+  expect(replaceSessionTokenIfCurrent).toHaveBeenCalledWith(1, "new-session", "sign_in");
   expect(clearSpace).toHaveBeenCalledOnce();
 });
 it.each([WebBrowserResultType.CANCEL, WebBrowserResultType.DISMISS])(
