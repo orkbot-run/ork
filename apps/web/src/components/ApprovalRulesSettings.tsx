@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   ActionApprovalRule,
@@ -15,6 +19,7 @@ import { useSpaceQueries } from "../lib/query";
 import { useSpaceRpc } from "../lib/space-rpc";
 import { errorText } from "../lib/user-error";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
+import { SpendingLimitSettings } from "./SpendingLimitSettings";
 
 const segmented = "rounded-lg bg-muted p-1";
 const segment = "h-7 px-3 text-[13px] aria-pressed:bg-background aria-pressed:shadow-sm";
@@ -119,6 +124,7 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
 
   return (
     <div data-testid="approval-settings" className="space-y-8">
+      {scope === "account" ? <SpendingLimitSettings /> : null}
       <SettingsGroup>
         <SettingsRow
           label={<Trans>Mode</Trans>}

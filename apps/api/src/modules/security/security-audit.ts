@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; spending limit auditing is PolyForm-covered.
 
 import type { SecurityEventInput, SecurityEventType } from "@orkbot/db";
 import { recordSecurityEvent } from "@orkbot/db";
@@ -93,6 +94,11 @@ export const AUDITED_PROCEDURES: Record<string, AuditedProcedure> = {
   },
   "approvalRules.set": { type: "approval.policy.changed", fields: ["effect", "matchKind"] },
   "approvalRules.remove": { type: "approval.policy.changed", fields: ["id"] },
+  "spendingLimit.set": {
+    type: "spending.limit.changed",
+    kind: "account_spending_limit",
+    fields: ["limit.currency", "limit.period"],
+  },
   "models.setRole": { type: "approval.policy.changed", fields: ["role", "scope"] },
   "autoReview.set": { type: "approval.policy.changed", fields: ["enabled", "skipApprovals"] },
   "spaceSettings.setOverride": {
@@ -155,6 +161,11 @@ export function procedureSecurityEvent(
       .filter((key) => fields[key] !== undefined)
       .sort()
       .join(",");
+  }
+  if (procedure === "spendingLimit.set") {
+    metadata.enabled = fields.limit !== null;
+    if (isRecord(fields.limit) && typeof fields.limit.amount === "number")
+      metadata.amount = fields.limit.amount;
   }
   if (procedure === "mcp.assignments.approve") metadata.decision = "allow";
   if (procedure === "mcp.assignments.dismiss") metadata.decision = "deny";

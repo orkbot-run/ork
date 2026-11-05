@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +13,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const rpcMock = vi.hoisted(() => ({
   approvalRules: { list: vi.fn(), set: vi.fn(), remove: vi.fn() },
   autoReview: { get: vi.fn(), set: vi.fn() },
+  spendingLimit: { get: vi.fn(), set: vi.fn() },
 }));
 vi.mock("../lib/rpc", () => ({
   rpc: rpcMock,
@@ -27,6 +32,8 @@ vi.mock("@orkbot/ui-web", async () => {
     onValueChange: () => undefined,
   });
   return {
+    NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+    NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
     Input: (props: ComponentProps<"input">) => <input {...props} />,
     Button: ({
       variant: _variant,
@@ -68,7 +75,10 @@ import { ApprovalRulesSettings } from "./ApprovalRulesSettings";
 
 const settings = { mode: "ask", enabled: false, skipApprovals: false, checkerAvailable: true };
 
-beforeEach(() => vi.resetAllMocks());
+beforeEach(() => {
+  vi.resetAllMocks();
+  rpcMock.spendingLimit.get.mockResolvedValue({ limit: null, spent: 0 });
+});
 
 async function render(scope: "account" | "space" = "account") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -421,6 +431,78 @@ it("leaves a tool's existing rule alone when it is typed again by its displayed 
     );
     expect(rpcMock.approvalRules.set).not.toHaveBeenCalled();
     expect(container.querySelector("form")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("sets a PLN account limit and removes it without a Space override", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  rpcMock.approvalRules.list.mockResolvedValue([]);
+  rpcMock.autoReview.get.mockResolvedValue(settings);
+  rpcMock.spendingLimit.set.mockImplementation(async ({ limit }) => ({ limit, spent: 0 }));
+  const { container, root } = await render();
+  const within = '[data-testid="spending-limit-settings"]';
+  try {
+    await vi.waitFor(() => expect(button(container, "Set limit", within)?.disabled).toBe(false));
+    await act(async () => button(container, "Set limit", within)!.click());
+    const input = container.querySelector<HTMLInputElement>(`${within} input`)!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "120.50",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      const currency = container.querySelector<HTMLSelectElement>('select[aria-label="Currency"]')!;
+      currency.value = "PLN";
+      currency.dispatchEvent(new Event("change", { bubbles: true }));
+      const period = container.querySelector<HTMLSelectElement>(
+        'select[aria-label="Reset period (UTC)"]',
+      )!;
+      period.value = "weekly";
+      period.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => button(container, "Save limit", within)!.click());
+    expect(rpcMock.spendingLimit.set).toHaveBeenCalledWith({
+      limit: { amount: 120.5, currency: "PLN", period: "weekly" },
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("PLN 120.50"));
+    await act(async () => button(container, "Remove limit", within)!.click());
+    expect(rpcMock.spendingLimit.set).toHaveBeenLastCalledWith({ limit: null });
+    await vi.waitFor(() => expect(button(container, "Set limit", within)).toBeDefined());
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("keeps failed spending edits and never renders a limit in Space settings", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  rpcMock.approvalRules.list.mockResolvedValue([]);
+  rpcMock.autoReview.get.mockResolvedValue(settings);
+  const space = await render("space");
+  expect(space.container.querySelector('[data-testid="spending-limit-settings"]')).toBeNull();
+  expect(rpcMock.spendingLimit.get).not.toHaveBeenCalled();
+  await act(async () => space.root.unmount());
+  space.container.remove();
+
+  rpcMock.spendingLimit.get.mockResolvedValue({
+    limit: { amount: 50, currency: "EUR", period: "daily" },
+    spent: 20,
+  });
+  rpcMock.spendingLimit.set.mockRejectedValue(new Error("Save unavailable"));
+  const { container, root } = await render();
+  try {
+    await vi.waitFor(() => expect(button(container, "Edit limit")?.disabled).toBe(false));
+    await act(async () => button(container, "Edit limit")!.click());
+    await act(async () => button(container, "Save limit")!.click());
+    expect(container.textContent).toContain("Save unavailable");
+    expect(container.querySelector<HTMLInputElement>('input[aria-label="Amount"]')?.value).toBe(
+      "50",
+    );
   } finally {
     await act(async () => root.unmount());
     container.remove();

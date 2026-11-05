@@ -1,4 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 export const NL_MESSAGES: Record<string, string> = {
+  "Account spending limit": "Uitgavenlimiet voor account",
+  Amount: "Bedrag",
+  Currency: "Valuta",
+  Daily: "Dagelijks",
+  Weekly: "Wekelijks",
+  Never: "Nooit",
+  "Could not load spending limit": "Kan de uitgavenlimiet niet laden",
+  "Could not save spending limit": "Kan de uitgavenlimiet niet opslaan",
+  "Edit limit": "Limiet bewerken",
+  "No limit": "Geen limiet",
+  "Remove limit": "Limiet verwijderen",
+  "Reset period (UTC)": "Resetperiode (UTC)",
+  "Save limit": "Limiet opslaan",
+  "Set limit": "Limiet instellen",
+  "Spent and reserved": "Uitgegeven en gereserveerd",
+  "Spending limit": "Uitgavenlimiet",
   "Add rule": "Regel toevoegen",
   "Tool name": "Toolnaam",
   Address: "Adres",

@@ -482,6 +482,10 @@ msgstr "Nombre de la cuenta"
 msgid "Account menu for {name}"
 msgstr "Menú de cuenta de {name}"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Account spending limit"
+msgstr "Límite de gasto de la cuenta"
+
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
 #. placeholder {0}: page.title
@@ -760,6 +764,10 @@ msgstr "Siempre permitido"
 #: src/components/markdown-link-prompt.tsx
 msgid "Always open {site}"
 msgstr "Abrir siempre {site}"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Amount"
+msgstr "Importe"
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -1212,6 +1220,7 @@ msgstr "No puede leer imágenes"
 #: src/components/markdown-link-prompt.tsx
 #: src/components/ModelCredits.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -1939,6 +1948,10 @@ msgstr "No se pudo completar la acción"
 msgid "Could not complete OAuth"
 msgstr "No se pudo completar OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "No se pudo completar la actualización. Vuelve a intentarlo."
@@ -2148,6 +2161,10 @@ msgstr "No se pudieron cargar las opciones de inicio de sesión"
 msgid "Could not load skill"
 msgstr "No se pudo cargar la habilidad"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not load spending limit"
+msgstr "No se pudo cargar el límite de gasto"
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "No se pudo cargar este artefacto."
@@ -2311,6 +2328,10 @@ msgstr "No se pudo guardar la regla"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not save skill"
 msgstr "No se pudo guardar la habilidad"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not save spending limit"
+msgstr "No se pudo guardar el límite de gasto"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Could not save that choice"
@@ -2552,6 +2573,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Expresión cron"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Currency"
+msgstr "Moneda"
+
 #: src/components/AccountAccess.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -2576,6 +2601,10 @@ msgstr "Personalizar {label}"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
 msgstr "Personalizar avatar del bot"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Daily"
+msgstr "Diario"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Daily check-ins on unfinished work"
@@ -2939,6 +2968,10 @@ msgstr "Editar"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Editar primero"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Edit limit"
+msgstr "Editar límite"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4163,6 +4196,7 @@ msgid "month"
 msgstr "mes"
 
 #: src/components/ModelCredits.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "Mensual"
@@ -4286,6 +4320,10 @@ msgstr "Te necesita"
 #: src/pages/shell/import-status.ts
 msgid "Needs: {names}"
 msgstr "Necesita: {names}"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Never"
+msgstr "Nunca"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Never ask"
@@ -4412,6 +4450,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "Ningún bot coincide"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "No limit"
+msgstr "Sin límite"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
@@ -5300,6 +5342,10 @@ msgstr "Quitar evento de Git"
 msgid "Remove header"
 msgstr "Eliminar encabezado"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Remove limit"
+msgstr "Quitar límite"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove message trigger"
 msgstr "Quitar activador de mensajes"
@@ -5418,6 +5464,10 @@ msgstr "¿Restablecer computadora?"
 msgid "Reset password"
 msgstr "Restablecer contraseña"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Reset period (UTC)"
+msgstr "Periodo de reinicio (UTC)"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Restablece tu contraseña"
@@ -5467,6 +5517,7 @@ msgstr "Restaurando tu espacio de trabajo"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -5610,6 +5661,10 @@ msgstr "sábado"
 #: src/pages/shell/dialogs.tsx
 msgid "Save"
 msgstr "Guardar"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Save limit"
+msgstr "Guardar límite"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5834,6 +5889,10 @@ msgstr "Nombre del servidor"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "URL del servidor"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Set limit"
+msgstr "Establecer límite"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6114,6 +6173,10 @@ msgstr "Hablando"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Speech model"
 msgstr "Modelo de habla"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Spent and reserved"
+msgstr "Gastado y reservado"
 
 #: src/components/AccountAccess.tsx
 msgid "SSO"
@@ -7060,6 +7123,10 @@ msgstr "Días laborables"
 #: src/lib/cron.ts
 msgid "Weekends"
 msgstr "Fines de semana"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Weekly"
+msgstr "Semanal"
 
 #: src/components/SignupSurvey.tsx
 msgid "Welcome to Ork"

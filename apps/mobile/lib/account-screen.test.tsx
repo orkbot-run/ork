@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 // @vitest-environment jsdom
 
 import type { AccountSecurity } from "@orkbot/contracts";
@@ -461,6 +465,7 @@ it.each([false, true])(
         "Models",
         "Voice",
         "Approvals",
+        "Spending limit",
         "Vault",
         "Integrations",
         "Skills",
@@ -480,6 +485,7 @@ it.each([false, true])(
       expect(events).toEqual(["close", "/artifacts"]);
       for (const [title, href] of [
         ["Models", "/models"],
+        ["Spending limit", "/approvals"],
         ["Vault", "/vault"],
         ["Memory", "/memory"],
         ["Messaging", "/messaging"],
@@ -530,14 +536,16 @@ it("shows the approval mode as the Approvals row's value, with Rules only once t
   await act(async () => approvals.click());
   expect(account.push).not.toHaveBeenCalled();
   expect(view.button("Rules")).toBeUndefined();
+  expect(view.button("Spending limit")).toBeDefined();
 
   act(() => root?.unmount());
   container?.remove();
   account.rules = [{ id: "rule-1" }, { id: "rule-2" }];
   view = await renderAccount();
   const titles = Array.from(view.screen.querySelectorAll("[data-row]"), (row) => row.textContent);
-  expect(titles.slice(titles.indexOf("Approvals"), titles.indexOf("Approvals") + 3)).toEqual([
+  expect(titles.slice(titles.indexOf("Approvals"), titles.indexOf("Approvals") + 4)).toEqual([
     "Approvals",
+    "Spending limit",
     "Rules",
     "Vault",
   ]);

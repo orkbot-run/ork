@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 import { Stack, useNavigation } from "expo-router";
 import { HeaderBackButton } from "expo-router/react-navigation";
 import { useEffect } from "react";
@@ -79,7 +83,7 @@ export default function SettingsLayout() {
       <Stack.Screen
         name="approvals"
         options={{
-          ...glassHeaderOptions(t("Rules")),
+          ...glassHeaderOptions(t("Approvals")),
           contentStyle: { backgroundColor: native.groupedPage },
         }}
       />

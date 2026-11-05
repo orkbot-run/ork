@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 import { MenuView } from "@expo/ui/community/menu";
 import type { ActionApprovalRule } from "@orkbot/contracts";
 import { humanizeToolName, toolNameFromLabel } from "@orkbot/core";
@@ -9,6 +13,7 @@ import { LoadFailure } from "../../components/load-failure";
 import { TextFieldDialog } from "../../components/name-dialog";
 import { NativeActionButton } from "../../components/native-action-button";
 import { SettingsGroup, SettingsRow } from "../../components/settings-group";
+import { SpendingLimitSettings } from "../../components/spending-limit-settings";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import { native, useResolvedAppearance, useThemedStyles } from "../../lib/native";
@@ -205,6 +210,7 @@ export default function ApprovalRules() {
             {shownError}
           </Text>
         ) : null}
+        {scope === "account" ? <SpendingLimitSettings /> : null}
         <SettingsGroup>
           {rules?.map((rule) => {
             const title =

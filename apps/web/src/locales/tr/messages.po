@@ -482,6 +482,10 @@ msgstr "Hesap etiketi"
 msgid "Account menu for {name}"
 msgstr "{name} için hesap menüsü"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Account spending limit"
+msgstr ""
+
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
 #. placeholder {0}: page.title
@@ -760,6 +764,10 @@ msgstr "Her zaman izinli"
 #: src/components/markdown-link-prompt.tsx
 msgid "Always open {site}"
 msgstr "{site} sitesini her zaman aç"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Amount"
+msgstr ""
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -1212,6 +1220,7 @@ msgstr "Görselleri okuyamaz"
 #: src/components/markdown-link-prompt.tsx
 #: src/components/ModelCredits.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -1939,6 +1948,10 @@ msgstr "İşlem tamamlanamadı"
 msgid "Could not complete OAuth"
 msgstr "OAuth tamamlanamadı"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Güncelleme tamamlanamadı. Tekrar dene."
@@ -2148,6 +2161,10 @@ msgstr "Giriş seçenekleri yüklenemedi"
 msgid "Could not load skill"
 msgstr "Beceri yüklenemedi"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not load spending limit"
+msgstr ""
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "Bu çıktı yüklenemedi."
@@ -2311,6 +2328,10 @@ msgstr "Kural kaydedilemedi"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not save skill"
 msgstr "Beceri kaydedilemedi"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not save spending limit"
+msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Could not save that choice"
@@ -2552,6 +2573,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron ifadesi"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Currency"
+msgstr ""
+
 #: src/components/AccountAccess.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -2576,6 +2601,10 @@ msgstr "{label}: özelleştir"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
 msgstr "Bot avatarını özelleştir"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Daily"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Daily check-ins on unfinished work"
@@ -2939,6 +2968,10 @@ msgstr "Düzenle"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Önce düzenle"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Edit limit"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4163,6 +4196,7 @@ msgid "month"
 msgstr "ay"
 
 #: src/components/ModelCredits.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "Aylık"
@@ -4286,6 +4320,10 @@ msgstr "Seni bekliyor"
 #: src/pages/shell/import-status.ts
 msgid "Needs: {names}"
 msgstr "Gerekenler: {names}"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Never"
+msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Never ask"
@@ -4412,6 +4450,10 @@ msgstr "Bot yok"
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "Eşleşen bot yok"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "No limit"
+msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
@@ -5300,6 +5342,10 @@ msgstr "Git olayını kaldır"
 msgid "Remove header"
 msgstr "Üstbilgiyi kaldır"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Remove limit"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove message trigger"
 msgstr "Mesaj tetikleyicisini kaldır"
@@ -5418,6 +5464,10 @@ msgstr "Bilgisayar sıfırlansın mı?"
 msgid "Reset password"
 msgstr "Parolayı sıfırla"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Reset period (UTC)"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "Parolanızı sıfırlayın"
@@ -5467,6 +5517,7 @@ msgstr "Çalışma alanın geri yükleniyor"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -5610,6 +5661,10 @@ msgstr "Cumartesi"
 #: src/pages/shell/dialogs.tsx
 msgid "Save"
 msgstr "Kaydet"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Save limit"
+msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5834,6 +5889,10 @@ msgstr "Sunucu adı"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Sunucu URL'si"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Set limit"
+msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6114,6 +6173,10 @@ msgstr "Konuşuyor"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Speech model"
 msgstr "Konuşma modeli"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Spent and reserved"
+msgstr ""
 
 #: src/components/AccountAccess.tsx
 msgid "SSO"
@@ -7060,6 +7123,10 @@ msgstr "Hafta içi"
 #: src/lib/cron.ts
 msgid "Weekends"
 msgstr "Hafta sonları"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Weekly"
+msgstr ""
 
 #: src/components/SignupSurvey.tsx
 msgid "Welcome to Ork"

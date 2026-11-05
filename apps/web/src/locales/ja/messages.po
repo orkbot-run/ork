@@ -482,6 +482,10 @@ msgstr "アカウントラベル"
 msgid "Account menu for {name}"
 msgstr "{name}のアカウントメニュー"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Account spending limit"
+msgstr "アカウントの利用上限"
+
 #. placeholder {0}: bot.name
 #. placeholder {0}: group.spaceName
 #. placeholder {0}: page.title
@@ -760,6 +764,10 @@ msgstr "常に許可済み"
 #: src/components/markdown-link-prompt.tsx
 msgid "Always open {site}"
 msgstr "{site} を常に開く"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Amount"
+msgstr "金額"
 
 #: src/lib/model-connection-preflight.ts
 msgid "An API key is stored for this provider, not a subscription sign-in."
@@ -1212,6 +1220,7 @@ msgstr "画像を読み取れません"
 #: src/components/markdown-link-prompt.tsx
 #: src/components/ModelCredits.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/AccountSettingsOverlay.tsx
@@ -1939,6 +1948,10 @@ msgstr "操作を完了できませんでした"
 msgid "Could not complete OAuth"
 msgstr "OAuthを完了できませんでした"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "アップデートを完了できませんでした。もう一度お試しください。"
@@ -2148,6 +2161,10 @@ msgstr "ログイン方法を読み込めませんでした"
 msgid "Could not load skill"
 msgstr "スキルを読み込めませんでした"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not load spending limit"
+msgstr "利用上限を読み込めませんでした"
+
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
 msgstr "このアーティファクトを読み込めませんでした。"
@@ -2311,6 +2328,10 @@ msgstr "ルールを保存できませんでした"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not save skill"
 msgstr "スキルを保存できませんでした"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Could not save spending limit"
+msgstr "利用上限を保存できませんでした"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Could not save that choice"
@@ -2552,6 +2573,10 @@ msgstr "Cron"
 msgid "Cron expression"
 msgstr "Cron式"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Currency"
+msgstr "通貨"
+
 #: src/components/AccountAccess.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Current password"
@@ -2576,6 +2601,10 @@ msgstr "{label}をカスタマイズ"
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Customize bot avatar"
 msgstr "ボットのアバターをカスタマイズ"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Daily"
+msgstr "毎日"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Daily check-ins on unfinished work"
@@ -2939,6 +2968,10 @@ msgstr "編集"
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先に編集"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Edit limit"
+msgstr "上限を編集"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Edit name"
@@ -4163,6 +4196,7 @@ msgid "month"
 msgstr "月"
 
 #: src/components/ModelCredits.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "毎月"
@@ -4286,6 +4320,10 @@ msgstr "対応が必要"
 #: src/pages/shell/import-status.ts
 msgid "Needs: {names}"
 msgstr "必要: {names}"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Never"
+msgstr "リセットしない"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Never ask"
@@ -4412,6 +4450,10 @@ msgstr ""
 #: src/pages/shell/bot-picker.tsx
 msgid "No bots match"
 msgstr "一致するボットはありません"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "No limit"
+msgstr "上限なし"
 
 #: src/components/AskCard.tsx
 #: src/components/SecretAskCard.tsx
@@ -5300,6 +5342,10 @@ msgstr "Gitイベントを削除"
 msgid "Remove header"
 msgstr "ヘッダーを削除"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Remove limit"
+msgstr "上限を削除"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove message trigger"
 msgstr "メッセージトリガーを削除"
@@ -5418,6 +5464,10 @@ msgstr "コンピューターをリセットしますか？"
 msgid "Reset password"
 msgstr "パスワードをリセット"
 
+#: src/components/SpendingLimitSettings.tsx
+msgid "Reset period (UTC)"
+msgstr "リセット期間 (UTC)"
+
 #: src/pages/Auth.tsx
 msgid "Reset your password"
 msgstr "パスワードをリセット"
@@ -5467,6 +5517,7 @@ msgstr "ワークスペースを復元中"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/components/SpendingLimitSettings.tsx
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -5610,6 +5661,10 @@ msgstr "土曜日"
 #: src/pages/shell/dialogs.tsx
 msgid "Save"
 msgstr "保存"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Save limit"
+msgstr "上限を保存"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5834,6 +5889,10 @@ msgstr "サーバー名"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "サーバーURL"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Set limit"
+msgstr "上限を設定"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6114,6 +6173,10 @@ msgstr "話しています"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Speech model"
 msgstr "音声モデル"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Spent and reserved"
+msgstr "使用済み・予約済み"
 
 #: src/components/AccountAccess.tsx
 msgid "SSO"
@@ -7060,6 +7123,10 @@ msgstr "平日"
 #: src/lib/cron.ts
 msgid "Weekends"
 msgstr "週末"
+
+#: src/components/SpendingLimitSettings.tsx
+msgid "Weekly"
+msgstr "毎週"
 
 #: src/components/SignupSurvey.tsx
 msgid "Welcome to Ork"

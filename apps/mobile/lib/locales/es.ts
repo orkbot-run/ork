@@ -1,4 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 export const ES_MESSAGES: Record<string, string> = {
+  "Account spending limit": "Límite de gasto de la cuenta",
+  Amount: "Importe",
+  Currency: "Moneda",
+  Daily: "Diario",
+  Weekly: "Semanal",
+  Never: "Nunca",
+  "Could not load spending limit": "No se pudo cargar el límite de gasto",
+  "Could not save spending limit": "No se pudo guardar el límite de gasto",
+  "Edit limit": "Editar límite",
+  "No limit": "Sin límite",
+  "Remove limit": "Quitar límite",
+  "Reset period (UTC)": "Periodo de reinicio (UTC)",
+  "Save limit": "Guardar límite",
+  "Set limit": "Establecer límite",
+  "Spent and reserved": "Gastado y reservado",
+  "Spending limit": "Límite de gasto",
   "Add rule": "Añadir regla",
   "Tool name": "Nombre de la herramienta",
   Title: "Título",

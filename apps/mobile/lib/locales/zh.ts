@@ -1,4 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 export const ZH_MESSAGES: Record<string, string> = {
+  "Account spending limit": "账户支出限额",
+  Amount: "金额",
+  Currency: "币种",
+  Daily: "每天",
+  Weekly: "每周",
+  Never: "永不",
+  "Could not load spending limit": "无法加载支出限额",
+  "Could not save spending limit": "无法保存支出限额",
+  "Edit limit": "编辑限额",
+  "No limit": "无限额",
+  "Remove limit": "移除限额",
+  "Reset period (UTC)": "重置周期 (UTC)",
+  "Save limit": "保存限额",
+  "Set limit": "设置限额",
+  "Spent and reserved": "已支出和已预留",
+  "Spending limit": "支出限额",
   "Add rule": "添加规则",
   "Tool name": "工具名称",
   Address: "地址",

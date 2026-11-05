@@ -1,4 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 export const JA_MESSAGES: Record<string, string> = {
+  "Account spending limit": "アカウントの利用上限",
+  Amount: "金額",
+  Currency: "通貨",
+  Daily: "毎日",
+  Weekly: "毎週",
+  Never: "リセットしない",
+  "Could not load spending limit": "利用上限を読み込めませんでした",
+  "Could not save spending limit": "利用上限を保存できませんでした",
+  "Edit limit": "上限を編集",
+  "No limit": "上限なし",
+  "Remove limit": "上限を削除",
+  "Reset period (UTC)": "リセット期間 (UTC)",
+  "Save limit": "上限を保存",
+  "Set limit": "上限を設定",
+  "Spent and reserved": "使用済み・予約済み",
+  "Spending limit": "利用上限",
   "Add rule": "ルールを追加",
   "Tool name": "ツール名",
   Address: "住所",

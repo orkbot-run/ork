@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; account spending limit routes are PolyForm-covered.
 
 import {
   changeUserTimezone,
@@ -31,12 +32,14 @@ import {
   lockSpaceSettings,
   newestVoiceCredentialOrder,
   Prisma,
+  readSpendingLimit,
   removeApprovalRule,
   runAsSystem,
   runAsTenant,
   saveApprovalRule,
   saveAutoReviewPreference,
   selectVoicePreference,
+  setSpendingLimit,
   voicePreferenceTarget,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -270,6 +273,14 @@ export function accountRoutes(ctx: RouterContext) {
       apply: authed.updater.apply.handler(() => {
         throw new ORPCError("FORBIDDEN");
       }),
+    },
+    spendingLimit: {
+      get: authed.spendingLimit.get.handler(({ context }) =>
+        readSpendingLimit(deps.prisma, context.actor.userId),
+      ),
+      set: authed.spendingLimit.set.handler(({ context, input }) =>
+        setSpendingLimit(deps.prisma, context.actor.userId, input.limit),
+      ),
     },
     approvalRules: {
       list: authed.approvalRules.list.handler(async ({ context, input }) => {

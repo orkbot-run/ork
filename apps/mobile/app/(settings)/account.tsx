@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 import { MenuView } from "@expo/ui/community/menu";
 import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
 import { accountDisplay, displayName } from "@orkbot/core";
@@ -704,6 +708,12 @@ export default function Account() {
             ] as const
           ).map(settingsLink)}
           <ApprovalModeRow key="approvals" approvals={approvals} disabled={pending} />
+          <SettingsRow
+            title={t("Spending limit")}
+            chevron="right"
+            disabled={pending}
+            onPress={() => router.push("/approvals")}
+          />
           {approvals.ruleCount ? (
             <ApprovalRulesRow
               key="approval-rules"

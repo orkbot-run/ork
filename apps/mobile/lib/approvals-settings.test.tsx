@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -55,6 +59,9 @@ vi.mock("expo-router", () => ({
   }),
 }));
 vi.mock("./native-controls", () => ({ iosAtLeast: () => true }));
+vi.mock("../components/spending-limit-settings", () => ({
+  SpendingLimitSettings: () => createElement("aside", { "data-testid": "spending-limit" }),
+}));
 vi.mock("../components/name-dialog", () => ({ TextFieldDialog: () => null }));
 vi.mock("react-native", () => ({
   Alert: { prompt: state.prompt },
@@ -183,10 +190,11 @@ beforeEach(() => {
   root = createRoot(container);
 });
 
-it("lists only the rules; the mode is a row in settings", async () => {
+it("lists the account rules and spending limit; the mode is a row in settings", async () => {
   state.rules = [rule({ id: "tool", matchValue: "send_email" })];
   await render();
   expect(rows()).toEqual(["Send email: Allow"]);
+  expect(container.querySelector('[data-testid="spending-limit"]')).not.toBeNull();
   expect(container.querySelector('[role="radiogroup"]')).toBeNull();
   expect(container.querySelector("small")).toBeNull();
   expect(state.rpc.mock.calls.map(([proc]) => proc)).toEqual(["approvalRules/list"]);
@@ -225,6 +233,7 @@ it("switches and removes rules, keeping legacy category rules removable only", a
 it("edits a Space's own copy when opened with one", async () => {
   state.spaceId = "space-1";
   await render();
+  expect(container.querySelector('[data-testid="spending-limit"]')).toBeNull();
   const spaceContext = { requestContext: { headers: { space: "space-1" } } };
   expect(state.rpc.mock.calls).toEqual([["approvalRules/list", { scope: "space" }, spaceContext]]);
 });

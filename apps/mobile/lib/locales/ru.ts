@@ -1,4 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork additions are covered by PolyForm Noncommercial.
+
 export const RU_MESSAGES: Record<string, string> = {
+  "Account spending limit": "Лимит расходов аккаунта",
+  Amount: "Сумма",
+  Currency: "Валюта",
+  Daily: "Ежедневно",
+  Weekly: "Еженедельно",
+  Never: "Никогда",
+  "Could not load spending limit": "Не удалось загрузить лимит расходов",
+  "Could not save spending limit": "Не удалось сохранить лимит расходов",
+  "Edit limit": "Изменить лимит",
+  "No limit": "Без лимита",
+  "Remove limit": "Удалить лимит",
+  "Reset period (UTC)": "Период сброса (UTC)",
+  "Save limit": "Сохранить лимит",
+  "Set limit": "Установить лимит",
+  "Spent and reserved": "Потрачено и зарезервировано",
+  "Spending limit": "Лимит расходов",
   "Add rule": "Добавить правило",
   "Tool name": "Название инструмента",
   Address: "Адрес",
