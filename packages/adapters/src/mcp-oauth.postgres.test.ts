@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material remains under Apache-2.0.
+
 import { randomUUID } from "node:crypto";
 import { asSystem, createDb, runAsTenant } from "@orkbot/db";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import type { OAuthMaterial } from "./mcp-oauth.js";
 import { McpOAuthBroker } from "./mcp-oauth.js";
 import { PostgresRealtimeFanout } from "./realtime.js";
@@ -155,4 +158,61 @@ describePostgres("MCP OAuth refresh (PostgreSQL contract)", () => {
       expect(notified).toContain(row.ciphertext);
     }
   }, 30_000);
+
+  it("spends a rotating refresh token once across independent one-connection pools", async () => {
+    const { server, context } = await seed(expiredMaterial());
+    const monitor = openDb();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const refresh = vi.fn(async () => {
+      await gate;
+      return Response.json({
+        access_token: "access-1",
+        refresh_token: "refresh-1",
+        token_type: "Bearer",
+        expires_in: 3600,
+      });
+    });
+    const brokers = [openDb(1), openDb(1)].map((db) => {
+      const store = new EncryptedSecretStore("test-only-encryption-key");
+      return new McpOAuthBroker(withSecretPersistence(db.prisma, store), store, {
+        resolveHostname: async () => [{ address: "203.0.113.10", family: 4 as const }],
+        fetch: refresh,
+      });
+    });
+    const providers = await Promise.all(
+      brokers.map((broker) => runAsTenant(context, () => broker.providerFor(server, context))),
+    );
+    const pending = providers.map((provider) => runAsTenant(context, () => provider!.tokens()));
+    const settled = Promise.allSettled(pending);
+    try {
+      // Observe real contention before allowing the provider to rotate the token.
+      await vi.waitFor(
+        async () => {
+          const waiting = await monitor.pool.query<{ count: number }>(
+            `SELECT count(*)::int AS count FROM pg_locks
+           WHERE locktype = 'advisory' AND NOT granted
+             AND classid = hashtext('mcp-oauth-material')::oid
+             AND objid = hashtext($1)::oid`,
+            [server.id],
+          );
+          expect(waiting.rows[0]?.count).toBe(1);
+        },
+        { timeout: 5_000 },
+      );
+      expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      release();
+      await settled;
+    }
+    const tokens = await Promise.all(pending);
+    expect(tokens.map((token) => token?.access_token)).toEqual(["access-1", "access-1"]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+    const row = await asSystem(monitor.prisma).secret.findFirstOrThrow({
+      where: { mcpServers: { some: { id: server.id } } },
+    });
+    expect(JSON.parse(await secrets.load(row.ciphertext, row.id)).oauth.tokens.refresh_token).toBe(
+      "refresh-1",
+    );
+  });
 });

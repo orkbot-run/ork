@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
 
 import { randomUUID } from "node:crypto";
 import type { AgentRunModel, AgentRuntime, SecretStore } from "@orkbot/adapter-kit";
@@ -11,10 +12,9 @@ import {
   hostedModelCreditObserver,
   parseModelSecret,
   resolveMemberMainModel,
-  resolveModelAuth,
+  resolveStoredModelAuth,
   retireToReconnectMarker,
   secretValuesToRedact,
-  serializeModelSecret,
   toOAuthCredential,
 } from "@orkbot/adapters";
 import { redactSecrets } from "@orkbot/core";
@@ -272,24 +272,6 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       where: { id: credential.secretId, userId: bot.userId, spaceId: null },
     });
     if (!secret) return null;
-    const persist = async (plaintext: string) => {
-      const stored = await this.deps.secrets.put(
-        plaintext,
-        {
-          operationId: "team-chat-judge-credential",
-          traceId: "team-chat-judge-credential",
-          spaceId: bot.spaceId,
-          userId: bot.userId,
-          botId: bot.id,
-          signal: new AbortController().signal,
-        },
-        { recordId: secret.id },
-      );
-      await this.deps.prisma.secret.update({
-        where: { id: secret.id },
-        data: { ciphertext: stored.ciphertext },
-      });
-    };
     const plaintext = await this.deps.secrets.load(secret.ciphertext, secret.id);
     const retire = retireToReconnectMarker(
       this.deps.prisma,
@@ -298,7 +280,15 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
       credential,
       parseModelSecret(plaintext).maxTokens,
     );
-    const auth = await resolveModelAuth(plaintext, provider, { persist, retire });
+    const auth = await resolveStoredModelAuth(
+      this.deps.prisma,
+      this.deps.secrets,
+      scope,
+      secret.id,
+      provider,
+      { plaintext, retire },
+    );
+    if (!auth) return null;
     const parsed = auth.secret;
     const limit = parsed.maxTokens !== undefined ? { maxTokens: parsed.maxTokens } : {};
     const context =
@@ -316,14 +306,23 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
           ...limit,
           oauth: {
             credential: { ...parsed.credential },
-            persist: async (credential) => {
-              await persist(
-                serializeModelSecret({
-                  kind: "oauth",
-                  credential: toOAuthCredential(credential),
-                  ...limit,
-                }),
+            refresh: async (update, signal) => {
+              const latest = await resolveStoredModelAuth(
+                this.deps.prisma,
+                this.deps.secrets,
+                scope,
+                secret.id,
+                provider,
+                {
+                  modify: async (current) => {
+                    const next = await update(current);
+                    return next ? toOAuthCredential(next) : undefined;
+                  },
+                  signal,
+                  retire,
+                },
               );
+              return latest?.secret.kind === "oauth" ? latest.secret.credential : undefined;
             },
             retire,
           },
