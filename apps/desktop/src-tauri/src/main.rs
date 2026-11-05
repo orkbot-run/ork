@@ -54,6 +54,9 @@ struct DesktopState {
     sessions: native::Sessions,
     browser_auth: browser_auth::BrowserAuth,
     accounts: accounts::Accounts,
+    restoring: std::sync::atomic::AtomicBool,
+    restore_intent: AtomicU64,
+    setup_ready: std::sync::atomic::AtomicBool,
     speech: speech::SpeechManager,
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
@@ -664,22 +667,46 @@ async fn connect_saved_server(
         .ok_or("That server is no longer available.")?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
+    connect_directory_server(
+        &window,
+        &app,
+        &state,
+        &server,
+        &authorization,
+        &directory,
+        &device,
+    )
+    .await
+}
+
+async fn connect_directory_server(
+    window: &WebviewWindow,
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    server: &server_directory::Server,
+    authorization: &accounts::Authorization,
+    directory: &server_directory::Directory,
+    device: &str,
+) -> Result<(), String> {
+    require_setup(window)?;
+    require_account(state, authorization)?;
     match server.kind {
         server_directory::Kind::Local => {
-            start_local_server(&window, &app, &state, &authorization, &directory, &device).await
+            start_local_server(window, app, state, authorization, directory, device).await
         }
         server_directory::Kind::Selfhosted => {
             let target = server::normalize_server_url(&server.url)?;
             server::probe_server(&target).await?;
             open_server(
-                &window,
-                &app,
-                &state,
+                window,
+                app,
+                state,
                 settings::Setup {
                     mode: settings::InstanceMode::Existing,
                     server_url: target,
+                    account: None,
                 },
-                &authorization,
+                authorization,
             )
             .await
         }
@@ -759,6 +786,7 @@ async fn connect_server(
         settings::Setup {
             mode: settings::InstanceMode::Existing,
             server_url: target,
+            account: None,
         },
         &authorization,
     )
@@ -833,6 +861,7 @@ async fn start_local_server(
         settings::Setup {
             mode: settings::InstanceMode::New,
             server_url: state.stack.web_url(),
+            account: None,
         },
         &authorization,
     )
@@ -843,7 +872,7 @@ async fn open_server(
     window: &WebviewWindow,
     app: &tauri::AppHandle,
     state: &DesktopState,
-    choice: settings::Setup,
+    mut choice: settings::Setup,
     authorization: &accounts::Authorization,
 ) -> Result<(), String> {
     require_setup(window)?;
@@ -941,6 +970,7 @@ async fn open_server(
         let _ = next.destroy();
         return Err(error);
     }
+    choice.account = Some(settings::account_key(authorization.account.identity()));
     if let Err(error) = settings::save(&state.directory, &choice) {
         cancel_native_document(app, &label);
         state.sessions.remove(&label);
@@ -1010,20 +1040,44 @@ fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String
 }
 
 fn show_setup(app: &tauri::AppHandle) -> tauri::Result<()> {
+    setup_window(app, true).map(|_| ())
+}
+
+fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewWindow> {
     if let Some(window) = app.get_webview_window("setup") {
-        window.show()?;
-        window.unminimize()?;
-        window.set_focus()?;
+        if visible {
+            window.show()?;
+            window.unminimize()?;
+            window.set_focus()?;
+        }
+        Ok(window)
     } else {
+        app.state::<DesktopState>()
+            .setup_ready
+            .store(false, Ordering::SeqCst);
         WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
             .title("Ork Preview")
             .inner_size(580.0, 520.0)
             .resizable(false)
+            .visible(visible)
             .on_navigation(|url| is_setup_document("setup", url))
+            .on_page_load(move |window, payload| {
+                if payload.event() == tauri::webview::PageLoadEvent::Finished
+                    && is_setup_document("setup", payload.url())
+                {
+                    let first = !window
+                        .app_handle()
+                        .state::<DesktopState>()
+                        .setup_ready
+                        .swap(true, Ordering::SeqCst);
+                    if !visible && first {
+                        show_active_or_setup(window.app_handle());
+                    }
+                }
+            })
             .on_new_window(|_, _| NewWindowResponse::Deny)
-            .build()?;
+            .build()
     }
-    Ok(())
 }
 
 fn refresh_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
@@ -1073,9 +1127,179 @@ fn set_locale(app: &tauri::AppHandle, raw: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn focus_active<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
+    let Some(state) = app.try_state::<DesktopState>() else {
+        return false;
+    };
+    let Ok(active) = state.active_window.lock() else {
+        return false;
+    };
+    let Some(window) = active
+        .as_ref()
+        .and_then(|label| app.get_webview_window(label))
+    else {
+        return false;
+    };
+    // The warm-window reaper checks this generation under the same active-window lock.
+    state.warm_generation.fetch_add(1, Ordering::Relaxed);
+    drop(active);
+    if window
+        .show()
+        .and_then(|()| window.unminimize())
+        .and_then(|()| window.set_focus())
+        .is_err()
+    {
+        return false;
+    }
+    if let Some(setup) = app.get_webview_window("setup") {
+        let _ = setup.hide();
+    }
+    true
+}
+
+fn saved_server<'a>(
+    choice: &settings::Setup,
+    identity: (&str, &str),
+    servers: &'a [server_directory::Server],
+) -> Option<&'a server_directory::Server> {
+    if !choice.belongs_to(identity) {
+        return None;
+    }
+    servers.iter().find(|server| {
+        server.url == choice.server_url.origin().ascii_serialization()
+            && matches!(
+                (choice.mode, server.kind),
+                (settings::InstanceMode::New, server_directory::Kind::Local)
+                    | (
+                        settings::InstanceMode::Existing,
+                        server_directory::Kind::Selfhosted
+                    )
+            )
+    })
+}
+
+fn cancel_restore(state: &DesktopState) {
+    state.restore_intent.fetch_add(1, Ordering::SeqCst);
+    if state.restoring.load(Ordering::SeqCst) {
+        state.accounts.invalidate();
+        state.stack.abort();
+    }
+}
+
+fn begin_restore(state: &DesktopState) -> Option<u64> {
+    if !state.setup_ready.load(Ordering::SeqCst)
+        || state
+            .restoring
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+    {
+        return None;
+    }
+    Some(state.restore_intent.load(Ordering::SeqCst))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn retire_warm_window(state: &DesktopState, label: &str, generation: u64) -> bool {
+    let Ok(mut active) = state.active_window.lock() else {
+        return false;
+    };
+    if active.as_deref() != Some(label)
+        || state.warm_generation.load(Ordering::Relaxed) != generation
+    {
+        return false;
+    }
+    *active = None;
+    true
+}
+
+async fn restore_saved_server(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    intent: u64,
+) -> Result<bool, String> {
+    let state = app.state::<DesktopState>();
+    let _switch = state.switching.lock().await;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Ok(false);
+    }
+    let choice = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable")?
+        .clone();
+    let Some(choice) = choice else {
+        return Ok(false);
+    };
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Ok(false);
+    }
+    if !choice.belongs_to(authorization.account.identity()) {
+        return Ok(false);
+    }
+    let device = server_directory::device_id(&state.directory)?;
+    let directory = server_directory::Directory::new()?;
+    let entries = directory
+        .list(authorization.directory_bearer()?, &device)
+        .await?;
+    require_account(&state, &authorization)?;
+    let Some(server) = saved_server(&choice, authorization.account.identity(), &entries) else {
+        return Ok(false);
+    };
+    connect_directory_server(
+        window,
+        app,
+        &state,
+        server,
+        &authorization,
+        &directory,
+        &device,
+    )
+    .await?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        retire_server_windows(app, &state);
+        return Ok(false);
+    }
+    Ok(true)
+}
+
 fn show_active_or_setup(app: &tauri::AppHandle) {
-    // Saved renderer state cannot authorize opening a server for the current Accounts identity.
-    let _ = show_setup(app);
+    if focus_active(app) {
+        return;
+    }
+    if app
+        .get_webview_window("setup")
+        .is_some_and(|window| window.is_visible().unwrap_or(false))
+    {
+        let _ = show_setup(app);
+        return;
+    }
+    if app.get_webview_window("setup").is_none() {
+        // The first completed bundled document starts restoration, before any URL getter is used.
+        let _ = setup_window(app, false);
+        return;
+    }
+    let state = app.state::<DesktopState>();
+    let Some(intent) = begin_restore(&state) else {
+        return;
+    };
+    let Ok(window) = setup_window(app, false) else {
+        state.restoring.store(false, Ordering::SeqCst);
+        return;
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let restored = restore_saved_server(&app, &window, intent).await;
+        app.state::<DesktopState>()
+            .restoring
+            .store(false, Ordering::SeqCst);
+        if !matches!(restored, Ok(true)) && !focus_active(&app) {
+            let _ = show_setup(&app);
+        }
+    });
 }
 
 fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
@@ -1092,6 +1316,8 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
             }
         }
         MenuAction::ChangeServer => {
+            let state = app.state::<DesktopState>();
+            cancel_restore(&state);
             let _ = show_setup(app);
         }
         MenuAction::StopLocalServer => {
@@ -1176,16 +1402,7 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            let setup = app
-                .get_webview_window("setup")
-                .filter(|window| window.is_visible().unwrap_or(false));
-            if let Some(window) = setup {
-                let _ = window.show();
-                let _ = window.unminimize();
-                let _ = window.set_focus();
-            } else {
-                show_active_or_setup(app);
-            }
+            show_active_or_setup(app);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1255,6 +1472,9 @@ fn main() {
                 sessions: native::Sessions::default(),
                 browser_auth,
                 accounts: accounts::Accounts::default(),
+                restoring: std::sync::atomic::AtomicBool::new(false),
+                restore_intent: AtomicU64::new(0),
+                setup_ready: std::sync::atomic::AtomicBool::new(false),
                 speech: speech::SpeechManager::new(speech_helper),
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
@@ -1262,7 +1482,7 @@ fn main() {
             app.manage(updates::UpdateCheck::default());
             updates::start_background(app.handle().clone());
             refresh_menu(app.handle())?;
-            show_setup(app.handle())?;
+            setup_window(app.handle(), false)?;
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1296,15 +1516,9 @@ fn main() {
                             {
                                 return;
                             }
-                            let mut active = state
-                                .active_window
-                                .lock()
-                                .unwrap_or_else(|error| error.into_inner());
-                            if active.as_deref() != Some(&label) {
+                            if !retire_warm_window(&state, &label, generation) {
                                 return;
                             }
-                            *active = None;
-                            drop(active);
                             cancel_native_document(&app, &label);
                             state.sessions.remove(&label);
                             let _ = window.set_badge_count(None);
@@ -1347,6 +1561,164 @@ fn main() {
 mod tests {
     use super::*;
 
+    fn test_state(directory: &std::path::Path) -> DesktopState {
+        DesktopState {
+            directory: directory.to_owned(),
+            setup: Mutex::new(None),
+            host_computer: None,
+            computer_choice: tokio::sync::Mutex::new(()),
+            computer_prompt: std::sync::atomic::AtomicBool::new(false),
+            stack: local_stack::LocalStack::new(
+                directory.join("stack"),
+                directory.join("resources"),
+                "edge".into(),
+                None,
+                None,
+            ),
+            active_window: Mutex::new(None),
+            sequence: AtomicU64::new(1),
+            switching: tokio::sync::Mutex::new(()),
+            sessions: native::Sessions::default(),
+            browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
+            accounts: accounts::Accounts::default(),
+            restoring: std::sync::atomic::AtomicBool::new(false),
+            restore_intent: AtomicU64::new(0),
+            setup_ready: std::sync::atomic::AtomicBool::new(false),
+            speech: speech::SpeechManager::new(PathBuf::new()),
+            pairings: pairing::Pairings::default(),
+            warm_generation: AtomicU64::new(0),
+        }
+    }
+
+    #[test]
+    fn reopening_an_existing_product_window_reuses_it_and_retires_the_warm_timeout() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(test_state(directory.path()))
+            .build(app_context())
+            .unwrap();
+        let _picker =
+            WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
+                .visible(true)
+                .build()
+                .unwrap();
+        let product = WebviewWindowBuilder::new(
+            &app,
+            "server-1",
+            WebviewUrl::External(Url::parse("https://product.example.test").unwrap()),
+        )
+        .visible(false)
+        .build()
+        .unwrap();
+        let state = app.state::<DesktopState>();
+        *state.active_window.lock().unwrap() = Some(product.label().into());
+        assert!(focus_active(app.handle()));
+        assert_eq!(state.warm_generation.load(Ordering::Relaxed), 1);
+        // MockRuntime's visibility getter is constant. Native QA verifies show/hide and focus.
+        assert!(focus_active(app.handle()));
+        assert_eq!(state.warm_generation.load(Ordering::Relaxed), 2);
+        assert_eq!(app.webview_windows().len(), 2);
+    }
+
+    #[test]
+    fn a_missing_product_window_cannot_be_focused_from_a_stale_label() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(test_state(directory.path()))
+            .build(app_context())
+            .unwrap();
+        *app.state::<DesktopState>().active_window.lock().unwrap() = Some("server-missing".into());
+        assert!(!focus_active(app.handle()));
+    }
+
+    #[test]
+    fn startup_waits_for_the_bundled_document_and_deduplicates_restore_until_it_finishes() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        assert_eq!(begin_restore(&state), None);
+        state.setup_ready.store(true, Ordering::SeqCst);
+        let intent = begin_restore(&state).unwrap();
+        assert_eq!(begin_restore(&state), None);
+        cancel_restore(&state);
+        assert_ne!(state.restore_intent.load(Ordering::SeqCst), intent);
+        assert_eq!(begin_restore(&state), None);
+        state.restoring.store(false, Ordering::SeqCst);
+        assert_eq!(begin_restore(&state), Some(intent + 1));
+    }
+
+    #[test]
+    fn a_reopen_between_the_warm_visibility_check_and_retirement_keeps_the_window() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        *state.active_window.lock().unwrap() = Some("server-1".into());
+        let expiration = state.warm_generation.load(Ordering::Relaxed);
+        // Reopen wins the active-window lock after the reaper's earlier visibility check.
+        {
+            let _active = state.active_window.lock().unwrap();
+            state.warm_generation.fetch_add(1, Ordering::Relaxed);
+        }
+        assert!(!retire_warm_window(&state, "server-1", expiration));
+        assert_eq!(
+            state.active_window.lock().unwrap().as_deref(),
+            Some("server-1")
+        );
+        assert!(retire_warm_window(&state, "server-1", expiration + 1));
+        assert!(state.active_window.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn startup_restores_only_a_current_accounts_directory_choice_for_the_same_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "subject-a");
+        for (mode, kind, url) in [
+            (
+                settings::InstanceMode::Existing,
+                server_directory::Kind::Selfhosted,
+                "https://product.example.test",
+            ),
+            (
+                settings::InstanceMode::New,
+                server_directory::Kind::Local,
+                "http://127.0.0.1:45173",
+            ),
+        ] {
+            let choice = settings::Setup {
+                mode,
+                server_url: Url::parse(url).unwrap(),
+                account: Some(settings::account_key(identity)),
+            };
+            settings::save(directory.path(), &choice).unwrap();
+            let mut choice = settings::load(directory.path()).unwrap();
+            let mut entries = vec![server_directory::Server {
+                id: "11111111-1111-4111-8111-111111111111".into(),
+                url: url.into(),
+                kind,
+                device_id: (kind == server_directory::Kind::Local).then(|| "this-device".into()),
+            }];
+            assert!(saved_server(&choice, identity, &entries).is_some());
+            assert!(saved_server(&choice, (identity.0, "subject-b"), &entries).is_none());
+            assert!(saved_server(
+                &choice,
+                ("https://other.example.test", identity.1),
+                &entries
+            )
+            .is_none());
+            assert!(saved_server(&choice, identity, &[]).is_none());
+            entries[0].url = "https://different.example.test".into();
+            assert!(saved_server(&choice, identity, &entries).is_none());
+            entries[0].url = url.into();
+            entries[0].kind = if kind == server_directory::Kind::Local {
+                server_directory::Kind::Selfhosted
+            } else {
+                server_directory::Kind::Local
+            };
+            assert!(saved_server(&choice, identity, &entries).is_none());
+            entries[0].kind = kind;
+            choice.account = None;
+            assert!(saved_server(&choice, identity, &entries).is_none());
+        }
+    }
+
     #[test]
     fn setup_commands_require_the_bundled_document_and_window() {
         for accepted in [
@@ -1378,29 +1750,7 @@ mod tests {
     fn runtime_authority_denies_remote_and_other_window_ipc() {
         let directory = tempfile::tempdir().unwrap();
         let app = tauri::test::mock_builder()
-            .manage(DesktopState {
-                directory: directory.path().to_owned(),
-                setup: Mutex::new(None),
-                host_computer: None,
-                computer_choice: tokio::sync::Mutex::new(()),
-                computer_prompt: std::sync::atomic::AtomicBool::new(false),
-                stack: local_stack::LocalStack::new(
-                    directory.path().join("stack"),
-                    directory.path().join("resources"),
-                    "edge".into(),
-                    None,
-                    None,
-                ),
-                active_window: Mutex::new(None),
-                sequence: AtomicU64::new(1),
-                switching: tokio::sync::Mutex::new(()),
-                sessions: native::Sessions::default(),
-                browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
-                accounts: accounts::Accounts::default(),
-                speech: speech::SpeechManager::new(PathBuf::new()),
-                pairings: pairing::Pairings::default(),
-                warm_generation: AtomicU64::new(0),
-            })
+            .manage(test_state(directory.path()))
             .plugin(tauri_plugin_updater::Builder::new().build())
             .invoke_handler(tauri::generate_handler![
                 setup_state,

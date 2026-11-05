@@ -9,6 +9,7 @@ use std::io::{Read, Write};
 use std::path::Path;
 
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use url::Url;
 
 use crate::server::normalize_server_url;
@@ -28,6 +29,23 @@ pub enum InstanceMode {
 pub struct Setup {
     pub mode: InstanceMode,
     pub server_url: Url,
+    pub account: Option<String>,
+}
+
+impl Setup {
+    pub fn belongs_to(&self, identity: (&str, &str)) -> bool {
+        self.account.as_deref() == Some(account_key(identity).as_str())
+    }
+}
+
+pub fn account_key(identity: (&str, &str)) -> String {
+    let value = serde_json::to_vec(&identity).expect("account identity can be serialized");
+    let digest = Sha256::digest(value);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn valid_account(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
 fn valid_managed_origin(url: &Url) -> bool {
@@ -64,9 +82,18 @@ pub fn load(dir: &Path) -> Option<Setup> {
     }
     let value: Value = serde_json::from_slice(&contents).ok()?;
     let object = value.as_object()?;
-    if object.len() != 2 {
+    if object.len() != 2 + usize::from(object.contains_key("account")) {
         return None;
     }
+    let account = match object.get("account") {
+        Some(value) => Some(
+            value
+                .as_str()
+                .filter(|value| valid_account(value))?
+                .to_owned(),
+        ),
+        None => None,
+    };
     let mode = match object.get("mode")?.as_str()? {
         "existing" => InstanceMode::Existing,
         "new" => InstanceMode::New,
@@ -76,13 +103,24 @@ pub fn load(dir: &Path) -> Option<Setup> {
     if mode == InstanceMode::New && !valid_managed_origin(&server_url) {
         return None;
     }
-    Some(Setup { mode, server_url })
+    Some(Setup {
+        mode,
+        server_url,
+        account,
+    })
 }
 
 /// Atomically replace preview settings with a normalized origin and no credentials or headers.
 pub fn save(dir: &Path, setup: &Setup) -> Result<(), String> {
     let origin = normalize_server_url(setup.server_url.as_str())?;
     if setup.mode == InstanceMode::New && !valid_managed_origin(&origin) {
+        return Err(SAVE_ERROR.into());
+    }
+    if setup
+        .account
+        .as_deref()
+        .is_some_and(|value| !valid_account(value))
+    {
         return Err(SAVE_ERROR.into());
     }
     let mut builder = DirBuilder::new();
@@ -97,11 +135,14 @@ pub fn save(dir: &Path, setup: &Setup) -> Result<(), String> {
     if !directory.is_dir() || is_reparse_point(&directory) {
         return Err(SAVE_ERROR.into());
     }
-    let contents = serde_json::to_vec(&json!({
+    let mut value = json!({
         "mode": setup.mode,
         "serverUrl": origin.origin().ascii_serialization(),
-    }))
-    .map_err(|_| SAVE_ERROR)?;
+    });
+    if let Some(account) = &setup.account {
+        value["account"] = json!(account);
+    }
+    let contents = serde_json::to_vec(&value).map_err(|_| SAVE_ERROR)?;
     let mut temporary = tempfile::NamedTempFile::new_in(dir).map_err(|_| SAVE_ERROR)?;
     temporary.write_all(&contents).map_err(|_| SAVE_ERROR)?;
     temporary.as_file().sync_all().map_err(|_| SAVE_ERROR)?;
@@ -170,6 +211,7 @@ mod tests {
             &Setup {
                 mode: InstanceMode::Existing,
                 server_url: url.clone(),
+                account: None,
             },
         )
     }
@@ -179,6 +221,7 @@ mod tests {
         let setup = Setup {
             mode: InstanceMode::New,
             server_url: Url::parse("http://127.0.0.1:45173").unwrap(),
+            account: None,
         };
         super::save(dir.path(), &setup).unwrap();
         assert_eq!(super::load(dir.path()).unwrap().mode, InstanceMode::New);
@@ -192,7 +235,8 @@ mod tests {
                 dir.path(),
                 &Setup {
                     mode: InstanceMode::New,
-                    server_url: Url::parse(target).unwrap()
+                    server_url: Url::parse(target).unwrap(),
+                    account: None,
                 }
             )
             .is_err());
@@ -203,6 +247,36 @@ mod tests {
         }
         super::clear(dir.path()).unwrap();
         assert!(super::load(dir.path()).is_none());
+    }
+
+    #[test]
+    fn persists_the_account_binding_without_storing_the_identity_or_credentials() {
+        let dir = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "test-subject");
+        let setup = Setup {
+            mode: InstanceMode::Existing,
+            server_url: Url::parse("https://product.example.test").unwrap(),
+            account: Some(account_key(identity)),
+        };
+        super::save(dir.path(), &setup).unwrap();
+        let saved = super::load(dir.path()).unwrap();
+        assert!(saved.belongs_to(identity));
+        assert!(!saved.belongs_to((identity.0, "other-subject")));
+        assert!(!saved.belongs_to(("https://other.example.test", identity.1)));
+        let contents = fs::read_to_string(dir.path().join(SETTINGS_FILE)).unwrap();
+        assert!(!contents.contains(identity.0));
+        assert!(!contents.contains(identity.1));
+        for account in [
+            json!(null),
+            json!(17),
+            json!("invalid"),
+            json!("z".repeat(64)),
+        ] {
+            fs::write(dir.path().join(SETTINGS_FILE), json!({
+                "mode": "existing", "serverUrl": "https://product.example.test", "account": account,
+            }).to_string()).unwrap();
+            assert!(super::load(dir.path()).is_none());
+        }
     }
 
     #[test]
