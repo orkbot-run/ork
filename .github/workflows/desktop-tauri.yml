@@ -9,21 +9,25 @@ on:
     branches: [main]
     paths: &tauri-paths
       - ".github/workflows/desktop-tauri.yml"
-      - "apps/desktop/src-tauri/**"
-      - "apps/desktop/tauri-ui/**"
-      - "apps/desktop/assets/**"
-      - "apps/desktop/scripts/*tauri*"
-      - "apps/desktop/package.json"
-      - "apps/desktop/src/setup.css"
-      - "apps/desktop/src/app-document-script.ts"
-      - "apps/desktop/src/locales/**"
-      - "apps/desktop/scripts/build-speech.mjs"
-      - "apps/desktop/native/speech/**"
+      - "apps/desktop/**"
       - "apps/web/src/lib/desktop.ts"
       - "apps/web/src/lib/sso-flow.ts"
       - "packages/contracts/src/desktop.ts"
       - "scripts/pnpm.mjs"
       - "pnpm-lock.yaml"
+      - "package.json"
+      - "pnpm-workspace.yaml"
+      - ".npmrc"
+      - "LICENSE"
+      - "LICENSE-POLYFORM"
+      - "LICENSE.md"
+      - "NOTICE"
+      - "infra/compose/docker-compose.images.yml"
+      - "infra/compose/.env.images.example"
+      - "docs/licensing-faq.md"
+      - "docs/commercial-license.md"
+      - "docs/licensing-rollout.md"
+      - "docs/cla/v1.md"
       - "packages/ui-tokens/src/**"
   pull_request:
     paths: *tauri-paths
@@ -37,7 +41,7 @@ concurrency:
 
 jobs:
   diagnostic-build:
-    name: Experimental Tauri (${{ matrix.os }})
+    name: Tauri (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:

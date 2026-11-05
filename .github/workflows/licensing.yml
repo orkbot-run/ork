@@ -4,8 +4,18 @@ name: Dependency license inventory
 
 on:
   pull_request:
+    paths: &license-paths
+      - "**/package.json"
+      - "pnpm-lock.yaml"
+      - "LICENSE*"
+      - "**/LICENSE*"
+      - "NOTICE"
+      - "**/*.license"
+      - "scripts/license-headers*.mjs"
+      - "scripts/dependency-licenses*.mjs"
   push:
     branches: [main]
+    paths: *license-paths
   workflow_dispatch:
 
 permissions:

@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# Modified by Ork contributors to publish only current pull-request results. See LICENSE.md.
+
 name: publish Playwright report
 
 on:
@@ -24,9 +28,27 @@ jobs:
     outputs:
       job_result: ${{ steps.playwright.outputs.job_result }}
       result: ${{ steps.playwright.outputs.result }}
+      pull_request: ${{ steps.pull_request.outputs.number }}
     steps:
+      - name: Resolve current open pull request
+        id: pull_request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          pulls="$(gh api --method GET \
+            "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${HEAD_OWNER}:${HEAD_BRANCH}&per_page=100")"
+          number="$(jq -r --arg sha "$HEAD_SHA" \
+            '[.[] | select(.head.sha == $sha)] | if length == 1 then .[0].number else empty end' \
+            <<<"$pulls")"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
       - name: Read Playwright job result
         id: playwright
+        if: steps.pull_request.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
@@ -34,7 +56,7 @@ jobs:
         shell: bash
         run: |
           result="$(gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/${RUN_ATTEMPT}/jobs?per_page=100" | \
-            jq -r '[.[].jobs[] | select(.name == "Web E2E / Web E2E") | .conclusion] | unique | if length == 1 then .[0] else error("expected exactly one Playwright job") end')"
+            jq -r '[.[].jobs[] | select(.name == "Web E2E / Web E2E") | .conclusion] | unique | if length == 0 then "skipped" elif length == 1 then .[0] else error("expected exactly one Playwright job") end')"
           case "$result" in
             success|failure) ;;
             timed_out) ;;
@@ -48,7 +70,11 @@ jobs:
 
   publish:
     needs: result
-    if: needs.result.outputs.result != 'skipped'
+    # Successful runs with no hosted gallery stay in Actions instead of posting a PR comment.
+    if: >-
+      needs.result.outputs.pull_request != '' &&
+      needs.result.outputs.result != 'skipped' &&
+      (needs.result.outputs.result == 'failure' || vars.PLAYWRIGHT_PUBLIC_BASE_URL != '')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
@@ -86,24 +112,6 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.storage.outputs.configured == 'true'
-      - name: Resolve pull request
-        id: pull_request
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        shell: bash
-        run: |
-          pulls="$(gh api --method GET \
-            "repos/${GITHUB_REPOSITORY}/pulls?state=all&head=${HEAD_OWNER}:${HEAD_BRANCH}&per_page=100")"
-          number="$(jq -r --arg sha "$HEAD_SHA" \
-            '[.[] | select(.head.sha == $sha)] | if length == 1 then .[0].number else empty end' \
-            <<<"$pulls")"
-          if [[ -z "$number" ]]; then
-            echo "::warning::Could not resolve a pull request for ${HEAD_OWNER}:${HEAD_BRANCH} at ${HEAD_SHA}."
-          fi
-          echo "number=$number" >> "$GITHUB_OUTPUT"
       - name: Check for Playwright artifact
         id: artifact
         env:
@@ -159,7 +167,7 @@ jobs:
           PLAYWRIGHT_SHA: ${{ github.event.workflow_run.head_sha }}
           PLAYWRIGHT_EVENT: ${{ github.event.workflow_run.event }}
           PLAYWRIGHT_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          PLAYWRIGHT_PR_NUMBER: ${{ steps.pull_request.outputs.number }}
+          PLAYWRIGHT_PR_NUMBER: ${{ needs.result.outputs.pull_request }}
           PLAYWRIGHT_REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
           PLAYWRIGHT_PUBLISH_REPORT: "false"
           PLAYWRIGHT_REPORT_DIR: ${{ runner.temp }}/playwright-artifacts/playwright-report
@@ -168,12 +176,12 @@ jobs:
       - name: Link screenshot gallery from pull request
         if: >-
           steps.storage.outputs.configured == 'true' &&
-          steps.pull_request.outputs.number != '' &&
+          needs.result.outputs.pull_request != '' &&
           steps.publish.outputs.latest_pr_run == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PLAYWRIGHT_PUBLIC_BASE_URL: ${{ vars.PLAYWRIGHT_PUBLIC_BASE_URL }}
-          PR_NUMBER: ${{ steps.pull_request.outputs.number }}
+          PR_NUMBER: ${{ needs.result.outputs.pull_request }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           SHA: ${{ github.event.workflow_run.head_sha }}
         shell: bash
@@ -202,6 +210,8 @@ jobs:
                 "$review_path" \
                 "$changed_paths_file"
           )"
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq 'select(.state == "open") | .head.sha')"
+          if [[ "$current_head" != "$SHA" ]]; then exit 0; fi
           marker="<!-- orkbot-playwright-screenshots -->"
           comment_id="$(gh api --paginate --slurp \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" | \
@@ -214,13 +224,13 @@ jobs:
             gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --input - <<<"$payload"
           fi
       - name: Link native Actions report and screenshots
-        if: steps.storage.outputs.configured != 'true'
+        if: steps.storage.outputs.configured != 'true' && needs.result.outputs.result == 'failure'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARTIFACT_ID: ${{ steps.artifact.outputs.id }}
           HAS_ARTIFACT: ${{ steps.artifact.outputs.exists }}
           PLAYWRIGHT_RESULT: ${{ needs.result.outputs.result }}
-          PR_NUMBER: ${{ steps.pull_request.outputs.number }}
+          PR_NUMBER: ${{ needs.result.outputs.pull_request }}
           RUN_ID: ${{ github.event.workflow_run.id }}
           RUN_URL: ${{ github.event.workflow_run.html_url }}
           SHA: ${{ github.event.workflow_run.head_sha }}
@@ -243,6 +253,8 @@ jobs:
           cat "$body_path" >> "$GITHUB_STEP_SUMMARY"
           if [[ -z "$PR_NUMBER" ]]; then exit 0; fi
           [[ "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid pull request number." >&2; exit 1; }
+          current_head="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq 'select(.state == "open") | .head.sha')"
+          if [[ "$current_head" != "$SHA" ]]; then exit 0; fi
           marker="<!-- orkbot-playwright-screenshots -->"
           comment_id="$(gh api --paginate --slurp \
             "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" | \

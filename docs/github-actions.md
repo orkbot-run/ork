@@ -1,6 +1,9 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the Tauri CI cleanup. See LICENSE.md. -->
+
 # GitHub Actions configuration
 
-Start with the workflows in `.github/workflows/`. All 15 use Ork repository paths and GitHub-hosted runners, with optional services disabled until you configure them.
+Start with the workflows in `.github/workflows/`. They use Ork repository paths and GitHub-hosted runners, with optional services disabled until you configure them.
 
 ## Available with GitHub only
 
@@ -12,17 +15,15 @@ Start with the workflows in `.github/workflows/`. All 15 use Ork repository path
 | `topology-verification.yml` | Manual Docker topology verification. |
 | `computer-replay.yml` | Manual browser/computer replay without model inference. |
 | `publish-server-image.yml` | Native amd64 and arm64 images in this repository's GHCR namespace, using `GITHUB_TOKEN`. |
-| `publish-playwright-report.yml` | PR links to the matching Actions report and artifact. S3 galleries are optional. |
-| `desktop-macos-screenshot.yml` | Diagnostic macOS screenshots. |
+| `publish-playwright-report.yml` | Publishes report links only after relevant browser test runs. S3 galleries are optional. |
+| `desktop-macos-screenshot.yml` | Manual Tauri setup screenshot on a disposable macOS runner. |
 | `mobile-android-screenshots.yml` | Diagnostic Android screenshots and artifacts. S3 publication is explicit. |
-| `release-desktop.yml` | Unsigned diagnostic installers as Actions artifacts by default. Signed stable releases require separate configuration. |
+| `desktop-tauri.yml` | Tauri checks, tests and unsigned diagnostic installers for macOS, Windows and Linux. |
 | `release-android-apk.yml` | A development-signed diagnostic APK on a GitHub runner by default. EAS production publication is explicit. |
 | `release-mobile.yml` | Android diagnostic build by default. iOS submission is an explicit option requiring Expo and Apple accounts. |
 | `model-catalog-bump.yml` | Update the model catalog and verify it. PR creation requires the repository/organization bot policy below or a dedicated PAT. |
-| `weekly-dependencies.yml` | Check updater configuration. AI dependency updates require the dedicated credentials below. |
-| `review-bot.yml` | Route review fallback events after the selected review applications have been installed. |
 
-Manual CI runs static/type checks and safety checks, three unit-test shards, and two PostgreSQL test shards. PR-only build, native, and Web E2E jobs are skipped, along with push-only image publishing, OTA, and deployment.
+Manual CI runs static/type checks and safety checks, three unit-test shards, and two PostgreSQL test shards. Jobs that depend on PR changed-area outputs are skipped, along with push-only image publishing, OTA, and deployment.
 
 Diagnostic runs upload unsigned installers or development-signed APKs to Actions artifacts. Stable feeds and store submissions use the release modes described below.
 
@@ -30,11 +31,9 @@ Diagnostic runs upload unsigned installers or development-signed APKs to Actions
 
 Keep Actions enabled and allow the pinned actions used by the workflows. Keep default workflow permissions read-only. Publishing jobs request their own permissions.
 
-For automated dependency PRs, enable **Allow GitHub Actions to create and approve pull requests** at the organization and repository levels. The workflows create reviewable PRs and do not automatically approve or merge them. If organization policy prevents that setting, supply a dedicated `GH_DEPENDENCY_UPDATES_PAT` with repository contents and pull-request write access. The AI updater also needs that PAT to update its own subscription-auth secret.
+For automated dependency PRs, enable **Allow GitHub Actions to create and approve pull requests** at the organization and repository levels. The workflows create reviewable PRs and do not automatically approve or merge them. If organization policy prevents that setting, supply a dedicated `GH_DEPENDENCY_UPDATES_PAT` with repository contents and pull-request write access.
 
 When the model-catalog updater uses `GITHUB_TOKEN`, GitHub creates its PR workflow runs in an approval-required state. A maintainer with write access can start them by selecting **Approve workflows to run**. A dedicated PAT allows the PR checks to start automatically. See [GitHub's workflow-triggering rules](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow#triggering-a-workflow-from-a-workflow). Review every automated dependency patch before merging it.
-
-The review fallback labels are `review:cr` and `review:greptile`. Install the Qodo, CodeRabbit, and Greptile GitHub applications and grant access to this repository to use the corresponding external reviewers. GitHub Actions does not provide those services by itself.
 
 GHCR publication needs permission for the repository workflow to create and write packages in its organization. If organization package policy denies that, an organization owner must allow it. No manually stored registry token is required for the normal GHCR path.
 
@@ -67,26 +66,17 @@ For iOS, create an Apple Developer account, an App Store Connect app, signing cr
 
 Choose the iOS submission input explicitly. Missing Expo or Apple configuration stops that request with the missing entry names. It does not turn a diagnostic build into a store release.
 
-## Signed desktop releases and updates
+## Tauri desktop builds and updates
 
-For a manual signed release, select a `vMAJOR.MINOR.PATCH` tag and set `signed_release=true`. The tag must match the desktop version and changelog and pass the ancestry check against `main`. For signed releases triggered by a tag push, set `DESKTOP_SIGNED_RELEASE_ENABLED=true` after configuring every requested platform.
+`desktop-tauri.yml` uploads unsigned diagnostic installers. It does not publish a stable
+release or update manifest. Production signing and publication still need Tauri-specific
+configuration and installed-platform verification.
 
-macOS needs an Apple Developer **Developer ID Application** certificate and an App Store Connect API key for notarization:
-
-- Secrets: `DESKTOP_MAC_CSC_LINK`, `DESKTOP_MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_API_KEY_P8`.
-- Optional secret: `DESKTOP_MAC_PROVISIONING_PROFILE` for the associated passkey capability.
-
-Windows signed releases use an Azure Artifact Signing account and certificate profile with an OIDC trust for the `desktop-release` GitHub environment:
-
-- Secrets: `DESKTOP_WIN_AZURE_CLIENT_ID`, `DESKTOP_WIN_AZURE_TENANT_ID`.
-- Variables: `DESKTOP_WIN_SIGNING_ENDPOINT`, `DESKTOP_WIN_SIGNING_ACCOUNT`, `DESKTOP_WIN_SIGNING_PROFILE`, `DESKTOP_WIN_PUBLISHER`.
-
-Linux update verification needs an Ed25519 key pair that the Ork operator generates and owns:
-
-- Secret: `DESKTOP_LINUX_UPDATE_SIGNING_KEY`, the private signing key.
-- Variable: `ORKBOT_LINUX_UPDATE_PUBLIC_KEY`, its matching public PEM key.
-
-Desktop updates remain disabled unless `ORKBOT_ENABLE_AUTO_UPDATE=1` is set for a configured release. Linux also requires the matching public verification key at build time. Keep the private key outside the repository.
+Local passkey builds use `PASSKEY_PROFILE`, `APPLE_SIGNING_IDENTITY` and
+`ORKBOT_PASSKEY_RP_ID`. Updates stay disabled unless the build sets
+`ORKBOT_ENABLE_AUTO_UPDATE=1`, `TAURI_UPDATER_ENDPOINT` and `TAURI_UPDATER_PUBLIC_KEY`.
+Those update settings are compiled into the app. See [Desktop releases](desktop-release.md)
+for the build commands and verification limits.
 
 ## Optional hosted report galleries
 
@@ -97,17 +87,6 @@ GitHub artifacts work without an object-storage account. To publish the persiste
 - Optional variable: `S3_REGION`, default `us-east-1`.
 
 Partial storage configuration does not publish a gallery. The GitHub artifact remains the default report. The Android screenshot workflow requires the gallery input explicitly before using storage credentials.
-
-## AI dependency updates
-
-The original agent-assisted updater requires a Codex-compatible subscription login and a dedicated GitHub PAT. It runs dependency code without repository-write credentials and publishes through a separate job.
-
-- Secret: `CODEX_SUBSCRIPTION_AUTH`, the dedicated updater's validated subscription-auth JSON.
-- Secret: `GH_DEPENDENCY_UPDATES_PAT`, with repository contents/pull-request write access and repository-secret write access to persist a rotated subscription login.
-
-Use a dedicated automation identity and token. Do not copy a personal login into GitHub automatically. Scheduled runs skip an unconfigured updater. A manual request without both credentials fails and names the missing entries in its log.
-
-The separate model-catalog updater uses GitHub alone, subject to the automated-PR policy above.
 
 ## Production deployment
 
