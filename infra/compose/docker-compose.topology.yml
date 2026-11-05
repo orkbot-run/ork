@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 topology is preserved. Offline identity isolation is an Ork addition.
+
 services:
   postgres:
     image: postgres:18-alpine
@@ -77,7 +82,7 @@ services:
       - bash
       - -lc
       # The owner URL lives only in this command, so neither process environment holds it.
-      - DATABASE_MIGRATION_URL=postgres://orkbot:topology-only-password@postgres:5432/orkbot pnpm db:deploy && exec node --enable-source-maps dist/index.js
+      - DATABASE_MIGRATION_URL=postgres://orkbot:topology-only-password@postgres:5432/orkbot pnpm db:deploy && exec node --enable-source-maps ../../packages/testkit/dist/cli/topology-api.js
     environment: &app-environment
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-10}
       MAX_ATTACHMENTS_PER_MESSAGE: ${MAX_ATTACHMENTS_PER_MESSAGE:-4}
@@ -113,13 +118,8 @@ services:
       # Proxies whose X-Forwarded-For is believed. Unset trusts this stack's own networks: the web
       # proxy and a reverse proxy on the host. See docs/self-host-production.md#client-addresses.
       TRUSTED_PROXIES:
-      OIDC_ISSUER: ${OIDC_ISSUER:-}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_NAME: ${OIDC_NAME:-SSO}
-      OIDC_SCOPES: ${OIDC_SCOPES:-openid email profile}
-      OIDC_ALLOW_SIGNUP_BYPASS: ${OIDC_ALLOW_SIGNUP_BYPASS:-false}
-      AUTH_PASSWORD_ENABLED: ${AUTH_PASSWORD_ENABLED:-true}
+      # Only the disposable test composition enables local identity fixtures.
+      AUTH_PASSWORD_ENABLED: "true"
       AUTH_BREACHED_PASSWORD_CHECK_ENABLED: ${AUTH_BREACHED_PASSWORD_CHECK_ENABLED:-false}
     ports:
       - "127.0.0.1:${TOPOLOGY_API_PORT:-3199}:3100"

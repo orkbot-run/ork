@@ -111,6 +111,7 @@ credentials for the API's confidential client.
 Check TypeScript, Rust and mobile tests before building. Offline coverage includes
 discovery and redirect handling, callback state and issuer checks, ID token
 verification, secure credential storage, refresh rotation and logout. Smoke-test
-installed callbacks and keychain access on each platform. To test the full production
-token flow, ask the operator to grant access to the installation first. Offline
-tests do not cover that grant.
+installed callbacks and keychain access on each platform. A first-party app verifies
+a central account before server selection. The selected installation checks its own
+access policy when it creates the product session. Test both steps with a verified
+central account. Offline tests do not replace that installed-app check.

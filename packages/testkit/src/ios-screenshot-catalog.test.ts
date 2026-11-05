@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 coverage checks are preserved. Native Accounts callback classification is an Ork addition.
+
 import { access, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,9 +15,10 @@ const mobileDir = path.resolve(
 );
 const catalogDir = path.join(mobileDir, "e2e", "ios-screenshots");
 
-/** Screens the catalog cannot reach yet, and why. Capture one and remove it here. */
+/** Routes without standalone screenshot coverage, and why. */
 const UNCOVERED: Record<string, string> = {
   "integration-setup": "redirects to Integrations",
+  "oauth2/callback": "native Accounts consumes this callback before redirecting; no standalone UI",
   share: "Android only: iOS has no share extension yet",
 };
 

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 egress coverage is preserved. Accounts fixture configuration is an Ork addition.
 # Offline checks for install-images.sh's computer egress setup: stubbed uname,
 # docker, iptables and egress script; no daemon, root or firewall changes.
 set -euo pipefail
@@ -32,6 +36,8 @@ BETTER_AUTH_SECRET=b
 ENCRYPTION_KEY=e
 SCREEN_PROXY_SECRET=s
 SANDBOX_SUPERVISOR_TOKEN=t
+OIDC_ISSUER=https://api.orkbot.run
+OIDC_CLIENT_ID=offline-test-client
 EOF
 exit 0
 STUB

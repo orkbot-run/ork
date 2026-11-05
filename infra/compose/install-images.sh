@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 installer is preserved. Accounts configuration validation is an Ork addition.
 
 set -Eeuo pipefail
 
@@ -320,6 +324,35 @@ YAML
   fi
 }
 
+# Resolve dotenv and shell precedence through Compose without touching the running stack.
+validate_accounts_config() {
+  if ! docker compose --env-file "$ENV_FILE" -f - config --environment <<'YAML' | awk '
+    /^OIDC_ISSUER=/ {
+      issuer = substr($0, index($0, "=") + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", issuer)
+      issuers++
+    }
+    /^OIDC_CLIENT_ID=/ {
+      client = substr($0, index($0, "=") + 1)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", client)
+      clients++
+    }
+    END {
+      if (issuers != 1 || issuer != "https://api.orkbot.run" || clients != 1 || client == "") exit 1
+    }
+  '
+services:
+  api:
+    image: scratch
+    environment:
+      OIDC_ISSUER: ${OIDC_ISSUER:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+YAML
+  then
+    fail "set OIDC_ISSUER=https://api.orkbot.run and OIDC_CLIENT_ID to your registered Ork Accounts client in .env (or the shell), then rerun bash install-images.sh. See docs/self-host-accounts.md."
+  fi
+}
+
 # The Compose file passes each container only the settings it names. Say which .env settings it
 # does not name, such as TELEGRAM_BOT_TOKEN_<NAME>, rather than let an upgrade drop them silently.
 warn_unpassed_settings() {
@@ -382,13 +415,20 @@ if [[ -f "$OVERRIDE_FILE" ]]; then
   echo "Using ${OVERRIDE_FILE}."
 fi
 
+existing_env=false
 if [[ -e "$ENV_FILE" ]]; then
+  existing_env=true
   echo "Keeping existing .env."
-  add_missing_secrets
 else
   create_env
 fi
 
+if [[ "$prepare_only" != true ]]; then
+  validate_accounts_config
+fi
+if [[ "$existing_env" == true ]]; then
+  add_missing_secrets
+fi
 validate_required_secrets
 warn_unpassed_settings
 

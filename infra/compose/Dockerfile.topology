@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 build is preserved. Offline API fixture startup is an Ork addition.
+
 FROM node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
 
 RUN corepack enable
@@ -8,6 +13,7 @@ COPY --chmod=755 . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter @orkbot/db generate
 RUN pnpm --filter @orkbot/api --filter @orkbot/worker build
+RUN cd packages/testkit && node ../../scripts/build-server.mjs src/cli/topology-api.ts
 RUN ORKBOT_ALLOW_DEV_SECRETS=1 pnpm --filter @orkbot/web build
 RUN install -d -m 750 -o node -g node /data /app/apps/web/node_modules/.vite-temp
 

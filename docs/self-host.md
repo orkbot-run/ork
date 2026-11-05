@@ -10,8 +10,8 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 ## What you need
 
-- Docker Engine 26 or newer with the Compose plugin, curl and OpenSSL. Nothing else is needed for
-  the published images.
+- Docker Engine 26 or newer with the Compose plugin, curl and OpenSSL.
+- A registered Ork Accounts client for this installation ([Accounts sign-in](./self-host-accounts.md)).
 - A model: an OpenRouter key, a connection added in the app after signup, or a model server you
   run yourself ([models](./self-host-models.md)).
 - For a public host, a domain and TLS ([production deployment](./self-host-production.md)).
@@ -24,15 +24,25 @@ Requires Docker Engine 26+ (API 1.45+ for bot home volume subpaths), the Compose
 ```bash
 mkdir -p orkbot && cd orkbot &&
 curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
+bash install-images.sh --prepare-only
+```
+
+The installer downloads `docker-compose.images.yml` and `.env.images.example`, then creates `.env`
+with random secrets. Configure Accounts next.
+Set `OIDC_ISSUER=https://api.orkbot.run` and `OIDC_CLIENT_ID` to your registered client ID in `.env`,
+then follow [Accounts sign-in](./self-host-accounts.md) for the callback and client secret settings.
+Choose the public URL here too.
+
+```bash
 bash install-images.sh
 ```
 
-The installer downloads `docker-compose.images.yml` and `.env.images.example`, creates `.env` with
-random secrets, then pulls and starts the images. It preserves an existing `.env` when rerun. For
-the installer secret list, non-reuse rules, and recovery, see
-[Self-host secrets checklist](./self-host-secrets.md). To customize the public URL, image tag, or
-optional providers before startup, run `bash install-images.sh --prepare-only`, edit `.env`, then
-run `bash install-images.sh`. Flags may be combined in either order: `--prepare-only`, `--local`.
+The installer requires this exact issuer and a non-empty client ID before pulling images or
+changing services. If this check fails, your existing `.env` stays intact.
+On later runs, the installer keeps your settings and fills any missing upgrade secrets after
+checking the Accounts configuration, so existing secrets keep their values.
+See [Self-host secrets checklist](./self-host-secrets.md) for backup and recovery.
+Flags may be combined in either order: `--prepare-only`, `--local`.
 
 `SANDBOX_PROVIDER` defaults to `docker`. The images Compose file runs a sandbox supervisor
 (from the app image, on the internal network only) and pulls `ghcr.io/orkbot-run/ork/computer`.
@@ -74,7 +84,7 @@ If the installer, Compose downloads, or image pulls are blocked, use the
 ## Docker Compose (single machine)
 
 1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` and `POSTGRES_APP_PASSWORD` (`openssl rand -hex 16` each), plus `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, and `SCREEN_PROXY_SECRET` to independent long random strings (32+ characters; 64 hex for `ENCRYPTION_KEY`). Docker sandboxes also need a dedicated `SANDBOX_SUPERVISOR_TOKEN`. Keep existing `ENCRYPTION_KEY` values so stored credentials stay decryptable.
-2. Set `OPENROUTER_API_KEY` (and `COMPOSIO_API_KEY` if you want Plugins).
+2. Configure the registered Ork Accounts client in `.env` using [Accounts sign-in](./self-host-accounts.md). `OIDC_ISSUER` must be `https://api.orkbot.run`, and `OIDC_CLIENT_ID` is required. Set optional model or integration keys as needed.
 3. Build the computer image: `pnpm sandbox:build` (Compose also builds it via the `computer` service).
 4. `docker compose --env-file .env -f infra/compose/docker-compose.yml up --build`
 5. Open the web origin (`http://127.0.0.1:5173` by default). Signup never grants server-administration permissions.

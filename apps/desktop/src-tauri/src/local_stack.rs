@@ -1808,6 +1808,22 @@ mod tests {
     }
 
     #[test]
+    fn shipped_environment_templates_parse_with_accounts_names_and_generated_secrets() {
+        for template in [
+            include_str!("../../../../infra/compose/.env.images.example"),
+            include_str!("../../../../.env.example"),
+        ] {
+            let rendered = render_environment(template, |bytes| Ok("d".repeat(bytes * 2))).unwrap();
+            let values = parse_environment(&rendered).unwrap();
+            assert_eq!(values["OIDC_NAME"], "Ork Accounts");
+            assert_eq!(values["OIDC_ISSUER"], "https://api.orkbot.run");
+            assert_eq!(values["AUTH_PASSWORD_ENABLED"], "false");
+            assert_eq!(values["POSTGRES_PASSWORD"], "d".repeat(32));
+            assert_eq!(values["POSTGRES_APP_PASSWORD"], "d".repeat(32));
+        }
+    }
+
+    #[test]
     fn existing_environment_is_preserved_and_invalid_files_are_never_regenerated() {
         let (root, stack, _) = fixture(Vec::new());
         private_directory(&stack.directory).unwrap();

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 smoke coverage is preserved. Accounts validation cases are an Ork addition.
 set -euo pipefail
 root="$(cd "$(dirname "$0")" && pwd)"
 src="$root/install-images.sh"
@@ -85,6 +89,7 @@ ENCRYPTION_KEY=test-encryption-key
 SCREEN_PROXY_SECRET=test-screen-secret
 SANDBOX_SUPERVISOR_TOKEN=test-supervisor-token
 EOF
+    grep -E '^OIDC_(ISSUER|CLIENT_ID)=' .env || true
     ;;
   pull|up)
     ;;
@@ -140,6 +145,8 @@ ENCRYPTION_KEY=test-encryption-key
 SCREEN_PROXY_SECRET=test-screen-secret
 SANDBOX_SUPERVISOR_TOKEN=test-supervisor-token
 SANDBOX_COMPUTER_EGRESS=open
+OIDC_ISSUER=https://api.orkbot.run
+OIDC_CLIENT_ID=offline-test-client
 EOF
   : > "$work/docker.log"
   : > "$work/curl.log"
@@ -165,6 +172,51 @@ has_up_pull_never() {
   grep -F -e 'VERB=up' "$1/docker.log" >/dev/null \
     && grep -F -e ' --pull never' "$1/docker.log" >/dev/null
 }
+
+# Missing or foreign Accounts configuration stops before secrets, firewall, pull or startup.
+for invalid_accounts in missing-issuer foreign-issuer missing-client whitespace-client; do
+  work="$tmp/accounts-$invalid_accounts"
+  setup_work "$work"
+  case "$invalid_accounts" in
+    missing-issuer) sed '/^OIDC_ISSUER=/d' "$work/cwd/.env" > "$work/env-invalid" ;;
+    foreign-issuer) sed 's|^OIDC_ISSUER=.*|OIDC_ISSUER=https://identity.example.test|' "$work/cwd/.env" > "$work/env-invalid" ;;
+    missing-client) sed '/^OIDC_CLIENT_ID=/d' "$work/cwd/.env" > "$work/env-invalid" ;;
+    whitespace-client) sed 's/^OIDC_CLIENT_ID=.*/OIDC_CLIENT_ID=   /' "$work/cwd/.env" > "$work/env-invalid" ;;
+  esac
+  # An older installation would normally receive this missing secret on upgrade.
+  sed '/^POSTGRES_APP_PASSWORD=/d; /^SANDBOX_COMPUTER_EGRESS=/d' "$work/env-invalid" > "$work/cwd/.env"
+  before="$(cat "$work/cwd/.env")"
+  if accounts_out="$(run_install "$work" --local 2>&1)"; then
+    fail "$invalid_accounts started the stack"
+  fi
+  [[ "$accounts_out" == *"OIDC_ISSUER=https://api.orkbot.run"*"OIDC_CLIENT_ID"*"rerun bash install-images.sh"* ]] ||
+    fail "$invalid_accounts did not explain how to configure Accounts: $accounts_out"
+  [[ "$(cat "$work/cwd/.env")" == "$before" ]] || fail "$invalid_accounts changed the existing .env"
+  has_compose_pull "$work" && fail "$invalid_accounts pulled images"
+  grep -q 'VERB=up' "$work/docker.log" && fail "$invalid_accounts started services"
+  [[ ! -s "$work/curl.log" ]] || fail "$invalid_accounts downloaded an egress script"
+done
+
+# A fresh install keeps the generated configuration for the operator to complete.
+setup_work "$tmp/accounts-new"
+mv "$tmp/accounts-new/cwd/.env" "$tmp/accounts-new/original-env"
+cp "$root/.env.images.example" "$tmp/accounts-new/cwd/.env.images.example"
+if new_accounts_out="$(run_install "$tmp/accounts-new" --local 2>&1)"; then
+  fail "fresh install started without a registered Accounts client"
+fi
+[[ -s "$tmp/accounts-new/cwd/.env" ]] || fail "fresh install did not keep its generated .env"
+[[ "$new_accounts_out" == *"OIDC_CLIENT_ID"* ]] || fail "fresh install did not identify missing Accounts configuration"
+has_compose_pull "$tmp/accounts-new" && fail "fresh install pulled images without Accounts"
+grep -q 'VERB=up' "$tmp/accounts-new/docker.log" && fail "fresh install started without Accounts"
+
+# Preparing files is allowed before the operator has registered an Accounts client.
+setup_work "$tmp/accounts-prepare"
+sed '/^OIDC_/d' "$tmp/accounts-prepare/cwd/.env" > "$tmp/accounts-prepare/env-empty"
+mv "$tmp/accounts-prepare/env-empty" "$tmp/accounts-prepare/cwd/.env"
+prepare_out="$(run_install "$tmp/accounts-prepare" --offline --prepare-only 2>&1)" ||
+  fail "prepare-only required Accounts before editing .env: $prepare_out"
+has_compose_pull "$tmp/accounts-prepare" && fail "prepare-only pulled images"
+grep -q 'VERB=up' "$tmp/accounts-prepare/docker.log" && fail "prepare-only started services"
 
 # Flags accepted: --offline takes the local/pull-never path (no curl, no compose pull).
 setup_work "$tmp/offline"
