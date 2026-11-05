@@ -1,47 +1,26 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to retain the Tauri desktop path.
+// Inherited material remains Apache-2.0. New changes follow LICENSE.md.
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { associatedPasskeyRpIds, PASSKEY_RP_ID, passkeyEntitlements } from "./passkeys.js";
-import { ORKBOT_CLOUD_URL } from "./setup-config.js";
+import { PASSKEY_RP_ID, passkeyEntitlements } from "./passkeys.js";
 
 const root = path.resolve(import.meta.dirname, "..");
-const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
-  build: { appId: string; mac: { entitlements: string; entitlementsInherit: string } };
+const config = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8")) as {
+  identifier: string;
 };
-const base = readFileSync(path.join(root, pkg.build.mac.entitlements), "utf8");
-
-describe("associatedPasskeyRpIds", () => {
-  const resourcesPath = "/Applications/Ork.app/Contents/Resources";
-  const profile = "/Applications/Ork.app/Contents/embedded.provisionprofile";
-
-  it("lists the hosted domain only for a packaged macOS app with an embedded profile", () => {
-    const exists = (file: string) => file === profile;
-    expect(
-      associatedPasskeyRpIds({ platform: "darwin", packaged: true, resourcesPath, exists }),
-    ).toEqual([PASSKEY_RP_ID]);
-    expect(
-      associatedPasskeyRpIds({
-        platform: "darwin",
-        packaged: true,
-        resourcesPath,
-        exists: () => false,
-      }),
-    ).toEqual([]);
-    expect(
-      associatedPasskeyRpIds({ platform: "darwin", packaged: false, resourcesPath, exists }),
-    ).toEqual([]);
-    expect(
-      associatedPasskeyRpIds({ platform: "win32", packaged: true, resourcesPath, exists }),
-    ).toEqual([]);
-  });
-});
+const base = readFileSync(path.join(root, "src-tauri/Entitlements.plist"), "utf8");
 
 describe("passkeyEntitlements", () => {
   it("adds the application identifier and webcredentials domain to the base entitlements", () => {
-    const plist = passkeyEntitlements(base, "ABCDE12345", pkg.build.appId);
+    const plist = passkeyEntitlements(base, "ABCDE12345", config.identifier);
     expect(plist.startsWith(base.slice(0, base.lastIndexOf("</dict>")).trimEnd())).toBe(true);
     expect(plist).toContain(
-      "<key>com.apple.application-identifier</key>\n    <string>ABCDE12345.run.orkbot.desktop</string>",
+      "<key>com.apple.application-identifier</key>\n    <string>ABCDE12345.run.orkbot.desktop.preview</string>",
     );
     expect(plist).toContain(
       `<key>com.apple.developer.associated-domains</key>\n    <array>\n      <string>webcredentials:${PASSKEY_RP_ID}</string>\n    </array>\n  </dict>\n</plist>`,
@@ -49,27 +28,28 @@ describe("passkeyEntitlements", () => {
   });
 
   it("marks a development build that fetches the association itself in developer mode", () => {
-    const plist = passkeyEntitlements(base, "ABCDE12345", pkg.build.appId, { developerMode: true });
+    const plist = passkeyEntitlements(base, "ABCDE12345", config.identifier, {
+      developerMode: true,
+    });
     expect(plist).toContain(`<string>webcredentials:${PASSKEY_RP_ID}?mode=developer</string>`);
     expect(plist).toContain("<key>com.apple.security.get-task-allow</key>\n    <true/>\n  </dict>");
-    expect(passkeyEntitlements(base, "ABCDE12345", pkg.build.appId)).not.toContain(
+    expect(passkeyEntitlements(base, "ABCDE12345", config.identifier)).not.toContain(
       "get-task-allow",
     );
   });
 
   it("keeps helpers on the base entitlements", () => {
-    expect(pkg.build.mac.entitlementsInherit).toBe(pkg.build.mac.entitlements);
     expect(base).not.toContain("associated-domains");
     expect(base).not.toContain("application-identifier");
   });
 
   it("rejects a malformed team or bundle identifier", () => {
-    expect(() => passkeyEntitlements(base, "", pkg.build.appId)).toThrow();
-    expect(() => passkeyEntitlements(base, "abcde12345", pkg.build.appId)).toThrow();
-    expect(() => passkeyEntitlements(base, "ABCDE12345</string>", pkg.build.appId)).toThrow();
+    expect(() => passkeyEntitlements(base, "", config.identifier)).toThrow();
+    expect(() => passkeyEntitlements(base, "abcde12345", config.identifier)).toThrow();
+    expect(() => passkeyEntitlements(base, "ABCDE12345</string>", config.identifier)).toThrow();
     expect(() => passkeyEntitlements(base, "ABCDE12345", "dev orkbot")).toThrow();
-    const derived = passkeyEntitlements(base, "ABCDE12345", pkg.build.appId);
-    expect(() => passkeyEntitlements(derived, "ABCDE12345", pkg.build.appId)).toThrow();
+    const derived = passkeyEntitlements(base, "ABCDE12345", config.identifier);
+    expect(() => passkeyEntitlements(derived, "ABCDE12345", config.identifier)).toThrow();
   });
 });
 
@@ -87,13 +67,13 @@ describe("self-hosted passkey domain", () => {
 
   it("defaults to the hosted server's domain", async () => {
     const passkeys = await load("");
-    expect(passkeys.PASSKEY_RP_ID).toBe(new URL(ORKBOT_CLOUD_URL).hostname);
+    expect(passkeys.PASSKEY_RP_ID).toBe("app.orkbot.run");
   });
 
   it("associates the build with ORKBOT_PASSKEY_RP_ID", async () => {
     const passkeys = await load(" OrkBot.Example.org ");
     expect(passkeys.PASSKEY_RP_ID).toBe("orkbot.example.org");
-    expect(passkeys.passkeyEntitlements(base, "ABCDE12345", pkg.build.appId)).toContain(
+    expect(passkeys.passkeyEntitlements(base, "ABCDE12345", config.identifier)).toContain(
       "<string>webcredentials:orkbot.example.org</string>",
     );
   });
@@ -102,7 +82,7 @@ describe("self-hosted passkey domain", () => {
     "refuses to sign entitlements for %s",
     async (rpId) => {
       const passkeys = await load(rpId);
-      expect(() => passkeys.passkeyEntitlements(base, "ABCDE12345", pkg.build.appId)).toThrow(
+      expect(() => passkeys.passkeyEntitlements(base, "ABCDE12345", config.identifier)).toThrow(
         "ORKBOT_PASSKEY_RP_ID",
       );
     },

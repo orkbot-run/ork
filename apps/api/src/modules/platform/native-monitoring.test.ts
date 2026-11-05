@@ -83,7 +83,7 @@ describe("native error collector privacy boundary", () => {
       {
         platform: "cocoa",
         user: { id: "a".repeat(64) },
-        contexts: { electron: { crashed_url: "https://app.example.com/?token=private" } },
+        contexts: { webview: { crashed_url: "https://app.example.com/?token=private" } },
         tags: { prompt: "private" },
         exception: {
           values: [

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -381,7 +385,7 @@ function activeLimitReached(
   ref: ComputerRef,
   runningSince: Date | null | undefined,
 ): boolean {
-  // Electron owns a native computer's lifetime.
+  // The desktop app owns a native computer's lifetime.
   if (ref.kind === "desktop") return false;
   const limit =
     sandbox.billsWhileRunning?.(ref) === true
@@ -432,7 +436,7 @@ export async function sleepComputerIfIdle(
   if (!computerIdleSleepEnabled()) return;
   let computer = await loadComputer(deps.prisma, computerId);
   if (!computer?.providerRef || !mayNeedSleep(computer)) return;
-  // Native computers have no provisioned runtime to suspend; Electron owns their lifetime.
+  // Native computers have no provisioned runtime to suspend; The desktop app owns their lifetime.
   if (computer.kind === "desktop") return;
 
   if (computer.controlBotId && computer.controlLeaseId && !hasActiveComputerControl(computer)) {

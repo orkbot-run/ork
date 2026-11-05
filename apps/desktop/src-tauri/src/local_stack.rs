@@ -203,7 +203,7 @@ impl LocalStack {
         }
     }
 
-    /// Stop preserves volumes, images, and settings. It never touches the Electron project.
+    /// Stop preserves volumes, images, settings, and other Compose projects.
     pub async fn stop(&self) -> LocalStackState {
         self.stopping.store(true, Ordering::SeqCst);
         self.replace_state(self.state());

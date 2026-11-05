@@ -166,7 +166,7 @@ const DEDICATED_CARDS: readonly RoundupCard[] = [
     href: SELF_HOST_GUIDE_PATH,
     heading: "Source-available AI agent you run yourself",
     paragraphs: [
-      "Ork is a source-available AI agent for persistent teammates. It is in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app. You bring a model key, including a local server, and each bot can use a different model. The default computer is local Docker. Optional computers include E2B, Daytona, CreateOS, Boat, and a trusted local computer. Like Grok Bot, Ork is just chat once it is running: a new bot interviews you, and you manage schedules, memory, and approvals from that chat. Routines are readable Markdown. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. Run Ork on your own infrastructure.",
+      "Ork is a source-available AI agent for persistent teammates. It is in beta. The clients are the web app, the Tauri desktop app, and the Expo mobile app. You bring a model key, including a local server, and each bot can use a different model. The default computer is local Docker. Optional computers include E2B, Daytona, CreateOS, Boat, and a trusted local computer. Like Grok Bot, Ork is just chat once it is running: a new bot interviews you, and you manage schedules, memory, and approvals from that chat. Routines are readable Markdown. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. Run Ork on your own infrastructure.",
     ],
   },
   {

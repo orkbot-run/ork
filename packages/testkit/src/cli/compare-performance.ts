@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { readFile } from "node:fs/promises";
 import type { PerformanceReport } from "../performance-report.js";
 import { parsePerformanceReport, percentageDelta, roundMetric } from "../performance-report.js";
@@ -96,7 +100,7 @@ function warnAboutIntentionalRuntimeChanges(
   beforeReport: PerformanceReport,
   afterReport: PerformanceReport,
 ) {
-  const keys = ["electron", "rendererMode", "warmWindow"] as const;
+  const keys = ["rendererMode", "warmWindow"] as const;
   const changes = keys
     .filter((key) => beforeReport.environment[key] !== afterReport.environment[key])
     .map(

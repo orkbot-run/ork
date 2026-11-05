@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import type { OrkDesktopSpeechEvent } from "@orkbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DesktopSpeechRecognition } from "./desktop-speech.js";
@@ -25,7 +29,7 @@ function fakeSpeech(started: () => Promise<boolean> = async () => true) {
 
 function useDesktop(speech: ReturnType<typeof fakeSpeech>["speech"]) {
   vi.stubGlobal("window", { orkbotDesktop: { platform: "darwin", speech } });
-  vi.stubGlobal("navigator", { language: "es-CL", userAgent: "Mozilla/5.0 Electron/45.0.0" });
+  vi.stubGlobal("navigator", { language: "es-CL", userAgent: "Mozilla/5.0 AppleWebKit/605.1.15" });
 }
 
 afterEach(() => {

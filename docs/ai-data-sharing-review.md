@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Mobile AI data sharing: release and review
 
 ## Scope
@@ -5,7 +9,7 @@
 The mobile client obtains permission before uploading attachments, submitting messages,
 starting routines, or sending voice content. Consent is stored per account, Space, recipient,
 and disclosure version. Read-only disclosure/grant endpoints do not change provider execution.
-Web, Electron, workers, helper model selection, and self-hosted server execution retain their
+Web, Tauri, workers, helper model selection, and self-hosted server execution retain their
 existing behavior. There are no gateway blocklists, provider-routing overrides, or external
 metadata requests introduced by consent.
 

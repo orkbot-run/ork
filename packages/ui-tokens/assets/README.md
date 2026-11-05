@@ -11,12 +11,12 @@ Icon Composer with Xcode 26 or newer to edit the centered mint Nunu foreground
 and system dark background. The transparent artwork is in `Assets/ork-nunu.png`.
 Use `ork-nunu-monochrome.svg` for masks.
 
-macOS packaging compiles the source into a Tahoe asset catalog and generates the
-legacy ICNS fallback. Expo copies the same source into the iOS project.
+Tauri packaging generates ICNS, ICO and PNG bundle icons from the raster export.
+Expo copies the editable Icon Composer source into the iOS project.
 
 The platform exports are:
 
-- `apps/desktop/assets/icon-macos.png`: 1024-pixel development icon with Dock margins.
+- `apps/desktop/assets/icon.png`: shared source for generated Tauri bundle icons.
 - `apps/mobile/assets/icon.png`: opaque 1024-pixel square for the generic/legacy icon,
   with no rounded mask or Dock margins.
 - `apps/mobile/assets/adaptive-icon.png`: transparent 1024-pixel Android foreground.
@@ -43,7 +43,7 @@ The card renderer uses the installed Playwright Chromium browser, with
 
 ## Animated vector avatars
 
-Web, Electron, and mobile draw animated Nunu avatars from the shared
+Web, Tauri, and mobile draw animated Nunu avatars from the shared
 `logo-avatar-art.ts` geometry and paint definitions. The small ears, oval eyes,
 and smile match the mascot. Existing bot colors and motion settings are preserved.
 The vector renderers use gradients instead of loading the raster icon.

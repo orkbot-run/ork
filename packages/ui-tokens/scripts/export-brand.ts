@@ -75,14 +75,6 @@ await mkdir(path("apps/www/public/brand"), { recursive: true });
 await png(rounded, "apps/www/public/brand/orkbot-mark.png", 256);
 await png(rounded, "apps/mobile/assets/favicon.png", 128);
 await png(square, "apps/desktop/assets/icon.png", 1024);
-await ico(rounded, "apps/desktop/assets/icon.ico", [16, 32, 48, 64, 128, 256]);
-// Development launches need Dock margins; production macOS uses Icon Composer.
-const dock = await sharp(rounded)
-  .resize(824, 824)
-  .extend({ top: 100, bottom: 100, left: 100, right: 100, background: "transparent" })
-  .png()
-  .toBuffer();
-await png(dock, "apps/desktop/assets/icon-macos.png", 1024);
 
 await png(square, "apps/mobile/assets/icon.png", 1024);
 const background = await sharp({

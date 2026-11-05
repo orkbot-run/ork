@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { t } from "@lingui/core/macro";
 import {
   cancelResponseBody,
@@ -53,17 +57,10 @@ export function webSpeechAvailable(): boolean {
 }
 
 /**
- * Electron exposes webkitSpeechRecognition without a speech-service key, so
- * recognition fails with `network`. Don't treat that API as available there.
+ * Desktop dictation uses the native recognizer or the connected transcription service.
  */
-function electronSpeechHost(): boolean {
-  if (typeof window !== "undefined") {
-    const host = window as Window & { orkbotDesktop?: unknown };
-    if (host.orkbotDesktop) return true;
-  }
-  if (typeof navigator === "undefined") return false;
-  const agent = navigator.userAgent;
-  return typeof agent === "string" && agent.includes("Electron");
+function desktopSpeechHost(): boolean {
+  return typeof window !== "undefined" && Boolean(window.orkbotDesktop);
 }
 
 /**
@@ -152,7 +149,7 @@ function speechRecognitionCtor(): SpeechRecognitionCtor | undefined {
   if (typeof window === "undefined") return undefined;
   // The desktop app listens through the operating system's recognizer instead.
   if (desktopBridge()?.speech) return DesktopSpeechRecognition;
-  if (electronSpeechHost()) return undefined;
+  if (desktopSpeechHost()) return undefined;
   const host = window as Window & {
     SpeechRecognition?: SpeechRecognitionCtor;
     webkitSpeechRecognition?: SpeechRecognitionCtor;

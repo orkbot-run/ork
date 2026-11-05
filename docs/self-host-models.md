@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Models
 
 Choose the deployment's default model, connect local or OpenAI-compatible servers, and configure
@@ -194,7 +198,7 @@ must fit both the 10 MiB media ceiling and the configured attachment limit;
 larger outputs are rejected.
 
 Images use existing inline chat rendering. MP4 files can be previewed with native
-video controls on web and Electron and opened/downloaded through the existing
+video controls on web and Tauri and opened/downloaded through the existing
 native file flow on mobile. No new mobile player or settings screen is required.
 
 ## Voice

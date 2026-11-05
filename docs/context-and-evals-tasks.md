@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Conversation context and model eval tasks
 
 Generated JSON reports are preserved locally under ignored `test-report/evals/archive/`, with a second backup outside the disposable worktree. They are not tracked documentation or repository downloads; maintained findings and synthetic fixtures remain in source control. Report references below identify local archived evidence, including every original failed and partial run.
@@ -91,10 +95,10 @@ Completed delivery steps:
       loop steps, repeated source-verified answers, and no new or queued compaction.
 - [x] Run final unit, type, lint, protocol, and PostgreSQL integration checks after
       the last implementation change. Preserve unrelated changes and avoid local
-      Electron E2E. Validate and sanitize the final reports.
+      native desktop checks. Validate and sanitize the final reports.
       Final checks pass: 372 unit suites / 3,821 tests, 19 package type checks,
       mobile TypeScript, lint (21 existing warnings), 140 focused checks including
-      24 PostgreSQL checks, and 14 actual Pi checks. No local Electron E2E ran.
+      24 PostgreSQL checks, and 14 actual Pi checks. No local native desktop checks ran.
 - [x] Qualify the selected policy on the final default/fallback source: all 54
       unchanged workflows with three trials per case and no failed or skipped gate.
       This final paid run carries cumulative spend forward rather than starting
@@ -215,7 +219,7 @@ credentials or real production conversations into this file or eval fixtures.
 - Age influences selection but does not invalidate durable constraints, decisions,
   unresolved work, or approvals. A cold cache does not mean the task has changed.
 - Keep shared behavior in packages and orchestration on the backend. Web,
-  Electron, and mobile must benefit from the same context and retrieval behavior.
+  desktop, and mobile must benefit from the same context and retrieval behavior.
 - Keep providers optional. Local history search and context selection must work
   without an external memory service, embeddings, or hosted search vendor.
 - Preserve authorization, channel isolation, deletion semantics, secret redaction,
@@ -531,7 +535,7 @@ authorization. Do not restart a timed-out observation as a second paid process.
 Use deterministic offline checks for contracts, authorization, accounting,
 retrieval, context budgets, and cache policy. Run focused unit tests and the Pi
 protocol suite for runtime changes, and product integration checks for database
-and executor changes. Do not routinely run desktop Electron E2E locally.
+and executor changes. Keep native desktop window checks out of routine local verification.
 
 Use synthetic data only. Keep credentials, private connection files, raw provider
 payloads, personal information, and local machine identifiers out of tracked
@@ -613,7 +617,7 @@ whole checklist is complete. The implementation goal resumed after this handoff.
   mobile's additional Expo compatibility check finds pre-existing installed-version
   mismatches. Package declarations and unrelated lockfile edits were preserved.
 - Project lint passes with existing warnings. New public eval JSON reports were
-  formatted. No desktop Electron E2E was run locally.
+  formatted. No desktop native desktop checks was run locally.
 - The initial shared-budget live strategy matrix is preserved as a partial report.
   Default selection and
   measured quality/cost/cache conclusions remain incomplete.
@@ -681,7 +685,7 @@ The latest broad offline pass at this audit point passed 3,796 tests across 370
 files; 172 opt-in tests across 32 files were skipped. All 19 non-mobile package
 type checks passed and mobile TypeScript passed directly. Lint passed with 21
 existing warnings and the existing schema-version notice. Two cache protocol
-files needed formatting only and were corrected. No Electron windows were opened.
+files needed formatting only and were corrected. No native app windows were opened.
 
 The accounting, authorized-query performance, snapshot pagination, active-state,
 and immediate cache-reuse audits are complete. Remaining completion gates are

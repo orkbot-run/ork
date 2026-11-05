@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 export interface NumericSummary {
   count: number;
   min: number;
@@ -22,7 +26,6 @@ export interface PerformanceReport {
     cpuCount: number;
     totalMemoryBytes: number;
     node: string;
-    electron?: string;
     chrome?: string;
     playwright: string;
     buildMode: string;

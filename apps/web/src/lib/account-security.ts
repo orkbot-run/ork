@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { t } from "@lingui/core/macro";
 import { accountSecuritySchema, legacyAccountSecurity } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
@@ -7,7 +11,7 @@ export async function fetchAccountSecurity() {
   const response = await fetch("/api/auth/account-security", {
     signal: AbortSignal.timeout(8_000),
   });
-  // Electron ships this client independently of the connected API version.
+  // The desktop app ships this client independently of the connected API version.
   if (response.status === 404) return legacyAccountSecurity;
   if (!response.ok) throw new Error(t`Could not load sign-in options`);
   try {

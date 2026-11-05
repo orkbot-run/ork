@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Agent verification
 
 Generated JSON reports are preserved locally under ignored `test-report/evals/archive/`, with a second backup outside the disposable worktree. They are not tracked documentation or repository downloads; maintained findings and synthetic fixtures remain in source control. Report references below identify local archived evidence, including every original failed and partial run.
@@ -91,7 +95,7 @@ pnpm test:computer-replay --image=orkbot/computer:local
 pnpm test:computer-replay --subnet=<unused-private-cidr>
 ```
 
-Docker replay does not open Electron windows, use model credentials, or attach
+Docker replay does not open Tauri windows, use model credentials, or attach
 to an existing browser. It owns and cleans up its test resources. It exercises
 the runtime and computer boundary; it does not claim UI, approval, or database
 executor coverage.

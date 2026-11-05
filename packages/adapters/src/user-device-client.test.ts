@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { once } from "node:events";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
@@ -13,9 +17,6 @@ import type { UserDeviceClient } from "./user-device-client.js";
 import { startUserDeviceClient, USER_DEVICE_MAX_MESSAGE_BYTES } from "./user-device-client.js";
 
 const token = "device-token";
-const nodeEnv: Record<string, string> = process.versions.electron
-  ? { ELECTRON_RUN_AS_NODE: "1" }
-  : {};
 
 interface Frame {
   type: string;
@@ -121,7 +122,7 @@ describe("user device client", () => {
         request: {
           method: "execute",
           botId: "bot",
-          command: { env: nodeEnv, argv: [process.execPath, "-e", "process.stdout.write('hi')"] },
+          command: { argv: [process.execPath, "-e", "process.stdout.write('hi')"] },
         },
       }),
     );
@@ -149,7 +150,6 @@ describe("user device client", () => {
           method: "execute",
           botId: "bot",
           command: {
-            env: nodeEnv,
             argv: [process.execPath, "-e", "console.log('started'); setInterval(() => {}, 1000)"],
           },
         },
@@ -227,7 +227,6 @@ describe("user device client", () => {
           method: "execute",
           botId: "bot",
           command: {
-            env: nodeEnv,
             argv: [process.execPath, "-e", "console.log('started'); setInterval(() => {}, 1000)"],
           },
         },
@@ -349,7 +348,6 @@ describe("user device client", () => {
             method: "execute",
             botId: "bot",
             command: {
-              env: nodeEnv,
               argv: [process.execPath, "-e", "setInterval(() => {}, 1000)"],
             },
           },

@@ -1,17 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to retain the Tauri desktop path.
+// Inherited material remains Apache-2.0. New changes follow LICENSE.md.
+
 import { spawnSync } from "node:child_process";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// The macOS dictation helper ships as an extra resource, outside asar, so it can run. It is
-// one universal binary: the universal app build keeps a file that is already universal as is.
-// Other platforms have no helper; a Mac without Swift builds the app and dictation falls back.
+// The macOS dictation helper ships as a sidecar with native privacy declarations.
+// Build every supported architecture into one universal executable.
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, "native", "speech");
 const out = path.join(root, "build", "speech");
 const helper = path.join(out, "orkbot-speech");
-// Electron 45's own minimum.
+// Match the Tauri bundle minimum system version.
 const MACOS_TARGET = "12";
 
 if (process.platform !== "darwin") process.exit(0);

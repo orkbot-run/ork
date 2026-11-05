@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { getLogger } from "@orkbot/logging";
 import type { PrismaClient } from "./generated/prisma/client.js";
 
@@ -44,7 +48,7 @@ export async function recordComputerRunStart(
   startedAt: Date,
   previousEnd: ComputerRunEnd = "reconciled",
 ): Promise<void> {
-  // Host computers run on the user's own machine, and Electron, not Ork, sees them stop.
+  // Host computers run on the user's own machine, and only the desktop app sees them stop.
   if (computer.kind === "desktop") return;
   try {
     await prisma.$executeRaw`

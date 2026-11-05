@@ -1,48 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify Tauri bundle metadata.
+// Inherited material remains Apache-2.0. New changes follow LICENSE.md.
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const packageJson = JSON.parse(
-  readFileSync(path.resolve(import.meta.dirname, "../package.json"), "utf8"),
-) as {
-  productName?: string;
-  build?: {
-    appId?: string;
-    productName?: string;
-    publish?: { provider: string; owner: string; repo: string }[];
-    mac?: {
-      extendInfo?: Record<string, string>;
-      extraResources?: { from: string; to: string }[];
-    };
+const root = path.resolve(import.meta.dirname, "..");
+const bundle = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8")) as {
+  identifier: string;
+  bundle: {
+    resources: Record<string, string>;
   };
 };
+const info = readFileSync(path.join(root, "src-tauri/Info.plist"), "utf8");
 
-describe("desktop package metadata", () => {
-  it("packages the Ork identity and its own update feed", () => {
-    expect(packageJson.build?.appId).toBe("run.orkbot.desktop");
-    expect(packageJson.build?.publish).toEqual([
-      { provider: "github", owner: "orkbot-run", repo: "ork" },
-    ]);
-  });
-
-  it("shares the customer-facing name between Electron and electron-builder", () => {
-    expect(packageJson.productName).toBe("Ork");
-    expect(packageJson.build?.productName).toBeUndefined();
+describe("desktop bundle metadata", () => {
+  it("preserves the installed Tauri application identifier", () => {
+    expect(bundle.identifier).toBe("run.orkbot.desktop.preview");
   });
 
   it.each(["es", "pl"])("ships a %s version of every macOS permission prompt", (locale) => {
     const strings = readFileSync(
-      path.resolve(import.meta.dirname, `../assets/${locale}.lproj/InfoPlist.strings`),
+      path.join(root, `assets/${locale}.lproj/InfoPlist.strings`),
       "utf8",
     );
-    const prompts = Object.keys(packageJson.build?.mac?.extendInfo ?? {}).filter((key) =>
-      key.endsWith("UsageDescription"),
+    const prompts = [...info.matchAll(/<key>([^<]*UsageDescription)<\/key>/g)].map(
+      (match) => match[1],
     );
     expect(prompts.length).toBeGreaterThan(0);
     for (const key of prompts) expect(strings, key).toMatch(new RegExp(`^"${key}" = ".+";$`, "m"));
-    expect(packageJson.build?.mac?.extraResources).toContainEqual({
-      from: `assets/${locale}.lproj`,
-      to: `${locale}.lproj`,
-    });
+    expect(bundle.bundle.resources[`../assets/${locale}.lproj`]).toBe(`${locale}.lproj`);
   });
 });

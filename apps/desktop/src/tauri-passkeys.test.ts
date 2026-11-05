@@ -111,7 +111,7 @@ describe("Tauri passkey signing", () => {
     });
   });
 
-  it("rejects malformed relying party domains using the Electron entitlement generator", async () => {
+  it("rejects malformed relying party domains using the shared entitlement generator", async () => {
     for (const rp of [
       "https://app.example.com",
       "localhost",
