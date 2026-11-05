@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 coverage is preserved. Default Ork avatars are an Ork addition.
+
 import type { Page, TestInfo } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
@@ -54,7 +58,7 @@ test("shows peer lines in transcript and opens view-only peer chat", async ({ pa
   await expect(chip).toHaveAccessibleName(
     /Messaged Researcher|Message from Researcher|messages with Researcher/,
   );
-  await expect(chip.locator(".orkbot-organic-avatar")).toBeVisible();
+  await expect(chip.locator(".orkbot-logo-avatar")).toBeVisible();
   await expect(chip).not.toContainText("{peer}");
   // User bubble still contains the phrase; peer body must not appear outside the chip.
   await expect(chip).not.toContainText("peer-exchange-alpha");

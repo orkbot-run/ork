@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 coverage is preserved. Default Ork avatars are an Ork addition.
+
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import {
@@ -95,13 +99,13 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
     .getByRole("button", { name: /^Draft team/ })
     .locator(".orkbot-group-avatar");
   await expect(groupAvatar).toBeVisible();
-  await expect(groupAvatar.locator(".orkbot-organic-avatar")).toHaveCount(2);
+  await expect(groupAvatar.locator(".orkbot-logo-avatar")).toHaveCount(2);
   const workingAvatar = groupAvatar.locator('[data-working="true"]');
   await expect(workingAvatar).toHaveCount(1);
-  await expect(workingAvatar.locator(".orkbot-organic-avatar-body-working")).toHaveCSS(
-    "animation-name",
-    /orkbot-organic-/,
-  );
+  await expect(workingAvatar).toHaveAttribute("data-activity", "working");
+  await expect(
+    workingAvatar.locator('[data-logo-layer][data-outgoing="false"] .logo-avatar-art'),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "group-avatar-active");
   await page.unroute("**/rpc/groups/list");
   await page.unroute("**/rpc/threads/get");

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 coverage is preserved. Generator avatar defaults are an Ork addition.
+
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openBotPanelTab, signup } from "./helpers";
 
@@ -68,6 +72,3 @@ test("new bots use Ork generator avatars and keep explicit appearance choices", 
   ).toHaveAttribute("aria-selected", "true");
   await captureScreenshot(page, testInfo, "avatar-studio-orkbot-set");
 });
-// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 coverage is preserved. Generator avatar defaults are an Ork addition.
