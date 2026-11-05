@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
+
 import { getArtifactById } from "./artifacts";
 
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
@@ -55,6 +59,7 @@ import {
 } from "./api.js";
 import { artifactCacheSession } from "./artifact-cache-session";
 import { resumeLiveNotifications } from "./live-notifications.js";
+import { clearNetworkCache } from "./network-cache.js";
 import { threadRefreshDelayMs } from "./refresh";
 import {
   clearSessionToken,
@@ -2244,6 +2249,18 @@ describe("mobile API authentication", () => {
     const store = new Map<string, string>([["orkbot.session_token", "revoked-token"]]);
     mockSecureStore(store);
     await loadApiBase();
+    await artifactCacheSession("revoked-token");
+    const clear = vi.fn();
+    configureUnsentSends({
+      request: vi.fn(),
+      serverReachable: () => true,
+      passwordChanging: () => false,
+      scope: () => null,
+      disk: { clear, save: vi.fn() } as unknown as UnsentDisk,
+      errorText: String,
+      notDelivered: vi.fn(),
+    });
+    vi.mocked(clearNetworkCache).mockClear();
     const rejected = vi.fn();
     const unsubscribe = subscribeSessionRejected(rejected);
     const fetchMock = vi
@@ -2259,6 +2276,10 @@ describe("mobile API authentication", () => {
       ]);
       expect(rejected).toHaveBeenCalledOnce();
       expect(store.has("orkbot.session_token")).toBe(false);
+      expect(clear).not.toHaveBeenCalled();
+      expect(clearNetworkCache).toHaveBeenCalledOnce();
+      expect(store.has("orkbot.artifact-cache-session")).toBe(false);
+      expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.integrations-scope");
       expect(
         vi
           .mocked(SecureStore.deleteItemAsync)
@@ -2269,9 +2290,37 @@ describe("mobile API authentication", () => {
       await expect(rpc("me")).rejects.toThrow("Unauthorized");
       expect(fetchMock.mock.calls[2]![1].headers.authorization).toBeUndefined();
       expect(rejected).toHaveBeenCalledOnce();
+      expect(clear).not.toHaveBeenCalled();
     } finally {
       unsubscribe();
     }
+  });
+
+  it.each([
+    ["sign-in", () => signIn("ada@example.test", "correct horse")],
+    ["sign-out", () => signOut()],
+  ])("deletes the queue kept after a rejected session on %s", async (_action, change) => {
+    const store = new Map<string, string>([["orkbot.session_token", "revoked-token"]]);
+    mockSecureStore(store);
+    const clear = vi.fn();
+    configureUnsentSends({
+      request: vi.fn(),
+      serverReachable: () => true,
+      passwordChanging: () => false,
+      scope: () => null,
+      disk: { clear, save: vi.fn() } as unknown as UnsentDisk,
+      errorText: String,
+      notDelivered: vi.fn(),
+    });
+    const fetchMock = vi.fn(async () => rpcErrorResponse(401, "UNAUTHORIZED", "Unauthorized"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(rpc("me")).rejects.toThrow("Unauthorized");
+    expect(clear).not.toHaveBeenCalled();
+
+    fetchMock.mockImplementation(async () => jsonResponse({ token: "new-session" }));
+    await change();
+    expect(clear).toHaveBeenCalledOnce();
   });
 
   it("checks Space access before treating a 401 as a rejected session", async () => {

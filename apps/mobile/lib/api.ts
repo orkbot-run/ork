@@ -452,7 +452,7 @@ async function clearCredentialsForEndpointChange(): Promise<
       result: { ok: false, error: t("Could not clear the previous server session") },
     };
   }
-  const sessionCleared = await clearSessionToken();
+  const sessionCleared = await clearSessionToken("account_switch");
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();
   const spaceCleared = await clearStoredValue(SPACE_KEY);
@@ -969,7 +969,7 @@ export function subscribeSessionRejected(listener: () => void): () => void {
 }
 
 async function rejectSession() {
-  await clearSessionToken();
+  await clearSessionToken("session_rejected");
   for (const listener of sessionRejectedListeners) listener();
 }
 
