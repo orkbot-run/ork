@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type {
   BillingCancellationReason,
   ByokTier,
@@ -508,6 +511,13 @@ export interface AgentRunModel {
   oauth?: {
     credential: AgentModelOAuthCredential;
     persist?: (credential: AgentModelOAuthCredential) => Promise<void>;
+    /** Refresh from the latest stored token, or adopt a rotation from another process. */
+    refresh?: (
+      update: (
+        current: AgentModelOAuthCredential,
+      ) => Promise<AgentModelOAuthCredential | undefined>,
+      signal?: AbortSignal,
+    ) => Promise<AgentModelOAuthCredential | undefined>;
     /** Drop the stored credential after a terminal provider rejection. */
     retire?: (
       reason: ModelCredentialRetireReason,

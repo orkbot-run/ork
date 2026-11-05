@@ -1,6 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors for coordinated OAuth refresh tests. See LICENSE.md.
+
 import type { OAuthCredential } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type { ModelCredentialFailedState, ModelCredentialRetireReason } from "@orkbot/adapter-kit";
+import type {
+  AgentModelOAuthCredential,
+  ModelCredentialFailedState,
+  ModelCredentialRetireReason,
+} from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { PiRuntimeCredentialStore } from "./pi-credentials.js";
 import {
@@ -22,6 +30,128 @@ function credential(overrides: Partial<OAuthCredential> = {}): OAuthCredential {
 }
 
 describe("PiRuntimeCredentialStore", () => {
+  it("runs the provider's refresh recheck with the database token instead of its stale runtime copy", async () => {
+    const held = credential({ access: "stale-access", refresh: "stale-refresh" });
+    const latest = credential({ access: "current-access", refresh: "current-refresh" });
+    const refresh = vi.fn(
+      async (
+        update: (
+          current: AgentModelOAuthCredential,
+        ) => Promise<AgentModelOAuthCredential | undefined>,
+      ) => {
+        await update(latest);
+        return latest;
+      },
+    );
+    const persist = vi.fn();
+    const retire = vi.fn();
+    const providerRefresh = vi.fn(async () => undefined);
+    const signal = new AbortController().signal;
+    const store = new PiRuntimeCredentialStore("openai-codex", held, persist, retire, refresh);
+
+    await expect(store.modify("openai-codex", providerRefresh, { signal })).resolves.toEqual(
+      latest,
+    );
+
+    expect(refresh).toHaveBeenCalledExactlyOnceWith(expect.any(Function), signal);
+    expect(providerRefresh).toHaveBeenCalledExactlyOnceWith(latest);
+    expect(persist).not.toHaveBeenCalled();
+    expect(retire).not.toHaveBeenCalled();
+    expect(store.accessToken).toBe("current-access");
+    expect(await store.read("openai-codex")).toEqual(latest);
+  });
+
+  it("lets queued runtime refreshes recheck the token so the provider rotates it only once", async () => {
+    const held = credential({ access: "expired-access", expires: 1 });
+    const fresh = credential({ access: "fresh-access", refresh: "fresh-refresh" });
+    let latest = held;
+    const coordinate = vi.fn(
+      async (
+        update: (
+          current: AgentModelOAuthCredential,
+        ) => Promise<AgentModelOAuthCredential | undefined>,
+      ) => {
+        const next = await update(latest);
+        if (next) latest = { ...next, type: "oauth" };
+        return latest;
+      },
+    );
+    const store = new PiRuntimeCredentialStore(
+      "openai-codex",
+      held,
+      undefined,
+      undefined,
+      coordinate,
+    );
+    const rotate = vi.fn(async () => fresh);
+    const sdkRefresh = vi.fn(async (current) => {
+      if (current?.type !== "oauth" || current.expires > Date.now()) return undefined;
+      return rotate();
+    });
+
+    const results = await Promise.all([
+      store.modify("openai-codex", sdkRefresh),
+      store.modify("openai-codex", sdkRefresh),
+    ]);
+
+    expect(rotate).toHaveBeenCalledTimes(1);
+    expect(sdkRefresh).toHaveBeenCalledTimes(2);
+    expect(sdkRefresh).toHaveBeenNthCalledWith(2, fresh);
+    expect(results).toEqual([fresh, fresh]);
+    expect(store.accessToken).toBe("fresh-access");
+  });
+
+  it("clears a runtime token whose stored credential disappeared without refreshing it", async () => {
+    const refresh = vi.fn(async () => undefined);
+    const providerRefresh = vi.fn();
+    const store = new PiRuntimeCredentialStore(
+      "openai-codex",
+      credential(),
+      undefined,
+      undefined,
+      refresh,
+    );
+
+    await expect(store.modify("openai-codex", providerRefresh)).resolves.toBeUndefined();
+
+    expect(providerRefresh).not.toHaveBeenCalled();
+    expect(store.accessToken).toBeUndefined();
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("clears the runtime credential when coordinated retirement is confirmed", async () => {
+    const failure = new RetiredModelCredentialError(OAUTH_RECONNECT_REQUIRED_ERROR);
+    const refresh = vi.fn(async () => {
+      throw failure;
+    });
+    const retire = vi.fn();
+    const store = new PiRuntimeCredentialStore(
+      "openai-codex",
+      credential(),
+      undefined,
+      retire,
+      refresh,
+    );
+
+    await expect(store.modify("openai-codex", vi.fn())).rejects.toBe(failure);
+
+    expect(store.accessToken).toBeUndefined();
+    expect(retire).not.toHaveBeenCalled();
+  });
+
+  it("keeps the runtime credential after a transient coordinated refresh error", async () => {
+    const held = credential();
+    const failure = new Error("database temporarily unavailable");
+    const refresh = vi.fn(async () => {
+      throw failure;
+    });
+    const store = new PiRuntimeCredentialStore("openai-codex", held, undefined, undefined, refresh);
+
+    await expect(store.modify("openai-codex", vi.fn())).rejects.toBe(failure);
+
+    expect(await store.read("openai-codex")).toEqual(held);
+  });
+
   it("resolves a saved Azure API key through the renamed provider", async () => {
     const store = new PiRuntimeCredentialStore("azure-openai-responses", {
       type: "api_key",

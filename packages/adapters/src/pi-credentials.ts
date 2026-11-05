@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type {
   AuthOperationOptions,
   Credential,
@@ -42,6 +45,12 @@ export class PiRuntimeCredentialStore implements CredentialStore {
       detail?: string,
       failed?: ModelCredentialFailedState,
     ) => Promise<boolean | undefined>,
+    private readonly refreshOAuth?: (
+      update: (
+        current: AgentModelOAuthCredential,
+      ) => Promise<AgentModelOAuthCredential | undefined>,
+      signal?: AbortSignal,
+    ) => Promise<AgentModelOAuthCredential | undefined>,
   ) {
     this.credential = credential;
     this.providerId = canonicalPiProviderId(providerId);
@@ -76,6 +85,21 @@ export class PiRuntimeCredentialStore implements CredentialStore {
     const operation = previous.then(async () => {
       options?.signal?.throwIfAborted();
       const current = this.credential;
+      if (current?.type === "oauth" && this.refreshOAuth) {
+        // Pi rechecks expiry and bounds the provider call inside this closure.
+        // It must receive the latest stored token after the database lock is held.
+        try {
+          const refreshed = await this.refreshOAuth(async (latest) => {
+            const next = await fn(toOAuthCredential(latest));
+            return next?.type === "oauth" ? next : undefined;
+          }, options?.signal);
+          this.credential = refreshed ? toOAuthCredential(refreshed) : undefined;
+          return this.credential;
+        } catch (error) {
+          if (error instanceof RetiredModelCredentialError) this.credential = undefined;
+          throw error;
+        }
+      }
       let next: Credential | undefined;
       try {
         next = await fn(current);

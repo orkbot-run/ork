@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type {
   Api,
   Model,
@@ -137,6 +140,7 @@ function credentialStoreForRequest(
     toOAuthCredential(oauth.credential),
     persist ? (next) => persist(next) : undefined,
     oauth.retire,
+    oauth.refresh,
   );
 }
 

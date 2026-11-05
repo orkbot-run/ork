@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import type { AgentRuntimeEvent, AutoReviewProvider } from "@orkbot/adapter-kit";
 import { recordUsage } from "@orkbot/db";
 import type { AutoReviewChecker } from "./auto-review.js";
@@ -99,6 +102,7 @@ export async function autoReviewCheckerProvider(
             ? {
                 credential: judgeKey.oauth,
                 persist: judgeKey.persistOAuth,
+                refresh: judgeKey.refreshOAuth,
                 retire: judgeKey.retireOAuth,
               }
             : undefined,

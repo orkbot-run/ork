@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type {
@@ -33,6 +36,7 @@ import { getLogger } from "@orkbot/logging";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { MCP_DYNAMIC_REGISTRATION_UNSUPPORTED, needsMcpOAuthClient } from "./mcp-server-health.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
+import { oauthRefreshSignal, withOAuthRefreshLock } from "./oauth-refresh-lock.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { persistPreparedSecret } from "./secret-persistence.js";
 import { deleteSecretBestEffort, holdSecretNotifications } from "./secret-store-factory.js";
@@ -849,16 +853,7 @@ type MaterialSnapshot = {
   secret: { id: string; ciphertext: string } | null;
 };
 
-/**
- * A refresh holds the credential lock across one token request and the write.
- * The lock wait runs inside the transaction, so it gets its own cap. Whatever
- * is left after the wait and the request goes to the secret write: a rotated
- * token that never commits is lost.
- */
-const REFRESH_LOCK_WAIT_MS = 10_000;
-const REFRESH_REQUEST_TIMEOUT_MS = 15_000;
-const REFRESH_TRANSACTION_MS = 60_000;
-
+/** Other MCP material writers share the refresh lock namespace. */
 function lockMaterial(tx: Prisma.TransactionClient, serverId: string): Promise<number> {
   return tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
 }
@@ -881,8 +876,7 @@ async function requestRefresh(
     clientInformation,
     refreshToken,
     resource: canonicalResource(discovery.resourceMetadata?.resource, allowPrivateEndpoint),
-    fetchFn: (input, init) =>
-      fetchFn(input, { ...init, signal: AbortSignal.timeout(REFRESH_REQUEST_TIMEOUT_MS) }),
+    fetchFn: (input, init) => fetchFn(input, { ...init, signal: oauthRefreshSignal() }),
   });
 }
 
@@ -1227,17 +1221,17 @@ export class McpOAuthBroker {
     // the exchange itself went.
     // The secret read can be a remote call, so the lock gets refresh's limits, not the
     // default transaction timeout.
-    const generation = await this.prisma.$transaction(
+    const generation = await withOAuthRefreshLock(
+      this.prisma,
+      "mcp-oauth-material",
+      pending.serverId,
       async (tx) => {
-        await tx.$executeRaw`SELECT set_config('lock_timeout', ${`${REFRESH_LOCK_WAIT_MS}ms`}, true)`;
-        await lockMaterial(tx, pending.serverId);
         const snapshot = await this.snapshot(tx, pending.serverId, input);
         const material = snapshot.secret
           ? await this.read(snapshot.secret.ciphertext, snapshot.secret.id)
           : {};
         return material.oauthGeneration ?? 0;
       },
-      { maxWait: REFRESH_LOCK_WAIT_MS, timeout: REFRESH_TRANSACTION_MS },
     );
     if (generation !== pending.generation)
       throw new Error("MCP OAuth session is invalid or expired");
@@ -1382,44 +1376,39 @@ export class McpOAuthBroker {
         this.secrets,
         undefined,
         () =>
-          this.prisma.$transaction(
-            async (tx) => {
-              await tx.$executeRaw`SELECT set_config('lock_timeout', ${`${REFRESH_LOCK_WAIT_MS}ms`}, true)`;
-              await lockMaterial(tx, serverId);
-              const snapshot = await this.snapshot(tx, serverId, context, endpoint);
-              const material = snapshot.secret
-                ? await this.read(snapshot.secret.ciphertext, snapshot.secret.id)
-                : {};
-              const oauth = material.oauth;
-              const current = oauth?.tokens?.refresh_token;
-              if (!oauth || !current || (current !== held && !accessTokenExpired(oauth)))
-                return { grant: { tokens: oauth?.tokens, obtainedAt: oauth?.obtainedAt } };
-              let grant: TokenGrant;
-              try {
-                grant = {
-                  tokens: await requestRefresh(
-                    material,
-                    current,
-                    network.fetch,
-                    this.allowPrivateEndpoint,
-                  ),
-                };
-                grant.obtainedAt = Date.now();
-              } catch (error) {
-                // Under the lock `current` is the stored token, so a rejection
-                // means the grant is revoked, not rotated by another process.
-                if (!(error instanceof InvalidGrantError)) throw error;
-                grant = {};
-              }
-              applyGrant(oauth, grant);
-              if (grant.tokens) rotated = { material, grant, spent: current };
-              stored = await this.putMaterial(material, context);
-              if (!(await this.commitMaterial(tx, serverId, context, snapshot, stored)))
-                throw new Error("MCP credentials changed during refresh; retry");
-              return { grant, record: { id: stored.id, ref: stored.ciphertext, material } };
-            },
-            { maxWait: REFRESH_LOCK_WAIT_MS, timeout: REFRESH_TRANSACTION_MS },
-          ),
+          withOAuthRefreshLock(this.prisma, "mcp-oauth-material", serverId, async (tx) => {
+            const snapshot = await this.snapshot(tx, serverId, context, endpoint);
+            const material = snapshot.secret
+              ? await this.read(snapshot.secret.ciphertext, snapshot.secret.id)
+              : {};
+            const oauth = material.oauth;
+            const current = oauth?.tokens?.refresh_token;
+            if (!oauth || !current || (current !== held && !accessTokenExpired(oauth)))
+              return { grant: { tokens: oauth?.tokens, obtainedAt: oauth?.obtainedAt } };
+            let grant: TokenGrant;
+            try {
+              grant = {
+                tokens: await requestRefresh(
+                  material,
+                  current,
+                  network.fetch,
+                  this.allowPrivateEndpoint,
+                ),
+              };
+              grant.obtainedAt = Date.now();
+            } catch (error) {
+              // Under the lock `current` is the stored token, so a rejection
+              // means the grant is revoked, not rotated by another process.
+              if (!(error instanceof InvalidGrantError)) throw error;
+              grant = {};
+            }
+            applyGrant(oauth, grant);
+            if (grant.tokens) rotated = { material, grant, spent: current };
+            stored = await this.putMaterial(material, context);
+            if (!(await this.commitMaterial(tx, serverId, context, snapshot, stored)))
+              throw new Error("MCP credentials changed during refresh; retry");
+            return { grant, record: { id: stored.id, ref: stored.ciphertext, material } };
+          }),
         (result) => {
           if (result.record) onPersisted?.(result.record);
         },
