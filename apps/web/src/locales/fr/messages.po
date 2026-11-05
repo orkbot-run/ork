@@ -1939,6 +1939,10 @@ msgstr "Impossible de terminer l'action"
 msgid "Could not complete OAuth"
 msgstr "Impossible de terminer OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Impossible de terminer la mise à jour. Réessayez."
