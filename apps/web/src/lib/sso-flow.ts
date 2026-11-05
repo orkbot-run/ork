@@ -4,7 +4,6 @@
 
 import { t } from "@lingui/core/macro";
 import { newClientId } from "@orkbot/core";
-import { supportsNativeSsoPopup } from "./desktop";
 
 type SsoResult = {
   data: { url?: string } | null;
@@ -44,12 +43,11 @@ export function completeSsoCallback(): boolean {
   return true;
 }
 
-/** Native popups share the app session. Normal browsers use the server's redirect. */
+/** Sign in in a separate window that shares the product's session cookies. */
 export async function runSsoFlow(
   begin: (disableRedirect: boolean, callbackURL: (url: string) => string) => Promise<SsoResult>,
   callbackURLs: readonly string[],
 ): Promise<SsoResult> {
-  if (!supportsNativeSsoPopup()) return begin(false, (url) => url);
   const nonce = newClientId();
   const callbacks = callbackURLs.map((url) => new URL(url, window.location.href));
   const callbackURL = (url: string) => {
@@ -78,8 +76,10 @@ export async function runSsoFlow(
   cancelActiveAttempt?.();
   cancelActiveAttempt = cancel;
   try {
-    popup = window.open("about:blank", SSO_CHANNEL, "popup,width=560,height=720");
+    popup = window.open("about:blank", `${SSO_CHANNEL}:${nonce}`, "popup,width=560,height=720");
     if (!popup) throw new Error(t`Could not continue`);
+    // Completion uses the same-origin channel, so the provider needs no opener access.
+    popup.opener = null;
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => reject(new Error(t`Could not continue`)), SSO_TIMEOUT_MS);
     });
@@ -91,7 +91,11 @@ export async function runSsoFlow(
     } catch {
       throw new Error(t`Could not continue`);
     }
-    if (target.protocol !== "https:" && target.origin !== window.location.origin)
+    if (
+      target.username ||
+      target.password ||
+      (target.protocol !== "https:" && target.origin !== window.location.origin)
+    )
       throw new Error(t`Could not continue`);
     popup.location.href = target.href;
     // COOP can sever the handle while authentication continues. Retrying

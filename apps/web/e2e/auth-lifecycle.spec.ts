@@ -1,6 +1,101 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved. Separate-window SSO coverage is an Ork addition.
+
 import type { Request } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup, signupThroughForm } from "./helpers";
+
+test("SSO keeps the product open and completes in a separate window", async ({
+  page,
+  context,
+}, testInfo) => {
+  await page.route("**/api/auth/capabilities", (route) =>
+    route.fulfill({
+      json: {
+        passwordAuth: false,
+        passwordReset: false,
+        resetUrl: null,
+        sso: { name: "Accounts", availability: "available" },
+      },
+    }),
+  );
+  let callback = "";
+  await page.route("**/api/auth/sign-in/social", (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.disableRedirect).toBe(true);
+    expect(body.provider).toBe("oidc");
+    callback = body.newUserCallbackURL;
+    expect(new URL(callback).pathname).toBe("/sso/callback");
+    return route.fulfill({
+      json: { url: "https://identity.example.test/authorize", redirect: false },
+    });
+  });
+  await context.route("https://identity.example.test/authorize", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
+  );
+  await page.goto("/sign-in");
+  const opened = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Continue with Accounts" }).click();
+  const popup = await opened;
+  await expect(popup.getByRole("heading", { name: "Account sign-in" })).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+  await captureScreenshot(page, testInfo, "sso-product-stays-open");
+  await captureScreenshot(popup, testInfo, "sso-separate-sign-in-window");
+
+  // The existing offline identity fixture supplies the session. This checks the browser handoff.
+  const created = await page.request.post("/api/auth/sign-up/email", {
+    headers: { origin: new URL(page.url()).origin },
+    data: { email: `popup-${Date.now()}@orkbot.test`, password: "password12", name: "Popup user" },
+  });
+  expect(created.ok()).toBe(true);
+  const closed = popup.waitForEvent("close");
+  await popup.goto(callback).catch(() => undefined);
+  await closed;
+  await expect(page).toHaveURL(/\/(onboarding|app)(\/|$)/);
+});
+
+test("SSO reports a failed popup callback in the original product window", async ({
+  page,
+  context,
+}) => {
+  await page.route("**/api/auth/get-session**", (route) => route.fulfill({ json: null }));
+  await page.route("**/api/auth/capabilities", (route) =>
+    route.fulfill({
+      json: {
+        passwordAuth: false,
+        passwordReset: false,
+        resetUrl: null,
+        sso: { name: "Accounts", availability: "available" },
+      },
+    }),
+  );
+  let callback = "";
+  await page.route("**/api/auth/sign-in/social", (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.disableRedirect).toBe(true);
+    callback = body.errorCallbackURL;
+    return route.fulfill({
+      json: { url: "https://identity.example.test/authorize", redirect: false },
+    });
+  });
+  await context.route("https://identity.example.test/authorize", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
+  );
+  await page.goto("/sign-in");
+  const opened = page.waitForEvent("popup");
+  await page.getByRole("button", { name: "Continue with Accounts" }).click();
+  const popup = await opened;
+  await expect(popup.getByRole("heading", { name: "Account sign-in" })).toBeVisible();
+  const failed = new URL(callback);
+  failed.searchParams.set("error", "SSO_UNAVAILABLE");
+  const closed = popup.waitForEvent("close");
+  await popup.goto(failed.href).catch(() => undefined);
+  await closed;
+  await expect(page).toHaveURL(/\/sign-in\?error=SSO_UNAVAILABLE$/);
+  await expect(page.getByRole("button", { name: "Continue with Accounts" })).toBeEnabled();
+});
 
 test(
   "sign-up stays blank until session and sign-in options are ready",

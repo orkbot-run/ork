@@ -26,7 +26,7 @@ function desktopWindow() {
     }
   }
   vi.stubGlobal("BroadcastChannel", FakeChannel);
-  const popup = { closed: false, close: vi.fn(), location: { href: "about:blank" } };
+  const popup = { closed: false, opener: {}, close: vi.fn(), location: { href: "about:blank" } };
   const location = {
     href: "https://orkbot.example.test/sign-in",
     origin: "https://orkbot.example.test",
@@ -51,14 +51,23 @@ function desktopWindow() {
   return { popup, location, open, close, begin, channels, land, callback: () => returnTo };
 }
 
-it("uses the normal redirect and unchanged callbacks on web", async () => {
-  vi.stubGlobal("window", {});
-  const begin = vi.fn(async (disableRedirect, callbackURL) => {
-    expect(disableRedirect).toBe(false);
-    expect(callbackURL("/app")).toBe("/app");
-    return result;
-  });
-  await expect(runSsoFlow(begin, ["/app"])).resolves.toBe(result);
+it("opens browser sign-in separately and keeps the app in place until the callback", async () => {
+  const browser = desktopWindow();
+  delete window.orkbotDesktop;
+  const flow = runSsoFlow(browser.begin, ["/app"]);
+  await vi.waitFor(() => expect(browser.popup.location.href).toBe(result.data.url));
+  expect(browser.begin).toHaveBeenCalledWith(true, expect.any(Function));
+  expect(browser.location.assign).not.toHaveBeenCalled();
+  expect(browser.open).toHaveBeenCalledWith(
+    "about:blank",
+    expect.stringMatching(/^orkbot-sso-oauth:/),
+    expect.any(String),
+  );
+  expect(browser.popup.opener).toBeNull();
+  browser.land();
+  await expect(flow).resolves.toBe(result);
+  expect(browser.location.assign).toHaveBeenCalledWith("https://orkbot.example.test/app");
+  expect(browser.popup.close).toHaveBeenCalledOnce();
 });
 
 it("completes native popup SSO without enabling the full desktop bridge", async () => {
@@ -93,7 +102,11 @@ it.each(["/app", "/onboarding", "/app?settings=account", "/sign-in?error=SSO_UNA
       ["/app", "/onboarding", "/sign-in"],
     );
     await vi.advanceTimersByTimeAsync(30_000);
-    expect(open).toHaveBeenCalledWith("about:blank", "orkbot-sso-oauth", expect.any(String));
+    expect(open).toHaveBeenCalledWith(
+      "about:blank",
+      expect.stringMatching(/^orkbot-sso-oauth:/),
+      expect.any(String),
+    );
     expect(popup.location.href).toBe(result.data.url);
     expect(location.assign).not.toHaveBeenCalled();
     if (callback.includes("?error=")) landing += "&error=SSO_UNAVAILABLE";
@@ -151,26 +164,26 @@ it("closes the blank popup on server errors or unsafe provider URLs", async () =
   const { popup, open, channels } = desktopWindow();
   const failure = { data: null, error: { code: "SSO_UNAVAILABLE" } };
   await expect(runSsoFlow(async () => failure, ["/app"])).resolves.toBe(failure);
-  await expect(
-    runSsoFlow(
-      async () => ({ data: { url: "http://identity.example.test" }, error: null }),
-      ["/app"],
-    ),
-  ).rejects.toThrow();
+  for (const url of ["http://identity.example.test", "https://user:password@identity.example.test"])
+    await expect(
+      runSsoFlow(async () => ({ data: { url }, error: null }), ["/app"]),
+    ).rejects.toThrow();
   await expect(
     runSsoFlow(async () => {
       throw new Error("unavailable");
     }, ["/app"]),
   ).rejects.toThrow();
-  expect(open).toHaveBeenCalledTimes(3);
-  expect(popup.close).toHaveBeenCalledTimes(3);
+  expect(open).toHaveBeenCalledTimes(4);
+  expect(popup.close).toHaveBeenCalledTimes(4);
   expect(channels.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
 });
 
 it("reports a blocked popup and closes the channel", async () => {
   const { open, begin, channels } = desktopWindow();
   open.mockReturnValue(null as never);
+  delete window.orkbotDesktop;
   await expect(runSsoFlow(begin, ["/app"])).rejects.toThrow("Could not continue");
+  expect(begin).not.toHaveBeenCalled();
   expect(channels[0]?.close).toHaveBeenCalled();
 });
 
@@ -221,7 +234,11 @@ it("opens synchronously before beginning authorization", async () => {
   const { open, popup } = desktopWindow();
   await expect(
     runSsoFlow(async () => {
-      expect(open).toHaveBeenCalledWith("about:blank", "orkbot-sso-oauth", expect.any(String));
+      expect(open).toHaveBeenCalledWith(
+        "about:blank",
+        expect.stringMatching(/^orkbot-sso-oauth:/),
+        expect.any(String),
+      );
       expect(popup.location.href).toBe("about:blank");
       return { data: null, error: { code: "SSO_UNAVAILABLE" } };
     }, ["/app"]),

@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved. Browser popup coverage is an Ork addition.
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -172,9 +175,9 @@ it("hides SSO in password recovery", async () => {
   expect(host.textContent).not.toContain("Continue with Example");
 });
 
-it("selects a non-redirecting SSO request on desktop", async () => {
+it.each(["browser", "desktop"])("selects a non-redirecting SSO request on %s", async (surface) => {
   vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
-  window.orkbotDesktop = {} as NonNullable<Window["orkbotDesktop"]>;
+  if (surface === "desktop") window.orkbotDesktop = {} as NonNullable<Window["orkbotDesktop"]>;
   vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
   vi.mocked(authClient.signIn.social).mockResolvedValue({
     data: null,
@@ -209,6 +212,7 @@ it("offers no server change in a browser", async () => {
 });
 
 it("keeps SSO available for retry while an authorization request is pending", async () => {
+  vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
   vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
   vi.mocked(authClient.signIn.social).mockReturnValue(new Promise(() => undefined));
   await render();
