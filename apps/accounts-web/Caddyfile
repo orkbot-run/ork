@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 # Account pages share the dashboard hostname. Only the private API handles auth.
+# EasyPanel routes api.orkbot.run directly to Accounts, outside this dashboard proxy.
+# When EasyPanel terminates TLS for this proxy, set DASHBOARD_HOST=:80.
 {$DASHBOARD_HOST} {
 	@accounts path /account /account/*
 	header @accounts {
@@ -15,7 +17,8 @@
 		request_body {
 			max_size 64KB
 		}
-		reverse_proxy {$ACCOUNTS_UPSTREAM:127.0.0.1:3200} {
+		reverse_proxy {$ACCOUNTS_UPSTREAM:https://api.orkbot.run} {
+			header_up Host {upstream_hostport}
 			header_up X-Real-IP {remote_host}
 		}
 	}
@@ -38,30 +41,5 @@
 
 	handle {
 		reverse_proxy {$DASHBOARD_UPSTREAM:127.0.0.1:5173}
-	}
-}
-
-# Keep an existing identity issuer stable when moving the browser-facing UI.
-# This host serves discovery and legacy API URLs, never the login frontend.
-{$ACCOUNTS_ISSUER_HOST} {
-	request_body {
-		max_size 64KB
-	}
-	@legacyAuthorize path /api/auth/oauth2/authorize
-	handle @legacyAuthorize {
-		redir https://{$DASHBOARD_HOST}/account{uri} 302
-	}
-	@api path /api/auth/* /.well-known/*
-	handle @api {
-		reverse_proxy {$ACCOUNTS_UPSTREAM:127.0.0.1:3200} {
-			header_up X-Real-IP {remote_host}
-		}
-	}
-	@pages path / /sign-in /sign-up /verify-email /forgot-password /reset-password
-	handle @pages {
-		redir https://{$DASHBOARD_HOST}/account{uri} 302
-	}
-	handle {
-		respond "Not found" 404
 	}
 }

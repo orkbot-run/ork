@@ -15,19 +15,51 @@ pnpm --filter @orkbot/accounts-web check
 pnpm --filter @orkbot/accounts-web build
 ```
 
-Publish `dist/` under `/account/` on the dashboard origin. `Caddyfile` shows the
-split: `/account/api/auth/*` goes to the private Accounts API, account pages/assets
-come from this build, and other requests go to the existing dashboard. Set
-`DASHBOARD_HOST`, `ACCOUNTS_WEB_ROOT`, `DASHBOARD_UPSTREAM`, `ACCOUNTS_UPSTREAM`
-and `ACCOUNTS_ISSUER_HOST` for your deployment.
+Publish `dist/` under `/account/` on the dashboard origin. `Caddyfile` routes
+`/account/api/auth/*` to `https://api.orkbot.run`, serves account pages/assets
+from this build and forwards other requests to the existing dashboard.
+`ACCOUNTS_UPSTREAM` can override the API destination for a different deployment.
+The browser keeps relative requests and dashboard-scoped cookies; no frontend
+API key, cross-origin cookie configuration or rebuild is needed to change upstreams.
 
-Set the private API's `ACCOUNTS_WEB_URL` to `https://dashboard.example.test/account`.
-Keep `ACCOUNTS_URL` (the identity issuer) unchanged for an existing deployment:
-changing it would change issuer/subject identity mappings. Its host now serves
-discovery/legacy API routes and redirects old account page links to the dashboard.
-Discovery advertises the new dashboard API URLs. Central cookies use `/account`
-and remain separate from the product's local session. Bind the API privately;
-trust only the actual edge peer in `ACCOUNTS_TRUSTED_PROXY_IPS`.
+Set these variables on the dashboard proxy (replace paths and service addresses):
+
+```dotenv
+DASHBOARD_HOST=dashboard.example.test
+ACCOUNTS_WEB_ROOT=/srv/accounts
+DASHBOARD_UPSTREAM=http://dashboard:5173
+ACCOUNTS_UPSTREAM=https://api.orkbot.run
+```
+
+If EasyPanel terminates HTTPS in front of this Caddy container, use
+`DASHBOARD_HOST=:80` and route the dashboard domain to port 80. Otherwise Caddy
+serves the configured dashboard hostname directly. Do not route `api.orkbot.run`
+back through this proxy: EasyPanel must route it directly to the Accounts service
+on port 3200. This avoids a proxy loop.
+
+On the private Accounts API, configure:
+
+```dotenv
+ACCOUNTS_URL=https://api.orkbot.run
+ACCOUNTS_WEB_URL=https://dashboard.example.test/account
+HOST=0.0.0.0
+PORT=3200
+NODE_ENV=production
+```
+
+Replace the dashboard example with the real UI origin, including `/account`.
+On the Ork product API, set `OIDC_ISSUER=https://api.orkbot.run` and use the client
+ID/secret registered with that Accounts deployment. Keep those credentials on the
+server. For an existing installation, changing the issuer changes identity mappings;
+do not silently migrate existing users by matching email addresses.
+
+The Accounts domain serves API/discovery endpoints, not login pages. Discovery
+advertises the dashboard API URLs, so `/account/api/auth/*` must reach Accounts
+before any dashboard SPA fallback. Keep Origin and cookies intact; the proxy sets
+the upstream Host for HTTPS routing. Trust only actual proxy peers in
+`ACCOUNTS_TRUSTED_PROXY_IPS`, with the edge overwriting client IP headers.
+Cloudflare or other edge access rules must allow OAuth discovery/token requests
+and dashboard-to-API traffic without an interactive browser challenge.
 
 The existing product dashboard continues initiating OIDC login. The signed login
 continuation stays in the URL across account pages. The API validates it; the
