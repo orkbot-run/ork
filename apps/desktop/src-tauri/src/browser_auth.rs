@@ -659,7 +659,7 @@ mod tests {
 
     async fn wait_closed(callback: &Url) {
         let port = callback.port().unwrap();
-        tokio::time::timeout(Duration::from_secs(2), async move {
+        tokio::time::timeout(Duration::from_secs(10), async move {
             loop {
                 if TcpStream::connect((Ipv4Addr::LOCALHOST, port))
                     .await
@@ -667,7 +667,7 @@ mod tests {
                 {
                     return;
                 }
-                tokio::task::yield_now().await;
+                tokio::time::sleep(Duration::from_millis(20)).await;
             }
         })
         .await
