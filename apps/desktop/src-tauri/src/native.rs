@@ -33,6 +33,12 @@ pub struct Document {
 #[derive(serde::Deserialize)]
 #[serde(tag = "type", deny_unknown_fields)]
 pub enum Command {
+    #[serde(rename = "accounts.signIn")]
+    AccountsSignIn,
+    #[serde(rename = "accounts.session")]
+    AccountsSession,
+    #[serde(rename = "accounts.logout")]
+    AccountsLogout,
     #[serde(rename = "hello")]
     Hello { epoch: u64 },
     #[serde(rename = "pairing.sync")]

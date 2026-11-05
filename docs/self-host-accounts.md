@@ -133,6 +133,10 @@ is unreachable or takes longer than three seconds, the password is accepted and 
 
 ## OpenID Connect SSO
 
+The API-managed flow uses a confidential client. To connect it to Ork Accounts,
+set `OIDC_ISSUER=https://api.orkbot.run` with that client registration. See
+[Native Ork Accounts](accounts-native.md) for the separate public native PKCE flow.
+
 SSO works with a self-hosted or hosted OpenID Connect provider. Leave its settings unset to
 keep password authentication alone. Configure all three credentials together on the API:
 

@@ -3,6 +3,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod accounts;
 mod auth;
 mod browser_auth;
 mod credentials;
@@ -51,6 +52,7 @@ struct DesktopState {
     switching: tokio::sync::Mutex<()>,
     sessions: native::Sessions,
     browser_auth: browser_auth::BrowserAuth,
+    accounts: accounts::Accounts,
     speech: speech::SpeechManager,
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
@@ -157,6 +159,53 @@ async fn native_command(
     let owner = document.owner();
     let unit = serde_json::Value::Null;
     match command {
+        Command::AccountsSignIn => {
+            let opener_app = app.clone();
+            let opener_owner = owner.clone();
+            let account = state
+                .accounts
+                .sign_in(
+                    &document.origin,
+                    &state.browser_auth,
+                    &owner,
+                    move |url| async move {
+                        if active_document(&opener_app)
+                            .is_none_or(|current| current.owner() != opener_owner)
+                        {
+                            return Err("This sign-in window is no longer active.".into());
+                        }
+                        opener_app
+                            .opener()
+                            .open_url(url, None::<&str>)
+                            .map_err(|_| "Could not open browser sign-in.".into())
+                    },
+                    || {
+                        state.sessions.is_current(&document)
+                            && active_document(&app).is_some_and(|current| current.owner() == owner)
+                    },
+                )
+                .await?;
+            if !state.sessions.is_current(&document)
+                || active_document(&app).is_none_or(|current| current.owner() != owner)
+            {
+                return Err("This sign-in window is no longer active.".into());
+            }
+            serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
+        }
+        Command::AccountsSession => {
+            let account = state.accounts.session(&document.origin).await?;
+            if !state.sessions.is_current(&document)
+                || active_document(&app).is_none_or(|current| current.owner() != owner)
+            {
+                return Err("This sign-in window is no longer active.".into());
+            }
+            serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
+        }
+        Command::AccountsLogout => {
+            state.browser_auth.cancel_owner(&owner);
+            state.accounts.logout(&document.origin).await?;
+            Ok(unit)
+        }
         Command::Hello { .. } => {
             if managed_computer_document(&app, &document) {
                 if let Some(host) = &state.host_computer {
@@ -1000,6 +1049,7 @@ fn main() {
                 switching: tokio::sync::Mutex::new(()),
                 sessions: native::Sessions::default(),
                 browser_auth,
+                accounts: accounts::Accounts::default(),
                 speech: speech::SpeechManager::new(speech_helper),
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
@@ -1141,6 +1191,7 @@ mod tests {
                 switching: tokio::sync::Mutex::new(()),
                 sessions: native::Sessions::default(),
                 browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
+                accounts: accounts::Accounts::default(),
                 speech: speech::SpeechManager::new(PathBuf::new()),
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),

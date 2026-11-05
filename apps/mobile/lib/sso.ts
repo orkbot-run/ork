@@ -118,3 +118,16 @@ async function sessionUser(apiBase: string, headers: Record<string, string>): Pr
     throw new Error(authResponseErrorText(response.status, body, invalidJson));
   return body.user.id;
 }
+
+/** Public-client Accounts identity connection, independent of the selected server session. */
+export async function continueWithAccounts(): Promise<boolean> {
+  return (await import("./accounts")).continueWithAccounts();
+}
+
+export async function accountsAccessToken(): Promise<string | null> {
+  return (await import("./accounts")).accountsAccessToken();
+}
+
+export async function signOutAccounts(): Promise<void> {
+  return (await import("./accounts")).signOutAccounts();
+}

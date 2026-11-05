@@ -9,6 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import appConfig from "../app.config";
 
 beforeEach(() => {
+  vi.stubEnv("ORK_ACCOUNTS_ISSUER", undefined);
+  vi.stubEnv("ORK_ACCOUNTS_MOBILE_CLIENT_ID", undefined);
   vi.stubEnv("EAS_BUILD_PROFILE", "production");
   vi.stubEnv("EXPO_PUBLIC_API_URL", "https://app.example.com");
 });
@@ -37,6 +39,7 @@ const passkeys = {
 describe("mobile app config", () => {
   it("keeps the fork detached from an unconfigured Expo project and native stores", () => {
     const manifest = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8")).expo;
+    expect(manifest.scheme).toEqual(["orkbot", "run.orkbot.app"]);
     expect(manifest.owner).toBeUndefined();
     expect(manifest.extra.eas.projectId).toBeUndefined();
     expect(manifest.updates).toEqual({ enabled: false });
@@ -52,6 +55,17 @@ describe("mobile app config", () => {
       "run.orkbot.app.notifications",
     ]);
   });
+  it("embeds explicit public Accounts build settings without replacing existing extra values", () => {
+    vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://accounts.example.test");
+    vi.stubEnv("ORK_ACCOUNTS_MOBILE_CLIENT_ID", "public-mobile-client");
+    expect(appConfig(context(config)).extra).toEqual({
+      ...config.extra,
+      passkeyRpIds: ["app.example.com"],
+      accountsIssuer: "https://accounts.example.test",
+      accountsClientId: "public-mobile-client",
+    });
+  });
+
   it("loads the Firebase file path while preserving the existing config", () => {
     vi.stubEnv("GOOGLE_SERVICES_JSON", "/build/google-services.json");
 

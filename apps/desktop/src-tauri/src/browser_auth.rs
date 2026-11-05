@@ -49,6 +49,8 @@ const ATTEMPT_LIFETIME: Duration = Duration::from_secs(10 * 60);
 pub struct OAuthCallback {
     pub code: String,
     pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub iss: Option<String>,
 }
 
 /// The caller must revalidate this owner before delivering to a live, trusted app document.
@@ -105,6 +107,70 @@ impl BrowserAuth {
         F: FnOnce(String) -> Fut + Send,
         Fut: Future<Output = Result<(), String>> + Send,
     {
+        self.open_inner(owner, authorization_url, None, None, open_external)
+            .await
+    }
+
+    /// Reserve the ephemeral IPv4 listener before constructing the public-client redirect.
+    pub async fn authorize_public<B, F, Fut>(
+        &self,
+        owner: &str,
+        build: B,
+        open_external: F,
+    ) -> Result<(OAuthCallback, String), String>
+    where
+        B: FnOnce(&str) -> Result<String, String>,
+        F: FnOnce(String) -> Fut + Send,
+        Fut: Future<Output = Result<(), String>> + Send,
+    {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .await
+            .map_err(|_| "Could not listen for sign-in.")?;
+        let port = listener
+            .local_addr()
+            .map_err(|_| "Could not listen for sign-in.")?
+            .port();
+        let redirect = format!("http://127.0.0.1:{port}/callback");
+        let authorization = build(&redirect)?;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let sender = Mutex::new(Some(sender));
+        let callback: Callback = Arc::new(move |_, callback| {
+            if let Some(sender) = sender
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .take()
+            {
+                let _ = sender.send(callback);
+            }
+        });
+        self.open_inner(
+            owner,
+            &authorization,
+            Some(listener),
+            Some(callback),
+            open_external,
+        )
+        .await?;
+        let result = tokio::time::timeout(self.lifetime, receiver).await;
+        self.cancel_url(owner, &authorization);
+        let callback = result
+            .map_err(|_| "Sign-in expired. Retry to continue.")?
+            .map_err(|_| "Sign-in cancelled.")?;
+        Ok((callback, redirect))
+    }
+
+    async fn open_inner<F, Fut>(
+        &self,
+        owner: &str,
+        authorization_url: &str,
+        listener: Option<TcpListener>,
+        on_callback: Option<Callback>,
+        open_external: F,
+    ) -> Result<(), String>
+    where
+        F: FnOnce(String) -> Fut + Send,
+        Fut: Future<Output = Result<(), String>> + Send,
+    {
         if owner.is_empty() || owner.len() > MAX_OWNER_BYTES {
             return Err("Invalid sign-in window.".into());
         }
@@ -134,9 +200,22 @@ impl BrowserAuth {
 
         let has_callback = authorization.callback.is_some();
         if let Some(callback) = authorization.callback {
-            let listeners = tokio::select! {
-                listeners = bind_callback(&callback.url, TcpListener::bind) => listeners?,
-                _ = wait_cancelled(&control) => return Err("Sign-in cancelled.".into()),
+            let listeners = if let Some(listener) = listener {
+                validate_public_redirect(&callback.url)?;
+                if listener
+                    .local_addr()
+                    .map_err(|_| "Invalid sign-in listener.")?
+                    .port()
+                    != callback.url.port().unwrap_or(0)
+                {
+                    return Err("Invalid sign-in listener.".into());
+                }
+                vec![listener]
+            } else {
+                tokio::select! {
+                    listeners = bind_callback(&callback.url, TcpListener::bind) => listeners?,
+                    _ = wait_cancelled(&control) => return Err("Sign-in cancelled.".into()),
+                }
             };
             if control.cancelled.load(Ordering::SeqCst) {
                 return Err("Sign-in cancelled.".into());
@@ -146,7 +225,7 @@ impl BrowserAuth {
                 registry: Arc::clone(&self.attempts),
                 control: Arc::clone(&control),
                 callback,
-                on_callback: Arc::clone(&self.on_callback),
+                on_callback: on_callback.unwrap_or_else(|| Arc::clone(&self.on_callback)),
                 connections: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
             });
             tokio::spawn(run_attempt(listeners, context, self.lifetime));
@@ -346,6 +425,21 @@ fn values(url: &Url, key: &str) -> Vec<String> {
         .filter(|(name, _)| name == key)
         .map(|(_, value)| value.into_owned())
         .collect()
+}
+
+pub fn validate_public_redirect(url: &Url) -> Result<(), String> {
+    if url.scheme() != "http"
+        || url.host_str() != Some("127.0.0.1")
+        || url.path() != "/callback"
+        || url.port().is_none_or(|port| port < 1024)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("Accounts requires an IPv4 loopback callback.".into());
+    }
+    Ok(())
 }
 
 fn loopback_callback(url: &Url) -> bool {
@@ -564,7 +658,12 @@ fn validate_callback<B>(request: &Request<B>, callback: &CallbackTarget) -> Opti
     if states.len() != 1 || states[0] != callback.state || codes.len() != 1 || codes[0].is_empty() {
         return None;
     }
+    let issuers = values(&target, "iss");
+    if issuers.len() > 1 {
+        return None;
+    }
     Some(OAuthCallback {
+        iss: issuers.first().cloned(),
         code: codes[0].clone(),
         state: states[0].clone(),
     })
@@ -589,6 +688,35 @@ fn response(status: StatusCode, body: &'static str) -> Response<Full<Bytes>> {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[tokio::test]
+    async fn public_client_reserves_ipv4_redirect_before_opening_browser() {
+        let auth = BrowserAuth::new(Arc::new(|_, _| {
+            panic!("public callback crossed legacy bridge")
+        }));
+        let (callback, redirect) = auth.authorize_public(
+            "window-a",
+            |redirect| {
+                let redirect = Url::parse(redirect).unwrap();
+                validate_public_redirect(&redirect).unwrap();
+                Ok(authorization(&redirect))
+            },
+            |authorization| async move {
+                let url = Url::parse(&authorization).unwrap();
+                let redirect = Url::parse(&values(&url, "redirect_uri")[0]).unwrap();
+                let response = client().get(return_url(&redirect, "code=public-code&state=test-state&iss=https%3A%2F%2Fidentity.example.com")).send().await.unwrap();
+                assert!(response.status().is_success());
+                Ok(())
+            },
+        ).await.unwrap();
+        assert_eq!(callback.code, "public-code");
+        assert_eq!(
+            callback.iss.as_deref(),
+            Some("https://identity.example.com")
+        );
+        assert_eq!(Url::parse(&redirect).unwrap().host_str(), Some("127.0.0.1"));
+        wait_closed(&Url::parse(&redirect).unwrap()).await;
+    }
 
     #[derive(Default)]
     struct Callbacks {
@@ -717,6 +845,7 @@ mod tests {
                 &[(
                     "window-a".to_owned(),
                     OAuthCallback {
+                        iss: None,
                         code: "example-code".to_owned(),
                         state: "test-state".to_owned()
                     }

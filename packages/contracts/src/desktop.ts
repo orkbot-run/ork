@@ -44,6 +44,16 @@ export interface OrkDesktopUpdate {
 export interface OrkDesktopOAuthCallback {
   code: string;
   state?: string;
+  iss?: string;
+}
+
+/** Public identity metadata. Native credentials never cross the bridge. */
+export interface OrkDesktopAccount {
+  issuer: string;
+  subject: string;
+  userinfo: Record<string, unknown>;
+  /** Unix timestamp in seconds. */
+  expiresAt: number;
 }
 
 export interface OrkDesktopDevice {
@@ -87,6 +97,12 @@ export function isDesktopMenuCommand(value: unknown): value is DesktopMenuComman
 }
 
 export interface OrkDesktop {
+  /** Optional native identity connection, separate from the selected server's session. */
+  accounts?: {
+    signIn: () => Promise<OrkDesktopAccount>;
+    session: () => Promise<OrkDesktopAccount | null>;
+    logout: () => Promise<void>;
+  };
   /** Optional for compatibility with hosts without native device pairing. */
   pairing?: {
     /** Native code derives the current server and account from the window session. */
