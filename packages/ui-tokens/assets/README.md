@@ -1,44 +1,49 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Nunu asset workflow. -->
+<!-- Inherited documentation remains Apache-2.0. New changes follow LICENSE.md. -->
+
 # App icon source
 
 `Ork.icon` is the shared editable source for macOS and iOS. Open it in Apple's
-Icon Composer with Xcode 26 or newer. The orange foreground keeps its original
-lighting, sits 90 points below center, and uses the system dark background.
+Icon Composer with Xcode 26 or newer to edit the centered mint Nunu foreground
+and system dark background. The transparent artwork is in `Assets/ork-nunu.png`.
+Use `ork-nunu-monochrome.svg` for masks.
 
 macOS packaging compiles the source into a Tahoe asset catalog and generates the
 legacy ICNS fallback. Expo copies the same source into the iOS project.
 
 The platform exports are:
 
-- `apps/desktop/assets/icon-macos.png`: Icon Composer's default appearance,
-  1024-pixel macOS pre-Tahoe export, including Dock margins for development launches.
+- `apps/desktop/assets/icon-macos.png`: 1024-pixel development icon with Dock margins.
 - `apps/mobile/assets/icon.png`: opaque 1024-pixel square for the generic/legacy icon,
   with no rounded mask or Dock margins.
-- `apps/mobile/assets/adaptive-icon.png`: transparent 1024-pixel Android foreground;
-  the bot is 820 pixels wide, centered horizontally and offset 179 pixels from the top.
-  Its face stays inside the launcher's safe area and the body extends below the mask.
+- `apps/mobile/assets/adaptive-icon.png`: transparent 1024-pixel Android foreground.
+  The centered artwork leaves room for circular launcher masks.
 - `apps/mobile/assets/icon-background.png`: opaque Android background using the
   shared dark background token.
-- `apps/mobile/assets/monochrome-icon.png`: matching Android alpha silhouette with
-  transparent eyes for themed launchers.
+- `apps/mobile/assets/monochrome-icon.png`: white Nunu silhouette with transparent
+  eyes and smile for themed launchers.
 
-Refresh platform exports after changing the source. Android supplies its own mask;
-never bake Mac corners, a rim, or an outer shadow into adaptive layers.
+Refresh exports after each source change. Android supplies its own mask.
+Keep Mac corners, rims, and outer shadows out of the adaptive layers.
 
-Run `pnpm --filter @orkbot/ui-tokens export:brand` to refresh the web and marketing
-favicons, install icons, marketing mark, Windows/Linux icons, mobile splash, and
-mobile web favicon. These use the same orange foreground with the shared dark
-background, a rounded mask for small browser marks, and transparent splash padding.
-The notification export uses the Android monochrome silhouette so its eyes remain
-transparent. Apple Icon Composer and Android launcher exports remain separate
-because their system masks and safe areas differ.
+Run `pnpm --filter @orkbot/ui-tokens export:brand` to refresh platform raster
+exports and the brand kit's icon and mascot: favicons, desktop icons, Android
+layers, mobile splash, and notification icon. Square app icons use the shared
+dark background. Browser marks use rounded corners, and the splash keeps transparent padding. Tauri derives
+its bundle icons from `apps/desktop/assets/icon.png` during preparation.
 
-Run `pnpm --filter @orkbot/www brand:render` to refresh the Ork wordmark and composite brand image. After exporting, run `pnpm exec tsx apps/www/scripts/render-og.mjs` to refresh the marketing page social cards. The renderer uses the installed Playwright Chromium browser, with `CHROME_PATH` as an optional executable override.
+Run `pnpm --filter @orkbot/www brand:render` to refresh the composite logo and
+colored marketing avatars. These avatars use the shared `@orkbot/avatar` renderer.
+Then run `pnpm exec tsx apps/www/scripts/render-og.mjs` to refresh social cards.
+The card renderer uses the installed Playwright Chromium browser, with
+`CHROME_PATH` as an optional executable override.
 
 ## Animated vector avatars
 
-The animated Ork avatar uses SVG paths and gradients in the shared
-`logo-avatar-art.ts` definition. Its contour is sampled from this canonical
-source's alpha silhouette. The hands and lighting are simplified vector shapes;
-the original photographic skin grain is intentionally not reproduced. No raster
-body is embedded or loaded by the vector renderer. The canonical icon and its
-platform exports remain unchanged.
+Web, Electron, and mobile draw animated Nunu avatars from the shared
+`logo-avatar-art.ts` geometry and paint definitions. The small ears, oval eyes,
+and smile match the mascot. Existing bot colors and motion settings are preserved.
+The vector renderers use gradients instead of loading the raster icon.

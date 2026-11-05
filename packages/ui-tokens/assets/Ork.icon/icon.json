@@ -5,13 +5,16 @@
       "layers": [
         {
           "glass": false,
-          "image-name": "orange-bot.png",
-          "name": "orange-bot"
+          "image-name": "ork-nunu.png",
+          "name": "ork-nunu"
         }
       ],
       "position": {
         "scale": 1,
-        "translation-in-points": [0, 90]
+        "translation-in-points": [
+          0,
+          0
+        ]
       },
       "shadow": {
         "kind": "neutral",
@@ -24,7 +27,9 @@
     }
   ],
   "supported-platforms": {
-    "circles": ["watchOS"],
+    "circles": [
+      "watchOS"
+    ],
     "squares": "shared"
   }
 }

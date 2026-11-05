@@ -1,4 +1,16 @@
-import { BOT_COLOR_LIST, contrastRatio, seededLogoAvatarColor } from "@orkbot/core";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify the new shared body and smile.
+// Inherited avatar behavior checks remain Apache-2.0. New changes follow LICENSE.md.
+
+import {
+  BOT_COLOR_LIST,
+  contrastRatio,
+  LOGO_AVATAR_SMILE_PATH,
+  LOGO_BODY_PATH,
+  seededLogoAvatarColor,
+} from "@orkbot/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -21,16 +33,17 @@ describe("logo-derived avatar prototype", () => {
     expect(html).toContain('data-vector-body="true"');
     expect(html).not.toContain("<image");
     expect(html).not.toContain("<filter");
-    // The two light windows contain vector gradients only, never an image or baked eyes.
-    expect([...html.matchAll(/<mask\b/g)]).toHaveLength(2);
-    expect(html).toContain("mask-type:luminance");
+    expect(html).toContain(`d="${LOGO_BODY_PATH}"`);
+    expect(html).toContain(`d="${LOGO_AVATAR_SMILE_PATH}"`);
+    expect(html).toContain('class="logo-avatar-smile"');
+    expect(html).not.toContain("<mask");
     expect(html).not.toContain("orange-bot.png");
     expect(html).toContain("logo-avatar-gaze");
     expect(html).toContain('role="img"');
     expect(html).toContain('aria-label="Inbox is reading"');
   });
 
-  it("gives repeated avatars unique local mask and gradient references", () => {
+  it("gives repeated avatars unique local clip and gradient references", () => {
     const html = renderToString(
       <>
         <LogoAvatar />
@@ -86,5 +99,7 @@ describe("logo-derived avatar prototype", () => {
     )?.[1];
     expect(eyeInk).toBeDefined();
     expect(contrastRatio(hex, eyeInk!)).toBeGreaterThanOrEqual(3);
+    const smileInk = html.match(/class="logo-avatar-smile"[^>]*stroke="([^"]+)"/)?.[1];
+    expect(smileInk).toBe(eyeInk);
   });
 });

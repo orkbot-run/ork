@@ -1,5 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify replacement Ork geometry.
+// Inherited behavior checks remain Apache-2.0. New changes follow LICENSE.md.
+
 import { readFile } from "node:fs/promises";
-import { BOT_AVATAR_COLORS } from "@orkbot/core";
+import { BOT_AVATAR_COLORS, LOGO_AVATAR_EYES } from "@orkbot/core";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 
@@ -465,7 +471,7 @@ test("thinking ponders in one direction with a long squint and a small reconside
     expect(avatar.reconsiderLooksUp).toBe(true);
     expect(avatar.rest).toEqual([0, -2]);
     expect(avatar.squint).toEqual([0.8, 0.68, 1]);
-    expect(avatar.eyeCenters).toEqual([40.5, 59.5]);
+    expect(avatar.eyeCenters).toEqual([LOGO_AVATAR_EYES.leftCx, LOGO_AVATAR_EYES.rightCx]);
     for (const [start, end] of avatar.holds) expect(start).toEqual(end);
   }
 });
@@ -533,7 +539,7 @@ test("paired blinks last 160ms with uneven spacing and reduced motion opens the 
 
 test("expressive gaze reads at24/32/38px and stays on the logo silhouette", async ({ page }) => {
   await page.goto("/e2e/fixtures/logo-avatars.html?compare=1");
-  const proof = await page.evaluate(async () => {
+  const proof = await page.evaluate(async (geometry) => {
     const avatars = [...document.querySelectorAll<SVGSVGElement>(".orkbot-logo-avatar")].filter(
       (avatar) =>
         [24, 32, 38].includes(Number(avatar.getAttribute("width"))) &&
@@ -570,15 +576,16 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
             bounds[1]!.x +
               bounds[1]!.width / 2 -
               (bounds[0]!.x + bounds[0]!.width / 2) -
-              (19 * Number(avatar.getAttribute("width"))) / 100,
+              ((geometry.rightCx - geometry.leftCx) * Number(avatar.getAttribute("width"))) / 100,
           ),
         );
         for (const eye of eyes) {
           const intoArtwork = imageElement.getCTM()!.inverse().multiply(eye.getCTM()!);
           for (let angle = 0; angle < 16; angle++) {
             const point = new DOMPoint(
-              Number(eye.getAttribute("cx")) + 5.2 * Math.cos((angle * Math.PI) / 8),
-              40 + 8 * Math.sin((angle * Math.PI) / 8),
+              Number(eye.getAttribute("cx")) +
+                (geometry.width / 2) * Math.cos((angle * Math.PI) / 8),
+              geometry.cy + (geometry.height / 2) * Math.sin((angle * Math.PI) / 8),
             ).matrixTransform(intoArtwork);
             minAlpha = Math.min(
               minAlpha,
@@ -597,7 +604,7 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
         maxSpacingError,
       };
     });
-  });
+  }, LOGO_AVATAR_EYES);
   expect(new Set(proof.map((item) => item.size))).toEqual(new Set([24, 32, 38]));
   for (const item of proof) {
     expect(item.animated).toBe("true");
@@ -723,11 +730,12 @@ test("native small-size indicators keep one-pixel strokes and omit fine detail i
   }
 });
 
-test("directional vector rim follows the source edge falloff without whitening the face", async ({
+test("clay vector body matches the supplied Ork silhouette with ears and a rounded base", async ({
   page,
 }) => {
   const original = await readFile(
-    new URL("../../../packages/ui-tokens/assets/Ork.icon/Assets/orange-bot.png", import.meta.url),
+    new URL("../../../packages/ui-tokens/assets/ork-nunu-monochrome.svg", import.meta.url),
+    "utf8",
   );
   await page.goto("/e2e/fixtures/logo-avatars.html?compare=1&theme=light");
   const art = await page
@@ -736,9 +744,9 @@ test("directional vector rim follows the source edge falloff without whitening t
     .evaluate((node) => node.outerHTML);
   const proof = await page.evaluate(
     async ({ art, original }) => {
-      const pixels = async (src: string) => {
+      const pixels = async (markup: string) => {
         const image = new Image();
-        image.src = src;
+        image.src = `data:image/svg+xml,${encodeURIComponent(markup)}`;
         await image.decode();
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = 1024;
@@ -746,44 +754,40 @@ test("directional vector rim follows the source edge falloff without whitening t
         context.drawImage(image, 0, 0, 1024, 1024);
         return context.getImageData(0, 0, 1024, 1024).data;
       };
-      const source = await pixels(original);
-      const vector = await pixels(
-        `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">${art}</svg>`)}`,
+      const svg = (content: string) =>
+        `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">${content}</svg>`;
+      const reference = new DOMParser().parseFromString(original, "image/svg+xml");
+      const contour = reference.documentElement.querySelector(":scope > path")!.getAttribute("d");
+      const source = await pixels(
+        svg(
+          `<g transform="translate(-14.5 -21.93) scale(.215)"><path d="${contour}" fill="white"/></g>`,
+        ),
       );
-      const rgba = (data: Uint8ClampedArray, x: number, y: number) =>
-        Array.from(data.slice((y * 1024 + x) * 4, (y * 1024 + x) * 4 + 4));
-      const y = 420;
-      const opaque = Array.from({ length: 1024 }, (_, x) => x).filter(
-        (x) => rgba(source, x, y)[3]! > 245,
-      );
-      const left = opaque[0]!,
-        right = opaque[opaque.length - 1]!;
-      const sample = (data: Uint8ClampedArray, side: "left" | "right", inset: number) =>
-        rgba(data, side === "left" ? left + inset : right - inset, y);
+      const vector = await pixels(svg(art));
+      let intersection = 0,
+        union = 0;
+      for (let index = 3; index < source.length; index += 4) {
+        const sourceInside = source[index]! > 127;
+        const vectorInside = vector[index]! > 127;
+        if (sourceInside || vectorInside) union++;
+        if (sourceInside && vectorInside) intersection++;
+      }
+      const alpha = (x: number, y: number) =>
+        vector[(Math.round(y * 10.24) * 1024 + Math.round(x * 10.24)) * 4 + 3]!;
       return {
-        sourceLeft: sample(source, "left", 4),
-        vectorLeft: sample(vector, "left", 4),
-        sourceRight: sample(source, "right", 4),
-        vectorRight: sample(vector, "right", 4),
-        leftInside: sample(vector, "left", 40),
-        rightInside: sample(vector, "right", 40),
-        sourceHotspot: rgba(source, 580, 220),
-        vectorHotspot: rgba(vector, 580, 220),
-        outsideAlpha: rgba(vector, 512, 20)[3],
+        overlap: intersection / union,
+        ears: [alpha(36, 2), alpha(64, 2)],
+        crownGap: alpha(50, 4),
+        roundedBase: [alpha(15, 80), alpha(50, 82), alpha(85, 80)],
+        outsideAlpha: alpha(5, 43),
       };
     },
-    { art, original: `data:image/png;base64,${original.toString("base64")}` },
+    { art, original },
   );
-  expect(proof.vectorRight[2]! - proof.rightInside[2]!).toBeGreaterThan(25);
-  expect(proof.vectorLeft[2]! - proof.leftInside[2]!).toBeGreaterThan(15);
-  expect(proof.vectorRight[1]! - proof.vectorLeft[1]!).toBeGreaterThan(25);
-  for (const [actual, source] of [
-    [proof.vectorLeft, proof.sourceLeft],
-    [proof.vectorRight, proof.sourceRight],
-    [proof.vectorHotspot, proof.sourceHotspot],
-  ])
-    for (let channel = 0; channel < 3; channel++)
-      expect(Math.abs(actual![channel]! - source![channel]!)).toBeLessThan(30);
+  expect(proof.overlap).toBeGreaterThan(0.995);
+  expect(proof.ears).toEqual([255, 255]);
+  expect(proof.crownGap).toBe(0);
+  expect(proof.roundedBase).toEqual([0, 255, 0]);
   expect(proof.outsideAlpha).toBe(0);
 });
 

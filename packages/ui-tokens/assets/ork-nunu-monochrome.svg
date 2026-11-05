@@ -1,0 +1,13 @@
+<!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+  <defs>
+    <mask id="face">
+      <rect width="600" height="600" fill="white"/>
+      <ellipse cx="244" cy="302" rx="12.75" ry="22.95" fill="black"/>
+      <ellipse cx="356" cy="302" rx="12.75" ry="22.95" fill="black"/>
+      <path d="M278 361 Q300 384 322 361" fill="none" stroke="black" stroke-width="11" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <path fill="white" mask="url(#face)" d="M222 109 Q238 94 246 115 L255 146 Q259 157 272 153 Q300 148 328 153 Q342 158 346 146 L355 115 Q362 94 379 108 C450 153 482 224 478 302 C477 415 405 487 302 491 C194 491 120 418 122 304 C120 225 154 157 222 109 Z"/>
+</svg>

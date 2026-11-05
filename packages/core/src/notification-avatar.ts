@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use the shared Ork smile in notification portraits.
+// Inherited identity and avatar selection remain Apache-2.0. New changes follow LICENSE.md.
+
 import { BotAvatarValueSchema, parseBotAvatarValue, resolveBotAvatarSet } from "@orkbot/contracts";
 import { lightTokens } from "@orkbot/ui-tokens";
 import type { AvatarEyes } from "./avatar-shape.js";
@@ -18,6 +24,8 @@ import {
 import {
   LOGO_AVATAR_BODY_Y,
   LOGO_AVATAR_EYES,
+  LOGO_AVATAR_SMILE_PATH,
+  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
   LOGO_BODY_PATH,
   logoAvatarEyeInk,
@@ -51,7 +59,9 @@ export function notificationAvatarSource(bot: {
       .map((cx) => `<ellipse cx="${cx}" cy="${cy}" rx="${width / 2}" ry="${height / 2}"/>`)
       .join("");
     viewBox = LOGO_AVATAR_VIEWBOX;
-    body = `<g transform="translate(0 ${LOGO_AVATAR_BODY_Y})"><path d="${LOGO_BODY_PATH}" fill="${fill}"/><g fill="${logoAvatarEyeInk(fill, lightTokens)}">${eyes}</g></g>`;
+    const ink = logoAvatarEyeInk(fill, lightTokens);
+    const smile = `<path d="${LOGO_AVATAR_SMILE_PATH}" fill="none" stroke="${ink}" stroke-width="${LOGO_AVATAR_SMILE_STROKE}" stroke-linecap="round"/>`;
+    body = `<g transform="translate(0 ${LOGO_AVATAR_BODY_Y})"><path d="${LOGO_BODY_PATH}" fill="${fill}"/><g fill="${ink}">${eyes}</g>${smile}</g>`;
   } else {
     const seed = avatarIdentitySeed(bot.id);
     viewBox = ORGANIC_AVATAR_VIEWBOX;

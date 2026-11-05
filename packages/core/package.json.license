@@ -1,0 +1,6 @@
+SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+SPDX-FileCopyrightText: 2026 Rakazo contributors
+SPDX-FileCopyrightText: 2026 Ork contributors
+Modified by Ork contributors to declare the package's mixed license scope after
+adding the new Ork avatar artwork and rendering changes.
+Inherited material remains Apache-2.0. New changes follow LICENSE.md.
