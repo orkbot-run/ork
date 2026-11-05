@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # API instructions
 
 - Keep `src/app.ts` and `src/index.ts` as composition roots. Executable entrypoints stay in `src/cli/`, where the build scripts expect them.

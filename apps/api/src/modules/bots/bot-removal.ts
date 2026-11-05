@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { destroyBot } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { createRepos } from "@orkbot/db";

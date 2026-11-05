@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Vision
 
 Ork exists so that people can own AI teammates that persist, use computers, and finish work beyond a single chat.
@@ -13,7 +16,7 @@ Changes that reduce bots to prompt presets or isolated one-off tasks work agains
 
 ## Ownership includes choice
 
-The complete core product runs on infrastructure controlled by its operator under an open-source license.
+The complete core product runs on infrastructure controlled by its operator under the terms in [LICENSE.md](LICENSE.md). New Ork work is source-available under PolyForm Noncommercial or a separate commercial agreement. Existing Apache material keeps its license.
 No hosted vendor is required for models, computers, memory, voice, integrations, or another core workflow.
 External services remain optional choices behind provider-neutral contracts, and new providers reuse shared contracts and deterministic offline conformance tests.
 Bot state remains inspectable, exportable, recoverable, and portable across provider failure or replacement.

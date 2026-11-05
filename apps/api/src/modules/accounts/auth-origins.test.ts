@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { createAuth } from "@orkbot/auth";
 import { describe, expect, it } from "vitest";
 import { isTrustedOrigin, MOBILE_AUTH_ORIGINS } from "../../app.js";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startHourlySweep } from "#modules/platform/hourly-sweep";

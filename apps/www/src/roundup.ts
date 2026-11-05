@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { Alternative, FaqItem } from "./alternatives";
 import { ALTERNATIVES, ALTERNATIVES_HUB, ROUNDUP_UPDATED, alternativePath } from "./alternatives";
 import { GROK_ALTERNATIVE_H1, GROK_ALTERNATIVE_PATH } from "./grok-alternative";
@@ -12,9 +14,9 @@ export const ROUNDUP_DESCRIPTION = ALTERNATIVES_HUB.description;
 
 export const ROUNDUP_TLDR = [
   ALTERNATIVES_HUB.intro,
-  "Ork is the open source option you run yourself. Like Grok Bot, it is just chat once it is running: you set up a bot and manage it from that chat. You bring the model key. The license is Apache-2.0, and there is no seat fee.",
+  "Ork is the source-available option you run yourself. Like Grok Bot, it is just chat once it is running: you set up a bot and manage it from that chat. You bring the model key. The Apache baseline stays Apache. New Ork work uses PolyForm Noncommercial or a paid commercial license.",
   "Grok Bot, Meta Muse, OpenAI Dots, Instinct, Claude Duet, and Hark Pro are hosted. You do not install their service. Grok Bot comes with paid Cursor plans and SuperGrok. Muse runs on a virtual machine Meta operates. Dots sit on eligible ChatGPT plans. Instinct is the assistant you text or call. Hark Pro has a free tier, with $20 and $100 monthly tiers for more usage.",
-  "OpenClaw and Hermes Agent are also open source and self-hosted. Their docs describe installers, config files, and a gateway. Hermes Desktop can reach a first chat without the command line. OpenClaw can chat while its Gateway runs in the terminal.",
+  "OpenClaw and Hermes Agent are open source and self-hosted. Their docs describe installers, config files, and a gateway. Hermes Desktop can reach a first chat without the command line. OpenClaw can chat while its Gateway runs in the terminal.",
 ] as const;
 
 export const ROUNDUP_COLUMNS = [
@@ -41,10 +43,10 @@ export const ROUNDUP_ROWS: readonly RoundupRow[] = [
   {
     product: "Ork",
     href: "/",
-    license: "Apache-2.0",
+    license: "Apache baseline + PolyForm NC",
     selfHost: "Yes. Docker images or a source checkout.",
     model: "Yes. Your key, including a local server.",
-    price: "No seat fee. You pay the model and computer.",
+    price: "Noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model and computer.",
     setup: "Docker or the desktop app, then an account and a model.",
     chat: "Yes. You manage the bot from the chat.",
   },
@@ -162,9 +164,9 @@ const DEDICATED_CARDS: readonly RoundupCard[] = [
   {
     name: "Ork",
     href: SELF_HOST_GUIDE_PATH,
-    heading: "Open source AI agent you run yourself",
+    heading: "Source-available AI agent you run yourself",
     paragraphs: [
-      "Ork is an open source AI agent for persistent teammates. It is in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app. You bring a model key, including a local server, and each bot can use a different model. The default computer is local Docker. Optional computers include E2B, Daytona, CreateOS, Boat, and a trusted local computer. Like Grok Bot, Ork is just chat once it is running: a new bot interviews you, and you manage schedules, memory, and approvals from that chat. Routines are readable Markdown. There is no seat fee. Run Ork on your own infrastructure.",
+      "Ork is a source-available AI agent for persistent teammates. It is in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app. You bring a model key, including a local server, and each bot can use a different model. The default computer is local Docker. Optional computers include E2B, Daytona, CreateOS, Boat, and a trusted local computer. Like Grok Bot, Ork is just chat once it is running: a new bot interviews you, and you manage schedules, memory, and approvals from that chat. Routines are readable Markdown. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. Run Ork on your own infrastructure.",
     ],
   },
   {

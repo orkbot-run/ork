@@ -2,7 +2,7 @@
   "name": "@orkbot/www",
   "version": "0.1.0",
   "private": true,
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
     "brand:render": "node scripts/render-brand.mjs",

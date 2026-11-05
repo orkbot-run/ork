@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Actor } from "@orkbot/contracts";
 import { AI_DISCLOSURE_VERSION } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";

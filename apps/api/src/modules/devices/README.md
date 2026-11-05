@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Devices
 
 This module pairs user devices, authorizes forwarding requests, and keeps device access tied to sign-in sessions. It revokes devices when their session ends and enforces the pairing limit, using injected workspace adapters for socket transport and connected-device state.

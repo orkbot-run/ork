@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { AccessGrant, AccessGrantInput } from "@orkbot/contracts";
 import { AccessGrantInputSchema } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";

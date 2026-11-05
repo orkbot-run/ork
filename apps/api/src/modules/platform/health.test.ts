@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { InfisicalSecretStore } from "@orkbot/adapters";
 import { describe, expect, it, vi } from "vitest";
 import { infisicalFake } from "../../../../../packages/adapters/src/secret-store-fake.js";

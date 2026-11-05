@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Ork
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
@@ -6,12 +9,12 @@
 
 ![Ork：由你掌控的 AI 队友](./docs/readme-hero.png)
 
-Ork 是一个开源 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
+Ork 是一个源码可用的 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
 它提供网页版、Electron 桌面应用，以及 [iPhone](https://orkbot.run/download/) 和
 [Android](https://orkbot.run/download/) 应用。
 你可以接入自己的模型和计算环境提供商，也可以在本地运行完整服务。
 
-它是 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet 和 Hark Pro 的开源、自托管替代方案。
+它是 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet 和 Hark Pro 的源码可用、自托管替代方案。
 
 Ork 目前处于测试阶段。详情见 [orkbot.run](https://orkbot.run)。
 
@@ -274,6 +277,10 @@ pnpm test:e2e
 欢迎贡献。提交 PR 前，请阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 发现安全漏洞时，请按照 [SECURITY.md](./SECURITY.md) 的说明报告，勿提交公开 Issue。
 
-Ork 采用 [Apache License 2.0](./LICENSE) 许可证。
+源自 Rakazo 的代码及现有 Apache 基线继续适用 [Apache 2.0](./LICENSE)。新增的 Ork 代码适用 [PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM)，商业用途另需付费许可协议。先前已授予的 Apache 权利继续有效。
+
+在 PolyForm 允许的非商业用途范围内可免费自托管。营利公司的内部业务同样需要获得 PolyForm 所覆盖部分的商业许可，除非 PolyForm 明确允许该用途或适用法律另行赋予权利。Ork 整体属于源码可用软件，PolyForm 部分不属于 OSI 定义的开源软件。
+
+请阅读[许可范围](./LICENSE.md)、[署名声明](./NOTICE)和 [FAQ](./docs/licensing-faq.md)。商业许可采用单独报价。[商业协议](./docs/commercial-license.md)和 [CLA](./docs/cla/v1.md) 目前是待法律审核的草案。
 
 欢迎在 [Ork GitHub](https://github.com/orkbot-run/ork/issues)交流问题与想法。

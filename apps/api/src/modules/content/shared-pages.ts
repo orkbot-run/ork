@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { SHARED_PAGE_PATH_PREFIX } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import type { Context, Hono } from "hono";

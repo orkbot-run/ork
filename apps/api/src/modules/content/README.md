@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Content
 
 Artifacts, pages, boards, search, and publicly shared page rendering live here, with ownership checks and attachment preparation for messages. Storage and page-runtime implementations stay in workspace packages, while conversation state belongs to `threads`.

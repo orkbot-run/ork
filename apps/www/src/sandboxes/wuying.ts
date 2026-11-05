@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   MONTH_HOURS,
@@ -34,7 +36,7 @@ export const wuying: Sandbox = {
   h1: "Let your AI agents use a Wuying cloud computer",
   intro: [
     "Wuying (无影) is Alibaba Cloud's cloud computer service, sold outside China as Elastic Desktop Service. It gives you a Windows desktop that runs in Alibaba Cloud and that you open from a browser or the Wuying client.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each bot gets a computer you can watch and take over. With Wuying, that computer is a Windows desktop you already run on Alibaba Cloud. It is the only way to give Ork bots Windows, and it suits teams on Alibaba Cloud or in mainland China, where other sandbox providers can be hard to reach.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each bot gets a computer you can watch and take over. With Wuying, that computer is a Windows desktop you already run on Alibaba Cloud. It is the only way to give Ork bots Windows, and it suits teams on Alibaba Cloud or in mainland China, where other sandbox providers can be hard to reach.",
   ],
   scene: {
     bot: "Expense Manager",

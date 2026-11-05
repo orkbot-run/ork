@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
 import { mountAppAssociation, nativePasskeys } from "./app-association.js";

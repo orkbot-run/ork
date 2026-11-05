@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
 import { parseRoutineWatch, stableStringify, validateRoutineWatch } from "@orkbot/adapters";
 import { canonicalPiProviderId } from "@orkbot/contracts";

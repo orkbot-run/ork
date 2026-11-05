@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { CodexLiveCatalog, parseModelSecret } from "@orkbot/adapters";
 import { findConnectedModelCredential, validateConnectedModelChoice } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";

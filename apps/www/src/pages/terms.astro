@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import { githubStarsLabel } from "../github";
@@ -14,9 +16,10 @@ const starsLabel = await githubStarsLabel();
     <main id="main" class="privacy-copy">
       <h1>Terms</h1>
       <p>
-        Ork's source code is distributed under the
+        The Rakazo and existing Ork baseline remains under the
         <a href={`${GITHUB_URL}/blob/main/LICENSE`}>Apache License, Version 2.0</a>.
-        That license governs use, modification, and redistribution of the code.
+        New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license.
+        Read the <a href="/license/">license scope and commercial terms</a> before using that work.
       </p>
       <p>
         This page does not create a paid subscription or a hosted-service agreement. A server operator

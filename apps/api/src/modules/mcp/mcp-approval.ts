@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import { QUEUE_HOLDING_RUN_STATUSES } from "@orkbot/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";

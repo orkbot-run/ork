@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Actor } from "@orkbot/contracts";
 import { GROUP_MEMBER_MIN } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";

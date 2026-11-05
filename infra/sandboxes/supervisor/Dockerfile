@@ -1,6 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Modified by Ork contributors to include license notices. See LICENSE.md.
 FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205
 WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY LICENSE LICENSE-POLYFORM LICENSE.md NOTICE ./
+COPY docs/licensing-faq.md docs/commercial-license.md docs/licensing-rollout.md ./docs/
+COPY docs/cla/v1.md ./docs/cla/v1.md
 COPY patches patches
 COPY packages/contracts packages/contracts
 COPY packages/core packages/core

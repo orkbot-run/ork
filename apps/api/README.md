@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # API
 
 `src/app.ts` assembles the application. `src/index.ts` runs the server, and `src/cli/` contains executable maintenance commands. Domain code and its tests live under `src/modules/`.

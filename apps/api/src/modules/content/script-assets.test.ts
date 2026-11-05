@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { PAGE_RUNTIME_PATH } from "@orkbot/core";
 import { buildPageRuntime } from "@orkbot/page-kit/runtime-build";
 import { Hono } from "hono";

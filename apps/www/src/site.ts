@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 export const SITE_NAME = "Ork";
 export const SITE_URL = "https://orkbot.run";
 export const SITE_DESCRIPTION =
-  "Ork is an open source Grok Bot alternative for persistent AI teammates that do real work. Your keys, your model, your machine.";
+  "Ork is a source-available Grok Bot alternative for persistent AI teammates. Free for permitted noncommercial use, with paid commercial licensing for new Ork work.";
 
 export const APP_URL = "https://app.orkbot.run";
 export const PLUGIN_SUBMISSIONS_URL = `${APP_URL}/api/v1/plugin-submissions`;

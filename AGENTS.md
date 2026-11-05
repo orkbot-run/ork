@@ -1,6 +1,10 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # AGENTS.md
 
 - This is Ork, derived from Rakazo. Follow README.md for local setup; README.reference.md contains the adapted reference. Use Ork for display names, orkbot for technical identifiers and @orkbot/* packages, and orkbot.run for the public domain. Preserve original copyright attribution, historical migration SQL, and compatibility identifiers for persisted data and cryptography.
+- Follow LICENSE.md for license scope. Preserve LICENSE byte-for-byte, the Apache baseline, and all upstream and third-party notices. New original Ork files require an SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 header and copyright attribution. Use an adjacent .license sidecar for JSON and binary files. Never relabel imported code as Ork-owned. Mark changes to inherited files and identify the inherited Apache material separately from new PolyForm-covered changes. Update package license metadata when its contents become mixed, and run pnpm licenses:check and pnpm test:licenses. Describe the combined product as source-available. Do not promise a blanket free-business exemption, revoke earlier Apache grants, claim legal approval, activate the draft CLA, or publish the transition before the rollout requirements in docs/licensing-rollout.md are met.
 - All workflows live in `.github/workflows/`; workflow-definition tests read the active files. Standard CI, reports, and diagnostic native artifacts use GitHub infrastructure. Store submissions, signed releases, OTA, hosted report galleries, production deployment, and AI dependency updates require the Ork-owned configuration documented in docs/github-actions.md.
 
 - This is a public repository: assume all tracked content and diffs are public. Never commit secrets, `.env` files, private URLs, personal/customer data, or real production data; use fake placeholders. Review `git status` and the staged diff before committing, and never force-add ignored files. If private data appears, stop and alert the maintainer.

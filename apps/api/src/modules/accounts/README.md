@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Accounts
 
 Account import, export, deletion, access grants, identity confirmation, and onboarding live here. Organization membership routes belong here too. Auth primitives and email templates stay in `@orkbot/auth`.

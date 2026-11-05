@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { messagingDeliverJob } from "@orkbot/adapter-kit";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";

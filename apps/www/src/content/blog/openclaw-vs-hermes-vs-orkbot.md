@@ -1,6 +1,6 @@
 ---
 title: "OpenClaw vs Hermes Agent vs Ork: which is simplest to run?"
-description: "Ork, OpenClaw, and Hermes Agent are open source and can run on your hardware. The simplest one is the product shape you actually want: chat, a gateway, or a desktop agent."
+description: "Ork, OpenClaw, and Hermes Agent can run on your hardware. Ork is source-available, while OpenClaw and Hermes Agent use MIT. The simplest one is the product shape you actually want: chat, a gateway, or a desktop agent."
 published: "2026-10-07"
 updated: "2026-10-07"
 author: "Elie Steinbock"
@@ -19,10 +19,10 @@ sources:
     href: "https://github.com/orkbot-run/ork/blob/main/docs/self-host.md"
 related:
   - href: "/openclaw-alternative/"
-    title: "Open source OpenClaw alternative"
+    title: "Source-available OpenClaw alternative"
     description: "The longer Ork and OpenClaw comparison."
   - href: "/hermes-alternative/"
-    title: "Open source Hermes alternative"
+    title: "Source-available Hermes alternative"
     description: "Setup and day-to-day notes for Hermes Agent."
   - href: "/self-hosted-ai-agent/"
     title: "Self-hosted AI agent"
@@ -31,13 +31,13 @@ related:
     title: "How to self-host an AI agent"
     description: "The published-image install, without a measured time."
   - href: "/blog/best-open-source-ai-agents-2026/"
-    title: "Best open source AI agents in 2026"
+    title: "Open source and source-available AI agents in 2026"
     description: "A wider list, including projects that are libraries rather than apps."
 faq:
   - question: "Is Ork always fewer steps than Hermes Desktop?"
     answer: "No. The Hermes desktop guide says first-run onboarding can reach a first message in seconds, and that Choose provider later skips provider setup. Ork's published images still need Docker to pull and start, then an account and a model. Pick the install that matches the app you want to live in."
   - question: "Do any of these charge for the software?"
-    answer: "Ork is free to self-host. Run Ork on your own infrastructure. OpenClaw's docs say there is no paid tier and no hosted service. Hermes Agent is MIT-licensed and also documents optional Nous Portal credits and cloud hosting. You still pay for models, machines, and any optional computer provider."
+    answer: "Ork is free to self-host for permitted noncommercial use. Commercial use of new Ork work requires a paid license. Run Ork on your own infrastructure. OpenClaw's docs say there is no paid tier and no hosted service. Hermes Agent is MIT-licensed and also documents optional Nous Portal credits and cloud hosting. You still pay for models, machines, and any optional computer provider."
   - question: "Can I message all three from Telegram or Slack?"
     answer: "OpenClaw's main surface is chat apps, through its Gateway. Hermes uses a messaging gateway that the desktop guide describes as a separate process from the app's local backend. Ork's optional connectors can attach Slack, WhatsApp, Telegram, iMessage via Sendblue, and Feishu/Lark. Those connectors are extras. The Ork apps do not require them."
   - question: "Where do the details on this page come from?"
@@ -52,7 +52,7 @@ comparison:
   rows:
     - topic: "License"
       cells:
-        - "Apache-2.0"
+        - "Apache baseline + PolyForm NC"
         - "MIT, OpenClaw Foundation"
         - "MIT, Nous Research"
     - topic: "First surface"
@@ -77,6 +77,9 @@ comparison:
         - "A local backend in the desktop app"
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
+
 People ask which of these is simplest. The honest answer is that they are not three installers for the same product. Ork is a chat application for persistent bots. OpenClaw is a gateway that connects chat apps to an assistant on your machine. Hermes Agent is a desktop app and a command-line agent that share a config directory, with a messaging gateway you start when you want Telegram, Discord, Slack, and the rest.
 
 All three can run on hardware you control. All three send prompts to the model provider you configure. None of this page is a timed benchmark. The steps below are the ones each project documents.
@@ -98,7 +101,7 @@ If you want a native desktop agent, Hermes Desktop is documented as a first-run 
 
 ## Ork
 
-Ork is Apache-2.0. You run the published Docker images, or a source checkout, on a machine you control. The desktop app can start that stack locally or connect to a server you already run. Run Ork on your own infrastructure.
+Ork combines an Apache-2.0 baseline with new PolyForm Noncommercial work. You run the published Docker images, or a source checkout, on a machine you control. The desktop app can start that stack locally or connect to a server you already run. Run Ork on your own infrastructure.
 
 The published-image installer is one script in an empty directory. It writes `.env` with random secrets, pulls the images, and starts the API, the worker, Postgres, and a Docker computer. You open the app, create an account, and connect a model. The first registered user is the deployment owner. From there the product is chat. A new bot interviews you. Routines are Markdown. A bot can pause for approval, and actions land in an audit log you keep.
 
@@ -106,7 +109,7 @@ Models include OpenAI, Anthropic, Google, OpenRouter, Vercel AI Gateway, an Open
 
 Optional connectors exist for Slack, WhatsApp, Telegram, iMessage via Sendblue, and Feishu/Lark. They are not how you talk to the bot. The web, Electron, and Expo apps are.
 
-There is no seat fee for the software. You pay for models, machines, and any remote computer you enable. Image pull time is not a fixed number. The [self-host guide](/self-hosted-ai-agent/) is the command list, and the [longer install note](/blog/self-host-an-ai-agent/) says what the ten-minute title does and does not mean.
+Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay for models, machines, and any remote computer you enable. Image pull time is not a fixed number. The [self-host guide](/self-hosted-ai-agent/) is the command list, and the [longer install note](/blog/self-host-an-ai-agent/) says what the ten-minute title does and does not mean.
 
 ## OpenClaw
 

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Agents
 
 This module imports agent definitions, manages their secrets and skills, and lists activity from saved runs. It also coordinates teaching sessions. Runtime execution stays in workspace packages, while bot membership and conversation routing belong to `bots` and `threads`.

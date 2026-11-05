@@ -1,6 +1,30 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Contributing to Ork
 
 Thanks for helping improve Ork. Keep changes focused and testable.
+
+## Licensing and contributor agreement
+
+Read the [license map](LICENSE.md) before contributing. Inherited Apache and
+third-party material keeps its existing terms. New original Ork files use
+`SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0`. Preserve upstream
+attribution when modifying or importing a file, and mark your changes. Use an
+adjacent `.license` file for a format that cannot carry comments. Run
+`pnpm licenses:check` before opening a PR.
+
+The proposed [Contributor License Agreement v1](docs/cla/v1.md) lets the named
+Ork licensor offer your contributions under public and paid commercial terms.
+You keep copyright. Identify third-party material and obtain any employer
+authorization needed to grant those rights. A DCO or PR alone is not a substitute
+for the required agreement.
+
+The CLA is a draft pending legal review. Signing and merge enforcement are not
+active merely because this document exists. Maintainers must complete the
+[activation and verification steps](docs/licensing-rollout.md) before accepting
+contributions for commercial relicensing. Do not ask contributors to sign this
+draft. Existing Apache contributions keep their original grants.
 
 ## Run locally
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { RosterBot } from "../demo";
 import { SITE_DESCRIPTION } from "../site";
 import { CLAUDE_CHATGPT_SUBSCRIPTION_FAQ } from "../subscription-faq";
@@ -902,9 +904,9 @@ const TESTIMONIALS: HomeCopy["testimonials"]["items"] = [];
 
 const HOME_COPY: Record<Locale, HomeCopy> = {
   pl: {
-    title: "Ork | Otwarta alternatywa dla Grok Bot",
+    title: "Ork | Alternatywa dla Grok Bot z dostępnym kodem",
     description:
-      "Ork to otwarta alternatywa dla Grok Bot. Boty AI z własną pamięcią wykonują zadania na Twoim komputerze, z wybranym przez Ciebie modelem.",
+      "Ork to alternatywa dla Grok Bot z dostępnym kodem. Boty AI z własną pamięcią wykonują zadania na Twoim komputerze, z wybranym przez Ciebie modelem.",
     ogImageAlt: "Ork. Twój zespół AI na Twoim komputerze, z Twoimi kluczami i modelem.",
     availableLanguage: "Polish",
     skipToContent: "Przejdź do treści",
@@ -923,8 +925,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Materiały marki",
     },
     hero: {
-      eyebrow: "Otwarty kod źródłowy",
-      heading: "Otwarta alternatywa dla Grok Bot pod Twoją kontrolą",
+      eyebrow: "Dostępny kod źródłowy",
+      heading: "Alternatywa dla Grok Bot z dostępnym kodem",
       lead: "Zleć botom zadanie. Śledź ich pracę z dowolnego urządzenia.",
       getStarted: "Zacznij",
       download: {
@@ -1022,8 +1024,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Otwarty kod źródłowy",
-      copy: "Licencja Apache-2.0. Uruchom Ork i dostosuj kod do swoich potrzeb.",
+      heading: "Dostępny kod źródłowy",
+      copy: "Dotychczasowy kod zachowuje Apache-2.0. Nowy kod Orka: PolyForm Noncommercial lub płatna licencja komercyjna.",
       starOnGithub: "Dodaj gwiazdkę na GitHubie",
       readTheDocs: "Przeczytaj dokumentację",
       cloudTitle: "Chmura",
@@ -1032,12 +1034,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Poznaj swojego pierwszego bota",
       copy: "Powierz mu kolejne zadanie.",
-      openSourceValue: "Otwarty kod",
+      openSourceValue: "Dostępny kod źródłowy",
       selfHostValue: "Własny serwer",
       stats: [
         { value: "stars", label: "Gwiazdki na GitHubie" },
         { value: "license", label: "Licencja" },
-        { value: "openSource", label: "Wszystkie funkcje za darmo" },
+        { value: "openSource", label: "Kod do wglądu" },
         { value: "selfHost", label: "Twój komputer" },
       ],
     },
@@ -1066,7 +1068,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   en: {
-    title: "Ork | Open source Grok Bot alternative",
+    title: "Ork | Source-available Grok Bot alternative",
     description: SITE_DESCRIPTION,
     ogImageAlt:
       "Ork. AI teammates you actually own. Your keys, your model, your machine.",
@@ -1087,8 +1089,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Brand kit",
     },
     hero: {
-      eyebrow: "Open source",
-      heading: "The open source Grok Bot alternative you actually own",
+      eyebrow: "Source available",
+      heading: "Source-available Grok Bot alternative",
       lead: "Give your bots a job. Check in from any device.",
       getStarted: "Get started",
       download: {
@@ -1174,8 +1176,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Open source",
-      copy: "Apache-2.0. Run it, change it, make it yours.",
+      heading: "Source available",
+      copy: "The Apache-2.0 baseline keeps its license. New Ork work uses PolyForm Noncommercial or a paid commercial license.",
       starOnGithub: "Star on GitHub",
       readTheDocs: "Read the docs",
       cloudTitle: "Cloud",
@@ -1184,12 +1186,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Meet your first bot",
       copy: "Hand over your next task.",
-      openSourceValue: "Open source",
+      openSourceValue: "Source available",
       selfHostValue: "Self-host",
       stats: [
         { value: "stars", label: "GitHub stars" },
         { value: "license", label: "License" },
-        { value: "openSource", label: "Every feature, free" },
+        { value: "openSource", label: "Public source" },
         { value: "selfHost", label: "Your machine" },
       ],
     },
@@ -1218,9 +1220,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   de: {
-    title: "Ork | Open-Source-Alternative zu Grok Bot",
+    title: "Ork | Grok-Bot-Alternative mit verfügbarem Quellcode",
     description:
-      "Ork ist eine Open-Source-Alternative zu Grok Bot für persistente KI-Teamkollegen, die echte Arbeit erledigen. Deine Keys, dein Modell, deine Maschine.",
+      "Ork ist eine Grok-Bot-Alternative mit einsehbarem Quellcode für dauerhafte KI-Teamkollegen. Deine Schlüssel, dein Modell, deine Maschine.",
     ogImageAlt:
       "Ork. KI-Teamkollegen, die dir wirklich gehören. Deine Keys, dein Modell, deine Maschine.",
     availableLanguage: "German",
@@ -1240,8 +1242,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Markenkit",
     },
     hero: {
-      eyebrow: "Open Source",
-      heading: "Die Open-Source-Alternative zu Grok Bot, die dir wirklich gehört",
+      eyebrow: "Quellcode verfügbar",
+      heading: "Grok-Bot-Alternative mit verfügbarem Quellcode",
       lead: "Gib deinen Bots eine Aufgabe. Schau von jedem Gerät nach.",
       getStarted: "Loslegen",
       download: {
@@ -1331,8 +1333,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Open Source",
-      copy: "Apache-2.0. Selbst betreiben, ändern und anpassen.",
+      heading: "Quellcode verfügbar",
+      copy: "Der bisherige Code bleibt unter Apache-2.0. Neue Ork-Arbeiten: PolyForm Noncommercial oder eine kostenpflichtige kommerzielle Lizenz.",
       starOnGithub: "Auf GitHub mit Stern markieren",
       readTheDocs: "Docs lesen",
       cloudTitle: "Cloud",
@@ -1341,12 +1343,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Triff deinen ersten Bot",
       copy: "Gib deine nächste Aufgabe ab.",
-      openSourceValue: "Open Source",
+      openSourceValue: "Quellcode verfügbar",
       selfHostValue: "Self-host",
       stats: [
         { value: "stars", label: "GitHub Stars" },
         { value: "license", label: "Lizenz" },
-        { value: "openSource", label: "Alle Funktionen, kostenlos" },
+        { value: "openSource", label: "Quellcode einsehen" },
         { value: "selfHost", label: "Deine Maschine" },
       ],
     },
@@ -1375,9 +1377,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   ko: {
-    title: "Ork | 오픈소스 Grok Bot 대안",
+    title: "Ork | 소스를 확인할 수 있는 Grok Bot 대안",
     description:
-      "Ork는 실제 업무를 수행하는 지속형 AI 팀원을 위한 오픈소스 Grok Bot 대안입니다. 키, 모델, 머신, 모두 당신 것.",
+      "Ork는 소스를 확인할 수 있는 Grok Bot 대안입니다. 지속형 AI 팀원이 선택한 모델로 내 컴퓨터에서 작업합니다.",
     ogImageAlt: "Ork. 진짜로 내 것인 AI 팀원. 키, 모델, 머신, 모두 당신 것.",
     availableLanguage: "Korean",
     skipToContent: "본문으로 건너뛰기",
@@ -1396,8 +1398,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "브랜드 키트",
     },
     hero: {
-      eyebrow: "오픈 소스",
-      heading: "진짜로 내 것인 오픈소스 Grok Bot 대안",
+      eyebrow: "소스 공개",
+      heading: "소스를 확인할 수 있는 Grok Bot 대안",
       lead: "봇에게 일을 맡기세요. 어떤 기기에서든 확인하세요.",
       getStarted: "시작하기",
       download: {
@@ -1487,8 +1489,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "오픈소스",
-      copy: "Apache-2.0. 직접 실행하고 원하는 대로 수정하세요.",
+      heading: "소스 공개",
+      copy: "기존 코드는 Apache-2.0을 유지합니다. 새로운 Ork 코드는 PolyForm Noncommercial 또는 유료 상용 라이선스를 사용합니다.",
       starOnGithub: "GitHub에서 Star",
       readTheDocs: "문서 읽기",
       cloudTitle: "Cloud",
@@ -1497,12 +1499,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "첫 봇을 만나보세요",
       copy: "다음 할 일을 맡겨 보세요.",
-      openSourceValue: "오픈소스",
+      openSourceValue: "소스 공개",
       selfHostValue: "셀프 호스트",
       stats: [
         { value: "stars", label: "GitHub 스타" },
         { value: "license", label: "라이선스" },
-        { value: "openSource", label: "모든 기능 무료" },
+        { value: "openSource", label: "소스 확인" },
         { value: "selfHost", label: "당신 머신" },
       ],
     },
@@ -1531,9 +1533,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   zh: {
-    title: "Ork | 开源 Grok Bot 替代品",
+    title: "Ork | 源码可查看的 Grok Bot 替代品",
     description:
-      "Ork 是一个开源 Grok Bot 替代品，用于运行真正干活的持久化 AI 队友。密钥、模型、机器，都归你所有。",
+      "Ork 是源码可查看的 Grok Bot 替代品。持久化 AI 队友使用你选择的模型，在你自己的机器上执行任务。",
     ogImageAlt: "Ork：真正属于你的 AI 队友。密钥、模型、机器，都归你所有。",
     availableLanguage: "Chinese",
     skipToContent: "跳到主要内容",
@@ -1552,8 +1554,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "品牌资源",
     },
     hero: {
-      eyebrow: "开源",
-      heading: "真正属于你的开源 Grok Bot 替代品",
+      eyebrow: "源码可查看",
+      heading: "源码可查看的 Grok Bot 替代品",
       lead: "把工作交给 Bot，随时用任意设备查看。",
       getStarted: "开始使用",
       download: {
@@ -1643,8 +1645,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "开源",
-      copy: "Apache-2.0。自由运行、修改，按需定制。",
+      heading: "源码可查看",
+      copy: "原有代码保留 Apache-2.0 许可。新增 Ork 代码采用 PolyForm Noncommercial 或付费商业许可。",
       starOnGithub: "在 GitHub 上点星",
       readTheDocs: "阅读文档",
       cloudTitle: "云端",
@@ -1653,12 +1655,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "认识你的第一个 Bot",
       copy: "把下一项任务交给 Bot。",
-      openSourceValue: "开源",
+      openSourceValue: "源码可查看",
       selfHostValue: "自托管",
       stats: [
         { value: "stars", label: "GitHub 星标" },
         { value: "license", label: "许可证" },
-        { value: "openSource", label: "全部功能，免费使用" },
+        { value: "openSource", label: "查看源码" },
         { value: "selfHost", label: "你的机器" },
       ],
     },
@@ -1687,9 +1689,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   ja: {
-    title: "Ork | オープンソースの Grok Bot 代替ツール",
+    title: "Ork | ソースを確認できる Grok Bot 代替ツール",
     description:
-      "Ork は、実際の仕事をこなす常駐型 AI チームメイトのための、オープンソースの Grok Bot 代替ツールです。キーもモデルもマシンも、すべてあなたのものです。",
+      "Ork はソースを確認できる Grok Bot 代替ツールです。常駐型 AI チームメイトが、選んだモデルを使って自分のマシンで作業します。",
     ogImageAlt:
       "Ork。本当に自分のものにできる AI チームメイト。キーもモデルもマシンも、すべてあなたのもの。",
     availableLanguage: "Japanese",
@@ -1709,8 +1711,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "ブランドキット",
     },
     hero: {
-      eyebrow: "オープンソース",
-      heading: "本当に自分のものにできる、オープンソースの Grok Bot 代替ツール",
+      eyebrow: "ソースコード公開",
+      heading: "ソースを確認できる Grok Bot 代替ツール",
       lead: "ボットに仕事を任せて、どのデバイスからでも確認できます。",
       getStarted: "はじめる",
       download: {
@@ -1800,8 +1802,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "オープンソース",
-      copy: "Apache-2.0。自由に実行し、変更して、自分のものに。",
+      heading: "ソースコード公開",
+      copy: "既存コードは Apache-2.0 を維持します。Ork の新規コードは PolyForm Noncommercial または有料の商用ライセンスです。",
       starOnGithub: "GitHub で Star する",
       readTheDocs: "ドキュメントを読む",
       cloudTitle: "クラウド",
@@ -1810,12 +1812,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "最初のボットを迎えましょう",
       copy: "次のタスクを任せてみましょう。",
-      openSourceValue: "オープンソース",
+      openSourceValue: "ソースコード公開",
       selfHostValue: "セルフホスト",
       stats: [
         { value: "stars", label: "GitHub スター" },
         { value: "license", label: "ライセンス" },
-        { value: "openSource", label: "全機能を無料で" },
+        { value: "openSource", label: "ソースを確認" },
         { value: "selfHost", label: "あなたのマシン" },
       ],
     },
@@ -1844,9 +1846,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "es": {
-    title: "Ork | Alternativa de código abierto a Grok Bot",
+    title: "Ork | Alternativa a Grok Bot con código disponible",
     description:
-      "Ork es una alternativa de código abierto a Grok Bot para compañeros de IA persistentes que hacen trabajo real. Tus claves, tu modelo, tu máquina.",
+      "Ork es una alternativa a Grok Bot con código disponible para compañeros de IA persistentes. Tus claves, tu modelo, tu máquina.",
     ogImageAlt:
       "Ork. Compañeros de IA que de verdad son tuyos. Tus claves, tu modelo, tu máquina.",
     availableLanguage: "Spanish",
@@ -1866,8 +1868,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Kit de marca",
     },
     hero: {
-      eyebrow: "Código abierto",
-      heading: "La alternativa de código abierto a Grok Bot que de verdad es tuya",
+      eyebrow: "Código disponible",
+      heading: "Alternativa a Grok Bot con código disponible",
       lead: "Dale un trabajo a tus bots. Síguelos desde cualquier dispositivo.",
       getStarted: "Empezar",
       download: {
@@ -1957,8 +1959,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Código abierto",
-      copy: "Apache-2.0. Ejecútalo, modifícalo, hazlo tuyo.",
+      heading: "Código disponible",
+      copy: "El código existente conserva Apache-2.0. El trabajo nuevo de Ork usa PolyForm Noncommercial o una licencia comercial de pago.",
       starOnGithub: "Dar una estrella en GitHub",
       readTheDocs: "Leer la documentación",
       cloudTitle: "Cloud",
@@ -1967,12 +1969,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Conoce a tu primer bot",
       copy: "Delégale tu próxima tarea.",
-      openSourceValue: "Código abierto",
+      openSourceValue: "Código disponible",
       selfHostValue: "Autoalojado",
       stats: [
         { value: "stars", label: "Estrellas en GitHub" },
         { value: "license", label: "Licencia" },
-        { value: "openSource", label: "Todas las funciones, gratis" },
+        { value: "openSource", label: "Consultar código" },
         { value: "selfHost", label: "Tu máquina" },
       ],
     },
@@ -2001,9 +2003,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "fr": {
-    title: "Ork | Alternative open source à Grok Bot",
+    title: "Ork | Alternative à Grok Bot au code consultable",
     description:
-      "Ork est une alternative open source à Grok Bot pour des coéquipiers IA persistants qui font un vrai travail. Vos clés, votre modèle, votre machine.",
+      "Ork est une alternative à Grok Bot au code consultable pour des coéquipiers IA persistants. Vos clés, votre modèle, votre machine.",
     ogImageAlt:
       "Ork. Des coéquipiers IA qui vous appartiennent vraiment. Vos clés, votre modèle, votre machine.",
     availableLanguage: "French",
@@ -2023,8 +2025,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Kit de marque",
     },
     hero: {
-      eyebrow: "Open source",
-      heading: "L’alternative open source à Grok Bot qui vous appartient vraiment",
+      eyebrow: "Code consultable",
+      heading: "Alternative à Grok Bot au code consultable",
       lead: "Confiez une mission à vos bots. Suivez-les depuis n’importe quel appareil.",
       getStarted: "Commencer",
       download: {
@@ -2114,8 +2116,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Open source",
-      copy: "Apache-2.0. Exécutez-le, modifiez-le, appropriez-le-vous.",
+      heading: "Code consultable",
+      copy: "Le code existant conserve Apache-2.0. Les nouveaux travaux Ork utilisent PolyForm Noncommercial ou une licence commerciale payante.",
       starOnGithub: "Ajouter une étoile sur GitHub",
       readTheDocs: "Lire la documentation",
       cloudTitle: "Cloud",
@@ -2124,12 +2126,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Rencontrez votre premier bot",
       copy: "Confiez-lui votre prochaine tâche.",
-      openSourceValue: "Open source",
+      openSourceValue: "Code consultable",
       selfHostValue: "Auto-hébergé",
       stats: [
         { value: "stars", label: "Étoiles GitHub" },
         { value: "license", label: "Licence" },
-        { value: "openSource", label: "Toutes les fonctionnalités, gratuites" },
+        { value: "openSource", label: "Consulter le code" },
         { value: "selfHost", label: "Votre machine" },
       ],
     },
@@ -2158,9 +2160,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "pt-br": {
-    title: "Ork | Alternativa de código aberto ao Grok Bot",
+    title: "Ork | Alternativa ao Grok Bot com código disponível",
     description:
-      "Ork é uma alternativa de código aberto ao Grok Bot para colegas de IA persistentes que fazem trabalho de verdade. Suas chaves, seu modelo, sua máquina.",
+      "Ork é uma alternativa ao Grok Bot com código disponível para colegas de IA persistentes. Suas chaves, seu modelo, sua máquina.",
     ogImageAlt:
       "Ork. Colegas de IA que são realmente seus. Suas chaves, seu modelo, sua máquina.",
     availableLanguage: "Portuguese",
@@ -2180,8 +2182,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Kit de marca",
     },
     hero: {
-      eyebrow: "Código aberto",
-      heading: "A alternativa de código aberto ao Grok Bot que é realmente sua",
+      eyebrow: "Código disponível",
+      heading: "Alternativa ao Grok Bot com código disponível",
       lead: "Dê um trabalho aos seus bots. Acompanhe de qualquer dispositivo.",
       getStarted: "Começar",
       download: {
@@ -2271,8 +2273,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Código aberto",
-      copy: "Apache-2.0. Rode, modifique, deixe do seu jeito.",
+      heading: "Código disponível",
+      copy: "O código existente mantém Apache-2.0. O novo trabalho do Ork usa PolyForm Noncommercial ou uma licença comercial paga.",
       starOnGithub: "Dar estrela no GitHub",
       readTheDocs: "Ler a documentação",
       cloudTitle: "Cloud",
@@ -2281,12 +2283,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Conheça seu primeiro bot",
       copy: "Entregue sua próxima tarefa.",
-      openSourceValue: "Código aberto",
+      openSourceValue: "Código disponível",
       selfHostValue: "Auto-hospedado",
       stats: [
         { value: "stars", label: "Estrelas no GitHub" },
         { value: "license", label: "Licença" },
-        { value: "openSource", label: "Todos os recursos, grátis" },
+        { value: "openSource", label: "Consultar código" },
         { value: "selfHost", label: "Sua máquina" },
       ],
     },
@@ -2315,9 +2317,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "nl": {
-    title: "Ork | Open source alternatief voor Grok Bot",
+    title: "Ork | Grok Bot-alternatief met beschikbare broncode",
     description:
-      "Ork is een open source alternatief voor Grok Bot voor blijvende AI-teamgenoten die echt werk doen. Jouw keys, jouw model, jouw machine.",
+      "Ork is een Grok Bot-alternatief met beschikbare broncode voor blijvende AI-teamgenoten. Jouw sleutels, jouw model, jouw machine.",
     ogImageAlt:
       "Ork. AI-teamgenoten die echt van jou zijn. Jouw keys, jouw model, jouw machine.",
     availableLanguage: "Dutch",
@@ -2337,8 +2339,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Merkkit",
     },
     hero: {
-      eyebrow: "Open source",
-      heading: "Het open source alternatief voor Grok Bot dat echt van jou is",
+      eyebrow: "Broncode beschikbaar",
+      heading: "Grok Bot-alternatief met beschikbare broncode",
       lead: "Geef je bots een taak. Kijk mee vanaf elk apparaat.",
       getStarted: "Aan de slag",
       download: {
@@ -2428,8 +2430,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Open source",
-      copy: "Apache-2.0. Draai het, pas het aan, maak het je eigen.",
+      heading: "Broncode beschikbaar",
+      copy: "Bestaande code behoudt Apache-2.0. Nieuw Ork-werk gebruikt PolyForm Noncommercial of een betaalde commerciële licentie.",
       starOnGithub: "Ster geven op GitHub",
       readTheDocs: "Lees de docs",
       cloudTitle: "Cloud",
@@ -2438,12 +2440,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Maak kennis met je eerste bot",
       copy: "Draag je volgende taak over.",
-      openSourceValue: "Open source",
+      openSourceValue: "Broncode beschikbaar",
       selfHostValue: "Zelf hosten",
       stats: [
         { value: "stars", label: "GitHub-sterren" },
         { value: "license", label: "Licentie" },
-        { value: "openSource", label: "Alle functies, gratis" },
+        { value: "openSource", label: "Broncode bekijken" },
         { value: "selfHost", label: "Jouw machine" },
       ],
     },
@@ -2472,9 +2474,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "ru": {
-    title: "Ork | Альтернатива Grok Bot с открытым исходным кодом",
+    title: "Ork | Альтернатива Grok Bot с доступным кодом",
     description:
-      "Ork — альтернатива Grok Bot с открытым исходным кодом: постоянные ИИ-коллеги, которые выполняют реальную работу. Ваши ключи, ваша модель, ваш компьютер.",
+      "Ork - альтернатива Grok Bot с доступным кодом для постоянных ИИ-помощников. Ваши ключи, ваша модель, ваша машина.",
     ogImageAlt:
       "Ork. ИИ-коллеги, которые действительно принадлежат вам. Ваши ключи, ваша модель, ваш компьютер.",
     availableLanguage: "Russian",
@@ -2494,8 +2496,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Брендбук",
     },
     hero: {
-      eyebrow: "Открытый исходный код",
-      heading: "Альтернатива Grok Bot с открытым исходным кодом, которая действительно ваша",
+      eyebrow: "Исходный код доступен",
+      heading: "Альтернатива Grok Bot с доступным кодом",
       lead: "Дайте ботам работу. Следите за ней с любого устройства.",
       getStarted: "Начать",
       download: {
@@ -2585,8 +2587,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Открытый исходный код",
-      copy: "Apache-2.0. Запускайте, меняйте, настраивайте под себя.",
+      heading: "Исходный код доступен",
+      copy: "Существующий код сохраняет Apache-2.0. Новая работа Ork: PolyForm Noncommercial или платная коммерческая лицензия.",
       starOnGithub: "Поставить звезду на GitHub",
       readTheDocs: "Читать документацию",
       cloudTitle: "Облако",
@@ -2595,12 +2597,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "Познакомьтесь с первым ботом",
       copy: "Передайте ему следующую задачу.",
-      openSourceValue: "Открытый код",
+      openSourceValue: "Исходный код доступен",
       selfHostValue: "Свой сервер",
       stats: [
         { value: "stars", label: "Звёзды на GitHub" },
         { value: "license", label: "Лицензия" },
-        { value: "openSource", label: "Все функции бесплатно" },
+        { value: "openSource", label: "Просмотр кода" },
         { value: "selfHost", label: "Ваш компьютер" },
       ],
     },
@@ -2629,9 +2631,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "tr": {
-    title: "Ork | Açık kaynaklı Grok Bot alternatifi",
+    title: "Ork | Kaynak kodu erişilebilir Grok Bot alternatifi",
     description:
-      "Ork, gerçek işler yapan kalıcı yapay zekâ ekip arkadaşları için açık kaynaklı bir Grok Bot alternatifidir. Sizin anahtarlarınız, sizin modeliniz, sizin makineniz.",
+      "Ork, kalıcı yapay zeka ekip arkadaşları için kaynak kodu erişilebilir bir Grok Bot alternatifidir. Anahtarlarınız, modeliniz, makineniz.",
     ogImageAlt:
       "Ork. Gerçekten size ait yapay zekâ ekip arkadaşları. Sizin anahtarlarınız, sizin modeliniz, sizin makineniz.",
     availableLanguage: "Turkish",
@@ -2651,8 +2653,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "Marka kiti",
     },
     hero: {
-      eyebrow: "Açık kaynak",
-      heading: "Gerçekten size ait, açık kaynaklı Grok Bot alternatifi",
+      eyebrow: "Kaynak kodu erişilebilir",
+      heading: "Kaynak kodu erişilebilir Grok Bot alternatifi",
       lead: "Botlarınıza bir iş verin. Her cihazdan takip edin.",
       getStarted: "Başlayın",
       download: {
@@ -2742,8 +2744,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "Açık kaynak",
-      copy: "Apache-2.0. Çalıştırın, değiştirin, size göre uyarlayın.",
+      heading: "Kaynak kodu erişilebilir",
+      copy: "Mevcut kod Apache-2.0 lisansını korur. Yeni Ork çalışmaları PolyForm Noncommercial veya ücretli ticari lisans kullanır.",
       starOnGithub: "GitHub'da yıldız verin",
       readTheDocs: "Belgeleri okuyun",
       cloudTitle: "Bulut",
@@ -2752,12 +2754,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "İlk botunuzla tanışın",
       copy: "Sıradaki görevinizi devredin.",
-      openSourceValue: "Açık kaynak",
+      openSourceValue: "Kaynak kodu erişilebilir",
       selfHostValue: "Kendi sunucunuz",
       stats: [
         { value: "stars", label: "GitHub yıldızı" },
         { value: "license", label: "Lisans" },
-        { value: "openSource", label: "Tüm özellikler ücretsiz" },
+        { value: "openSource", label: "Kodu inceleyin" },
         { value: "selfHost", label: "Sizin makineniz" },
       ],
     },
@@ -2786,9 +2788,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "he": {
-    title: "Ork | חלופת קוד פתוח ל-Grok Bot",
+    title: "Ork | חלופה ל-Grok Bot עם קוד זמין לעיון",
     description:
-      "Ork היא חלופת קוד פתוח ל-Grok Bot לעמיתי AI קבועים שעושים עבודה אמיתית. המפתחות שלך, המודל שלך, המכונה שלך.",
+      "Ork הוא חלופה ל-Grok Bot עם קוד זמין לעיון ועמיתי AI מתמשכים. המפתחות, המודל והמחשב בשליטתך.",
     ogImageAlt:
       "Ork. עמיתי AI ששייכים לך באמת. המפתחות שלך, המודל שלך, המכונה שלך.",
     availableLanguage: "Hebrew",
@@ -2808,8 +2810,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "ערכת מותג",
     },
     hero: {
-      eyebrow: "קוד פתוח",
-      heading: "חלופת הקוד הפתוח ל-Grok Bot ששייכת לך באמת",
+      eyebrow: "קוד זמין לעיון",
+      heading: "חלופה ל-Grok Bot עם קוד זמין לעיון",
       lead: "נותנים לבוטים משימה. מתעדכנים מכל מכשיר.",
       getStarted: "להתחיל",
       download: {
@@ -2899,8 +2901,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "קוד פתוח",
-      copy: "Apache-2.0. אפשר להריץ, לשנות ולהתאים לעצמך.",
+      heading: "קוד זמין לעיון",
+      copy: "הקוד הקיים שומר על Apache-2.0. עבודה חדשה של Ork: PolyForm Noncommercial או רישיון מסחרי בתשלום.",
       starOnGithub: "סימון בכוכב ב-GitHub",
       readTheDocs: "לקריאת התיעוד",
       cloudTitle: "ענן",
@@ -2909,12 +2911,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "הכירו את הבוט הראשון שלכם",
       copy: "העבירו לו את המשימה הבאה.",
-      openSourceValue: "קוד פתוח",
+      openSourceValue: "קוד זמין לעיון",
       selfHostValue: "אירוח עצמי",
       stats: [
         { value: "stars", label: "כוכבים ב-GitHub" },
         { value: "license", label: "רישיון" },
-        { value: "openSource", label: "כל הפיצ׳רים, בחינם" },
+        { value: "openSource", label: "עיון בקוד" },
         { value: "selfHost", label: "המכונה שלך" },
       ],
     },
@@ -2943,9 +2945,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "hi": {
-    title: "Ork | Grok Bot का ओपन सोर्स विकल्प",
+    title: "Ork | स्रोत कोड उपलब्ध वाला Grok Bot विकल्प",
     description:
-      "Ork, Grok Bot का ओपन सोर्स विकल्प है, ऐसे स्थायी AI साथियों के लिए जो असली काम करते हैं। आपकी कुंजियाँ, आपका मॉडल, आपकी मशीन।",
+      "Ork स्थायी AI साथियों के लिए स्रोत कोड उपलब्ध वाला Grok Bot विकल्प है। आपकी कुंजियां, आपका मॉडल, आपकी मशीन।",
     ogImageAlt:
       "Ork. ऐसे AI साथी जो सच में आपके अपने हैं। आपकी कुंजियाँ, आपका मॉडल, आपकी मशीन।",
     availableLanguage: "Hindi",
@@ -2965,8 +2967,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "ब्रांड किट",
     },
     hero: {
-      eyebrow: "ओपन सोर्स",
-      heading: "Grok Bot का ओपन सोर्स विकल्प, जो सच में आपका अपना है",
+      eyebrow: "स्रोत कोड उपलब्ध",
+      heading: "स्रोत कोड उपलब्ध वाला Grok Bot विकल्प",
       lead: "अपने बॉट्स को काम दें। किसी भी डिवाइस से हाल देखें।",
       getStarted: "शुरू करें",
       download: {
@@ -3056,8 +3058,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "ओपन सोर्स",
-      copy: "Apache-2.0. इसे चलाएं, बदलें, अपने हिसाब से बनाएं।",
+      heading: "स्रोत कोड उपलब्ध",
+      copy: "मौजूदा कोड Apache-2.0 पर रहता है। Ork का नया काम PolyForm Noncommercial या सशुल्क व्यावसायिक लाइसेंस के तहत है।",
       starOnGithub: "GitHub पर स्टार करें",
       readTheDocs: "दस्तावेज़ पढ़ें",
       cloudTitle: "क्लाउड",
@@ -3066,12 +3068,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "अपने पहले बॉट से मिलें",
       copy: "अपना अगला काम सौंप दें।",
-      openSourceValue: "ओपन सोर्स",
+      openSourceValue: "स्रोत कोड उपलब्ध",
       selfHostValue: "सेल्फ़-होस्ट",
       stats: [
         { value: "stars", label: "GitHub स्टार्स" },
         { value: "license", label: "लाइसेंस" },
-        { value: "openSource", label: "सभी फ़ीचर, मुफ़्त" },
+        { value: "openSource", label: "कोड देखें" },
         { value: "selfHost", label: "आपकी मशीन" },
       ],
     },
@@ -3100,9 +3102,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "zh-tw": {
-    title: "Ork | 開源 Grok Bot 替代方案",
+    title: "Ork | 原始碼可檢視的 Grok Bot 替代方案",
     description:
-      "Ork 是開源的 Grok Bot 替代方案，讓常駐的 AI 隊友幫你完成實際工作。金鑰、模型、機器，全都屬於你。",
+      "Ork 是原始碼可檢視的 Grok Bot 替代方案。持續運作的 AI 隊友使用你選擇的模型，在你的機器上執行工作。",
     ogImageAlt: "Ork：真正屬於你的 AI 隊友。金鑰、模型、機器，全都屬於你。",
     availableLanguage: "Chinese (Traditional)",
     skipToContent: "跳至主要內容",
@@ -3121,8 +3123,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       brandKit: "品牌資源",
     },
     hero: {
-      eyebrow: "開源",
-      heading: "真正屬於你的開源 Grok Bot 替代方案",
+      eyebrow: "原始碼可檢視",
+      heading: "原始碼可檢視的 Grok Bot 替代方案",
       lead: "把工作交給機器人，用任何裝置隨時查看。",
       getStarted: "開始使用",
       download: {
@@ -3212,8 +3214,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       ],
     },
     openSource: {
-      heading: "開源",
-      copy: "Apache-2.0。自由執行、修改，打造成你要的樣子。",
+      heading: "原始碼可檢視",
+      copy: "既有程式碼保留 Apache-2.0 授權。Ork 新增程式碼採用 PolyForm Noncommercial 或付費商業授權。",
       starOnGithub: "在 GitHub 上加星號",
       readTheDocs: "閱讀說明文件",
       cloudTitle: "雲端",
@@ -3222,12 +3224,12 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     cta: {
       heading: "認識你的第一個機器人",
       copy: "把下一項任務交給它。",
-      openSourceValue: "開源",
+      openSourceValue: "原始碼可檢視",
       selfHostValue: "自行託管",
       stats: [
         { value: "stars", label: "GitHub 星號" },
         { value: "license", label: "授權" },
-        { value: "openSource", label: "全部功能，免費使用" },
+        { value: "openSource", label: "檢視原始碼" },
         { value: "selfHost", label: "你的機器" },
       ],
     },

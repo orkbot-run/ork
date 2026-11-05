@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { AccountExportManifest, AccountExportRecord } from "@orkbot/contracts";
 import { accountExportPaths } from "@orkbot/contracts";
 import { Zip, ZipDeflate } from "fflate";

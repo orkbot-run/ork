@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { VoiceProvider } from "./types";
 import {
   CHARS_PER_HOUR,
@@ -51,7 +53,7 @@ export const openai: VoiceProvider = {
   h1: "OpenAI text to speech for AI agents: pricing, shutdown dates and setup",
   intro: [
     "[OpenAI](https://openai.com) is best known for ChatGPT and its language models, and its API also turns text into speech and speech into text. If you already pay for OpenAI, the same kind of API key can give your agents a voice.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Connect OpenAI and it does the speaking and the transcription. Ork runs the bot, decides what it says, and keeps the transcript in the chat.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Connect OpenAI and it does the speaking and the transcription. Ork runs the bot, decides what it says, and keeps the transcript in the chat.",
     "This page covers what OpenAI's audio models cost as of November 2026, the shutdown of `gpt-4o-mini-tts` and the transcription models in early 2027, and how OpenAI compares with the alternatives.",
   ],
   scene: {

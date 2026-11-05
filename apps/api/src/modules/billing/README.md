@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Billing
 
 This module applies billing plans and account access, handles billing callbacks, and manages referrals and marketing-email preferences. Payment-wallet routes delegate connection operations to workspace adapters, and billing provider calls use the injected billing interface.

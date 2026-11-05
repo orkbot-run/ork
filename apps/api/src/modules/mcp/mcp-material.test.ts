@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { McpServerConfigInput } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { buildMcpUpdateMaterial as buildFromParsed } from "./mcp-material.js";

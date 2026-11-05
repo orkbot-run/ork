@@ -1,6 +1,9 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Ork
 
-Ork is an open source assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Electron client, and Expo client in one repository. Its public domain is `orkbot.run`. Use `orkbot` in package names and technical identifiers.
+Ork is a source-available assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Electron client, and Expo client in one repository. Its public domain is `orkbot.run`. Use `orkbot` in package names and technical identifiers.
 
 ## Run locally
 
@@ -57,6 +60,19 @@ Production-backup tests use Linux tools such as `flock` and GNU `find`. Run that
 
 ## License and attribution
 
-Ork modifications: Copyright 2026 Ork contributors.
+Ork is based on [Rakazo](https://github.com/elie222/rakazo), Copyright 2026 Rakazo
+contributors. Rakazo and the existing Apache baseline remain under
+[Apache 2.0](./LICENSE). New Ork work is offered under
+[PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM), with a paid commercial license
+available by separate agreement. Ork modifications: Copyright 2026 Ork contributors.
 
-Ork is based on [Rakazo](https://github.com/elie222/rakazo), Copyright 2026 Rakazo contributors. The imported code and our current modifications are distributed under the [Apache License, Version 2.0](./LICENSE).
+Self-hosting is free for purposes permitted by PolyForm. Internal work for a
+for-profit business requires a commercial license for the PolyForm-covered work
+unless PolyForm expressly permits the use or applicable law allows it.
+Earlier Apache grants remain valid. The combined product is source-available,
+and its PolyForm parts are not OSI open source.
+
+Read the [license map](./LICENSE.md), [attribution](./NOTICE), and
+[FAQ](./docs/licensing-faq.md). Pricing is by individual quotation. The
+[commercial agreement](./docs/commercial-license.md) and [CLA](./docs/cla/v1.md)
+are drafts pending legal review and activation.

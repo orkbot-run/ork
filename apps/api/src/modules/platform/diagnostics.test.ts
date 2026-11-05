@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { describe, expect, it } from "vitest";
 import type { DiagnosticsInput, DiagnosticsServer } from "./diagnostics.js";
 import { opaque, renderDiagnostics, safeMessage } from "./diagnostics.js";

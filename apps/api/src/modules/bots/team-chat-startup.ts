@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { MessagingInboundMessage } from "@orkbot/adapter-kit";
 
 /** Cap buffered TeamChat events while the bridge is still starting. */

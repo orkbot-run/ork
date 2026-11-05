@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { BUILTIN_AGENT_SKILLS } from "@orkbot/adapters";
 import type { Actor, AgentSkill, AgentSkillSource } from "@orkbot/contracts";
 import type { SkillSource } from "@orkbot/core";

@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Voice
 
 Speech synthesis, transcription, voice credentials, and speech summaries live here. The module selects configured voices, checks requests, and passes audio work to injected provider interfaces. Thread routes own call state. Shared call services stay in workspace packages.

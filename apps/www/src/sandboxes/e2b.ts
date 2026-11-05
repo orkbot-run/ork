@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { HOSTED_SANDBOXES_TABLE } from "./compare";
 import {
   E2B_CREDIT,
@@ -39,7 +41,7 @@ export const e2b: Sandbox = {
   h1: "E2B for AI agents: pricing, limits and alternatives",
   intro: [
     "[E2B](https://e2b.dev) is an open source cloud for running AI agents in isolated sandboxes. Each sandbox is a small Linux virtual machine in E2B's cloud, so agent code and commands never run on your own server.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. E2B can be the place those computers live when you host Ork yourself. E2B supplies the sandbox. Ork puts each bot's screen on it, saves its work, and pauses it when nobody is using it.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. E2B can be the place those computers live when you host Ork yourself. E2B supplies the sandbox. Ork puts each bot's screen on it, saves its work, and pauses it when nobody is using it.",
     "This page covers what E2B costs as of November 2026, the limits that matter for a bot that works for hours, and how it compares with Daytona, Modal, Vercel Sandbox and the other options.",
   ],
   scene: {

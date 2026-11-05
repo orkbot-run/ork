@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { UsageOperationKind } from "@orkbot/adapter-kit";
 import { resolveBotWorkspacePath } from "@orkbot/adapters";
 import type { ExportManifest } from "@orkbot/contracts";

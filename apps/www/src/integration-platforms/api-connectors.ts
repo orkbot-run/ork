@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   COMPOSIO,
@@ -26,7 +28,7 @@ export const apiConnectors: IntegrationPlatform = {
   h1: "Turn any OpenAPI or GraphQL API into tools for your AI agents",
   intro: [
     "Many apps have an API but no MCP server and no ready-made integration. An API connector closes that gap: point it at the API's [OpenAPI](https://www.openapis.org) description or GraphQL endpoint, and each operation becomes a tool an AI agent can call. There is no platform fee in the middle: you pay only what the API itself charges. [integrations.sh](https://integrations.sh) is an open source catalog that helps you find those descriptions.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, bots use tools in your apps, and each bot also has its own computer. You can use it on Ork Cloud or host it yourself. API connectors let your bots use apps that aren't in the [integrations catalog](/integrations/), with only an API key.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, bots use tools in your apps, and each bot also has its own computer. You can use it on Ork Cloud or host it yourself. API connectors let your bots use apps that aren't in the [integrations catalog](/integrations/), with only an API key.",
   ],
   scene: {
     bot: "Account Manager",
@@ -63,7 +65,7 @@ export const apiConnectors: IntegrationPlatform = {
     {
       heading: "What API connectors cost",
       paragraphs: [
-        "Ork adds nothing per call: API connectors are part of every plan on Ork Cloud and free when you host Ork yourself. integrations.sh is free and open source. The cost is whatever the API's owner charges for the calls your bot makes, under your own account and key, and it comes in three shapes.",
+        "Ork adds nothing per call: API connectors are part of every plan on Ork Cloud. Self-hosting is free for permitted noncommercial use. Commercial use of new Ork work requires a paid license. integrations.sh is free and open source. The cost is whatever the API's owner charges for the calls your bot makes, under your own account and key, and it comes in three shapes.",
         "Many business apps include API access in the plan you already pay for and limit how fast you can call it. Some services charge for each request or for what the request does, such as sending a text message. And your own company's APIs cost only the servers they run on. Either way the bill comes from the API's owner, on the terms of your account with them.",
       ],
       table: {

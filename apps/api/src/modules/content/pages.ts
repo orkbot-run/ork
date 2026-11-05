@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { createHash, randomBytes } from "node:crypto";
 import type { SecretStore } from "@orkbot/adapter-kit";
 import { forgetPageShareSecrets } from "@orkbot/adapters";

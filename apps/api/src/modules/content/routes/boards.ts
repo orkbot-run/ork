@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { commentTicket, createTicket, updateTicket } from "@orkbot/adapters";
 import type { BoardEvent } from "@orkbot/contracts";
 import { parseTicketRef } from "@orkbot/contracts";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { Actor, RoutineHistory, RoutineRun, RoutineRunCursor } from "@orkbot/contracts";
 import { ROUTINE_HISTORY_PAGE_SIZE } from "@orkbot/contracts";
 import { runFailureError } from "@orkbot/core";

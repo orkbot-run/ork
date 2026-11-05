@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 /** Reads a request body without buffering more than maxBytes. */
 export async function readBoundedBody(request: Request, maxBytes: number): Promise<string | null> {
   const contentLengthHeader = request.headers.get("content-length");

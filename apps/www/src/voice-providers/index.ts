@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { absolute, articleMarkdown, cell, sectionMarkdown } from "../provider-article/markdown";
 import type { ArticleHub, ArticleLink, ArticleSection } from "../provider-article/types";
 import { SITE_URL } from "../site";
@@ -179,7 +181,7 @@ export const VOICE_PROVIDERS_HUB = {
   h1: "Best voice APIs for AI agents in 2026: text to speech and transcription compared",
   intro: [
     "Typing isn't always the fastest way to work with an AI agent. Sometimes you want to say what you need on the way out the door, hear the answer while you cook, or have the agent call you when something can't wait. That takes two things: a voice that sounds right, and transcription that hears you correctly.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and you can also hold the mic to speak, have replies read aloud, or call a bot. A bot can call you too. The voice provider you connect does the speaking and, for most providers, the listening. This page compares every option Ork supports, from hosted voices to a server you run yourself, against the other voice APIs people consider, with prices as of November 2026.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and you can also hold the mic to speak, have replies read aloud, or call a bot. A bot can call you too. The voice provider you connect does the speaking and, for most providers, the listening. This page compares every option Ork supports, from hosted voices to a server you run yourself, against the other voice APIs people consider, with prices as of November 2026.",
   ],
   scene: {
     bot: "Chief of Staff",

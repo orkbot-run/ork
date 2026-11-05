@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Integrations
 
 Connection authorization, catalog search, plugin installation, and submission review live here, with ownership rules and records of approved catalog entries. Provider communication and plugin parsing stay behind workspace adapter interfaces.

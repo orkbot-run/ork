@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { getLogger, monitoringUserId } from "@orkbot/logging";
 import type { MonitoringConfig } from "@orkbot/logging/monitoring";
 import { Hono } from "hono";

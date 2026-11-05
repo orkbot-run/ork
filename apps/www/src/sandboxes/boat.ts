@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import {
   BOAT,
   BOAT_ORKBOT,
@@ -36,7 +38,7 @@ export const boat: Sandbox = {
   h1: "Boat for AI agents: a cloud computer for every bot",
   intro: [
     "[Boat](https://boat.dev) rents out persistent Ubuntu virtual machines built for AI agents. Each one is a full Linux computer in the cloud that keeps its disk when it stops, so an agent can come back to the same files and installed tools later.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. Ork Cloud runs those computers on Boat, and if you host Ork yourself you can point it at your own Boat account. Boat supplies the machine. Ork puts the desktop on it, gives each bot its own screen and browser, and decides when to start and stop it.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. Ork Cloud runs those computers on Boat, and if you host Ork yourself you can point it at your own Boat account. Boat supplies the machine. Ork puts the desktop on it, gives each bot its own screen and browser, and decides when to start and stop it.",
   ],
   scene: {
     bot: "Sales Outbound",

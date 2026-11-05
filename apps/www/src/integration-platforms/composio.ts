@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { IntegrationPlatform } from "./types";
 import {
   ARCADE,
@@ -45,7 +47,7 @@ export const composio: IntegrationPlatform = {
   h1: "Composio for AI agents: pricing, limits and alternatives",
   intro: [
     `[Composio](https://composio.dev) is a hosted service that gives AI agents actions in other apps, such as sending an email in Gmail or opening an issue in GitHub. It runs the sign-in for each app, stores the tokens, and calls the app's API when an agent asks it to. It is free up to ${FREE_CALLS} tool calls a month, and the paid plan starts at ${PRO} a month plus usage.`,
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and bots use tools in your apps as well as their own computer. When you host Ork yourself, one Composio API key fills the app catalog people connect from. Composio supplies the app actions and logins. Ork decides which account each bot acts as and asks you before anything that changes data.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and bots use tools in your apps as well as their own computer. When you host Ork yourself, one Composio API key fills the app catalog people connect from. Composio supplies the app actions and logins. Ork decides which account each bot acts as and asks you before anything that changes data.",
   ],
   scene: {
     bot: "Inbox Manager",

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { VoiceProvider } from "./types";
 import {
   PRICING_SOURCES,
@@ -40,7 +42,7 @@ export const selfHosted: VoiceProvider = {
   h1: "Self-hosted voice for AI agents: Kokoro, Whisper and open source TTS",
   intro: [
     "You don't need a voice vendor to talk to an AI agent. Open models such as [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) for speech and Whisper for transcription run on an ordinary computer, and several open source servers put them behind the same API shape OpenAI uses. Point an agent at that server and no voice vendor ever hears you. The finished audio still goes to whichever device is listening.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Its **Self-hosted** voice option connects to any OpenAI-compatible speech server you run, so a [self-hosted Ork](/self-hosted-ai-agent/) can have voice with no hosted service at all.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. Its **Self-hosted** voice option connects to any OpenAI-compatible speech server you run, so a [self-hosted Ork](/self-hosted-ai-agent/) can have voice with no hosted service at all.",
     "This page compares the open source speech models people actually run in 2026, their licenses and hardware, what self-hosting costs against hosted APIs, and how to connect a server to Ork.",
   ],
   scene: {

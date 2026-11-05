@@ -18,16 +18,16 @@ related:
     title: "Self-hosted AI agent"
     description: "The same install, with the server and source paths."
   - href: "/openclaw-alternative/"
-    title: "Open source OpenClaw alternative"
+    title: "Source-available OpenClaw alternative"
     description: "How Ork's chat compares with OpenClaw's gateway."
   - href: "/hermes-alternative/"
-    title: "Open source Hermes alternative"
+    title: "Source-available Hermes alternative"
     description: "Desktop and CLI setup next to Ork's installer."
   - href: "/blog/openclaw-vs-hermes-vs-orkbot/"
     title: "OpenClaw vs Hermes Agent vs Ork"
     description: "Which shape is simplest depends on the product you want."
   - href: "/alternatives/"
-    title: "Open source alternatives"
+    title: "Self-hosted alternatives"
     description: "The rest of the comparison pages."
 faq:
   - question: "Does the installer take ten minutes?"
@@ -63,6 +63,9 @@ comparison:
         - "Required for running the published images."
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
+
 The title is the shape of the local install, not a stopwatch result. Ork's published images start from one script. Docker then downloads the images, and that download is the part that varies. When the app is up, you create an account, connect a model, and the first chat is the product. A hostname on the public internet, TLS, and a review of secrets are a separate piece of work.
 
 This page follows the [self-hosting guide](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md) and the [self-hosted AI agent page](/self-hosted-ai-agent/). Those stay the reference if a command changes.
@@ -71,14 +74,14 @@ This page follows the [self-hosting guide](https://github.com/orkbot-run/ork/blo
 
 A signed-in Ork deployment is not a static site. The guide describes a long-running API, a Graphile Worker, Postgres, and a computer provider. The computer defaults to Docker. E2B, Daytona, CreateOS, and Boat are optional remote computers, each with its own API key. The web app, the Electron desktop app, and the Expo mobile app are clients of that API.
 
-Postgres, bot files, browser profiles, and the audit log stay on the machine you operate. Content you send to a model provider is processed by that provider under its terms. You choose the provider and the keys. There is no seat fee for the open source software. You pay the model provider and any remote computer you turn on.
+Postgres, bot files, browser profiles, and the audit log stay on the machine you operate. Content you send to a model provider is processed by that provider under its terms. You choose the provider and the keys. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model provider and any remote computer you turn on.
 
 <figure class="post-figure">
   <img src="/graphics/architecture.svg" width="1200" height="720" alt="Diagram of an Ork deployment. Web, desktop, and mobile clients talk to an API. A worker and Postgres sit beside it. The computer defaults to Docker, with E2B, Daytona, CreateOS, or Boat optional. Model prompts go to the provider you configure." />
   <figcaption>An Ork deployment. Postgres, bot files, and the audit log stay on the machine you run. Prompts still go to the model provider you choose.</figcaption>
 </figure>
 
-The software is Apache-2.0. This install runs the same product as Ork Cloud, which is in beta.
+The existing Apache-2.0 baseline keeps its license. New Ork work uses PolyForm Noncommercial or a separate commercial license. See the [license scope](/license/). This install runs the same product as Ork Cloud, which is in beta.
 
 ## What the machine needs
 
@@ -182,6 +185,6 @@ The desktop app's **This computer** option is the same published images, started
 
 ## How this sits next to other agents
 
-OpenClaw and Hermes Agent are also open source and can run on hardware you control. Their install docs describe a gateway or a desktop app and a CLI, plus config files under a home directory. Ork's published-image path is the script above, then chat. The [comparison of those three](/blog/openclaw-vs-hermes-vs-orkbot/) is about that difference in shape, not a race.
+OpenClaw and Hermes Agent are open source and can run on hardware you control. Their install docs describe a gateway or a desktop app and a CLI, plus config files under a home directory. Ork's published-image path is the script above, then chat. The [comparison of those three](/blog/openclaw-vs-hermes-vs-orkbot/) is about that difference in shape, not a race.
 
 If the first chat on loopback is the goal, stay on the published images, create the owner account, and connect one model. If the goal is a public URL, budget time for TLS and the secrets checklist after the installer finishes.

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Ork
 
 [English](./README.md) | [简体中文](./README.zh-CN.md) | [日本語](./README.ja.md)
@@ -6,13 +9,13 @@
 
 ![Ork：本当に自分のものにできる AI チームメイト](./docs/readme-hero.png)
 
-Ork は、常駐型の AI チームメイトを持てるオープンソースの AI エージェントです。自分のマシンで動かせる
+Ork は、常駐型の AI チームメイトを持てるソース公開型の AI エージェントです。自分のマシンで動かせる
 セルフホスト型の AI アシスタントでもあります。Web 版、Electron デスクトップアプリ、
 [iPhone](https://orkbot.run/download/) 版と [Android](https://orkbot.run/download/) 版で利用できます。
 モデルやコンピューターのプロバイダーは自分で選べるほか、スタック全体をローカルで動かすこともできます。
 
 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet の
-オープンソースかつセルフホスト可能な代替ツールです。
+ソース公開型でセルフホスト可能な代替ツールです。
 
 Ork は現在ベータ版です。詳しくは [orkbot.run](https://orkbot.run) をご覧ください。
 
@@ -281,6 +284,10 @@ pnpm test:e2e
 コントリビューションを歓迎します。プルリクエストを作成する前に [CONTRIBUTING.md](./CONTRIBUTING.md) をお読みください。
 セキュリティ上の脆弱性は、公開の Issue を作成せず、[SECURITY.md](./SECURITY.md) の手順に従って報告してください。
 
-Ork は [Apache License 2.0](./LICENSE) のもとでライセンスされています。
+Rakazo 由来のコードと既存の Apache ベースラインは [Apache 2.0](./LICENSE) のままです。新しい Ork のコードには [PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM) を適用し、商用利用には別途有償契約を用意します。以前の Apache ライセンスによる権利は維持されます。
+
+PolyForm が認める非商用目的では無料でセルフホストできます。営利企業の社内業務にも、PolyForm 対象部分の商用ライセンスが必要です。ただし、PolyForm の明示的な許可または法律上の権利が適用される場合を除きます。Ork 全体はソース公開型であり、PolyForm 対象部分は OSI 定義のオープンソースではありません。
+
+詳細は [ライセンスの区分](./LICENSE.md)、[帰属表示](./NOTICE)、[FAQ](./docs/licensing-faq.md) を参照してください。商用価格は個別見積もりです。[商用契約](./docs/commercial-license.md) と [CLA](./docs/cla/v1.md) は法務確認待ちの草案です。
 
 質問やアイデアは [Ork GitHub](https://github.com/orkbot-run/ork/issues)でお気軽にどうぞ。

@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { Alternative } from "../alternatives";
 import { GET_STARTED, OPEN_SOURCE_REASONS } from "../alternatives";
 import { ogPublicPath } from "../og-pages";
@@ -67,7 +69,7 @@ const card = vsCard(page.slug);
     </table>
   </div>
 
-  <h2>Why open source and self-hosted</h2>
+  <h2>Why source-available and self-hosted</h2>
   <ul>
     {OPEN_SOURCE_REASONS.map((reason) => <li>{reason}</li>)}
   </ul>

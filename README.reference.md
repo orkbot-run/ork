@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+
 # Ork reference
 
 Adapted feature and deployment reference. Use [README.md](./README.md) for the current local setup. Published images, installers, store listings, and hosted services require separate Ork release configuration.
@@ -8,12 +11,12 @@ Adapted feature and deployment reference. Use [README.md](./README.md) for the c
 
 ![Ork - AI teammates you actually own](./docs/readme-hero.png)
 
-Ork is an open source AI agent for persistent teammates, and a self-hosted AI assistant you
+Ork is a source-available AI agent for persistent teammates, and a self-hosted AI assistant you
 can run on your own machine. It is available on the web, as an Electron desktop app, and on
 [iPhone](https://orkbot.run/download/) and [Android](https://orkbot.run/download/). Bring your own model
 and computer provider, or run the complete stack locally.
 
-It is an open source, self-hosted alternative to Grok Bot, Meta Muse, OpenAI Dots, Instinct,
+It is a source-available, self-hosted alternative to Grok Bot, Meta Muse, OpenAI Dots, Instinct,
 OpenClaw, Hermes Agent, and Claude Duet.
 
 Ork is in beta. Learn more at [orkbot.run](https://orkbot.run).
@@ -307,6 +310,9 @@ Contributions are welcome. Please read [CONTRIBUTING.md](./CONTRIBUTING.md) befo
 request. For security vulnerabilities, follow [SECURITY.md](./SECURITY.md) instead of filing a public
 issue.
 
-Ork is licensed under the [Apache License 2.0](./LICENSE).
+Ork combines its existing [Apache 2.0](./LICENSE) baseline with new work under
+[PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM) or a separate paid commercial
+agreement. See [LICENSE.md](./LICENSE.md) for scope and [NOTICE](./NOTICE) for
+attribution. Earlier Apache grants remain valid.
 
 Questions and ideas are welcome in the [Ork issue tracker](https://github.com/orkbot-run/ork/issues).

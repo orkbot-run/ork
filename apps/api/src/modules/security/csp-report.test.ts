@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { CSP_REPORT_PATH } from "@orkbot/contracts/content-security-policy";
 import type { TestSink } from "@orkbot/logging";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";

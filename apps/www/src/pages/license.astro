@@ -1,0 +1,48 @@
+---
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+import FaqSection from "../components/FaqSection.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import { githubStarsLabel } from "../github";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import {
+  COMMERCIAL_DESCRIPTION,
+  LEGAL_REVIEW_STATUS,
+  LICENSE_DESCRIPTION,
+  LICENSE_FAQS,
+  LICENSE_INTRO,
+} from "../licensing";
+import { GITHUB_URL } from "../site";
+
+const starsLabel = await githubStarsLabel();
+---
+
+<BaseLayout title="Licensing · Ork" description={LICENSE_DESCRIPTION} markdownAlternate="/license.md">
+  <div class="container">
+    <Header starsLabel={starsLabel} />
+    <main id="main" class="privacy-copy">
+      <h1>Ork licensing</h1>
+      <p>{LICENSE_INTRO}</p>
+      <p>{LEGAL_REVIEW_STATUS}</p>
+      <h2 id="commercial">Commercial licensing</h2>
+      <p>{COMMERCIAL_DESCRIPTION}</p>
+      <p>
+        <a href={`${GITHUB_URL}/blob/main/docs/commercial-license.md`}>Review the commercial agreement draft</a>.
+      </p>
+      <p>
+        <a href={`${GITHUB_URL}/issues/new`}>Request a private sales contact channel</a>.
+        Keep the request generic. Do not post personal, customer, deployment, or billing details in a public issue.
+      </p>
+      <h2>License documents</h2>
+      <ul>
+        <li><a href={`${GITHUB_URL}/blob/main/LICENSE.md`}>License scope</a></li>
+        <li><a href={`${GITHUB_URL}/blob/main/LICENSE`}>Apache-2.0</a></li>
+        <li><a href={`${GITHUB_URL}/blob/main/LICENSE-POLYFORM`}>PolyForm Noncommercial 1.0.0</a></li>
+        <li><a href={`${GITHUB_URL}/blob/main/NOTICE`}>Attribution</a></li>
+      </ul>
+      <FaqSection items={LICENSE_FAQS} />
+    </main>
+    <Footer />
+  </div>
+</BaseLayout>

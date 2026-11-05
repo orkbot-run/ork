@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # Spaces
 
 Space membership routes, item availability, and space deletion live here, with availability helpers choosing visible items and rehoming assignments when availability changes. Organization ownership and account deletion remain in `accounts`, which calls this module for space cleanup.

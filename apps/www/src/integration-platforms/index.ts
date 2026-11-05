@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { absolute, articleMarkdown, cell, sectionMarkdown } from "../provider-article/markdown";
 import type { ArticleHub, ArticleLink, ArticleSection } from "../provider-article/types";
 import { SITE_URL } from "../site";
@@ -67,7 +69,7 @@ const HUB_SECTIONS: readonly ArticleSection[] = [
   {
     heading: "Pricing compared",
     paragraphs: [
-      "On [Ork Cloud](/pricing/), connecting apps and MCP servers is part of every plan, and you don't need an account with any of these platforms. When you host Ork yourself, Ork is free and you pay any platform you turn on directly, on its own terms. The units differ, so the next table works out a real workload.",
+      "On [Ork Cloud](/pricing/), connecting apps and MCP servers is part of every plan, and you don't need an account with any of these platforms. When you host Ork yourself, permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay any platform you turn on directly, on its own terms. The units differ, so the next table works out a real workload.",
     ],
     table: {
       caption: `Integration platforms for AI agents: prices as of ${PRICES_CHECKED}`,
@@ -185,13 +187,13 @@ const HUB_SECTIONS: readonly ArticleSection[] = [
           topic: "MCP servers",
           cells: [
             "The app's; Ork registers itself or uses a client you enter",
-            "Depends on the server; Ork is open source",
+            "Depends on the server; Ork is source-available",
             "The app's own",
           ],
         },
         {
           topic: "API connectors",
-          cells: ["None: an API key or token", "Ork is open source", "The API's own"],
+          cells: ["None: an API key or token", "Ork is source-available", "The API's own"],
         },
         {
           topic: "Zapier MCP",
@@ -235,7 +237,7 @@ export const INTEGRATION_PLATFORMS_HUB = {
   h1: "Integration platforms for AI agents in 2026: pricing and comparison",
   intro: [
     "An AI agent is only as useful as the apps it can work in. To triage an inbox, update a CRM or file an issue, it needs tools for those apps and a safe way to sign in to them. There are a few ways to get there: a hosted platform that manages the logins for thousands of apps, an MCP server the app publishes itself, or a connector built straight from an API's description. For the same work, the price ranges from nothing beyond the app's own plan to hundreds of dollars a month.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and it uses your apps on your behalf, asking before it changes anything you've told it to check with you. Ork supports all four ways of giving bots tools, and you can mix them. This page compares them with the main alternatives, prices included. For the individual apps bots can use, see the [integrations catalog](/integrations/).",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and it uses your apps on your behalf, asking before it changes anything you've told it to check with you. Ork supports all four ways of giving bots tools, and you can mix them. This page compares them with the main alternatives, prices included. For the individual apps bots can use, see the [integrations catalog](/integrations/).",
   ],
   scene: {
     bot: "Chief of Staff",

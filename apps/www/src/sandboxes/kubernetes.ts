@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { GITHUB_URL } from "../site";
 import {
   E2B_PRO_FEE,
@@ -32,7 +34,7 @@ export const kubernetes: Sandbox = {
   h1: "AI agent sandboxes on Kubernetes",
   intro: [
     "If your team already runs [Kubernetes](https://kubernetes.io), your AI agents' computers can run there too. Each computer becomes a pod in a namespace you choose, on your own nodes and network, scheduled and limited like any other workload.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. When you [host Ork yourself](/self-hosted-ai-agent/) on a cluster, it can create those computers as pods directly through the Kubernetes API, with no Docker socket and no outside sandbox provider.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and each one gets its own computer with a desktop, browser, terminal and files that you can watch and take over. When you [host Ork yourself](/self-hosted-ai-agent/) on a cluster, it can create those computers as pods directly through the Kubernetes API, with no Docker socket and no outside sandbox provider.",
   ],
   scene: {
     bot: "Bug Triage",

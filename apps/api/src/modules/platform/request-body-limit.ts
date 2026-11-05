@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { ATTACHMENT_MAX_BYTES, attachmentSizeLabel } from "@orkbot/contracts";
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { cancelBody } from "./http-body.js";

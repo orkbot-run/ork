@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { createHash, createHmac } from "node:crypto";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {

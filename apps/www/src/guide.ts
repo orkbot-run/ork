@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import {
   DOCS_URL,
   GITHUB_URL,
@@ -55,15 +57,15 @@ export type ComparisonRow = {
   openclaw: string;
 };
 
-export const SELF_HOST_TITLE = "Self-Hosted AI Agent (Open Source) – Ork";
+export const SELF_HOST_TITLE = "Self-Hosted AI Agent (Source Available) - Ork";
 export const SELF_HOST_DESCRIPTION =
-  "Run Ork yourself: an open source AI agent with your data, your model, and your costs. Requirements and the setup steps for Docker or a source checkout.";
+  "Run Ork yourself: a source-available AI agent with your data, your model, and your costs. Requirements and the setup steps for Docker or a source checkout.";
 
-export const OPENCLAW_H1 = "Open source OpenClaw alternative";
-export const OPENCLAW_TITLE = "Open Source OpenClaw Alternative – Ork";
+export const OPENCLAW_H1 = "Source-available OpenClaw alternative";
+export const OPENCLAW_TITLE = "Source-Available OpenClaw Alternative - Ork";
 export const OPENCLAW_UPDATED = "October 7, 2026";
 export const OPENCLAW_DESCRIPTION =
-  "Ork and OpenClaw are both open source, self-hosted AI agents. Ork keeps setup and daily use in chat. OpenClaw's docs add a gateway, a config file, and a background service you can install.";
+  "Ork and OpenClaw are self-hosted AI agents. Ork is source-available with an Apache baseline and new PolyForm Noncommercial work. OpenClaw uses MIT. Ork keeps setup and daily use in chat. OpenClaw's docs add a gateway, a config file, and a background service you can install.";
 
 export const SELF_HOST_FAQS: readonly FaqItem[] = [
   {
@@ -79,7 +81,7 @@ export const SELF_HOST_FAQS: readonly FaqItem[] = [
   {
     question: "How do model choice and cost work?",
     answer:
-      "You connect your own model keys, or a local or OpenAI-compatible model server, and you can pick a different model per bot. The open source software has no seat fee. You pay the model and computer providers you use. Local Docker computers are the default and do not need a hosted sandbox account.",
+      "You connect your own model keys, or a local or OpenAI-compatible model server, and you can pick a different model per bot. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model and computer providers you use. Local Docker computers are the default and do not need a hosted sandbox account.",
   },
   {
     question: "Is hosted Ork available?",
@@ -89,7 +91,7 @@ export const SELF_HOST_FAQS: readonly FaqItem[] = [
   {
     question: "How does this compare with OpenClaw?",
     answer:
-      "Both are open source and run on hardware you control. After a Docker or desktop install, Ork is a chat for persistent teammates. OpenClaw's getting-started guide adds a wizard, a Gateway you run in the terminal or install as a background service, and a separate step to connect a chat app.",
+      "Both run on hardware you control. Ork is source-available. OpenClaw uses MIT. After a Docker or desktop install, Ork is a chat for persistent teammates. OpenClaw's getting-started guide adds a wizard, a Gateway you run in the terminal or install as a background service, and a separate step to connect a chat app.",
   },
 ];
 
@@ -127,12 +129,12 @@ export const OPENCLAW_FAQS: readonly FaqItem[] = [
   {
     question: "Is Ork a drop-in replacement for OpenClaw?",
     answer:
-      "No. Ork does not import OpenClaw configuration, skills, or channel sessions. It is a separate open source agent you self-host.",
+      "No. Ork does not import OpenClaw configuration, skills, or channel sessions. It is a separate source-available agent you self-host.",
   },
   {
     question: "How do the licenses differ?",
     answer:
-      "Ork is released under the Apache-2.0 license. OpenClaw is released under the MIT license and is stewarded by the OpenClaw Foundation, an independent 501(c)(3).",
+      "Ork keeps its Apache-2.0 baseline. New Ork work uses PolyForm Noncommercial or a paid commercial license. OpenClaw is released under the MIT license and is stewarded by the OpenClaw Foundation, an independent 501(c)(3).",
   },
   {
     question: "Do both keep data on my machine?",
@@ -147,7 +149,7 @@ export const OPENCLAW_FAQS: readonly FaqItem[] = [
   {
     question: "Does either project charge for the software?",
     answer:
-      "Ork is free to self-host. Run Ork on your own infrastructure. OpenClaw's documentation says the project has no paid tier and no hosted service. You still pay for models, machines, and any optional computer providers you use.",
+      "Ork is free to self-host for permitted noncommercial use. Commercial use of new Ork work requires a paid license. Run Ork on your own infrastructure. OpenClaw's documentation says the project has no paid tier and no hosted service. You still pay for models, machines, and any optional computer providers you use.",
   },
 ];
 
@@ -169,13 +171,13 @@ export const COMPARISON_ROWS: readonly ComparisonRow[] = [
   {
     aspect: "What it is",
     orkbot:
-      "An open source platform for persistent AI teammates. Bots keep conversations, memory, routines, and history, and can use a browser, shell, and desktop.",
+      "A source-available platform for persistent AI teammates. Bots keep conversations, memory, routines, and history, and can use a browser, shell, and desktop.",
     openclaw:
       "A self-hosted gateway that connects chat apps to an AI assistant on your machine. The project describes one Gateway for the channels you already use.",
   },
   {
     aspect: "License",
-    orkbot: "Apache-2.0. Developed in the open on GitHub.",
+    orkbot: "Apache baseline + PolyForm Noncommercial for new work. Public source on GitHub.",
     openclaw: "MIT. Stewarded by the OpenClaw Foundation, an independent 501(c)(3).",
   },
   {
@@ -226,7 +228,7 @@ export const COMPARISON_ROWS: readonly ComparisonRow[] = [
   },
   {
     aspect: "Software cost",
-    orkbot: "No seat fee for the open source software. You pay the models and infrastructure you use.",
+    orkbot: "Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the models and infrastructure you use.",
     openclaw: "The docs say there is no paid tier. You pay the models and the machine you run.",
   },
 ];
@@ -260,11 +262,11 @@ function comparisonMarkdown(): string {
 
 export const SELF_HOST_MARKDOWN = `# Self-hosted AI agent
 
-> Open source AI agent you run on a machine you control. Your keys, your model, your data.
+> Source-available AI agent you run on a machine you control. Your keys, your model, your data.
 
-Ork is an open source AI agent for persistent teammates. Each bot can use a browser and a shell, keep routines as Markdown, and pause for approval when work crosses a boundary you set. Self-hosting means that stack runs on infrastructure you operate.
+Ork is a source-available AI agent for persistent teammates. Each bot can use a browser and a shell, keep routines as Markdown, and pause for approval when work crosses a boundary you set. Self-hosting means that stack runs on infrastructure you operate.
 
-The software is [Apache-2.0](${GITHUB_URL}/blob/main/LICENSE). Run Ork on your own infrastructure. This page is the essential setup. The [full self-hosting guide](${DOCS_URL}) on GitHub covers backups, upgrades, secrets, restricted networks, and production Compose.
+The [license scope](https://orkbot.run/license/) separates the Apache baseline from new Ork work under PolyForm Noncommercial or a paid commercial license. Run Ork on your own infrastructure. This page is the essential setup. The [full self-hosting guide](${DOCS_URL}) on GitHub covers backups, upgrades, secrets, restricted networks, and production Compose.
 
 ## What self-hosting gives you
 
@@ -278,7 +280,7 @@ Connect OpenAI, Anthropic, Google, OpenRouter, or Vercel AI Gateway. You can als
 
 ### Cost control
 
-There is no seat fee for the open source software. You pay the model provider you connect and any remote computer provider you choose. Local Docker computers are the default, so a single machine does not need an E2B, Daytona, CreateOS, or Boat account.
+Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model provider you connect and any remote computer provider you choose. Local Docker computers are the default, so a single machine does not need an E2B, Daytona, CreateOS, or Boat account.
 
 ## Self-host only, for now
 
@@ -382,13 +384,13 @@ export const OPENCLAW_RELATED = [
   { href: "/alternatives/", label: "All comparisons" },
 ] as const;
 
-export const OPENCLAW_MARKDOWN = `# Open source OpenClaw alternative
+export const OPENCLAW_MARKDOWN = `# Source-available OpenClaw alternative
 
 Updated ${OPENCLAW_UPDATED}.
 
-> A fair comparison of Ork and OpenClaw, two open source ways to run an AI agent you control.
+> A fair comparison of Ork and OpenClaw, two ways to run an AI agent you control.
 
-The main difference is simplicity. Like Grok Bot, Ork is just chat: you set up the bot and manage it from that chat. OpenClaw is also open source and self-hosted. Its [getting-started guide](${OPENCLAW_GETTING_STARTED_URL}) is a longer path: a CLI installer, an onboarding wizard, a Gateway you run in the terminal or install as a background service, and a config file.
+The main difference is simplicity. Like Grok Bot, Ork is just chat: you set up the bot and manage it from that chat. OpenClaw is open source and self-hosted. Its [getting-started guide](${OPENCLAW_GETTING_STARTED_URL}) is a longer path: a CLI installer, an onboarding wizard, a Gateway you run in the terminal or install as a background service, and a config file.
 
 They are not the same product, and Ork does not import an OpenClaw setup. This comparison follows [OpenClaw's documentation](${OPENCLAW_DOCS_URL}) and this repository. Details change. Those docs are the full source for OpenClaw.
 
@@ -410,9 +412,9 @@ Ork is a web, desktop, and mobile app for persistent teammates: a bot has a job,
 
 Ork runs bot work on a computer. Local Docker is the default. OpenClaw can sandbox tool execution, and its docs say sandboxing is off by default. The Gateway process stays on the host.
 
-Both let you bring a model provider, including a server you run. Neither charges a seat fee for the software. OpenClaw's docs say it has no paid tier and no hosted service. Ork is free to self-host. Run Ork on your own infrastructure.
+Both let you bring a model provider, including a server you run. Ork is free for permitted noncommercial use. Commercial use of new Ork work requires a paid license. OpenClaw's docs say it has no paid tier and no hosted service.
 
-Ork is distributed under Apache-2.0. OpenClaw is MIT, stewarded by the OpenClaw Foundation.
+Ork keeps its Apache-2.0 baseline. New Ork work uses PolyForm Noncommercial or a paid commercial license. OpenClaw is MIT, stewarded by the OpenClaw Foundation.
 
 ## Which shape fits
 

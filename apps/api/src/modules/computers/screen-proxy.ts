@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { createHash, timingSafeEqual } from "node:crypto";
 import { hasActiveComputerControl } from "@orkbot/adapters";
 import { openScreenCapability, SCREEN_TARGET_ENDPOINT } from "@orkbot/core/node/screen-capability";

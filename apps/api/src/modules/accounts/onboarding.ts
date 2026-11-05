@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { ConnectorRegistry } from "@orkbot/adapters";
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import {

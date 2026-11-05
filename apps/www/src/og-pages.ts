@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { ALTERNATIVES, ALTERNATIVES_HUB } from "./alternatives";
 import { GROK_ALTERNATIVE_H1 } from "./grok-alternative";
 import { OPENCLAW_H1 } from "./guide";
@@ -20,7 +22,7 @@ const BLOG_OG: readonly OgPage[] = [
   {
     id: "blog-best-open-source-ai-agents-2026",
     kicker: "Roundup",
-    title: "Best open source AI agents in 2026",
+    title: "Open source and source-available AI agents in 2026",
   },
   {
     id: "blog-openclaw-vs-hermes-vs-orkbot",

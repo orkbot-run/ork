@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { IDENTITY_CONFIRMATION_REQUIRED, isIdentityConfirmationRequired } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/server";
 import { expect, it, vi } from "vitest";

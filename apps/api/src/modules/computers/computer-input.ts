@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 /** Where a scroll was made, when the screen sent both coordinates; else nothing. */
 export function scrollPoint(payload: Record<string, unknown>): { x?: number; y?: number } {
   if (payload.x === undefined || payload.y === undefined) return {};

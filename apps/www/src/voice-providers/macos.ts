@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import type { VoiceProvider } from "./types";
 import { GITHUB_URL } from "../site";
 import { VOICE_DOC, VOICE_MODELS_DOC, voicePriceTable, withPricingSources } from "./shared";
@@ -16,7 +18,7 @@ export const macos: VoiceProvider = {
   h1: "macOS text to speech for AI agents: use your Mac's built-in voices",
   intro: [
     "Every Mac ships with dozens of text-to-speech voices, and Apple offers Enhanced and Premium versions that sound more natural. The `say` command turns text into speech with any of them, entirely on the machine, with no account and no API key.",
-    "[Ork](/) is an open source app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. When the Ork server runs directly on a Mac, it offers **Server (Mac)** as a voice provider, so bots speak with that Mac's voices and no voice vendor.",
+    "[Ork](/) is a source-available app for AI teammates that do real work. You talk to each bot in chat, and you can also talk to it by voice: hold the mic to speak, have replies read aloud, or call a bot in real time. When the Ork server runs directly on a Mac, it offers **Server (Mac)** as a voice provider, so bots speak with that Mac's voices and no voice vendor.",
   ],
   scene: {
     bot: "Chief of Staff",

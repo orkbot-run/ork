@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { MiddlewareHandler } from "hono";
 
 /** Tracks handlers still running so shutdown can let them finish before closing the database. */

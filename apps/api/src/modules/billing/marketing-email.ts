@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { emailLocale, welcomeEmail } from "@orkbot/auth";

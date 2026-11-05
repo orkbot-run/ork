@@ -1,25 +1,27 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import { SITE_URL } from "./site";
 import { CLAUDE_CHATGPT_SUBSCRIPTION_FAQ } from "./subscription-faq";
 
 export const GROK_ALTERNATIVE_PATH = "/grok-bot-alternative/";
 
 export const GROK_ALTERNATIVE_TITLE =
-  "Grok Bot alternatives (open source and hosted) – Ork";
+  "Grok Bot alternatives (self-hosted and hosted) - Ork";
 
 export const GROK_ALTERNATIVE_DESCRIPTION =
-  "Open source and hosted Grok Bot alternatives: Ork, OpenClaw, Hermes Agent, Meta Muse, OpenAI Dots, Instinct, Hark Pro, and Claude Duet.";
+  "Self-hosted and hosted Grok Bot alternatives: Ork, OpenClaw, Hermes Agent, Meta Muse, OpenAI Dots, Instinct, Hark Pro, and Claude Duet.";
 
-export const GROK_ALTERNATIVE_H1 = "Grok Bot alternatives (open source and hosted)";
+export const GROK_ALTERNATIVE_H1 = "Grok Bot alternatives (self-hosted and hosted)";
 
 export const GROK_INTRO = [
   "Grok Bot is xAI's hosted product for named bots, a computer they can use, routines, and approvals. The public docs describe a cloud computer on your account. They do not describe installing the service yourself or connecting your own model provider.",
-  "Below are alternatives, open source and hosted. [Ork, the open source Grok Bot alternative](/), is one of them: Apache-2.0 software you can run on your own machine, with a model key you bring.",
+  "Below are self-hosted and hosted alternatives. [Ork, the source-available Grok Bot alternative](/), is one of them: source-available software you can run on your own machine, with a model key you bring.",
 ] as const;
 
 export const GROK_HOWTO = [
-  "Choose an agent you run yourself when the computer and the model key should stay with you. Ork is Apache-2.0: you host it, you bring the model key, and you manage the bot from chat. OpenClaw is an MIT-licensed agent you run yourself, and its docs add a Gateway and a config file. Hermes Agent is MIT-licensed, with a desktop app that can reach a first message without the command line, and a separate gateway for messaging apps.",
+  "Choose an agent you run yourself when the computer and the model key should stay with you. Ork combines an Apache-2.0 baseline with new PolyForm Noncommercial work: you host it, you bring the model key, and you manage the bot from chat. OpenClaw is an MIT-licensed agent you run yourself, and its docs add a Gateway and a config file. Hermes Agent is MIT-licensed, with a desktop app that can reach a first message without the command line, and a separate gateway for messaging apps.",
   "Choose a hosted assistant when you do not want to install the service. Grok Bot comes with paid Cursor plans and SuperGrok. Meta Muse runs on a virtual machine Meta operates. OpenAI Dots sit on eligible ChatGPT plans. Instinct is the assistant you text or call. Claude Duet comes with Claude Pro and Max in the US, on a computer Anthropic operates. Hark Pro has a free tier. $20 a month is twice the usage, and $100 a month is ten times the usage.",
-  "The [alternatives roundup](/alternatives/) lists license, price, and setup side by side. [OpenClaw vs Hermes Agent vs Ork](/blog/openclaw-vs-hermes-vs-orkbot/) compares the three you run yourself, and [best open source AI agents in 2026](/blog/best-open-source-ai-agents-2026/) includes libraries as well as apps.",
+  "The [alternatives roundup](/alternatives/) lists license, price, and setup side by side. [OpenClaw vs Hermes Agent vs Ork](/blog/openclaw-vs-hermes-vs-orkbot/) compares the three you run yourself, and [open source and source-available AI agents in 2026](/blog/best-open-source-ai-agents-2026/) includes libraries as well as apps.",
 ] as const;
 
 export const GROK_SOURCES = [
@@ -130,7 +132,7 @@ export const GROK_ALTERNATIVES: readonly GrokListCard[] = [
   {
     label: "Ork",
     href: "/",
-    note: "Suits someone who wants a persistent bot on a machine they control, with a model key they bring, managed from chat. The license is Apache-2.0. [Ork, the open source Grok Bot alternative](/).",
+    note: "Suits someone who wants a persistent bot on a machine they control, with a model key they bring, managed from chat. The Apache baseline stays Apache. New Ork work uses PolyForm Noncommercial or a paid commercial license. [Ork, the source-available Grok Bot alternative](/).",
     image: figureImage(GROK_CHAT_FIGURE),
     caption: GROK_CHAT_FIGURE.caption,
   },
@@ -188,7 +190,7 @@ export const GROK_ALTERNATIVE_FAQ = [
   {
     question: "Is Grok Bot open source?",
     answer:
-      "Grok Bot, the hosted teammate app, does not publish its source for you to run. xAI has open-sourced other software: Grok Build, the coding-agent CLI, is Apache-2.0, and the older Grok-1 model weights were released under Apache-2.0. Those projects are not the Grok Bot service. Ork is Apache-2.0, and the application source is public on GitHub.",
+      "Grok Bot, the hosted teammate app, does not publish its source for you to run. xAI has open-sourced other software: Grok Build, the coding-agent CLI, is Apache-2.0, and the older Grok-1 model weights were released under Apache-2.0. Those projects are not the Grok Bot service. Ork combines an Apache-2.0 baseline with new PolyForm Noncommercial work, and the application source is public on GitHub.",
   },
   {
     question: "Can I self-host Grok Bot?",
@@ -198,7 +200,7 @@ export const GROK_ALTERNATIVE_FAQ = [
   {
     question: "How is Ork different from Grok Bot?",
     answer:
-      "Both are persistent bots that can use a computer, sign in to tools, keep context, and run routines. Grok Bot hosts that computer for you and comes with paid Cursor plans and SuperGrok subscriptions. Ork is open source: you host it and choose the model, and team computers and private computers stay separate.",
+      "Both are persistent bots that can use a computer, sign in to tools, keep context, and run routines. Grok Bot hosts that computer for you and comes with paid Cursor plans and SuperGrok subscriptions. Ork is source-available: you host it and choose the model, and team computers and private computers stay separate.",
   },
   {
     question: "Is Ork just chat, like Grok Bot?",
@@ -308,7 +310,7 @@ ${sources}
 
 ${faq}
 
-- [Ork, the open source Grok Bot alternative](${SITE_URL}/)
+- [Ork, the source-available Grok Bot alternative](${SITE_URL}/)
 - [Sitemap](${SITE_URL}/sitemap-index.xml)
 `;
 }

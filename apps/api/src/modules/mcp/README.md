@@ -1,3 +1,6 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+
 # MCP
 
 This module manages MCP servers, credentials, assignments, OAuth setup, and approval cards, checking endpoint and command policy before connections are used. Protocol clients and execution adapters stay in workspace packages.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { BotSecretPutInput } from "@orkbot/contracts";
 import type * as Db from "@orkbot/db";
 import { recordSecurityEvent } from "@orkbot/db";

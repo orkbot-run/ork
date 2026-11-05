@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { ATTACHMENT_MAX_BASE64_LENGTH } from "@orkbot/contracts";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";

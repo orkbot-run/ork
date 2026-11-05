@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
 import { cancelComputerRunWork, screenLeaseIdForRun, toComputerRef } from "@orkbot/adapters";

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import { lookup } from "node:dns/promises";
 import { existsSync } from "node:fs";
 import { BlockList, isIP } from "node:net";

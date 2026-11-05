@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0
+
 import type { AccountExportRecord } from "@orkbot/contracts";
 import {
   ACCOUNT_EXPORT_MAX_HOME_FILE_BYTES,

@@ -1,4 +1,6 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import PlanCard from "../components/PlanCard.astro";
@@ -12,7 +14,7 @@ const starsLabel = await githubStarsLabel();
 <BaseLayout
   title="Pricing · Ork"
   markdownAlternate="/pricing.md"
-  description="Self-host Ork for free with the model and computer providers you choose."
+  description="Self-host Ork for permitted noncommercial use. Commercial licensing for new Ork work is quoted individually."
 >
   <div class="container">
     <Header starsLabel={starsLabel} />
@@ -25,6 +27,9 @@ const starsLabel = await githubStarsLabel();
           ))
         }
       </div>
+      <h2>Commercial self-hosting</h2>
+      <p>New Ork work requires a paid license for commercial use, including internal business automation.</p>
+      <p>Pricing is quoted individually. <a href="/license/#commercial">Request commercial terms</a>.</p>
     </main>
     <Footer />
   </div>
