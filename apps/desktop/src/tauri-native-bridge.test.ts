@@ -70,6 +70,7 @@ function runBridge(
     topLevel?: boolean;
     platform?: string;
     speech?: boolean;
+    computer?: boolean;
     randomByte?: number;
     timeOrigin?: number;
     invoke?: NativeInvoke;
@@ -82,6 +83,7 @@ function runBridge(
     proof: "fixture-native-proof",
     platform: options.platform ?? "darwin",
     speech: options.speech ?? false,
+    computer: options.computer ?? false,
   };
   const currentOrigin = options.currentOrigin ?? origin;
   const window = new TestWindow(
@@ -299,6 +301,28 @@ describe("Tauri native bridge", () => {
       expect(request.document).toBe(documentId());
       expect(Reflect.ownKeys(request).sort()).toEqual(["command", "document", "proof"]);
     }
+  });
+
+  it("exposes only consent controls for an app-managed server", async () => {
+    expect(desktop(runBridge().window).computer).toBeUndefined();
+    const harness = runBridge({ computer: true });
+    const computer = desktop(harness.window).computer;
+    expect(computer?.managesHostChoice).toBe(true);
+    await computer?.requestAccess();
+    await computer?.revokeAccess();
+    expect(harness.invoke.mock.calls.slice(1).map(([, request]) => request.command)).toEqual([
+      { type: "computer.requestAccess" },
+      { type: "computer.revokeAccess" },
+    ]);
+    const configure = vi.fn();
+    const unsubscribe = computer?.onConfigure(configure);
+    harness.signal("computer", undefined, "stale-document");
+    expect(configure).not.toHaveBeenCalled();
+    harness.signal("computer");
+    expect(configure).toHaveBeenCalledTimes(1);
+    unsubscribe?.();
+    harness.signal("computer");
+    expect(configure).toHaveBeenCalledTimes(1);
   });
 
   it("ignores stale document events even when the session number matches", () => {

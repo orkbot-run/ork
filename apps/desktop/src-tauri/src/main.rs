@@ -7,6 +7,8 @@ mod auth;
 mod browser_auth;
 mod credentials;
 mod document;
+mod host_computer;
+mod host_runner;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
 mod local_stack;
@@ -33,6 +35,7 @@ use tauri::{
     webview::NewWindowResponse, Emitter, Manager, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
@@ -40,6 +43,9 @@ struct DesktopState {
     directory: PathBuf,
     setup: Mutex<Option<settings::Setup>>,
     stack: local_stack::LocalStack,
+    host_computer: Option<host_computer::HostComputer>,
+    computer_choice: tokio::sync::Mutex<()>,
+    computer_prompt: std::sync::atomic::AtomicBool,
     active_window: Mutex<Option<String>>,
     sequence: AtomicU64,
     switching: tokio::sync::Mutex<()>,
@@ -89,6 +95,11 @@ fn cancel_native_document(app: &tauri::AppHandle, label: &str) {
             let owner = native::owner(label, &document);
             state.browser_auth.cancel_owner(&owner);
             state.speech.cancel_owner(&owner);
+            if let Some(host) = &state.host_computer {
+                if host.intent(&owner).is_some() {
+                    host.activate(None);
+                }
+            }
         }
     }
     auth::close_popup(app, label);
@@ -99,6 +110,9 @@ pub(crate) fn shutdown_native(app: &tauri::AppHandle) {
         state.stack.abort();
         state.browser_auth.cancel_all();
         state.speech.shutdown();
+        if let Some(host) = &state.host_computer {
+            host.close();
+        }
     }
 }
 
@@ -126,6 +140,9 @@ async fn native_command(
         let previous_owner = native::owner(window.label(), &previous);
         state.browser_auth.cancel_owner(&previous_owner);
         state.speech.cancel_owner(&previous_owner);
+        if let Some(host) = &state.host_computer {
+            host.retire(&previous_owner);
+        }
         auth::close_popup(&app, window.label());
     }
     let active = state
@@ -140,7 +157,24 @@ async fn native_command(
     let owner = document.owner();
     let unit = serde_json::Value::Null;
     match command {
-        Command::Hello { .. } => Ok(unit),
+        Command::Hello { .. } => {
+            if managed_computer_document(&app, &document) {
+                if let Some(host) = &state.host_computer {
+                    host.activate(Some(owner));
+                }
+            }
+            Ok(unit)
+        }
+        Command::ComputerRequestAccess => Ok(serde_json::json!(
+            request_computer_access(&app, &document).await?
+        )),
+        Command::ComputerRevokeAccess => {
+            if !managed_computer_document(&app, &document) {
+                return Err("Local computer access requires an app-managed local instance.".into());
+            }
+            revoke_computer_access(&app).await?;
+            Ok(unit)
+        }
         Command::PairingSync => {
             if state
                 .setup
@@ -299,6 +333,101 @@ async fn native_command(
     }
 }
 
+/// Only the app-owned stack can receive the private local host capability.
+fn managed_computer_document(app: &tauri::AppHandle, document: &native::Document) -> bool {
+    let state = app.state::<DesktopState>();
+    active_document(app).is_some_and(|active| active.owner() == document.owner())
+        && state.sessions.is_current(document)
+        && state
+            .setup
+            .lock()
+            .ok()
+            .and_then(|setup| setup.clone())
+            .is_some_and(|setup| {
+                setup.mode == settings::InstanceMode::New
+                    && setup.server_url.origin() == state.stack.web_url().origin()
+                    && document.origin.origin() == state.stack.web_url().origin()
+            })
+}
+
+fn native_text(app: &tauri::AppHandle, text: &str) -> String {
+    app.state::<Mutex<locale::Locale>>()
+        .lock()
+        .map(|locale| locale.text(text))
+        .unwrap_or_else(|_| text.into())
+}
+
+async fn request_computer_access(
+    app: &tauri::AppHandle,
+    document: &native::Document,
+) -> Result<bool, String> {
+    if !managed_computer_document(app, document) {
+        return Err("Local computer access requires an app-managed local instance.".into());
+    }
+    let state = app.state::<DesktopState>();
+    let host = state
+        .host_computer
+        .as_ref()
+        .ok_or("Local computer unavailable.")?;
+    let owner = document.owner();
+    host.activate(Some(owner.clone()));
+    let intent = host.intent(&owner).ok_or("Local computer unavailable.")?;
+    if !host.is_enabled() {
+        if state.computer_prompt.swap(true, Ordering::SeqCst) {
+            return Ok(false);
+        }
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let dialog = app.dialog()
+            .message(native_text(app, "Allow bots to use this computer?") + "\n\n" + &native_text(app, "Bots on this local instance can run commands, read and change files, and launch apps with your account’s permissions. You can revoke access from the app menu."))
+            .title(native_text(app, "Allow local computer access?"))
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(native_text(app, "Allow"), native_text(app, "Cancel")));
+        dialog.show(move |allowed| {
+            let _ = sender.send(allowed);
+        });
+        let allowed = receiver.await.unwrap_or(false);
+        state.computer_prompt.store(false, Ordering::SeqCst);
+        if !allowed {
+            return Ok(false);
+        }
+    }
+    let Ok(_switch) = state.switching.try_lock() else {
+        return Ok(false);
+    };
+    let _choice = state.computer_choice.lock().await;
+    if !managed_computer_document(app, document)
+        || !state.stack.matches_desired_stack().await
+        || !managed_computer_document(app, document)
+    {
+        return Ok(false);
+    }
+    if !host.grant(&owner, intent) {
+        return Ok(false);
+    }
+    if let Err(error) = state.stack.save_host_choice("this-mac").await {
+        host.revoke();
+        let _ = refresh_menu(app);
+        return Err(error);
+    }
+    // The window or consent can change while the server persists its choice.
+    if !managed_computer_document(app, document) || host.intent(&owner) != Some(intent) {
+        host.revoke();
+        return Ok(false);
+    }
+    let _ = refresh_menu(app);
+    Ok(host.is_enabled())
+}
+
+async fn revoke_computer_access(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = app.state::<DesktopState>();
+    if let Some(host) = &state.host_computer {
+        host.revoke();
+    }
+    let _ = refresh_menu(app);
+    let _choice = state.computer_choice.lock().await;
+    state.stack.save_host_choice("docker").await
+}
+
 fn is_setup_document(label: &str, url: &Url) -> bool {
     label == "setup"
         && url.username().is_empty()
@@ -430,6 +559,13 @@ async fn open_server(
     choice: settings::Setup,
 ) -> Result<(), String> {
     require_setup(window)?;
+    if choice.mode == settings::InstanceMode::New {
+        if let Some(host) = &state.host_computer {
+            host.activate(None);
+        }
+        state.stack.save_host_choice("docker").await?;
+        require_setup(window)?;
+    }
     let target = choice.server_url.clone();
     let label = format!("server-{}", state.sequence.fetch_add(1, Ordering::Relaxed));
     let origin = target.origin();
@@ -464,6 +600,7 @@ async fn open_server(
             &target,
             &proof,
             state.speech.available(),
+            choice.mode == settings::InstanceMode::New && state.host_computer.is_some(),
         ))
         // WebKit navigation policy callbacks include subframes. Their loads must
         // not retire the main document or open an artifact in the system browser.
@@ -552,6 +689,15 @@ async fn open_server(
         state.sessions.remove(previous.label());
         let _ = previous.destroy();
     }
+    if let Some(host) = &state.host_computer {
+        host.activate(
+            state
+                .sessions
+                .current(&label)
+                .filter(|document| managed_computer_document(app, document))
+                .map(|document| document.owner()),
+        );
+    }
     // The page may have requested pairing while it was still an inactive candidate.
     if let Some(document) = state.sessions.current(&label) {
         send_native_event(app, &document, "pairing", ());
@@ -610,7 +756,12 @@ fn refresh_menu(app: &tauri::AppHandle) -> tauri::Result<()> {
             app_open,
             local_server,
             updates: true,
-            ..Default::default()
+            computer_access: local_server && state.host_computer.is_some(),
+            revoke_computer_access: local_server
+                && state
+                    .host_computer
+                    .as_ref()
+                    .is_some_and(|host| host.is_enabled()),
         },
     )
 }
@@ -698,7 +849,12 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
         MenuAction::StopLocalServer => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                app.state::<DesktopState>().stack.stop().await;
+                let state = app.state::<DesktopState>();
+                if let Some(host) = &state.host_computer {
+                    host.activate(None);
+                }
+                state.stack.stop().await;
+                let _ = refresh_menu(&app);
             });
         }
         MenuAction::CheckForUpdates => {
@@ -708,7 +864,19 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
             });
         }
         MenuAction::Quit => app.exit(0),
-        MenuAction::ComputerAccess | MenuAction::RevokeComputerAccess => {}
+        MenuAction::ComputerAccess => {
+            if let Some(document) =
+                active_document(app).filter(|document| managed_computer_document(app, document))
+            {
+                send_native_event(app, &document, "computer", ());
+            }
+        }
+        MenuAction::RevokeComputerAccess => {
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = revoke_computer_access(&app).await;
+            });
+        }
         action => {
             let window = app
                 .webview_windows()
@@ -789,6 +957,7 @@ fn main() {
             } else {
                 app.path().resource_dir()?.join("stack")
             };
+            let host_computer = host_computer::HostComputer::prepare(&directory).ok();
             let callback_app = app.handle().clone();
             let stack = local_stack::LocalStack::new(
                 directory.join("stack"),
@@ -802,6 +971,7 @@ fn main() {
                         let _ = window.emit("desktop-stack-changed", state);
                     }
                 })),
+                host_computer.as_ref().map(|host| host.connection.clone()),
             );
             let auth_app = app.handle().clone();
             let browser_auth = browser_auth::BrowserAuth::new(Arc::new(move |owner, callback| {
@@ -821,6 +991,9 @@ fn main() {
             app.manage(DesktopState {
                 setup: Mutex::new(settings::load(&directory)),
                 stack,
+                host_computer,
+                computer_choice: tokio::sync::Mutex::new(()),
+                computer_prompt: std::sync::atomic::AtomicBool::new(false),
                 directory,
                 active_window: Mutex::new(None),
                 sequence: AtomicU64::new(1),
@@ -953,10 +1126,14 @@ mod tests {
             .manage(DesktopState {
                 directory: directory.path().to_owned(),
                 setup: Mutex::new(None),
+                host_computer: None,
+                computer_choice: tokio::sync::Mutex::new(()),
+                computer_prompt: std::sync::atomic::AtomicBool::new(false),
                 stack: local_stack::LocalStack::new(
                     directory.path().join("stack"),
                     directory.path().join("resources"),
                     "edge".into(),
+                    None,
                     None,
                 ),
                 active_window: Mutex::new(None),
