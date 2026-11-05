@@ -1,3 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Apache-2.0 covers imported tests; Ork's stale native-action regressions are PolyForm-covered.
+// Modified by Ork contributors to verify pending actions cannot cross feed or session changes.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
@@ -5,6 +11,8 @@ const fake = vi.hoisted(() => ({
   locked: false,
   onAppState: undefined as undefined | ((state: string) => void),
   onEvent: undefined as undefined | ((event: unknown) => void),
+  onResponse: undefined as undefined | ((response: unknown) => void),
+  lastResponse: null as unknown,
   actions: [] as Record<string, string>[],
   native: {
     incomingState: vi.fn(),
@@ -22,8 +30,11 @@ const fake = vi.hoisted(() => ({
 vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => fake.native }));
 vi.mock("expo-notifications", () => ({
   setNotificationCategoryAsync: async () => {},
-  getLastNotificationResponse: () => null,
-  addNotificationResponseReceivedListener: () => ({ remove() {} }),
+  getLastNotificationResponse: () => fake.lastResponse,
+  addNotificationResponseReceivedListener: (onResponse: (response: unknown) => void) => {
+    fake.onResponse = onResponse;
+    return { remove() {} };
+  },
   addNotificationReceivedListener: () => ({ remove() {} }),
 }));
 vi.mock("react-native", () => ({
@@ -75,6 +86,7 @@ import {
   startIncomingCalls,
   stopIncomingCalls,
 } from "./incoming-calls";
+import { registerCallPushToken } from "./push";
 
 const bot = { id: "bot-1", spaceId: "space-1", name: "Caller", color: "", avatarSet: undefined };
 const block = () => ({
@@ -95,8 +107,11 @@ beforeEach(() => {
   fake.locked = false;
   fake.onAppState = undefined;
   fake.onEvent = undefined;
+  fake.onResponse = undefined;
+  fake.lastResponse = null;
   fake.call = null;
   vi.clearAllMocks();
+  vi.mocked(registerCallPushToken).mockReset().mockResolvedValue(undefined);
   fake.native.incomingState.mockResolvedValue({ token: "", actions: [] });
   fake.rpc.mockImplementation(async (path: string) => {
     if (path === "spaces/list") return { current: { bots: [bot] }, spaces: [] };
@@ -168,6 +183,147 @@ describe("mobile incoming calls", () => {
     await vi.waitFor(() => expect(fake.startCall).toHaveBeenCalled());
     expect(endCall).toHaveBeenCalled();
     expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-1", true);
+  });
+  it.each([false, true])(
+    "abandons native actions if push registration outlives its feed (session changes: %s)",
+    async (sessionChanges) => {
+      stop = startIncomingCalls();
+      await tick();
+      let finishRegistration!: () => void;
+      vi.mocked(registerCallPushToken).mockImplementationOnce(
+        () => new Promise<void>((resolve) => (finishRegistration = resolve)),
+      );
+      fake.native.incomingState.mockResolvedValueOnce({
+        token: "voip-token",
+        actions: [
+          { action: "answer", callId: "call-old", botId: bot.id, expiresAt: block().expiresAt },
+        ],
+      });
+      fake.onAppState?.("active");
+      await tick();
+      expect(registerCallPushToken).toHaveBeenCalledWith({ voipToken: "voip-token" });
+      stop?.();
+      if (sessionChanges) fake.generation++;
+      stop = startIncomingCalls();
+      await tick();
+      finishRegistration();
+      await tick();
+      expect(fake.rpc.mock.calls.filter(([path]) => path === "threads/answerCall")).toEqual([]);
+      expect(fake.native.finishAnswer).not.toHaveBeenCalledWith("call-old", expect.anything());
+    },
+  );
+  const orgBot = {
+    id: "bot-org-b",
+    spaceId: "space-org-b",
+    name: "Other org caller",
+    color: "",
+    avatarSet: undefined,
+  };
+  const orgAnswerRpc = (callId: string) => [
+    "threads/answerCall",
+    { botId: orgBot.id, callId },
+    {
+      requestContext: expect.objectContaining({
+        headers: expect.objectContaining({ "x-orkbot-space-id": orgBot.spaceId }),
+      }),
+    },
+  ];
+  it("answers a native call from a bot outside the active organization", async () => {
+    stop = startIncomingCalls();
+    await tick();
+    // The account stream knows callers across every organization; spaces/list only the active one.
+    fake.onEvent?.([{ ...orgBot, incomingCall: { ...block(), callId: "call-b" } }]);
+    fake.native.incomingState.mockResolvedValue({
+      token: "",
+      actions: [
+        { action: "answer", callId: "call-b", botId: orgBot.id, expiresAt: block().expiresAt },
+      ],
+    });
+    fake.onAppState?.("active");
+    await vi.waitFor(() => expect(fake.rpc).toHaveBeenCalledWith(...orgAnswerRpc("call-b")));
+    expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-b", true);
+  });
+  it("answers a same-organization native call from the roster without waiting on the stream", async () => {
+    stop = startIncomingCalls();
+    await tick();
+    // No stream event: the active-organization roster must be enough, with no five-second wait.
+    fake.native.incomingState.mockResolvedValue({
+      token: "",
+      actions: [
+        { action: "answer", callId: "call-roster", botId: bot.id, expiresAt: block().expiresAt },
+      ],
+    });
+    fake.onAppState?.("active");
+    await vi.waitFor(() =>
+      expect(fake.rpc).toHaveBeenCalledWith(
+        "threads/answerCall",
+        { botId: bot.id, callId: "call-roster" },
+        expect.anything(),
+      ),
+    );
+    expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-roster", true);
+  });
+  it("answers a notification call from another organization once the stream reports it", async () => {
+    fake.lastResponse = {
+      actionIdentifier: "answer",
+      notification: {
+        request: { content: { data: { ...block(), kind: "incoming_call", botId: orgBot.id } } },
+      },
+    };
+    stop = startIncomingCalls();
+    await tick();
+    // Cold start: the answer waits for the account stream's snapshot instead of failing
+    // on the active organization's roster.
+    fake.onEvent?.([{ ...orgBot, incomingCall: { ...block(), callId: "call-1" } }]);
+    await vi.waitFor(() => expect(fake.rpc).toHaveBeenCalledWith(...orgAnswerRpc("call-1")));
+  });
+  it.each([false, true])(
+    "abandons a resolved notification caller when its feed changes (session changes: %s)",
+    async (sessionChanges) => {
+      await ring();
+      const response = {
+        actionIdentifier: "answer",
+        notification: {
+          request: { content: { data: { ...block(), kind: "incoming_call", botId: bot.id } } },
+        },
+      };
+      await Promise.all([
+        Promise.resolve().then(() => fake.onResponse?.(response)),
+        Promise.resolve().then(() => {
+          stop?.();
+          if (sessionChanges) fake.generation++;
+          stop = startIncomingCalls();
+        }),
+      ]);
+      await tick();
+      expect(fake.rpc.mock.calls.filter(([path]) => path === "threads/answerCall")).toEqual([]);
+      expect(fake.native.finishAnswer).not.toHaveBeenCalledWith("call-1", expect.anything());
+    },
+  );
+  it("abandons a cold-start notification answer when its session stops before the stream reports", async () => {
+    fake.lastResponse = {
+      actionIdentifier: "answer",
+      notification: {
+        request: { content: { data: { ...block(), kind: "incoming_call", botId: orgBot.id } } },
+      },
+    };
+    stop = startIncomingCalls();
+    await tick();
+    // The answer is parked waiting for the account stream's first snapshot.
+    stop?.();
+    stop = undefined;
+    // The app restarts under a new session and its stream reports the same ringing call.
+    fake.generation++;
+    stop = startIncomingCalls();
+    await tick();
+    fake.onEvent?.([{ ...orgBot, incomingCall: { ...block(), callId: "call-1" } }]);
+    await vi.waitFor(() => expect(fake.rpc).toHaveBeenCalledWith(...orgAnswerRpc("call-1")));
+    const answers = () => fake.rpc.mock.calls.filter((call) => call[0] === "threads/answerCall");
+    expect(answers()).toHaveLength(1);
+    // The stopped session's wait must not wake after its window and re-answer or fail the action.
+    await vi.advanceTimersByTimeAsync(5100);
+    expect(answers()).toHaveLength(1);
+    expect(fake.native.finishAnswer).not.toHaveBeenCalledWith("call-1", false);
   });
   it("declines through the same backend path as web", async () => {
     await respondToMobileCall(await ring(), "decline");

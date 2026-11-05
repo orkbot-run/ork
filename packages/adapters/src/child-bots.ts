@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork cancellation changes are PolyForm-covered.
+
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -388,7 +393,9 @@ export async function destroyBot(
     strictTeardown?: boolean;
   },
 ) {
+  context.signal.throwIfAborted();
   await deps.messagingInstallations?.removeForBot(bot);
+  context.signal.throwIfAborted();
   const [dedicated, activeRuns, routines] = await Promise.all([
     deps.prisma.computer.findUnique({
       where: {
@@ -406,6 +413,7 @@ export async function destroyBot(
     }),
     deps.prisma.routine.findMany({ where: { botId: bot.id }, select: { id: true } }),
   ]);
+  context.signal.throwIfAborted();
   const runIds = activeRuns.map((run) => run.id);
   await deps.prisma.run.updateMany({
     where: { id: { in: runIds } },
@@ -416,15 +424,19 @@ export async function destroyBot(
     ...activeRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
     ...routines.map((routine) => deps.jobs.cancel(routineJobKey(routine.id))),
   ]);
+  context.signal.throwIfAborted();
   const sharedComputer = await releaseTeamComputerScreen(deps, bot, dedicated?.id, context, {
     cancelRunWork: true,
   });
+  context.signal.throwIfAborted();
   if (dedicated?.providerRef) {
     const destroyed = deps.sandbox.destroy(toComputerRef(dedicated), context);
     await (options.strictTeardown ? destroyed : destroyed.catch(() => undefined));
   }
+  context.signal.throwIfAborted();
   // Keep the bot deletion transaction from committing if raw transcript cleanup fails.
   await removePiBotSessions(deps.dataDir, bot.userId, bot.id);
+  context.signal.throwIfAborted();
   const deletion = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ id: string; webhookSecretId: string | null }>>`
@@ -433,6 +445,7 @@ export async function destroyBot(
         WHERE id = ${bot.id} AND "spaceId" = ${bot.spaceId}
         FOR UPDATE
       `;
+      context.signal.throwIfAborted();
       // A concurrent removal of the same bot committed while this one waited for the lock;
       // it owns the deletion and the cleanup that follows.
       if (locked.length === 0) return null;

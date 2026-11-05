@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork cancellation changes are PolyForm-covered.
+
 import { execFileSync } from "node:child_process";
 import type * as fsPromises from "node:fs/promises";
 import {
@@ -36,6 +41,7 @@ import {
 } from "./child-bots.js";
 import { BrowserStoppedReleaseError } from "./computer-screens.js";
 import { LocalAgentHomeStore } from "./home.js";
+import { piSessionBotRoot, piSessionsRoot } from "./pi-session.js";
 
 const fsHooks = vi.hoisted(() => ({
   afterRealpath: undefined as ((resolved: string) => Promise<void>) | undefined,
@@ -283,68 +289,130 @@ describe("spawned bot archival", () => {
 });
 
 describe("destroyBot", () => {
-  it("removes its deleted pages' link tokens from the secret store once the delete commits", async () => {
-    const order: string[] = [];
-    const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
-      const result = await callback({
-        $queryRaw: vi.fn().mockResolvedValue([{ id: "bot-1" }]),
-        chatGroup: {
-          findMany: vi.fn().mockResolvedValue([]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+  it("starts no transcript or row cleanup when destruction returns after cancellation", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-cancel-delete-"));
+    let finishDestroy!: () => void;
+    const destruction = new Promise<void>((resolve) => {
+      finishDestroy = resolve;
+    });
+    const destroy = vi.fn(() => destruction);
+    const transaction = vi.fn().mockResolvedValue(null);
+    const stopping = new AbortController();
+    const cancelled = new Error("Organization deletion lost its claim");
+    const sessions = piSessionBotRoot(piSessionsRoot(root), "user-1", "bot-1");
+    const transcript = path.join(sessions, "turn.jsonl");
+    try {
+      await mkdir(sessions, { recursive: true });
+      await writeFile(transcript, "pending cleanup\n");
+      const prisma = {
+        computer: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "computer-1",
+            homeKey: "home-1",
+            kind: "docker",
+            providerRef: "container-1",
+          }),
         },
-        artifact: {
+        run: {
           findMany: vi.fn().mockResolvedValue([]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
-        },
-        page: {
           updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-          deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
-        secret: {
-          findMany: vi.fn().mockResolvedValue([{ id: "secret-1", ciphertext: "ref-1" }]),
-          deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+        routine: { findMany: vi.fn().mockResolvedValue([]) },
+        $transaction: transaction,
+      } as unknown as PrismaClient;
+      const deleting = destroyBot(
+        {
+          prisma,
+          sandbox: { destroy } as unknown as SandboxProvider,
+          home: {} as AgentHomeStore,
+          jobs: { cancel: vi.fn() } as unknown as JobPublisher,
+          dataDir: root,
         },
-        computerExecutionLease: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
-        $executeRaw: vi.fn().mockResolvedValue(0),
-        botDeletion: { create: vi.fn().mockResolvedValue({}) },
-        bot: { delete: vi.fn().mockResolvedValue({}) },
-      });
-      order.push("commit");
-      return result;
-    });
-    const prisma = {
-      computer: { findUnique: vi.fn().mockResolvedValue(null) },
-      run: {
-        findMany: vi.fn().mockResolvedValue([]),
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-      },
-      routine: { findMany: vi.fn().mockResolvedValue([]) },
-      $transaction: transaction,
-    } as unknown as PrismaClient;
-    const removeSecret = vi.fn(async () => {
-      order.push("store delete");
-    });
+        { id: "bot-1", spaceId: "workspace-1", userId: "user-1", name: "Gone", archivedAt: null },
+        { ...context, signal: stopping.signal },
+        { deleteMemories: true, strictTeardown: true },
+      );
+      deleting.catch(() => undefined);
+      await vi.waitFor(() => expect(destroy).toHaveBeenCalledOnce());
+      stopping.abort(cancelled);
+      finishDestroy();
 
-    await destroyBot(
-      {
-        prisma,
-        sandbox: {} as SandboxProvider,
-        home: {} as AgentHomeStore,
-        jobs: { cancel: vi.fn() } as unknown as JobPublisher,
-        secretStore: { delete: removeSecret },
-      },
-      { id: "bot-1", spaceId: "workspace-1", userId: "user-1", name: "Gone", archivedAt: null },
-      context,
-      { deleteMemories: true },
-    );
-
-    expect(removeSecret).toHaveBeenCalledWith(
-      "ref-1",
-      expect.objectContaining({ recordId: "secret-1" }),
-    );
-    expect(order).toEqual(["commit", "store delete"]);
+      await expect(deleting).rejects.toBe(cancelled);
+      expect(transaction).not.toHaveBeenCalled();
+      expect(await readFile(transcript, "utf8")).toBe("pending cleanup\n");
+    } finally {
+      finishDestroy();
+      await rm(root, { recursive: true, force: true });
+    }
   });
+
+  it.each([false, true])(
+    "removes its deleted pages' link tokens after commit, even if cancelled: %s",
+    async (cancelAfterCommit) => {
+      const order: string[] = [];
+      const stopping = new AbortController();
+      const transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => {
+        const result = await callback({
+          $queryRaw: vi.fn().mockResolvedValue([{ id: "bot-1" }]),
+          chatGroup: {
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          artifact: {
+            findMany: vi.fn().mockResolvedValue([]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+          },
+          page: {
+            updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+          secret: {
+            findMany: vi.fn().mockResolvedValue([{ id: "secret-1", ciphertext: "ref-1" }]),
+            deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+          },
+          computerExecutionLease: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+          $executeRaw: vi.fn().mockResolvedValue(0),
+          botDeletion: { create: vi.fn().mockResolvedValue({}) },
+          bot: { delete: vi.fn().mockResolvedValue({}) },
+        });
+        order.push("commit");
+        if (cancelAfterCommit) stopping.abort(new Error("Request ended after commit"));
+        return result;
+      });
+      const prisma = {
+        computer: { findUnique: vi.fn().mockResolvedValue(null) },
+        run: {
+          findMany: vi.fn().mockResolvedValue([]),
+          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        },
+        routine: { findMany: vi.fn().mockResolvedValue([]) },
+        $transaction: transaction,
+      } as unknown as PrismaClient;
+      const removeSecret = vi.fn(async () => {
+        order.push("store delete");
+      });
+
+      await destroyBot(
+        {
+          prisma,
+          sandbox: {} as SandboxProvider,
+          home: {} as AgentHomeStore,
+          jobs: { cancel: vi.fn() } as unknown as JobPublisher,
+          secretStore: { delete: removeSecret },
+        },
+        { id: "bot-1", spaceId: "workspace-1", userId: "user-1", name: "Gone", archivedAt: null },
+        { ...context, signal: stopping.signal },
+        { deleteMemories: true },
+      );
+
+      expect(removeSecret).toHaveBeenCalledWith(
+        "ref-1",
+        expect.objectContaining({ recordId: "secret-1" }),
+      );
+      expect(order).toEqual(["commit", "store delete"]);
+    },
+  );
 
   it("moves bot memories into shared memory before the cascading delete", async () => {
     const createDeletion = vi.fn().mockResolvedValue({});
