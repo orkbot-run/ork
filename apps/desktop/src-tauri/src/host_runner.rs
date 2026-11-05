@@ -1316,6 +1316,7 @@ fn base64_decode(value: &str) -> Result<Vec<u8>, String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     async fn collect(runner: &HostRunner, request: Value) -> Vec<Value> {
         let (tx, mut rx) = mpsc::channel(8);
         let (_cancel, cancelled) = watch::channel(false);
