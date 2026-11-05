@@ -1,0 +1,19 @@
+{
+  "name": "@orkbot/avatar",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node src/server.mjs",
+    "test": "node scripts/build.mjs && node --test test/generator.test.mjs test/server.test.mjs",
+    "check": "node --check src/generator.mjs && node --check src/renderer.mjs && node --check src/server.mjs && node --check public/app.js && node --check scripts/build.mjs"
+  },
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "exports": {
+    ".": "./src/generator.mjs"
+  }
+}

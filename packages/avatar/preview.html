@@ -1,0 +1,60 @@
+<!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ORK Avatar Service</title>
+    <link rel="stylesheet" href="./public/style.css" />
+    <script defer src="./dist/ork-avatar.js"></script>
+    <script defer src="./public/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a href="./preview.html">ORK<span>.</span></a
+      ><span>Soft 3D / offline</span>
+    </header>
+    <main>
+      <section class="controls">
+        <h1>Ork zapisany w numerze.</h1>
+        <form id="form" novalidate>
+          <label for="avatarString">Numer orka</label>
+          <textarea
+            id="avatarString"
+            name="avatarString"
+            rows="3"
+            required
+            autocomplete="off"
+            inputmode="numeric"
+            spellcheck="false"
+          ></textarea>
+          <div class="actions">
+            <button type="submit">Odtwórz</button
+            ><button type="button" id="classic">Klasyczny Orko</button>
+          </div>
+          <details>
+            <summary>Parametry</summary>
+            <div id="parameters"></div>
+            <button type="button" id="save">Zapisz jako numer</button>
+          </details>
+        </form>
+        <p id="error" role="alert"></p>
+      </section>
+      <section class="result" aria-label="Podgląd orka">
+        <div class="artboard">
+          <img id="avatar" alt="" width="600" height="600" />
+        </div>
+        <div class="result-bar">
+          <h2 id="name">Orko</h2>
+          <button type="button" id="download" disabled>Pobierz SVG</button>
+        </div>
+        <details>
+          <summary>Konfiguracja JSON</summary>
+          <pre id="config"></pre>
+        </details>
+      </section>
+    </main>
+  </body>
+</html>
