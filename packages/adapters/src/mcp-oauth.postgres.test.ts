@@ -208,8 +208,8 @@ describePostgres("MCP OAuth refresh (PostgreSQL contract)", () => {
     const tokens = await Promise.all(pending);
     expect(tokens.map((token) => token?.access_token)).toEqual(["access-1", "access-1"]);
     expect(refresh).toHaveBeenCalledTimes(1);
-    const row = await asSystem(monitor.prisma).secret.findUniqueOrThrow({
-      where: { id: server.secretId! },
+    const row = await asSystem(monitor.prisma).secret.findFirstOrThrow({
+      where: { mcpServers: { some: { id: server.id } } },
     });
     expect(JSON.parse(await secrets.load(row.ciphertext, row.id)).oauth.tokens.refresh_token).toBe(
       "refresh-1",
