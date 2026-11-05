@@ -208,6 +208,37 @@ describe("Tauri native bridge", () => {
     ]);
   });
 
+  it("syncs pairing after native activation once the document handshake succeeds", async () => {
+    let acceptHello = () => {};
+    const hello = new Promise<void>((resolve) => {
+      acceptHello = resolve;
+    });
+    const { invoke, signal } = runBridge({
+      invoke: (_name, request) => (request.command.type === "hello" ? hello : Promise.resolve()),
+    });
+    signal("pairing", null);
+    await Promise.resolve();
+    expect(invoke.mock.calls.map(([, request]) => request.command.type)).toEqual(["hello"]);
+    acceptHello();
+    await vi.waitFor(() =>
+      expect(invoke.mock.calls.map(([, request]) => request.command)).toEqual([
+        expect.objectContaining({ type: "hello" }),
+        { type: "pairing.sync" },
+      ]),
+    );
+  });
+
+  it("contains native activation pairing failures", async () => {
+    const { invoke, signal } = runBridge({
+      invoke: (_name, request) =>
+        request.command.type === "hello"
+          ? Promise.resolve()
+          : Promise.reject(new Error("Secure storage unavailable")),
+    });
+    signal("pairing", null);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledTimes(2));
+  });
+
   it("propagates a refused hello without sending later commands", async () => {
     const { window, invoke } = runBridge({
       invoke: () => Promise.reject(new Error("Native document refused")),
@@ -219,6 +250,8 @@ describe("Tauri native bridge", () => {
   it("routes typed commands with their arguments and the private document proofs", async () => {
     const { window, invoke, config, documentId, helloEpoch } = runBridge({ speech: true });
     const bridge = desktop(window);
+    await bridge.pairing?.sync();
+    await bridge.pairing?.clear();
     await bridge.badge?.set(7);
     await bridge.locale?.set("es-CL");
     await bridge.oauth.open?.("https://identity.example.com/authorize");
@@ -239,6 +272,8 @@ describe("Tauri native bridge", () => {
     await bridge.speech?.abort(4);
     expect(invoke.mock.calls.map(([, request]) => request.command)).toEqual([
       { type: "hello", epoch: helloEpoch },
+      { type: "pairing.sync" },
+      { type: "pairing.clear" },
       { type: "badge.set", count: 7 },
       { type: "locale.set", locale: "es-CL" },
       { type: "oauth.open", url: "https://identity.example.com/authorize" },

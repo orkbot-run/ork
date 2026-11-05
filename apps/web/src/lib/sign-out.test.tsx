@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native device pairing tests are Ork additions.
+
 // @vitest-environment jsdom
 
 import { act } from "react";
@@ -15,22 +19,36 @@ import { COMPOSER_ENTER_TO_SEND_STORAGE_KEY } from "./composer-enter-to-send-pre
 import { selectedSpaceId, selectSpace } from "./rpc";
 import { LOG_OUT_FAILED_KEY, signOut, syncLogOutFailure, useSignOut } from "./sign-out";
 
-const { requestSignOut, endCallBeforeSignOut } = vi.hoisted(() => ({
+const nativePairing = vi.hoisted(() => ({
+  enabled: false,
+  clear: vi.fn<() => Promise<void>>(async () => undefined),
+}));
+
+const { requestSignOut, endCallBeforeSignOut, sessionChangedUnderPage } = vi.hoisted(() => ({
   requestSignOut: vi.fn(),
   endCallBeforeSignOut: vi.fn(async () => undefined),
+  sessionChangedUnderPage: vi.fn(() => false),
 }));
 
 vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 vi.mock("./auth", () => ({ authClient: { signOut: requestSignOut } }));
+vi.mock("./desktop", () => ({
+  desktopBridge: () =>
+    nativePairing.enabled ? { pairing: { clear: nativePairing.clear } } : undefined,
+}));
 vi.mock("./call-session", async (importOriginal) => ({
   ...(await importOriginal<typeof CallSessionModule>()),
   endCallBeforeSignOut,
+  sessionChangedUnderPage,
 }));
 
 const location = { assign: vi.fn(), reload: vi.fn() };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  nativePairing.enabled = false;
+  sessionChangedUnderPage.mockReturnValue(false);
+  nativePairing.clear.mockResolvedValue(undefined);
   vi.stubGlobal("location", location);
   requestSignOut.mockResolvedValue({ data: { success: true }, error: null });
   localStorage.setItem(SIGNED_IN_USER_KEY, "user-1");
@@ -65,6 +83,54 @@ function mountSignOut(destination: string, onError: (message: string) => void = 
 }
 
 describe("signOut", () => {
+  it("clears native device access before sending the web sign-out request", async () => {
+    nativePairing.enabled = true;
+    let finishClear = () => {};
+    nativePairing.clear.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishClear = resolve;
+      }),
+    );
+    const signingOut = signOut("/sign-in");
+    await vi.waitFor(() => expect(nativePairing.clear).toHaveBeenCalledOnce());
+    expect(requestSignOut).not.toHaveBeenCalled();
+    finishClear();
+    await signingOut;
+    expect(nativePairing.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      requestSignOut.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(location.assign).toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("does not sign out another account after native cleanup finishes", async () => {
+    nativePairing.enabled = true;
+    sessionChangedUnderPage.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await signOut("/sign-in");
+    expect(nativePairing.clear).toHaveBeenCalledOnce();
+    expect(requestSignOut).not.toHaveBeenCalled();
+    expect(location.reload).toHaveBeenCalledOnce();
+  });
+
+  it.each(["throw", "reject"])("still signs out when native cleanup fails (%s)", async (mode) => {
+    nativePairing.enabled = true;
+    if (mode === "throw")
+      nativePairing.clear.mockImplementationOnce(() => {
+        throw new Error("Unavailable");
+      });
+    else nativePairing.clear.mockRejectedValueOnce(new Error("Unavailable"));
+    await signOut("/sign-in");
+    expect(requestSignOut).toHaveBeenCalledOnce();
+    expect(location.assign).toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("clears native access even when the web sign-out request fails", async () => {
+    nativePairing.enabled = true;
+    requestSignOut.mockRejectedValueOnce(new Error("Network"));
+    await signOut("/sign-in");
+    expect(nativePairing.clear).toHaveBeenCalledOnce();
+    expect(location.reload).toHaveBeenCalledOnce();
+  });
+
   it("ends the call first, then leaves for the destination signed out", async () => {
     await signOut("/sign-in");
     expect(endCallBeforeSignOut.mock.invocationCallOrder[0]).toBeLessThan(

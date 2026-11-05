@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved. New native auth hints are Ork additions.
+// Inherited Apache-2.0 material is preserved. New native auth hints and pairing lifecycle are Ork additions.
 
 /** A native host can share its server session with an SSO popup without exposing commands. */
 export interface OrkNativeAuth {
@@ -86,6 +86,13 @@ export function isDesktopMenuCommand(value: unknown): value is DesktopMenuComman
 }
 
 export interface OrkDesktop {
+  /** Optional for compatibility with hosts without native device pairing. */
+  pairing?: {
+    /** Native code derives the current server and account from the window session. */
+    sync: () => Promise<void>;
+    /** Revokes and removes native device access before the web session signs out. */
+    clear: () => Promise<void>;
+  };
   /** Optional for compatibility with older desktop releases. */
   badge?: {
     set: (count: number) => Promise<boolean>;

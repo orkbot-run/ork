@@ -5,6 +5,7 @@
 
 mod auth;
 mod browser_auth;
+mod credentials;
 mod document;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
@@ -12,6 +13,7 @@ mod local_stack;
 mod locale;
 mod menu;
 mod native;
+mod pairing;
 mod profile;
 mod server;
 mod settings;
@@ -43,6 +45,7 @@ struct DesktopState {
     sessions: native::Sessions,
     browser_auth: browser_auth::BrowserAuth,
     speech: speech::SpeechManager,
+    pairings: pairing::Pairings,
     warm_generation: AtomicU64,
 }
 
@@ -137,6 +140,49 @@ async fn native_command(
     let unit = serde_json::Value::Null;
     match command {
         Command::Hello { .. } => Ok(unit),
+        Command::PairingSync => {
+            if state
+                .setup
+                .lock()
+                .map_err(|_| "Desktop state unavailable.")?
+                .as_ref()
+                .is_some_and(|setup| setup.mode == settings::InstanceMode::New)
+            {
+                return Ok(unit);
+            }
+            let origin = pairing::secure_origin(&document.origin)?;
+            let attempt = state.pairings.attempt(&origin)?;
+            let cookie_window = window.clone();
+            let cookie_url = origin
+                .join("/api/auth/get-session")
+                .map_err(|_| "Invalid server.")?;
+            // WebView2 cookie access must run outside the UI thread. Cookies stay native.
+            let cookies = tokio::task::spawn_blocking(move || {
+                cookie_window.cookies_for_url(cookie_url).map(|cookies| {
+                    cookies
+                        .iter()
+                        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+                        .collect::<Vec<_>>()
+                        .join("; ")
+                })
+            })
+            .await
+            .map_err(|_| "Could not read the server session.")?
+            .map_err(|_| "Could not read the server session.")?;
+            state
+                .pairings
+                .sync(&origin, &cookies, || {
+                    attempt.is_current()
+                        && state.sessions.is_current(&document)
+                        && active_document(&app).is_some_and(|current| current.owner() == owner)
+                })
+                .await?;
+            Ok(unit)
+        }
+        Command::PairingClear => {
+            state.pairings.clear(&document.origin).await?;
+            Ok(unit)
+        }
         Command::WindowState => Ok(serde_json::json!({
             "minimized": window.is_minimized().unwrap_or(false),
             "maximized": window.is_maximized().unwrap_or(false),
@@ -498,6 +544,10 @@ async fn open_server(
         state.sessions.remove(previous.label());
         let _ = previous.destroy();
     }
+    // The page may have requested pairing while it was still an inactive candidate.
+    if let Some(document) = state.sessions.current(&label) {
+        send_native_event(app, &document, "pairing", ());
+    }
     window.hide().map_err(|_| "Could not hide setup")?;
     let _ = refresh_menu(app);
     Ok(())
@@ -770,6 +820,7 @@ fn main() {
                 sessions: native::Sessions::default(),
                 browser_auth,
                 speech: speech::SpeechManager::new(speech_helper),
+                pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
             });
             app.manage(updates::UpdateCheck::default());
@@ -906,6 +957,7 @@ mod tests {
                 sessions: native::Sessions::default(),
                 browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
                 speech: speech::SpeechManager::new(PathBuf::new()),
+                pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
             })
             .plugin(tauri_plugin_updater::Builder::new().build())

@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native device pairing integration is an Ork addition.
+
 import { t } from "@lingui/core/macro";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "./auth";
 import { endCallBeforeSignOut, forgetSignedInUser, sessionChangedUnderPage } from "./call-session";
 import { clearComposerDrafts } from "./composer-draft";
+import { desktopBridge } from "./desktop";
 import { clearSpaceSelection } from "./rpc";
 
 /** Kept across the reload after a failed sign-out, so the fresh page can say it failed. */
@@ -18,6 +23,14 @@ export async function signOut(destination: string): Promise<void> {
   // Hang up while the session still exists, so the server-side hang-up is authorized.
   await endCallBeforeSignOut();
   // The account changed while hanging up: signing out now would sign out the other account.
+  if (sessionChangedUnderPage()) {
+    window.location.reload();
+    return;
+  }
+  // Local device access ends even if the web sign-out request fails.
+  await Promise.resolve()
+    .then(() => desktopBridge()?.pairing?.clear())
+    .catch(() => undefined);
   if (sessionChangedUnderPage()) {
     window.location.reload();
     return;

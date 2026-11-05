@@ -61,7 +61,14 @@ if (
     configurable: false,
     writable: false,
   });
+  subscribe<void>("pairing", () => {
+    void call<void>("pairing.sync").catch(() => undefined);
+  });
   const bridge: OrkDesktop = {
+    pairing: {
+      sync: () => call("pairing.sync"),
+      clear: () => call("pairing.clear"),
+    },
     platform: config.platform,
     nativeWindowFrame: config.platform !== "darwin",
     badge: { set: (count) => call<boolean>("badge.set", { count }) },

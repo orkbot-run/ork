@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native device pairing tests are Ork additions.
+
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -7,7 +11,7 @@ import { expect, it, vi } from "vitest";
 
 interface SessionState {
   isPending: boolean;
-  data: { user: { id: string } } | null;
+  data: { user: { id: string }; session?: { id: string } } | null;
   error: { status: number } | null;
 }
 
@@ -19,10 +23,16 @@ const capability = vi.hoisted(() => ({
   session: null as SessionState | null,
   authMounts: 0,
   syncCallIdentity: vi.fn(),
+  nativePairing: false,
+  syncPairing: vi.fn(async () => undefined),
 }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+}));
+vi.mock("./lib/desktop", () => ({
+  desktopBridge: () =>
+    capability.nativePairing ? { pairing: { sync: capability.syncPairing } } : undefined,
 }));
 vi.mock("./lib/bootstrap", () => ({
   getTicketBoardEnabled: () => capability.enabled,
@@ -221,3 +231,75 @@ it("tells the call session who is signed in, without counting an unreachable loo
     vi.unstubAllGlobals();
   }
 });
+
+it("syncs native pairing only for settled sessions, including same-account session replacement", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const render = async (session: SessionState) => {
+    capability.session = session;
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/app"]}>
+          <App />
+        </MemoryRouter>,
+      ),
+    );
+  };
+  const session = (id: string): SessionState => ({
+    isPending: false,
+    data: { user: { id: "user-1" }, session: { id } },
+    error: null,
+  });
+  try {
+    capability.nativePairing = true;
+    capability.syncPairing.mockClear();
+    await render({ isPending: true, data: null, error: null });
+    expect(capability.syncPairing).not.toHaveBeenCalled();
+    await render({ isPending: false, data: null, error: { status: 503 } });
+    expect(capability.syncPairing).not.toHaveBeenCalled();
+    await render(session("session-1"));
+    expect(capability.syncPairing).toHaveBeenCalledTimes(1);
+    await render(session("session-1"));
+    expect(capability.syncPairing).toHaveBeenCalledTimes(1);
+    await render(session("session-2"));
+    expect(capability.syncPairing).toHaveBeenCalledTimes(2);
+    await render({ isPending: false, data: null, error: null });
+    expect(capability.syncPairing).toHaveBeenCalledTimes(3);
+    expect(capability.syncPairing.mock.calls.every((args) => args.length === 0)).toBe(true);
+  } finally {
+    capability.session = null;
+    capability.nativePairing = false;
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each(["throw", "reject"])(
+  "keeps native pairing failures out of the app error boundary (%s)",
+  async (mode) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    try {
+      capability.nativePairing = true;
+      if (mode === "throw")
+        capability.syncPairing.mockImplementationOnce(() => {
+          throw new Error("Unavailable");
+        });
+      else capability.syncPairing.mockRejectedValueOnce(new Error("Unavailable"));
+      await act(async () =>
+        root.render(
+          <MemoryRouter initialEntries={["/app"]}>
+            <App />
+          </MemoryRouter>,
+        ),
+      );
+      expect(container.textContent).toBe("Shell");
+    } finally {
+      capability.nativePairing = false;
+      await act(async () => root.unmount());
+      vi.unstubAllGlobals();
+    }
+  },
+);

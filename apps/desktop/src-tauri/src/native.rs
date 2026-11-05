@@ -35,6 +35,10 @@ pub struct Document {
 pub enum Command {
     #[serde(rename = "hello")]
     Hello { epoch: u64 },
+    #[serde(rename = "pairing.sync")]
+    PairingSync,
+    #[serde(rename = "pairing.clear")]
+    PairingClear,
     #[serde(rename = "window.state")]
     WindowState,
     #[serde(rename = "window.close")]

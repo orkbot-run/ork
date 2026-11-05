@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native device pairing integration is an Ork addition.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { LinkFavicons } from "@orkbot/chat-ui/web";
 import { LinkFaviconsContext, RemoteImagesContext } from "@orkbot/chat-ui/web";
@@ -159,6 +163,12 @@ function SessionApp() {
   useEffect(() => {
     if (gate === "authenticated" || gate === "anonymous") setQueryUser(analyticsUserId ?? null);
   }, [gate, analyticsUserId]);
+  useEffect(() => {
+    if (gate !== "authenticated" && gate !== "anonymous") return;
+    void Promise.resolve()
+      .then(() => desktopBridge()?.pairing?.sync())
+      .catch(() => undefined);
+  }, [gate, analyticsUserId, session.data?.session?.id]);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
   const nextHolding = holdUnreachableGate(gate, holdingUnreachable);
   if (nextHolding !== holdingUnreachable) setHoldingUnreachable(nextHolding);
