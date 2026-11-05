@@ -117,10 +117,17 @@ vi.mock("react-native-svg", () => {
       d?: string;
       fill?: string;
       stopColor?: string;
+      offset?: number | string;
     }) =>
       createElement(
         tag,
-        { "data-d": props.d, "data-fill": props.fill, "data-stop-color": props.stopColor },
+        {
+          "data-d": props.d,
+          "data-fill": props.fill,
+          "data-stop-color": props.stopColor,
+          "data-offset": props.offset,
+          "data-offset-type": typeof props.offset,
+        },
         children,
       );
   return {
@@ -334,6 +341,20 @@ describe("BotAvatar", () => {
     expect(view.querySelector("img, image")).toBeNull();
     expect(view.querySelectorAll("ellipse")).toHaveLength(2);
     expect(view.querySelector("radialGradient")).not.toBeNull();
+  });
+
+  it("keeps the clay gradients' middle stops at native numeric fractional positions", () => {
+    const view = render("#3EC5A8", "orkbot");
+    const middleStops = [
+      view.querySelector("linearGradient stop:nth-child(2)"),
+      view.querySelector("radialGradient stop:nth-child(2)"),
+    ];
+    expect(middleStops.map((stop) => stop?.getAttribute("data-offset"))).toEqual(["0.53", "0.4"]);
+    // react-native-svg treats unsupported decimal strings as zero, changing the gradient.
+    expect(middleStops.map((stop) => stop?.getAttribute("data-offset-type"))).toEqual([
+      "number",
+      "number",
+    ]);
   });
 
   it("keeps a custom picture when the stored set is Ork", () => {

@@ -1,12 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openBotPanelTab, signup } from "./helpers";
 
-test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo) => {
+test("new bots use Ork generator avatars and keep explicit appearance choices", async ({
+  page,
+}, testInfo) => {
   const stamp = Date.now();
   await signup(page, `avatar-studio-${stamp}@orkbot.test`, "password12", "Avatar Studio");
   await completeOnboarding(page);
   await page.goto("/app");
   await page.waitForURL(/\/app\/[^/]+$/);
+  await expect(page.locator(".orkbot-logo-avatar").first()).toBeVisible();
 
   await page.getByTestId("bot-settings-trigger").click();
   const settings = page.getByTestId("bot-settings");
@@ -20,10 +23,13 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   await expect(studio.getByRole("tab", { name: "Upload", exact: true })).toBeVisible();
   await expect(studio.getByTestId("avatar-studio-bot-tab")).toBeVisible();
 
-  await expect(studio.getByRole("tab", { name: "Original", exact: true })).toHaveAttribute(
+  await expect(studio.getByRole("tab", { name: "Ork", exact: true })).toHaveAttribute(
     "aria-selected",
     "true",
   );
+  await expect(studio.locator(".orkbot-logo-avatar").first()).toBeVisible();
+  await captureScreenshot(page, testInfo, "avatar-studio-generator-default");
+  await studio.getByRole("tab", { name: "Original", exact: true }).click();
   const defaultLook = studio.getByTestId("avatar-studio-default");
   const wedge = studio.getByRole("button", { name: "wedge", exact: true });
   await expect(defaultLook).toHaveAttribute("aria-pressed", "true");
@@ -62,3 +68,6 @@ test("bot settings open Avatar Studio on the Bot tab", async ({ page }, testInfo
   ).toHaveAttribute("aria-selected", "true");
   await captureScreenshot(page, testInfo, "avatar-studio-orkbot-set");
 });
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 coverage is preserved. Generator avatar defaults are an Ork addition.

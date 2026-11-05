@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 contract tests are preserved. Ork default coverage is a PolyForm-covered addition.
+
 import { describe, expect, it } from "vitest";
 import {
   AgentImportCreateInput,
@@ -76,7 +80,11 @@ describe("per-bot avatar sets", () => {
     expect(resolveBotAvatarSet("future-set")).toBe("organic");
     expect(resolveBotAvatarSet("organic")).toBe("organic");
     expect(resolveBotAvatarSet("orkbot")).toBe("orkbot");
-    expect(DEFAULT_NEW_BOT_AVATAR_SET).toBe("organic");
+  });
+
+  it("uses the Ork set for new bots while retaining the legacy metadata fallback", () => {
+    expect(DEFAULT_NEW_BOT_AVATAR_SET).toBe("orkbot");
+    expect(CreateBotInput.parse({ name: "Scout" }).avatarSet).toBeUndefined();
   });
 
   it("accepts an explicit set on create/update and rejects unrecognised writes", () => {

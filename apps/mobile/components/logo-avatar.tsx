@@ -137,7 +137,7 @@ export function LogoAvatar({
         </ClipPath>
         <LinearGradient id={`fill-${id}`} {...lighting.body}>
           <Stop stopColor={paint.light} />
-          <Stop offset=".53" stopColor={paint.base} />
+          <Stop offset={0.53} stopColor={paint.base} />
           <Stop offset="1" stopColor={paint.shadow} />
         </LinearGradient>
         <RadialGradient
@@ -147,7 +147,7 @@ export function LogoAvatar({
           r={lighting.crown.r}
         >
           <Stop stopColor="white" stopOpacity={lighting.crown.peak} />
-          <Stop offset=".4" stopColor="white" stopOpacity={lighting.crown.shoulder} />
+          <Stop offset={0.4} stopColor="white" stopOpacity={lighting.crown.shoulder} />
           <Stop offset="1" stopColor="white" stopOpacity="0" />
         </RadialGradient>
         <ClipPath id={`pages-${id}`}>

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 avatar contracts are preserved. The Ork default is a PolyForm-covered addition.
+
 import * as z from "zod";
 
 /** Per-bot set. Missing values belong to the original renderer. */
@@ -5,7 +9,7 @@ export const BotAvatarSetSchema = z
   .enum(["organic", "orkbot", "rakazo"])
   .transform((value) => (value === "rakazo" ? "orkbot" : value));
 export type BotAvatarSet = z.infer<typeof BotAvatarSetSchema>;
-export const DEFAULT_NEW_BOT_AVATAR_SET: BotAvatarSet = "organic";
+export const DEFAULT_NEW_BOT_AVATAR_SET: BotAvatarSet = "orkbot";
 
 export function resolveBotAvatarSet(value?: string | null): BotAvatarSet {
   return value === "orkbot" || value === "rakazo" ? "orkbot" : "organic";
