@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 call cleanup tests are preserved; central account cleanup coverage is an Ork addition.
 
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -36,7 +38,7 @@ vi.mock("./voice", () => ({
   stopSpeaking: vi.fn(),
 }));
 
-import { resetApiBase, saveApiBase } from "./api";
+import { clearProductAccountSession, resetApiBase, saveApiBase } from "./api";
 import type { CallDeps } from "./call-session";
 import { startCall } from "./call-session";
 import { currentSessionGeneration, saveSessionToken } from "./session";
@@ -62,6 +64,13 @@ afterEach(() => {
 it.each([
   ["a server change", () => saveApiBase("https://second-server.example")],
   ["a reset to the default server", () => resetApiBase()],
+  [
+    "a central account change",
+    async () => {
+      await clearProductAccountSession();
+      return { ok: true };
+    },
+  ],
 ])("hangs up on the old server before %s clears its session", async (_name, change) => {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), headers: new Headers(init?.headers) });

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 OIDC tests are preserved. Public-client coverage is an Ork addition.
+
 import { createHash, createHmac, generateKeyPairSync, sign } from "node:crypto";
 import type * as Db from "@orkbot/db";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -29,6 +34,7 @@ let corruptSignature = false;
 let omitIdToken = false;
 let replayedIdToken: string | undefined;
 let userInfoClaims: Record<string, unknown>;
+let tokenRequests: { headers: Headers; body: URLSearchParams }[];
 const codes = new Map<
   string,
   { challenge: string; nonce: string; claims: Record<string, unknown> }
@@ -225,6 +231,7 @@ beforeEach(() => {
   corruptSignature = false;
   omitIdToken = false;
   replayedIdToken = undefined;
+  tokenRequests = [];
   userInfoClaims = { sub: "subject-1", email: "sso@example.test", email_verified: true };
   codes.clear();
   vi.stubGlobal(
@@ -247,6 +254,7 @@ beforeEach(() => {
       if (url.pathname === "/jwks") return json({ keys: [jwk] });
       if (url.pathname === "/token") {
         const body = new URLSearchParams(String(init?.body));
+        tokenRequests.push({ headers: new Headers(init?.headers), body });
         const code = body.get("code")!;
         const value = codes.get(code);
         codes.delete(code);
@@ -274,6 +282,51 @@ afterEach(() => {
 });
 
 describe("OIDC callbacks", () => {
+  it("authenticates a public client with PKCE and no client secret or Authorization header", async () => {
+    const redirectURI = "http://127.0.0.1:45173/callback";
+    setup({
+      oidc: {
+        issuer,
+        clientId: "test-client",
+        redirectURI,
+        name: "SSO",
+        scopes: ["openid", "email", "profile"],
+        allowSignupBypass: false,
+      },
+    });
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    expect(rows("session")).toHaveLength(1);
+    expect(tokenRequests).toHaveLength(1);
+    const tokenRequest = tokenRequests[0]!;
+    expect(tokenRequest.body.get("client_id")).toBe("test-client");
+    expect(tokenRequest.body.get("redirect_uri")).toBe(redirectURI);
+    expect(tokenRequest.body.has("client_secret")).toBe(false);
+    expect(tokenRequest.headers.has("authorization")).toBe(false);
+    expect(tokenRequest.body.get("code_verifier")).toBeTruthy();
+  });
+
+  it.each(["nonce", "signature", "audience"])(
+    "rejects public-client ID tokens with an invalid %s",
+    async (kind) => {
+      setup({
+        oidc: {
+          issuer,
+          clientId: "test-client",
+          name: "SSO",
+          scopes: [],
+          allowSignupBypass: false,
+        },
+      });
+      const callback = await start();
+      const code = codes.get("code-1")!;
+      if (kind === "nonce") code.nonce = "wrong-nonce";
+      if (kind === "signature") corruptSignature = true;
+      if (kind === "audience") code.claims.aud = "other-client";
+      expect((await request(callback)).headers.get("location")).toContain("error=");
+      expect(rows("session")).toHaveLength(0);
+    },
+  );
+
   it.each([true, false, undefined])(
     "preserves email_verified=%s through the real callback",
     async (verified) => {
@@ -815,6 +868,141 @@ describe("OIDC callbacks", () => {
   it("refuses password-off without an alternative", () => {
     expect(() => setup({ passwordAuth: false, oidc: undefined })).toThrow(/requires OIDC/);
   });
+});
+
+describe("Accounts-only session policy", () => {
+  it("does not renew a product session beyond its central-authentication proof", async () => {
+    setup({ passwordAuth: false });
+    await signIn();
+    const session = rows("session")[0]!;
+    const expiresAt = Number(session.expiresAt);
+    const proof = rows("verification").find(
+      (value) => value.identifier === `oidc-session-v1-${session.id}`,
+    )!;
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Number(session.createdAt) + 2 * 24 * 60 * 60_000);
+    expect(await (await request("/get-session")).json()).toMatchObject({
+      session: { id: session.id, expiresAt: new Date(expiresAt).toISOString() },
+    });
+    expect(Number(rows("session")[0]!.expiresAt)).toBe(expiresAt);
+    expect(Number(proof.expiresAt)).toBe(expiresAt);
+
+    vi.setSystemTime(expiresAt + 1_000);
+    expect(await (await request("/get-session")).json()).toBeNull();
+    cookies = "";
+    expect(
+      await (await request("/get-session", undefined, String(session.token))).json(),
+    ).toBeNull();
+  });
+
+  it("accepts a session created by the current OIDC callback", async () => {
+    setup({ passwordAuth: false });
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    const session = rows("session")[0]!;
+    expect(await (await request("/get-session")).json()).toMatchObject({
+      session: { id: session.id },
+    });
+    cookies = "";
+    expect(
+      await (await request("/get-session", undefined, String(session.token))).json(),
+    ).toMatchObject({
+      session: { id: session.id },
+    });
+  });
+
+  it("rejects cookie and bearer sessions without central sign-in provenance", async () => {
+    setup({ passwordAuth: false });
+    await signIn();
+    const session = rows("session")[0]!;
+    const marker = rows("verification").findIndex(
+      (value) => value.identifier === `oidc-session-v1-${session.id}`,
+    );
+    expect(marker).toBeGreaterThanOrEqual(0);
+    state.db.verification!.splice(marker, 1);
+    expect(await (await request("/get-session")).json()).toBeNull();
+    cookies = "";
+    expect(
+      await (await request("/get-session", undefined, String(session.token))).json(),
+    ).toBeNull();
+    expect(rows("account").some((account) => account.providerId === "oidc")).toBe(true);
+  });
+
+  it("requires central reauthentication instead of legacy passwords or emailed codes", async () => {
+    setup({ passwordAuth: false });
+    await signIn();
+    const user = rows("user")[0]!;
+    const context = await auth.$context;
+    state.db.account!.push({
+      id: "legacy-credential",
+      providerId: "credential",
+      accountId: user.id,
+      userId: user.id,
+      password: await context.password.hash("legacy-password-123"),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(await (await request("/account-security")).json()).toMatchObject({
+      hasPassword: false,
+      emailDeletion: false,
+      passwordChangeEnabled: false,
+    });
+    for (const proof of [{ password: "legacy-password-123" }, { code: "123456" }]) {
+      expect((await request("/confirm-identity", proof)).status).toBe(403);
+    }
+    expect((await request("/request-identity-code", {})).status).toBe(403);
+    expect((await request("/request-account-deletion", {})).status).toBeGreaterThanOrEqual(400);
+    expect((await request("/delete-user", { password: "legacy-password-123" })).status).toBe(403);
+    expect((await request("/delete-user", { token: "legacy-delete-token" })).status).toBe(403);
+    expect(rows("user")).toHaveLength(1);
+    expect(sentCodes).toHaveLength(0);
+    expect(
+      (await request(await start(undefined, false, `${origin}/app`, true))).headers.get("location"),
+    ).toBe(`${origin}/app`);
+    expect((await request("/delete-user", {})).status).toBe(200);
+    expect(rows("user")).toHaveLength(0);
+  });
+
+  it("rejects an old local-credential session after switching to Accounts-only", async () => {
+    setup();
+    await request("/sign-up/email", {
+      email: "local@example.test",
+      password: "test-password-123",
+      name: "Local",
+    });
+    const session = rows("session")[0]!;
+    setup({ passwordAuth: false });
+    expect(await (await request("/get-session")).json()).toBeNull();
+    cookies = "";
+    expect(
+      await (await request("/get-session", undefined, String(session.token))).json(),
+    ).toBeNull();
+  });
+});
+
+it("ignores an old local identity confirmation and accepts fresh central reauthentication", async () => {
+  setup({ passwordAuth: false });
+  await signIn();
+  const session = rows("session")[0]!;
+  const identity = { sessionId: String(session.id), userId: String(session.userId) };
+  const context = await auth.$context;
+  await context.internalAdapter.createVerificationValue({
+    identifier: `identity-confirmed-${session.id}`,
+    value: identity.userId,
+    expiresAt: new Date(Date.now() + 300_000),
+  });
+  expect(await auth.hasRecentIdentityConfirmation(identity)).toBe(false);
+  expect(
+    (await request(await start(undefined, false, `${origin}/app`, true))).headers.get("location"),
+  ).toBe(`${origin}/app`);
+  const current = (await (await request("/get-session")).json()) as {
+    session: { id: string };
+  };
+  expect(
+    await auth.hasRecentIdentityConfirmation({
+      sessionId: current.session.id,
+      userId: identity.userId,
+    }),
+  ).toBe(true);
 });
 
 describe("SSO-only account deletion", () => {
@@ -1414,36 +1602,23 @@ describe("SSO-only account deletion", () => {
     expect((await request("/delete-user", { token: otherCode })).status).not.toBe(200);
     expect(rows("user")).toHaveLength(2);
   });
-  it.each([true, false])(
-    "keeps password deletion for credential accounts (password auth: %s)",
-    async (passwordAuth) => {
-      setup();
-      await request("/sign-up/email", {
-        email: "local@example.test",
-        password: "test-password-123",
-        name: "Local",
-      });
-      setup({ passwordAuth });
-      expect(await (await request("/account-security")).json()).toMatchObject({
-        hasPassword: true,
-        passwordChangeEnabled: passwordAuth,
-      });
-      if (!passwordAuth) {
-        expect(
-          (
-            await request("/change-password", {
-              currentPassword: "test-password-123",
-              newPassword: "new-password-123",
-            })
-          ).status,
-        ).toBe(403);
-      }
-      expect((await request("/request-account-deletion", {})).status).toBe(400);
-      expect((await request("/delete-user", {})).status).toBe(400);
-      expect((await request("/delete-user", { password: "wrong-password" })).status).toBe(400);
-      expect((await request("/delete-user", { password: "test-password-123" })).status).toBe(200);
-    },
-  );
+  it("keeps password deletion for credential accounts when password auth is enabled", async () => {
+    setup();
+    await request("/sign-up/email", {
+      email: "local@example.test",
+      password: "test-password-123",
+      name: "Local",
+    });
+    setup({ passwordAuth: true });
+    expect(await (await request("/account-security")).json()).toMatchObject({
+      hasPassword: true,
+      passwordChangeEnabled: true,
+    });
+    expect((await request("/request-account-deletion", {})).status).toBe(400);
+    expect((await request("/delete-user", {})).status).toBe(400);
+    expect((await request("/delete-user", { password: "wrong-password" })).status).toBe(400);
+    expect((await request("/delete-user", { password: "test-password-123" })).status).toBe(200);
+  });
 });
 
 it("counts only stored OIDC subjects bound to the current issuer", async () => {

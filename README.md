@@ -16,7 +16,9 @@ corepack pnpm db:up
 corepack pnpm dev
 ```
 
-Open the development URL printed after migrations finish, which is usually `http://127.0.0.1:5173` unless another checkout already occupies one of the default ports. Create an account there. The interface and account setup do not require a hosted model key, so you can start locally and connect a model when you want to run a bot.
+Before starting the API, set the registered Accounts public client ID in `.env` as `OIDC_CLIENT_ID`. The local callback is `http://127.0.0.1/callback`, with the development port supplied at runtime. See [Accounts sign-in](docs/accounts-native.md#local-server-sign-in).
+
+Open the development URL printed after migrations finish, usually `http://127.0.0.1:5173`. Continue through Ork Accounts to sign in. No model key is needed to open the app.
 
 `setup:local` creates `.env` with random database passwords and independent encryption, authentication, supervisor, and screen-proxy secrets. Keep it private. Running setup again preserves the existing file. PostgreSQL uses the `ork` Compose project and a named volume, with its host port bound to loopback at `127.0.0.1:5433`.
 

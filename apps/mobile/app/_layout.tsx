@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 layout is preserved. The central Accounts startup gate is an Ork addition.
+
 import type { LinkFavicons } from "@orkbot/chat-ui/native";
 import {
   CodeCopyButtonContext,
@@ -24,6 +29,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from "react-native-g
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { AccountsGate } from "../components/accounts-gate";
 import { AppErrorBoundary } from "../components/app-error-boundary";
 import { CallCard } from "../components/CallCard";
 import { chatRouteHeader } from "../components/chat-route-header";
@@ -570,7 +576,9 @@ function LayoutContent() {
 export default function Layout() {
   return (
     <AppErrorBoundary>
-      <LayoutContent />
+      <AccountsGate>
+        <LayoutContent />
+      </AccountsGate>
     </AppErrorBoundary>
   );
 }

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 startup is preserved. Accounts-only configuration is an Ork addition.
+
 import type { Socket } from "node:net";
 import { unwrapEnvFromKeyManager } from "@orkbot/adapters";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
@@ -9,13 +14,13 @@ await unwrapEnvFromKeyManager();
 import { serve } from "@hono/node-server";
 import { SERVICE_NAMES } from "@orkbot/logging";
 import { createRootLogger } from "@orkbot/logging/axiom";
-import { loadEnv } from "#modules/platform/env";
+import { loadProductEnv } from "#modules/platform/env";
 import { createApp } from "./app.js";
 
 const logger = await createRootLogger(SERVICE_NAMES.api);
 
 try {
-  const env = loadEnv();
+  const env = loadProductEnv();
   const { app, stop, handleUpgrade } = await createApp({ ...env, logger });
   const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
     logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });

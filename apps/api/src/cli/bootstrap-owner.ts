@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 bootstrap logic is preserved. Accounts-only protection is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
 import { createAuth } from "@orkbot/auth";
@@ -9,6 +13,9 @@ function required(name: string): string {
   return value;
 }
 
+if (process.env.AUTH_PASSWORD_ENABLED === "false") {
+  throw new Error("Local account bootstrap is unavailable when Accounts sign-in is required.");
+}
 await unwrapEnvFromKeyManager();
 const { prisma, pool } = createDb(required("DATABASE_URL"), {
   keyProvider: contentKeyProviderFromEnv(),

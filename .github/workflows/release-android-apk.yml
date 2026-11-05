@@ -1,4 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 release orchestration is preserved. Accounts build configuration is an Ork addition.
+
 name: release-android-apk
+
+env:
+  ORK_ACCOUNTS_ISSUER: ${{ vars.ORK_ACCOUNTS_ISSUER || 'https://api.orkbot.run' }}
+  ORK_ACCOUNTS_MOBILE_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_MOBILE_CLIENT_ID }}
 
 on:
   workflow_dispatch:
@@ -40,6 +48,7 @@ jobs:
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
         run: |
           set -euo pipefail
+          [[ -n "$ORK_ACCOUNTS_MOBILE_CLIENT_ID" ]] || { echo "Set ORK_ACCOUNTS_MOBILE_CLIENT_ID to a registered public Accounts client." >&2; exit 1; }
           mode="${REQUESTED_MODE:-diagnostic}"
           case "$mode" in
             diagnostic)
@@ -48,7 +57,7 @@ jobs:
             eas)
               [[ "$RELEASE_REF" == refs/heads/main ]] || { echo "EAS releases must run from main." >&2; exit 1; }
               missing=()
-              for name in EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL; do
+              for name in EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL ORK_ACCOUNTS_MOBILE_CLIENT_ID; do
                 [[ -n "${!name}" ]] || missing+=("$name")
               done
               if (( ${#missing[@]} )); then
@@ -127,7 +136,8 @@ jobs:
             '.expo.owner = $owner | .expo.extra.eas.projectId = $project | .expo.updates.enabled = true | .expo.updates.url = ("https://u.expo.dev/" + $project)' \
             apps/mobile/app.json > "$RUNNER_TEMP/ork-mobile-app.json"
           cp "$RUNNER_TEMP/ork-mobile-app.json" apps/mobile/app.json
-          jq --arg api "$EXPO_PUBLIC_API_URL" '.build.production.env.EXPO_PUBLIC_API_URL = $api' \
+          jq --arg api "$EXPO_PUBLIC_API_URL" --arg issuer "$ORK_ACCOUNTS_ISSUER" --arg client "$ORK_ACCOUNTS_MOBILE_CLIENT_ID" \
+            '.build.production.env.EXPO_PUBLIC_API_URL = $api | .build.production.env.ORK_ACCOUNTS_ISSUER = $issuer | .build.production.env.ORK_ACCOUNTS_MOBILE_CLIENT_ID = $client' \
             apps/mobile/eas.json > "$RUNNER_TEMP/ork-mobile-eas.json"
           cp "$RUNNER_TEMP/ork-mobile-eas.json" apps/mobile/eas.json
 

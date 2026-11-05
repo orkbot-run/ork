@@ -11,7 +11,7 @@ import appConfig from "../app.config";
 beforeEach(() => {
   vi.stubEnv("ORK_ACCOUNTS_ISSUER", undefined);
   vi.stubEnv("ORK_ACCOUNTS_MOBILE_CLIENT_ID", undefined);
-  vi.stubEnv("EAS_BUILD_PROFILE", "production");
+  vi.stubEnv("EAS_BUILD_PROFILE", "development");
   vi.stubEnv("EXPO_PUBLIC_API_URL", "https://app.example.com");
 });
 
@@ -37,6 +37,22 @@ const passkeys = {
 };
 
 describe("mobile app config", () => {
+  it.each(["production", "android-apk", "diagnostic"])(
+    "requires the central public client for %s builds",
+    (profile) => {
+      vi.stubEnv("EAS_BUILD_PROFILE", profile);
+      expect(() => appConfig(context(config))).toThrow(/Accounts issuer/);
+      vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://api.orkbot.run");
+      expect(() => appConfig(context(config))).toThrow(/public mobile client ID/);
+      vi.stubEnv("ORK_ACCOUNTS_MOBILE_CLIENT_ID", "public-mobile-client");
+      expect(appConfig(context(config)).extra).toMatchObject({
+        accountsIssuer: "https://api.orkbot.run",
+        accountsClientId: "public-mobile-client",
+      });
+      vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://other.example.test");
+      expect(() => appConfig(context(config))).toThrow(/Accounts issuer/);
+    },
+  );
   it("keeps the fork detached from an unconfigured Expo project and native stores", () => {
     const manifest = JSON.parse(readFileSync(new URL("../app.json", import.meta.url), "utf8")).expo;
     expect(manifest.scheme).toEqual(["orkbot", "run.orkbot.app"]);

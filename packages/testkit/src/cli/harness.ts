@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 harness behavior is preserved. Offline auth isolation is an Ork addition.
+
 import { execSync } from "node:child_process";
 import { globSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -106,6 +111,12 @@ async function main() {
     process.env.DATA_DIR = path.join(reportDir, "data");
     process.env.SIGNUPS_ENABLED = "true";
     process.env.SIGNUP_ALLOWLIST = "";
+    // This harness constructs the API library directly with offline identity fixtures.
+    // Never inherit production Accounts configuration from a developer's environment.
+    process.env.AUTH_PASSWORD_ENABLED = "true";
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("OIDC_")) delete process.env[key];
+    }
     // Model and speech fixtures listen on loopback, and most test accounts are not the owner.
     process.env.MCP_ALLOW_PRIVATE_ENDPOINT = "true";
     if (!integration) {

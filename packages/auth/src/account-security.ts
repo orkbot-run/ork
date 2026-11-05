@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 account checks are preserved. OIDC-only authorization is an Ork addition.
+
 import { randomBytes } from "node:crypto";
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import type { BetterAuthPlugin } from "better-auth";
@@ -51,9 +56,9 @@ export function accountSecurity(
                 ),
               )
             ).some(Boolean),
-            hasPassword: Boolean(credential?.password),
+            hasPassword: passwordChangeEnabled && Boolean(credential?.password),
             passwordChangeEnabled,
-            emailDeletion: Boolean(email),
+            emailDeletion: passwordChangeEnabled && Boolean(email),
             sso: ssoName ? { name: ssoName } : null,
           });
         },
@@ -64,6 +69,7 @@ export function accountSecurity(
         async (ctx) => {
           const user = ctx.context.session.user;
           if (
+            !passwordChangeEnabled ||
             !email ||
             (await ctx.context.internalAdapter.findCredentialAccount(user.id))?.password
           ) {
@@ -97,7 +103,7 @@ export function accountSecurity(
             const credential = await ctx.context.internalAdapter.findCredentialAccount(
               session.user.id,
             );
-            if (credential?.password) {
+            if (passwordChangeEnabled && credential?.password) {
               if (!ctx.body?.password) {
                 throw new APIError("BAD_REQUEST", {
                   message: "Invalid password",
@@ -107,7 +113,7 @@ export function accountSecurity(
               return;
             }
             // Better Auth consumes and validates email deletion tokens against this user.
-            if (ctx.body?.token) return;
+            if (passwordChangeEnabled && ctx.body?.token) return;
             const proof = await ctx.context.internalAdapter.findVerificationValue(
               oidcProofKey(session.session.id),
             );

@@ -5,4 +5,4 @@ identifier = "setup"
 description = "Only the bundled setup window can choose a server or quit."
 local = true
 windows = ["setup"]
-permissions = ["allow-setup-state", "allow-connect-server", "allow-connect-local-server", "allow-local-stack-state", "allow-quit-setup", "core:event:allow-listen", "core:event:allow-unlisten"]
+permissions = ["allow-setup-state", "allow-setup-accounts-session", "allow-setup-accounts-sign-in", "allow-setup-accounts-logout", "allow-list-servers", "allow-remove-server", "allow-connect-saved-server", "allow-connect-server", "allow-connect-local-server", "allow-local-stack-state", "allow-quit-setup", "core:event:allow-listen", "core:event:allow-unlisten"]

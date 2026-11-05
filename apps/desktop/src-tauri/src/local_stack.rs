@@ -273,6 +273,13 @@ impl LocalStack {
 
     fn host_config_identity(&self) -> String {
         let mut hash = Sha256::new();
+        hash.update(b"accounts-only-v1\0");
+        hash.update(
+            accounts_client_id(&self.environment)
+                .unwrap_or_default()
+                .as_bytes(),
+        );
+        hash.update([0]);
         if let Some(host) = &self.host {
             hash.update(host.url.as_bytes());
             hash.update([0]);
@@ -284,7 +291,7 @@ impl LocalStack {
     fn matches_host_config(&self) -> bool {
         match read_private(&self.directory.join(HOST_CONFIG_FILE), 256) {
             Some(saved) => saved == self.host_config_identity().as_bytes(),
-            None => self.host.is_none(),
+            None => false,
         }
     }
 
@@ -404,6 +411,9 @@ impl LocalStack {
         }
 
         self.phase(LocalStackPhase::Preparing);
+        if accounts_client_id(&self.environment).is_none() {
+            return Err("Accounts sign-in is not configured for this build.".into());
+        }
         let compose = read_private(&self.resources.join(COMPOSE_FILE), FILE_BYTES)
             .ok_or("Could not read the bundled local server configuration.")?;
         write_private(&self.directory.join(COMPOSE_FILE), &compose)?;
@@ -1205,6 +1215,16 @@ fn docker_environment(
         ("ORKBOT_COMPUTER_IMAGE_TAG", image_tag.to_owned()),
         ("SANDBOX_COMPUTER_EGRESS", "open".to_owned()),
         ("CONTENT_ENCRYPTION", "off".to_owned()),
+        ("AUTH_PASSWORD_ENABLED", "false".to_owned()),
+        ("MESSAGING_OPEN_SIGNUP", "false".to_owned()),
+        ("OIDC_ISSUER", "https://api.orkbot.run".to_owned()),
+        (
+            "OIDC_CLIENT_ID",
+            accounts_client_id(source).unwrap_or_default().to_owned(),
+        ),
+        ("OIDC_CLIENT_SECRET", String::new()),
+        ("OIDC_NAME", "Ork Accounts".to_owned()),
+        ("OIDC_REDIRECT_URI", format!("{origin}/callback")),
         ("ORKBOT_WEB_BIND", "127.0.0.1".to_owned()),
         ("ORKBOT_WEB_PORT", url.port().unwrap_or(80).to_string()),
         ("ORKBOT_API_PORT", "0".to_owned()),
@@ -1219,6 +1239,14 @@ fn docker_environment(
         environment.insert("ORKBOT_DESKTOP_STACK_TOKEN".into(), OsString::from(token));
     }
     environment
+}
+
+fn accounts_client_id(source: &Environment) -> Option<&str> {
+    source
+        .get("ORK_ACCOUNTS_DESKTOP_CLIENT_ID")
+        .and_then(|value| value.to_str())
+        .or(option_env!("ORK_ACCOUNTS_DESKTOP_CLIENT_ID"))
+        .filter(|value| !value.trim().is_empty() && value.trim() == *value)
 }
 
 fn compose_supports_wait_timeout(version: &str) -> bool {
@@ -1727,8 +1755,13 @@ mod tests {
             None,
             None,
         );
-        stack.environment =
-            Environment::from([("ORKBOT_DOCKER_BINARY".to_owned(), binary.into_os_string())]);
+        stack.environment = Environment::from([
+            ("ORKBOT_DOCKER_BINARY".to_owned(), binary.into_os_string()),
+            (
+                "ORK_ACCOUNTS_DESKTOP_CLIENT_ID".to_owned(),
+                OsString::from("fake-public-client"),
+            ),
+        ]);
         stack.runner = runner.clone();
         (root, stack, runner)
     }
@@ -1740,6 +1773,21 @@ mod tests {
         for version in ["", "0.7", "0.7.0-beta.1", "v0.7.0", "0.7.0\n", "0..0"] {
             assert_eq!(image_tag(version, true), "edge");
         }
+    }
+
+    #[tokio::test]
+    async fn missing_accounts_configuration_never_starts_a_password_server() {
+        let (_root, mut stack, runner) = fixture(vec![ok("2.24.0"), ok("29.0.0")]);
+        stack
+            .environment
+            .insert("ORK_ACCOUNTS_DESKTOP_CLIENT_ID".into(), OsString::new());
+        let result = stack.start().await;
+        assert_eq!(result.phase, LocalStackPhase::Failed);
+        assert_eq!(
+            result.message.as_deref(),
+            Some("Accounts sign-in is not configured for this build.")
+        );
+        assert_eq!(runner.requests.lock().unwrap().len(), 2);
     }
 
     #[test]
@@ -1870,6 +1918,10 @@ mod tests {
                 OsString::from("must-not-override-private-env"),
             ),
             ("ORKBOT_WEB_BIND".to_owned(), OsString::from("0.0.0.0")),
+            (
+                "ORK_ACCOUNTS_DESKTOP_CLIENT_ID".to_owned(),
+                OsString::from("fake-public-client"),
+            ),
         ]);
         let binary = Path::new("/example/docker");
         let url = Url::parse("http://127.0.0.1:45173").unwrap();
@@ -1890,6 +1942,12 @@ mod tests {
         assert_eq!(env["ORKBOT_DESKTOP_STACK_TOKEN"], "private-stack-token");
         assert_eq!(env["WEB_ORIGIN"], "http://127.0.0.1:45173");
         assert_eq!(env["SANDBOX_HOST_TOKEN"], "");
+        assert_eq!(env["AUTH_PASSWORD_ENABLED"], "false");
+        assert_eq!(env["MESSAGING_OPEN_SIGNUP"], "false");
+        assert_eq!(env["OIDC_ISSUER"], "https://api.orkbot.run");
+        assert_eq!(env["OIDC_CLIENT_ID"], "fake-public-client");
+        assert_eq!(env["OIDC_CLIENT_SECRET"], "");
+        assert_eq!(env["OIDC_REDIRECT_URI"], "http://127.0.0.1:45173/callback");
     }
 
     fn host_connection() -> Connection {

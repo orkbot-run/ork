@@ -12,6 +12,18 @@
   <body>
     <main class="shell">
       <h1 class="heading">Ork Preview</h1>
+      <section id="signed-out">
+        <button id="sign-in" class="button button-primary" type="button" disabled>Sign in to Accounts</button>
+      </section>
+      <section id="signed-in" hidden>
+        <div class="account-row">
+          <span id="account"></span>
+          <button id="sign-out" class="link" type="button">Sign out</button>
+        </div>
+        <section id="servers" class="server-list" aria-label="Your servers"></section>
+        <button id="refresh" class="link" type="button">Refresh</button>
+        <details id="add-server" class="headers">
+          <summary>Add server</summary>
       <form id="setup">
         <fieldset class="choices">
           <legend class="sr-only">Instance</legend>
@@ -22,13 +34,15 @@
         <label class="field-label" for="server-url">Server address</label>
         <input id="server-url" class="field" type="text" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
         </section>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
         <details id="details" class="headers" hidden><summary>Technical details</summary><pre id="output" class="stack-output"></pre></details>
         <div class="actions">
-          <button id="quit" class="button button-secondary" type="button">Quit</button>
           <button id="connect" class="button button-primary" type="submit" disabled>Connect</button>
         </div>
       </form>
+        </details>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <div class="actions"><button id="quit" class="button button-secondary" type="button">Quit</button></div>
     </main>
     <script src="setup.js"></script>
   </body>

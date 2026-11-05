@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 composition is preserved. Native OIDC callback wiring is an Ork addition.
+
 import { hostname } from "node:os";
 import type {
   AgentContextStrategy,
@@ -153,6 +157,8 @@ import {
 } from "#modules/accounts/account-deletion";
 import { mountAccountExportRoute } from "#modules/accounts/account-export";
 import { mountAccountImportRoute } from "#modules/accounts/account-import";
+import { expireNonOidcSessions } from "#modules/accounts/accounts-only-sessions";
+import { mountAuthCallback } from "#modules/accounts/auth-callback";
 import { createBillingService } from "#modules/billing/billing";
 import { mountBillingRoutes } from "#modules/billing/billing-webhook";
 import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
@@ -302,6 +308,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ...envOverrides
   } = overrides;
   const env = { ...loadEnv(process.env), ...envOverrides };
+  if (env.passwordAuth === false) env.messagingOpenSignup = false;
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
   const poolMax = parsePositiveInteger(process.env.DB_POOL_MAX, 4);
@@ -532,6 +539,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       : new PiAgentRuntime({
           sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
         }));
+  if (env.passwordAuth === false && env.oidc) {
+    await expireNonOidcSessions(prisma, env.oidc.issuer);
+  }
   const pushTokens = new PrismaPushTokenStore(prisma, env.encryptionKey);
   const notifications =
     notificationsOverride ??
@@ -981,6 +991,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   ] as const) {
     app.use(path, (_c, next) => runAsSystem(reason, next));
   }
+  mountAuthCallback(app, env.oidc?.redirectURI, env.authUrl);
   app.on(["GET", "POST"], "/api/auth/*", async (c) => {
     const path = new URL(c.req.url).pathname.replace("/api/auth", "");
     if (isBlockedAuthPath(path)) {

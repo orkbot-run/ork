@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 OIDC handling is preserved. Public-client configuration is an Ork addition.
+
 import { createHash } from "node:crypto";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, getOAuthState } from "better-auth/api";
@@ -11,7 +16,8 @@ const OIDC_CLOCK_SKEW = 60;
 export interface OidcConfig {
   issuer: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
+  redirectURI?: string;
   name: string;
   scopes: string[];
   allowSignupBypass: boolean;
@@ -27,6 +33,8 @@ export function oidcDiscovery(config: OidcConfig) {
         discoveryUrl: `${config.issuer.replace(/\/$/, "")}/.well-known/openid-configuration`,
         clientId: config.clientId,
         clientSecret: config.clientSecret,
+        tokenEndpointAuth: config.clientSecret ? undefined : { method: "none" },
+        redirectURI: config.redirectURI,
         scopes: [...new Set(["openid", "email", "profile", ...config.scopes])],
         pkce: true,
         accountSubject: ({ profile }) => {

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 authentication is preserved. OIDC-only session enforcement is an Ork addition.
+
 import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import type { ProductAnalytics, TransactionalEmailProvider } from "@orkbot/adapter-kit";
@@ -125,6 +130,9 @@ export const CLIENT_IP_HEADER = "x-orkbot-client-ip";
 /** Routes that end sessions other than the caller's own sign-out. Recorded per deleted session. */
 const REVOCATION_PATHS = new Set(["/revoke-session", "/revoke-sessions", "/revoke-other-sessions"]);
 
+export const OIDC_SESSION_PREFIX = "oidc-session-v1-";
+const oidcSessionKey = (sessionId: string) => `${OIDC_SESSION_PREFIX}${sessionId}`;
+
 /** Successful account changes worth an audit row. Sign-in, sign-up, sign-out and deletion use hooks. */
 const ACCOUNT_EVENT_PATHS: Record<string, SecurityEventType> = {
   "/change-password": "auth.password.changed",
@@ -218,6 +226,8 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
     logger: env.logger,
     secret: env.secret,
     baseURL: env.baseURL,
+    // Keep the product session and its verified OIDC provenance on one fixed lifetime.
+    session: { disableSessionRefresh: env.passwordAuth === false },
     trustedOrigins: [...buildTrustedOrigins(env), "orkbot://"],
     account: {
       accountLinking: { enabled: true, disableImplicitLinking: true, trustedProviders: [] },
@@ -365,7 +375,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         env.oidc?.issuer,
         env.passwordAuth !== false,
       ),
-      identityConfirmation(env.email, emailLocaleOf),
+      identityConfirmation(env.email, emailLocaleOf, env.passwordAuth !== false),
       ...(discovery ? [discovery.plugin] : []),
       ...(emailCodeSignIn
         ? [
@@ -543,6 +553,17 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 findSession: async (token: string) => {
                   const session = await findSession(token);
                   if (!session || isMessagingEmail(session.user.email)) return null;
+                  if (env.passwordAuth === false) {
+                    const proof = await ctx.context.internalAdapter.findVerificationValue(
+                      oidcSessionKey(session.session.id),
+                    );
+                    if (
+                      !proof ||
+                      proof.value !== JSON.stringify([env.oidc?.issuer, session.user.id]) ||
+                      proof.expiresAt.getTime() <= Date.now()
+                    )
+                      return null;
+                  }
                   if (session.user.emailVerified) return session;
                   if (env.oidc?.allowSignupBypass) {
                     const accounts = await ctx.context.internalAdapter.findAccounts(
@@ -609,6 +630,12 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId);
             const policy = signupPolicyFromEnv(env);
             const oidcSignIn = isOidcCallback(ctx);
+            if (env.passwordAuth === false && !oidcSignIn) {
+              throw new APIError("FORBIDDEN", {
+                code: "PASSWORD_AUTH_DISABLED",
+                message: "Sign in with the identity provider",
+              });
+            }
             const bypassAllowlist = oidcSignIn && env.oidc?.allowSignupBypass;
             if (!user || isMessagingEmail(user.email)) {
               throw new APIError("FORBIDDEN", {
@@ -643,6 +670,15 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             }
           },
           after: async (session, ctx) => {
+            // A linked identity does not prove how an older session authenticated.
+            // Only a verified callback may mark this exact session as OIDC-authenticated.
+            if (ctx && isOidcCallback(ctx) && env.oidc) {
+              await ctx.context.internalAdapter.createVerificationValue({
+                identifier: oidcSessionKey(session.id),
+                value: JSON.stringify([env.oidc.issuer, session.userId]),
+                expiresAt: session.expiresAt,
+              });
+            }
             await env.afterSignIn?.(session.userId, ctx?.headers);
             env.analytics?.capture(
               session.userId,
@@ -747,7 +783,11 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
     ssoAvailability: () => discovery?.availability(),
     passkeyRpId: relyingParty?.rpID ?? null,
     hasRecentIdentityConfirmation: async (session: { sessionId: string; userId: string }) =>
-      hasRecentIdentityConfirmation((await auth.$context).internalAdapter, session),
+      hasRecentIdentityConfirmation(
+        (await auth.$context).internalAdapter,
+        session,
+        env.passwordAuth !== false,
+      ),
     issueAccountExportToken: async (userId: string) =>
       issueAccountExportToken((await auth.$context).internalAdapter, userId),
     consumeAccountExportToken: async (token: string) =>

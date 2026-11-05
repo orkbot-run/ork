@@ -20,6 +20,7 @@ mod pairing;
 mod passkeys;
 mod profile;
 mod server;
+mod server_directory;
 mod settings;
 mod speech;
 mod updates;
@@ -498,6 +499,193 @@ fn require_setup<R: tauri::Runtime>(window: &WebviewWindow<R>) -> Result<(), Str
     }
 }
 
+const SETUP_ACCOUNTS_OWNER: &str = "desktop-setup-accounts";
+
+fn retire_server_windows(app: &tauri::AppHandle, state: &DesktopState) {
+    state.stack.abort();
+    if let Some(host) = &state.host_computer {
+        host.activate(None);
+    }
+    if let Ok(mut active) = state.active_window.lock() {
+        *active = None;
+    }
+    for (label, server) in app.webview_windows() {
+        if label.starts_with("server-") {
+            cancel_native_document(app, &label);
+            state.sessions.remove(&label);
+            let _ = server.destroy();
+        }
+    }
+    let _ = refresh_menu(app);
+}
+
+fn require_account(state: &DesktopState, account: &accounts::Authorization) -> Result<(), String> {
+    account.directory_bearer()?;
+    if state.accounts.is_current(account) {
+        Ok(())
+    } else {
+        Err("Accounts sign-in changed. Try again.".into())
+    }
+}
+
+#[tauri::command]
+async fn setup_accounts_session<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+) -> Result<Option<accounts::Account>, String> {
+    require_setup(&window)?;
+    state.accounts.session(&server_directory::origin()).await
+}
+
+#[tauri::command]
+async fn setup_accounts_sign_in(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<accounts::Account, String> {
+    require_setup(&window)?;
+    state.accounts.invalidate();
+    state.stack.abort();
+    let _switch = state.switching.lock().await;
+    retire_server_windows(&app, &state);
+    let opener = app.clone();
+    let result = state
+        .accounts
+        .sign_in(
+            &server_directory::origin(),
+            &state.browser_auth,
+            SETUP_ACCOUNTS_OWNER,
+            move |url| async move {
+                let setup = opener
+                    .get_webview_window("setup")
+                    .ok_or("Sign-in cancelled.")?;
+                require_setup(&setup)?;
+                if !setup.is_visible().unwrap_or(false) {
+                    return Err("Sign-in cancelled.".into());
+                }
+                opener
+                    .opener()
+                    .open_url(url, None::<&str>)
+                    .map_err(|_| "Could not open browser sign-in.".into())
+            },
+            || require_setup(&window).is_ok() && window.is_visible().unwrap_or(false),
+        )
+        .await;
+    retire_server_windows(&app, &state);
+    result
+}
+
+#[tauri::command]
+async fn setup_accounts_logout(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    state.accounts.invalidate();
+    state.browser_auth.cancel_owner(SETUP_ACCOUNTS_OWNER);
+    retire_server_windows(&app, &state);
+    let result = state.accounts.logout(&server_directory::origin()).await;
+    // A candidate already being built must retire before logout completes, too.
+    let _switch = state.switching.lock().await;
+    retire_server_windows(&app, &state);
+    result
+}
+
+#[tauri::command]
+async fn list_servers<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<server_directory::Server>, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let device = server_directory::device_id(&state.directory)?;
+    let servers = server_directory::Directory::new()?
+        .list(authorization.directory_bearer()?, &device)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(servers)
+}
+
+#[tauri::command]
+async fn remove_server<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    id: String,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let device = server_directory::device_id(&state.directory)?;
+    let directory = server_directory::Directory::new()?;
+    let servers = directory
+        .list(authorization.directory_bearer()?, &device)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    if !servers.iter().any(|server| server.id == id) {
+        return Err("That server is no longer available.".into());
+    }
+    directory
+        .remove(authorization.directory_bearer()?, &id)
+        .await?;
+    require_account(&state, &authorization)
+}
+
+#[tauri::command]
+async fn connect_saved_server(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+    id: String,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let _switch = state
+        .switching
+        .try_lock()
+        .map_err(|_| "A connection is already in progress.")?;
+    let device = server_directory::device_id(&state.directory)?;
+    let directory = server_directory::Directory::new()?;
+    let server = directory
+        .list(authorization.directory_bearer()?, &device)
+        .await?
+        .into_iter()
+        .find(|server| server.id == id)
+        .ok_or("That server is no longer available.")?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    match server.kind {
+        server_directory::Kind::Local => {
+            start_local_server(&window, &app, &state, &authorization, &directory, &device).await
+        }
+        server_directory::Kind::Selfhosted => {
+            let target = server::normalize_server_url(&server.url)?;
+            server::probe_server(&target).await?;
+            open_server(
+                &window,
+                &app,
+                &state,
+                settings::Setup {
+                    mode: settings::InstanceMode::Existing,
+                    server_url: target,
+                },
+                &authorization,
+            )
+            .await
+        }
+    }
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SetupState {
@@ -542,12 +730,28 @@ async fn connect_server(
     raw_url: String,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    require_account(&state, &authorization)?;
     let _switch = state
         .switching
         .try_lock()
         .map_err(|_| "A connection is already in progress.")?;
     let target = server::normalize_server_url(&raw_url)?;
     server::probe_server(&target).await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let device = server_directory::device_id(&state.directory)?;
+    server_directory::Directory::new()?
+        .add(
+            authorization.directory_bearer()?,
+            &target,
+            server_directory::Kind::Selfhosted,
+            &device,
+        )
+        .await?;
     open_server(
         &window,
         &app,
@@ -556,6 +760,7 @@ async fn connect_server(
             mode: settings::InstanceMode::Existing,
             server_url: target,
         },
+        &authorization,
     )
     .await
 }
@@ -576,12 +781,35 @@ async fn connect_local_server(
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
     let _switch = state
         .switching
         .try_lock()
         .map_err(|_| "A connection is already in progress.")?;
+    let device = server_directory::device_id(&state.directory)?;
+    let directory = server_directory::Directory::new()?;
+    start_local_server(&window, &app, &state, &authorization, &directory, &device).await
+}
+
+async fn start_local_server(
+    window: &WebviewWindow,
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+    directory: &server_directory::Directory,
+    device: &str,
+) -> Result<(), String> {
+    require_setup(window)?;
+    require_account(state, authorization)?;
     let result = state.stack.start().await;
-    require_setup(&window)?;
+    require_setup(window)?;
+    let authorization = state
+        .accounts
+        .renew(authorization, &server_directory::origin())
+        .await?;
     if result.phase != local_stack::LocalStackPhase::Ready
         || !state.stack.matches_desired_stack().await
     {
@@ -589,14 +817,24 @@ async fn connect_local_server(
             .message
             .unwrap_or_else(|| "Could not start the local server.".into()));
     }
+    require_account(state, &authorization)?;
+    directory
+        .add(
+            authorization.directory_bearer()?,
+            &state.stack.web_url(),
+            server_directory::Kind::Local,
+            device,
+        )
+        .await?;
     open_server(
-        &window,
-        &app,
-        &state,
+        window,
+        app,
+        state,
         settings::Setup {
             mode: settings::InstanceMode::New,
             server_url: state.stack.web_url(),
         },
+        &authorization,
     )
     .await
 }
@@ -606,14 +844,20 @@ async fn open_server(
     app: &tauri::AppHandle,
     state: &DesktopState,
     choice: settings::Setup,
+    authorization: &accounts::Authorization,
 ) -> Result<(), String> {
     require_setup(window)?;
+    require_account(state, authorization)?;
+    server::require_accounts_only(&choice.server_url).await?;
+    require_setup(window)?;
+    require_account(state, authorization)?;
     if choice.mode == settings::InstanceMode::New {
         if let Some(host) = &state.host_computer {
             host.activate(None);
         }
         state.stack.save_host_choice("docker").await?;
         require_setup(window)?;
+        require_account(state, authorization)?;
     }
     let target = choice.server_url.clone();
     let label = format!("server-{}", state.sequence.fetch_add(1, Ordering::Relaxed));
@@ -631,6 +875,7 @@ async fn open_server(
         WebviewWindowBuilder::new(app, &label, WebviewUrl::External(target.clone())),
         &state.directory,
         &target,
+        authorization.account.identity(),
     );
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -689,6 +934,7 @@ async fn open_server(
     if let Err(error) = document::wait_for_document(&next, Duration::from_secs(20))
         .await
         .and_then(|()| require_setup(window))
+        .and_then(|()| require_account(state, authorization))
     {
         cancel_native_document(app, &label);
         state.sessions.remove(&label);
@@ -828,55 +1074,8 @@ fn set_locale(app: &tauri::AppHandle, raw: &str) -> Result<(), String> {
 }
 
 fn show_active_or_setup(app: &tauri::AppHandle) {
-    let active = app.try_state::<DesktopState>().and_then(|state| {
-        state.warm_generation.fetch_add(1, Ordering::Relaxed);
-        state
-            .active_window
-            .lock()
-            .ok()?
-            .as_ref()
-            .and_then(|label| app.get_webview_window(label))
-    });
-    if let Some(window) = active {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-        return;
-    }
+    // Saved renderer state cannot authorize opening a server for the current Accounts identity.
     let _ = show_setup(app);
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let state = app.state::<DesktopState>();
-        let Ok(_switch) = state.switching.try_lock() else {
-            return;
-        };
-        let choice = state.setup.lock().ok().and_then(|choice| choice.clone());
-        let Some(choice) = choice else {
-            return;
-        };
-        let Some(setup) = app.get_webview_window("setup") else {
-            return;
-        };
-        let result = async {
-            if choice.mode == settings::InstanceMode::New {
-                let stack = state.stack.start().await;
-                if stack.phase != local_stack::LocalStackPhase::Ready
-                    || !state.stack.matches_desired_stack().await
-                {
-                    return Err(stack
-                        .message
-                        .unwrap_or_else(|| "Could not start the local server.".into()));
-                }
-            } else {
-                server::probe_server(&choice.server_url).await?;
-            }
-            open_server(&setup, &app, &state, choice).await
-        }
-        .await;
-        if let Err(message) = result {
-            let _ = setup.emit("desktop-reopen-failed", message);
-        }
-    });
 }
 
 fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
@@ -993,6 +1192,12 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             setup_state,
+            setup_accounts_session,
+            setup_accounts_sign_in,
+            setup_accounts_logout,
+            list_servers,
+            remove_server,
+            connect_saved_server,
             connect_server,
             connect_local_server,
             local_stack_state,
@@ -1197,7 +1402,13 @@ mod tests {
                 warm_generation: AtomicU64::new(0),
             })
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .invoke_handler(tauri::generate_handler![setup_state, local_stack_state])
+            .invoke_handler(tauri::generate_handler![
+                setup_state,
+                local_stack_state,
+                setup_accounts_session,
+                list_servers,
+                remove_server,
+            ])
             .build(app_context())
             .unwrap();
         let setup = WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
@@ -1236,6 +1447,16 @@ mod tests {
             (&other, local),
             (&other, "https://orkbot.example.com"),
         ] {
+            for command in [
+                "setup_accounts_session",
+                "list_servers",
+                "remove_server",
+                "connect_saved_server",
+                "setup_accounts_sign_in",
+                "setup_accounts_logout",
+            ] {
+                assert!(tauri::test::get_ipc_response(window, request(command, origin)).is_err());
+            }
             assert!(tauri::test::get_ipc_response(window, request("setup_state", origin)).is_err());
             assert!(
                 tauri::test::get_ipc_response(window, request("local_stack_state", origin))

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 proxy tests are preserved. Native callback coverage is an Ork addition.
+
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
@@ -86,6 +90,17 @@ function upgrade(
 }
 
 describe("apiProxy", () => {
+  it("proxies only the exact loopback callback path and preserves its query", async () => {
+    const api = await startApi();
+    const port = await startPreview(api.target);
+    const response = await fetch(
+      `http://127.0.0.1:${port}/callback?code=fake-code&state=fake-state`,
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).host).toBe(new URL(api.target).host);
+    const unrelated = await fetch(`http://127.0.0.1:${port}/callback-other`);
+    expect(await unrelated.text()).toBe("<!doctype html>");
+  });
   it("forwards the device socket and preserves authentication, origin and address headers", async () => {
     const { target, upgrades } = await startApi();
     const port = await startPreview(target);

@@ -46,6 +46,8 @@ jobs:
     timeout-minutes: 60
     env:
       ORKBOT_ENABLE_AUTO_UPDATE: "0"
+      ORK_ACCOUNTS_ISSUER: https://api.orkbot.run
+      ORK_ACCOUNTS_DESKTOP_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_DESKTOP_CLIENT_ID }}
     strategy:
       fail-fast: false
       matrix:

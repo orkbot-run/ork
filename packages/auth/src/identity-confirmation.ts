@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 identity checks are preserved. OIDC-only confirmation is an Ork addition.
+
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import type { TransactionalEmailProvider } from "@orkbot/adapter-kit";
 import { recordSecurityEvent } from "@orkbot/db";
@@ -55,11 +60,12 @@ async function reservePasswordAttempt(
 export async function hasRecentIdentityConfirmation(
   adapter: { findVerificationValue(identifier: string): Promise<Verification | null> },
   session: { sessionId: string; userId: string },
+  localConfirmationEnabled = true,
 ): Promise<boolean> {
+  const identifiers = [oidcProofKey(session.sessionId)];
+  if (localConfirmationEnabled) identifiers.push(confirmationKey(session.sessionId));
   const proofs = await Promise.all(
-    [confirmationKey(session.sessionId), oidcProofKey(session.sessionId)].map((identifier) =>
-      adapter.findVerificationValue(identifier),
-    ),
+    identifiers.map((identifier) => adapter.findVerificationValue(identifier)),
   );
   return proofs.some(
     (proof) => proof?.value === session.userId && proof.expiresAt.getTime() > Date.now(),
@@ -86,6 +92,7 @@ const expiredCode = () =>
 export function identityConfirmation(
   email: TransactionalEmailProvider | undefined,
   emailLocaleOf: EmailLocaleOf,
+  localConfirmationEnabled = true,
 ) {
   return {
     id: "identity-confirmation",
@@ -94,6 +101,7 @@ export function identityConfirmation(
         "/request-identity-code",
         { method: "POST", use: [sessionMiddleware] },
         async (ctx) => {
+          if (!localConfirmationEnabled) throw new APIError("FORBIDDEN");
           const { session, user } = ctx.context.session;
           const adapter = ctx.context.internalAdapter;
           if (!email || (await adapter.findCredentialAccount(user.id))?.password) {
@@ -118,6 +126,7 @@ export function identityConfirmation(
         "/confirm-identity",
         { method: "POST", use: [sessionMiddleware] },
         async (ctx) => {
+          if (!localConfirmationEnabled) throw new APIError("FORBIDDEN");
           const { session, user } = ctx.context.session;
           const adapter = ctx.context.internalAdapter;
           const body = (ctx.body ?? {}) as { password?: unknown; code?: unknown };

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 proxy behavior is preserved. Native callback routing is an Ork addition.
+
 import { isIP } from "node:net";
 import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts/user-devices";
 import type { ProxyOptions } from "vite";
@@ -42,6 +46,7 @@ export function apiProxy(
   });
   return {
     "/api": options(false),
+    "^/callback(?:\\?|$)": options(false),
     // A user's own computer keeps its device socket open here, the API's only upgrade. Vite
     // matches other keys as prefixes, so this one is anchored to the exact path.
     [DEVICE_SOCKET]: options(true),

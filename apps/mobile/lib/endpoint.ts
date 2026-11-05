@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 endpoint validation is preserved. Accounts-only server checks are Ork additions.
+
 import { isPrivateNetworkHost } from "@orkbot/contracts";
 import { cancelResponseBody, readBoundedJsonResponse, withAbort } from "@orkbot/core";
 import { t } from "./i18n";
@@ -5,6 +10,38 @@ import { DEFAULT_API, LOCAL_API } from "./server-config";
 
 export const API_PROBE_TIMEOUT_MS = 8_000;
 export const MAX_API_PROBE_RESPONSE_BYTES = 64 * 1024;
+
+/** The app never falls back to an older server's local credential forms. */
+export async function requireAccountsSignIn(
+  url: string,
+  headers: Record<string, string> = {},
+): Promise<void> {
+  const parsed = normalizeApiBase(url);
+  if (!parsed.ok || parsed.url !== url) throw new Error("Invalid server address.");
+  const response = await fetch(`${url}/api/auth/capabilities`, {
+    headers,
+    credentials: "omit",
+    redirect: "error",
+    signal: AbortSignal.timeout(API_PROBE_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error("Could not read the server's sign-in options.");
+  const value = await readBoundedJsonResponse<unknown>(response, MAX_API_PROBE_RESPONSE_BYTES);
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("passwordAuth" in value) ||
+    value.passwordAuth !== false ||
+    !("sso" in value) ||
+    !value.sso ||
+    typeof value.sso !== "object" ||
+    !("name" in value.sso) ||
+    typeof value.sso.name !== "string" ||
+    !value.sso.name.trim() ||
+    !("availability" in value.sso) ||
+    value.sso.availability !== "available"
+  )
+    throw new Error("This server must use Accounts sign-in.");
+}
 
 export type EndpointResult = { ok: true; url: string } | { ok: false; error: string };
 type HealthResponse = { json?: { ok?: boolean }; error?: { message?: string } };

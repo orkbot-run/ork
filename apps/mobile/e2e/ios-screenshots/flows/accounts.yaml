@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+name: Accounts sign-in
+---
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: "Continue with Accounts|Kontynuuj przez Accounts"
+    timeout: 40000
+- assertNotVisible: "Password|Hasło"
+- assertNotVisible: "Continue as guest|Skip sign-in"
+- takeScreenshot: 01-accounts-required

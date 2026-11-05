@@ -14,9 +14,8 @@ ORK_ACCOUNTS_MOBILE_CLIENT_ID=replace-with-mobile-public-client-id
 
 Client IDs are public. Use a separate ID for each app and keep client secrets out
 of both binaries. If configuration is missing, requesting an Accounts connection
-fails with a configuration error, while the rest of the app can still run locally
-without a hosted Accounts service. Rebuild after changing these settings or URL
-schemes.
+fails with a configuration error. The app-managed local server also requires the
+desktop public client ID. Rebuild after changing these settings or URL schemes.
 
 ## Provider registration
 
@@ -38,6 +37,44 @@ where an existing browser session can be reused. Both clients check the callback
 state and issuer. Before saving tokens, they verify the ID token signature,
 issuer, audience, nonce and time claims, then check that userinfo belongs to the
 verified subject.
+
+## Account and server selection
+
+Desktop and mobile require a verified central Accounts session before opening the
+product. Desktop signs in before it starts Docker or connects to an existing
+server. It then saves the selected server in the account directory. Mobile loads
+that directory after sign-in and lets the user select or add an external server.
+An empty directory leaves the server picker open.
+
+Remote entries follow the account. A Docker loopback entry belongs to the desktop
+that created it, identified by a random local device ID, so another device never
+opens that address as its own localhost. Removing a bookmark does not delete the
+server or its data. Every selected server still verifies its own product session
+and permissions.
+
+The directory accepts central access tokens only at the fixed Accounts endpoint.
+Native apps never send those tokens to saved servers. Switching central accounts
+retires product sessions and pending operations before the next account opens.
+Desktop also keeps each account and server in a separate browser profile.
+
+## Local server sign-in
+
+"This computer" uses Ork Accounts as its only sign-in method. The desktop build supplies
+the public client ID to its local API, which uses PKCE without a client secret.
+The registered `http://127.0.0.1/callback` accepts the allocated loopback port.
+The web proxy forwards that exact path to the API, which sends it to the shared
+OIDC callback handler without changing the code or state.
+
+Accounts verifies the identity. The local API verifies the ID token and creates a
+product session for that identity. Passwords, email codes and passkeys on the local
+server cannot sign in or confirm sensitive actions. Old product sessions without
+verified OIDC provenance expire when the API starts in this mode, including their
+paired-device credentials. Account and workspace data stay in place.
+
+Set the repository variable `ORK_ACCOUNTS_DESKTOP_CLIENT_ID` for desktop builds
+and `ORK_ACCOUNTS_MOBILE_CLIENT_ID` for mobile builds.
+For a local build, export the same variable before compiling. A missing client ID
+stops local-server startup rather than enabling another sign-in method.
 
 ## Credentials and sessions
 

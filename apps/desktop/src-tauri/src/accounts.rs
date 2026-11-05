@@ -3,7 +3,7 @@
 
 use std::{
     future::Future,
-    sync::atomic::{AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -558,6 +558,80 @@ mod tests {
         logout.await.unwrap().unwrap();
         assert!(fixture.store.0.lock().unwrap().is_empty());
     }
+
+    #[tokio::test]
+    async fn central_authorization_is_separate_from_server_sessions_and_logout_fences_it() {
+        let fixture = Fixture::new(false).await;
+        let central = crate::server_directory::origin();
+        assert!(fixture
+            .accounts
+            .authorization_config(&central, &config())
+            .await
+            .is_err());
+        let mut valid = credential();
+        valid.account.expires_at = now() + 300;
+        fixture
+            .accounts
+            .save(&config().key(&central), &valid)
+            .await
+            .unwrap();
+        let authorization = fixture
+            .accounts
+            .authorization_config(&central, &config())
+            .await
+            .unwrap();
+        assert!(authorization.directory_bearer().is_err());
+        let mut central_authorization = Authorization {
+            account: authorization.account.clone(),
+            token: "central-access".into(),
+            generation: authorization.generation,
+        };
+        central_authorization.account.issuer = crate::server_directory::origin()
+            .origin()
+            .ascii_serialization();
+        assert_eq!(
+            central_authorization.directory_bearer().unwrap(),
+            "central-access"
+        );
+        assert!(fixture.accounts.is_current(&authorization));
+        let public = serde_json::to_string(&authorization.account).unwrap();
+        assert!(!public.contains("old-access") && !public.contains("old-refresh"));
+        {
+            fixture.accounts.signing_in.store(true, Ordering::SeqCst);
+            let _pending = SignInGuard(&fixture.accounts.signing_in);
+            assert!(!fixture.accounts.is_current(&authorization));
+            assert!(fixture
+                .accounts
+                .authorization_config(&central, &config())
+                .await
+                .is_err());
+            assert!(fixture
+                .accounts
+                .session_config(&central, &config())
+                .await
+                .is_err());
+            assert!(fixture.requests.lock().unwrap().is_empty());
+        }
+        assert!(fixture.accounts.is_current(&authorization));
+        fixture.accounts.invalidate();
+        assert!(!fixture.accounts.is_current(&authorization));
+        fixture
+            .accounts
+            .logout_config(&central, &config())
+            .await
+            .unwrap();
+        assert!(fixture
+            .accounts
+            .authorization_config(&central, &config())
+            .await
+            .is_err());
+        assert!(fixture
+            .store
+            .0
+            .lock()
+            .unwrap()
+            .contains_key(&config().key(&fixture.origin)));
+    }
 }
 
 fn secure_url(value: &str) -> Result<Url, String> {
@@ -635,6 +709,32 @@ pub struct Account {
     subject: String,
     userinfo: serde_json::Value,
     expires_at: u64,
+}
+
+impl Account {
+    pub(crate) fn identity(&self) -> (&str, &str) {
+        (&self.issuer, &self.subject)
+    }
+}
+
+/// Native-only authorization. Tokens are never serialized into renderer IPC.
+pub(crate) struct Authorization {
+    pub account: Account,
+    token: String,
+    generation: u64,
+}
+
+impl Authorization {
+    pub(crate) fn directory_bearer(&self) -> Result<&str, String> {
+        if self.account.issuer
+            != crate::server_directory::origin()
+                .origin()
+                .ascii_serialization()
+        {
+            return Err("This build must use the central Accounts issuer.".into());
+        }
+        Ok(&self.token)
+    }
 }
 
 #[derive(Deserialize, Serialize)]
@@ -853,9 +953,67 @@ pub struct Accounts {
     discovery: Mutex<Option<(Instant, Discovery)>>,
     operation: Mutex<()>,
     generation: AtomicU64,
+    signing_in: AtomicBool,
+}
+
+struct SignInGuard<'a>(&'a AtomicBool);
+
+impl Drop for SignInGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl Accounts {
+    pub(crate) fn invalidate(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+    }
+
+    pub(crate) fn is_current(&self, authorization: &Authorization) -> bool {
+        !self.signing_in.load(Ordering::SeqCst)
+            && authorization.generation == self.generation.load(Ordering::SeqCst)
+            && authorization.account.expires_at > now()
+    }
+
+    pub(crate) async fn authorization(&self, origin: &Url) -> Result<Authorization, String> {
+        self.authorization_config(origin, &Config::build()?).await
+    }
+
+    async fn authorization_config(
+        &self,
+        origin: &Url,
+        config: &Config,
+    ) -> Result<Authorization, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let credential = self
+            .credential_config(origin, config)
+            .await?
+            .ok_or("Sign in to Accounts first.")?;
+        let authorization = Authorization {
+            account: credential.account,
+            token: credential.access_token,
+            generation,
+        };
+        if !self.is_current(&authorization) {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        Ok(authorization)
+    }
+
+    pub(crate) async fn renew(
+        &self,
+        previous: &Authorization,
+        origin: &Url,
+    ) -> Result<Authorization, String> {
+        let next = self.authorization(origin).await?;
+        if previous.generation != next.generation
+            || previous.account.issuer != next.account.issuer
+            || previous.account.subject != next.account.subject
+        {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        Ok(next)
+    }
     async fn discover(&self, config: &Config, client: &Client) -> Result<Discovery, String> {
         let mut cache = self.discovery.lock().await;
         if let Some((time, discovery)) = cache.as_ref() {
@@ -892,6 +1050,10 @@ impl Accounts {
         Fut: Future<Output = Result<(), String>> + Send,
         C: Fn() -> bool,
     {
+        if self.signing_in.swap(true, Ordering::SeqCst) {
+            return Err("Accounts sign-in is already in progress.".into());
+        }
+        let _signing_in = SignInGuard(&self.signing_in);
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let config = Config::build()?;
         let client = client()?;
@@ -1035,7 +1197,31 @@ impl Accounts {
         origin: &Url,
         config: &Config,
     ) -> Result<Option<Account>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let account = self
+            .credential_config(origin, config)
+            .await?
+            .map(|credential| credential.account);
+        if self.signing_in.load(Ordering::SeqCst)
+            || generation != self.generation.load(Ordering::SeqCst)
+        {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        Ok(account)
+    }
+
+    async fn credential_config(
+        &self,
+        origin: &Url,
+        config: &Config,
+    ) -> Result<Option<Credential>, String> {
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err("Accounts sign-in is in progress.".into());
+        }
         let _operation = self.operation.lock().await;
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err("Accounts sign-in is in progress.".into());
+        }
         let key = config.key(origin);
         let Some(raw) = self.store.get(key.clone()).await? else {
             return Ok(None);
@@ -1045,7 +1231,7 @@ impl Accounts {
             return Err(ERROR.into());
         }
         if previous.account.expires_at > now() + 30 {
-            return Ok(Some(previous.account));
+            return Ok(Some(previous));
         }
         let Some(refresh) = previous.refresh_token.as_ref() else {
             self.store.delete(key).await?;
@@ -1076,7 +1262,7 @@ impl Accounts {
             .validate_tokens(&client, config, &discovery, response, None, Some(&previous))
             .await?;
         self.save(&key, &credential).await?;
-        Ok(Some(credential.account))
+        Ok(Some(credential))
     }
 
     pub async fn logout(&self, origin: &Url) -> Result<(), String> {

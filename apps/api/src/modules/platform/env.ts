@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 environment handling is preserved. Public-client validation is an Ork addition.
 
 import type {
   ApnsVoipConfig,
@@ -181,16 +182,30 @@ export interface AppEnv {
   crispWebsiteId?: string | null;
 }
 
+/** Enforce the shipped API's identity boundary without changing injectable library fixtures. */
+export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
+  const issuer = optional(source.OIDC_ISSUER);
+  if (issuer !== "https://api.orkbot.run")
+    throw new Error("OIDC_ISSUER must be https://api.orkbot.run");
+  if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
+    throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
+  const clientId = required(source, "OIDC_CLIENT_ID");
+  return loadEnv({
+    ...source,
+    AUTH_PASSWORD_ENABLED: "false",
+    OIDC_ISSUER: issuer,
+    OIDC_CLIENT_ID: clientId,
+    OIDC_NAME: optional(source.OIDC_NAME) ?? "Ork Accounts",
+  });
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   secretStoreOptionsFromEnv(source);
   const issuer = optional(source.OIDC_ISSUER);
   const clientId = optional(source.OIDC_CLIENT_ID);
   const clientSecret = optional(source.OIDC_CLIENT_SECRET);
-  const credentials = [issuer, clientId, clientSecret];
-  if (credentials.some(Boolean) && !credentials.every(Boolean)) {
-    throw new Error(
-      "OIDC_ISSUER, OIDC_CLIENT_ID and OIDC_CLIENT_SECRET must be configured together",
-    );
+  if ((issuer || clientId || clientSecret) && !(issuer && clientId)) {
+    throw new Error("OIDC_ISSUER and OIDC_CLIENT_ID must be configured together");
   }
   if (issuer) {
     try {
@@ -213,12 +228,37 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const passwordAuth = source.AUTH_PASSWORD_ENABLED !== "false";
   if (!passwordAuth && !issuer)
     throw new Error("AUTH_PASSWORD_ENABLED=false requires OIDC configuration");
+  const webOrigin = resolveWebOrigin(source.WEB_ORIGIN, DEFAULT_WEB_ORIGIN, "WEB_ORIGIN");
+  const authUrl = resolveWebOrigin(source.BETTER_AUTH_URL, webOrigin, "BETTER_AUTH_URL");
+  const redirectURI = optional(source.OIDC_REDIRECT_URI);
+  if (redirectURI) {
+    if (!issuer) throw new Error("OIDC_REDIRECT_URI requires OIDC configuration");
+    try {
+      const url = new URL(redirectURI);
+      if (
+        url.protocol !== "http:" ||
+        !["127.0.0.1", "[::1]"].includes(url.hostname) ||
+        url.origin !== new URL(authUrl).origin ||
+        url.pathname !== "/callback" ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error();
+    } catch {
+      throw new Error(
+        "OIDC_REDIRECT_URI must be the local auth origin's HTTP loopback /callback URL",
+      );
+    }
+  }
   const oidc =
-    issuer && clientId && clientSecret
+    issuer && clientId
       ? {
           issuer,
           clientId,
           clientSecret,
+          redirectURI,
           name: optional(source.OIDC_NAME) ?? "SSO",
           scopes: (optional(source.OIDC_SCOPES) ?? "openid email profile")
             .split(/[\s,]+/)
@@ -227,7 +267,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
         }
       : undefined;
   const authSecret = resolveAuthSecret(source);
-  const webOrigin = resolveWebOrigin(source.WEB_ORIGIN, DEFAULT_WEB_ORIGIN, "WEB_ORIGIN");
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);
   const deploymentModel = resolveDeploymentModel(source);
@@ -240,7 +279,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),
     desktopStackToken: optional(source.ORKBOT_DESKTOP_STACK_TOKEN),
     authSecret,
-    authUrl: resolveWebOrigin(source.BETTER_AUTH_URL, webOrigin, "BETTER_AUTH_URL"),
+    authUrl,
     webOrigin,
     passkeyAppleAppIds: list(source.PASSKEY_APPLE_APP_IDS),
     passkeyAndroidCertFingerprints: androidCertFingerprints(source.PASSKEY_ANDROID_CERT_SHA256),

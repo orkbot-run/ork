@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 startup is preserved. Accounts callback port handling is an Ork addition.
 // Modified for Ork: allow the upstream baseline before origin has its first main branch.
 // `pnpm dev`: start the API, worker, web app, and sandbox supervisor for this checkout.
 //
@@ -83,6 +86,7 @@ function portEnv({ web, api, supervisor }) {
     WEB_PORT: String(web),
     WEB_ORIGIN: webUrl,
     BETTER_AUTH_URL: webUrl,
+    ...(setting("OIDC_REDIRECT_URI") ? { OIDC_REDIRECT_URI: `${webUrl}/callback` } : {}),
     API_PORT: String(api),
     API_URL: apiUrl,
     API_PROXY_TARGET: apiUrl,

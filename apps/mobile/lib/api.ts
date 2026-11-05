@@ -424,6 +424,21 @@ export function configureSessionEndHangUp(hangUp: (() => Promise<void>) | undefi
   hangUpBeforeCredentialsCleared = hangUp;
 }
 
+/** A central account change must never restore the previous product identity. */
+export async function clearProductAccountSession(): Promise<void> {
+  await hangUpBeforeCredentialsCleared?.().catch(() => undefined);
+  const cleared = await clearSessionToken("account_switch");
+  cachedSpaceId = "";
+  bumpSpaceSelectionGeneration();
+  const storage = await Promise.all([
+    clearStoredValue(SPACE_KEY),
+    clearStoredValue(SPACE_ROLLBACK_KEY),
+    clearStoredValue(ORGANIZATION_SPACES_KEY),
+  ]);
+  if (!cleared || storage.some((saved) => !saved))
+    throw new Error(t("Could not clear the previous server session"));
+}
+
 /** Clears session + space for an endpoint change. Restores both if either wipe fails. */
 async function clearCredentialsForEndpointChange(): Promise<
   | {

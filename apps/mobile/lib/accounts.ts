@@ -32,6 +32,20 @@ let writes: Promise<unknown> = Promise.resolve();
 let signingIn = false;
 let refreshing: Promise<string | null> | undefined;
 let refreshSnapshot: Tokens | undefined;
+let accountVersion = 0;
+const accountListeners = new Set<() => void>();
+
+export function subscribeAccounts(listener: () => void): () => void {
+  accountListeners.add(listener);
+  return () => accountListeners.delete(listener);
+}
+
+export const accountsVersion = () => accountVersion;
+
+function accountChanged() {
+  accountVersion += 1;
+  for (const listener of accountListeners) listener();
+}
 
 function config(): Config {
   return accountsConfig({
@@ -338,7 +352,9 @@ export async function continueWithAccounts(): Promise<boolean> {
       },
       nonce,
     );
-    return await save(tokens, owner);
+    const saved = await save(tokens, owner);
+    if (saved) accountChanged();
+    return saved;
   } finally {
     signingIn = false;
   }
@@ -355,6 +371,25 @@ export async function accountsAccessToken(): Promise<string | null> {
   } finally {
     if (refreshing === task) refreshing = undefined;
   }
+}
+
+export async function accountsAuthorization(): Promise<{
+  issuer: string;
+  subject: string;
+  accessToken: string;
+} | null> {
+  const owner = generation;
+  const token = await accountsAccessToken();
+  if (!token || owner !== generation) return null;
+  const tokens = await load(config());
+  return owner === generation && tokens?.accessToken === token
+    ? { issuer: tokens.issuer, subject: tokens.subject, accessToken: token }
+    : null;
+}
+
+export async function accountsIdentity(): Promise<{ issuer: string; subject: string } | null> {
+  const authorization = await accountsAuthorization();
+  return authorization ? { issuer: authorization.issuer, subject: authorization.subject } : null;
 }
 
 async function validAccessToken(): Promise<string | null> {
@@ -401,6 +436,7 @@ export async function signOutAccounts(): Promise<void> {
   const pendingRefresh = refreshSnapshot;
   const owner = ++generation;
   invalidated = true;
+  accountChanged();
   const previous = await enqueue(async () => {
     let stored: string | null = null;
     try {

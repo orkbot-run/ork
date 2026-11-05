@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Existing Apache-2.0 setup is preserved. Accounts client configuration is an Ork addition.
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
@@ -6,6 +9,7 @@ const root = new URL("../", import.meta.url);
 const ownerPassword = randomBytes(32).toString("hex");
 const appPassword = randomBytes(32).toString("hex");
 const settings = {
+  OIDC_CLIENT_ID: process.env.OIDC_CLIENT_ID ?? process.env.ORK_ACCOUNTS_DESKTOP_CLIENT_ID ?? "",
   POSTGRES_USER: "ork",
   POSTGRES_DB: "ork",
   POSTGRES_PASSWORD: ownerPassword,

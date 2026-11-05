@@ -146,6 +146,50 @@ pub async fn probe_server(server: &Url) -> Result<(), String> {
     Ok(())
 }
 
+/// Refuse password-enabled or unavailable sign-in before opening a product renderer.
+pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
+    const ERROR: &str = "This server must use Accounts sign-in with password sign-in disabled.";
+    let origin = normalize_server_url(server.as_str())?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(PROBE_TIMEOUT)
+        .timeout(PROBE_TIMEOUT)
+        .build()
+        .map_err(|_| ERROR)?;
+    let mut response = client
+        .get(origin.join("/api/auth/capabilities").map_err(|_| ERROR)?)
+        .header(reqwest::header::CACHE_CONTROL, "no-store")
+        .send()
+        .await
+        .map_err(|_| ERROR)?;
+    if !response.status().is_success()
+        || response
+            .content_length()
+            .is_some_and(|size| size > MAX_PROBE_BYTES as u64)
+    {
+        return Err(ERROR.into());
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
+        if chunk.len() > MAX_PROBE_BYTES.saturating_sub(body.len()) {
+            return Err(ERROR.into());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let value: Value = serde_json::from_slice(&body).map_err(|_| ERROR)?;
+    if value.get("passwordAuth") != Some(&Value::Bool(false))
+        || !value.get("sso").is_some_and(|sso| {
+            sso.get("name")
+                .and_then(Value::as_str)
+                .is_some_and(|name| !name.trim().is_empty())
+                && sso.get("availability").and_then(Value::as_str) == Some("available")
+        })
+    {
+        return Err(ERROR.into());
+    }
+    Ok(())
+}
+
 fn is_ork_health(value: &Value) -> bool {
     value.get("json").is_some_and(|health| {
         health.get("ok") == Some(&Value::Bool(true))
@@ -366,6 +410,45 @@ mod tests {
             serde_json::from_str::<Value>(body).unwrap(),
             json!({"json": {}})
         );
+    }
+
+    #[tokio::test]
+    async fn accounts_only_capability_check_never_sends_central_credentials() {
+        let (server, request) = serve_once(http_response(
+            "200 OK",
+            r#"{"passwordAuth":false,"sso":{"name":"Accounts","availability":"available"}}"#,
+        ));
+        require_accounts_only(&server).await.unwrap();
+        let request = request.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("get /api/auth/capabilities http/1.1\r\n"));
+        assert!(!request.contains("authorization:") && !request.contains("cookie:"));
+    }
+
+    #[tokio::test]
+    async fn accounts_only_capability_check_rejects_legacy_unavailable_and_unsafe_responses() {
+        for body in [
+            r#"{"passwordAuth":true,"sso":{"name":"Accounts","availability":"available"}}"#,
+            r#"{"passwordAuth":false,"sso":null}"#,
+            r#"{"passwordAuth":false,"sso":{"name":"Accounts"}}"#,
+            r#"{"passwordAuth":false,"sso":{"name":"Accounts","availability":"unavailable"}}"#,
+            r#"{"passwordAuth":false,"sso":{"name":"Accounts","availability":"checking"}}"#,
+            r#"{"passwordAuth":false,"sso":{"name":" ","availability":"available"}}"#,
+            r#"{"passwordAuth":"false","sso":{"name":"Accounts","availability":"available"}}"#,
+            "not json",
+        ] {
+            let (server, request) = serve_once(http_response("200 OK", body));
+            assert!(require_accounts_only(&server).await.is_err(), "{body}");
+            request.join().unwrap();
+        }
+        for response in [
+            b"HTTP/1.1 302 Found\r\nLocation: https://untrusted.example.com\r\nContent-Length: 0\r\n\r\n".to_vec(),
+            http_response("401 Unauthorized", "{}"),
+            http_response("200 OK", &" ".repeat(MAX_PROBE_BYTES + 1)),
+        ] {
+            let (server, request) = serve_once(response);
+            assert!(require_accounts_only(&server).await.is_err());
+            request.join().unwrap();
+        }
     }
 
     #[tokio::test]

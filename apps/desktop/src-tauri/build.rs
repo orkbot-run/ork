@@ -15,6 +15,12 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "setup_state",
+            "setup_accounts_session",
+            "setup_accounts_sign_in",
+            "setup_accounts_logout",
+            "list_servers",
+            "remove_server",
+            "connect_saved_server",
             "connect_server",
             "connect_local_server",
             "local_stack_state",

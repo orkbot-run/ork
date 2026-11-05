@@ -16,7 +16,9 @@
         "ORKBOT_ENABLE_AUTO_UPDATE",
         "PUBLIC_CRISP_WEBSITE_ID",
         "PUBLIC_POSTHOG_HOST",
-        "PUBLIC_POSTHOG_KEY"
+        "PUBLIC_POSTHOG_KEY",
+        "OIDC_CLIENT_ID",
+        "ORK_ACCOUNTS_DESKTOP_CLIENT_ID"
       ],
       "outputs": ["dist/**", "src/generated/**"]
     },

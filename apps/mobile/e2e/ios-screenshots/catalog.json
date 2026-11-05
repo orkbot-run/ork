@@ -1,5 +1,11 @@
 [
   {
+    "id": "accounts",
+    "title": "Accounts sign-in",
+    "flow": "flows/accounts.yaml",
+    "screens": ["sign-in", "server"]
+  },
+  {
     "id": "auth",
     "title": "Auth",
     "flow": "flows/auth.yaml",

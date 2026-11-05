@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 environment tests are preserved. Public-client coverage is an Ork addition.
 
 import { describe, expect, it } from "vitest";
-import { loadEnv } from "./env.js";
+import { loadEnv, loadProductEnv } from "./env.js";
 
 const base = {
   DATABASE_URL: "postgres://orkbot:orkbot@127.0.0.1:5433/orkbot",
@@ -351,12 +352,53 @@ describe("OIDC environment", () => {
     OIDC_CLIENT_ID: "fake-client",
     OIDC_CLIENT_SECRET: "fake-secret",
   };
-  it("requires all credentials and an HTTPS issuer", () => {
+  it("requires issuer and client ID together, and an HTTPS issuer", () => {
     for (const [key, value] of Object.entries(oidc))
       expect(() => loadEnv({ ...base, [key]: value })).toThrow(/configured together/);
     expect(() =>
       loadEnv({ ...base, ...oidc, OIDC_ISSUER: "http://identity.example.test" }),
     ).toThrow(/HTTPS/);
+  });
+  it("accepts public clients without a secret and preserves confidential client secrets", () => {
+    expect(
+      loadEnv({ ...base, OIDC_ISSUER: oidc.OIDC_ISSUER, OIDC_CLIENT_ID: oidc.OIDC_CLIENT_ID }).oidc,
+    ).toMatchObject({
+      issuer: oidc.OIDC_ISSUER,
+      clientId: oidc.OIDC_CLIENT_ID,
+      clientSecret: undefined,
+    });
+    expect(loadEnv({ ...base, ...oidc }).oidc?.clientSecret).toBe(oidc.OIDC_CLIENT_SECRET);
+    expect(() => loadEnv({ ...base, OIDC_CLIENT_SECRET: oidc.OIDC_CLIENT_SECRET })).toThrow(
+      /configured together/,
+    );
+  });
+  it("accepts a loopback callback only on this server's auth origin", () => {
+    const configuration = {
+      ...base,
+      OIDC_ISSUER: oidc.OIDC_ISSUER,
+      OIDC_CLIENT_ID: oidc.OIDC_CLIENT_ID,
+      BETTER_AUTH_URL: "http://127.0.0.1:45173",
+      OIDC_REDIRECT_URI: "http://127.0.0.1:45173/callback",
+    };
+    expect(loadEnv(configuration).oidc?.redirectURI).toBe(configuration.OIDC_REDIRECT_URI);
+    for (const redirectURI of [
+      "http://127.0.0.1:45174/callback",
+      "http://127.0.0.1:45173/api/auth/callback/oidc",
+      "http://127.0.0.1:45173/callback?next=elsewhere",
+      "http://127.0.0.1:45173/callback#fragment",
+      "http://user:password@127.0.0.1:45173/callback",
+      "http://localhost:45173/callback",
+      "https://127.0.0.1:45173/callback",
+      "https://identity.example.test/callback",
+      "not-a-url",
+    ]) {
+      expect(() => loadEnv({ ...configuration, OIDC_REDIRECT_URI: redirectURI })).toThrow(
+        /HTTP loopback \/callback/,
+      );
+    }
+    expect(() => loadEnv({ ...base, OIDC_REDIRECT_URI: configuration.OIDC_REDIRECT_URI })).toThrow(
+      /requires OIDC/,
+    );
   });
   it.each(["identity.example.test", "/issuer", "https://"])(
     "reports invalid issuer %s as a configuration error",
@@ -388,6 +430,62 @@ describe("OIDC environment", () => {
     expect(
       loadEnv({ ...base, ...oidc, OIDC_ALLOW_SIGNUP_BYPASS: "true" }).oidc?.allowSignupBypass,
     ).toBe(true);
+  });
+});
+
+describe("product API authentication boundary", () => {
+  const configured = {
+    ...base,
+    OIDC_ISSUER: "https://api.orkbot.run",
+    OIDC_CLIENT_ID: "offline-public-client",
+  };
+
+  it("requires explicit central issuer and client settings before startup", () => {
+    expect(() => loadProductEnv(base)).toThrow("OIDC_ISSUER");
+    expect(() => loadProductEnv({ ...configured, OIDC_ISSUER: undefined })).toThrow("OIDC_ISSUER");
+    expect(() => loadProductEnv({ ...configured, OIDC_CLIENT_ID: undefined })).toThrow(
+      "OIDC_CLIENT_ID",
+    );
+    expect(() =>
+      loadProductEnv({
+        ...configured,
+        OIDC_CLIENT_ID: undefined,
+        OIDC_CLIENT_SECRET: "fake-secret",
+      }),
+    ).toThrow("OIDC_CLIENT_ID");
+  });
+
+  it("uses only central Accounts with every local login disabled by default", () => {
+    const env = loadProductEnv(configured);
+    expect(env.passwordAuth).toBe(false);
+    expect(env.oidc).toMatchObject({
+      issuer: "https://api.orkbot.run",
+      clientId: "offline-public-client",
+      clientSecret: undefined,
+      name: "Ork Accounts",
+    });
+    expect(loadProductEnv({ ...configured, AUTH_PASSWORD_ENABLED: "false" }).passwordAuth).toBe(
+      false,
+    );
+  });
+
+  it.each(["true", "1", "yes"])("rejects local-auth opt-in %s", (value) => {
+    expect(() => loadProductEnv({ ...configured, AUTH_PASSWORD_ENABLED: value })).toThrow(
+      "AUTH_PASSWORD_ENABLED must be false",
+    );
+  });
+
+  it.each([
+    "https://identity.example.test",
+    "https://api.orkbot.run/",
+    "http://api.orkbot.run",
+    "https://api.orkbot.run?next=other",
+    "https://user:password@api.orkbot.run",
+    "not-a-url",
+  ])("rejects a different or noncanonical issuer %s", (issuer) => {
+    expect(() => loadProductEnv({ ...configured, OIDC_ISSUER: issuer })).toThrow(
+      "OIDC_ISSUER must be https://api.orkbot.run",
+    );
   });
 });
 
