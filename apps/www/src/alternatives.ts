@@ -18,7 +18,7 @@ export const OPEN_SOURCE_REASONS = [
   "You can run the published Docker images, or a source checkout, on a machine you control. The desktop app can start that stack locally or connect to a server you already run.",
   "You bring the model credentials. Connector credentials are encrypted on the server and are not returned by the API.",
   "Routines are readable Markdown. A bot can pause for approval at a boundary you set, and actions are recorded in an audit log.",
-  "The web app, the Electron desktop app, and the Expo mobile app are clients of the same API.",
+  "The web app, the Tauri desktop app, and the Expo mobile app are clients of the same API.",
 ] as const;
 
 export type ComparisonRow = {
@@ -244,7 +244,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         topic: "Where you use it",
         orkbot:
-          "Web app, Electron desktop app, and Expo mobile app. Voice can speak replies, take dictation, and call a bot, with your own ElevenLabs, OpenAI, Cartesia, or Fish Audio key.",
+          "Web app, Tauri desktop app, and Expo mobile app. Voice can speak replies, take dictation, and call a bot, with your own ElevenLabs, OpenAI, Cartesia, or Fish Audio key.",
         other:
           "Muse app on iOS and Android, WhatsApp, and muse.ai, per the launch. The Connect recap adds the Mac app, a voice mode you can shape, and Muse on AI glasses in the coming months.",
       },
@@ -263,7 +263,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Does Ork include Muse on WhatsApp, shopping checkout, or AI glasses?",
         answer:
-          "No. Those are Muse surfaces Meta describes. Ork's clients are the web app, the Electron desktop app, and the Expo mobile app. Voice in Ork uses a key you bring for ElevenLabs, OpenAI, Cartesia, or Fish Audio.",
+          "No. Those are Muse surfaces Meta describes. Ork's clients are the web app, the Tauri desktop app, and the Expo mobile app. Voice in Ork uses a key you bring for ElevenLabs, OpenAI, Cartesia, or Fish Audio.",
       },
       {
         question: "Where do the Muse details come from?",
@@ -423,7 +423,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         topic: "Where you use it",
         orkbot:
-          "Web app, Electron desktop app, and Expo mobile app. Voice can speak replies, take dictation, and call a bot, with your own ElevenLabs, OpenAI, Cartesia, or Fish Audio key.",
+          "Web app, Tauri desktop app, and Expo mobile app. Voice can speak replies, take dictation, and call a bot, with your own ElevenLabs, OpenAI, Cartesia, or Fish Audio key.",
         other:
           "The homepage says you text or call it. The privacy policy and terms also describe the Instinct website, Mac apps, and mobile apps.",
       },
@@ -442,7 +442,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Does Ork text, call, or buy things the way Instinct describes?",
         answer:
-          "No. Those are Instinct behaviors described on its homepage, privacy policy, and terms. Ork's clients are the web app, the Electron desktop app, and the Expo mobile app. A bot can use a browser, terminal, files, and a desktop you run, and it can pause for approval at a boundary you set.",
+          "No. Those are Instinct behaviors described on its homepage, privacy policy, and terms. Ork's clients are the web app, the Tauri desktop app, and the Expo mobile app. A bot can use a browser, terminal, files, and a desktop you run, and it can pause for approval at a boundary you set.",
       },
       {
         question: "Where do the Instinct details come from?",
@@ -762,7 +762,7 @@ export const ALTERNATIVES: readonly Alternative[] = [
       {
         question: "Does Ork order things or run Handoff the way Hark describes?",
         answer:
-          "No. Ordering, bill pay, and Handoff are Hark behaviors described on its site. Ork's clients are the web app, the Electron desktop app, and the Expo mobile app. A bot can use a browser, terminal, files, and a desktop you run, and it can pause for approval at a boundary you set.",
+          "No. Ordering, bill pay, and Handoff are Hark behaviors described on its site. Ork's clients are the web app, the Tauri desktop app, and the Expo mobile app. A bot can use a browser, terminal, files, and a desktop you run, and it can pause for approval at a boundary you set.",
       },
       {
         question: "Where do the Hark Pro details come from?",

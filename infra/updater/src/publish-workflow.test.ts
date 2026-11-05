@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify narrowed CI triggers. See LICENSE.md.
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -30,7 +34,7 @@ interface WorkflowJob {
 
 const workflow = parse(workflowText) as {
   concurrency: { group: string; "cancel-in-progress": string };
-  on: Record<string, { branches?: string[]; tags?: string[] } | null>;
+  on: Record<string, { branches?: string[]; tags?: string[]; paths?: string[] } | null>;
   jobs: {
     validate: WorkflowJob;
     build: WorkflowJob;
@@ -145,13 +149,21 @@ describe("server image publish workflow", () => {
     ]);
   });
 
-  it("lets main revisions validate independently and retains pending release work", () => {
+  it("cancels superseded main checks while keeping release publication locks", () => {
     for (const concurrency of [ci.concurrency, workflow.concurrency]) {
       expect(concurrency.group).toContain("github.run_id");
       expect(concurrency.group).toContain("github.event.pull_request.number");
-      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression
-      expect(concurrency["cancel-in-progress"]).toBe("${{ github.event_name == 'pull_request' }}");
     }
+    expect(ci.concurrency.group).toContain("github.event_name == 'push'");
+    expect(ci.concurrency.group).toContain("github.ref == 'refs/heads/main' && 'main'");
+    expect(ci.concurrency["cancel-in-progress"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression
+      "${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}",
+    );
+    expect(workflow.concurrency["cancel-in-progress"]).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression
+      "${{ github.event_name == 'pull_request' }}",
+    );
     for (const job of [
       ci.jobs["deploy-production"],
       ci.jobs["publish-mobile-update"],
@@ -163,7 +175,7 @@ describe("server image publish workflow", () => {
     }
   });
 
-  it("lets only the newest waiting main revision replace a queued one, never a running one", () => {
+  it("keeps distinct job locks and starts release prerequisites without extra dependencies", () => {
     const locks = [
       "static-checks",
       "unit-tests-shard",
@@ -176,8 +188,7 @@ describe("server image publish workflow", () => {
       expect(lock?.queue).toBeUndefined();
       expect(lock?.["cancel-in-progress"]).toBeUndefined();
     }
-    // Release prerequisites start with their run, so they reach these locks in push order and an
-    // older revision cannot replace a newer one that is already waiting.
+    // Release prerequisites start with the run instead of waiting for the path-classification job.
     for (const name of [
       "static-checks",
       "unit-tests-shard",
@@ -185,6 +196,69 @@ describe("server image publish workflow", () => {
       "publish-server-image",
     ]) {
       expect(ci.jobs[name]?.needs, name).toBeUndefined();
+    }
+  });
+
+  it("limits image validation to server and web build manifests", () => {
+    const paths = workflow.on.pull_request?.paths ?? [];
+    expect(paths).not.toContain("**/package.json");
+    for (const manifest of [
+      "package.json",
+      "apps/api/package.json",
+      "apps/worker/package.json",
+      "apps/web/package.json",
+      "packages/adapters/package.json",
+      "packages/contracts/package.json",
+      "packages/ui-web/package.json",
+      "packages/chat-ui/package.json",
+    ]) {
+      expect(paths, manifest).toContain(manifest);
+    }
+    for (const app of ["accounts-web", "desktop", "mobile", "www"]) {
+      expect(paths).not.toContain(`apps/${app}/package.json`);
+    }
+    expect(paths).not.toContain("packages/testkit/package.json");
+    expect(paths).toContain("pnpm-lock.yaml");
+  });
+
+  it("rebuilds Tauri for every desktop path and external bundle resource", () => {
+    const tauri = parse(readFileSync(path.join(workflowsDir, "desktop-tauri.yml"), "utf8")) as {
+      on: Record<"push" | "pull_request", { paths: string[] }>;
+    };
+    const paths = tauri.on.pull_request.paths;
+    expect(paths).toContain("apps/desktop/**");
+    expect(tauri.on.push.paths).toEqual(paths);
+    const desktop = path.join(workflowsDir, "../../apps/desktop/src-tauri");
+    const config = JSON.parse(readFileSync(path.join(desktop, "tauri.conf.json"), "utf8")) as {
+      bundle: { resources: Record<string, string> };
+    };
+    for (const resource of Object.keys(config.bundle.resources)) {
+      const source = path.relative(
+        path.join(workflowsDir, "../.."),
+        path.resolve(desktop, resource),
+      );
+      expect(
+        paths.some(
+          (pattern) =>
+            pattern === source ||
+            (pattern.endsWith("/**") && source.startsWith(pattern.slice(0, -2))),
+        ),
+        source,
+      ).toBe(true);
+    }
+  });
+
+  it("runs native adapter checks only for native changes and lints every main push", () => {
+    expect(ci.jobs["native-computer"]?.if).toBe("needs.changes.outputs.native == 'true'");
+    const nativeSteps = ci.jobs["native-computer"]?.steps ?? [];
+    expect(nativeSteps.some((step) => step.run?.includes("host-computer.test.ts"))).toBe(true);
+    expect(nativeSteps.some((step) => step.run?.includes("apps/desktop"))).toBe(false);
+    for (const name of ["Lint", "Check translation catalogs are current"]) {
+      const step = ci.jobs["static-checks"]?.steps.find(
+        (step) => (step as { name?: string }).name === name,
+      );
+      expect(step, name).toBeDefined();
+      expect(step?.if).toBeUndefined();
     }
   });
 

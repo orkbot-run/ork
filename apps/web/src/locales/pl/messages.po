@@ -1939,6 +1939,10 @@ msgstr "Nie udało się wykonać działania"
 msgid "Could not complete OAuth"
 msgstr "Nie udało się ukończyć OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr "Nie udało się dokończyć logowania. Spróbuj ponownie lub poproś administratora o sprawdzenie dostępu."
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Nie udało się ukończyć aktualizacji. Spróbuj ponownie."

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import { isIdentityConfirmationRequired } from "@orkbot/contracts";
 import { Button, Spinner } from "@orkbot/ui-web";
@@ -29,7 +33,7 @@ export function AccountDataSettings({
     setError(null);
     try {
       const { token } = await withIdentityConfirmation(() => rpc.export.accountToken());
-      // A download link, not a fetch, so the browser or Electron saves the stream natively.
+      // A download link, not a fetch, so the browser or desktop app saves the stream natively.
       const link = document.createElement("a");
       link.href = `/api/account/export?token=${encodeURIComponent(token)}`;
       link.download = "";

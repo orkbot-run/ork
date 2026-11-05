@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# Modified by Ork contributors to remove the legacy desktop workflow and narrow CI work. See LICENSE.md.
+
 name: ci
 on:
   push:
@@ -8,14 +12,10 @@ on:
 permissions:
   contents: read
 
-# Superseded PR checks cancel together. On main, each job that leads to a deploy holds a per-job
-# lock: one revision runs while only the newest waits, so a burst of merges deploys its last commit
-# without stopping work already in progress. Main reruns only what the deploy needs; the pull
-# request already ran the rest against the then-current main, and the nightly run refreshes the
-# E2E screenshot baseline.
+# Keep only the newest pull-request revision or push to main. Manual runs stay independent.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event.pull_request.number || (github.event_name == 'push' && github.ref == 'refs/heads/main' && 'main') || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
 
 # Testcontainers pulls Docker Hub images through Google's public mirror: anonymous Docker Hub pulls
 # from shared runner IPs fail intermittently with "authentication required" or rate limits.
@@ -68,20 +68,9 @@ jobs:
           DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
           BETTER_AUTH_SECRET: ci-build-auth-secret-at-least-32-characters
           ENCRYPTION_KEY: ci-build-encryption-key-at-least-32-characters
-      - name: Electron smoke
-        run: xvfb-run --auto-servernum pnpm --filter @orkbot/desktop exec playwright test --config e2e/playwright.config.ts
-      - name: Upload desktop setup screenshots
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: desktop-e2e-screenshots
-          path: apps/desktop/e2e/screenshots
-          if-no-files-found: ignore
 
-  # A deploy needs these jobs, so like Postgres journeys they check their own changed areas to reach
-  # their main locks in push order. Pull requests typecheck and test only the packages their files
-  # touch and the packages that depend on them, unless a change sits outside the package graph;
-  # main always runs everything.
+  # Pull requests typecheck and test affected packages unless the change sits outside the package
+  # graph. Main validates every package before publishing a deployment.
   static-checks:
     name: Lint and typecheck
     runs-on: ubuntu-latest
@@ -103,10 +92,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Lint
-        if: github.event_name == 'pull_request'
         run: pnpm lint
       - name: Check translation catalogs are current
-        if: github.event_name == 'pull_request'
         run: |
           pnpm --filter @orkbot/web intl:extract
           git diff --exit-code -- apps/web/src/locales
@@ -216,8 +203,7 @@ jobs:
   native-computer:
     name: Native computer (${{ matrix.os }})
     needs: changes
-    # Required matrix checks must register on every PR, including server-only changes.
-    if: github.event_name == 'pull_request'
+    if: needs.changes.outputs.native == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -240,18 +226,9 @@ jobs:
       - run: pnpm db:generate
         env:
           DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
-      - run: pnpm --filter @orkbot/desktop build
-      - run: pnpm exec vitest run packages/adapters/src/host-computer.test.ts packages/adapters/src/desktop-sandbox-command.test.ts packages/adapters/src/desktop-sandbox-paths.test.ts packages/adapters/src/desktop-workspace-cleanup.test.ts packages/adapters/src/computer-support.test.ts apps/desktop/src/host-computer.test.ts
-      - name: Screen control on a real Windows desktop
-        if: runner.os == 'Windows'
-        run: pnpm exec vitest run apps/desktop/src/host-screen.windows.test.ts
-      - name: Native computer in headless Electron
-        run: pnpm --filter @orkbot/desktop exec electron ../../node_modules/vitest/vitest.mjs run --root ../.. packages/adapters/src/host-computer.test.ts apps/desktop/src/host-computer.test.ts
-        env:
-          ELECTRON_RUN_AS_NODE: "1"
+      - run: pnpm exec vitest run packages/adapters/src/host-computer.test.ts packages/adapters/src/desktop-sandbox-command.test.ts packages/adapters/src/desktop-sandbox-paths.test.ts packages/adapters/src/desktop-workspace-cleanup.test.ts packages/adapters/src/computer-support.test.ts
 
-  # Checks its own changed areas instead of needing `changes`: a deploy needs this job, and on main
-  # it must reach its lock in push order so an older revision cannot replace a newer waiting one.
+  # Postgres journeys classify their own paths so they can start alongside the first checks.
   # The suites are CPU-bound, so two runners finish in about half the time.
   test-integration-shard:
     name: Postgres journeys (${{ matrix.shard }}/2)

@@ -12,7 +12,7 @@ Adapted feature and deployment reference. Use [README.md](./README.md) for the c
 ![Ork - AI teammates you actually own](./docs/readme-hero.png)
 
 Ork is a source-available AI agent for persistent teammates, and a self-hosted AI assistant you
-can run on your own machine. It is available on the web, as an Electron desktop app, and on
+can run on your own machine. It is available on the web, as a Tauri desktop app, and on
 [iPhone](https://orkbot.run/download/) and [Android](https://orkbot.run/download/). Bring your own model
 and computer provider, or run the complete stack locally.
 
@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/dccdeddb-2134-4a56-8eed-b2e591736b1c
 
 - TypeScript
 - React 19, Vite, and Tailwind CSS
-- Electron and Expo
+- Tauri and Expo
 - Hono and oRPC
 - PostgreSQL and Prisma
 - Better Auth
@@ -197,58 +197,30 @@ Workspace exports reject files above 64 MiB without truncating them. Set `RAILWA
 
 ## Desktop and mobile
 
-The Electron and Expo apps are clients of the same Ork API used by the web app.
-
-With the development stack running, launch Electron with:
+The Tauri desktop and Expo mobile apps connect to the same Ork API as the web app.
+With the development stack running, launch the desktop client with:
 
 ```bash
 pnpm --filter @orkbot/desktop dev
 ```
 
-On first run the desktop app asks whether to run Ork on this computer or connect to an existing
-server. **This computer** installs and starts the published images with Docker Compose (the same
-files as `infra/compose/install-images.sh`) under the app's data directory, so Docker Desktop,
-OrbStack, or Docker Engine must be installed; the app links to them when it is not. Installed
-builds pin the image tag to their own version; unpackaged builds pull `edge`. Developers running
-`pnpm dev` should pick **Existing instance** with `http://127.0.0.1:5173` instead. Public servers
-must use HTTPS; HTTP is accepted only for loopback and private LAN addresses (not link-local). The
-app verifies Ork's health endpoint before saving, and later launches go straight to that
-instance. The stack keeps running after the app quits; **Stop Local Stack** in the application
-menu turns it off.
-
-On Linux the desktop app ships as an AppImage, which needs FUSE 2 (`libfuse.so.2`). Distributions
-that only include FUSE 3, such as Fedora Silverblue or Ubuntu 24.04, show
-`dlopen(): error loading libfuse.so.2`. Install the FUSE 2 library (`fuse-libs` on Fedora,
-`libfuse2t64` on Ubuntu 24.04, `libfuse2` on older Ubuntu and Debian), or run the AppImage without
-FUSE:
-
-```bash
-chmod +x Ork-*.AppImage
-./Ork-*.AppImage --appimage-extract-and-run
-```
-
-**This computer** looks for the `docker` CLI and does not detect Podman. To try another
-Docker-compatible CLI that supports the `compose` commands, set `ORKBOT_DOCKER_BINARY` to its path
-before starting the app.
-
-Use **Change Ork Server…** in the application menu to reconnect. Closing that window without
-saving returns to the previous instance. For development automation, set `ORKBOT_WEB_URL` to point
-the shell somewhere else without changing the saved instance, or `ORKBOT_FORCE_SETUP=1` to run
-setup again.
-
-Mobile build and release instructions live in [docs/mobile-release.md](./docs/mobile-release.md).
+Choose **Existing instance** and enter the web address printed by `pnpm dev`.
+**This computer** runs the published server images through Docker Compose.
+See [Desktop app](./docs/desktop-app.md) for setup and permissions, and
+[Tauri desktop development](./docs/desktop-tauri.md) for prerequisites and checks.
+Mobile build and release instructions are in [Mobile releases](./docs/mobile-release.md).
 
 ## UI language
 
-The web (and Electron-hosted) UI supports English, Deutsch, 한국어, Türkçe, हिन्दी,
+The web (and desktop-hosted) UI supports English, Deutsch, 한국어, Türkçe, हिन्दी,
 Português (Brasil), 简体中文, 繁體中文, Español, Русский, Français, עברית, Nederlands, and 日本語 under
 **Settings → Language**. The Expo app ships English, 简体中文, 繁體中文, Русский, Deutsch,
 Nederlands, and 日本語 catalogs, and **Account → Language** lists all seven. A device language or
 `EXPO_PUBLIC_DEFAULT_UI_LOCALE` still selects the starting catalog before a saved choice.
 The marketing
 homepage (`apps/www`) is available in en/de/ko/zh/ja via footer language links (`/`, `/de/`,
-`/ko/`, `/zh/`, `/ja/`); other marketing pages stay English. The Russian marketing homepage and
-native Electron setup/menu remain separate follow-up work.
+`/ko/`, `/zh/`, `/ja/`); other marketing pages stay English. Native desktop setup and menus use
+the separate catalogs in `apps/desktop/src/locales`.
 
 ## Development
 
@@ -291,7 +263,6 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development workflow and test m
 - [Computer runtime and isolation](./docs/computer-runtime.md)
 - [Desktop releases](./docs/desktop-release.md)
 - [Mobile releases](./docs/mobile-release.md)
-- [Performance testing](./docs/performance.md)
 - [Bots that manage bots](./docs/fleet-management.md)
 
 ## How Ork compares

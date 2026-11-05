@@ -24,7 +24,7 @@ A managed Ork service may improve convenience, but it does not become a hidden d
 
 ## One product across every surface
 
-Web, Electron, mobile, and messaging surfaces expose the same bots and durable state through shared product contracts.
+Web, Tauri, mobile, and messaging surfaces expose the same bots and durable state through shared product contracts.
 Core workflows work on every applicable surface or degrade safely for an explicit reason.
 Shared behavior, orchestration, and reusable interface logic live in shared packages.
 Platform-specific code is reserved for native navigation, storage, permissions, and interactions that genuinely differ.

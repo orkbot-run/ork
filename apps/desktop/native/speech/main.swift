@@ -1,5 +1,11 @@
-// System speech recognition for desktop dictation on macOS: Electron's Web Speech has no
-// recognition service, so the main process runs this helper instead of asking for a key.
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to retain the Tauri desktop path.
+// Inherited material remains Apache-2.0. New changes follow LICENSE.md.
+
+// System speech recognition for desktop dictation on macOS. The native desktop client
+// runs this helper and forwards its events to the web interface.
 //
 //   orkbot-speech <language>
 //

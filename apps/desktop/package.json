@@ -7,16 +7,11 @@
   },
   "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
-  "main": "dist/main.js",
   "scripts": {
-    "dev": "pnpm build && electron .",
-    "build": "node scripts/build.mjs && node scripts/copy-static.mjs && node scripts/build-speech.mjs",
-    "pack": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --mac --win --linux",
-    "pack:dir": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --dir",
-    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.jsdom.json && tsc --noEmit -p e2e/tsconfig.json && tsc --noEmit -p scripts/tsconfig.json",
+    "dev": "pnpm tauri:dev",
+    "build": "pnpm tauri:build",
+    "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p scripts/tsconfig.json",
     "test": "vitest run --root ../.. apps/desktop/src",
-    "test:e2e": "pnpm build && playwright test --config e2e/playwright.config.ts",
-    "release": "pnpm --filter @orkbot/web build && pnpm build && electron-builder --publish never",
     "tauri:prepare": "node scripts/prepare-tauri.mjs",
     "tauri:dev": "tauri dev",
     "tauri:build": "tsx scripts/build-tauri-passkeys.ts",
@@ -24,142 +19,14 @@
     "tauri:check": "pnpm tauri:prepare && tsc --ignoreConfig --noEmit --strict --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --lib es2022,dom tauri-ui/setup.ts tauri-ui/native-bridge.ts && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings"
   },
   "dependencies": {
-    "@orkbot/contracts": "workspace:*",
-    "@orkbot/logging": "workspace:*",
-    "@sentry/electron": "8.3.0",
-    "electron-updater": "6.8.11",
-    "koffi": "3.3.6"
+    "@orkbot/contracts": "workspace:*"
   },
   "devDependencies": {
-    "@orkbot/adapters": "workspace:*",
-    "@orkbot/core": "workspace:*",
     "@orkbot/ui-tokens": "workspace:*",
-    "@playwright/test": "1.64.1",
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/cli": "2.12.4",
-    "electron": "45.2.2",
-    "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
     "typescript": "7.0.2",
-    "vitest": "4.1.12",
-    "yaml": "2.9.1"
-  },
-  "build": {
-    "appId": "run.orkbot.desktop",
-    "directories": {
-      "output": "out",
-      "buildResources": "assets"
-    },
-    "files": [
-      "dist/**/*",
-      "package.json"
-    ],
-    "extraResources": [
-      {
-        "from": "../web/dist",
-        "to": "web"
-      },
-      {
-        "from": "../../infra/compose/docker-compose.images.yml",
-        "to": "stack/docker-compose.images.yml"
-      },
-      {
-        "from": "../../infra/compose/.env.images.example",
-        "to": "stack/.env.images.example"
-      },
-      {
-        "from": "../..",
-        "to": "licenses",
-        "filter": [
-          "LICENSE",
-          "LICENSE-POLYFORM",
-          "LICENSE.md",
-          "NOTICE",
-          "docs/licensing-faq.md",
-          "docs/commercial-license.md",
-          "docs/licensing-rollout.md",
-          "docs/cla/v1.md"
-        ]
-      }
-    ],
-    "extraMetadata": {
-      "name": "orkbot",
-      "main": "dist/main.js"
-    },
-    "mac": {
-      "icon": "../../packages/ui-tokens/assets/Ork.icon",
-      "category": "public.app-category.productivity",
-      "x64ArchFiles": "{**/node_modules/@koromix/koffi-darwin-*/darwin_*/koffi.node,**/node_modules/@oxc-parser/binding-darwin-*/parser.darwin-*.node}",
-      "entitlements": "assets/entitlements.mac.plist",
-      "entitlementsInherit": "assets/entitlements.mac.plist",
-      "extendInfo": {
-        "NSMicrophoneUsageDescription": "Ork uses the microphone for dictation and voice calls with your bots.",
-        "NSSpeechRecognitionUsageDescription": "Ork turns what you say into text for dictation and voice calls with your bots."
-      },
-      "extraResources": [
-        {
-          "from": "build/speech/orkbot-speech",
-          "to": "speech/orkbot-speech"
-        },
-        {
-          "from": "assets/es.lproj",
-          "to": "es.lproj"
-        },
-        {
-          "from": "assets/pl.lproj",
-          "to": "pl.lproj"
-        }
-      ],
-      "target": [
-        "dmg",
-        "zip"
-      ],
-      "notarize": true
-    },
-    "dmg": {
-      "title": "${productName}",
-      "iconSize": 100,
-      "window": {
-        "width": 660,
-        "height": 400
-      },
-      "contents": [
-        {
-          "x": 170,
-          "y": 175,
-          "type": "file"
-        },
-        {
-          "x": 490,
-          "y": 175,
-          "type": "link",
-          "path": "/Applications"
-        }
-      ]
-    },
-    "nsis": {
-      "artifactName": "${productName}-Setup-${version}.${ext}"
-    },
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": [
-        "nsis"
-      ],
-      "verifyUpdateCodeSignature": true
-    },
-    "linux": {
-      "executableName": "orkbot",
-      "icon": "assets/icon.png",
-      "target": [
-        "AppImage"
-      ]
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "orkbot-run",
-        "repo": "ork"
-      }
-    ]
+    "vitest": "4.1.12"
   }
 }

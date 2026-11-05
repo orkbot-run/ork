@@ -63,6 +63,9 @@ comparison:
         - "Required for running the published images."
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
 
@@ -72,7 +75,7 @@ This page follows the [self-hosting guide](https://github.com/orkbot-run/ork/blo
 
 ## What you are running
 
-A signed-in Ork deployment is not a static site. The guide describes a long-running API, a Graphile Worker, Postgres, and a computer provider. The computer defaults to Docker. E2B, Daytona, CreateOS, and Boat are optional remote computers, each with its own API key. The web app, the Electron desktop app, and the Expo mobile app are clients of that API.
+A signed-in Ork deployment is not a static site. The guide describes a long-running API, a Graphile Worker, Postgres, and a computer provider. The computer defaults to Docker. E2B, Daytona, CreateOS, and Boat are optional remote computers, each with its own API key. The web app, the Tauri desktop app, and the Expo mobile app are clients of that API.
 
 Postgres, bot files, browser profiles, and the audit log stay on the machine you operate. Content you send to a model provider is processed by that provider under its terms. You choose the provider and the keys. Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay the model provider and any remote computer you turn on.
 

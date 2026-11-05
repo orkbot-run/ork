@@ -10,7 +10,7 @@
 ![Ork：本当に自分のものにできる AI チームメイト](./docs/readme-hero.png)
 
 Ork は、常駐型の AI チームメイトを持てるソース公開型の AI エージェントです。自分のマシンで動かせる
-セルフホスト型の AI アシスタントでもあります。Web 版、Electron デスクトップアプリ、
+セルフホスト型の AI アシスタントでもあります。Web 版、Tauri デスクトップアプリ、
 [iPhone](https://orkbot.run/download/) 版と [Android](https://orkbot.run/download/) 版で利用できます。
 モデルやコンピューターのプロバイダーは自分で選べるほか、スタック全体をローカルで動かすこともできます。
 
@@ -49,7 +49,7 @@ https://github.com/user-attachments/assets/dccdeddb-2134-4a56-8eed-b2e591736b1c
 
 - TypeScript
 - React 19、Vite、Tailwind CSS
-- Electron、Expo
+- Tauri、Expo
 - Hono、oRPC
 - PostgreSQL、Prisma
 - Better Auth
@@ -188,55 +188,29 @@ Railway のサンドボックス利用は従量課金です。
 
 ## デスクトップとモバイル
 
-Electron アプリと Expo アプリは、Web アプリと同じ Ork API を使うクライアントです。
-
-開発用スタックを起動した状態で、次のコマンドで Electron を起動します。
+The Tauri desktop and Expo mobile apps connect to the same Ork API as the web app.
+With the development stack running, launch the desktop client with:
 
 ```bash
 pnpm --filter @orkbot/desktop dev
 ```
 
-初回起動時、デスクトップアプリは Ork をこのコンピューターで動かすか、既存のサーバーに接続するかを
-尋ねます。**This computer**（このコンピューター）を選ぶと、アプリのデータディレクトリに Docker Compose で公開イメージを
-インストールして起動します（`infra/compose/install-images.sh` と同じファイルを使います）。そのため Docker Desktop、
-OrbStack、Docker Engine のいずれかが必要です。インストールされていない場合、アプリからそれらへのリンクを案内します。インストール済みの
-ビルドはイメージタグを自身のバージョンに固定し、パッケージ化されていないビルドは `edge` を取得します。
-`pnpm dev` を実行している開発者は、代わりに **Existing instance**（既存のインスタンス）を選び `http://127.0.0.1:5173` を指定してください。公開サーバーは
-HTTPS を使う必要があります。HTTP はループバックとプライベート LAN のアドレスでのみ受け付けます（リンクローカルは除く）。
-アプリは保存前に Ork のヘルスチェックエンドポイントを確認し、以降の起動ではそのインスタンスに直接接続します。
-アプリを終了してもスタックは動き続けます。停止するには、アプリケーションメニューの **Stop Local Stack**（ローカルスタックを停止）を使います。
-
-Linux では、デスクトップアプリは AppImage として配布されており、FUSE 2（`libfuse.so.2`）が必要です。Fedora Silverblue や
-Ubuntu 24.04 など、FUSE 3 しか含まないディストリビューションでは
-`dlopen(): error loading libfuse.so.2` と表示されます。FUSE 2 ライブラリ（Fedora では `fuse-libs`、
-Ubuntu 24.04 では `libfuse2t64`、それ以前の Ubuntu や Debian では `libfuse2`）をインストールするか、FUSE を使わずに
-AppImage を実行してください。
-
-```bash
-chmod +x Ork-*.AppImage
-./Ork-*.AppImage --appimage-extract-and-run
-```
-
-**This computer** は `docker` CLI を探し、Podman は検出しません。`compose` コマンドに対応した別の
-Docker 互換 CLI を試すには、アプリを起動する前に `ORKBOT_DOCKER_BINARY` にそのパスを設定してください。
-
-接続先を変えるには、アプリケーションメニューの **Change Ork Server…**（Ork サーバーを変更）を使います。保存せずに
-そのウィンドウを閉じると、以前のインスタンスに戻ります。開発の自動化では、`ORKBOT_WEB_URL` を設定すると
-保存済みのインスタンスを変えずにシェルの接続先を変更でき、`ORKBOT_FORCE_SETUP=1` を設定するとセットアップを
-再実行できます。
-
-モバイルのビルドとリリースの手順は [docs/mobile-release.md](./docs/mobile-release.md) にあります。
+Choose **Existing instance** and enter the web address printed by `pnpm dev`.
+**This computer** runs the published server images through Docker Compose.
+See [Desktop app](./docs/desktop-app.md) for setup and permissions, and
+[Tauri desktop development](./docs/desktop-tauri.md) for prerequisites and checks.
+Mobile build and release instructions are in [Mobile releases](./docs/mobile-release.md).
 
 ## UI の言語
 
-Web（および Electron 内）の UI は、**Settings → Language**（設定 → 言語）で English、Deutsch、한국어、Türkçe、हिन्दी、
+Web（および Tauri 内）の UI は、**Settings → Language**（設定 → 言語）で English、Deutsch、한국어、Türkçe、हिन्दी、
 Português (Brasil)、简体中文、Español、Русский、Français、עברית、Nederlands、日本語 に対応しています。
 Expo アプリには English、简体中文、Русский、Deutsch、Nederlands、日本語 のカタログが含まれ、
 **Account → Language**（アカウント → 言語）にこの 6 つが表示されます。保存された選択がない場合は、デバイスの言語または
 `EXPO_PUBLIC_DEFAULT_UI_LOCALE` が最初のカタログを決めます。
 マーケティング用ホームページ（`apps/www`）は、フッターの言語リンクから en/de/ko/zh/ja で表示できます（`/`、`/de/`、
-`/ko/`、`/zh/`、`/ja/`）。その他のマーケティングページは英語のままです。ロシア語のマーケティング用ホームページと、
-Electron ネイティブのセットアップ画面／メニューの翻訳は、今後の課題として残っています。
+`/ko/`、`/zh/`、`/ja/`）。その他のマーケティングページは英語のままです。
+Native desktop setup and menus use `apps/desktop/src/locales`.
 
 ## 開発
 
@@ -266,7 +240,6 @@ pnpm test:e2e
 - [コンピューターのランタイムと分離](./docs/computer-runtime.md)
 - [デスクトップのリリース](./docs/desktop-release.md)
 - [モバイルのリリース](./docs/mobile-release.md)
-- [パフォーマンステスト](./docs/performance.md)
 - [ボットを管理するボット](./docs/fleet-management.md)
 
 ## Ork と他製品の比較

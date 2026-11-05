@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Adapted from the inherited Electron application menu. Rust additions follow LICENSE.md.
+// Adapted from the inherited desktop application menu. Rust additions follow LICENSE.md.
 
 use tauri::{
     menu::{

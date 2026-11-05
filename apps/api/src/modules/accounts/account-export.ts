@@ -206,7 +206,7 @@ export function accountExportFilename(now = new Date()): string {
 }
 
 /**
- * `GET /api/account/export?token=`: a plain navigation, so the browser or Electron saves the
+ * `GET /api/account/export?token=`: a plain navigation, so the browser or desktop app saves the
  * download itself. The one-time token from `export.accountToken` is the only credential.
  */
 export function mountAccountExportRoute(

@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import type { AppBootstrap } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { initialBootstrapTarget, linkedBotRoute } from "./bootstrap-target";
 
 describe("initial bootstrap target", () => {
-  it("primes the Electron root before its client-side redirect", () => {
+  it("primes the desktop root before its client-side redirect", () => {
     expect(initialBootstrapTarget("/", true)).toEqual({ botId: undefined });
     expect(initialBootstrapTarget("/", false)).toBeNull();
   });

@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# Modified by Ork contributors to cover the Tauri desktop paths. See LICENSE.md.
+
 """Classify pull-request merge commits in disposable repositories, without network access."""
 
 import pathlib
@@ -106,7 +110,7 @@ class ChangedAreasTests(unittest.TestCase):
             ("apps/web/src/app.ts", expect("web", "e2e")),
             ("packages/ui-web/src/button.tsx", expect("web", "e2e")),
             ("packages/chat-ui/src/thread.tsx", expect("web", "e2e")),
-            ("apps/desktop/src/main.ts", expect("web", "e2e", "native")),
+            ("apps/desktop/src-tauri/src/lib.rs", expect("web", "e2e", "native")),
             ("apps/web/package.json", expect(*EVERY_BROWSER_AREA, "all_packages")),
             ("packages/ui-tokens/src/tokens.ts", expect(*EVERY_BROWSER_AREA)),
         ]

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -347,7 +351,7 @@ describePostgres("computer runs (PostgreSQL)", () => {
     ]);
   });
 
-  it("does not record host computers, whose stop only Electron sees", async () => {
+  it("does not record host computers, whose stop only the desktop app sees", async () => {
     const o = await owner();
 
     await runAsTenant(o.tenant, () =>

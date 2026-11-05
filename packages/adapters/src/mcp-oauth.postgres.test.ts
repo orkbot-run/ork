@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Modified by Ork contributors. Inherited Apache material remains under Apache-2.0.
 
 import { randomUUID } from "node:crypto";
@@ -186,7 +187,7 @@ describePostgres("MCP OAuth refresh (PostgreSQL contract)", () => {
     const pending = providers.map((provider) => runAsTenant(context, () => provider!.tokens()));
     const settled = Promise.allSettled(pending);
     try {
-      // Observe real contention before allowing the provider to rotate the token.
+      // Observe contention and entry into the gated refresh before allowing token rotation.
       await vi.waitFor(
         async () => {
           const waiting = await monitor.pool.query<{ count: number }>(
@@ -197,10 +198,10 @@ describePostgres("MCP OAuth refresh (PostgreSQL contract)", () => {
             [server.id],
           );
           expect(waiting.rows[0]?.count).toBe(1);
+          expect(refresh).toHaveBeenCalledTimes(1);
         },
         { timeout: 5_000 },
       );
-      expect(refresh).toHaveBeenCalledTimes(1);
     } finally {
       release();
       await settled;

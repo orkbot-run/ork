@@ -77,6 +77,9 @@ comparison:
         - "A local backend in the desktop app"
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
 
@@ -107,7 +110,7 @@ The published-image installer is one script in an empty directory. It writes `.e
 
 Models include OpenAI, Anthropic, Google, OpenRouter, Vercel AI Gateway, an OpenAI-compatible endpoint, and a local server such as Ollama, LM Studio, llama.cpp, or MLX. Each bot can use a different model. The default computer is local Docker. E2B, Daytona, CreateOS, and Boat are optional. An explicit desktop provider can run on the host, and it is not the default.
 
-Optional connectors exist for Slack, WhatsApp, Telegram, iMessage via Sendblue, and Feishu/Lark. They are not how you talk to the bot. The web, Electron, and Expo apps are.
+Optional connectors exist for Slack, WhatsApp, Telegram, iMessage via Sendblue, and Feishu/Lark. They are not how you talk to the bot. The web, Tauri, and Expo apps are.
 
 Permitted noncommercial use is free. Commercial use of new Ork work requires a paid license. You pay for models, machines, and any remote computer you enable. Image pull time is not a fixed number. The [self-host guide](/self-hosted-ai-agent/) is the command list, and the [longer install note](/blog/self-host-an-ai-agent/) says what the ten-minute title does and does not mean.
 

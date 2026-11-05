@@ -136,10 +136,10 @@ describePostgres("model OAuth refresh (PostgreSQL contract)", () => {
             [JSON.stringify([id, provider])],
           );
           expect(waiting.rows[0]?.count).toBe(2);
+          expect(oauth.refresh).toHaveBeenCalledTimes(1);
         },
         { timeout: 5_000 },
       );
-      expect(oauth.refresh).toHaveBeenCalledTimes(1);
     } finally {
       release();
       await settled;

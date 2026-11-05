@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to ignore superseded report runs and successful fallback comments. See LICENSE.md.
+
 // biome-ignore-all lint/suspicious/noTemplateCurlyInString: Shell and GitHub expressions are literal workflow fixtures.
 import { execFileSync } from "node:child_process";
 import {
@@ -114,6 +118,49 @@ ${script}`;
       expect(readFileSync(output, "utf8")).toBe("job_result=failure\nresult=failure\n");
     },
   );
+
+  it.skipIf(process.platform === "win32").each([
+    ["current", "current", "number=42\n"],
+    ["superseded", "current", "number=\n"],
+  ])(
+    "publishes only an open pull request's current head (%s)",
+    (runHead, currentHead, expected) => {
+      const root = temporaryDirectory();
+      const output = path.join(root, "output");
+      const step = workflow
+        .split("      - name: Resolve current open pull request\n")[1]
+        ?.split("      - name: Read Playwright job result\n")[0];
+      const script = step?.split("        run: |\n")[1]?.replace(/^ {10}/gm, "");
+      expect(script).toBeTruthy();
+      const mock = `gh() {
+  [[ "$*" == *"state=open&head="* ]] || return 1
+  printf '%s\\n' '[{"number":42,"head":{"sha":"${currentHead}"}}]'
+}
+${script}`;
+      execFileSync("bash", ["-eo", "pipefail", "-c", mock], {
+        env: {
+          ...process.env,
+          GITHUB_REPOSITORY: "example/repo",
+          HEAD_OWNER: "example",
+          HEAD_BRANCH: "feature",
+          HEAD_SHA: runHead,
+          GITHUB_OUTPUT: output,
+        },
+      });
+      expect(readFileSync(output, "utf8")).toBe(expected);
+    },
+  );
+
+  it("keeps successful fallback reports in Actions and guards stale comments", () => {
+    expect(workflow).toContain("needs.result.outputs.pull_request != ''");
+    expect(workflow).toContain(
+      "needs.result.outputs.result == 'failure' || vars.PLAYWRIGHT_PUBLIC_BASE_URL != ''",
+    );
+    expect(workflow).toContain(
+      "if: steps.storage.outputs.configured != 'true' && needs.result.outputs.result == 'failure'",
+    );
+    expect(workflow).toContain('if [[ "$current_head" != "$SHA" ]]; then exit 0; fi');
+  });
 
   it("keeps extraction and explicit report inputs outside the trusted checkout", () => {
     expect(workflow).not.toContain("actions/download-artifact@");

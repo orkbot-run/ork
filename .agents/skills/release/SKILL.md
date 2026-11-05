@@ -3,6 +3,9 @@ name: release
 description: Prepare a Ork release - draft the CHANGELOG section from the pull requests merged since the last tag, bump the desktop version, open the release PR, and tag it once merged. Use when asked to cut, prepare, or ship a release or a new version.
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
 # Release
 
 Feature pull requests never touch `CHANGELOG.md`; the release writes it in one pass.
@@ -39,4 +42,4 @@ sha="$(gh pr view <release PR> --json mergeCommit -q .mergeCommit.oid)"
 git fetch origin main && git tag vX.Y.Z "$sha" && git push origin vX.Y.Z
 ```
 
-The tag runs `release-desktop` (desktop builds, GitHub release text from the changelog section followed by the merged PR list) and publishes the server images. The workflow refuses a tag without a matching changelog section.
+The tag publishes the server images. Tauri desktop builds currently remain diagnostic Actions artifacts from `desktop-tauri.yml`; signed desktop release publication is not configured.

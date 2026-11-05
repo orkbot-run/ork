@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { notificationAvatarSource } from "@orkbot/core";
 
 type AvatarBot = { id: string; color: string; avatarSet?: string | null };
@@ -7,7 +11,7 @@ const icons = new Map<string, { key: string; icon?: string }>();
 
 const avatarKey = (bot: AvatarBot) => `${bot.avatarSet ?? ""}\n${bot.color}`;
 
-// Chromium and Electron do not reliably draw SVG notification icons.
+// Chromium and native webviews do not reliably draw SVG notification icons.
 function rasterize(svgUrl: string): Promise<string | undefined> {
   return new Promise((resolve) => {
     const image = new Image();

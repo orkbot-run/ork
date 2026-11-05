@@ -222,7 +222,7 @@ pub fn rp_ids(origin: &Url, bundle_id: &str) -> Vec<String> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        // Other system WebViews use standard WebAuthn capability detection, as Electron does.
+        // Other system WebViews use standard WebAuthn capability detection.
         let _ = (origin, bundle_id);
         Vec::new()
     }

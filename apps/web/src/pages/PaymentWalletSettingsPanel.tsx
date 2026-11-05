@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { PaymentWalletStatus } from "@orkbot/contracts";
 import { writeSaved } from "@orkbot/core/query";
@@ -23,7 +27,7 @@ import { errorText } from "../lib/user-error";
 export const PAYMENT_WALLET_POLL_MS = 3_000;
 
 function openVerification(url: string) {
-  // Electron hands a new window to the system browser; a blocked popup leaves the Open button.
+  // The desktop app hands a new window to the system browser; a blocked popup leaves the Open button.
   window.open(url, "_blank", "noopener,noreferrer");
 }
 

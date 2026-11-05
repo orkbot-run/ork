@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved. New native auth hints and pairing lifecycle are Ork additions.
+// Inherited Apache-2.0 material is preserved. Native auth and pairing are Ork additions.
+// Modified by Ork contributors to remove the legacy setup bridge.
 
 /** A native host can share its server session with an SSO popup without exposing commands. */
 export interface OrkNativeAuth {
@@ -176,94 +177,8 @@ export interface OrkDesktop {
   };
 }
 
-/**
- * How the desktop app was pointed at a Ork server during first-run setup.
- * `new` is the Docker Compose stack this app installs and runs on the same computer.
- */
-export type DesktopInstanceMode = "new" | "existing";
-
-export interface DesktopSetup {
-  mode: DesktopInstanceMode;
-  serverUrl: string;
-  /** Sent with every request to an existing server, such as an access proxy's credentials. */
-  headers?: Record<string, string>;
-}
-
-export interface DesktopSetupState {
-  defaultLocalUrl: string;
-  /** Hosted Ork origin, saved as an `existing` server when chosen. */
-  cloudUrl: string;
-  saved: DesktopSetup | null;
-  /** Present when a saved or newly selected server could not be reopened. */
-  error?: string;
-}
-
-export interface DesktopReachability {
-  ok: boolean;
-  /** HTTP status when the server answered, absent when it could not be reached. */
-  status?: number;
-  /** Normalized URL that was probed, absent when the input was not a usable URL. */
-  url?: string;
-  error?: string;
-}
-
+/** Version probe shared by the web development server and native desktop setup. */
 export interface DesktopStackProbeResponse {
   ok: true;
   imageTag: string;
-}
-
-/**
- * Lifecycle of the Docker Compose stack the desktop app manages for mode `new`.
- * `docker-missing` and `docker-not-running` wait for the person to act; `ready` and
- * `failed` are terminal until the next start.
- */
-export type DesktopLocalStackPhase =
-  | "idle"
-  | "checking-docker"
-  | "docker-missing"
-  | "docker-not-running"
-  | "preparing"
-  | "pulling"
-  | "starting"
-  | "waiting-healthy"
-  | "ready"
-  | "failed";
-
-export interface DesktopLocalStackState {
-  phase: DesktopLocalStackPhase;
-  /** One actionable sentence; null while the stack is progressing normally. */
-  message: string | null;
-  /** Bounded tail of docker output for the current attempt. */
-  output: string[];
-  /** Bytes pulled per image layer in the current attempt; the sum is the only progress Docker reports. */
-  layerBytes: Record<string, number>;
-  /** Image tag this app launches (`v<app version>` for installed builds, `edge` otherwise). */
-  imageTag: string;
-}
-
-export type DesktopSetupLink = "docker-desktop" | "orbstack" | "docker-engine";
-
-/**
- * Bridge exposed only to the first-run setup window. The app window keeps the
- * narrower `orkbotDesktop` bridge so a connected server can never re-point the app.
- */
-export interface OrkSetup {
-  /** Used only to reserve space for native window controls in the local setup UI. */
-  platform: string;
-  /** The page's language and its translations, keyed by the English text; empty for English. */
-  locale: { lang: string; dir: "ltr" | "rtl"; messages: Readonly<Record<string, string>> };
-  state: () => Promise<DesktopSetupState>;
-  test: (url: string, headers?: Record<string, string>) => Promise<DesktopReachability>;
-  save: (setup: DesktopSetup) => Promise<{ ok: boolean; error?: string }>;
-  quit: () => Promise<void>;
-  /** Opens one of the Docker install pages in the system browser. */
-  openLink: (link: DesktopSetupLink) => Promise<void>;
-  /** The Docker Compose stack this app installs and runs for mode `new`. */
-  stack: {
-    state: () => Promise<DesktopLocalStackState>;
-    /** Starts (or retries) the stack; a no-op while a start is already in flight. */
-    start: () => Promise<DesktopLocalStackState>;
-    /** Fires on every state change so progress never depends on a renderer timer. */
-    onChange: (listener: (state: DesktopLocalStackState) => void) => void;
-  };
 }

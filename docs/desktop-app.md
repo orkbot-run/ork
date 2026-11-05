@@ -1,22 +1,27 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Desktop app
 
-The desktop app for Mac, Windows and Linux runs the same Ork as the web, and can also run
-everything on your own computer.
+The Tauri desktop app for Mac, Windows and Linux loads the same Ork frontend as the web
+and can run the server on your own computer.
 
 ## Install
 
-Download it from [orkbot.run](https://orkbot.run). The Linux AppImage needs FUSE 2.
+Build it from source or download a diagnostic installer from the `desktop-tauri.yml`
+Actions artifacts. See [Tauri desktop development](desktop-tauri.md). The Linux
+AppImage needs FUSE 2.
 
 ## Choose a server
 
-The first time it opens, the app asks which server to use:
+Setup opens with the saved server choice:
 
-- **Ork Cloud**: sign in to your orkbot.run account.
 - **This computer**: run your own Ork locally in Docker. If Docker isn't installed, the app links
   to Docker Desktop, OrbStack and Docker Engine. Everything, including your bots' computers, then
   runs on your machine. It is yours alone: once you create your account, it accepts no other.
 - **Existing instance**: connect to a Ork server you or your team already run. Enter its
-  **Server address** and choose **Check connection**.
+  **Server address** and choose **Connect**.
 
 To switch later, use **Change Ork Server…** in the app menu (Cmd+Shift+K, or Ctrl+Shift+K on
 Windows and Linux).
@@ -48,9 +53,10 @@ Either way, the app asks **Allow bots to use this computer?** before access is g
 
 ## Updates
 
-The app checks for updates and downloads them in the background. When one is ready, an
-**Install update** button appears at the bottom of the sidebar, or choose **Restart** when asked.
-**Check for Updates…** in the app menu checks now.
+Updates are available only in builds configured with a signed Tauri update feed.
+Default diagnostic builds have updates disabled. In a configured build, the app checks
+and downloads updates in the background, then asks before installation.
+**Check for Updates…** in the app menu checks now. See [Desktop releases](desktop-release.md).
 
 ## Shortcuts
 

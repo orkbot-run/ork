@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Set up Ork with a coding agent
 
 Copy one of the prompts below into a coding agent.
@@ -67,7 +71,7 @@ When finished, report the directory path, effective Docker/Compose versions, con
 
 ## Local source checkout (pnpm)
 
-Use this for development, Docker sandboxes on the host, or Electron.
+Use this for development, Docker sandboxes on the host, or Tauri.
 
 ```text
 Set up Ork locally and leave it running in a usable state.
@@ -92,7 +96,7 @@ Before making changes, ask me these concise questions:
    - Connect during Ork onboarding with a provider API key or with ChatGPT Plus/Pro, GitHub Copilot, or SuperGrok / X Premium.
    - Defer model setup and verify infrastructure only. Make clear that bots cannot answer until a model is connected.
 3. Do I want a managed app catalog? If yes, choose Composio (`COMPOSIO_API_KEY`) or Pipedream Connect (`PIPEDREAM_CLIENT_ID`, `PIPEDREAM_CLIENT_SECRET`, and `PIPEDREAM_PROJECT_ID`); otherwise leave them empty. Explain that this is optional and that users can still add Treg, HTTPS MCP, or OpenAPI sources in the app.
-4. Set up the web app only (recommended), or also launch the Electron desktop shell after the web stack works?
+4. Set up the web app only (recommended), or also launch the Tauri desktop shell after the web stack works?
 5. Which email should the initial ordinary account use? There is no administrator account or first-signup privilege. Keep deployment configuration in `.env` and server operations in deployment tooling. Without email delivery, keep `SIGNUPS_ENABLED=false` and create that account privately with the documented server-side bootstrap command; never treat an unverified public signup as proof of identity.
 
 Generate the required application secrets with openssl; do not ask me to invent them. If I choose an API key, let me enter it through an available secure secret mechanism or directly into `.env`; never echo it back. OAuth or device-code sign-in must remain under my control.
@@ -140,7 +144,7 @@ Verification:
 - Open the Agent computer pane and confirm the Docker computer reaches `running` and renders its desktop.
 - Open Integrations. If neither managed catalog was configured, confirm the view still offers Treg, HTTPS MCP, and OpenAPI sources. If one was configured, verify its app catalog loads without exposing any key or client secret.
 - Run `pnpm test` and `pnpm check`. Report failures with the relevant output; do not claim success if either fails.
-- If I requested Electron, leave the web stack running and then launch `pnpm --filter @orkbot/desktop dev`. Verify the shell loads the same app. Let me make the Docker-versus-This-Mac choice because This Mac grants bots access under my OS account.
+- If I requested Tauri, leave the web stack running and then launch `pnpm --filter @orkbot/desktop dev`. Verify the shell loads the same app. Let me make the Docker-versus-This-Mac choice because This Mac grants bots access under my OS account.
 
 When finished, report:
 

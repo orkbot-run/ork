@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -50,7 +54,6 @@ export async function removeOwnedWorkspaceChildren(
     ],
     {
       cwd: parent,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
       signal,
       timeout: 20_000,
       maxBuffer: 64 * 1024,

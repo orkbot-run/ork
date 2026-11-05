@@ -93,6 +93,9 @@ comparison:
         - "Multi-agent workflows you build"
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
 
@@ -112,7 +115,7 @@ Hosted products with no source you can run are outside this list. The [alternati
 
 ## Ork
 
-Ork is a source-available platform for persistent AI teammates. Its Apache baseline stays Apache. New Ork work uses PolyForm Noncommercial or a paid commercial license, so that work is not OSI open source. You run published Docker images or a source checkout. The web app, the Electron desktop app, and the Expo mobile app are clients of the same API. Run Ork on your own infrastructure.
+Ork is a source-available platform for persistent AI teammates. Its Apache baseline stays Apache. New Ork work uses PolyForm Noncommercial or a paid commercial license, so that work is not OSI open source. You run published Docker images or a source checkout. The web app, the Tauri desktop app, and the Expo mobile app are clients of the same API. Run Ork on your own infrastructure.
 
 A bot has conversations, memory, routines, and history. Routines are readable Markdown and can run on a schedule. Browser, terminal, files, and a graphical desktop are available. The default computer is local Docker. E2B, Daytona, CreateOS, and Boat are optional remote computers. You bring model credentials: OpenAI, Anthropic, Google, OpenRouter, Vercel AI Gateway, an OpenAI-compatible endpoint, or a local server such as Ollama, LM Studio, llama.cpp, or MLX. Each bot can use a different model.
 

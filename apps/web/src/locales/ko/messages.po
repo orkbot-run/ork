@@ -1939,6 +1939,10 @@ msgstr ""
 msgid "Could not complete OAuth"
 msgstr "OAuth 인증을 완료하지 못했습니다."
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""

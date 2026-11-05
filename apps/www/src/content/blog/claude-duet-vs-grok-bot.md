@@ -87,6 +87,9 @@ comparison:
         - "Apache baseline + PolyForm NC"
 ---
 
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0. -->
 
@@ -116,7 +119,7 @@ Price follows a plan in both cases. Duet comes with Claude Pro at $20 a month an
 
 ## Where Ork fits
 
-Ork is the source-available version of this shape. Its Apache baseline stays Apache, while new Ork work uses PolyForm Noncommercial or a paid commercial license. It is in beta. You run it with the published Docker images or the desktop app, or use Ork Cloud, in beta. The clients are the web app, the Electron desktop app, and the Expo mobile app.
+Ork is the source-available version of this shape. Its Apache baseline stays Apache, while new Ork work uses PolyForm Noncommercial or a paid commercial license. It is in beta. You run it with the published Docker images or the desktop app, or use Ork Cloud, in beta. The clients are the web app, the Tauri desktop app, and the Expo mobile app.
 
 Like Grok Bot, it is just chat once it is running. You create named bots and manage each one from its conversation. Each bot keeps memory, routines, and history. Routines are readable Markdown and can run on a schedule, so a morning brief is a routine you write, not a fixed feature. A bot can pause for approval at a boundary you set, and actions are recorded in an audit log.
 

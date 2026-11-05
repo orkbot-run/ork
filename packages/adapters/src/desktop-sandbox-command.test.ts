@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { existsSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
@@ -101,15 +105,12 @@ describe("desktop command execution", () => {
     },
   );
 
-  it("only hosts commands in the desktop app or a local development process", () => {
-    const node = { ...process.versions, electron: undefined };
-    const electron = { ...process.versions, electron: "38.0.0" };
+  it("only selects host commands in a local development or test process", () => {
     const refused = "SANDBOX_PROVIDER=desktop runs bot commands directly on this host";
-    expect(() => assertHostCommandsAllowed({ NODE_ENV: "production" }, node)).toThrow(refused);
-    expect(() => assertHostCommandsAllowed({}, node)).toThrow(refused);
-    expect(() => assertHostCommandsAllowed({ NODE_ENV: "production" }, electron)).not.toThrow();
-    expect(() => assertHostCommandsAllowed({ NODE_ENV: "development" }, node)).not.toThrow();
-    expect(() => assertHostCommandsAllowed({ NODE_ENV: "test" }, node)).not.toThrow();
+    expect(() => assertHostCommandsAllowed({ NODE_ENV: "production" })).toThrow(refused);
+    expect(() => assertHostCommandsAllowed({})).toThrow(refused);
+    expect(() => assertHostCommandsAllowed({ NODE_ENV: "development" })).not.toThrow();
+    expect(() => assertHostCommandsAllowed({ NODE_ENV: "test" })).not.toThrow();
   });
 
   it("leaves the desktop app's own bridge free to build the provider", () => {

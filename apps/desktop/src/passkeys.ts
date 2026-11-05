@@ -1,28 +1,15 @@
-import path from "node:path";
-import { ORKBOT_CLOUD_URL } from "./setup-config.js";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to retain the Tauri desktop path.
+// Inherited material remains Apache-2.0. New changes follow LICENSE.md.
 
 /**
- * The only relying party a build is associated with (`webcredentials:` entitlement). The bundler
- * inlines `ORKBOT_PASSKEY_RP_ID`, so the app and its entitlements must be built with the same value.
+ * The only relying party a build is associated with (`webcredentials:` entitlement). The app and
+ * its entitlements must be built with the same `ORKBOT_PASSKEY_RP_ID` value.
  */
 export const PASSKEY_RP_ID =
-  process.env.ORKBOT_PASSKEY_RP_ID?.trim().toLowerCase() || new URL(ORKBOT_CLOUD_URL).hostname;
-
-/**
- * Relying parties whose passkeys this build can use through the system passkey sheet. The
- * release workflow embeds a provisioning profile only together with the `webcredentials:`
- * entitlement, and macOS ignores that entitlement without one, so the profile is the signal.
- */
-export function associatedPasskeyRpIds(input: {
-  platform: NodeJS.Platform;
-  packaged: boolean;
-  resourcesPath: string;
-  exists: (file: string) => boolean;
-}): string[] {
-  if (input.platform !== "darwin" || !input.packaged) return [];
-  const profile = path.join(input.resourcesPath, "..", "embedded.provisionprofile");
-  return input.exists(profile) ? [PASSKEY_RP_ID] : [];
-}
+  process.env.ORKBOT_PASSKEY_RP_ID?.trim().toLowerCase() || "app.orkbot.run";
 
 const TEAM_ID = /^[A-Z0-9]{10}$/;
 const BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
@@ -48,7 +35,7 @@ export function passkeyEntitlements(
     throw new Error("Unexpected base entitlements");
   }
   const entries = [
-    "    <!-- System passkeys (app.configureWebAuthn); requires the embedded provisioning profile. -->",
+    "    <!-- System passkeys require the embedded provisioning profile. -->",
     "    <key>com.apple.application-identifier</key>",
     `    <string>${teamId}.${bundleId}</string>`,
     "    <key>com.apple.developer.associated-domains</key>",

@@ -1,3 +1,7 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+
 # Tools and integrations
 
 Configure the services bots reach beyond the model: web search, memory, MCP servers, apps,
@@ -198,7 +202,7 @@ the Integrations screen are a separate connection from this messaging surface.
 
 ## Cloud coding agents
 
-Cloud agents delegate a repository task to a hosted coding agent and track its result in the bot's chat. They are separate from the bot computer and its in-turn subagents. Web, Electron, and mobile show the same status and pull-request link.
+Cloud agents delegate a repository task to a hosted coding agent and track its result in the bot's chat. They are separate from the bot computer and its in-turn subagents. Web, Tauri, and mobile show the same status and pull-request link.
 
 The default is `CLOUD_AGENT_PROVIDER=none`. Core workflows do not require Cursor or any other hosted coding provider.
 

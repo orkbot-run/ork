@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import koffi from "koffi";
@@ -127,7 +131,7 @@ export function spawnOwnedCommand(
     windows ? ["-e", WINDOWS_COMMAND_WRAPPER] : argv.slice(1),
     {
       cwd,
-      env: windows ? { ...env, ELECTRON_RUN_AS_NODE: "1" } : env,
+      env,
       detached: !windows,
       shell: false,
       windowsHide: true,

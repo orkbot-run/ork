@@ -10,7 +10,7 @@
 ![Ork：由你掌控的 AI 队友](./docs/readme-hero.png)
 
 Ork 是一个源码可用的 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
-它提供网页版、Electron 桌面应用，以及 [iPhone](https://orkbot.run/download/) 和
+它提供网页版、Tauri 桌面应用，以及 [iPhone](https://orkbot.run/download/) 和
 [Android](https://orkbot.run/download/) 应用。
 你可以接入自己的模型和计算环境提供商，也可以在本地运行完整服务。
 
@@ -56,7 +56,7 @@ https://github.com/user-attachments/assets/dccdeddb-2134-4a56-8eed-b2e591736b1c
 
 - TypeScript
 - React 19、Vite 和 Tailwind CSS
-- Electron 和 Expo
+- Tauri 和 Expo
 - Hono 和 oRPC
 - PostgreSQL 和 Prisma
 - Better Auth
@@ -196,50 +196,29 @@ Railway 沙箱按用量计费。
 
 ## 桌面端与移动端
 
-Electron 和 Expo 应用都是 Ork API 的客户端，与网页版使用同一套 API。
-
-开发服务启动后，使用以下命令启动 Electron：
+The Tauri desktop and Expo mobile apps connect to the same Ork API as the web app.
+With the development stack running, launch the desktop client with:
 
 ```bash
 pnpm --filter @orkbot/desktop dev
 ```
 
-首次运行时，桌面应用会询问是在本机运行 Ork，还是连接已有服务器。
-选择 **This computer**（本机）会在应用数据目录中，通过 Docker Compose 安装并启动已发布镜像，
-使用的文件与 `infra/compose/install-images.sh` 相同。
-因此需要先安装 Docker Desktop、OrbStack 或 Docker Engine；未安装时，应用会提供相应链接。
-已安装的发行版将镜像标签固定为自身版本，未打包的开发版本则拉取 `edge`。
-
-运行 `pnpm dev` 的开发者应选择 **Existing instance**（已有实例），地址填写终端打印的地址（默认为 `http://127.0.0.1:5173`）。
-公共服务器必须使用 HTTPS；只有回环地址和局域网私有地址允许 HTTP，不包括链路本地地址。
-应用会在保存地址前检查 Ork 的健康检查端点，之后启动时直接连接该实例。
-退出应用后，服务仍会继续运行；可通过应用菜单中的 **Stop Local Stack**（停止本地服务）将其关闭。
-
-在 Linux 上，桌面应用以 AppImage 形式发布，需要 FUSE 2（`libfuse.so.2`）。只包含 FUSE 3 的发行版（例如 Fedora Silverblue 或 Ubuntu 24.04）会报错
-`dlopen(): error loading libfuse.so.2`。请安装 FUSE 2 库（Fedora 上为 `fuse-libs`，Ubuntu 24.04 上为 `libfuse2t64`，较早的 Ubuntu 和 Debian 上为 `libfuse2`），或者不借助 FUSE 运行 AppImage：
-
-```bash
-chmod +x Ork-*.AppImage
-./Ork-*.AppImage --appimage-extract-and-run
-```
-
-使用应用菜单中的 **Change Ork Server…**（更换 Ork 服务器）重新选择服务器。
-关闭该窗口且不保存时，会返回之前的实例。
-开发自动化中，可以设置 `ORKBOT_WEB_URL`，让桌面应用连接其他地址而不改变已保存的实例；
-也可以设置 `ORKBOT_FORCE_SETUP=1`，再次运行设置流程。
-
-移动端构建和发布说明见 [docs/mobile-release.md](./docs/mobile-release.md)。
+Choose **Existing instance** and enter the web address printed by `pnpm dev`.
+**This computer** runs the published server images through Docker Compose.
+See [Desktop app](./docs/desktop-app.md) for setup and permissions, and
+[Tauri desktop development](./docs/desktop-tauri.md) for prerequisites and checks.
+Mobile build and release instructions are in [Mobile releases](./docs/mobile-release.md).
 
 ## 界面语言
 
-网页版及 Electron 内嵌界面可在 **Settings → Language**（设置 → 语言）中选择英语、德语、韩语、土耳其语、
+网页版及 Tauri 内嵌界面可在 **Settings → Language**（设置 → 语言）中选择英语、德语、韩语、土耳其语、
 印地语、巴西葡萄牙语、简体中文、繁体中文、西班牙语、俄语、法语、希伯来语、荷兰语和日语。
 Expo 应用包含英语、简体中文、繁体中文、俄语、德语、荷兰语和日语翻译，**Account → Language**（账号 → 语言）列出这七种语言。
 在用户保存选择之前，移动端的初始语言由设备语言或 `EXPO_PUBLIC_DEFAULT_UI_LOCALE` 决定。
 
 官网首页（`apps/www`）提供英语、德语、韩语、中文和日语版本，可通过页脚语言链接切换，
 对应路径为 `/`、`/de/`、`/ko/`、`/zh/` 和 `/ja/`；其他官网页面仍为英文。
-俄语官网首页，以及 Electron 原生设置窗口和菜单的本地化仍有待完成。
+Native desktop setup and menus use `apps/desktop/src/locales`.
 
 ## 开发
 
@@ -269,7 +248,6 @@ pnpm test:e2e
 - [计算机运行时与隔离](./docs/computer-runtime.md)
 - [桌面端发布](./docs/desktop-release.md)
 - [移动端发布](./docs/mobile-release.md)
-- [性能测试](./docs/performance.md)
 - [管理机器人的机器人](./docs/fleet-management.md)
 
 ## 参与贡献

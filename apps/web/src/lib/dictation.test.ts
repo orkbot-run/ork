@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   combineTranscript,
@@ -926,17 +930,11 @@ describe("dictation engine choice", () => {
     expect(webSpeechAvailable()).toBe(true);
   });
 
-  it("treats Electron as having no usable Web Speech", () => {
+  it("uses transcription when the desktop bridge has no native recognizer", () => {
     vi.stubGlobal("window", {
       webkitSpeechRecognition: class {},
       orkbotDesktop: { platform: "darwin" },
     });
-    expect(webSpeechAvailable()).toBe(false);
-  });
-
-  it("treats an Electron user agent as having no usable Web Speech", () => {
-    vi.stubGlobal("window", { webkitSpeechRecognition: class {} });
-    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 Electron/44.2.0" });
     expect(webSpeechAvailable()).toBe(false);
   });
 
@@ -1434,7 +1432,7 @@ describe("Dictation web speech", () => {
     expect(dictation.state.status).toBe("listening");
   });
 
-  it("records through the connected voice provider in Electron", async () => {
+  it("records through the connected voice provider in the desktop app", async () => {
     const constructed = vi.fn();
     class FakeRecognition {
       start = vi.fn();

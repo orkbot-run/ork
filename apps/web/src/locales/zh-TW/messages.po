@@ -1940,6 +1940,10 @@ msgstr "無法完成操作"
 msgid "Could not complete OAuth"
 msgstr "無法完成 OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "無法完成更新，請再試一次。"

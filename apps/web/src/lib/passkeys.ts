@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+
 import { t } from "@lingui/core/macro";
 import { hostMatchesPasskeyRpId } from "@orkbot/core";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
@@ -100,7 +104,7 @@ export function cancelPasskeyRequest() {
 }
 
 /**
- * Electron's system passkey sheet is modal and has no autofill mode, so on macOS a
+ * The desktop system passkey sheet is modal and has no autofill mode, so on macOS a
  * conditional request would open it as soon as the form appears. The button opens it instead.
  */
 export async function conditionalPasskeyAvailable(

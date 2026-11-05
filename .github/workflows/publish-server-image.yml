@@ -1,3 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# Modified by Ork contributors to remove the legacy desktop workflow and narrow CI work. See LICENSE.md.
+
 name: publish-server-image
 
 # Release tags publish the source-addressed image used by in-app updates plus the human-readable
@@ -12,7 +16,7 @@ on:
   push:
     tags: ["v*"]
   workflow_call:
-  # Only what the image definitions consume directly. A source change that breaks the app's build
+  # Server and web build manifests only; dependency edits in other apps change the lockfile. A source change that breaks the app's build
   # fails ci.yml's production builds first, and main still builds every image before it deploys.
   pull_request:
     paths:
@@ -24,7 +28,22 @@ on:
       - "infra/sandboxes/**"
       - "infra/updater/**"
       - "patches/**"
-      - "**/package.json"
+      - "package.json"
+      - "apps/api/package.json"
+      - "apps/worker/package.json"
+      - "apps/web/package.json"
+      - "packages/adapter-kit/package.json"
+      - "packages/adapters/package.json"
+      - "packages/auth/package.json"
+      - "packages/chat-ui/package.json"
+      - "packages/contracts/package.json"
+      - "packages/core/package.json"
+      - "packages/db/package.json"
+      - "packages/logging/package.json"
+      - "packages/memory/package.json"
+      - "packages/page-kit/package.json"
+      - "packages/ui-tokens/package.json"
+      - "packages/ui-web/package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
   workflow_dispatch:
