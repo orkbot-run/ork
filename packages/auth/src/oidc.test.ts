@@ -657,6 +657,29 @@ describe("OIDC callbacks", () => {
     });
     expect(owner.status).toBe(200);
   });
+  it("lets Expo probe the native authorization origin without storing an absent nonce", async () => {
+    setup({ passwordAuth: false });
+    const adapter = (await auth.$context).internalAdapter;
+    const createVerificationValue = adapter.createVerificationValue.bind(adapter);
+    const persisted = vi.spyOn(adapter, "createVerificationValue").mockImplementation((value) => {
+      // Prisma rejects the missing required value that the memory adapter otherwise accepts.
+      if (typeof value.value !== "string") throw new Error("Verification value is required");
+      return createVerificationValue(value);
+    });
+    const callback = await start(undefined, false, "orkbot://sign-in");
+    const authorize = `${issuer}/authorize?state=${new URL(`${origin}${callback}`).searchParams.get("state")}`;
+    const proxy = await request(
+      `/expo-authorization-proxy?${new URLSearchParams({ authorizationURL: authorize })}`,
+    );
+    expect(proxy.status).toBe(302);
+    expect(proxy.headers.get("location")).toBe(authorize);
+    expect(persisted.mock.calls.every(([value]) => typeof value.value === "string")).toBe(true);
+    expect(rows("verification").some((value) => value.identifier === "oidc-callback-state")).toBe(
+      false,
+    );
+    expect(new URL((await request(callback)).headers.get("location")!).protocol).toBe("orkbot:");
+    expect(rows("session")).toHaveLength(1);
+  });
   it("hands the native browser callback to Expo with a valid bearer session", async () => {
     setup();
     const callback = await start(undefined, false, "orkbot://sign-in");
@@ -764,6 +787,19 @@ describe("OIDC callbacks", () => {
     expect((await request(callback)).headers.get("location")).toBe(`${origin}/app`);
     expect((await request(callback)).headers.get("location")).toContain("error=");
     expect(rows("session")).toHaveLength(1);
+  });
+  it("rejects a real callback without its nonce marker before exchanging the code", async () => {
+    setup();
+    const callback = await start(undefined, false, "orkbot://sign-in");
+    const marker = rows("verification").findIndex((value) =>
+      String(value.identifier).startsWith("oidc-callback-"),
+    );
+    expect(marker).toBeGreaterThanOrEqual(0);
+    rows("verification").splice(marker, 1);
+    expect((await request(callback)).headers.get("location")).toContain("error=invalid_code");
+    expect(tokenRequests).toHaveLength(0);
+    expect(rows("session")).toHaveLength(0);
+    expect(rows("user")).toHaveLength(0);
   });
   it("rejects a code issued to a different PKCE challenge", async () => {
     setup();

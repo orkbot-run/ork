@@ -135,11 +135,15 @@ export function oidcDiscovery(config: OidcConfig) {
           }
           // Better Auth's state read/delete is not atomic. Consume a separate
           // server-side marker before code exchange, including concurrent callbacks.
-          await ctx.internalAdapter.createVerificationValue({
-            identifier: `oidc-callback-${data.state}`,
-            value: data.idTokenNonce!,
-            expiresAt: new Date(Date.now() + 10 * 60_000),
-          });
+          // Expo also probes this method without a nonce to discover the provider origin.
+          // A probe must not persist callback state; callbacks still require this marker.
+          if (data.idTokenNonce) {
+            await ctx.internalAdapter.createVerificationValue({
+              identifier: `oidc-callback-${data.state}`,
+              value: data.idTokenNonce,
+              expiresAt: new Date(Date.now() + 10 * 60_000),
+            });
+          }
           return url;
         },
         validateAuthorizationCode: async (data) => {
