@@ -11,10 +11,7 @@
       ],
       "position": {
         "scale": 1,
-        "translation-in-points": [
-          0,
-          0
-        ]
+        "translation-in-points": [0, 0]
       },
       "shadow": {
         "kind": "neutral",
@@ -27,9 +24,7 @@
     }
   ],
   "supported-platforms": {
-    "circles": [
-      "watchOS"
-    ],
+    "circles": ["watchOS"],
     "squares": "shared"
   }
 }
