@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. New native auth hints are Ork additions.
+
+/** A native host can share its server session with an SSO popup without exposing commands. */
+export interface OrkNativeAuth {
+  readonly ssoPopup: true;
+}
+
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
  * the normal state for a fork. It is not an error the user needs to act on. Automatic checks stay

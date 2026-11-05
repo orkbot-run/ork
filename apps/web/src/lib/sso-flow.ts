@@ -1,6 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native auth hint support is an Ork addition.
+
 import { t } from "@lingui/core/macro";
 import { newClientId } from "@orkbot/core";
-import { desktopBridge } from "./desktop";
+import { supportsNativeSsoPopup } from "./desktop";
 
 type SsoResult = {
   data: { url?: string } | null;
@@ -40,12 +44,12 @@ export function completeSsoCallback(): boolean {
   return true;
 }
 
-/** Named Electron popups share the app session; normal browsers use Better Auth's redirect. */
+/** Native popups share the app session. Normal browsers use the server's redirect. */
 export async function runSsoFlow(
   begin: (disableRedirect: boolean, callbackURL: (url: string) => string) => Promise<SsoResult>,
   callbackURLs: readonly string[],
 ): Promise<SsoResult> {
-  if (!desktopBridge()) return begin(false, (url) => url);
+  if (!supportsNativeSsoPopup()) return begin(false, (url) => url);
   const nonce = newClientId();
   const callbacks = callbackURLs.map((url) => new URL(url, window.location.href));
   const callbackURL = (url: string) => {

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Preserves the inherited microphone permission explanation for the native host. -->
+<plist version="1.0">
+  <dict>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Ork uses the microphone for dictation and voice calls with your bots.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Ork turns what you say into text for dictation and voice calls with your bots.</string>
+  </dict>
+</plist>

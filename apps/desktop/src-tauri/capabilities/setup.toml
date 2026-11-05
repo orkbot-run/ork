@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+identifier = "setup"
+description = "Only the bundled setup window can choose a server or quit."
+local = true
+windows = ["setup"]
+permissions = ["allow-setup-state", "allow-connect-server", "allow-connect-local-server", "allow-local-stack-state", "allow-quit-setup", "core:event:allow-listen", "core:event:allow-unlisten"]

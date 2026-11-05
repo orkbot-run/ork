@@ -1,0 +1,35 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ork Preview</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="setup.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <h1 class="heading">Ork Preview</h1>
+      <form id="setup">
+        <fieldset class="choices">
+          <legend class="sr-only">Instance</legend>
+          <label class="choice"><input type="radio" name="mode" value="existing" checked /><span class="choice-title">Existing instance</span></label>
+          <label class="choice"><input type="radio" name="mode" value="new" /><span class="choice-title">This computer</span></label>
+        </fieldset>
+        <section id="existing-server">
+        <label class="field-label" for="server-url">Server address</label>
+        <input id="server-url" class="field" type="text" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
+        </section>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <details id="details" class="headers" hidden><summary>Technical details</summary><pre id="output" class="stack-output"></pre></details>
+        <div class="actions">
+          <button id="quit" class="button button-secondary" type="button">Quit</button>
+          <button id="connect" class="button button-primary" type="submit" disabled>Connect</button>
+        </div>
+      </form>
+    </main>
+    <script src="setup.js"></script>
+  </body>
+</html>

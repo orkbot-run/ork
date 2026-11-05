@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native auth hint tests are Ork additions.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OrkDesktop, OrkDesktopOAuthCallback } from "./desktop.js";
 import {
+  desktopBridge,
   desktopOAuthCode,
   oauthStateOf,
   onDesktopOAuthCallback,
+  supportsNativeSsoPopup,
   windowChromeKind,
 } from "./desktop.js";
 
@@ -33,6 +39,30 @@ function desktop(platform: string): OrkDesktop {
     oauth: { onCallback: () => () => undefined },
   };
 }
+
+describe("native SSO popup availability", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("does not enable the desktop bridge when only native SSO is available", () => {
+    vi.stubGlobal("window", { orkbotNativeAuth: { ssoPopup: true } });
+    expect(supportsNativeSsoPopup()).toBe(true);
+    expect(desktopBridge()).toBeUndefined();
+  });
+
+  it("keeps native SSO enabled for existing desktop bridges", () => {
+    vi.stubGlobal("window", { orkbotDesktop: desktop("darwin") });
+    expect(supportsNativeSsoPopup()).toBe(true);
+  });
+
+  it("requires an explicit popup hint outside the desktop bridge", () => {
+    for (const state of [{}, { orkbotNativeAuth: {} }, { orkbotNativeAuth: { ssoPopup: false } }]) {
+      vi.stubGlobal("window", state);
+      expect(supportsNativeSsoPopup()).toBe(false);
+    }
+    vi.stubGlobal("window", undefined);
+    expect(supportsNativeSsoPopup()).toBe(false);
+  });
+});
 
 describe("window chrome", () => {
   it("does not paint fake traffic lights in the browser", () => {

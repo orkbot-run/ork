@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Native auth hint tests are Ork additions.
+
 import { afterEach, expect, it, vi } from "vitest";
 import { completeSsoCallback, runSsoFlow, SSO_CALLBACK_PATH } from "./sso-flow";
 
@@ -55,6 +59,22 @@ it("uses the normal redirect and unchanged callbacks on web", async () => {
     return result;
   });
   await expect(runSsoFlow(begin, ["/app"])).resolves.toBe(result);
+});
+
+it("completes native popup SSO without enabling the full desktop bridge", async () => {
+  vi.useFakeTimers();
+  const native = desktopWindow();
+  Object.assign(window, { orkbotNativeAuth: { ssoPopup: true } });
+  delete window.orkbotDesktop;
+  const flow = runSsoFlow(native.begin, ["/app"]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(native.begin).toHaveBeenCalledWith(true, expect.any(Function));
+  expect(native.popup.location.href).toBe(result.data.url);
+  native.land();
+  await expect(flow).resolves.toBe(result);
+  expect(native.location.assign).toHaveBeenCalledWith("https://orkbot.example.test/app");
+  expect(window.orkbotDesktop).toBeUndefined();
+  expect(native.popup.close).toHaveBeenCalledOnce();
 });
 
 it.each(["/app", "/onboarding", "/app?settings=account", "/sign-in?error=SSO_UNAVAILABLE"])(

@@ -1,0 +1,417 @@
+{
+  "measuredOn": "2026-11-05",
+  "scope": "Native integrations preview comparison; full feature parity remains incomplete.",
+  "artifacts": {
+    "platform": "macOS",
+    "architecture": "arm64",
+    "osVersion": "27.0.1",
+    "desktopVersion": "0.7.0",
+    "kind": "uncompressed app bundle",
+    "bytes": {
+      "tauri": 8727174,
+      "electron": 517576875
+    }
+  },
+  "installers": {
+    "kind": "headless UDZO DMG with app and Applications link",
+    "bytes": {
+      "tauri": 5173632,
+      "electron": 195493279
+    }
+  },
+  "memory": {
+    "platform": {
+      "operatingSystem": "macOS",
+      "architecture": "arm64"
+    },
+    "scenario": "Unauthenticated sign-up screen with empty fields. Both packaged release clients use the same managed Docker server.",
+    "method": {
+      "attribution": "Apple proc_pidinfo PROC_PIDCOALITIONINFO resource coalition",
+      "measurement": "Sum of ps RSS in KiB for all attributed app processes; sampler, compiler and backend/Docker processes excluded",
+      "sharedPages": "Counted once in each process RSS; this is not deduplicated physical RAM",
+      "settlingSeconds": 30,
+      "sampleCount": 6,
+      "intervalSeconds": 3
+    },
+    "samples": [
+      {
+        "sample": 1,
+        "elapsedSeconds": 0.08,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383296,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158640
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540368,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210624
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129936
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151680
+            }
+          }
+        }
+      },
+      {
+        "sample": 2,
+        "elapsedSeconds": 3.08,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383296,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158640
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540368,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210624
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129936
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151680
+            }
+          }
+        }
+      },
+      {
+        "sample": 3,
+        "elapsedSeconds": 6.09,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383168,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158512
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540368,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210624
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129936
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151680
+            }
+          }
+        }
+      },
+      {
+        "sample": 4,
+        "elapsedSeconds": 9.09,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383168,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158512
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540448,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210640
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129984
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151696
+            }
+          }
+        }
+      },
+      {
+        "sample": 5,
+        "elapsedSeconds": 12.08,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383168,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158512
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540448,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210640
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129984
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151696
+            }
+          }
+        }
+      },
+      {
+        "sample": 6,
+        "elapsedSeconds": 15.09,
+        "tauri": {
+          "processCount": 9,
+          "excludedProcessCount": 0,
+          "rssKiB": 383168,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 112560
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48288
+            },
+            "gpu": {
+              "processCount": 1,
+              "rssKiB": 31792
+            },
+            "web-content": {
+              "processCount": 2,
+              "rssKiB": 158512
+            },
+            "networking": {
+              "processCount": 1,
+              "rssKiB": 20144
+            },
+            "utility": {
+              "processCount": 1,
+              "rssKiB": 11872
+            }
+          }
+        },
+        "electron": {
+          "processCount": 7,
+          "excludedProcessCount": 0,
+          "rssKiB": 540432,
+          "perKind": {
+            "main": {
+              "processCount": 1,
+              "rssKiB": 210640
+            },
+            "utility": {
+              "processCount": 2,
+              "rssKiB": 129984
+            },
+            "other-app-owned": {
+              "processCount": 3,
+              "rssKiB": 48128
+            },
+            "renderer": {
+              "processCount": 1,
+              "rssKiB": 151680
+            }
+          }
+        }
+      }
+    ],
+    "summary": {
+      "tauri": {
+        "version": "0.7.0",
+        "medianRssMiB": 374.19,
+        "minRssMiB": 374.19,
+        "maxRssMiB": 374.31,
+        "processCountRange": [9, 9]
+      },
+      "electron": {
+        "version": "0.7.0",
+        "medianRssMiB": 527.73,
+        "minRssMiB": 527.7,
+        "maxRssMiB": 527.78,
+        "processCountRange": [7, 7]
+      }
+    },
+    "limitations": [
+      "One idle scenario on one macOS architecture.",
+      "Preview has fewer features than Electron.",
+      "Both applications were running concurrently.",
+      "No active chat, voice, long-running sessions or repeated-launch trials were measured.",
+      "Backend and Docker memory are outside the client totals."
+    ]
+  },
+  "notes": [
+    "This snapshot includes the native desktop bridge and universal speech sidecar. The helper stays stopped until dictation is requested.",
+    "Both clients displayed the same Polish sign-up page with empty fields on the same managed local server.",
+    "The application and helper use local ad-hoc signatures. Production signing and notarization remain untested.",
+    "The default 15-minute warm-window timeout was restored before packaging and this measurement.",
+    "Physical footprint was not measured for this build. The earlier preview report records a separate historical snapshot."
+  ]
+}

@@ -1,15 +1,27 @@
-import type { OrkDesktop, OrkDesktopOAuthCallback } from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. New native auth hints are Ork additions.
+
+import type { OrkDesktop, OrkDesktopOAuthCallback, OrkNativeAuth } from "@orkbot/contracts";
 
 export type { OrkDesktop, OrkDesktopOAuthCallback } from "@orkbot/contracts";
 
 declare global {
   interface Window {
     orkbotDesktop?: OrkDesktop;
+    orkbotNativeAuth?: OrkNativeAuth;
   }
 }
 
 export function desktopBridge(): OrkDesktop | undefined {
   return typeof window === "undefined" ? undefined : window.orkbotDesktop;
+}
+
+export function supportsNativeSsoPopup(): boolean {
+  return Boolean(
+    desktopBridge() ||
+      (typeof window !== "undefined" && window.orkbotNativeAuth?.ssoPopup === true),
+  );
 }
 
 /** The compact `code#state` form the manual paste flow already accepts. */
