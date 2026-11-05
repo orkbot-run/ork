@@ -22,8 +22,8 @@ import {
   rotateSpaceDataKeys,
   runAsSystem,
 } from "@orkbot/db";
-import { moveMcpArgsIntoSecrets } from "../mcp-args-migration.js";
-import { createSecretMigrationRepository } from "../secret-migration.js";
+import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
+import { createSecretMigrationRepository } from "#modules/security/secret-migration";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();

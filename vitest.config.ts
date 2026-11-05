@@ -23,12 +23,14 @@ const mutatesSharedState =
   /vi\.(mock|doMock|stubGlobal|stubEnv|resetModules|useFakeTimers|spyOn)\(|globalThis\.\w+ *=[^=]|(globalThis|global|window)\[[^\]]+\] *=[^=]|process\.env(\.\w+|\[[^\]]+\]) *=[^=]|delete process\.env|defineProperty\((globalThis|global|window|document|navigator|process)|process\.chdir|@vitest-environment/;
 // Package scripts run from their own folder, so paths resolve from the repo root, not the cwd.
 const root = path.dirname(fileURLToPath(import.meta.url));
+const postgres = "**/*.postgres.test.ts";
 const isolated = include
   .flatMap((pattern) => globSync(pattern, { cwd: root }))
   .filter(
     (file) =>
-      process.env.COPY_TEST_DATABASE ||
-      mutatesSharedState.test(readFileSync(path.join(root, file), "utf8")),
+      !file.endsWith(".postgres.test.ts") &&
+      (process.env.COPY_TEST_DATABASE ||
+        mutatesSharedState.test(readFileSync(path.join(root, file), "utf8"))),
   );
 
 export default defineConfig({
@@ -73,7 +75,13 @@ export default defineConfig({
     hookTimeout: 60_000,
     projects: [
       { extends: true, test: { name: "isolated", include: isolated } },
-      { extends: true, test: { name: "shared", include, exclude: isolated, isolate: false } },
+      {
+        extends: true,
+        test: { name: "shared", include, exclude: [...isolated, postgres], isolate: false },
+      },
+      ...(process.env.VERIFY_DATABASE
+        ? [{ extends: true as const, test: { name: "postgres", include: [postgres] } }]
+        : []),
     ],
   },
 });
