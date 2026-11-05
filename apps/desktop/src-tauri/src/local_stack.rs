@@ -416,10 +416,11 @@ impl LocalStack {
         }
         check_cancelled(&cancel)?;
 
-        if !self
-            .release_images_cached(&binary, &token, cancel.clone(), redactions.clone())
-            .await
-        {
+        let mut cached = stable_version(self.image_tag.strip_prefix('v').unwrap_or(""))
+            && self
+                .images_cached(&binary, &token, cancel.clone(), redactions.clone())
+                .await;
+        if !cached {
             check_cancelled(&cancel)?;
             self.phase(LocalStackPhase::Pulling);
             let pull = self
@@ -434,16 +435,30 @@ impl LocalStack {
                 .await;
             check_result_cancelled(&cancel, &pull)?;
             if pull.code != 0 {
-                return Err(failure_message(failure_kind(&pull), true).into());
+                let kind = failure_kind(&pull);
+                if matches!(
+                    kind,
+                    DockerFailure::ImageUnavailable | DockerFailure::Network
+                ) {
+                    cached = self
+                        .images_cached(&binary, &token, cancel.clone(), redactions.clone())
+                        .await;
+                }
+                check_cancelled(&cancel)?;
+                if !cached {
+                    return Err(failure_message(kind, true).into());
+                }
             }
         }
 
         self.phase(LocalStackPhase::Starting);
-        let up = if compose_supports_wait_timeout(&version.stdout) {
-            &["up", "-d", "--wait", "--wait-timeout", "300"][..]
-        } else {
-            &["up", "-d"][..]
-        };
+        let mut up = vec!["up", "-d"];
+        if cached {
+            up.extend(["--pull", "never"]);
+        }
+        if compose_supports_wait_timeout(&version.stdout) {
+            up.extend(["--wait", "--wait-timeout", "300"]);
+        }
         for attempt in 0..3 {
             write_private(
                 &self.directory.join(WEB_URL_FILE),
@@ -452,7 +467,7 @@ impl LocalStack {
             let result = self
                 .compose(
                     &binary,
-                    up,
+                    &up,
                     Duration::from_secs(360),
                     &token,
                     cancel.clone(),
@@ -506,16 +521,13 @@ impl LocalStack {
             .web_url = url;
     }
 
-    async fn release_images_cached(
+    async fn images_cached(
         &self,
         binary: &Path,
         token: &str,
         cancel: watch::Receiver<bool>,
         redactions: Vec<String>,
     ) -> bool {
-        if !stable_version(self.image_tag.strip_prefix('v').unwrap_or("")) {
-            return false;
-        }
         let images = self
             .compose(
                 binary,
@@ -986,6 +998,7 @@ fn redactions(values: &BTreeMap<String, String>, token: &str) -> Vec<String> {
         .iter()
         .filter(|(name, value)| {
             !value.is_empty()
+                && !matches!(name.as_str(), "MASTER_KEY_PROVIDER" | "SECRET_STORE")
                 && (["PASSWORD", "SECRET", "TOKEN", "KEY"]
                     .iter()
                     .any(|part| name.contains(part))
@@ -2082,9 +2095,12 @@ mod tests {
             ok("2.24.0"),
             ok("29.0.0"),
             error("unauthorized: authentication required"),
+            ok("registry.example.com/app:edge\nregistry.example.com/computer:edge\n"),
+            error("No such image: registry.example.com/computer:edge"),
             ok("2.24.0"),
             ok("29.0.0"),
             error("pull access denied"),
+            error("Could not resolve the Compose configuration"),
         ]);
         let phases = Arc::new(Mutex::new(Vec::new()));
         let captured = Arc::clone(&phases);
@@ -2097,7 +2113,7 @@ mod tests {
             assert!(state.message.unwrap().contains("images are unavailable"));
         }
         let requests = runner.requests.lock().unwrap();
-        assert_eq!(requests.len(), 6);
+        assert_eq!(requests.len(), 9);
         assert!(requests
             .iter()
             .all(|request| !request.args.iter().any(|arg| arg == "up")));
@@ -2242,6 +2258,8 @@ mod tests {
         assert_eq!(layers["other"], 3000);
         let secrets = redactions(
             &BTreeMap::from([
+                ("MASTER_KEY_PROVIDER".into(), "local".into()),
+                ("SECRET_STORE".into(), "encrypted".into()),
                 ("ENCRYPTION_KEY".into(), "private-encryption-value".into()),
                 (
                     "PRIVATE_KEY".into(),
@@ -2255,6 +2273,74 @@ mod tests {
             "[redacted] [redacted]"
         );
         assert_eq!(redact_line("second-private-line", &secrets), "[redacted]");
+        assert_eq!(
+            redact_line("orkbot/local-app:edge encrypted", &secrets),
+            "orkbot/local-app:edge encrypted"
+        );
+    }
+
+    #[tokio::test]
+    async fn cached_development_images_start_after_registry_failures_without_pulling_again() {
+        for failure in ["pull access denied", "network is unreachable"] {
+            let (_root, stack, runner) = fixture(vec![
+                ok("2.24.0"),
+                ok("29.0.0"),
+                error(failure),
+                ok("orkbot/local-app:edge\norkbot/local-computer:edge\npostgres:16\nbusybox:1\n"),
+                ok("sha256:app\nsha256:computer\nsha256:postgres\nsha256:busybox\n"),
+                Reply::Healthy,
+            ]);
+            fs::write(
+                stack.resources.join(ENV_TEMPLATE),
+                format!(
+                    "{}\nMASTER_KEY_PROVIDER=local\nSECRET_STORE=encrypted\n",
+                    template()
+                ),
+            )
+            .unwrap();
+            assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
+            let requests = runner.requests.lock().unwrap();
+            assert_eq!(requests.len(), 6);
+            assert!(requests[2].args.iter().any(|arg| arg == "pull"));
+            assert!(requests[5]
+                .args
+                .windows(2)
+                .any(|args| args == ["--pull", "never"]));
+            for image in [
+                "orkbot/local-app:edge",
+                "orkbot/local-computer:edge",
+                "postgres:16",
+                "busybox:1",
+            ] {
+                assert!(requests[4].args.iter().any(|arg| arg == image));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelling_image_inspection_does_not_start_cached_services() {
+        let (_root, stack, runner) = fixture(vec![
+            ok("2.24.0"),
+            ok("29.0.0"),
+            error("pull access denied"),
+            ok("registry.example.com/app:edge\n"),
+            Reply::UntilCancelled,
+        ]);
+        let stack = Arc::new(stack);
+        let starting = {
+            let stack = Arc::clone(&stack);
+            tokio::spawn(async move { stack.start().await })
+        };
+        tokio::time::timeout(Duration::from_secs(2), runner.blocked.notified())
+            .await
+            .unwrap();
+        stack.abort();
+        assert_ne!(starting.await.unwrap().phase, LocalStackPhase::Ready);
+        let requests = runner.requests.lock().unwrap();
+        assert_eq!(requests.len(), 5);
+        assert!(requests
+            .iter()
+            .all(|request| !request.args.iter().any(|arg| arg == "up")));
     }
 
     #[tokio::test]
@@ -2270,6 +2356,10 @@ mod tests {
         assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
         let requests = runner.requests.lock().unwrap();
         assert_eq!(requests.len(), 5);
+        assert!(requests[4]
+            .args
+            .windows(2)
+            .any(|args| args == ["--pull", "never"]));
         assert!(!requests
             .iter()
             .any(|request| request.args.iter().any(|arg| arg == "pull")));
