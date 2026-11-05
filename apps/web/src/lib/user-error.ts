@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors: explain failed SSO code exchanges. See LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import {
   CONNECTOR_AUTH_UNAVAILABLE,
@@ -59,6 +62,8 @@ export function credentialIssueText(field: CredentialField): string {
 export function authErrorText(error: unknown, fallback: string): string {
   const code = error && typeof error === "object" && "code" in error ? error.code : undefined;
   if (code === "SSO_UNAVAILABLE") return t`SSO is temporarily unavailable. Try again.`;
+  if (code === "invalid_code")
+    return t`Could not complete sign-in. Retry or ask your administrator to check access.`;
   if (code === "account_not_linked") return t`Sign in to your existing account to link SSO`;
   if (code === "REGISTRATION_CLOSED") return t`Registration is closed`;
   if (code === "EMAIL_NOT_ALLOWED") return t`Email is not allowed to register`;
