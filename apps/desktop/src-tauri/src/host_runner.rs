@@ -942,6 +942,7 @@ fn write_workspace_file(
     Ok(())
 }
 
+#[cfg(unix)]
 fn valid_cleanup_name(parent: &str, name: &str) -> bool {
     if parent == "bots" {
         !name.is_empty()
