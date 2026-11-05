@@ -1,16 +1,22 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to render the shared Ork body and face on native.
+// Inherited motion and interaction handling remain Apache-2.0. New changes follow LICENSE.md.
+
 import type { AvatarMotionMode, AvatarPoke, LogoAvatarActivity } from "@orkbot/core";
 import {
   avatarPokeFrame,
   LOGO_AVATAR_BODY_Y,
   LOGO_AVATAR_EYES,
+  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
   LOGO_BODY_PATH,
-  LOGO_LEFT_HAND_PATH,
-  LOGO_RIGHT_HAND_PATH,
   LOGO_AVATAR_LIGHTING as lighting,
   logoAvatarEyeInk,
   logoAvatarFrame,
   logoAvatarPaint,
+  logoAvatarSmilePath,
   logoAvatarTraits,
 } from "@orkbot/core";
 import type { ReactNode } from "react";
@@ -30,7 +36,6 @@ import Svg, {
   Ellipse,
   G,
   LinearGradient,
-  Mask,
   Path,
   RadialGradient,
   Rect,
@@ -67,10 +72,7 @@ export function LogoAvatar({
     () => logoAvatarTraits(identity || color || "default", color),
     [identity, color],
   );
-  const paint = useMemo(
-    () => logoAvatarPaint(traits.color, traits.originalOrange),
-    [traits.color, traits.originalOrange],
-  );
+  const paint = useMemo(() => logoAvatarPaint(traits.color), [traits.color]);
   const reduced = useReducedMotion();
   const onScreen = useAvatarOnScreen();
   const canMove = size >= 24 && motion !== "static" && (motion !== "lazy" || activity !== "idle");
@@ -102,6 +104,9 @@ export function LogoAvatar({
   };
   const leftEye = useAnimatedProps(eyeProps(eyes.leftCx));
   const rightEye = useAnimatedProps(eyeProps(eyes.rightCx));
+  const smile = useAnimatedProps(() => ({
+    d: logoAvatarSmilePath(frame.value.eyeX, LOGO_AVATAR_BODY_Y + frame.value.eyeY),
+  }));
   const page = useAnimatedProps(() => ({
     opacity: 1,
     matrix: [1, 0, 0, 1, frame.value.pageX, frame.value.pageY],
@@ -130,165 +135,21 @@ export function LogoAvatar({
         <ClipPath id={`body-${id}`}>
           <Path d={LOGO_BODY_PATH} />
         </ClipPath>
-        <RadialGradient id={`fill-${id}`} {...lighting.body}>
-          <Stop stopColor={paint.base} />
-          <Stop offset=".48" stopColor={paint.base} />
-          <Stop offset="1" stopColor={paint.edge} />
-        </RadialGradient>
-        <RadialGradient id={`shade-${id}`} {...lighting.flank}>
-          <Stop stopColor={paint.flank} stopOpacity=".94" />
-          <Stop offset=".4" stopColor={paint.flank} stopOpacity=".94" />
-          <Stop offset=".65" stopColor={paint.flank} stopOpacity=".76" />
-          <Stop offset=".85" stopColor={paint.flank} stopOpacity=".22" />
-          <Stop offset="1" stopColor={paint.flank} stopOpacity="0" />
-        </RadialGradient>
+        <LinearGradient id={`fill-${id}`} {...lighting.body}>
+          <Stop stopColor={paint.light} />
+          <Stop offset=".53" stopColor={paint.base} />
+          <Stop offset="1" stopColor={paint.shadow} />
+        </LinearGradient>
         <RadialGradient
           id={`light-${id}`}
-          gradientUnits={lighting.crown.gradientUnits}
           cx={lighting.crown.cx}
           cy={lighting.crown.cy}
           r={lighting.crown.r}
-          gradientTransform={lighting.crown.gradientTransform}
         >
           <Stop stopColor="white" stopOpacity={lighting.crown.peak} />
           <Stop offset=".4" stopColor="white" stopOpacity={lighting.crown.shoulder} />
           <Stop offset="1" stopColor="white" stopOpacity="0" />
         </RadialGradient>
-        <RadialGradient id={`left-${id}`} {...lighting.leftHand}>
-          <Stop stopColor={paint.base} />
-          <Stop offset=".28" stopColor={paint.base} />
-          <Stop offset="1" stopColor={paint.shadow} />
-        </RadialGradient>
-        <RadialGradient id={`right-${id}`} {...lighting.rightHand}>
-          <Stop stopColor={paint.base} />
-          <Stop offset=".28" stopColor={paint.base} />
-          <Stop offset="1" stopColor={paint.shadow} />
-        </RadialGradient>
-        <RadialGradient
-          id={`left-light-${id}`}
-          {...lighting.leftHand}
-          r={lighting.handLight.radius}
-        >
-          <Stop stopColor="white" stopOpacity={lighting.handLight.leftPeak} />
-          <Stop offset="1" stopColor="white" stopOpacity="0" />
-        </RadialGradient>
-        <RadialGradient
-          id={`right-light-${id}`}
-          {...lighting.rightHand}
-          r={lighting.handLight.radius}
-        >
-          <Stop stopColor="white" stopOpacity={lighting.handLight.rightPeak} />
-          <Stop offset="1" stopColor="white" stopOpacity="0" />
-        </RadialGradient>
-        <RadialGradient id={`left-contact-${id}`} {...lighting.leftContact}>
-          <Stop stopColor={paint.contact} stopOpacity=".72" />
-          <Stop offset=".45" stopColor={paint.contact} stopOpacity=".64" />
-          <Stop offset=".65" stopColor={paint.contact} stopOpacity=".3" />
-          <Stop offset=".9" stopColor={paint.contact} stopOpacity=".04" />
-          <Stop offset="1" stopColor={paint.contact} stopOpacity="0" />
-        </RadialGradient>
-        <RadialGradient id={`right-contact-${id}`} {...lighting.rightContact}>
-          <Stop stopColor={paint.contact} stopOpacity=".72" />
-          <Stop offset=".45" stopColor={paint.contact} stopOpacity=".64" />
-          <Stop offset=".65" stopColor={paint.contact} stopOpacity=".3" />
-          <Stop offset=".9" stopColor={paint.contact} stopOpacity=".04" />
-          <Stop offset="1" stopColor={paint.contact} stopOpacity="0" />
-        </RadialGradient>
-        <LinearGradient
-          id={`rim-direction-${id}`}
-          gradientUnits="userSpaceOnUse"
-          x1="0"
-          y1="0"
-          x2="100"
-          y2="0"
-        >
-          <Stop stopColor="white" stopOpacity=".25" />
-          <Stop offset=".5" stopColor="white" stopOpacity=".72" />
-          <Stop offset="1" stopColor="white" />
-        </LinearGradient>
-        <LinearGradient
-          id={`rim-lower-fade-${id}`}
-          gradientUnits="userSpaceOnUse"
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="100"
-        >
-          <Stop stopColor="white" stopOpacity="0" />
-          <Stop offset=".36" stopColor="white" stopOpacity="0" />
-          <Stop offset=".58" stopColor="white" />
-          <Stop offset="1" stopColor="white" />
-        </LinearGradient>
-        <LinearGradient
-          id={`rim-upper-cut-${id}`}
-          gradientUnits="userSpaceOnUse"
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="100"
-        >
-          <Stop stopColor="black" stopOpacity="0" />
-          <Stop offset=".36" stopColor="black" stopOpacity="0" />
-          <Stop offset=".58" stopColor="black" />
-          <Stop offset="1" stopColor="black" />
-        </LinearGradient>
-        <Mask
-          id={`rim-upper-mask-${id}`}
-          maskUnits="userSpaceOnUse"
-          maskType="luminance"
-          x="0"
-          y="0"
-          width="100"
-          height="110"
-        >
-          <Rect width="100" height="110" fill={`url(#rim-direction-${id})`} />
-          <Rect width="100" height="110" fill={`url(#rim-upper-cut-${id})`} />
-          <Rect width="100" height="110" fill={`url(#rim-left-trim-${id})`} />
-        </Mask>
-        <Mask
-          id={`rim-lower-mask-${id}`}
-          maskUnits="userSpaceOnUse"
-          maskType="luminance"
-          x="0"
-          y="0"
-          width="100"
-          height="110"
-        >
-          <Rect width="100" height="110" fill={`url(#rim-lower-fade-${id})`} />
-        </Mask>
-        <RadialGradient id={`rim-left-trim-${id}`} {...lighting.rimLeftTrim}>
-          <Stop stopColor="black" stopOpacity=".6" />
-          <Stop offset=".9" stopColor="black" stopOpacity=".6" />
-          <Stop offset=".94" stopColor="black" stopOpacity=".5" />
-          <Stop offset=".965" stopColor="black" stopOpacity="0" />
-          <Stop offset="1" stopColor="black" stopOpacity="0" />
-        </RadialGradient>
-        <RadialGradient id={`rim-upper-${id}`} {...lighting.rimUpper}>
-          <Stop stopColor={paint.rim} stopOpacity="0" />
-          <Stop offset=".818" stopColor={paint.rim} stopOpacity="0" />
-          <Stop offset=".855" stopColor={paint.rim} stopOpacity=".035" />
-          <Stop offset=".882" stopColor={paint.rim} stopOpacity=".14" />
-          <Stop offset=".9" stopColor={paint.rim} stopOpacity=".42" />
-          <Stop offset=".918" stopColor={paint.rim} stopOpacity=".53" />
-          <Stop offset=".941" stopColor={paint.rim} stopOpacity=".2" />
-          <Stop offset=".973" stopColor={paint.rim} stopOpacity="0" />
-          <Stop offset="1" stopColor={paint.rim} stopOpacity="0" />
-        </RadialGradient>
-        {(["Left", "Right"] as const).map((side) => (
-          <RadialGradient
-            key={side}
-            id={`rim-${side.toLowerCase()}-${id}`}
-            {...lighting[side === "Left" ? "rimLeft" : "rimRight"]}
-          >
-            <Stop stopColor={paint.rim} stopOpacity="0" />
-            <Stop offset=".873" stopColor={paint.rim} stopOpacity="0" />
-            <Stop offset=".891" stopColor={paint.rim} stopOpacity={side === "Left" ? 0.22 : 0.46} />
-            <Stop offset=".912" stopColor={paint.rim} stopOpacity={side === "Left" ? 0.22 : 0.46} />
-            <Stop offset=".93" stopColor={paint.rim} stopOpacity={side === "Left" ? 0.1 : 0.2} />
-            <Stop offset=".955" stopColor={paint.rim} stopOpacity="0" />
-            <Stop offset="1" stopColor={paint.rim} stopOpacity="0" />
-          </RadialGradient>
-        ))}
         <ClipPath id={`pages-${id}`}>
           <Path d="M26 79Q37 75 47 80V91Q37 87 26 91ZM53 80Q63 75 74 79V91Q63 87 53 91Z" />
         </ClipPath>
@@ -304,29 +165,28 @@ export function LogoAvatar({
         <AnimatedG animatedProps={body}>
           <G transform={`translate(0 ${LOGO_AVATAR_BODY_Y})`}>
             <Path d={LOGO_BODY_PATH} fill={`url(#fill-${id})`} />
-            <Path d={LOGO_BODY_PATH} fill={`url(#shade-${id})`} />
             <Path d={LOGO_BODY_PATH} fill={`url(#light-${id})`} />
             <G clipPath={`url(#body-${id})`}>
               <Path
-                d={LOGO_BODY_PATH}
-                fill={`url(#rim-upper-${id})`}
-                mask={`url(#rim-upper-mask-${id})`}
+                d={lighting.shine.path}
+                fill="none"
+                stroke="white"
+                strokeOpacity={lighting.shine.opacity}
+                strokeWidth={lighting.shine.width}
+                strokeLinecap="round"
               />
-              <G mask={`url(#rim-lower-mask-${id})`}>
-                <Path d={LOGO_BODY_PATH} fill={`url(#rim-left-${id})`} />
-                <Path d={LOGO_BODY_PATH} fill={`url(#rim-right-${id})`} />
-              </G>
-
-              <Path d={LOGO_BODY_PATH} fill={`url(#left-contact-${id})`} />
-              <Path d={LOGO_BODY_PATH} fill={`url(#right-contact-${id})`} />
-              <Path d={LOGO_LEFT_HAND_PATH} fill={`url(#left-${id})`} />
-              <Path d={LOGO_RIGHT_HAND_PATH} fill={`url(#right-${id})`} />
-              <Path d={LOGO_LEFT_HAND_PATH} fill={`url(#left-light-${id})`} />
-              <Path d={LOGO_RIGHT_HAND_PATH} fill={`url(#right-light-${id})`} />
             </G>
           </G>
           <AnimatedEllipse animatedProps={leftEye} rx={eyes.width / 2} fill={eyeInk} />
           <AnimatedEllipse animatedProps={rightEye} rx={eyes.width / 2} fill={eyeInk} />
+          <AnimatedPath
+            animatedProps={smile}
+            d={logoAvatarSmilePath(0, LOGO_AVATAR_BODY_Y)}
+            fill="none"
+            stroke={eyeInk}
+            strokeWidth={LOGO_AVATAR_SMILE_STROKE}
+            strokeLinecap="round"
+          />
           {size >= 24 ? (
             <G
               fill="none"

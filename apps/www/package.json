@@ -28,11 +28,13 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@orkbot/avatar": "workspace:*",
     "@playwright/test": "1.64.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "pagefind": "1.6.0",
+    "sharp": "0.35.5",
     "tailwindcss": "4.3.4",
     "typescript": "6.0.3"
   }

@@ -1,4 +1,10 @@
-import { mkdir, readFile } from "node:fs/promises";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to refresh Nunu social cards and asset notices.
+// Inherited rendering remains Apache-2.0. New changes follow LICENSE.md.
+
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
@@ -42,7 +48,7 @@ function pageHtml(kicker, title) {
 await mkdir(outDir, { recursive: true });
 const selected = new Set(process.argv.slice(2));
 const pages = [
-  { id: "home", kicker: "Open source AI teammates", title: "AI teammates you actually own" },
+  { id: "home", kicker: "Source-available AI teammates", title: "AI teammates you actually own" },
   ...ogPages(),
 ].filter((page) => selected.size === 0 || selected.has(page.id));
 const browser = await chromium.launch({
@@ -56,6 +62,7 @@ try {
     await page.locator("img").evaluateAll((images) => Promise.all(images.map((image) => image.decode())));
     const target = item.id === "home" ? join(root, "public/og-image.png") : join(outDir, `${item.id}.png`);
     await page.screenshot({ path: target });
+    await writeFile(`${target}.license`, "SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0\nSPDX-FileCopyrightText: 2026 Rakazo contributors\nSPDX-FileCopyrightText: 2026 Ork contributors\nInherited card layout and copy remain Apache-2.0. New Nunu artwork follows LICENSE.md.\n");
     console.log(item.id);
   }
 } finally {

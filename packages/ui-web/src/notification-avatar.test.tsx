@@ -1,4 +1,15 @@
-import { notificationAvatarSource } from "@orkbot/core";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify notification portraits retain the shared Ork face.
+// Inherited avatar compatibility checks remain Apache-2.0. New changes follow LICENSE.md.
+
+import {
+  contrastRatio,
+  LOGO_AVATAR_SMILE_PATH,
+  LOGO_AVATAR_SMILE_STROKE,
+  notificationAvatarSource,
+} from "@orkbot/core";
 import { renderToString } from "react-dom/server";
 import { expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -33,7 +44,18 @@ it.each<[string, { color: string; avatarSet?: "orkbot" }]>([
   const [body] = tags(portrait, "path");
   const bodyGeometry = bot.avatarSet === "orkbot" ? { d: body!.d } : body!;
   expect(tags(chat, "path")).toContainEqual(expect.objectContaining(bodyGeometry));
-  if (bot.avatarSet === "orkbot") expect(chat).toContain(`data-color="${body!.fill}"`);
+  if (bot.avatarSet === "orkbot") {
+    expect(chat).toContain(`data-color="${body!.fill}"`);
+    const smile = tags(portrait, "path").find((path) => path.d === LOGO_AVATAR_SMILE_PATH);
+    expect(smile).toMatchObject({
+      fill: "none",
+      "stroke-width": String(LOGO_AVATAR_SMILE_STROKE),
+      "stroke-linecap": "round",
+    });
+    const { stroke, ...geometry } = smile!;
+    expect(tags(chat, "path")).toContainEqual(expect.objectContaining(geometry));
+    expect(contrastRatio(body!.fill!, stroke!)).toBeGreaterThanOrEqual(3);
+  }
   for (const transform of tags(portrait, "g").flatMap((group) => group.transform ?? [])) {
     expect(chat).toContain(`transform="${transform}"`);
   }

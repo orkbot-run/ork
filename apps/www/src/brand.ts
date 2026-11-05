@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors for the Nunu brand palette.
+// Inherited definitions remain Apache-2.0. New changes follow LICENSE.md.
+
 export const BRAND_KIT_PATH = "/brand/";
 export const WORDMARK_SVG_PATH = "/brand/kit/orkbot-wordmark.svg";
 
@@ -29,7 +35,7 @@ export const BRAND_LOGOS = [
 ] as const;
 
 export const BRAND_COLORS = [
-  { name: "Orange", hex: "#F97D16" },
+  { name: "Mint", hex: "#7DD4D2" },
   { name: "Black", hex: "#141414" },
   { name: "White", hex: "#FFFFFF" },
 ] as const;

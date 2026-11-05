@@ -1,7 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify replacement Ork geometry.
+// Inherited behavior checks remain Apache-2.0. New changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import {
   avatarIdentitySeed,
+  LOGO_AVATAR_BODY_Y,
+  LOGO_AVATAR_EYES,
   LOGO_BODY_PATH,
   logoAvatarFrame,
   logoAvatarTraits,
@@ -173,9 +181,15 @@ describe("BotAvatar", () => {
       );
     send(1, true);
     const frame = logoAvatarFrame("thinking", logoAvatarTraits("bot-1", "#10B981"), 0, true);
-    expect(latestEye()).toMatchObject({ cx: 40.5 + frame.eyeX, cy: 49 + frame.eyeY });
+    expect(latestEye()).toMatchObject({
+      cx: LOGO_AVATAR_EYES.leftCx + frame.eyeX,
+      cy: LOGO_AVATAR_EYES.cy + LOGO_AVATAR_BODY_Y + frame.eyeY,
+    });
     send(2, false);
-    expect(latestEye()).toMatchObject({ cx: 40.5, cy: 49 });
+    expect(latestEye()).toMatchObject({
+      cx: LOGO_AVATAR_EYES.leftCx,
+      cy: LOGO_AVATAR_EYES.cy + LOGO_AVATAR_BODY_Y,
+    });
   });
 
   it("uses the same shared seed colour as SSR for a bot without a saved colour", () => {

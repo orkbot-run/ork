@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to verify the complete new mark stays within its frame.
+// Inherited accessibility and theme checks remain Apache-2.0. New changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -12,6 +18,7 @@ vi.mock("react-native", () => {
     accessible?: boolean;
     accessibilityElementsHidden?: boolean;
     importantForAccessibility?: string;
+    style?: { width?: number; height?: number; overflow?: string };
   }) {
     return createElement(
       "div",
@@ -19,13 +26,26 @@ vi.mock("react-native", () => {
         "data-accessible": String(props.accessible),
         "aria-hidden": props.accessibilityElementsHidden ? "true" : undefined,
         "data-important": props.importantForAccessibility,
+        "data-width": props.style?.width,
+        "data-height": props.style?.height,
+        "data-overflow": props.style?.overflow,
       },
       props.children,
     );
   }
 
-  function MockImage(props: { style?: { tintColor?: string } }) {
-    return createElement("img", { "data-tint": props.style?.tintColor });
+  function MockImage(props: {
+    resizeMode?: string;
+    style?: { tintColor?: string; width?: number; height?: number; left?: number; top?: number };
+  }) {
+    return createElement("img", {
+      "data-tint": props.style?.tintColor,
+      "data-width": props.style?.width,
+      "data-height": props.style?.height,
+      "data-left": props.style?.left,
+      "data-top": props.style?.top,
+      "data-resize-mode": props.resizeMode,
+    });
   }
 
   return {
@@ -69,6 +89,13 @@ describe("AppMark", () => {
     expect(mark?.getAttribute("aria-hidden")).toBe("true");
     expect(mark?.dataset.accessible).toBe("false");
     expect(mark?.dataset.important).toBe("no-hide-descendants");
-    expect(container?.querySelector("img")?.dataset.tint).toBe("label");
+    const image = container?.querySelector("img");
+    expect(image?.dataset.tint).toBe("label");
+    expect(image?.dataset.resizeMode).toBe("contain");
+    expect(image?.dataset.width).toBe(mark?.dataset.width);
+    expect(image?.dataset.height).toBe(mark?.dataset.height);
+    expect(image?.dataset.left).toBeUndefined();
+    expect(image?.dataset.top).toBeUndefined();
+    expect(mark?.dataset.overflow).not.toBe("hidden");
   });
 });

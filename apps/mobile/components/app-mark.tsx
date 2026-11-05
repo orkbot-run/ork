@@ -1,11 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to display the full new mark without the inherited face crop.
+// Inherited theme and accessibility handling remain Apache-2.0. New changes follow LICENSE.md.
+
 import { Image, StyleSheet, View } from "react-native";
 import appMark from "../assets/monochrome-icon.png";
 import { native, useThemedStyles } from "../lib/native";
 
 const MARK = 56;
-// The face of the 1024 px monochrome icon: a 480 px circle inside the silhouette, eyes included.
-const CROP = { x: 272, y: 303, size: 480 };
-const SCALE = MARK / CROP.size;
 
 export function AppMark() {
   const styles = useThemedStyles(createAppMarkStyles);
@@ -14,28 +17,23 @@ export function AppMark() {
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={styles.circle}
+      style={styles.frame}
     >
-      <Image source={appMark} style={styles.image} />
+      <Image source={appMark} style={styles.image} resizeMode="contain" />
     </View>
   );
 }
 
 function createAppMarkStyles() {
   return StyleSheet.create({
-    circle: {
+    frame: {
       width: MARK,
       height: MARK,
-      borderRadius: MARK / 2,
-      overflow: "hidden",
       alignSelf: "center",
     },
     image: {
-      position: "absolute",
-      width: 1024 * SCALE,
-      height: 1024 * SCALE,
-      left: -CROP.x * SCALE,
-      top: -CROP.y * SCALE,
+      width: MARK,
+      height: MARK,
       tintColor: native.label,
     },
   });

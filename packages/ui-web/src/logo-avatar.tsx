@@ -1,8 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to add the Ork face while retaining avatar behavior.
+// Inherited motion and state handling remain Apache-2.0. New changes follow LICENSE.md.
+
 import { parseBotAvatarValue } from "@orkbot/contracts";
 import type { LogoAvatarActivity } from "@orkbot/core";
 import {
   LOGO_AVATAR_BODY_Y,
   LOGO_AVATAR_EYES,
+  LOGO_AVATAR_SMILE_PATH,
+  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
   logoAvatarEyeInk,
   logoAvatarTraits,
@@ -120,11 +128,7 @@ export const LogoAvatar = memo(function LogoAvatar({
           >
             <g className="logo-avatar-body">
               <g transform={`translate(0 ${LOGO_AVATAR_BODY_Y})`}>
-                <LogoAvatarBody
-                  id={`${id}-${layer.key}`}
-                  color={traits.color}
-                  originalOrange={traits.originalOrange}
-                />
+                <LogoAvatarBody id={`${id}-${layer.key}`} color={traits.color} />
                 <g className="logo-avatar-gaze">
                   <g className="logo-avatar-scan">
                     {[eyes.leftCx, eyes.rightCx].map((x, index) => (
@@ -154,6 +158,14 @@ export const LogoAvatar = memo(function LogoAvatar({
                         </g>
                       </g>
                     ))}
+                    <path
+                      className="logo-avatar-smile"
+                      d={LOGO_AVATAR_SMILE_PATH}
+                      fill="none"
+                      stroke={eyeInk}
+                      strokeWidth={LOGO_AVATAR_SMILE_STROKE}
+                      strokeLinecap="round"
+                    />
                   </g>
                 </g>
               </g>
