@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited interfaces remain Apache-2.0; purchase inspection availability is PolyForm-covered.
+
 import type { ComputerSize } from "@orkbot/contracts";
 import type {
   AdapterContext,
@@ -647,7 +651,7 @@ export interface BrowserProvider {
   ): Promise<BrowserActResult>;
   /**
    * Whether these clicks, or a click or key on the screen, would complete a purchase, without acting.
-   * A browser that cannot tell, such as an older computer image, answers none.
+   * A browser that cannot inspect the page reports checked:false, so a budget can fail closed.
    */
   purchaseCheck?(
     computer: ComputerRef,

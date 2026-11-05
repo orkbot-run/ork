@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; payment context propagation is PolyForm-covered.
+
 import type {
   AdapterContext,
   AgentToolExecutionObserver,
@@ -53,6 +57,7 @@ import type { ExecutorDeps } from "./executor-deps.js";
 import { CATALOG_LOAD, CATALOG_SEARCH } from "./lazy-tool-catalog.js";
 import { findConnectedModelCredential } from "./model-selection.js";
 import { paidRequestEffect } from "./paid-request.js";
+import type { PagePayment } from "./purchase-budget.js";
 import { PURCHASE_CHECKED_TOOLS, purchaseApprovalOf } from "./purchase-gate.js";
 import { autoReviewCheckerProvider } from "./run-auto-review.js";
 import type { RunContext, RunTrust } from "./run-context.js";
@@ -97,6 +102,7 @@ export interface ToolCall {
   readonly connectorCall: ConnectorCall;
   /** Idempotency key of this call's effect; also the delivery key of what it sends. */
   readonly effectKey: string;
+  readonly pagePayment?: PagePayment;
   /** The effect recorded for this call. Read-only tools that need no approval have none. */
   readonly applied: AppliedEffect | undefined;
   readonly nextApprovedTool: string | undefined;
@@ -517,6 +523,7 @@ export async function gateToolCall(
     observer,
     connectorCall,
     effectKey,
+    pagePayment: request.pagePayment,
     applied,
     nextApprovedTool,
     bypassApproval: gateDecision === "allow" && gated,

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited approval tests remain Apache-2.0; spending fixtures are PolyForm-covered.
+
 import type {
   AgentRunRequest,
   AutoReviewProvider,
@@ -17,6 +21,7 @@ import { DENIED_ACTION_ERROR, isApprovalPausedResult } from "./approval-effect.j
 import { MAX_SHARED_MEMORY_CHARS } from "./builtin-tools.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
+import { fakePurchasePrisma } from "./fake-purchases.js";
 import { FakeWebProvider } from "./fake-web.js";
 import type * as FleetToolsModule from "./fleet-tools.js";
 import type { HostComputerRequest } from "./host-computer-protocol.js";
@@ -315,7 +320,11 @@ function fixture({
   let checkpointCapture:
     | { executionId: string; checkpoint: Omit<TurnCheckpoint, "provider" | "model"> }
     | undefined;
+  const purchaseStore = fakePurchasePrisma(run);
   const prisma = {
+    purchase: purchaseStore.prisma.purchase,
+    accountSpendingLimit: purchaseStore.prisma.accountSpendingLimit,
+    paymentLedgerEntry: purchaseStore.prisma.paymentLedgerEntry,
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findFirst: vi.fn(

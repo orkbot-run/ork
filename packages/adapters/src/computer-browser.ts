@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited browser adapter remains Apache-2.0; inspection availability is PolyForm-covered.
+
 import type {
   AdapterContext,
   BrowserActRequest,
@@ -235,7 +239,7 @@ export class ComputerBrowserProvider implements BrowserProvider {
 
   /**
    * Whether these clicks, or a click or key on the screen, would complete a purchase. A computer
-   * image from before the check answers "unknown command": it cannot tell, so nothing is asked.
+   * image from before the check reports unavailable, so an active budget can refuse the press.
    */
   async purchaseCheck(
     computer: ComputerRef,
@@ -265,7 +269,7 @@ export class ComputerBrowserProvider implements BrowserProvider {
         this.purchaseCheckWarned = true;
         getLogger().warn("purchase check unavailable on a computer", { error: live?.error });
       }
-      return { purchase: null };
+      return { purchase: null, checked: false };
     }
     const found = live.purchase as
       | { steps?: unknown; label?: unknown; amount?: unknown; amountFrom?: unknown }

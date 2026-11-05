@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited fixtures remain Apache-2.0; ledger fixtures are PolyForm-covered.
+
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -12,6 +16,7 @@ import type {
   PurchaseSnapshot,
 } from "@orkbot/adapter-kit";
 import type { PrismaClient, Purchase } from "@orkbot/db";
+import { Prisma } from "@orkbot/db";
 import { readStripeChargeChallenge, stripeChargeAuthorization } from "./mpp-stripe.js";
 
 export const FAKE_PAY_TOKEN = "fake_pay_token_secret";
@@ -85,8 +90,15 @@ type Row = Record<string, unknown>;
 
 function matches(row: Row, where: Row): boolean {
   return Object.entries(where).every(([key, expected]) => {
+    if (key === "AND") return (expected as Row[]).every((branch) => matches(row, branch));
     if (key === "OR") return (expected as Row[]).some((branch) => matches(row, branch));
     const actual = row[key];
+    if (expected && typeof expected === "object" && "startsWith" in expected)
+      return typeof actual === "string" && actual.startsWith(String(expected.startsWith));
+    if (expected && typeof expected === "object" && "in" in expected)
+      return (expected.in as unknown[]).includes(actual);
+    if (expected && typeof expected === "object" && "gt" in expected)
+      return actual instanceof Date && actual > (expected.gt as Date);
     if (expected instanceof Date)
       return actual instanceof Date && actual.getTime() === expected.getTime();
     if (expected && typeof expected === "object" && "lte" in expected) {
@@ -110,6 +122,59 @@ export function fakePurchasePrisma(fixture: {
   threadId: string;
 }) {
   const purchases: Purchase[] = [];
+  const limits = new Map<string, Row>();
+  const ledger = new Map<string, Row>();
+  const ledgerKey = (where: Row) => {
+    const owner = where.userId_operationKey as { userId: string; operationKey: string };
+    return `${owner.userId}:${owner.operationKey}`;
+  };
+  const spending = {
+    $queryRaw: async () => [],
+    accountSpendingLimit: {
+      findUnique: async ({ where }: { where: Row }) => limits.get(String(where.userId)) ?? null,
+      upsert: async ({ where, create, update }: { where: Row; create: Row; update: Row }) => {
+        const key = String(where.userId);
+        const row = {
+          ...(limits.has(key) ? limits.get(key) : create),
+          ...update,
+          amount: new Prisma.Decimal(Number(update.amount ?? create.amount)),
+        };
+        limits.set(key, row);
+        return row;
+      },
+      deleteMany: async ({ where }: { where: Row }) => ({
+        count: Number(limits.delete(String(where.userId))),
+      }),
+    },
+    paymentLedgerEntry: {
+      findUnique: async ({ where }: { where: Row }) => ledger.get(ledgerKey(where)) ?? null,
+      findFirst: async ({ where }: { where: Row }) =>
+        [...ledger.values()].find((row) => matches(row, where)) ?? null,
+      aggregate: async ({ where }: { where: Row }) => ({
+        _sum: {
+          amount: [...ledger.values()]
+            .filter((row) => matches(row, where))
+            .reduce(
+              (total, row) => total.plus((row.amount as Prisma.Decimal) ?? 0),
+              new Prisma.Decimal(0),
+            ),
+        },
+      }),
+      upsert: async ({ where, create, update }: { where: Row; create: Row; update: Row }) => {
+        const key = ledgerKey(where);
+        const row = ledger.has(key)
+          ? { ...ledger.get(key), ...update }
+          : { ...create, id: key, pageOperationKey: null };
+        ledger.set(key, row);
+        return row;
+      },
+      updateMany: async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = [...ledger.values()].filter((row) => matches(row, where));
+        for (const row of rows) Object.assign(row, data);
+        return { count: rows.length };
+      },
+    },
+  };
   const runs: Row[] = [];
   const tasks: Row[] = [];
   const live = { thread: true, member: true, bot: true, threadGeneration: 0 };
@@ -118,6 +183,11 @@ export function fakePurchasePrisma(fixture: {
   const purchase = {
     findUnique: async ({ where }: { where: Row }) =>
       purchases.find((row) => matches(row, where)) ?? null,
+    findUniqueOrThrow: async ({ where }: { where: Row }) => {
+      const row = purchases.find((row) => matches(row, where));
+      if (!row) throw new Error("Unknown fixture purchase");
+      return row;
+    },
     findFirst: async ({ where }: { where: Row }) =>
       purchases.find((row) => matches(row, where)) ?? null,
     findMany: async ({ where, select }: { where: Row; select?: Record<string, boolean> }) =>
@@ -156,6 +226,7 @@ export function fakePurchasePrisma(fixture: {
     },
   };
   const tx = {
+    ...spending,
     purchase,
     thread: {
       updateMany: async ({ where }: { where: Row }) => ({
@@ -191,7 +262,7 @@ export function fakePurchasePrisma(fixture: {
     ...tx,
     $transaction: async <T>(fn: (client: typeof tx) => Promise<T>) => fn(tx),
   } as unknown as PrismaClient;
-  return { prisma, purchases, runs, tasks, live };
+  return { prisma, purchases, runs, tasks, live, limits, ledger };
 }
 
 export function fakeJobs() {

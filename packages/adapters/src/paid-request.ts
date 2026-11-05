@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited HTTP payment logic remains Apache-2.0; spending checks are PolyForm-covered.
+
 import { createHash } from "node:crypto";
 import type {
   AdapterContext,
@@ -7,8 +11,15 @@ import type {
 import { PaidRequestInput } from "@orkbot/contracts";
 import { stableJsonValue } from "@orkbot/core/node/approval-effect-key";
 import type { Purchase } from "@orkbot/db";
+import { reserveSpendingInTransaction } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { redactConnectorPayload } from "./connector-safety.js";
+import {
+  budgetRefusal,
+  reservePurchaseBudget,
+  walletPurchaseMoney,
+  walletSpendingKey,
+} from "./purchase-budget.js";
 import type { PurchaseDeps } from "./purchase-service.js";
 import {
   createPurchase,
@@ -19,6 +30,7 @@ import {
   providerError,
   purchaseContext,
   purchaseView,
+  recordPurchaseSpending,
   recordSeenStatus,
   sealOnce,
   walletSupports,
@@ -150,6 +162,13 @@ async function payApproved(
     return plain({ ...responseView(response), note: "The server did not ask for payment." });
   }
   const approved = purchase;
+  const blocked = await reservePurchaseBudget(
+    deps,
+    approved,
+    walletSpendingKey(approved),
+    walletPurchaseMoney(approved),
+  );
+  if (blocked) return plain(blocked);
   let authorization: HttpPaymentAuthorization;
   try {
     authorization = await withPurchaseWallet(deps, provider, approved, (credential) =>
@@ -173,10 +192,28 @@ async function payApproved(
     purchaseContext(approved, "http-payment"),
   );
   // The token is single use: claim the purchase before sending it, so a concurrent call can't.
-  const claimed = await deps.prisma.purchase.updateMany({
-    where: { id: approved.id, status: "approved" },
-    data: { status: "completed", wokenStatus: "completed", nextPollAt: null },
+  const claimed = await deps.prisma.$transaction(async (tx) => {
+    // Purchase row first, then the account lock, matching the poller's lock order.
+    const live = await tx.purchase.updateMany({
+      where: { id: approved.id, status: "approved" },
+      data: { status: "approved" },
+    });
+    if (!live.count) return { count: 0, decision: { allowed: true } as const };
+    const decision = await reserveSpendingInTransaction(tx, {
+      userId: approved.userId,
+      operationKey: walletSpendingKey(approved),
+      ...walletPurchaseMoney(approved),
+    });
+    if (!decision.allowed) return { count: 0, decision };
+    const claimed = await tx.purchase.updateMany({
+      where: { id: approved.id, status: "approved" },
+      data: { status: "completed", wokenStatus: "completed", nextPollAt: null },
+    });
+    if (claimed.count) await recordPurchaseSpending(tx, approved, "completed");
+    return { ...claimed, decision };
   });
+  const finalBlocked = await budgetRefusal(approved, claimed.decision);
+  if (finalBlocked) return plain(finalBlocked);
   if (!claimed.count) return plain({ error: "This purchase was already used." });
 
   let paid: SafeHttpResponse;
@@ -217,9 +254,12 @@ async function payApproved(
 }
 
 async function markFailed(deps: PurchaseDeps, purchase: Purchase) {
-  await deps.prisma.purchase.updateMany({
-    where: { id: purchase.id, status: "completed" },
-    data: { status: "failed", wokenStatus: "failed" },
+  await deps.prisma.$transaction(async (tx) => {
+    const saved = await tx.purchase.updateMany({
+      where: { id: purchase.id, status: "completed" },
+      data: { status: "failed", wokenStatus: "failed" },
+    });
+    if (saved.count) await recordPurchaseSpending(tx, purchase, "failed");
   });
 }
 

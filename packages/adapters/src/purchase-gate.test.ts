@@ -1,5 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests remain Apache-2.0; budget fixtures are PolyForm-covered.
+
 import type { BrowserProvider } from "@orkbot/adapter-kit";
+import { setSpendingLimit } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { fakePurchasePrisma } from "./fake-purchases.js";
 import type { PurchaseApproval } from "./purchase-gate.js";
 import { detectPurchase, purchaseApprovalOf, purchaseCardSummary } from "./purchase-gate.js";
 import type { RunContext } from "./run-context.js";
@@ -20,7 +26,9 @@ function contextWith(
   overrides: Record<string, unknown> = {},
 ) {
   return {
-    deps: {},
+    deps: {
+      prisma: fakePurchasePrisma({ spaceId: "s", userId: "u", botId: "b", threadId: "t" }).prisma,
+    },
     run: { spaceId: "s", userId: "u" },
     bot: { id: "b" },
     context: { signal: new AbortController().signal },
@@ -33,6 +41,29 @@ function contextWith(
 }
 
 describe("purchase detection for the page tools", () => {
+  it.each(["missing", "unavailable", "disabled"])(
+    "fails closed with a budget when page inspection is %s",
+    async (kind) => {
+      const ctx = contextWith(
+        kind === "missing" ? undefined : async () => ({ purchase: null, checked: false }),
+      );
+      if (kind === "disabled") ctx.computer.pageBrowserAllowed = false;
+      await setSpendingLimit(ctx.deps.prisma, ctx.run.userId, {
+        amount: 100,
+        currency: "USD",
+        period: "daily",
+      });
+      const request = {
+        name: "computer_act",
+        args: { actions: [{ kind: "click", x: 1, y: 2 }] },
+      } as unknown as ToolRequest;
+      expect(await prepareToolRequest(ctx, request)).toEqual({
+        error: expect.stringContaining("cannot be read safely"),
+      });
+      expect(request.fleetSummary).toBeUndefined();
+    },
+  );
+
   it("asks the browser about a click or Enter on the screen, and about nothing else", async () => {
     const check = vi.fn(async (_computer: unknown, _request: unknown) => ({ purchase: found }));
     const ctx = contextWith(check as never);

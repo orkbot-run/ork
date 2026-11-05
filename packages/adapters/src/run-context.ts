@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; wallet payment context is PolyForm-covered.
+
 import type {
   AdapterContext,
   BrowserProvider,
@@ -196,6 +200,8 @@ export interface RunState {
    * the wallet owner approved paying there, so the pay click there asks nothing more.
    */
   walletHosts: Set<string>;
+  /** Approved wallet purchases typed at each host, for the final account budget check. */
+  walletPurchases?: Map<string, string>;
   handedOff: boolean;
   terminalCheckpointComplete: boolean;
 }

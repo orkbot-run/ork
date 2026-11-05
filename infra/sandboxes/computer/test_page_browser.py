@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited browser tests remain Apache-2.0; PLN cases are PolyForm-covered.
+
 """Offline tests for the page browser: the agent-browser wrapper and the saved-login, card and pay-token steps."""
 import importlib.machinery
 import importlib.util
@@ -544,6 +548,22 @@ class PurchaseTest(unittest.TestCase):
         self.assertEqual(result["purchase"], {**PAY, "site": "shop.example.test"})
         self.assertEqual((result["ok"], result["completed"], result["uncertain"]), (False, 0, False))
         self.assertEqual(browser.actions(), [])
+
+    def test_a_pln_purchase_preserves_the_displayed_amount_and_refuses_a_changed_total(self):
+        for amount in ("PLN 49,90", "49,90 zł", "1 234,56 PLN"):
+            with self.subTest(amount=amount):
+                purchase = {**PAY, "label": "Pay now", "amount": amount, "amountFrom": "page"}
+                browser = pays(FakeAgentBrowser(), purchase=purchase)
+                checked = page(browser).purchase_check({"actions": [{"kind": "click", "ref": "e8"}]})
+                self.assertEqual(checked["purchase"]["amount"], amount)
+                approved = {"kind": "click", "ref": "e8", "approved": True,
+                            "site": "shop.example.test", "label": "Pay now", "amount": amount}
+                self.assertTrue(self.act([approved], browser)["ok"])
+
+                changed = pays(FakeAgentBrowser(), purchase={**purchase, "amount": "99,90 zł"})
+                result = self.act([approved], changed)
+                self.assertEqual(result["error"], helper.PURCHASE_CHANGED)
+                self.assertEqual(changed.actions(), [])
 
     def test_an_approved_purchase_click_is_pressed_only_on_the_site_it_was_approved_for(self):
         approved = {"kind": "click", "ref": "e8", "approved": True, "label": "Pay $5", "amount": "$5"}

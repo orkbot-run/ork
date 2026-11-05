@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests remain Apache-2.0; settlement polling coverage is PolyForm-covered.
+
 import { PaymentWalletRequestRejected } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakePaymentWallet, fakeJobs, fakePurchasePrisma } from "./fake-purchases.js";
@@ -73,7 +77,7 @@ describe("pollPurchase", () => {
     await env.poll();
     expect(env.row()).toMatchObject({
       status: "approved",
-      nextPollAt: null,
+      nextPollAt: expect.any(Date),
       wokenStatus: "approved",
     });
     expect(env.tasks).toEqual([
@@ -91,33 +95,37 @@ describe("pollPurchase", () => {
     ]);
     expect(env.enqueued).toEqual([
       expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
+      expect.objectContaining({ name: "purchase.poll" }),
     ]);
-    // Settled: a later poll does nothing.
+    // A later status poll keeps the reservation without waking the bot twice.
     await env.poll();
     expect(env.runs).toHaveLength(1);
   });
 
-  it("does not wake a bot that is gone, and stops polling", async () => {
+  it("keeps settling a deleted bot's wallet without waking it", async () => {
     const env = await setup();
     env.live.bot = false;
     env.approve();
     await env.poll();
     expect(env.runs).toHaveLength(0);
-    expect(env.row()).toMatchObject({ status: "approved", nextPollAt: null });
+    expect(env.row()).toMatchObject({ status: "approved", nextPollAt: expect.any(Date) });
 
     const pending = await setup();
     pending.live.thread = false;
     await pending.poll();
-    expect(pending.row()).toMatchObject({ status: "pending_approval", nextPollAt: null });
+    expect(pending.row()).toMatchObject({
+      status: "pending_approval",
+      nextPollAt: expect.any(Date),
+    });
   });
 
-  it("does not wake a chat cleared since the purchase, and stops polling", async () => {
+  it("keeps settling a cleared chat's wallet without waking it", async () => {
     const env = await setup();
     env.live.threadGeneration += 1;
     env.approve();
     await env.poll();
     expect(env.runs).toHaveLength(0);
-    expect(env.row()).toMatchObject({ status: "approved", nextPollAt: null });
+    expect(env.row()).toMatchObject({ status: "approved", nextPollAt: expect.any(Date) });
   });
 
   it("expires a purchase nobody decided on after the deadline", async () => {

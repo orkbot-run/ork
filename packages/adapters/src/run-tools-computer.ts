@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited computer handlers remain Apache-2.0; spending enforcement is PolyForm-covered.
+
 import { randomUUID } from "node:crypto";
 import type { SandboxProvider } from "@orkbot/adapter-kit";
 import type { ComputerCommand } from "@orkbot/contracts";
@@ -42,6 +46,7 @@ import {
   protectedComputerLifecycleRefusal,
 } from "./desktop-command-guard.js";
 import { nativeShellCommandArgv, usesNativeShell } from "./native-shell.js";
+import { reservePagePayment } from "./purchase-budget.js";
 import { purchaseApprovalOf } from "./purchase-gate.js";
 import { resolvePurchaseCardFill, resolvePurchasePayTokenFill } from "./purchase-service.js";
 import type { RunContext } from "./run-context.js";
@@ -185,6 +190,7 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
             downloads,
             redactions,
             approvedPurchase: paying,
+            beforeAct: () => reservePagePayment(ctx, call),
             // Team bots may send only their own folder or shared/ off the computer; a
             // private computer's helper already confines uploads to its home folder.
             uploadRoots:
@@ -227,6 +233,8 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
                 addRunSecrets(ctx, resolved.redactions);
                 // No pass for the pay click: approving the card named no amount, so the click
                 // that places the order still asks, showing what the page charges.
+                ctx.state.walletHosts.delete(approvedCard.site);
+                ctx.state.walletPurchases?.delete(approvedCard.site);
                 return { text: resolved.text, origin: resolved.origin };
               }
               const paymentWallet = deps.paymentWallet;
@@ -239,7 +247,12 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
               );
               if ("error" in resolved) return resolved;
               addRunSecrets(ctx, resolved.redactions);
-              if (!paying) ctx.state.walletHosts.add(new URL(resolved.origin).host);
+              if (!paying) {
+                const host = new URL(resolved.origin).host;
+                ctx.state.walletHosts.add(host);
+                ctx.state.walletPurchases ??= new Map();
+                ctx.state.walletPurchases.set(host, step.purchase);
+              }
               return { text: resolved.text, origin: resolved.origin };
             },
             resolveCodeFill: async () => {
@@ -265,7 +278,12 @@ export async function pageBrowserTool(ctx: RunContext, call: ToolCall) {
               if ("error" in resolved) return resolved;
               addRunSecrets(ctx, resolved.redactions);
               const { text, origin, merchantAccountId } = resolved;
-              if (!paying) ctx.state.walletHosts.add(new URL(origin).host);
+              if (!paying) {
+                const host = new URL(origin).host;
+                ctx.state.walletHosts.add(host);
+                ctx.state.walletPurchases ??= new Map();
+                ctx.state.walletPurchases.set(host, step.purchase);
+              }
               return { text, origin, merchantAccountId };
             },
           },
@@ -307,8 +325,11 @@ export const computerTools: ToolHandlers = {
     }
     ctx.computer.checkpoint.markDirty();
     return computerScreenToolResult(async () => {
+      const computer = await ctx.computer.get("tool", name);
+      const payment = await reservePagePayment(ctx, call);
+      if ("error" in payment) return payment;
       const result = await deps.sandbox.act(
-        await ctx.computer.get("tool", name),
+        computer,
         {
           actions,
           observe: args.observe !== false,
@@ -316,6 +337,7 @@ export const computerTools: ToolHandlers = {
         },
         context,
       );
+      await payment.settle?.({ completed: result.completed, uncertain: false });
       return result.observation
         ? formatObservation(
             ctx,

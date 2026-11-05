@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited browser tests remain Apache-2.0; PLN cases are PolyForm-covered.
+
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import { JSDOM } from "jsdom";
@@ -287,6 +291,35 @@ describe("purchase detection in the page helper", () => {
     );
     expect(plain.intent("Read more")).toBeNull();
   });
+
+  it.each(["PLN 49,90", "pln 49.90", "zł 49,90", "49,90 zł", "1 234,56 PLN"])(
+    "detects a PLN payment button and keeps its displayed amount: %s",
+    (amount) => {
+      const label = `Pay ${amount}`;
+      const { intent } = page(`<button>${label}</button>`);
+      expect(intent(label)).toEqual({
+        reason: "final_step",
+        label,
+        amount,
+        amountFrom: "button",
+      });
+    },
+  );
+
+  it.each(["PLN 49,90", "49,90 zł", "1 234,56 PLN", "1 234,56 zł"])(
+    "reads a PLN checkout total when the button has no amount: %s",
+    (amount) => {
+      const { intent } = page(
+        `<p>Subtotal: PLN 1,00</p>\n<p>Order total: ${amount}</p>\n<button>Buy now</button>`,
+      );
+      expect(intent("Buy now")).toEqual({
+        reason: "final_step",
+        label: "Buy now",
+        amount,
+        amountFrom: "page",
+      });
+    },
+  );
 
   it("finds the amount in the label first, then next to a total on the page", () => {
     const named = page(`<p>Total: $10</p><button>Pay $113</button>`);

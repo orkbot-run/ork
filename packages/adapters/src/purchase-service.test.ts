@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests remain Apache-2.0; spending lifecycle coverage is PolyForm-covered.
+
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import { PaymentWalletDisconnected, PaymentWalletRequestRejected } from "@orkbot/adapter-kit";
+import { readSpendingLimit, setSpendingLimit } from "@orkbot/db";
 import { Challenge, Credential } from "mppx";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -179,7 +184,7 @@ describe("purchase_status", () => {
     expect(env.purchases[0]).toMatchObject({
       status: "approved",
       wokenStatus: "approved",
-      nextPollAt: null,
+      nextPollAt: expect.any(Date),
     });
   });
 
@@ -190,6 +195,84 @@ describe("purchase_status", () => {
     expect(await env.call("purchase_status", { id: "purchase-1" })).toEqual({
       error: "Unknown purchase.",
     });
+  });
+});
+
+describe("account spending enforcement for wallets", () => {
+  const limit = { amount: 20, currency: "USD", period: "never" } as const;
+
+  it("blocks before asking the wallet and converts exact minor units", async () => {
+    const env = setup();
+    await setSpendingLimit(env.prisma, fixture.userId, { ...limit, amount: 19.98 });
+    expect(await env.call("request_purchase", request)).toEqual({
+      error: expect.stringContaining("spending limit"),
+    });
+    expect(env.wallet.created).toHaveLength(0);
+    await setSpendingLimit(env.prisma, fixture.userId, limit);
+    await env.call("request_purchase", request);
+    expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(19.99);
+    expect(await env.call("request_purchase", request)).toMatchObject({ id: "purchase-1" });
+    expect(env.wallet.created).toHaveLength(1);
+    expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(19.99);
+  });
+
+  it("rechecks a lowered budget before revealing the approved card", async () => {
+    const env = setup();
+    await env.call("request_purchase", request);
+    env.purchases[0]!.status = "approved";
+    await setSpendingLimit(env.prisma, fixture.userId, { ...limit, amount: 10 });
+    const reveal = vi.spyOn(env.wallet, "revealCard");
+    expect(await resolvePurchaseCardFill(env.deps, fixture, "purchase-1", "number")).toEqual({
+      error: expect.stringContaining("spending limit"),
+    });
+    expect(reveal).not.toHaveBeenCalled();
+  });
+
+  it.each(["denied", "expired", "failed", "canceled"] as const)(
+    "releases %s purchases atomically",
+    async (status) => {
+      const env = setup();
+      await setSpendingLimit(env.prisma, fixture.userId, limit);
+      await env.call("request_purchase", request);
+      env.wallet.snapshots.set("remote-op-1", { id: "remote-op-1", status });
+      await env.call("purchase_status", { id: "purchase-1" });
+      expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(0);
+      await env.call("request_purchase", request, "op-2");
+      expect(env.wallet.created).toHaveLength(2);
+    },
+  );
+
+  it("releases a known provider refusal but retains an unknown network outcome", async () => {
+    const env = setup();
+    await setSpendingLimit(env.prisma, fixture.userId, limit);
+    env.wallet.createPurchase = async () => {
+      throw new PaymentWalletRequestRejected("Declined");
+    };
+    await env.call("request_purchase", request);
+    expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(0);
+    env.wallet.createPurchase = async () => {
+      throw new Error("Lost response");
+    };
+    await expect(env.call("request_purchase", request, "op-2")).rejects.toThrow("Lost response");
+    expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(19.99);
+  });
+
+  it("reuses its reservation after a lost provider response without double counting", async () => {
+    const env = setup();
+    await setSpendingLimit(env.prisma, fixture.userId, limit);
+    const create = env.wallet.createPurchase.bind(env.wallet);
+    let lost = true;
+    env.wallet.createPurchase = async (...args) => {
+      const snapshot = await create(...args);
+      if (lost) {
+        lost = false;
+        throw new Error("Lost response");
+      }
+      return snapshot;
+    };
+    await expect(env.call("request_purchase", request)).rejects.toThrow("Lost response");
+    expect(await env.call("request_purchase", request)).toMatchObject({ id: "purchase-1" });
+    expect((await readSpendingLimit(env.prisma, fixture.userId)).spent).toBe(19.99);
   });
 });
 
@@ -514,6 +597,25 @@ describe("paid_request", () => {
     const paid = await env.paid({ purchase: "purchase-1" }, "op-2");
     expect(paid.result).toMatchObject({ purchase: { status: "failed" }, status: 500 });
     expect(env.purchases[0]).toMatchObject({ status: "failed", wokenStatus: "failed" });
+    expect([...env.ledger.values()][0]).toMatchObject({ status: "released" });
+  });
+
+  it("rechecks the account limit after remote HTTP authorization and before sending payment", async () => {
+    const { env, api } = await approvedPurchase();
+    const authorize = env.wallet.authorizeHttpPayment.bind(env.wallet);
+    env.wallet.authorizeHttpPayment = async (...args) => {
+      const authorization = await authorize(...args);
+      await setSpendingLimit(env.prisma, fixture.userId, {
+        amount: 0,
+        currency: "USD",
+        period: "never",
+      });
+      return authorization;
+    };
+    const result = await env.paid({ purchase: "purchase-1" }, "op-2");
+    expect(result.result).toEqual({ error: expect.stringContaining("spending limit") });
+    expect(api.seen.every((call) => !call.authorization)).toBe(true);
+    expect(env.purchases[0]!.status).toBe("approved");
   });
 
   it("does not pay a challenge whose amount changed after approval", async () => {

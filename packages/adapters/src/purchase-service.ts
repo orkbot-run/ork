@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; account spending enforcement is PolyForm-covered.
+
 import type {
   AdapterContext,
   JobPublisher,
@@ -16,11 +20,22 @@ import {
 } from "@orkbot/adapter-kit";
 import type { PurchaseCardField } from "@orkbot/contracts";
 import { PurchaseIdInput, PurchaseRequestInput } from "@orkbot/contracts";
-import type { Purchase } from "@orkbot/db";
+import type { Prisma, Purchase } from "@orkbot/db";
+import {
+  confirmSpendingInTransaction,
+  releaseSpending,
+  releaseSpendingInTransaction,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { cardRedactionForms } from "./bot-secrets.js";
 import type { PaymentWalletDeps } from "./payment-wallets.js";
 import { withPaymentWalletCredential } from "./payment-wallets.js";
+import {
+  checkPurchaseBudget,
+  reservePurchaseBudget,
+  walletPurchaseMoney,
+  walletSpendingKey,
+} from "./purchase-budget.js";
 import { deleteSecretBestEffort } from "./secret-store-factory.js";
 import type { SafeWebFetchOptions } from "./web-ssrf.js";
 
@@ -36,6 +51,10 @@ export const PENDING_PURCHASE_STATUSES: ReadonlySet<string> = new Set<PurchaseSt
   "needs_action",
 ]);
 export const PURCHASE_POLL_MS = 5_000;
+export const POLLABLE_PURCHASE_STATUSES: ReadonlySet<string> = new Set([
+  ...PENDING_PURCHASE_STATUSES,
+  "approved",
+]);
 
 export const NOT_CONFIGURED = { error: "No wallet is available." };
 const DISCONNECTED = {
@@ -166,7 +185,17 @@ export async function executePurchaseTool(
   } catch (error) {
     return providerError(error);
   }
-  return purchaseView(await recordSeenStatus(deps, purchase, snapshot), snapshot.card);
+  const seen = await recordSeenStatus(deps, purchase, snapshot);
+  if (seen.status === "approved") {
+    const blocked = await checkPurchaseBudget(
+      deps,
+      seen,
+      walletPurchaseMoney(seen),
+      walletSpendingKey(seen),
+    );
+    if (blocked) return blocked;
+  }
+  return purchaseView(seen, snapshot.card);
 }
 
 /** Only the bot that asked for it: its later runs are the ones that keep hiding what it typed. */
@@ -236,7 +265,25 @@ export async function createPurchase(
   const existing = await deps.prisma.purchase.findUnique({
     where: { operationKey: context.operationId },
   });
-  if (existing) return purchaseView(ownedReplay(existing, context));
+  if (existing) {
+    ownedReplay(existing, context);
+    if (POLLABLE_PURCHASE_STATUSES.has(existing.status)) {
+      const blocked = await checkPurchaseBudget(
+        deps,
+        existing,
+        walletPurchaseMoney(existing),
+        walletSpendingKey(existing),
+      );
+      if (blocked) return blocked;
+    }
+    return purchaseView(existing);
+  }
+  const spendingKey = `wallet:${context.operationId}`;
+  const money = walletPurchaseMoney(request);
+  const blocked = await checkPurchaseBudget(deps, context, money, spendingKey);
+  if (blocked) return blocked;
+  const reservation = await reservePurchaseBudget(deps, context, spendingKey, money);
+  if (reservation) return reservation;
   let snapshot: PurchaseSnapshot;
   try {
     // The idempotency key makes a replay after a crash reuse the same remote purchase.
@@ -254,9 +301,11 @@ export async function createPurchase(
       ),
     );
   } catch (error) {
+    if (error instanceof PaymentWalletDisconnected || error instanceof PaymentWalletRequestRejected)
+      await releaseSpending(deps.prisma, context.userId, spendingKey);
     return providerError(error);
   }
-  const pending = PENDING_PURCHASE_STATUSES.has(snapshot.status);
+  const pending = POLLABLE_PURCHASE_STATUSES.has(snapshot.status);
   const thread = await deps.prisma.thread.findUniqueOrThrow({
     where: { id: run.threadId },
     select: { historyCompactionGeneration: true },
@@ -292,7 +341,17 @@ export async function createPurchase(
     }),
     context,
   );
+  await deps.prisma.$transaction((tx) => recordPurchaseSpending(tx, purchase, purchase.status));
   if (purchase.nextPollAt) await enqueuePurchasePoll(deps, purchase.id, purchase.nextPollAt);
+  if (purchase.status === "approved") {
+    const blocked = await checkPurchaseBudget(
+      deps,
+      purchase,
+      walletPurchaseMoney(purchase),
+      walletSpendingKey(purchase),
+    );
+    if (blocked) return blocked;
+  }
   return purchaseView(purchase, snapshot.card);
 }
 
@@ -312,19 +371,37 @@ export async function recordSeenStatus(
   snapshot: PurchaseSnapshot,
 ) {
   if (snapshot.status === purchase.status) return purchase;
-  const pending = PENDING_PURCHASE_STATUSES.has(snapshot.status);
+  const pending = POLLABLE_PURCHASE_STATUSES.has(snapshot.status);
   const data = {
     status: snapshot.status,
     approvalUrl: snapshot.approvalUrl ?? purchase.approvalUrl,
     wokenStatus: snapshot.status,
     nextPollAt: pending ? (purchase.nextPollAt ?? new Date()) : null,
   };
-  const saved = await deps.prisma.purchase.updateMany({
-    where: { id: purchase.id, updatedAt: purchase.updatedAt },
-    data,
+  const saved = await deps.prisma.$transaction(async (tx) => {
+    const saved = await tx.purchase.updateMany({
+      where: { id: purchase.id, updatedAt: purchase.updatedAt },
+      data,
+    });
+    if (saved.count) await recordPurchaseSpending(tx, purchase, snapshot.status);
+    return saved;
   });
   if (saved.count && data.nextPollAt) await enqueuePurchasePoll(deps, purchase.id, data.nextPollAt);
-  return { ...purchase, ...data };
+  return saved.count
+    ? { ...purchase, ...data }
+    : deps.prisma.purchase.findUniqueOrThrow({ where: { id: purchase.id } });
+}
+
+/** Update the ledger in the same transaction as a successful purchase status write. */
+export async function recordPurchaseSpending(
+  tx: Prisma.TransactionClient,
+  purchase: Purchase,
+  status: string,
+) {
+  if (status === "completed")
+    await confirmSpendingInTransaction(tx, purchase.userId, walletSpendingKey(purchase));
+  else if (["denied", "expired", "canceled", "failed"].includes(status))
+    await releaseSpendingInTransaction(tx, purchase.userId, walletSpendingKey(purchase));
 }
 
 /** The row is the outbox; a queue failure leaves it due for reconcilePurchases. */
@@ -366,6 +443,13 @@ export async function resolvePurchaseCardFill(
   if (purchase.status !== "approved") return NOT_APPROVED;
   if (credentialKind(purchase) !== "card")
     return { error: "This purchase pays without a card. Check purchase_status." };
+  const blocked = await reservePurchaseBudget(
+    deps,
+    purchase,
+    walletSpendingKey(purchase),
+    walletPurchaseMoney(purchase),
+  );
+  if (blocked) return blocked;
   const context = purchaseContext(purchase, "card");
   const origin = new URL(purchase.merchantUrl).origin;
   if (field === "expiry" || field === "postal_code") {
@@ -419,6 +503,13 @@ export async function resolvePurchasePayTokenFill(
   if (credentialKind(purchase) !== "pay_token" || !purchase.merchantAccountId)
     return { error: "This purchase has no pay token. Check purchase_status." };
   if (purchase.status !== "approved") return NOT_APPROVED;
+  const blocked = await reservePurchaseBudget(
+    deps,
+    purchase,
+    walletSpendingKey(purchase),
+    walletPurchaseMoney(purchase),
+  );
+  if (blocked) return blocked;
   const context = purchaseContext(purchase, "pay-token");
   let token: string;
   try {

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited purchase detection remains Apache-2.0; inspection enforcement is PolyForm-covered.
+
+import { readSpendingLimit } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { FleetCardSummary } from "./approval-ask.js";
 import { redactConnectorPayload } from "./connector-safety.js";
@@ -163,9 +168,13 @@ export async function detectPurchase(
 ): Promise<PurchaseApproval | undefined> {
   const probe = purchaseProbe(name, args);
   const { browser } = ctx.providers;
-  if (!probe || !browser.purchaseCheck || !ctx.computer.pageBrowserAllowed) return undefined;
+  if (!probe) return undefined;
   if (ctx.computer.heldForTakeover) return undefined;
   const unchecked = { steps: [], site: "", label: "", amount: "", amountSource: "page" } as const;
+  if (!browser.purchaseCheck || !ctx.computer.pageBrowserAllowed)
+    return (await readSpendingLimit(ctx.deps.prisma, ctx.run.userId)).limit
+      ? { ...unchecked, steps: [] }
+      : undefined;
   // A press after the batch opens a URL lands on a page nobody could look at yet.
   if ("unchecked" in probe && probe.unchecked) return { ...unchecked, steps: [] };
   let found: Awaited<ReturnType<NonNullable<typeof browser.purchaseCheck>>>["purchase"];
@@ -178,11 +187,17 @@ export async function detectPurchase(
     return undefined;
   }
   try {
-    ({ purchase: found } = await browser.purchaseCheck(
+    const checked = await browser.purchaseCheck(
       computer,
       { ...probe, signal: ctx.context.signal },
       ctx.context,
-    ));
+    );
+    found = checked.purchase;
+    if (
+      checked.checked === false &&
+      (await readSpendingLimit(ctx.deps.prisma, ctx.run.userId)).limit
+    )
+      found = { ...unchecked, steps: [] };
   } catch (error) {
     ctx.context.signal.throwIfAborted();
     getLogger().warn("purchase check failed, asking", {

@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited browser helpers remain Apache-2.0; the final payment hook is PolyForm-covered.
+
 import type {
   AdapterContext,
   AgentToolExecutionResult,
+  BrowserActResult,
   BrowserActStep,
   BrowserDownload,
   BrowserProvider,
@@ -168,6 +173,10 @@ export async function browserActFromTool(
     uploadRoots?: string[];
     /** The purchase the user approved for this call; its clicks alone may complete it. */
     approvedPurchase?: PurchaseApproval;
+    /** Reserve spending only after fills and code claims have succeeded. */
+    beforeAct?: () => Promise<
+      { error: string } | { settle?: (result: BrowserActResult) => Promise<void> }
+    >;
   } = {},
 ) {
   try {
@@ -307,11 +316,17 @@ export async function browserActFromTool(
         completed: 0,
       };
     }
+    const payment = await options.beforeAct?.();
+    if (payment && "error" in payment) {
+      if (codeTyped) await codeTyped.restore();
+      return { ...refusedInput(payment.error), completed: 0 };
+    }
     const result = await browser.act(
       computer,
       { actions, downloads: options.downloads?.folder, signal: context.signal },
       context,
     );
+    await payment?.settle?.(result);
     // A code the page took is spent. One it clearly refused goes back, so a fill on the right page
     // can use it; any doubt about the outcome keeps it spent, never typed twice.
     if (codeTyped && result.uncertain === false && result.completed <= codeTyped.index) {

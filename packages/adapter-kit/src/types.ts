@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited contracts remain Apache-2.0; purchase inspection availability is PolyForm-covered.
+
 import type {
   BillingCancellationReason,
   ByokTier,
@@ -1242,6 +1246,8 @@ export interface BrowserPurchaseCheckRequest {
 /** `steps`: the indexes of the clicks that would complete the purchase. */
 export interface BrowserPurchaseCheckResult {
   purchase: (BrowserPurchase & { steps: number[] }) | null;
+  /** False when the browser cannot inspect a page, rather than finding no payment. */
+  checked?: boolean;
 }
 
 /** A sandbox must route these commands through its owned screen, never generic host execution. */

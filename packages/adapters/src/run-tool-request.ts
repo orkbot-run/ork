@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; account spending checks are PolyForm-covered.
+
 import type { ConnectorCall, ConnectorTool } from "@orkbot/adapter-kit";
 import { BOT_INSTRUCTIONS_MAX_LENGTH, BotSecretAuth } from "@orkbot/contracts";
 import { redactSecrets } from "@orkbot/core";
@@ -23,6 +27,8 @@ import { sanitizeConnectorError } from "./connector-safety.js";
 import { isFleetApprovalTool, prepareFleetRequest } from "./fleet-tools.js";
 import { assertConnectorToolArgs, CATALOG_EXECUTE } from "./lazy-tool-catalog.js";
 import { paidRequestEffect, restorePaidRequest } from "./paid-request.js";
+import type { PagePayment } from "./purchase-budget.js";
+import { checkPagePayment } from "./purchase-budget.js";
 import type { PurchaseApproval } from "./purchase-gate.js";
 import {
   detectPurchase,
@@ -74,6 +80,7 @@ export interface ToolRequest {
   purchase: PurchaseApproval | undefined;
   /** This page tool call types a saved card into a checkout, which a person approves each time. */
   cardUse: VaultCardUse | undefined;
+  pagePayment?: PagePayment;
 }
 
 type ToolError = { error: string };
@@ -392,7 +399,12 @@ export async function prepareToolRequest(
   if (PURCHASE_CHECKED_TOOLS.has(name)) {
     // The approval is written here from what the page says; a model-supplied one is dropped, and an
     // approved replay keeps the one the user saw.
-    const { purchaseApproval: given, cardApproval: givenCard, ...rest } = args;
+    const {
+      purchaseApproval: given,
+      cardApproval: givenCard,
+      walletPurchaseId: givenWallet,
+      ...rest
+    } = args;
     const approved = nextApprovedTool === name ? purchaseApprovalOf(given) : undefined;
     args = approved ? { ...rest, purchaseApproval: given } : rest;
     // A saved card is typed only into the checkout a person approved: the approval names the card
@@ -449,6 +461,36 @@ export async function prepareToolRequest(
       };
     if (purchase) {
       args = { ...args, purchaseApproval: purchase };
+      const walletFills = [
+        ...new Set(
+          Array.isArray(rest.actions) && !request.cardUse
+            ? rest.actions.flatMap((action: Record<string, unknown>, index: number) =>
+                purchase.steps.length > 0 &&
+                index < Math.min(...purchase.steps) &&
+                ["fill_card", "fill_pay_token"].includes(String(action.kind)) &&
+                typeof action.purchase === "string"
+                  ? [action.purchase]
+                  : [],
+              )
+            : [],
+        ),
+      ];
+      const walletPurchaseId = !request.cardUse
+        ? approved && typeof givenWallet === "string"
+          ? givenWallet
+          : walletFills.length === 1
+            ? walletFills[0]
+            : ctx.state.walletPurchases?.get(purchase.site)
+        : undefined;
+      if (walletPurchaseId) args = { ...args, walletPurchaseId };
+      request.pagePayment = { purchase, walletPurchaseId };
+      const blocked = await checkPagePayment(
+        ctx,
+        request.pagePayment,
+        request.approvedEffectKey ? `page:${request.approvedEffectKey}` : undefined,
+      );
+      if (blocked) return blocked;
+      ctx.state.walletPurchases?.delete(purchase.site);
       // The person approved paying at a site this run typed the approved card or pay token into: the
       // click still carries the approval to the page, with no card. Spent on the first purchase click there.
       if (approved || request.cardUse || !ctx.state.walletHosts.delete(purchase.site)) {

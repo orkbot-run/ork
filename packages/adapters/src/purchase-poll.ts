@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited polling remains Apache-2.0; ledger reconciliation is PolyForm-covered.
+
 import type { AdapterContext, PurchaseSnapshot, PurchaseStatus } from "@orkbot/adapter-kit";
 import {
   PaymentWalletDisconnected,
@@ -11,7 +15,9 @@ import {
   enqueuePurchasePoll,
   fetchPurchase,
   PENDING_PURCHASE_STATUSES,
+  POLLABLE_PURCHASE_STATUSES,
   PURCHASE_POLL_MS,
+  recordPurchaseSpending,
 } from "./purchase-service.js";
 
 /** Providers expire approval requests after 30 minutes; stop asking a little later. */
@@ -36,11 +42,14 @@ export async function pollPurchase(deps: PurchaseDeps, payload: { purchaseId: st
     where: { id: payload.purchaseId, provider: provider.describe().id },
   });
   if (!purchase?.nextPollAt) return;
-  if (!PENDING_PURCHASE_STATUSES.has(purchase.status)) {
+  if (!POLLABLE_PURCHASE_STATUSES.has(purchase.status)) {
     await settle(deps, purchase, { status: purchase.status as PurchaseStatus });
     return;
   }
-  if (Date.now() - purchase.createdAt.getTime() >= PURCHASE_POLL_DEADLINE_MS) {
+  if (
+    PENDING_PURCHASE_STATUSES.has(purchase.status) &&
+    Date.now() - purchase.createdAt.getTime() >= PURCHASE_POLL_DEADLINE_MS
+  ) {
     await settle(deps, purchase, { status: "expired" });
     return;
   }
@@ -112,9 +121,10 @@ async function settle(
       }),
     ]);
     const attached = thread.count > 0 && Boolean(member) && Boolean(bot);
-    const pending = PENDING_PURCHASE_STATUSES.has(next.status);
-    // Nobody is left to tell once the bot, its chat or its owner is gone, or the chat was cleared.
-    const nextPollAt = pending && attached ? new Date(Date.now() + PURCHASE_POLL_MS) : null;
+    // Wallet outcomes still release funds after the chat is cleared or the bot disappears.
+    const nextPollAt = POLLABLE_PURCHASE_STATUSES.has(next.status)
+      ? new Date(Date.now() + (next.status === "approved" ? RETRY_MS : PURCHASE_POLL_MS))
+      : null;
     const wake = attached && WAKE_STATUSES.has(next.status) && next.status !== purchase.wokenStatus;
     // The updatedAt fence makes a concurrent poll or purchase_status write win once.
     const updated = await tx.purchase.updateMany({
@@ -127,6 +137,7 @@ async function settle(
       },
     });
     if (!updated.count) return null;
+    await recordPurchaseSpending(tx, purchase, next.status);
     if (!wake) return { nextPollAt };
     const clientNonce = `purchase-wake:${purchase.id}:${next.status}`;
     // A status that comes back (approved, needs_action, approved) already woke the bot once.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited tests remain Apache-2.0; inspection availability tests are PolyForm-covered.
+
 import type { AdapterContext, ComputerRef, PageBrowserCommand } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createBrowserProvider, resolveBrowserProviderKind } from "./browser-provider-factory.js";
@@ -480,6 +484,7 @@ describe("page browser safety", () => {
     reply = { ok: false, error: "unknown command: purchase_check", fallback: "computer_act" };
     expect(await provider.purchaseCheck(computer, { actions }, baseContext)).toEqual({
       purchase: null,
+      checked: false,
     });
     // So is a computer without a page browser, or a supervisor from before the check.
     for (const error of [
@@ -489,6 +494,7 @@ describe("page browser safety", () => {
       reply = { ok: false, error, fallback: "computer_act" };
       expect(await provider.purchaseCheck(computer, { actions }, baseContext)).toEqual({
         purchase: null,
+        checked: false,
       });
     }
     // Any other failure asks, naming no page and approving no click: a check that started and broke,
