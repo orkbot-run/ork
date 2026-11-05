@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; spending limit events are PolyForm-covered.
+
 import * as z from "zod";
 
 /** Every security event the backend records. Alert queries match these strings. */
@@ -24,6 +28,8 @@ export const SECURITY_EVENT_TYPES = [
   "deployment.settings.changed",
   "approval.decided",
   "approval.policy.changed",
+  "spending.limit.changed",
+  "spending.limit.blocked",
   "egress.refused",
   "rate_limit.hit",
 ] as const;

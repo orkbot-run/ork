@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; account spending limit changes are PolyForm-covered.
+
 import type {
   AnyContractProcedure,
   InferContractRouterInputs,
@@ -180,6 +184,7 @@ import {
 import { SearchQueryOutputSchema } from "./search.js";
 import { SecurityEventListInputSchema, SecurityEventSchema } from "./security-events.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
+import { SpendingLimitSchema, SpendingLimitStateSchema } from "./spending-limit.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -1232,6 +1237,13 @@ export const appContract = {
         .output(MessagingAgentConnectionSchema),
       revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     },
+  },
+  /** One account budget shared by every bot and Space; it has no Space override. */
+  spendingLimit: {
+    get: oc.input(z.strictObject({})).output(SpendingLimitStateSchema),
+    set: oc
+      .input(z.strictObject({ limit: SpendingLimitSchema.nullable() }))
+      .output(SpendingLimitStateSchema),
   },
   approvalRules: {
     list: oc.input(settingsScopeInput.optional()).output(z.array(ActionApprovalRuleSchema)),

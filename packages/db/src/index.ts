@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 exports; the spending module is an original Ork addition.
+
 export * from "./account-export.js";
 export * from "./approval-settings.js";
 export * from "./artifact-versions.js";
@@ -48,6 +52,7 @@ export * from "./security-events.js";
 export * from "./sessions.js";
 export * from "./space-settings.js";
 export * from "./spaces.js";
+export * from "./spending-limit.js";
 export { primaryActiveRun } from "./thread-listing.js";
 export * from "./transaction-retry.js";
 export * from "./unread-inbox-chats.js";

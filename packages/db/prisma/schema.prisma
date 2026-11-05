@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited schema is Apache-2.0; account spending models are original Ork additions.
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -58,6 +62,8 @@ model User {
   modelCredentials            UserModelCredential[]
   voiceCredentials            UserVoiceCredential[]
   paymentWallet               PaymentWallet?
+  spendingLimit               AccountSpendingLimit?
+  spendingLedger              PaymentLedgerEntry[]
   secrets                     Secret[]
   mcpServers                  McpServer[]
   botSections                 BotSection[]
@@ -1135,6 +1141,39 @@ model PaymentWallet {
   updatedAt  DateTime  @updatedAt
 
   @@map("payment_wallets")
+}
+
+/// One account-wide purchase budget, independent of Space setting overrides.
+model AccountSpendingLimit {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount    Decimal  @db.Decimal(18, 2)
+  currency  String
+  period    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("account_spending_limits")
+}
+
+/// Outstanding reservations survive period rollover until their outcome is known.
+model PaymentLedgerEntry {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operationKey String
+  /// The first checkout effect funded by a wallet reservation, stable across worker restarts.
+  pageOperationKey String?
+  amount       Decimal?  @db.Decimal(18, 2)
+  currency     String?
+  status       String
+  countedAt    DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, operationKey])
+  @@index([userId, currency, status, countedAt])
+  @@map("payment_ledger_entries")
 }
 
 model Purchase {

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; spending limit exports are PolyForm-covered.
+
 export * from "./account-export.js";
 export * from "./agent-import.js";
 export * from "./agent-import-setup.js";
@@ -41,6 +45,7 @@ export * from "./search.js";
 export * from "./security-events.js";
 export * from "./server-headers.js";
 export * from "./settings-scope.js";
+export * from "./spending-limit.js";
 export * from "./terminal.js";
 export * from "./user-devices.js";
 export * from "./vault-items.js";
