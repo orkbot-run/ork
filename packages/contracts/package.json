@@ -29,6 +29,11 @@
       "types": "./src/content-security-policy.ts",
       "development": "./src/content-security-policy.ts",
       "default": "./src/content-security-policy.ts"
+    },
+    "./accounts": {
+      "types": "./src/accounts.ts",
+      "development": "./src/accounts.ts",
+      "default": "./src/accounts.ts"
     }
   },
   "scripts": {

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Ork",
     "slug": "orkbot",
-    "scheme": "orkbot",
+    "scheme": ["orkbot", "run.orkbot.app"],
     "version": "1.0.12",
     "orientation": "default",
     "userInterfaceStyle": "automatic",

@@ -252,6 +252,9 @@ describe("Tauri native bridge", () => {
   it("routes typed commands with their arguments and the private document proofs", async () => {
     const { window, invoke, config, documentId, helloEpoch } = runBridge({ speech: true });
     const bridge = desktop(window);
+    await bridge.accounts?.signIn();
+    await bridge.accounts?.session();
+    await bridge.accounts?.logout();
     await bridge.pairing?.sync();
     await bridge.pairing?.clear();
     await bridge.badge?.set(7);
@@ -274,6 +277,9 @@ describe("Tauri native bridge", () => {
     await bridge.speech?.abort(4);
     expect(invoke.mock.calls.map(([, request]) => request.command)).toEqual([
       { type: "hello", epoch: helloEpoch },
+      { type: "accounts.signIn" },
+      { type: "accounts.session" },
+      { type: "accounts.logout" },
       { type: "pairing.sync" },
       { type: "pairing.clear" },
       { type: "badge.set", count: 7 },

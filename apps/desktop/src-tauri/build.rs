@@ -3,6 +3,8 @@
 
 fn main() {
     for variable in [
+        "ORK_ACCOUNTS_ISSUER",
+        "ORK_ACCOUNTS_DESKTOP_CLIENT_ID",
         "ORKBOT_ENABLE_AUTO_UPDATE",
         "ORKBOT_DISABLE_AUTO_UPDATE",
         "TAURI_UPDATER_ENDPOINT",

@@ -66,6 +66,11 @@ if (
     void call<void>("pairing.sync").catch(() => undefined);
   });
   const bridge: OrkDesktop = {
+    accounts: {
+      signIn: () => call("accounts.signIn"),
+      session: () => call("accounts.session"),
+      logout: () => call("accounts.logout"),
+    },
     pairing: {
       sync: () => call("pairing.sync"),
       clear: () => call("pairing.clear"),

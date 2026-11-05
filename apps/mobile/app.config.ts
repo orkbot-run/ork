@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
+
 import type { ConfigContext, ExpoConfig } from "expo/config";
 
 const RELEASE_PROFILES = new Set(["production", "android-apk", "diagnostic"]);
@@ -23,6 +27,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   }
 
   let result = config as ExpoConfig;
+  if (process.env.ORK_ACCOUNTS_ISSUER || process.env.ORK_ACCOUNTS_MOBILE_CLIENT_ID) {
+    result = {
+      ...result,
+      extra: {
+        ...result.extra,
+        accountsIssuer: process.env.ORK_ACCOUNTS_ISSUER ?? "",
+        accountsClientId: process.env.ORK_ACCOUNTS_MOBILE_CLIENT_ID ?? "",
+      },
+    };
+  }
   const rpId = passkeyRpId(process.env.EXPO_PUBLIC_API_URL);
   if (rpId) {
     // Native passkeys only work for domains the binary is associated with, so the app reads the

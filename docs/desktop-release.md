@@ -55,3 +55,42 @@ Keep the private signing key outside the repository.
 
 Release versioning still follows `.agents/skills/release/SKILL.md`. Tagging publishes
 server images, while desktop installers currently remain diagnostic Actions artifacts.
+
+## Updater signing procedure
+
+Generate the signing pair on a trusted operator machine, saving the private key
+outside the checkout. Enter its password at the prompt:
+
+```sh
+pnpm --filter @orkbot/desktop exec tauri signer generate --write-keys '<private-key-path>'
+```
+
+Back up the key securely. Keep it and its password in the release secret store,
+and put the matching public key in `TAURI_UPDATER_PUBLIC_KEY`. Builds that trust a
+lost private key cannot receive updates signed by a replacement, so plan the key
+rotation while the original key is still available. Platform code signing uses
+separate credentials.
+
+For an authorized release, inject `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` through the build runner's secret environment.
+Set the updater endpoint and public key shown above. Enable signed update output
+with `{"bundle":{"createUpdaterArtifacts":true}}` in a local Tauri release
+configuration, passed to the build with `--config`. Private keys, passwords and
+signatures stay out of commits.
+
+`tauri build` binds updater signatures to the application version automatically.
+If signing an existing updater archive by hand, use the same version as the binary
+and update manifest:
+
+```sh
+pnpm --filter @orkbot/desktop exec tauri signer sign \
+  --private-key-path '<private-key-path>' \
+  --app-version '<version>' '<updater-artifact-path>'
+```
+
+Publish each platform's artifact and generated `.sig` through the authorized
+release process. Put the signature and HTTPS artifact URL in the matching platform
+entry of the update manifest, then test an installed previous release on each
+supported platform before promoting the feed. Diagnostic CI leaves these signing
+and publication steps to the operator. See the
+[Tauri updater guide](https://v2.tauri.app/plugin/updater/) for manifest fields.
