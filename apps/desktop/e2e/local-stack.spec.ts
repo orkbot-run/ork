@@ -4,6 +4,7 @@ import type { RequestListener, Server } from "node:http";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { OrkDesktop } from "@orkbot/contracts";
 import type { ElectronApplication } from "@playwright/test";
 import { _electron as electron, expect, test } from "@playwright/test";
 import { prepareHostComputer } from "../src/host-computer.js";
@@ -508,7 +509,12 @@ test("the desktop never exposes server administration or account impersonation",
   await setup.getByRole("button", { name: "Continue", exact: true }).click();
   const main = await nextWindow;
   await expect(main.getByText(APP_MARKER)).toBeVisible();
-  expect(await main.evaluate(() => "localSettings" in window.orkbotDesktop!)).toBe(false);
+  expect(
+    await main.evaluate(
+      () =>
+        "localSettings" in (window as typeof window & { orkbotDesktop: OrkDesktop }).orkbotDesktop,
+    ),
+  ).toBe(false);
   expect(
     await app.evaluate(({ Menu }) =>
       Boolean(Menu.getApplicationMenu()?.getMenuItemById("local-server-settings")),

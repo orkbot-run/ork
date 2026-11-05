@@ -1,3 +1,9 @@
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Apache-2.0 covers the inherited guide. Ork revisions are PolyForm-covered. -->
+<!-- Modified by Ork contributors to document the mobile routine editor. -->
+
 # Routines
 
 A routine is a prompt a bot runs on its own: on a schedule, when something changes, or when another
@@ -65,5 +71,11 @@ Runs when the bot receives a message in Slack. Needs [Slack connected](./messagi
 
 ## On mobile
 
-The mobile app lists a bot's routines from its profile. You can pause, delete and review them there.
-To create or change one, ask the bot in chat or use the web or desktop app.
+Open a bot's profile to see its routines. Tap **+** to create one, or open an existing
+routine to view its instruction, schedule, next run and run history. You can pause it
+or start a test run there. **Edit routine** lets you change its name, instruction and
+schedules, or delete it.
+
+Configure webhook, Git event, Slack message and change triggers in chat or on the web
+or desktop app. Set a routine's own model there too. Mobile displays these settings
+and preserves them when you edit the routine.

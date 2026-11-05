@@ -9,6 +9,7 @@ import type {
   SandboxProvider,
 } from "@orkbot/adapter-kit";
 import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
+import { insertOutboundRows } from "@orkbot/adapters";
 import type { MessageBlock } from "@orkbot/contracts";
 import { ATTACHMENT_MAX_COUNT, isAttachmentAudioMimeType } from "@orkbot/contracts";
 import type { MessagingCommand } from "@orkbot/core";
@@ -853,17 +854,16 @@ async function handleChannelEvent(
   }
 
   if (hasUnlinked && !channel.introPostedAt) {
-    await deps.prisma.messagingOutbound.createMany({
-      data: [
-        {
-          idempotencyKey: `intro:${channel.id}`,
-          kind: "intro",
-          threadId: channel.threadId,
-          body: "Hi. This line hosts Ork personal agents. Some people in this group haven't messaged it yet; send any message to this line first if you want your own agent here.",
-        },
-      ],
-      skipDuplicates: true,
-    });
+    // Under the channel lock, so the intro never takes a position inside a
+    // mirrored reply's range and the drain's claim stays serialised with it.
+    await insertOutboundRows(deps.prisma, { identityId: null, threadId: channel.threadId }, [
+      {
+        idempotencyKey: `intro:${channel.id}`,
+        kind: "intro",
+        threadId: channel.threadId,
+        body: "Hi. This line hosts Ork personal agents. Some people in this group haven't messaged it yet; send any message to this line first if you want your own agent here.",
+      },
+    ]);
     await deps.prisma.messagingChannel.update({
       where: { id: channel.id },
       data: { introPostedAt: new Date() },

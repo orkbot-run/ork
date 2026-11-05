@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Apache-2.0 covers the baseline; changes after the licensing transition are PolyForm-covered.
+// Modified by Ork contributors to verify the new share extension's application identifier.
+
 import { readFileSync } from "node:fs";
 import type { ConfigContext, ExpoConfig } from "expo/config";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,7 +46,11 @@ describe("mobile app config", () => {
       manifest.extra.eas.build.experimental.ios.appExtensions.map(
         (extension: { bundleIdentifier: string }) => extension.bundleIdentifier,
       ),
-    ).toEqual(["run.orkbot.app.widgets", "run.orkbot.app.notifications"]);
+    ).toEqual([
+      "run.orkbot.app.widgets",
+      "run.orkbot.app.expo-sharing-extension",
+      "run.orkbot.app.notifications",
+    ]);
   });
   it("loads the Firebase file path while preserving the existing config", () => {
     vi.stubEnv("GOOGLE_SERVICES_JSON", "/build/google-services.json");

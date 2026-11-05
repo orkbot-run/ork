@@ -60,7 +60,7 @@ import {
   withDetail,
 } from "./i18n.js";
 import { configuredLinuxUpdateKey, verifyDownloadedLinuxUpdate } from "./linux-update-signature.js";
-import { saveLocalComputerHost } from "./local-settings.js";
+import { createLocalComputerChoice, saveLocalComputerHost } from "./local-settings.js";
 import {
   LocalStackController,
   readStackToken,
@@ -737,6 +737,27 @@ async function installUpdate() {
   return state;
 }
 
+async function saveHostChoice(computerHost: "docker" | "this-mac") {
+  const origin = new URL(localStack.webUrl()).origin;
+  const token = await readStackToken(stackDir(app.getPath("userData")));
+  if (!token || !(await localStack.matchesDesiredStack()))
+    throw new Error(t("Local server is unavailable"));
+  await saveLocalComputerHost({ origin, token }, computerHost, (input, init) =>
+    net.fetch(input instanceof URL ? input.href : input, {
+      ...init,
+      bypassCustomProtocolHandlers: true,
+    }),
+  );
+}
+
+const localComputerChoice = createLocalComputerChoice({
+  save: saveHostChoice,
+  revoke: () => hostComputer?.revoke(),
+  settled: () => installApplicationMenu(),
+});
+const persistHostChoice = localComputerChoice.persist;
+const revokeLocalComputerAccess = localComputerChoice.revoke;
+
 function installApplicationMenu() {
   const computerAccess: Electron.MenuItemConstructorOptions = {
     label: t("Computer Access…"),
@@ -746,12 +767,7 @@ function installApplicationMenu() {
   const revokeComputerAccess: Electron.MenuItemConstructorOptions = {
     label: t("Revoke Local Computer Access"),
     visible: remoteServerOrigin() === null && hostComputer?.isEnabled() === true,
-    click: () => {
-      void hostComputer
-        ?.revoke()
-        .finally(() => installApplicationMenu())
-        .catch(() => undefined);
-    },
+    click: () => void revokeLocalComputerAccess().catch(() => undefined),
   };
   // Cmd+, is the macOS Settings chord, and no page keydown can see it: the OS takes
   // it first, so the menu item is the only place it can be registered.
@@ -1517,18 +1533,6 @@ app.whenReady().then(async () => {
     currentSetup?.mode === "new" &&
     appWindowTargets.get(mainWindow!) === localStack.webUrl() &&
     safeOrigin(event.senderFrame.url) === safeOrigin(localStack.webUrl());
-  const persistHostChoice = async (computerHost: "docker" | "this-mac") => {
-    const origin = new URL(localStack.webUrl()).origin;
-    const token = await readStackToken(stackDir(app.getPath("userData")));
-    if (!token || !(await localStack.matchesDesiredStack()))
-      throw new Error(t("Local server is unavailable"));
-    await saveLocalComputerHost({ origin, token }, computerHost, (input, init) =>
-      net.fetch(input instanceof URL ? input.href : input, {
-        ...init,
-        bypassCustomProtocolHandlers: true,
-      }),
-    );
-  };
   ipcMain.handle("desktop.computer.requestAccess", async (event) => {
     if (!isManagedComputerRequest(event) || !hostComputer)
       throw new Error(t("Local computer access requires an app-managed local instance."));
@@ -1562,14 +1566,7 @@ app.whenReady().then(async () => {
     }
   });
   ipcMain.handle("desktop.computer.revokeAccess", async (event) => {
-    if (isManagedComputerRequest(event)) {
-      try {
-        await persistHostChoice("docker");
-      } finally {
-        await hostComputer?.revoke();
-        installApplicationMenu();
-      }
-    }
+    if (isManagedComputerRequest(event)) await revokeLocalComputerAccess();
   });
   /** The remote server's own page in the app window, never a frame or another window. */
   const remoteDeviceOrigin = (event: Electron.IpcMainInvokeEvent) => {
@@ -1623,6 +1620,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("desktop.platform", () => process.platform);
   ipcMain.handle("desktop.passkeys.rpIds", () => passkeyRpIds);
   ipcMain.handle("desktop.monitoring.enabled", () => reportsErrors);
+  ipcMain.handle("desktop.server.change", (event) => {
+    if (fromMainWindow(event)) showSetupWindow();
+  });
   ipcMain.handle("desktop.window.close", (event) => {
     windowFrom(event)?.close();
   });

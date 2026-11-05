@@ -84,7 +84,10 @@ test.afterEach(async () => {
 });
 
 function launch(extraEnv: Record<string, string> = {}) {
-  const env = { ...process.env, ORKBOT_PERFORMANCE_USER_DATA: userData };
+  const env: Record<string, string | undefined> = {
+    ...process.env,
+    ORKBOT_PERFORMANCE_USER_DATA: userData,
+  };
   // A stale ORKBOT_WEB_URL from the developer's shell would bypass setup entirely.
   delete env.ORKBOT_WEB_URL;
   const executablePath = process.env.ORKBOT_E2E_EXECUTABLE;
@@ -92,7 +95,7 @@ function launch(extraEnv: Record<string, string> = {}) {
     ...(executablePath ? { executablePath: path.resolve(executablePath) } : {}),
     args: executablePath ? [] : ["."],
     cwd: path.resolve(import.meta.dirname, ".."),
-    env: { ...env, ...extraEnv },
+    env: { ...env, ...extraEnv } as Record<string, string>,
   });
 }
 
@@ -724,12 +727,12 @@ test("the app window stays on its server when a link redirects to another site",
   const openSignIn = (page: Page) =>
     page.evaluate(
       (url) =>
-        (window as typeof window & { orkbotDesktop: OrkDesktop }).orkbotDesktop.oauth
-          .open(url)
-          .then(
-            () => "opened",
-            (error: Error) => error.message,
-          ),
+        (window as typeof window & { orkbotDesktop: OrkDesktop }).orkbotDesktop.oauth.open!(
+          url,
+        ).then(
+          () => "opened",
+          (error: Error) => error.message,
+        ),
       signInUrl,
     );
 
