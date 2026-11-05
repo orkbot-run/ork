@@ -14,6 +14,7 @@ mod locale;
 mod menu;
 mod native;
 mod pairing;
+mod passkeys;
 mod profile;
 mod server;
 mod settings;
@@ -226,7 +227,14 @@ async fn native_command(
             Ok(unit)
         }
         Command::MonitoringEnabled => Ok(serde_json::json!(false)),
-        Command::PasskeyRpIds => Ok(serde_json::json!([])),
+        Command::PasskeyRpIds => {
+            let bundle_id = app.config().identifier.clone();
+            let ids =
+                tokio::task::spawn_blocking(move || passkeys::rp_ids(&document.origin, &bundle_id))
+                    .await
+                    .unwrap_or_default();
+            Ok(serde_json::json!(ids))
+        }
         Command::UpdateState => {
             Ok(serde_json::to_value(updates::state(&app))
                 .map_err(|_| "Update state unavailable.")?)
