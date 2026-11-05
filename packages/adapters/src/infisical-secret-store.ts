@@ -7,6 +7,7 @@ import type {
   SecretStore,
 } from "@orkbot/adapter-kit";
 import { SecretNotFoundError, SecretStoreUnavailableError } from "@orkbot/adapter-kit";
+import { readBoundedJsonResponse } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { credentialDigest } from "./credential-digest.js";
 import { SecretChanges } from "./secret-changes.js";
@@ -33,6 +34,7 @@ type CacheEntry = { value: string; expires: number; timer: ReturnType<typeof set
 const SECRETS_PATH = "/api/v4/secrets";
 // Infisical rate limits per 60s window; a longer wait is the caller's retry, not ours.
 const MAX_RETRY_AFTER_MS = 5_000;
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 /** Targeted REST reads only: no plaintext folder snapshot. */
 export class InfisicalSecretStore extends SecretChanges implements SecretStore {
@@ -366,7 +368,11 @@ export class InfisicalSecretStore extends SecretChanges implements SecretStore {
         });
         if (response.status === 404 && token !== undefined) {
           // A missing project, environment or folder is also a 404, and that is misconfiguration.
-          const { message } = (await response.json().catch(() => ({}))) as { message?: unknown };
+          const { message } = await readBoundedJsonResponse<{ message?: unknown }>(
+            response,
+            MAX_RESPONSE_BYTES,
+            signal,
+          ).catch(() => ({}) as { message?: unknown });
           if (typeof message !== "string" || !/^Secret\b.*\bnot found$/.test(message))
             throw new SecretStoreUnavailableError(404);
           this.degraded = false;
@@ -389,7 +395,11 @@ export class InfisicalSecretStore extends SecretChanges implements SecretStore {
           this.degraded = false;
           return {};
         }
-        const result = (await response.json()) as RestResult;
+        const result = await readBoundedJsonResponse<RestResult>(
+          response,
+          MAX_RESPONSE_BYTES,
+          signal,
+        );
         this.degraded = false;
         return result;
       } catch (error) {

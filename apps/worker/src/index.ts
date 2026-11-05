@@ -107,7 +107,7 @@ import { SERVICE_NAMES } from "@orkbot/logging";
 import { createRootLogger } from "@orkbot/logging/axiom";
 import { MarkdownMemoryStore } from "@orkbot/memory";
 
-const logger = createRootLogger(SERVICE_NAMES.worker);
+const logger = await createRootLogger(SERVICE_NAMES.worker);
 
 async function main() {
   const stopStallWatch = watchEventLoopStalls();

@@ -12,7 +12,7 @@ import { createRootLogger } from "@orkbot/logging/axiom";
 import { loadEnv } from "#modules/platform/env";
 import { createApp } from "./app.js";
 
-const logger = createRootLogger(SERVICE_NAMES.api);
+const logger = await createRootLogger(SERVICE_NAMES.api);
 
 try {
   const env = loadEnv();

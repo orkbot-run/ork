@@ -2,7 +2,11 @@ import type { AdapterContext, ManagedConnectorProvider } from "@orkbot/adapter-k
 import type { MessageBlock } from "@orkbot/contracts";
 import { appConnectCard, matchAppCatalog, matchesAppConnection } from "@orkbot/core";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
-import { appendEventInTransaction, createThreadMessageInTransaction } from "@orkbot/db";
+import {
+  appendEventInTransaction,
+  createThreadMessageInTransaction,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
+} from "@orkbot/db";
 
 const RECENT_MESSAGES = 50;
 
@@ -87,7 +91,7 @@ export async function connectApp(
       payload: { messageId: message.id, role: "bot", blocks: [block] },
     });
     return event;
-  });
+  }, THREAD_LOCK_TRANSACTION_OPTIONS);
   if (committed)
     await deps.events.notify(
       target.threadId,

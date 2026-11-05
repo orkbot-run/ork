@@ -7,7 +7,11 @@ import {
   truncatePlainText,
 } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
-import { STRATEGIC_INITIATIVE_NONCE_PREFIX, spaceHasModelAccess } from "@orkbot/db";
+import {
+  STRATEGIC_INITIATIVE_NONCE_PREFIX,
+  spaceHasModelAccess,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { isUniqueViolation } from "./run-messages.js";
 import { modelCreditBillingEnabled } from "./run-model.js";
@@ -283,7 +287,7 @@ async function queueStrategicInitiativeRun(
         select: { id: true },
       });
       return run.id;
-    });
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
   } catch (error) {
     if (isUniqueViolation(error)) return null;
     throw error;

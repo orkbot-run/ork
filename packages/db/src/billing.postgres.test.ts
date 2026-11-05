@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork partial trial reservation tests are PolyForm-covered.
+
 import type { BillingSubscriptionSnapshot } from "@orkbot/adapter-kit";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
@@ -6,6 +11,7 @@ import {
   organizationForMember,
   organizationSeatCount,
   ownedBillingAccounts,
+  reserveByokTrialCheckout,
   syncBillingSnapshot,
 } from "./billing.js";
 import type { PrismaClient } from "./client.js";
@@ -157,4 +163,76 @@ describePostgres("billing accounts (PostgreSQL)", () => {
     await prisma.organization.delete({ where: { id: organizationId } });
     await expect(prisma.billingAccount.count({ where: { customerId } })).resolves.toBe(0);
   });
+});
+
+describePostgres("atomic own-key trial reservations (PostgreSQL)", () => {
+  const suffix = `${process.pid}-${Date.now()}`;
+  const organizations: string[] = [];
+  const users: string[] = [];
+  let db: ReturnType<typeof createDb>;
+
+  beforeAll(() => {
+    db = createDb(databaseUrl!);
+  });
+
+  afterAll(async () => {
+    if (!db) return;
+    await db.prisma.organization.deleteMany({ where: { id: { in: organizations } } });
+    await db.prisma.user.deleteMany({ where: { id: { in: users } } });
+    await db.prisma.$disconnect();
+    await db.pool.end();
+  });
+
+  it.each([false, true])(
+    "leaves every owner's existing hold unchanged when one owner is unavailable (prior target hold: %s)",
+    async (hasPriorTargetHold) => {
+      const prisma = db.prisma;
+      const targetId = `trial-target-${hasPriorTargetHold}-${suffix}`;
+      const otherId = `trial-other-${hasPriorTargetHold}-${suffix}`;
+      const ownerId = `trial-owner-${hasPriorTargetHold}-${suffix}`;
+      const heldOwnerId = `trial-held-owner-${hasPriorTargetHold}-${suffix}`;
+      organizations.push(targetId, otherId);
+      users.push(ownerId, heldOwnerId);
+      const createdAt = new Date();
+      const priorExpiry = new Date(Date.now() + 60 * 60_000);
+      await prisma.organization.createMany({
+        data: [targetId, otherId].map((id) => ({ id, name: "Trial fixture", slug: id, createdAt })),
+      });
+      await prisma.user.createMany({
+        data: [ownerId, heldOwnerId].map((id) => ({
+          id,
+          name: "Trial co-owner",
+          email: `${id}@example.test`,
+          byokTrialCheckoutOrganizationId:
+            id === heldOwnerId ? otherId : hasPriorTargetHold ? targetId : null,
+          byokTrialCheckoutExpiresAt: id === heldOwnerId || hasPriorTargetHold ? priorExpiry : null,
+        })),
+      });
+      await prisma.member.createMany({
+        data: [ownerId, heldOwnerId].map((userId) => ({
+          id: `member-${userId}`,
+          organizationId: targetId,
+          userId,
+          role: "owner",
+          createdAt,
+        })),
+      });
+      const holds = () =>
+        prisma.user.findMany({
+          where: { id: { in: [ownerId, heldOwnerId] } },
+          orderBy: { id: "asc" },
+          select: {
+            id: true,
+            byokTrialCheckoutOrganizationId: true,
+            byokTrialCheckoutExpiresAt: true,
+          },
+        });
+      const before = await holds();
+
+      await expect(reserveByokTrialCheckout(prisma, targetId)).resolves.toBeNull();
+
+      // Losing one owner's trial cannot create or extend any other owner's hold.
+      expect(await holds()).toEqual(before);
+    },
+  );
 });

@@ -2536,6 +2536,10 @@ msgstr "자격 증명: {names}"
 msgid "Credit amount"
 msgstr ""
 
+#: src/components/ModelCredits.tsx
+msgid "Credits"
+msgstr "크레딧"
+
 #: src/pages/AdminAccessPage.tsx
 msgid "Credits ($)"
 msgstr ""
@@ -4751,7 +4755,6 @@ msgstr "원본 메시지를 사용할 수 없습니다"
 msgid "Ork"
 msgstr "Ork"
 
-#: src/components/ModelCredits.tsx
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
 msgstr ""
@@ -6248,8 +6251,8 @@ msgid "Subscribe for {price} / month"
 msgstr "월 {price}에 구독"
 
 #: src/components/ModelCredits.tsx
-msgid "Subscribe to Ork credits"
-msgstr "Ork 크레딧 구독"
+msgid "Subscribe to credits"
+msgstr "크레딧 구독"
 
 #: src/components/ModelCredits.tsx
 msgid "Subscribe with your own AI"

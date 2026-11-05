@@ -1,10 +1,16 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Apache-2.0 covers the imported implementation; Ork changes are PolyForm-covered.
+// Modified by Ork contributors to abandon calls when their chat changes during context capture.
+
 import { memberName, resolvePersonaColorDef } from "@orkbot/core";
 import { useNavigation, useRouter } from "expo-router";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { Alert, AppState } from "react-native";
-import type { MobileBot, MobileMessage, MobileSnapshot } from "./api";
-import { blockText, rpc } from "./api";
+import type { ApiRequestContext, MobileBot, MobileMessage, MobileSnapshot } from "./api";
+import { blockText, captureApiRequestContext, rpc } from "./api";
 import { nextAutoSpeakAction } from "./auto-speak";
 import { findSwitchTarget, ringOnArrival, takeRingOnArrival } from "./bot-switch";
 import { setCallProviderTranscribe, startCall } from "./call-session";
@@ -230,6 +236,10 @@ export function useThreadVoiceCall({
         return;
       }
       const botName = displayName ?? t("Bot");
+      // The call keeps the Space it starts in: an organization or Space switch mid-call must
+      // not move its turns, speech or hang-up to another Space.
+      const requestContext: ApiRequestContext = await captureApiRequestContext();
+      if (activeBotId.current !== targetBotId) return;
       const startedCallId = startCall({
         botId: targetBotId,
         botName,
@@ -238,6 +248,7 @@ export function useThreadVoiceCall({
         transcribe: plan.transcribe,
         greeting: callGreeting(botName, callerName, switchedHere),
         session: setupSession,
+        requestContext,
         switchBot: (text) => {
           const target = findSwitchTarget(text, mentionBotsRef.current);
           if (!target || target.id === targetBotId) return undefined;

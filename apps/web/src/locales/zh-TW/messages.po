@@ -2537,6 +2537,10 @@ msgstr "憑證：{names}"
 msgid "Credit amount"
 msgstr "額度金額"
 
+#: src/components/ModelCredits.tsx
+msgid "Credits"
+msgstr "額度"
+
 #: src/pages/AdminAccessPage.tsx
 msgid "Credits ($)"
 msgstr ""
@@ -4752,7 +4756,6 @@ msgstr "原訊息不可用"
 msgid "Ork"
 msgstr "Ork"
 
-#: src/components/ModelCredits.tsx
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
 msgstr "Ork 額度"
@@ -6249,8 +6252,8 @@ msgid "Subscribe for {price} / month"
 msgstr "以每月 {price} 訂閱"
 
 #: src/components/ModelCredits.tsx
-msgid "Subscribe to Ork credits"
-msgstr "訂閱 Ork 額度"
+msgid "Subscribe to credits"
+msgstr "訂閱額度"
 
 #: src/components/ModelCredits.tsx
 msgid "Subscribe with your own AI"

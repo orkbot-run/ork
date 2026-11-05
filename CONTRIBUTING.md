@@ -47,7 +47,13 @@ required secrets, and startup commands.
 | `pnpm check` | TypeScript (`tsc`) across the monorepo. |
 | `pnpm lint` | Biome lint and format check. |
 
-CI runs `pnpm lint`, `pnpm check`, production builds (including Electron preload smoke), `pnpm test`, `pnpm test:integration`, and `pnpm test:e2e` on every PR.
+Every pull request runs `pnpm lint`. Typechecks and unit tests cover affected packages
+and their dependents. Shared inputs, such as root configuration and package manifests,
+trigger checks across all packages.
+
+Production builds, including Electron smoke tests, Postgres integration tests and web E2E
+follow the [changed-area classification](.github/scripts/changed-areas.sh) in the
+[CI workflow](.github/workflows/ci.yml).
 
 Ordinary test processes (`NODE_ENV=test`) do not load the checkout's `.env`.
 Verification CLIs load configuration before starting isolated test processes;

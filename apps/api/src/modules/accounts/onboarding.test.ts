@@ -5,7 +5,7 @@
 import type * as db from "@orkbot/db";
 import { appendEventInTransaction } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { chooseFocus, markAppConnected, promptFocus } from "./onboarding.js";
+import { chooseFocus, dismissFocus, markAppConnected, promptFocus } from "./onboarding.js";
 
 const posted = vi.hoisted(() => [] as Array<{ blocks: unknown[]; markUnread?: boolean }>);
 vi.mock("@orkbot/db", async (original) => ({
@@ -16,6 +16,8 @@ vi.mock("@orkbot/db", async (original) => ({
   }),
   appendEventInTransaction: vi.fn(async () => ({ seq: 1 })),
 }));
+// These transactions lock the thread row, which snapshot reads hold for up to 15s.
+const budget = { timeout: 20_000 };
 function fixture(catalog: unknown[]) {
   posted.length = 0;
   const tx = {
@@ -55,6 +57,7 @@ describe("onboarding connection suggestions", () => {
     // The reply to the user's pick is read; suggestions after the catalog wait stay unread.
     expect(posted[0]?.markUnread).toBe(false);
     expect(posted.slice(1).every((message) => message.markUnread === true)).toBe(true);
+    expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), budget);
   });
   it("uses the available connector and omits unavailable apps", async () => {
     const { deps, actor } = fixture([
@@ -90,6 +93,7 @@ describe("promptFocus", () => {
     expect(posted.flatMap((message) => message.blocks)).toContainEqual(
       expect.objectContaining({ kind: "choice" }),
     );
+    expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), budget);
   });
 
   it("leaves the question to a bot whose creation intro is queued or running", async () => {
@@ -129,6 +133,17 @@ it("marks only the authorized connector when provider slugs collide", async () =
     where: { id: "cards" },
     data: { blocks: [blocks[0], { ...blocks[1], status: "connected" }] },
   });
+  expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), budget);
+});
+
+it("dismisses the pending focus card under the thread-lock budget", async () => {
+  const { deps, actor, tx } = fixture([]);
+  await dismissFocus(deps, actor, "bot");
+  expect(tx.message.update).toHaveBeenCalledWith({
+    where: { id: "choice" },
+    data: { blocks: [{ kind: "choice", answerId: expect.any(String) }] },
+  });
+  expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), budget);
 });
 
 it("does not trust a client's connected claim", async () => {
