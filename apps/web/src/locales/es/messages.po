@@ -1939,6 +1939,10 @@ msgstr "No se pudo completar la acción"
 msgid "Could not complete OAuth"
 msgstr "No se pudo completar OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "No se pudo completar la actualización. Vuelve a intentarlo."

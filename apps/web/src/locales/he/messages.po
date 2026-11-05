@@ -1939,6 +1939,10 @@ msgstr "לא ניתן להשלים את הפעולה"
 msgid "Could not complete OAuth"
 msgstr "לא ניתן להשלים את OAuth"
 
+#: src/lib/user-error.ts
+msgid "Could not complete sign-in. Retry or ask your administrator to check access."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "לא ניתן להשלים את העדכון. אפשר לנסות שוב."
