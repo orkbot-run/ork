@@ -22,8 +22,11 @@ use std::{
 };
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::{io::AsyncReadExt, process::Command, sync::watch};
 use url::Url;
+
+use crate::host_computer::Connection;
 
 const PROJECT_NAME: &str = "orkbot-desktop-tauri";
 const COMPOSE_FILE: &str = "docker-compose.images.yml";
@@ -31,6 +34,7 @@ const ENV_TEMPLATE: &str = ".env.images.example";
 const ENV_FILE: &str = ".env";
 const TOKEN_FILE: &str = ".desktop-stack-token";
 const WEB_URL_FILE: &str = ".desktop-web-url";
+const HOST_CONFIG_FILE: &str = ".desktop-host-config";
 const OUTPUT_LINES: usize = 20;
 const OUTPUT_BYTES: usize = 64 * 1024;
 const LINE_BYTES: usize = 4096;
@@ -103,6 +107,8 @@ pub struct LocalStack {
     generation: AtomicU64,
     stopping: AtomicBool,
     runner: Arc<dyn DockerRunner>,
+    host: Option<Connection>,
+    choice_save: tokio::sync::Mutex<()>,
 }
 
 impl LocalStack {
@@ -111,6 +117,7 @@ impl LocalStack {
         resources: PathBuf,
         image_tag: String,
         on_change: Option<StateListener>,
+        host: Option<Connection>,
     ) -> Self {
         let web_url = read_web_url(&directory).unwrap_or_else(|| {
             Url::parse("http://127.0.0.1:45173").expect("The default local origin is valid")
@@ -132,6 +139,8 @@ impl LocalStack {
             generation: AtomicU64::new(0),
             stopping: AtomicBool::new(false),
             runner: Arc::new(SystemDocker),
+            host,
+            choice_save: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -252,7 +261,7 @@ impl LocalStack {
 
     /// A health response only belongs to this app when both its private token and image match.
     pub async fn matches_desired_stack(&self) -> bool {
-        if self.stopping.load(Ordering::SeqCst) {
+        if self.stopping.load(Ordering::SeqCst) || !self.matches_host_config() {
             return false;
         }
         let Some(token) = read_token(&self.directory) else {
@@ -260,6 +269,36 @@ impl LocalStack {
         };
         probe_owned_stack(&self.web_url(), &token, &self.image_tag).await
             && !self.stopping.load(Ordering::SeqCst)
+    }
+
+    fn host_config_identity(&self) -> String {
+        let mut hash = Sha256::new();
+        if let Some(host) = &self.host {
+            hash.update(host.url.as_bytes());
+            hash.update([0]);
+            hash.update(host.token.as_bytes());
+        }
+        format!("{:x}", hash.finalize())
+    }
+
+    fn matches_host_config(&self) -> bool {
+        match read_private(&self.directory.join(HOST_CONFIG_FILE), 256) {
+            Some(saved) => saved == self.host_config_identity().as_bytes(),
+            None => self.host.is_none(),
+        }
+    }
+
+    /// Persists only the existing native-main capability; browser sessions cannot choose a host.
+    pub async fn save_host_choice(&self, computer_host: &str) -> Result<(), String> {
+        if !matches!(computer_host, "docker" | "this-mac") {
+            return Err("Invalid local computer choice.".into());
+        }
+        let _save = self.choice_save.lock().await;
+        if !self.matches_desired_stack().await {
+            return Err("Local server is unavailable.".into());
+        }
+        let token = read_token(&self.directory).ok_or("Local server is unavailable.")?;
+        save_local_computer_host(&self.web_url(), &token, computer_host).await
     }
 
     fn begin_operation(&self) -> watch::Receiver<bool> {
@@ -441,6 +480,10 @@ impl LocalStack {
                 _ = cancellation.changed() => return Err("The start was interrupted. Retry to continue.".into()),
             };
             if ready {
+                write_private(
+                    &self.directory.join(HOST_CONFIG_FILE),
+                    self.host_config_identity().as_bytes(),
+                )?;
                 self.phase(LocalStackPhase::Ready);
                 return Ok(());
             }
@@ -538,14 +581,20 @@ impl LocalStack {
         timeout: Duration,
         token: Option<&str>,
         cancel: watch::Receiver<bool>,
-        redactions: Vec<String>,
+        mut redactions: Vec<String>,
     ) -> DockerResult {
+        if let Some(host) = &self.host {
+            redactions.push(host.token.clone());
+            redactions.sort_by_key(|value| std::cmp::Reverse(value.len()));
+            redactions.dedup();
+        }
         let environment = docker_environment(
             &self.environment,
             binary,
             &self.web_url(),
             &self.image_tag,
             token,
+            self.host.as_ref(),
         );
         let current = Arc::clone(&self.current);
         let listener = self.on_change.clone();
@@ -642,7 +691,7 @@ fn check_result_cancelled(
     check_cancelled(cancel)
 }
 
-fn private_directory(directory: &Path) -> Result<(), String> {
+pub(crate) fn private_directory(directory: &Path) -> Result<(), String> {
     let mut builder = DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]
@@ -661,7 +710,7 @@ fn private_directory(directory: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn read_private(path: &Path, limit: u64) -> Option<Vec<u8>> {
+pub(crate) fn read_private(path: &Path, limit: u64) -> Option<Vec<u8>> {
     let before = fs::symlink_metadata(path).ok()?;
     if !before.is_file() || reparse_point(&before) || before.len() > limit {
         return None;
@@ -707,7 +756,7 @@ fn reparse_point(metadata: &Metadata) -> bool {
     }
 }
 
-fn write_private(path: &Path, contents: &[u8]) -> Result<(), String> {
+pub(crate) fn write_private(path: &Path, contents: &[u8]) -> Result<(), String> {
     let directory = path.parent().ok_or("The local server path is invalid.")?;
     let mut file = tempfile::NamedTempFile::new_in(directory)
         .map_err(|_| "Could not write local server settings.")?;
@@ -832,15 +881,61 @@ fn allocate_loopback_url() -> Result<Url, String> {
         .map_err(|_| "Could not allocate a local server port.".into())
 }
 
-async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
-    if url.scheme() != "http"
-        || url.host_str() != Some("127.0.0.1")
-        || url.port().is_none_or(|port| port < 1024)
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.query().is_some()
-        || url.fragment().is_some()
+fn local_stack_target(url: &Url) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some("127.0.0.1")
+        && url.port().is_some_and(|port| port >= 1024)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.query().is_none()
+        && url.fragment().is_none()
+}
+
+async fn save_local_computer_host(
+    url: &Url,
+    token: &str,
+    computer_host: &str,
+) -> Result<(), String> {
+    const ERROR: &str = "Could not save local computer choice.";
+    if !local_stack_target(url) {
+        return Err(ERROR.into());
+    }
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|_| ERROR)?;
+    let target = url
+        .join("/api/desktop-settings/computer-host")
+        .map_err(|_| ERROR)?;
+    let mut response = client
+        .post(target)
+        .header("x-orkbot-local-settings-token", token)
+        .json(&serde_json::json!({"computerHost": computer_host}))
+        .send()
+        .await
+        .map_err(|_| ERROR)?;
+    if !response.status().is_success() || response.content_length().is_some_and(|size| size > 1024)
     {
+        return Err(ERROR.into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
+        if chunk.len() > 1024_usize.saturating_sub(bytes.len()) {
+            return Err(ERROR.into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| ERROR)?;
+    if value.get("ok") != Some(&serde_json::Value::Bool(true)) {
+        return Err(ERROR.into());
+    }
+    Ok(())
+}
+
+async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
+    if !local_stack_target(url) {
         return false;
     }
     let Ok(client) = reqwest::Client::builder()
@@ -1034,6 +1129,7 @@ fn docker_environment(
     url: &Url,
     image_tag: &str,
     token: Option<&str>,
+    host: Option<&Connection>,
 ) -> Environment {
     let mut environment = Environment::new();
     let mut allowed = vec![
@@ -1084,8 +1180,14 @@ fn docker_environment(
     }
     let origin = url.origin().ascii_serialization();
     for (key, value) in [
-        ("SANDBOX_HOST_URL", "".to_owned()),
-        ("SANDBOX_HOST_TOKEN", "".to_owned()),
+        (
+            "SANDBOX_HOST_URL",
+            host.map_or("", |host| host.url.as_str()).to_owned(),
+        ),
+        (
+            "SANDBOX_HOST_TOKEN",
+            host.map_or("", |host| host.token.as_str()).to_owned(),
+        ),
         ("ORKBOT_IMAGE_TAG", image_tag.to_owned()),
         ("ORKBOT_COMPUTER_IMAGE_TAG", image_tag.to_owned()),
         ("SANDBOX_COMPUTER_EGRESS", "open".to_owned()),
@@ -1610,6 +1712,7 @@ mod tests {
             resources,
             "edge".to_owned(),
             None,
+            None,
         );
         stack.environment =
             Environment::from([("ORKBOT_DOCKER_BINARY".to_owned(), binary.into_os_string())]);
@@ -1757,7 +1860,14 @@ mod tests {
         ]);
         let binary = Path::new("/example/docker");
         let url = Url::parse("http://127.0.0.1:45173").unwrap();
-        let env = docker_environment(&source, binary, &url, "edge", Some("private-stack-token"));
+        let env = docker_environment(
+            &source,
+            binary,
+            &url,
+            "edge",
+            Some("private-stack-token"),
+            None,
+        );
         for key in ["AWS_SECRET_ACCESS_KEY", "COMPOSE_FILE", "ORKBOT_IMAGE"] {
             assert!(!env.contains_key(key));
         }
@@ -1767,6 +1877,160 @@ mod tests {
         assert_eq!(env["ORKBOT_DESKTOP_STACK_TOKEN"], "private-stack-token");
         assert_eq!(env["WEB_ORIGIN"], "http://127.0.0.1:45173");
         assert_eq!(env["SANDBOX_HOST_TOKEN"], "");
+    }
+
+    fn host_connection() -> Connection {
+        Connection {
+            url: "http://host.docker.internal:45001".into(),
+            token: "a".repeat(64),
+        }
+    }
+
+    #[tokio::test]
+    async fn host_transport_is_injected_and_its_identity_is_saved_only_after_start() {
+        let (_root, mut stack, runner) =
+            fixture(vec![ok("2.24.0"), ok("29.0.0"), ok(""), Reply::Healthy]);
+        stack.host = Some(host_connection());
+        assert!(!stack.matches_host_config());
+        assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
+        assert!(stack.matches_host_config());
+        let host = stack.host.as_ref().unwrap();
+        for request in runner.requests.lock().unwrap().iter() {
+            assert_eq!(
+                request.environment["SANDBOX_HOST_URL"].to_str().unwrap(),
+                host.url
+            );
+            assert_eq!(
+                request.environment["SANDBOX_HOST_TOKEN"].to_str().unwrap(),
+                host.token
+            );
+        }
+        let identity = read_private(&stack.directory.join(HOST_CONFIG_FILE), 256).unwrap();
+        assert!(!String::from_utf8(identity).unwrap().contains(&host.token));
+        stack.host.as_mut().unwrap().token = "b".repeat(64);
+        assert!(!stack.matches_host_config());
+        stack.host = Some(host_connection());
+        stack.host.as_mut().unwrap().url = "http://host.docker.internal:45002".into();
+        assert!(!stack.matches_host_config());
+        stack.host = None;
+        assert!(!stack.matches_host_config());
+    }
+
+    #[tokio::test]
+    async fn host_credentials_are_redacted_from_docker_output() {
+        let host = host_connection();
+        let (_root, mut stack, _runner) = fixture(vec![Reply::Output(DockerResult {
+            code: 1,
+            stdout: format!("stdout {}", host.token),
+            stderr: format!("stderr {}", host.token),
+        })]);
+        stack.host = Some(host);
+        stack.phase(LocalStackPhase::Pulling);
+        let binary = PathBuf::from(stack.environment["ORKBOT_DOCKER_BINARY"].clone());
+        let cancel = stack.begin_operation();
+        let result = stack
+            .docker(
+                &binary,
+                vec![],
+                Duration::from_secs(1),
+                None,
+                cancel,
+                vec![],
+            )
+            .await;
+        assert_eq!(result.stdout, "stdout [redacted]");
+        assert_eq!(result.stderr, "stderr [redacted]");
+        assert_eq!(
+            stack.state().output,
+            vec!["stdout [redacted]", "stderr [redacted]"]
+        );
+    }
+
+    #[tokio::test]
+    async fn native_host_choice_uses_the_existing_private_capability_without_a_session() {
+        let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+            .await
+            .unwrap();
+        let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+        let serving = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = read_request(&mut stream).await;
+            let boundary = request.find("\r\n\r\n").unwrap() + 4;
+            let length = request[..boundary]
+                .lines()
+                .find_map(|line| {
+                    line.to_ascii_lowercase()
+                        .strip_prefix("content-length: ")
+                        .and_then(|value| value.parse::<usize>().ok())
+                })
+                .unwrap();
+            while request.len() < boundary + length {
+                let mut buffer = [0; 1024];
+                let read = stream.read(&mut buffer).await.unwrap();
+                assert!(read > 0);
+                request.push_str(std::str::from_utf8(&buffer[..read]).unwrap());
+            }
+            stream.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}").await.unwrap();
+            request
+        });
+        save_local_computer_host(&url, "private-fixture-token", "this-mac")
+            .await
+            .unwrap();
+        let request = serving.await.unwrap();
+        let (headers, body) = request.split_once("\r\n\r\n").unwrap();
+        let headers = headers.to_ascii_lowercase();
+        assert!(headers.starts_with("post /api/desktop-settings/computer-host http/1.1\r\n"));
+        assert!(headers.contains("x-orkbot-local-settings-token: private-fixture-token\r\n"));
+        assert!(!headers.contains("authorization:"));
+        assert!(!headers.contains("cookie:"));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(body).unwrap(),
+            serde_json::json!({"computerHost": "this-mac"})
+        );
+    }
+
+    #[tokio::test]
+    async fn native_host_choice_rejects_redirects_errors_and_invalid_or_oversized_bodies() {
+        for (status, body, extra) in [
+            ("302 Found", "", "Location: http://127.0.0.1:1/private\r\n"),
+            ("401 Unauthorized", "{\"ok\":true}", ""),
+            ("200 OK", "{\"ok\":false}", ""),
+            ("200 OK", "not JSON", ""),
+            ("200 OK", &"x".repeat(1025), ""),
+        ] {
+            let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                .await
+                .unwrap();
+            let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+            let response = format!(
+                "HTTP/1.1 {status}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let serving = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                read_request(&mut stream).await;
+                stream.write_all(response.as_bytes()).await.unwrap();
+            });
+            assert!(
+                save_local_computer_host(&url, "private-fixture-token", "this-mac")
+                    .await
+                    .is_err()
+            );
+            serving.await.unwrap();
+        }
+        for origin in [
+            "https://example.com",
+            "http://localhost:45173",
+            "http://192.168.1.2:45173",
+        ] {
+            assert!(save_local_computer_host(
+                &Url::parse(origin).unwrap(),
+                "private-fixture-token",
+                "docker"
+            )
+            .await
+            .is_err());
+        }
     }
 
     #[test]
