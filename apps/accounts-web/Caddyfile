@@ -1,0 +1,67 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+# Account pages share the dashboard hostname. Only the private API handles auth.
+{$DASHBOARD_HOST} {
+	@accounts path /account /account/*
+	header @accounts {
+		Cache-Control "no-store"
+		Referrer-Policy "no-referrer"
+		X-Content-Type-Options "nosniff"
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+	}
+
+	handle /account/api/auth/* {
+		request_body {
+			max_size 64KB
+		}
+		reverse_proxy {$ACCOUNTS_UPSTREAM:127.0.0.1:3200} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	@pages path /account /account/ /account/sign-in /account/sign-up /account/verify-email /account/forgot-password /account/reset-password
+	handle @pages {
+		root * {$ACCOUNTS_WEB_ROOT}
+		rewrite * /index.html
+		file_server
+	}
+
+	handle_path /account/assets/* {
+		root * {$ACCOUNTS_WEB_ROOT}/assets
+		file_server
+	}
+
+	handle /account/* {
+		respond "Not found" 404
+	}
+
+	handle {
+		reverse_proxy {$DASHBOARD_UPSTREAM:127.0.0.1:5173}
+	}
+}
+
+# Keep an existing identity issuer stable when moving the browser-facing UI.
+# This host serves discovery and legacy API URLs, never the login frontend.
+{$ACCOUNTS_ISSUER_HOST} {
+	request_body {
+		max_size 64KB
+	}
+	@legacyAuthorize path /api/auth/oauth2/authorize
+	handle @legacyAuthorize {
+		redir https://{$DASHBOARD_HOST}/account{uri} 302
+	}
+	@api path /api/auth/* /.well-known/*
+	handle @api {
+		reverse_proxy {$ACCOUNTS_UPSTREAM:127.0.0.1:3200} {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+	@pages path / /sign-in /sign-up /verify-email /forgot-password /reset-password
+	handle @pages {
+		redir https://{$DASHBOARD_HOST}/account{uri} 302
+	}
+	handle {
+		respond "Not found" 404
+	}
+}
