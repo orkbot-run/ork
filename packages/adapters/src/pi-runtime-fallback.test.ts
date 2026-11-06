@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for reasoning effort recovery. See LICENSE.md.
+
 import type * as AgentCore from "@earendil-works/pi-agent-core";
 import type { AgentMessage, AgentOptions } from "@earendil-works/pi-agent-core";
 import type {
@@ -2945,6 +2948,74 @@ describe("Pi runtime fallback error classes and mid-run switches", () => {
 describe("Pi runtime reasoning efforts an endpoint refuses", () => {
   const refused =
     '400: {"message":"reasoning_effort must be one of: low, medium, high, max","type":"invalid_request_error","param":"","code":null}';
+
+  it("omits a refused off effort after retry and tool use, scoped to the run", async () => {
+    const original = {
+      ...primary,
+      reasoning: true,
+      thinkingLevelMap: { off: "none", xhigh: "xhigh", max: "max" },
+    };
+    providerState.models.set(`${primary.provider}/${primary.id}`, original);
+    const input = request();
+    input.model.thinkingLevel = "off";
+    providerState.stream
+      .mockImplementationOnce((target: Model<"openai-completions">) =>
+        stream(target, message(target, [], "error", "400: Invalid reasoning effort")),
+      )
+      .mockImplementationOnce((target: Model<"openai-completions">) =>
+        stream(
+          target,
+          message(
+            target,
+            [{ type: "toolCall", id: "call-1", name: "write_effect", arguments: { value: "a" } }],
+            "toolUse",
+          ),
+        ),
+      )
+      .mockImplementation((target: Model<"openai-completions">) =>
+        stream(target, message(target, [{ type: "text", text: "Done." }], "stop")),
+      );
+
+    expect((await run(input)).at(-1)).toEqual({ type: "done", text: "Done." });
+    expect(input.executeTool).toHaveBeenCalledOnce();
+    expect(providerState.stream.mock.calls.map(([target]) => target.thinkingLevelMap.off)).toEqual([
+      "none",
+      undefined,
+      undefined,
+    ]);
+    expect(providerState.stream.mock.calls.map(([, , options]) => options.reasoning)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    expect(original.thinkingLevelMap.off).toBe("none");
+
+    expect((await run({ ...input, runId: "next-run" })).at(-1)).toEqual({
+      type: "done",
+      text: "Done.",
+    });
+    expect(providerState.stream.mock.lastCall?.[0].thinkingLevelMap.off).toBe("none");
+  });
+
+  it.each([
+    ["400: Unsupported reasoning effort", 2],
+    ["400: reasoning_effort was provided; tool schema is invalid", 1],
+  ])("bounds recovery attempts for %s", async (error, attempts) => {
+    providerState.models.set(`${primary.provider}/${primary.id}`, {
+      ...primary,
+      reasoning: true,
+      thinkingLevelMap: { off: "none" },
+    });
+    const input = request();
+    input.model.thinkingLevel = "off";
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+      stream(target, message(target, [], "error", error)),
+    );
+
+    await expect(run(input)).rejects.toThrow(error);
+    expect(providerState.stream).toHaveBeenCalledTimes(attempts);
+    expect(input.executeTool).not.toHaveBeenCalled();
+  });
 
   it.each([
     ["minimal", ["minimal", "low", "low"]],
