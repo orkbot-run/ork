@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import { BotSettingsValuesSchema } from "@orkbot/contracts";
 import {
   appendEventInTransaction,
@@ -26,6 +29,8 @@ import {
 } from "./fleet-tools.js";
 import {
   listDefaultVoices,
+  normalizeOwnBotUpdateArgs,
+  OWN_BOT_SETTINGS_SELECT,
   prepareOwnBotSettings,
   readOwnBotSettings,
 } from "./own-bot-settings.js";
@@ -38,7 +43,7 @@ import { mayOpenModelStream } from "./run-lifecycle.js";
 import { publishMessage } from "./run-messages.js";
 import { fleetPrepareDeps } from "./run-model.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
-import { argumentGiven } from "./update-bot-patch.js";
+import { argumentGiven, ownBotInstructionsOffset } from "./update-bot-patch.js";
 
 async function archiveBot(ctx: RunContext, call: ToolCall) {
   const { deps, run, bot, thread, context } = ctx;
@@ -275,46 +280,37 @@ export const fleetTools: ToolHandlers = {
         }),
       );
     }
-    const { instructions, model, thinkingLevel, readAloud, voice, ...profile } = args;
     const modelDeps = await fleetPrepareDeps(deps, run);
     const live = await deps.prisma.bot.findUniqueOrThrow({
       where: { id: bot.id },
-      select: {
-        name: true,
-        description: true,
-        instructions: true,
-        color: true,
-        notifyOnFinish: true,
-        dailyCheckIns: true,
-        modelProvider: true,
-        modelId: true,
-        thinkingLevel: true,
-        autoSpeak: true,
-        voiceId: true,
-      },
+      select: OWN_BOT_SETTINGS_SELECT,
     });
-    // `instructions_offset` pages through long instructions on a read; it is not a write field.
-    const instructionsOffsetArg = args.instructions_offset ?? args.instructionsOffset;
-    const writeArgs = { ...args, instructions_offset: undefined, instructionsOffset: undefined };
-    const read = !Object.values(writeArgs).some(argumentGiven);
-    let readOffset = 0;
-    if (argumentGiven(instructionsOffsetArg)) {
-      const parsedOffset = Number(instructionsOffsetArg);
-      if (!read)
-        return call.finish({
-          error: "instructions_offset only works on a read: call update_bot with no other fields.",
-        });
-      if (!Number.isInteger(parsedOffset) || parsedOffset < 0)
-        return call.finish({ error: "instructions_offset must be a whole number of 0 or more." });
-      readOffset = parsedOffset;
-    }
+    const readOffset = ownBotInstructionsOffset(args);
+    if (typeof readOffset !== "number") return call.finish(readOffset);
+    const writeArgs = readOffset > 0 ? {} : await normalizeOwnBotUpdateArgs(modelDeps, live, args);
+    const read = readOffset > 0 || !Object.values(writeArgs).some(argumentGiven);
     if (read) {
       // A read does not rebase the baseline: the text it returns has not shaped a model
       // generation yet, and a truncated read would guard on text the model never saw.
       if (readOffset > 0 && readOffset >= live.instructions.length)
         return call.finish({ error: "instructions_offset is past the end of your instructions." });
-      return call.finish(await readOwnBotSettings(modelDeps, run, live, readOffset));
+      const settings = await readOwnBotSettings(modelDeps, run, live, readOffset);
+      // Names only, bounded independently of model-supplied keys and values.
+      const ignoredFields =
+        readOffset > 0
+          ? Object.keys(args)
+              .filter(
+                (key) =>
+                  key !== "instructions_offset" &&
+                  key !== "instructionsOffset" &&
+                  argumentGiven(args[key]),
+              )
+              .slice(0, 12)
+              .map((key) => key.slice(0, 64))
+          : [];
+      return call.finish({ ...settings, ...(ignoredFields.length ? { ignoredFields } : {}) });
     }
+    const { instructions, model, thinkingLevel, readAloud, voice, ...profile } = writeArgs;
     const settings = await prepareOwnBotSettings(
       modelDeps,
       run,

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import type {
   AgentRunRequest,
   AutoReviewProvider,
@@ -339,6 +342,8 @@ function fixture({
         description: bot.description,
         color: "#8B5CF6",
         notifyOnFinish: true,
+        dailyCheckIns: false,
+        voiceId: null,
         modelProvider: null,
         modelId: null,
         thinkingLevel: null,
@@ -1683,7 +1688,7 @@ describe("own instructions through update_bot", () => {
       long,
     );
   });
-  it("rejects an instructions offset that is not a plain read", async () => {
+  it("rejects invalid offsets while zero allows an ordinary update", async () => {
     const f = fixture({ name: "update_bot", builtin: true });
     const long = "x".repeat(19_000);
     f.instructionState.instructions = long;
@@ -1694,12 +1699,10 @@ describe("own instructions through update_bot", () => {
       { args: { instructions_offset: 19_000 }, executionId: "call-4" },
     ]);
     await f.run();
-    expect(f.results).toEqual([
+    expect(f.results).toMatchObject([
       { error: "instructions_offset must be a whole number of 0 or more." },
       { error: "instructions_offset must be a whole number of 0 or more." },
-      {
-        error: "instructions_offset only works on a read: call update_bot with no other fields.",
-      },
+      { ok: true, name: "New name" },
       { error: "instructions_offset is past the end of your instructions." },
     ]);
     expect(f.instructionState.instructions).toBe(long);
@@ -1965,6 +1968,132 @@ describe("own instructions through update_bot", () => {
 });
 
 describe("own settings through update_bot", () => {
+  it.each(["user", "routine"])(
+    "reads echoed settings without approval in a %s run",
+    async (trigger) => {
+      const f = fixture({ name: "update_bot", builtin: true, trigger, autoReview: true });
+      f.claimedOutsideSteering(true);
+      f.setCalls([
+        {
+          args: {
+            name: " Assistant ",
+            description: "Test assistant",
+            instructions: "Draft only",
+            color: "#8B5CF6",
+            notifyOnFinish: "true",
+            dailyCheckIns: "false",
+            readAloud: "false",
+            voice: "default",
+            thinkingLevel: "default",
+            model: "openrouter/fixture-model",
+            use_attached_image: false,
+            instructions_offset: 0,
+          },
+          executionId: "call-1",
+        },
+      ]);
+      reviewMock.mockClear();
+      await f.run();
+      expect(f.results).toMatchObject([
+        { name: "Assistant", instructions: "Draft only", readAloud: false },
+      ]);
+      expect(f.prisma.bot.update).not.toHaveBeenCalled();
+      expect(f.prisma.bot.updateMany).not.toHaveBeenCalled();
+      expect(f.effects.every((effect) => effect.status === "completed")).toBe(true);
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+      expect(reviewMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lets a helper read echoed owner settings", async () => {
+    const f = fixture({ name: "update_bot", builtin: true });
+    f.setCalls([
+      {
+        args: { readAloud: "false", model: "fixture-model", thinkingLevel: "default" },
+        executionId: JSON.stringify(["pi-tool", "helper-1", "call-1"]),
+      },
+    ]);
+    await f.run();
+    expect(f.results).toMatchObject([{ name: "Assistant", readAloud: false }]);
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+    expect(f.effects.every((effect) => effect.status === "completed")).toBe(true);
+  });
+
+  it("treats paging with write fields as a read and bounds the ignored field names", async () => {
+    const f = fixture({
+      name: "update_bot",
+      builtin: true,
+      trigger: "routine",
+      secrets: ["test-secret"],
+    });
+    const long = "x".repeat(19_000);
+    f.instructionState.instructions = long;
+    f.claimedOutsideSteering(true);
+    f.setCalls([
+      {
+        args: {
+          instructions_offset: 8_000,
+          model: "another-model",
+          readAloud: true,
+          instructions: "test-secret",
+          fleetManagement: true,
+          ...Object.fromEntries(
+            Array.from({ length: 30 }, (_, i) => [`field-${i}-${"z".repeat(1000)}`, "test-secret"]),
+          ),
+        },
+        executionId: "call-1",
+      },
+    ]);
+    await f.run();
+    expect(f.results[0]).toMatchObject({
+      instructions: long.slice(8_000, 16_000),
+      instructionsOffset: 8_000,
+      ignoredFields: expect.arrayContaining([
+        "model",
+        "readAloud",
+        "instructions",
+        "fleetManagement",
+      ]),
+    });
+    const result = f.results[0] as { ignoredFields: string[] };
+    expect(result.ignoredFields).toHaveLength(12);
+    expect(result.ignoredFields.every((key) => key.length <= 64)).toBe(true);
+    expect(JSON.stringify(result)).not.toContain("test-secret");
+    expect(JSON.stringify(result).length).toBeLessThan(11_000);
+    expect(f.instructionState.instructions).toBe(long);
+    expect(f.prisma.bot.update).not.toHaveBeenCalled();
+    expect(f.prisma.bot.updateMany).not.toHaveBeenCalled();
+    expect(f.effects.every((effect) => effect.status === "completed")).toBe(true);
+  });
+
+  it("still saves changed string booleans and rejects invalid ones", async () => {
+    const f = fixture({ name: "update_bot", builtin: true });
+    f.setCalls([
+      { args: { readAloud: "true" }, executionId: "call-1" },
+      { args: { dailyCheckIns: "yes" }, executionId: "call-2" },
+    ]);
+    await f.run();
+    expect(f.results).toEqual([
+      { ok: true, readAloud: true },
+      { error: "dailyCheckIns must be true or false." },
+    ]);
+    expect(f.prisma.bot.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps approval for an instruction change with a zero offset and echoed profile", async () => {
+    const f = fixture({ name: "update_bot", builtin: true });
+    f.setCalls([
+      {
+        args: { instructions: "Changed instructions", name: "Assistant", instructions_offset: 0 },
+        executionId: "call-1",
+      },
+    ]);
+    await f.run();
+    expect(f.instructionState.instructions).toBe("Draft only");
+    expect(f.pauseRunForInput).toHaveBeenCalled();
+    expect(f.effects[0]).toMatchObject({ kind: "update_bot", status: "intended" });
+  });
+
   it("never widens its own powers", async () => {
     const f = fixture({ name: "update_bot", builtin: true });
     f.setCalls([
@@ -2036,7 +2165,9 @@ describe("own settings through update_bot", () => {
     const f = fixture({ name: "update_bot", builtin: true });
     f.setCalls([{ args: { readAloud: false }, executionId: "call-1" }]);
     await f.run();
-    expect(f.results).toEqual([{ ok: true, readAloud: false }]);
+    expect(f.results).toMatchObject([
+      { name: "Assistant", instructions: "Draft only", readAloud: false },
+    ]);
     expect(f.prisma.bot.update).not.toHaveBeenCalled();
   });
   it("keeps the model once outside content entered the run", async () => {

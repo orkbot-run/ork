@@ -1,4 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import { BOT_DESCRIPTION_MAX_LENGTH, BOT_NAME_MAX_LENGTH } from "@orkbot/contracts";
+import type { OwnBotSettingsRow } from "./own-bot-settings.js";
 
 export type UpdateBotPatch = {
   name?: string;
@@ -60,4 +64,73 @@ export function parseUpdateBotPatch(
 export function argumentGiven(value: unknown): boolean {
   if (value === undefined || value === null) return false;
   return typeof value !== "string" || value.trim().length > 0;
+}
+
+/** Zero is the ordinary call; a positive offset always requests an instructions page. */
+export function ownBotInstructionsOffset(
+  args: Record<string, unknown>,
+): number | { error: string } {
+  const value = args.instructions_offset ?? args.instructionsOffset;
+  if (!argumentGiven(value)) return 0;
+  const offset = Number(value);
+  if (
+    (typeof value !== "number" && typeof value !== "string") ||
+    !Number.isSafeInteger(offset) ||
+    offset < 0
+  )
+    return { error: "instructions_offset must be a whole number of 0 or more." };
+  return offset;
+}
+
+/** Compare only the values this bot's settings read can echo, preserving actual changes. */
+export function dropUnchangedOwnBotArgs(
+  args: Record<string, unknown>,
+  bot: OwnBotSettingsRow,
+  model?: { provider: string | null; model: string | null; label: string },
+): Record<string, unknown> {
+  const remaining = Object.fromEntries(
+    Object.entries(args).filter(
+      ([key, value]) =>
+        key !== "instructions_offset" && key !== "instructionsOffset" && argumentGiven(value),
+    ),
+  );
+  // Preserve the canonical field's precedence when both spellings are supplied.
+  const notify = remaining.notifyOnFinish ?? remaining.notify_on_finish;
+  delete remaining.notify_on_finish;
+  if (notify !== undefined) remaining.notifyOnFinish = notify;
+  for (const key of ["notifyOnFinish", "dailyCheckIns", "readAloud", "use_attached_image"]) {
+    const value = remaining[key];
+    if (typeof value === "string" && ["true", "false"].includes(value.trim().toLowerCase()))
+      remaining[key] = value.trim().toLowerCase() === "true";
+  }
+  const current = {
+    name: bot.name,
+    description: bot.description,
+    instructions: bot.instructions,
+    color: bot.color,
+    thinkingLevel: bot.thinkingLevel ?? "default",
+    voice: bot.voiceId ?? "default",
+  };
+  for (const [key, value] of Object.entries(remaining)) {
+    const text = typeof value === "string" ? value.trim() : undefined;
+    if (
+      (Object.hasOwn(current, key) &&
+        text !== undefined &&
+        text === current[key as keyof typeof current].trim()) ||
+      (key === "notifyOnFinish" && value === bot.notifyOnFinish) ||
+      (key === "dailyCheckIns" && value === bot.dailyCheckIns) ||
+      (key === "readAloud" && value === bot.autoSpeak) ||
+      (key === "use_attached_image" && value === false) ||
+      (key === "model" &&
+        text !== undefined &&
+        model &&
+        [
+          ...(model.model ? [model.model] : []),
+          ...(model.provider && model.model ? [`${model.provider}/${model.model}`] : []),
+          model.label,
+        ].includes(text))
+    )
+      delete remaining[key];
+  }
+  return remaining;
 }
