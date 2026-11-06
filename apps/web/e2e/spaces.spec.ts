@@ -1,12 +1,24 @@
-import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, openNewSpace, rpc, signup } from "./helpers";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
 
-test("a new space auto-completes onboarding, is renamed in its settings, and is deleted with its bots", async ({
+import { expect, test } from "@playwright/test";
+import {
+  captureScreenshot,
+  completeOnboarding,
+  createBotFromPicker,
+  openNewSpace,
+  rpc,
+  signup,
+} from "./helpers";
+
+test("a new space opens empty, accepts a bot, is renamed, and is deleted with its bots", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `spaces-delete-${stamp}@orkbot.test`, "password12", "Space Owner");
   await completeOnboarding(page);
+  const { spaceId: personalSpaceId } = await rpc<{ spaceId: string }>(page, "me", {});
 
   const sidebar = page.locator("aside").first();
   await openNewSpace(page);
@@ -27,16 +39,24 @@ test("a new space auto-completes onboarding, is renamed in its settings, and is 
   }
   await name.press("Enter");
 
-  // Model is already connected, so onboarding skips the form and lands in Chief.
-  await completeOnboarding(page);
-  await expect(page).toHaveURL(/\/app\//);
+  // The account keeps one primary bot; another space opens without creating one.
+  await expect(page).toHaveURL(/\/app$/);
   await expect(sidebar.getByText("Typo space", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
+    .not.toBe(personalSpaceId);
+  await expect(
+    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
+  ).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(1);
+  await captureScreenshot(page, testInfo, "new-space-empty");
+
+  await createBotFromPicker(page, { name: "Space bot" });
   const occupied = sidebar
     .locator('[data-sidebar-group^="space:"]')
     .filter({ hasText: "Typo space" });
-  await expect(occupied.getByRole("button", { name: /^Chief/ })).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(2);
-  await captureScreenshot(page, testInfo, "new-space-after-onboarding");
+  await expect(occupied.getByRole("button", { name: /^Space bot/ })).toBeVisible();
+  await captureScreenshot(page, testInfo, "new-space-with-bot");
 
   // The space menu's Settings opens the Space section, where it is renamed in place.
   await sidebar.getByRole("button", { name: "Actions for Typo space" }).click();
@@ -80,6 +100,7 @@ test("deleting the last bot in a space stays in the app after first use", {
   const stamp = Date.now();
   await signup(page, `spaces-empty-${stamp}@orkbot.test`, "password12", "Space Owner");
   await completeOnboarding(page);
+  const { spaceId: personalSpaceId } = await rpc<{ spaceId: string }>(page, "me", {});
   const [chief] = await rpc<Array<{ id: string }>>(page, "bots/list", {});
   expect(chief).toBeTruthy();
   await rpc(page, "bots/archive", { botId: chief!.id });
@@ -91,19 +112,25 @@ test("deleting the last bot in a space stays in the app after first use", {
   const dialog = page.getByRole("dialog", { name: "New space" });
   await dialog.getByLabel("Name").fill("Side");
   await dialog.getByRole("button", { name: "Create space", exact: true }).click();
-  await page.waitForURL(/\/(onboarding|app)/);
-  await completeOnboarding(page);
+  await expect(page).toHaveURL(/\/app$/);
   await expect(sidebar.getByText("Side", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
+    .not.toBe(personalSpaceId);
+  await expect(
+    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
+  ).toBeVisible();
+  await createBotFromPicker(page, { name: "Side bot" });
 
   // Delete the only bot in the new space: the app must stay put instead of
   // forcing onboarding again.
   const sideBot = sidebar
     .locator('[data-sidebar-group^="space:"]')
     .filter({ hasText: "Side" })
-    .getByRole("button", { name: /^Chief/ });
+    .getByRole("button", { name: /^Side bot/ });
   await sideBot.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete" }).click();
-  const deleteDialog = page.getByRole("alertdialog", { name: /Delete Chief/ });
+  const deleteDialog = page.getByRole("alertdialog", { name: /Delete Side bot/ });
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(sideBot).toHaveCount(0);

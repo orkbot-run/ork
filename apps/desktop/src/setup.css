@@ -247,7 +247,7 @@ h1 {
 .server-list {
   display: grid;
   gap: 8px;
-  max-height: 120px;
+  max-height: 190px;
   overflow-y: auto;
   margin-bottom: 12px;
 }
@@ -255,6 +255,20 @@ h1 {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.server-default {
+  max-width: 95px;
+  line-height: 1.25;
+}
+.server-default[aria-pressed="true"] {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.installation-panel {
+  margin-top: 22px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  text-align: left;
 }
 .server-open {
   flex: 1;
