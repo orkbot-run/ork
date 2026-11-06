@@ -459,21 +459,15 @@ pub fn start_background(app: AppHandle) {
     }
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(30)).await;
+        // An empty feed can be temporary during first publication or channel replacement.
+        if app
+            .state::<UpdateCheck>()
+            .mutate(&app, |data| data.configuration.is_none())
+        {
+            return;
+        }
         loop {
-            let phase = state(&app).phase;
-            if phase == UpdatePhase::Unsupported {
-                break;
-            }
-            if matches!(
-                phase,
-                UpdatePhase::Idle
-                    | UpdatePhase::Error
-                    | UpdatePhase::Available
-                    | UpdatePhase::Ready
-            ) && check_state(&app).await.phase == UpdatePhase::Unsupported
-            {
-                break;
-            }
+            check_state(&app).await;
             tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
         }
     });
@@ -784,6 +778,31 @@ mod tests {
         assert_eq!(failed.phase, UpdatePhase::Error);
         assert!(manager.mutate(app.handle(), |data| data.verified_bytes.is_none()));
         assert!(!manager.install_with(app.handle(), |_| true).await.1);
+    }
+
+    #[tokio::test]
+    async fn a_feed_without_releases_can_discover_the_first_publication_later() {
+        let app = app();
+        let manager = app.state::<UpdateCheck>();
+        let (empty, _) = manager
+            .discover(app.handle(), |_| async { Err(Failure::NoReleases) })
+            .await;
+        assert_eq!(empty.phase, UpdatePhase::Unsupported);
+        manager.mutate(app.handle(), |data| {
+            assert!(data.configuration.is_some());
+            data.last_check = Some(Instant::now() - MIN_CHECK_INTERVAL);
+        });
+        let (published, download) = manager
+            .discover(app.handle(), |_| async {
+                Ok(Some(Arc::new(FakeArtifact {
+                    version: "1.1.1",
+                    fail_download: false,
+                    installs: Arc::new(AtomicU64::new(0)),
+                }) as Arc<dyn Artifact>))
+            })
+            .await;
+        assert_eq!(published.phase, UpdatePhase::Available);
+        assert!(download);
     }
 
     #[tokio::test]

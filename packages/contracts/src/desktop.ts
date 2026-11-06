@@ -10,8 +10,8 @@ export interface OrkNativeAuth {
 
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
- * the normal state for a fork. It is not an error the user needs to act on. Automatic checks stay
- * frozen after an empty feed; a manual check may retry when the install itself supports updates.
+ * the normal state for a fork. It is not an error the user needs to act on. Configured installs
+ * retry an empty feed on the next background check so the first release can arrive later.
  */
 export type DesktopUpdatePhase =
   | "idle"

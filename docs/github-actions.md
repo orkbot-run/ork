@@ -18,7 +18,8 @@ Start with the workflows in `.github/workflows/`. They use Ork repository paths 
 | `publish-playwright-report.yml` | Publishes report links only after relevant browser test runs. S3 galleries are optional. |
 | `desktop-macos-screenshot.yml` | Manual Tauri setup screenshot on a disposable macOS runner. |
 | `mobile-android-screenshots.yml` | Diagnostic Android screenshots and artifacts. S3 publication is explicit. |
-| `desktop-tauri.yml` | Tauri checks, tests and unsigned diagnostic installers for macOS, Windows and Linux. |
+| `desktop-tauri.yml` | Tauri checks, native builds and optional signed Preview artifacts. |
+| `desktop-tauri-publish.yml` | Publishes a complete Preview channel after CI and all native desktop builds pass. |
 | `release-android-apk.yml` | A development-signed diagnostic APK on a GitHub runner by default. EAS production publication is explicit. |
 | `release-mobile.yml` | Android diagnostic build by default. iOS submission is an explicit option requiring Expo and Apple accounts. |
 | `model-catalog-bump.yml` | Update the model catalog and verify it. PR creation requires the repository/organization bot policy below or a dedicated PAT. |
@@ -68,15 +69,16 @@ Choose the iOS submission input explicitly. Missing Expo or Apple configuration 
 
 ## Tauri desktop builds and updates
 
-`desktop-tauri.yml` uploads unsigned diagnostic installers. It does not publish a stable
-release or update manifest. Production signing and publication still need Tauri-specific
-configuration and installed-platform verification.
+`desktop-tauri.yml` builds macOS Apple Silicon and Intel, Windows x64 and Linux x64.
+Pull requests produce diagnostic artifacts. Enable signed Preview builds from main
+with `TAURI_PREVIEW_RELEASE_ENABLED=true`, the `TAURI_UPDATER_PUBLIC_KEY` variable,
+and the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
 
-Local passkey builds use `PASSKEY_PROFILE`, `APPLE_SIGNING_IDENTITY` and
-`ORKBOT_PASSKEY_RP_ID`. Updates stay disabled unless the build sets
-`ORKBOT_ENABLE_AUTO_UPDATE=1`, `TAURI_UPDATER_ENDPOINT` and `TAURI_UPDATER_PUBLIC_KEY`.
-Those update settings are compiled into the app. See [Desktop releases](desktop-release.md)
-for the build commands and verification limits.
+`desktop-tauri-publish.yml` promotes the update manifest after both CI and every
+native build pass for the same main revision. Installed Preview apps download new
+versions automatically and ask before restarting to install them. The updater key
+is separate from Apple and Windows platform signing. See [Desktop releases](desktop-release.md)
+for setup, first installation and verification limits.
 
 ## Optional hosted report galleries
 

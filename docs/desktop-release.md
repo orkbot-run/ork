@@ -3,13 +3,12 @@
 
 # Desktop builds and releases
 
-Find unsigned diagnostic Tauri installers in the Actions artifacts from
-`desktop-tauri.yml`, which checks and builds the desktop client for macOS, Windows
-and Linux. It publishes no releases or update feeds. The macOS screenshot workflow is
-manual and captures the setup screen on its disposable runner.
+`desktop-tauri.yml` tests and builds Tauri for macOS Apple Silicon and Intel,
+Windows x64 and Linux x64. Pull requests produce diagnostic installers. Main builds
+can publish signed Preview updates through `desktop-tauri-publish.yml`.
 
-Build locally with `pnpm --filter @orkbot/desktop build`, keeping signing credentials
-outside the repository. Production signing and release publication remain unconfigured.
+Build locally with `pnpm --filter @orkbot/desktop build`. Keep signing credentials
+outside the repository. The macOS screenshot workflow remains manual.
 
 ## macOS passkeys
 
@@ -30,67 +29,75 @@ Unsigned builds and invalid signing metadata hide macOS passkeys. Private develo
 domains also need `ORKBOT_PASSKEY_DEVELOPER_MODE=1` and associated-domain developer
 mode on the test Mac. See [Self-hosted accounts](self-host-accounts.md#passkeys).
 
-## Updates
+## Automatic Preview releases
 
-Automatic updates are disabled in the default build. A configured Tauri build reads
-these settings at compile time:
+Configure these Actions entries in the repository that owns the desktop releases:
 
-```sh
-ORKBOT_ENABLE_AUTO_UPDATE=1 \
-TAURI_UPDATER_ENDPOINT=https://updates.example.com/latest.json \
-TAURI_UPDATER_PUBLIC_KEY='<Tauri minisign public key>' \
-pnpm --filter @orkbot/desktop build
+| Type | Name | Value |
+| --- | --- | --- |
+| Secret | `TAURI_SIGNING_PRIVATE_KEY` | Private Tauri updater key contents. |
+| Secret | `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password for that key. |
+| Variable | `TAURI_UPDATER_PUBLIC_KEY` | Matching public key contents. |
+| Variable | `TAURI_PREVIEW_RELEASE_ENABLED` | `true` to publish Preview builds from main. |
+
+Once enabled, each push to main builds signed updater artifacts. Publication
+waits for successful `ci.yml` and all four native builds of the same main revision.
+A failed platform leaves the existing channel in place. Pull requests never receive
+the signing key or publish releases.
+
+Each workflow run gets an increasing `1.<minor>.<patch>` version. A retry reuses
+that version. Installers and version-bound signatures live in the corresponding
+`desktop-preview-<version>` GitHub prerelease. The complete update manifest lives at:
+
+```text
+https://github.com/<owner>/<repository>/releases/download/desktop-preview/latest.json
 ```
 
-Changing the environment of an already-built app does not change its update feed.
-The endpoint and redirects must use HTTPS. The updater verifies signatures bound to
-the artifact version, caps downloads at 256 MiB and asks for native confirmation
-before installation. The remote frontend cannot choose the feed or verification key.
+The publisher checks the current main head before promoting the channel, keeps
+platform archive URLs immutable and refuses to replace a newer channel version.
+These prereleases do not become GitHub's latest stable release. Application release
+notes and stable versioning still follow `.agents/skills/release/SKILL.md`.
 
-Diagnostic builds leave `bundle.createUpdaterArtifacts` unset. A production release
-must configure signed updater artifacts, publish a matching manifest and verify an
-installed update on each supported platform. Manual signatures need
-`tauri signer sign --app-version <version>` because `requireSignedVersion` is enabled.
-Keep the private signing key outside the repository.
+## Installing and receiving updates
 
-Release versioning still follows `.agents/skills/release/SKILL.md`. Tagging publishes
-server images, while desktop installers currently remain diagnostic Actions artifacts.
+Install a Preview build from GitHub Releases once. Older diagnostic builds have
+updates disabled and need this initial replacement. The installed app checks after
+30 seconds and then every 6 hours, downloads a newer signed package in the background
+and installs it after you choose Restart. It preserves the application identifier
+and local account data. An empty feed is retried on the next scheduled check.
 
-## Updater signing procedure
+The app verifies signatures bound to the artifact version, accepts HTTPS only and
+caps downloads at 256 MiB. The server frontend cannot choose the feed or signing key.
+The app menu and Settings also provide manual update controls.
 
-Generate the signing pair on a trusted operator machine, saving the private key
-outside the checkout. Enter its password at the prompt:
+Updater signatures are separate from Apple notarization, provisioning profiles and
+Windows code signing. Preview automation does not configure those platform accounts
+or enable macOS passkeys. Test installation and an update from a previous build on
+each platform before using this channel for wider distribution.
+
+## Signing keys and local builds
+
+Generate a signing pair on a trusted operator machine:
 
 ```sh
 pnpm --filter @orkbot/desktop exec tauri signer generate --write-keys '<private-key-path>'
 ```
 
-Back up the key securely. Keep it and its password in the release secret store,
-and put the matching public key in `TAURI_UPDATER_PUBLIC_KEY`. Builds that trust a
-lost private key cannot receive updates signed by a replacement, so plan the key
-rotation while the original key is still available. Platform code signing uses
-separate credentials.
+Back up the private key and password securely. A replacement key cannot update apps
+that trust the original, so arrange rotation while the original key is available.
+Never commit either secret. The public key may be stored in repository variables.
 
-For an authorized release, inject `TAURI_SIGNING_PRIVATE_KEY` and
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` through the build runner's secret environment.
-Set the updater endpoint and public key shown above. Enable signed update output
-with `{"bundle":{"createUpdaterArtifacts":true}}` in a local Tauri release
-configuration, passed to the build with `--config`. Private keys, passwords and
-signatures stay out of commits.
-
-`tauri build` binds updater signatures to the application version automatically.
-If signing an existing updater archive by hand, use the same version as the binary
-and update manifest:
+For a local build with updates, set these values at compile time and pass a local
+configuration with `bundle.createUpdaterArtifacts` set to `true`:
 
 ```sh
-pnpm --filter @orkbot/desktop exec tauri signer sign \
-  --private-key-path '<private-key-path>' \
-  --app-version '<version>' '<updater-artifact-path>'
+ORKBOT_ENABLE_AUTO_UPDATE=1 \
+TAURI_UPDATER_ENDPOINT=https://updates.example.com/latest.json \
+TAURI_UPDATER_PUBLIC_KEY='<public key>' \
+TAURI_SIGNING_PRIVATE_KEY='<private key contents>' \
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<key password>' \
+pnpm --filter @orkbot/desktop build --config '<release configuration path>'
 ```
 
-Publish each platform's artifact and generated `.sig` through the authorized
-release process. Put the signature and HTTPS artifact URL in the matching platform
-entry of the update manifest, then test an installed previous release on each
-supported platform before promoting the feed. Diagnostic CI leaves these signing
-and publication steps to the operator. See the
-[Tauri updater guide](https://v2.tauri.app/plugin/updater/) for manifest fields.
+Changing the environment of an already-built app does not change its update feed.
+Local debug builds and default diagnostic builds keep updates disabled.
