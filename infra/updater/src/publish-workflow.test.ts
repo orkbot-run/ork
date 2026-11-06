@@ -221,13 +221,14 @@ describe("server image publish workflow", () => {
     expect(paths).toContain("pnpm-lock.yaml");
   });
 
-  it("rebuilds Tauri for every desktop path and external bundle resource", () => {
+  it("builds every main revision and covers desktop bundle resources in pull requests", () => {
     const tauri = parse(readFileSync(path.join(workflowsDir, "desktop-tauri.yml"), "utf8")) as {
-      on: Record<"push" | "pull_request", { paths: string[] }>;
+      on: { push: { branches: string[]; paths?: string[] }; pull_request: { paths: string[] } };
     };
     const paths = tauri.on.pull_request.paths;
     expect(paths).toContain("apps/desktop/**");
-    expect(tauri.on.push.paths).toEqual(paths);
+    expect(tauri.on.push.branches).toEqual(["main"]);
+    expect(tauri.on.push.paths).toBeUndefined();
     const desktop = path.join(workflowsDir, "../../apps/desktop/src-tauri");
     const config = JSON.parse(readFileSync(path.join(desktop, "tauri.conf.json"), "utf8")) as {
       bundle: { resources: Record<string, string> };
