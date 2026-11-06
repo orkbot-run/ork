@@ -9,9 +9,8 @@
 The shared editable source and export notes are in
 [`packages/ui-tokens/assets`](../../../packages/ui-tokens/assets/README.md).
 
-Mac packaging requires Xcode 26 or newer. Electron builder compiles `Ork.icon`
-into `Assets.car` for Tahoe and generates `icon.icns` for older macOS versions.
-`icon-macos.png` is the Nunu development icon with Dock margins.
+Tauri generates platform bundle icons from `icon.png` during preparation.
+`icon-macos.png` remains the Nunu source export with Dock margins.
 
 `icon.png` and `icon.ico` are matching mint Nunu exports for Linux and Windows.
 Tauri generates its platform bundle icons from `icon.png` during preparation.

@@ -3,9 +3,10 @@
   "compilerOptions": {
     "outDir": "dist",
     "noEmit": true,
-    "lib": ["ES2023"],
-    "types": ["node"]
+    "lib": ["ES2023", "DOM"],
+    "types": ["node"],
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/app-document-state.test.ts", "src/setup.test.ts"]
+  "include": ["src/**/*.ts", "tauri-ui/**/*.ts"]
 }

@@ -194,7 +194,7 @@ must fit both the 10 MiB media ceiling and the configured attachment limit;
 larger outputs are rejected.
 
 Images use existing inline chat rendering. MP4 files can be previewed with native
-video controls on web and Electron and opened/downloaded through the existing
+video controls on web and desktop and opened/downloaded through the existing
 native file flow on mobile. No new mobile player or settings screen is required.
 
 ## Voice

@@ -36,7 +36,14 @@ function desktopWindow() {
   };
   const open = vi.fn(() => popup);
   const close = vi.fn();
-  vi.stubGlobal("window", { orkbotDesktop: {}, location, open, close });
+  vi.stubGlobal("window", {
+    orkbotDesktop: {},
+    location,
+    open,
+    close,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  });
   const begin = vi.fn(async (_disableRedirect: boolean, callbackURL: (url: string) => string) => {
     returnTo = callbackURL("/app");
     return result;
@@ -291,4 +298,26 @@ it("includes authorization time in the callback deadline", async () => {
   await failure;
   expect(popup.close).toHaveBeenCalledOnce();
   expect(vi.getTimerCount()).toBe(0);
+});
+
+it("keeps the callback alive until the opener acknowledges the matching login", () => {
+  const { land, channels, close } = desktopWindow();
+  land(
+    "https://orkbot.example.test/sso/callback?nonce=attempt&returnTo=https%3A%2F%2Forkbot.example.test%2Fapp",
+  );
+  const callback = channels[0]!;
+  expect(close).not.toHaveBeenCalled();
+  expect(callback.close).not.toHaveBeenCalled();
+  for (const data of [
+    null,
+    {},
+    { type: "sso-complete", nonce: "attempt" },
+    { type: "sso-ack", nonce: "other" },
+  ]) {
+    callback.onmessage?.({ data });
+  }
+  expect(close).not.toHaveBeenCalled();
+  callback.onmessage?.({ data: { type: "sso-ack", nonce: "attempt" } });
+  expect(close).toHaveBeenCalledOnce();
+  expect(callback.close).toHaveBeenCalledOnce();
 });

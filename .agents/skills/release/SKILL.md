@@ -28,7 +28,7 @@ Pick the version: patch for fixes, minor when users get new capability or self-h
 
 ## 3. Release PR
 
-Bump `apps/desktop/package.json` to the new version in the same branch and open the PR titled `Release vX.Y.Z`. The maintainer reviews the changelog wording there. Right before it merges, rerun the gather against current `main` and add entries for anything merged since, because the tag covers everything up to the release PR's merge commit.
+Bump `apps/desktop/package.json` and `apps/desktop/src-tauri/Cargo.toml` (including the package entry in `Cargo.lock`) to the new version in the same branch and open the PR titled `Release vX.Y.Z`. The maintainer reviews the changelog wording there. Right before it merges, rerun the gather against current `main` and add entries for anything merged since, because the tag covers everything up to the release PR's merge commit.
 
 ## 4. Tag
 
@@ -39,4 +39,4 @@ sha="$(gh pr view <release PR> --json mergeCommit -q .mergeCommit.oid)"
 git fetch origin main && git tag vX.Y.Z "$sha" && git push origin vX.Y.Z
 ```
 
-The tag runs `release-desktop` (desktop builds, GitHub release text from the changelog section followed by the merged PR list) and publishes the server images. The workflow refuses a tag without a matching changelog section.
+The tag publishes server images. Desktop installers are built separately by the read-only `desktop-tauri` workflow; run it manually for the release commit. It uploads unsigned diagnostic artifacts and does not publish a signed desktop release. Follow `docs/desktop-release.md` for the current distribution limits.

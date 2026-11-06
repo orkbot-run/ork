@@ -926,17 +926,11 @@ describe("dictation engine choice", () => {
     expect(webSpeechAvailable()).toBe(true);
   });
 
-  it("treats Electron as having no usable Web Speech", () => {
+  it("uses the provider when the desktop has no native speech recognizer", () => {
     vi.stubGlobal("window", {
       webkitSpeechRecognition: class {},
       orkbotDesktop: { platform: "darwin" },
     });
-    expect(webSpeechAvailable()).toBe(false);
-  });
-
-  it("treats an Electron user agent as having no usable Web Speech", () => {
-    vi.stubGlobal("window", { webkitSpeechRecognition: class {} });
-    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 Electron/44.2.0" });
     expect(webSpeechAvailable()).toBe(false);
   });
 
@@ -1434,7 +1428,7 @@ describe("Dictation web speech", () => {
     expect(dictation.state.status).toBe("listening");
   });
 
-  it("records through the connected voice provider in Electron", async () => {
+  it("records through the connected voice provider in the desktop app", async () => {
     const constructed = vi.fn();
     class FakeRecognition {
       start = vi.fn();

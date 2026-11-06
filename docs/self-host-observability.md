@@ -73,8 +73,8 @@ Error reporting to Sentry or a Sentry-compatible collector such as GlitchTip is 
   to that DSN. Use a separate project from `SENTRY_DSN`.
 - `SENTRY_ENVIRONMENT` names the deployment. `SENTRY_RELEASE` defaults to the image's `GIT_SHA`.
 
-Desktop and mobile use the connected server's `SENTRY_BROWSER_DSN`. Electron sends crash metadata
-without memory dumps. Mobile native reporting requires a rebuilt app; Expo Go is unsupported.
+The desktop web UI and mobile use the connected server's `SENTRY_BROWSER_DSN`. Tauri native
+crash reporting is currently unavailable. Mobile native reporting requires a rebuilt app; Expo Go is unsupported.
 For readable mobile crash stacks, build with `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`, `SENTRY_PROJECT`,
 and optional `SENTRY_URL` to upload symbols.
 
@@ -130,7 +130,7 @@ with the server-only secret. No names,
 emails, prompts, responses, message text, DOM, URLs, search parameters, document
 contents, request metadata, or raw errors are exported. There is no browser or
 mobile analytics SDK, autocapture, session replay, or third-party script.
-Web, Electron, and mobile send only fixed screen/surface enums to the authenticated
+Web, desktop, and mobile send only fixed screen/surface enums to the authenticated
 API; lifecycle events come from the shared backend. This works across clients
 without giving a collector access to their content. Local and self-hosted
 installations remain off until their backend is configured.

@@ -7,7 +7,7 @@ const icons = new Map<string, { key: string; icon?: string }>();
 
 const avatarKey = (bot: AvatarBot) => `${bot.avatarSet ?? ""}\n${bot.color}`;
 
-// Chromium and Electron do not reliably draw SVG notification icons.
+// Some WebViews do not reliably draw SVG notification icons.
 function rasterize(svgUrl: string): Promise<string | undefined> {
   return new Promise((resolve) => {
     const image = new Image();

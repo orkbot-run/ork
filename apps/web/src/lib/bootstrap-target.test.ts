@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { initialBootstrapTarget, linkedBotRoute } from "./bootstrap-target";
 
 describe("initial bootstrap target", () => {
-  it("primes the Electron root before its client-side redirect", () => {
+  it("primes the desktop root before its client-side redirect", () => {
     expect(initialBootstrapTarget("/", true)).toEqual({ botId: undefined });
     expect(initialBootstrapTarget("/", false)).toBeNull();
   });

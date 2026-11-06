@@ -13,9 +13,6 @@ import type { UserDeviceClient } from "./user-device-client.js";
 import { startUserDeviceClient, USER_DEVICE_MAX_MESSAGE_BYTES } from "./user-device-client.js";
 
 const token = "device-token";
-const nodeEnv: Record<string, string> = process.versions.electron
-  ? { ELECTRON_RUN_AS_NODE: "1" }
-  : {};
 
 interface Frame {
   type: string;
@@ -121,7 +118,7 @@ describe("user device client", () => {
         request: {
           method: "execute",
           botId: "bot",
-          command: { env: nodeEnv, argv: [process.execPath, "-e", "process.stdout.write('hi')"] },
+          command: { env: {}, argv: [process.execPath, "-e", "process.stdout.write('hi')"] },
         },
       }),
     );
@@ -149,7 +146,7 @@ describe("user device client", () => {
           method: "execute",
           botId: "bot",
           command: {
-            env: nodeEnv,
+            env: {},
             argv: [process.execPath, "-e", "console.log('started'); setInterval(() => {}, 1000)"],
           },
         },
@@ -227,7 +224,7 @@ describe("user device client", () => {
           method: "execute",
           botId: "bot",
           command: {
-            env: nodeEnv,
+            env: {},
             argv: [process.execPath, "-e", "console.log('started'); setInterval(() => {}, 1000)"],
           },
         },
@@ -349,7 +346,7 @@ describe("user device client", () => {
             method: "execute",
             botId: "bot",
             command: {
-              env: nodeEnv,
+              env: {},
               argv: [process.execPath, "-e", "setInterval(() => {}, 1000)"],
             },
           },

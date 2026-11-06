@@ -32,11 +32,6 @@ const context = {
   signal: new AbortController().signal,
 };
 const token = "ab".repeat(32);
-// Host commands get a minimal environment, so under headless Electron the child needs to be
-// told to run as Node again.
-const nodeEnv: Record<string, string> = process.versions.electron
-  ? { ELECTRON_RUN_AS_NODE: "1" }
-  : {};
 
 describe("native host computer transport", () => {
   let root: string;
@@ -74,7 +69,7 @@ describe("native host computer transport", () => {
         body: JSON.stringify({
           method: "execute",
           botId: computer.botId,
-          command: { env: nodeEnv, argv: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
+          command: { env: {}, argv: [process.execPath, "-e", "setInterval(() => {}, 1000)"] },
         }),
       });
       expect(response.status).toBe(200);
@@ -152,7 +147,7 @@ describe("native host computer transport", () => {
             "console.log(process.argv[1]); console.error(process.env.ORKBOT_TEST_REMOVED ?? 'unset')",
             payload,
           ],
-          env: { ...nodeEnv, ORKBOT_TEST_REMOVED: "remove" },
+          env: { ORKBOT_TEST_REMOVED: "remove" },
           unsetEnv: ["ORKBOT_TEST_REMOVED"],
         },
         context,
@@ -247,7 +242,7 @@ describe("native host computer transport", () => {
       for await (const event of client.execute(
         computer,
         {
-          env: nodeEnv,
+          env: {},
           argv: [process.execPath, "-e", "console.log('ready'); setInterval(() => {}, 1000)"],
         },
         { ...context, runId: "target-run" },
@@ -275,7 +270,7 @@ describe("native host computer transport", () => {
         for await (const event of client.execute(
           computer,
           {
-            env: nodeEnv,
+            env: {},
             argv: [process.execPath, "-e", "console.log('ready'); setInterval(() => {}, 1000)"],
           },
           { ...context, runId: "saturated-run" },
@@ -361,7 +356,7 @@ describe("native host computer transport", () => {
       const result = await collect(
         client.execute(
           computer,
-          { env: nodeEnv, argv: [process.execPath, "-e", command] },
+          { env: {}, argv: [process.execPath, "-e", command] },
           { ...context, runId: "background-run" },
         ),
       );
@@ -391,7 +386,7 @@ describe("native host computer transport", () => {
       for await (const event of client.execute(
         computer,
         {
-          env: nodeEnv,
+          env: {},
           argv: [process.execPath, "-e", "console.log(process.pid); setInterval(() => {}, 1000)"],
         },
         context,
@@ -463,7 +458,7 @@ describe("native host computer transport", () => {
       for await (const event of client.execute(
         computer,
         {
-          env: nodeEnv,
+          env: {},
           argv: [process.execPath, "-e", "console.log(process.pid); setInterval(() => {}, 1000)"],
         },
         { ...context, signal: controller.signal },

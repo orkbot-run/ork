@@ -39,6 +39,18 @@ pub(crate) fn entry_allowed(origin: &Url, target: &Url) -> bool {
     target.as_str() == "about:blank" || (safe_http(target) && target.origin() == origin.origin())
 }
 
+fn popup_destination(origin: &Url, target: &Url) -> &'static str {
+    if target.as_str() == "about:blank" {
+        "blank"
+    } else if target.origin() == origin.origin() {
+        "product"
+    } else if target.scheme() == "https" {
+        "identity"
+    } else {
+        "other"
+    }
+}
+
 fn navigation_allowed(origin: &Url, target: &Url) -> bool {
     target.as_str() == "about:blank"
         || (safe_http(target) && (target.scheme() == "https" || target.origin() == origin.origin()))
@@ -62,6 +74,23 @@ fn isolate_popup_scripts(features: &NewWindowFeatures) -> bool {
             .setUserContentController(&controller);
     }
     true
+}
+
+#[cfg(target_os = "linux")]
+fn close_native_popup_with_webview(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webkit2gtk::WebViewExt;
+
+    let app = window.app_handle().clone();
+    let label = window.label().to_owned();
+    window.with_webview(move |platform| {
+        // Wry destroys only WebKit's widget for window.close(). Retire its owning
+        // Tauri window too, so a completed or cancelled login leaves no empty shell.
+        platform.inner().connect_close(move |_| {
+            if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.destroy();
+            }
+        });
+    })
 }
 
 /// Create a related, unprivileged popup using the opener's native session.
@@ -90,7 +119,9 @@ pub fn open_popup(
         return NewWindowResponse::Deny;
     }
 
+    eprintln!("desktop.auth.popup event=create");
     let origin = origin.clone();
+    let load_origin = origin.clone();
     let popup = WebviewWindowBuilder::new(
         app,
         &label,
@@ -102,12 +133,36 @@ pub fn open_popup(
     .title("Ork")
     .inner_size(560.0, 720.0)
     .disable_drag_drop_handler()
-    .on_navigation(move |url| navigation_allowed(&origin, url))
+    .on_navigation(move |url| {
+        let allowed = navigation_allowed(&origin, url);
+        eprintln!(
+            "desktop.auth.popup event=navigation allowed={allowed} destination={}",
+            popup_destination(&origin, url)
+        );
+        allowed
+    })
+    .on_page_load(move |_, payload| {
+        eprintln!(
+            "desktop.auth.popup event=load phase={:?} destination={}",
+            payload.event(),
+            popup_destination(&load_origin, payload.url())
+        );
+    })
     .on_new_window(|_, _| NewWindowResponse::Deny)
     .build();
     match popup {
-        Ok(window) => NewWindowResponse::Create { window },
-        Err(_) => NewWindowResponse::Deny,
+        Ok(window) => {
+            #[cfg(target_os = "linux")]
+            if close_native_popup_with_webview(&window).is_err() {
+                let _ = window.destroy();
+                return NewWindowResponse::Deny;
+            }
+            NewWindowResponse::Create { window }
+        }
+        Err(_) => {
+            eprintln!("desktop.auth.popup event=create_failed");
+            NewWindowResponse::Deny
+        }
     }
 }
 

@@ -74,7 +74,7 @@ function nt(): NtFns {
   if (cached) return cached;
   const ntdll = koffi.load("ntdll.dll");
   const kernel32 = koffi.load("kernel32.dll");
-  // Convert through the running Node/Electron runtime: a separately loaded CRT owns a different fd table.
+  // Convert through the running Node runtime: a separately loaded CRT owns a different fd table.
   const runtime = koffi.load(null);
 
   koffi.struct("UNICODE_STRING", {

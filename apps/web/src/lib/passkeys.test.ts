@@ -28,7 +28,7 @@ describe("passkeysSupported", () => {
     );
   });
 
-  it("hides passkeys when no platform authenticator is ready, as in Electron on macOS", async () => {
+  it("hides passkeys when no platform authenticator is ready, as in a WebView without native passkey support", async () => {
     await expect(passkeysSupported("localhost", browser("localhost", false))).resolves.toBe(false);
     await expect(
       passkeysSupported("localhost", browser("localhost", new Error("blocked"))),

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 API composition is preserved. Authentication diagnostics are Ork additions.
+
 import { hostname } from "node:os";
 import type {
   AgentContextStrategy,
@@ -185,6 +189,7 @@ import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
 import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
+import { authenticationLogger } from "#modules/platform/auth-logging";
 import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
 import {
   clientIpMiddleware,
@@ -564,14 +569,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     signupAllowlist: env.signupAllowlist,
     singleAccount: Boolean(env.desktopStackToken),
     email,
-    logger: {
-      level: "error",
-      log: (_level, _message, ...args) =>
-        getLogger().error(
-          "auth.request.failed",
-          args.find((arg) => arg instanceof Error),
-        ),
-    },
+    logger: authenticationLogger(getLogger),
     onEmailError,
     afterSignIn:
       email && env.welcomeEmailEnabled

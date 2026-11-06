@@ -32,7 +32,11 @@ Team Computers follow their owner's account choice; Private Computers use the de
 
 ## Choosing a provider
 
-The Electron desktop app is a client of the same API. Docker remains the default. For an app-managed local instance, the local operator can choose **Use this Mac** (macOS) or **Use this computer** (Windows/Linux). After native confirmation, an authenticated bridge sends commands from the Docker backend to Electron, where they run under your OS account. **Computer Access…** in the app menu changes the choice; **Revoke Local Computer Access** immediately disconnects active operations and revokes the saved permission. Local execution requires the desktop app to remain running. Connecting to an existing remote instance does not grant it access to your computer. Browser and mobile clients use the deployment’s configured computer; they do not expose their own host. `SANDBOX_PROVIDER=desktop` is a separate, development-only configuration for backends running directly on the intended host.
+The Tauri desktop app is a client of the same API. Docker remains the default for an
+app-managed local instance. Native host control has not yet been ported to Tauri, so the
+client does not grant servers access to its host. Browser and mobile clients also use the
+deployment's configured computer. `SANDBOX_PROVIDER=desktop` is a separate development-only
+configuration for backends running directly on the intended host.
 
 Native file reads and workspace exports are limited to 8 MiB per file. A larger workspace file fails the checkpoint and preserves the previous saved workspace; local files remain on the computer. Writes are bounded by the 12 MiB encoded request limit.
 
@@ -56,13 +60,9 @@ Native file reads and workspace exports are limited to 8 MiB per file. A larger 
   workspace under `/home/user/orkbot-home`, and refreshes a two-hour TTL. Boat uses the shared Linux
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
-- **Local computer access** in the app-managed Electron instance runs commands on Windows, macOS,
-  or Linux through the native bridge. Bots can read/change local files and launch installed apps
-  through OS commands, subject to your account and OS permissions. Portable file tools and
-  checkpoints remain scoped to bot workspaces; use commands for other local folders. Graphical
-  screen control is unavailable. Permission is remembered locally and can be revoked from the
-  app menu. Only enable this for a trusted personal instance: every bot on that instance can use
-  your account’s permissions.
+- **Local computer access** is unavailable in the current Tauri client. The former native
+  host transport requires a Tauri implementation with explicit consent and revocation before
+  it can run commands or access files on the desktop host.
 - **Desktop provider** (`SANDBOX_PROVIDER=desktop`) runs commands directly on the API/worker host,
   with only a minimal shell environment (no server secrets). The API and worker refuse it unless
   `NODE_ENV` is `development` or `test`, so a production server never runs bot commands on itself.
@@ -279,7 +279,7 @@ powers the desktop off; deleting one removes only its home folder, never the des
 | `WUYING_END_USER_ID` | Screen logins are issued for this user |
 | `WUYING_MCP_URL` / `WUYING_MCP_TOKEN` | The desktop's MCP gateway and its bearer token |
 
-The web and Electron screen is drawn by the Wuying Web SDK in `/computer-screen/screen.html`, served by
+The web and desktop screen is drawn by the Wuying Web SDK in `/computer-screen/screen.html`, served by
 the web app. Mobile rejects the custom screen URL and does not embed this SDK. The
 SDK is not committed; fetch the pinned release before building the web app:
 

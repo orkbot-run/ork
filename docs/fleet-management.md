@@ -7,7 +7,7 @@ current space, whoever created them. It is controlled per bot and is on for new 
 ## Settings
 
 Open a bot's settings and expand **Advanced** to change **Manage other bots**. The switch is on web,
-the Electron desktop app (which hosts the web UI) and mobile bot settings.
+the Tauri desktop app (which hosts the web UI) and mobile bot settings.
 
 - New bots start with it on, including bots created by another bot, duplicates and imported agents.
   Duplicates do not inherit this setting from the source bot. Existing bots keep their setting;

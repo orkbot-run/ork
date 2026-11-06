@@ -445,7 +445,7 @@ async fn open_server(
         .hidden_title(true)
         .traffic_light_position(tauri::LogicalPosition::new(16.0, 16.0));
     let next = builder
-        .title("Ork Preview")
+        .title("Ork")
         .inner_size(1100.0, 760.0)
         .min_inner_size(640.0, 480.0)
         .visible(false)
@@ -466,6 +466,11 @@ async fn open_server(
             _ => false,
         })
         .on_page_load(move |window, payload| {
+            // A COOP transition can sever the JavaScript popup handle. Once the
+            // opener navigates, retire its native auth window independently.
+            if payload.event() == tauri::webview::PageLoadEvent::Started {
+                auth::close_popup(window.app_handle(), window.label());
+            }
             if payload.event() == tauri::webview::PageLoadEvent::Started
                 && (payload.url().origin() != origin
                     || !matches!(payload.url().scheme(), "http" | "https"))
@@ -567,7 +572,7 @@ fn show_setup(app: &tauri::AppHandle) -> tauri::Result<()> {
         window.set_focus()?;
     } else {
         WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
-            .title("Ork Preview")
+            .title("Ork")
             .inner_size(580.0, 520.0)
             .resizable(false)
             .on_navigation(|url| is_setup_document("setup", url))
@@ -895,7 +900,7 @@ fn main() {
             }
         })
         .build(app_context())
-        .expect("could not build Ork Preview")
+        .expect("could not build Ork")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Reopen { .. }) {

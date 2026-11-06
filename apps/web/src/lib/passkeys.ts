@@ -100,7 +100,7 @@ export function cancelPasskeyRequest() {
 }
 
 /**
- * Electron's system passkey sheet is modal and has no autofill mode, so on macOS a
+ * The native system passkey sheet is modal and has no autofill mode, so on macOS a
  * conditional request would open it as soon as the form appears. The button opens it instead.
  */
 export async function conditionalPasskeyAvailable(

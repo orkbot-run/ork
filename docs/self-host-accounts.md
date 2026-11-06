@@ -156,7 +156,7 @@ Register this redirect URI at the provider (using your public `BETTER_AUTH_URL` 
 https://app.example.com/api/auth/callback/oidc
 ```
 
-Web, Electron and mobile use the same provider redirect URI. Electron completes SSO in a
+Web, desktop and mobile use the same provider redirect URI. The desktop app completes SSO in a
 sandboxed in-app popup sharing the app's session, then returns to the main window. Mobile completes the callback
 on the API, then returns to `orkbot://sign-in` (or `orkbot://account` for linking and reauthentication) through Better Auth's Expo authorization proxy
 and a native auth browser session. The `orkbot` app scheme is trusted by the auth server;
@@ -217,21 +217,13 @@ Passkeys are on whenever `WEB_ORIGIN` is an HTTPS domain (or `localhost` in deve
 relying party is that origin's host, so existing passkeys keep working only while `WEB_ORIGIN`
 stays on the same domain. They are off when password sign-in is disabled for SSO-only
 deployments. On web, a browser offers them where it has a platform authenticator. The macOS
-desktop app uses the system passkey sheet, which only serves the domain the release is
-associated with (`app.orkbot.run`), so it hides passkeys for other servers.
+desktop bridge currently advertises no native relying-party IDs, so native passkey sign-in
+is hidden until Tauri support and domain association are configured and verified.
 
-Native apps can use a domain's passkeys only when the domain vouches for them and the app was
-built for that domain. The iOS app's associated domain comes from `EXPO_PUBLIC_API_URL` at build
-time. A macOS desktop build takes it from `ORKBOT_PASSKEY_RP_ID` (default `app.orkbot.run`): set
-it to the same domain for `pnpm build` and for `scripts/passkey-entitlements.ts`, then package with
-electron-builder's `-c.mac.entitlements` set to that script's output and `-c.mac.provisioningProfile`
-set to a profile for your App ID with the Associated Domains capability, as the release workflow
-does. Without both, macOS ignores the association and the app hides passkeys. When Apple's CDN
-cannot reach the server (a private network or a VPN such as Tailscale), also set
-`ORKBOT_PASSKEY_DEVELOPER_MODE=1` for either build: a development-signed app then fetches the
-association file itself, once associated-domains developer mode is on (Settings > Developer on
-iOS, `sudo swcutil developer-mode -e true` on macOS, where the app must also live in
-`/Applications`). To let a build use this server's passkeys, set:
+Native apps can use a domain's passkeys only when the domain vouches for them and the app
+was built for that domain. The iOS app's associated domain comes from `EXPO_PUBLIC_API_URL`
+at build time. The former Electron entitlement generation and packaging commands have been
+removed; they do not configure the Tauri client. To let a build use this server's passkeys, set:
 
 ```bash
 # iOS and the macOS desktop app (run.orkbot.desktop): <Apple Team ID>.<bundle id>, comma-separated.

@@ -1,75 +1,47 @@
-# Desktop releases
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- Modified by Ork contributors for the Tauri desktop transition. -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
 
-By default, `release-desktop` uploads unsigned diagnostic installers to Actions artifacts. For a manual signed release, select a `vMAJOR.MINOR.PATCH` tag and set `signed_release=true`. The tag must match the desktop version and changelog and pass the ancestry check against `main`. See [GitHub Actions configuration](./github-actions.md) for the required signing credentials.
+# Desktop builds
 
-Desktop automatic updates are disabled by default. Set `ORKBOT_ENABLE_AUTO_UPDATE=1` at build time or runtime to enable a configured Ork update feed. Linux builds also require an Ed25519 public PEM key in `ORKBOT_LINUX_UPDATE_PUBLIC_KEY` at build time, matching the private key used to sign releases. `ORKBOT_DISABLE_AUTO_UPDATE=1` always disables updates.
+Tauri 2 is the desktop runtime for Linux, macOS and Windows. Electron and its release
+pipeline have been removed. The native application loads the selected Ork server.
 
-In signed mode, `release-desktop` builds, signs, notarizes, attests, and publishes
-the Electron app from the validated tag. Docker image publication is triggered
-by the same tag push.
-
-## Repository secrets
-
-macOS (required):
-
-| Secret | Value |
-| --- | --- |
-| `DESKTOP_MAC_CSC_LINK` | Base64 of the `Developer ID Application` certificate exported as `.p12` |
-| `DESKTOP_MAC_CSC_KEY_PASSWORD` | Password used when exporting the `.p12` |
-| `APPLE_API_KEY_ID` | App Store Connect API key ID (the `XXXXXXXXXX` in `AuthKey_XXXXXXXXXX.p8`) |
-| `APPLE_API_ISSUER` | Issuer ID shown on App Store Connect > Users and Access > Integrations |
-| `APPLE_API_KEY_P8` | Contents of the `AuthKey_*.p8` file |
-
-The API key needs the Developer role. The workflow writes it to a mode 600 file
-in the runner's temp directory for the packaging step and deletes it afterwards.
-
-`patches/app-builder-lib@26.15.3.patch` carries electron-builder PR #10101:
-without it `CSC_LINK` signing fails while creating the temporary keychain. Drop
-the patch once an electron-builder release includes that fix.
-
-Windows signs through Azure Artifact Signing once it is configured, logging in
-with GitHub OIDC instead of a stored secret. Create a Public Trust certificate
-profile, then an app registration with the Artifact Signing Certificate Profile
-Signer role on the signing account, and a `desktop-release` environment in the
-repository settings. Give the app registration a federated credential whose
-subject is exactly the one printed under "Federated token details" in the
-release's Azure login step. This repository's OIDC subject includes owner and
-repository IDs, so the plain `repo:<owner>/<repo>:environment:desktop-release`
-form does not match.
-
-| Secret | Value |
-| --- | --- |
-| `DESKTOP_WIN_AZURE_TENANT_ID` | Directory (tenant) ID of the app registration |
-| `DESKTOP_WIN_AZURE_CLIENT_ID` | Application (client) ID of the app registration |
-
-| Variable | Value |
-| --- | --- |
-| `DESKTOP_WIN_SIGNING_ENDPOINT` | The signing account's URI, such as `https://eus.codesigning.azure.net/` |
-| `DESKTOP_WIN_SIGNING_ACCOUNT` | The signing account name |
-| `DESKTOP_WIN_SIGNING_PROFILE` | The certificate profile name |
-| `DESKTOP_WIN_PUBLISHER` | The certificate's common name, exactly as validated |
-
-When `DESKTOP_WIN_AZURE_CLIENT_ID` is unset the Windows installer ships
-unsigned, and Windows shows a SmartScreen warning on first launch. Unsigned
-builds carry no publisher in their update config, so they accept the first
-signed update; from then on updates must match the publisher. The release is
-only published when every platform produced its installer and update feed.
-
-Set a secret from a file without echoing it:
+Install Node/pnpm, Rust and the [Tauri platform prerequisites](https://v2.tauri.app/start/prerequisites/),
+then run from the repository root:
 
 ```sh
-base64 -i devid.p12 | gh secret set DESKTOP_MAC_CSC_LINK
-gh secret set APPLE_API_KEY_P8 < AuthKey_XXXXXXXXXX.p8
+pnpm install --frozen-lockfile
+pnpm --filter @orkbot/desktop check
+pnpm --filter @orkbot/desktop test
+pnpm --filter @orkbot/desktop test:native
+pnpm --filter @orkbot/desktop check:native
+pnpm --filter @orkbot/desktop bundle
 ```
 
-## Cut a release
+`build` prepares the setup UI, icons and native bridge. `bundle` compiles Rust and creates
+installers for the current host under `apps/desktop/src-tauri/target/release/bundle`.
+`pack:dir` compiles without an installer. For a Linux Debian package only:
 
-Follow `.agents/skills/release/SKILL.md`: one release PR writes the
-`CHANGELOG.md` section from the pull requests merged since the last tag and
-bumps `version` in `apps/desktop/package.json`. Once it merges, tag the merge
-commit `v<version>` and push the tag.
+```sh
+pnpm --filter @orkbot/desktop exec tauri build --bundles deb
+```
 
-The workflow refuses tags that do not match the desktop version, have no
-matching changelog section, are not on `main`, or are not newer than the latest
-published release. The release text is that changelog section followed by the
-merged pull requests.
+Set `ORKBOT_WEB_URL` to a public HTTP(S) origin while building to change the initial server
+address. Never put credentials in that URL. A saved server selection takes precedence.
+This only selects the server; it does not bundle or deploy the API.
+
+The `desktop-tauri.yml` workflow tests Rust and creates unsigned diagnostic installers
+on GitHub-hosted Linux, macOS and Windows runners. Run it manually or download artifacts
+from a matching main/PR run. It has read-only permissions and does not publish a release.
+
+Signed distribution, notarization and a production updater feed still need Tauri-specific
+configuration and installed-application verification. The updater is disabled by default;
+its public key is empty in the tracked configuration. Legacy Electron signing keys and
+update manifests do not configure Tauri. Do not enable automatic updates before configuring
+and verifying the signed Tauri feed. See [migration status](./desktop-tauri-migration.md)
+for remaining feature and platform checks.
+
+The compatibility identifier `run.orkbot.desktop.preview` remains unchanged to preserve
+existing Tauri profiles. Legacy Electron profiles are not imported automatically.

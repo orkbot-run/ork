@@ -59,14 +59,11 @@ const O_NOFOLLOW = constants.O_NOFOLLOW ?? 0;
 
 /**
  * Bot commands run directly as this OS user, so a backend may select SANDBOX_PROVIDER=desktop
- * only inside the desktop app or a local development or test process. Server images set
+ * only inside a local development or test process. Server images set
  * NODE_ENV=production and must use an isolated provider.
  */
-export function assertHostCommandsAllowed(
-  env: NodeJS.ProcessEnv = process.env,
-  versions: NodeJS.ProcessVersions = process.versions,
-) {
-  if (versions.electron || env.NODE_ENV === "development" || env.NODE_ENV === "test") return;
+export function assertHostCommandsAllowed(env: NodeJS.ProcessEnv = process.env) {
+  if (env.NODE_ENV === "development" || env.NODE_ENV === "test") return;
   throw new Error(
     "SANDBOX_PROVIDER=desktop runs bot commands directly on this host and is limited to local development. Use docker or a remote provider, or local computer access in the desktop app.",
   );

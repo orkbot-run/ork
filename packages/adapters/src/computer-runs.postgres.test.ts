@@ -347,7 +347,7 @@ describePostgres("computer runs (PostgreSQL)", () => {
     ]);
   });
 
-  it("does not record host computers, whose stop only Electron sees", async () => {
+  it("does not record host computers, whose stop only the desktop app sees", async () => {
     const o = await owner();
 
     await runAsTenant(o.tenant, () =>

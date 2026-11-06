@@ -68,15 +68,6 @@ jobs:
           DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
           BETTER_AUTH_SECRET: ci-build-auth-secret-at-least-32-characters
           ENCRYPTION_KEY: ci-build-encryption-key-at-least-32-characters
-      - name: Electron smoke
-        run: xvfb-run --auto-servernum pnpm --filter @orkbot/desktop exec playwright test --config e2e/playwright.config.ts
-      - name: Upload desktop setup screenshots
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: desktop-e2e-screenshots
-          path: apps/desktop/e2e/screenshots
-          if-no-files-found: ignore
 
   # A deploy needs these jobs, so like Postgres journeys they check their own changed areas to reach
   # their main locks in push order. Pull requests typecheck and test only the packages their files
@@ -241,14 +232,7 @@ jobs:
         env:
           DATABASE_URL: postgres://orkbot:orkbot@127.0.0.1:5433/orkbot
       - run: pnpm --filter @orkbot/desktop build
-      - run: pnpm exec vitest run packages/adapters/src/host-computer.test.ts packages/adapters/src/desktop-sandbox-command.test.ts packages/adapters/src/desktop-sandbox-paths.test.ts packages/adapters/src/desktop-workspace-cleanup.test.ts packages/adapters/src/computer-support.test.ts apps/desktop/src/host-computer.test.ts
-      - name: Screen control on a real Windows desktop
-        if: runner.os == 'Windows'
-        run: pnpm exec vitest run apps/desktop/src/host-screen.windows.test.ts
-      - name: Native computer in headless Electron
-        run: pnpm --filter @orkbot/desktop exec electron ../../node_modules/vitest/vitest.mjs run --root ../.. packages/adapters/src/host-computer.test.ts apps/desktop/src/host-computer.test.ts
-        env:
-          ELECTRON_RUN_AS_NODE: "1"
+      - run: pnpm exec vitest run packages/adapters/src/host-computer.test.ts packages/adapters/src/desktop-sandbox-command.test.ts packages/adapters/src/desktop-sandbox-paths.test.ts packages/adapters/src/desktop-workspace-cleanup.test.ts packages/adapters/src/computer-support.test.ts
 
   # Checks its own changed areas instead of needing `changes`: a deploy needs this job, and on main
   # it must reach its lock in push order so an older revision cannot replace a newer waiting one.

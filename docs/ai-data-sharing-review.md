@@ -5,7 +5,7 @@
 The mobile client obtains permission before uploading attachments, submitting messages,
 starting routines, or sending voice content. Consent is stored per account, Space, recipient,
 and disclosure version. Read-only disclosure/grant endpoints do not change provider execution.
-Web, Electron, workers, helper model selection, and self-hosted server execution retain their
+Web, desktop, workers, helper model selection, and self-hosted server execution retain their
 existing behavior. There are no gateway blocklists, provider-routing overrides, or external
 metadata requests introduced by consent.
 

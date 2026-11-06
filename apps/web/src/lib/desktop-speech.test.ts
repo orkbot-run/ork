@@ -25,7 +25,7 @@ function fakeSpeech(started: () => Promise<boolean> = async () => true) {
 
 function useDesktop(speech: ReturnType<typeof fakeSpeech>["speech"]) {
   vi.stubGlobal("window", { orkbotDesktop: { platform: "darwin", speech } });
-  vi.stubGlobal("navigator", { language: "es-CL", userAgent: "Mozilla/5.0 Electron/45.0.0" });
+  vi.stubGlobal("navigator", { language: "es-CL", userAgent: "Mozilla/5.0" });
 }
 
 afterEach(() => {

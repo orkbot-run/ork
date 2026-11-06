@@ -50,7 +50,7 @@ export async function removeOwnedWorkspaceChildren(
     ],
     {
       cwd: parent,
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      env: process.env,
       signal,
       timeout: 20_000,
       maxBuffer: 64 * 1024,

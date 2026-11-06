@@ -1,4 +1,4 @@
-// System speech recognition for desktop dictation on macOS: Electron's Web Speech has no
+// System speech recognition for desktop dictation on macOS: the desktop WebView has no
 // recognition service, so the main process runs this helper instead of asking for a key.
 //
 //   orkbot-speech <language>

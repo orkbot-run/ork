@@ -127,7 +127,7 @@ export function spawnOwnedCommand(
     windows ? ["-e", WINDOWS_COMMAND_WRAPPER] : argv.slice(1),
     {
       cwd,
-      env: windows ? { ...env, ELECTRON_RUN_AS_NODE: "1" } : env,
+      env,
       detached: !windows,
       shell: false,
       windowsHide: true,

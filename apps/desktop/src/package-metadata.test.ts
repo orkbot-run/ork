@@ -1,48 +1,46 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
-const packageJson = JSON.parse(
-  readFileSync(path.resolve(import.meta.dirname, "../package.json"), "utf8"),
-) as {
-  productName?: string;
-  build?: {
-    appId?: string;
-    productName?: string;
-    publish?: { provider: string; owner: string; repo: string }[];
-    mac?: {
-      extendInfo?: Record<string, string>;
-      extraResources?: { from: string; to: string }[];
-    };
-  };
-};
+const desktop = path.resolve(import.meta.dirname, "..");
+const root = path.resolve(desktop, "../..");
+const json = (file: string) => JSON.parse(readFileSync(file, "utf8"));
 
-describe("desktop package metadata", () => {
-  it("packages the Ork identity and its own update feed", () => {
-    expect(packageJson.build?.appId).toBe("run.orkbot.desktop");
-    expect(packageJson.build?.publish).toEqual([
-      { provider: "github", owner: "orkbot-run", repo: "ork" },
-    ]);
+describe("desktop distribution boundaries", () => {
+  it("packages the native client with complete notices and no Electron runtime", () => {
+    const manifest = json(path.join(desktop, "package.json"));
+    const config = json(path.join(desktop, "src-tauri/tauri.conf.json"));
+    const dependencies = { ...manifest.dependencies, ...manifest.devDependencies };
+    expect(Object.keys(dependencies).filter((name) => name.includes("electron"))).toEqual([]);
+    expect(manifest.main).toBeUndefined();
+    expect(manifest.scripts.bundle).toBe("tauri build");
+    expect(config.version).toBe("../package.json");
+    expect(config.plugins.updater.pubkey).toBe("");
+    expect(config.plugins.updater.requireSignedVersion).toBe(true);
+    expect(config.bundle.linux.deb.depends).toContain("libxdo3");
+    for (const file of ["LICENSE", "LICENSE-POLYFORM", "LICENSE.md", "NOTICE"]) {
+      expect(config.bundle.resources[`../../../${file}`]).toBe(`licenses/${file}`);
+    }
+    const cargo = readFileSync(path.join(desktop, "src-tauri/Cargo.toml"), "utf8");
+    expect(cargo).toContain(`version = "${manifest.version}"`);
   });
 
-  it("shares the customer-facing name between Electron and electron-builder", () => {
-    expect(packageJson.productName).toBe("Ork");
-    expect(packageJson.build?.productName).toBeUndefined();
-  });
-
-  it.each(["es", "pl"])("ships a %s version of every macOS permission prompt", (locale) => {
-    const strings = readFileSync(
-      path.resolve(import.meta.dirname, `../assets/${locale}.lproj/InfoPlist.strings`),
-      "utf8",
-    );
-    const prompts = Object.keys(packageJson.build?.mac?.extendInfo ?? {}).filter((key) =>
-      key.endsWith("UsageDescription"),
-    );
-    expect(prompts.length).toBeGreaterThan(0);
-    for (const key of prompts) expect(strings, key).toMatch(new RegExp(`^"${key}" = ".+";$`, "m"));
-    expect(packageJson.build?.mac?.extraResources).toContainEqual({
-      from: `assets/${locale}.lproj`,
-      to: `${locale}.lproj`,
-    });
+  it("keeps PR native installers unsigned and repository permissions read-only", () => {
+    const source = readFileSync(path.join(root, ".github/workflows/desktop-tauri.yml"), "utf8");
+    const workflow = parse(source);
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    expect(workflow.on.pull_request).toBeDefined();
+    expect(workflow.on.workflow_dispatch).toBeNull();
+    expect(source).not.toContain("secrets.");
+    expect(source).not.toContain("pull_request_target");
+    for (const job of Object.values(workflow.jobs) as Array<Record<string, unknown>>) {
+      expect(job.permissions).toBeUndefined();
+    }
+    expect(source).toContain('ORKBOT_ENABLE_AUTO_UPDATE: "0"');
+    expect(source).toContain("persist-credentials: false");
   });
 });

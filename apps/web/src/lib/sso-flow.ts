@@ -34,13 +34,36 @@ export function completeSsoCallback(): boolean {
   const error = params.get("error");
   if (error) target.searchParams.set("error", error);
   const channel = new BroadcastChannel(`${SSO_CHANNEL}:${nonce}`);
+  let disposed = false;
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    channel.onmessage = null;
+    window.removeEventListener("pagehide", dispose);
+    channel.close();
+  };
+  // WebKit can discard a queued broadcast when its sending WebView closes.
+  // Keep the landing document alive until the opener acknowledges delivery.
+  channel.onmessage = (event: MessageEvent) => {
+    const message: unknown = event.data;
+    if (
+      !message ||
+      typeof message !== "object" ||
+      !("type" in message) ||
+      message.type !== "sso-ack" ||
+      !("nonce" in message) ||
+      message.nonce !== nonce
+    )
+      return;
+    dispose();
+    window.close();
+  };
+  window.addEventListener("pagehide", dispose, { once: true });
   channel.postMessage({
     type: error ? "sso-error" : "sso-complete",
     nonce,
     url: target.href,
   });
-  channel.close();
-  window.close();
   return true;
 }
 
@@ -123,6 +146,7 @@ export async function runSsoFlow(
             )
           )
             return;
+          channel.postMessage({ type: "sso-ack", nonce });
           window.location.assign(returned.href);
           resolve();
         };

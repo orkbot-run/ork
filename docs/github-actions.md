@@ -1,6 +1,6 @@
 # GitHub Actions configuration
 
-Start with the workflows in `.github/workflows/`. All 15 use Ork repository paths and GitHub-hosted runners, with optional services disabled until you configure them.
+Start with the workflows in `.github/workflows/`. They use Ork repository paths and GitHub-hosted runners, with optional services disabled until you configure them.
 
 ## Available with GitHub only
 
@@ -13,9 +13,8 @@ Start with the workflows in `.github/workflows/`. All 15 use Ork repository path
 | `computer-replay.yml` | Manual browser/computer replay without model inference. |
 | `publish-server-image.yml` | Native amd64 and arm64 images in this repository's GHCR namespace, using `GITHUB_TOKEN`. |
 | `publish-playwright-report.yml` | PR links to the matching Actions report and artifact. S3 galleries are optional. |
-| `desktop-macos-screenshot.yml` | Diagnostic macOS screenshots. |
 | `mobile-android-screenshots.yml` | Diagnostic Android screenshots and artifacts. S3 publication is explicit. |
-| `release-desktop.yml` | Unsigned diagnostic installers as Actions artifacts by default. Signed stable releases require separate configuration. |
+| `desktop-tauri.yml` | Rust tests, native checks and unsigned Tauri installers on Linux, macOS and Windows. |
 | `release-android-apk.yml` | A development-signed diagnostic APK on a GitHub runner by default. EAS production publication is explicit. |
 | `release-mobile.yml` | Android diagnostic build by default. iOS submission is an explicit option requiring Expo and Apple accounts. |
 | `model-catalog-bump.yml` | Update the model catalog and verify it. PR creation requires the repository/organization bot policy below or a dedicated PAT. |
@@ -67,26 +66,15 @@ For iOS, create an Apple Developer account, an App Store Connect app, signing cr
 
 Choose the iOS submission input explicitly. Missing Expo or Apple configuration stops that request with the missing entry names. It does not turn a diagnostic build into a store release.
 
-## Signed desktop releases and updates
+## Desktop distribution
 
-For a manual signed release, select a `vMAJOR.MINOR.PATCH` tag and set `signed_release=true`. The tag must match the desktop version and changelog and pass the ancestry check against `main`. For signed releases triggered by a tag push, set `DESKTOP_SIGNED_RELEASE_ENABLED=true` after configuring every requested platform.
+`desktop-tauri.yml` is the desktop build workflow. Its manual, main and matching PR runs
+produce unsigned diagnostic installers as Actions artifacts, with read-only repository
+permissions. The Electron release and screenshot workflows have been removed.
 
-macOS needs an Apple Developer **Developer ID Application** certificate and an App Store Connect API key for notarization:
-
-- Secrets: `DESKTOP_MAC_CSC_LINK`, `DESKTOP_MAC_CSC_KEY_PASSWORD`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`, `APPLE_API_KEY_P8`.
-- Optional secret: `DESKTOP_MAC_PROVISIONING_PROFILE` for the associated passkey capability.
-
-Windows signed releases use an Azure Artifact Signing account and certificate profile with an OIDC trust for the `desktop-release` GitHub environment:
-
-- Secrets: `DESKTOP_WIN_AZURE_CLIENT_ID`, `DESKTOP_WIN_AZURE_TENANT_ID`.
-- Variables: `DESKTOP_WIN_SIGNING_ENDPOINT`, `DESKTOP_WIN_SIGNING_ACCOUNT`, `DESKTOP_WIN_SIGNING_PROFILE`, `DESKTOP_WIN_PUBLISHER`.
-
-Linux update verification needs an Ed25519 key pair that the Ork operator generates and owns:
-
-- Secret: `DESKTOP_LINUX_UPDATE_SIGNING_KEY`, the private signing key.
-- Variable: `ORKBOT_LINUX_UPDATE_PUBLIC_KEY`, its matching public PEM key.
-
-Desktop updates remain disabled unless `ORKBOT_ENABLE_AUTO_UPDATE=1` is set for a configured release. Linux also requires the matching public verification key at build time. Keep the private key outside the repository.
+Signed Tauri distribution and updates still require new signing/feed configuration and
+platform verification. Previous Electron signing secrets and update manifests are not used.
+See [desktop builds](./desktop-release.md). Automatic updates remain disabled by default.
 
 ## Optional hosted report galleries
 

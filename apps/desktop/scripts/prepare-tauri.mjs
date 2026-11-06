@@ -11,6 +11,14 @@ import { APP_DOCUMENT_STATE_SCRIPT } from "../src/app-document-script.ts";
 import { prepareTauriSpeech } from "./prepare-tauri-speech.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const defaultServer = new URL(process.env.ORKBOT_WEB_URL || "https://app.orkbot.run");
+if (
+  !["http:", "https:"].includes(defaultServer.protocol) ||
+  defaultServer.username ||
+  defaultServer.password
+) {
+  throw new Error("ORKBOT_WEB_URL must be an HTTP(S) server address without credentials.");
+}
 const output = path.join(root, "build/tauri-ui");
 const native = path.join(root, "build/tauri-native");
 await rm(native, { recursive: true, force: true });
@@ -100,6 +108,7 @@ await build({
   bundle: true,
   format: "iife",
   target: "es2022",
+  define: { __ORKBOT_DEFAULT_SERVER__: JSON.stringify(defaultServer.origin) },
 });
 await build({
   entryPoints: [path.join(root, "tauri-ui/native-bridge.ts")],

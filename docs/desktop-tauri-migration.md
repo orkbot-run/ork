@@ -3,18 +3,17 @@
 
 # Desktop migration to Tauri 2
 
-`apps/desktop` keeps Electron as its default local development and release target while an
-experimental Tauri 2 target is developed alongside it. Migration remains in progress.
-The feature inventory below was checked against the Electron implementation.
-Server selection, password login, session persistence and the local Docker lifecycle have now
-been exercised in the macOS application. Full replacement of Electron remains pending.
+`apps/desktop` now uses Tauri 2 for local development and packaging on all platforms.
+The Electron runtime, dependency, packaging and release workflows have been removed.
+Feature parity and platform verification remain in progress; the inventory below preserves
+the historical Electron baseline and names files removed during this transition.
 
-## Experimental target
+## Current target
 
-**Ork Preview** uses `run.orkbot.desktop.preview` for isolated application data, keeping
-Electron's existing profile separate. Every launch opens the local setup page with the
-saved mode and address, where you choose **Existing instance** and **Connect**, or
-**This computer** and **Start server**. Server orchestration stays in Ork Server.
+**Ork** retains `run.orkbot.desktop.preview` for compatibility with existing Tauri profiles.
+Legacy Electron application data is separate and is not imported automatically. Every launch
+opens the setup page with the saved mode and address. Choose **Existing instance** and
+**Connect**, or **This computer** and **Start server**. Server orchestration stays in Ork Server.
 
 A server switch first opens a hidden candidate window and waits up to 20 seconds for the
 shared `APP_DOCUMENT_STATE_SCRIPT` to recognize a usable app surface. Once ready, the app
@@ -62,21 +61,21 @@ build dependencies listed in the [Tauri prerequisites](https://v2.tauri.app/star
 Run commands from the repository root after `pnpm install`.
 
 ```sh
-pnpm --filter @orkbot/desktop tauri:dev
-pnpm --filter @orkbot/desktop tauri:check
-pnpm --filter @orkbot/desktop tauri:test
-pnpm --filter @orkbot/desktop tauri:build
+pnpm --filter @orkbot/desktop dev
+pnpm --filter @orkbot/desktop check:native
+pnpm --filter @orkbot/desktop test:native
+pnpm --filter @orkbot/desktop bundle
 ```
 
-`tauri:dev` launches real windows, so keep routine automated verification headless on a
+`dev` launches real windows, so keep routine automated verification headless on a
 maintainer's computer and run interactive platform checks in a suitable test environment.
-`tauri:build` packages the current host. Cross-platform support, notarization and working
+`bundle` packages the current host. Cross-platform support, notarization and working
 updates still need installed-application checks.
 
 ## Parity inventory
 
-Source paths below are relative to `apps/desktop/src`, except where a full repository path
-is given. Tauri code is in `apps/desktop/src-tauri/src`. **Partial** marks implemented work
+Legacy source paths below refer to the removed Electron implementation under
+`apps/desktop/src`, except where a full repository path is given. Tauri code is in `apps/desktop/src-tauri/src`. **Partial** marks implemented work
 with remaining checks, and **Pending** covers missing implementation or evidence.
 
 | Capability | Electron source and behavior to preserve | Tauri status and next verification |
@@ -101,7 +100,7 @@ with remaining checks, and **Pending** covers missing implementation or evidence
 | Error/crash reporting | `monitoring.ts`, `native-crashes.ts`: optional native reporting tied to server configuration and account changes | **Pending**: bridge reports native monitoring disabled, Electron-specific crash reporting still needs replacement and consent/configuration checks |
 | Auto-update | `auto-update.ts`, `linux-update-signature.ts`: background check/download, progress, verified installation, retry and install-on-quit | **Partial**: state/check/download/install contract, verified cache, background checks and confirmation tested headlessly, disabled native actions return Unsupported, signed release feed, installed updates and install-on-quit pending |
 | CI and native tests | `.github/workflows/ci.yml`, `.github/workflows/release-desktop.yml`, `.github/workflows/desktop-macos-screenshot.yml`, `apps/desktop/e2e/` | **Partial**: separate three-platform diagnostic workflow added, native macOS exercised locally, hosted builds and full cross-platform runtime checks pending |
-| Size and RAM | `packages/testkit/src/cli/desktop-performance.ts`: existing harness launches Electron directly | **Partial**: current macOS app/DMG sizes and idle RSS recorded below, full-feature, multi-scenario and Windows/Linux acceptance pending |
+| Size and RAM | `packages/testkit/src/cli/desktop-performance.ts`: removed harness launched Electron directly | **Partial**: current macOS app/DMG sizes and idle RSS recorded below, full-feature, multi-scenario and Windows/Linux acceptance pending |
 
 ## Native trust boundary
 
@@ -156,7 +155,7 @@ For a local configured build, use placeholders like these with your own values:
 ORKBOT_ENABLE_AUTO_UPDATE=1 \
 TAURI_UPDATER_ENDPOINT=https://updates.example.com/latest.json \
 TAURI_UPDATER_PUBLIC_KEY='<Tauri minisign public key>' \
-pnpm --filter @orkbot/desktop tauri:build
+pnpm --filter @orkbot/desktop bundle
 ```
 
 No endpoint or key is tracked. Configured, packaged release builds check after 30 seconds

@@ -1,6 +1,6 @@
 # Tool activity
 
-Bot replies in the web app and the Electron desktop app can show a small card listing the
+Bot replies in the web app and the Tauri desktop app can show a small card listing the
 tools the bot called during the run.
 
 ## Behavior
@@ -27,7 +27,7 @@ API responses are the same with it on or off.
 | Surface | Status |
 | --- | --- |
 | Web | Supported |
-| Electron desktop | Supported (hosts the web UI, stores the choice in its own local storage) |
+| Tauri desktop | Supported (hosts the web UI, stores the choice in its own local storage) |
 | Expo mobile | Not included. Mobile keeps hiding tool activity, which is the previous behavior, so nothing changes there. |
 
 ## Tests

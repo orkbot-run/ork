@@ -4,6 +4,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+declare const __ORKBOT_DEFAULT_SERVER__: string;
+
 type StackState = {
   phase:
     | "idle"
@@ -59,7 +61,7 @@ const showStack = (state: StackState) => {
   details.hidden = state.output.length === 0;
 };
 
-input.value = "https://app.orkbot.run";
+input.value = __ORKBOT_DEFAULT_SERVER__;
 Promise.all([
   invoke<{ serverUrl: string | null; mode: "existing" | "new" }>("setup_state"),
   listen<StackState>("desktop-stack-changed", (event) => showStack(event.payload)),

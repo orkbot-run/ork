@@ -1,5 +1,5 @@
 /**
- * One classifier for local, private, and non-public hosts. Pure TypeScript so web, Electron,
+ * One classifier for local, private, and non-public hosts. Pure TypeScript so web, desktop,
  * Expo, and the server share it.
  *
  * Address predicates take an IP literal (brackets, case, and an IPv6 zone are tolerated).

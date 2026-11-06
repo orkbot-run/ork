@@ -25,32 +25,17 @@ Windows and Linux).
 > A local server keeps running after you quit the app, so routines still run. Choose
 > **Stop Local Stack** in the app menu to shut it down.
 
-## Let bots use this computer
+## Native feature availability
 
-The desktop app can give bots access to the computer it runs on, to run commands and work with your
-files.
-
-- With **This computer**, the app asks **Where should bots run?** Choose **Docker** to keep bots in
-  their own isolated computers, or **Use this Mac** (**Use this computer** on Windows and Linux) to
-  let them work directly on yours. **Computer Access…** in the app menu changes this later, and
-  **Revoke Local Computer Access** turns it off.
-- With any server, turn on **Let bots use this computer** in **Settings → General** under
-  **Computers**. Your computer then shows as **Connected** or **Offline** there. Access belongs to
-  the account that turned it on and ends when that account signs out, resets its password or signs
-  out everywhere. Signing back in to the same account restores it without asking again.
-
-Either way, the app asks **Allow bots to use this computer?** before access is granted. See
-[The bot's computer](./computer.md#use-your-own-computer).
-
-> [!WARNING]
-> With **Use this Mac**, bots can run commands without asking. Don't choose it for a server other
-> people use.
+Tauri is now the desktop runtime. Local host control, screen control and native passkeys
+remain unavailable while their native transports and platform permissions are completed.
+The selected server still provides its configured bot computers. See
+[migration status](./desktop-tauri-migration.md) for the feature inventory.
 
 ## Updates
 
-The app checks for updates and downloads them in the background. When one is ready, an
-**Install update** button appears at the bottom of the sidebar, or choose **Restart** when asked.
-**Check for Updates…** in the app menu checks now.
+Current diagnostic builds do not have a configured signed update feed. Install a newer
+Tauri package manually. Automatic updates remain disabled by default.
 
 ## Shortcuts
 

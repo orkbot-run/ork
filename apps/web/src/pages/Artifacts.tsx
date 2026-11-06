@@ -217,7 +217,7 @@ export function ArtifactsPage() {
         {/* Wraps so window controls and the way back stay on screen with Filters. */}
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="flex items-center gap-2">
-            {/* This route is the window's leading edge, so Electron window controls sit in the header. */}
+            {/* This route is the window's leading edge, so desktop window controls sit in the header. */}
             {desktopBridge() ? <WindowChrome /> : null}
             <Link
               to="/app"

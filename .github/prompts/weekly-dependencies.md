@@ -7,7 +7,7 @@ and apply worthwhile patch releases. You own the investigation, edits, lockfile,
 compatibility fixes, and validation; no dependency list is prescribed.
 
 Preserve intentional compatibility constraints: TypeScript 6 in Expo/Astro,
-Expo's supported React/native versions, and patched Electron Builder. Leave the
+Expo's supported React/native versions, and Tauri's platform prerequisites. Leave the
 pi model-catalog packages to the existing model-catalog-bump workflow. Defer
 major/minor migrations and anything that needs a newer supported Node baseline.
 If an update breaks compatibility, omit it rather than weakening checks.
@@ -17,7 +17,7 @@ so validation covers CI's Node baseline. Keep package caches inside the ignored
 `.cache/` directory if the sandbox needs a writable cache.
 Install dependencies, generate the database client, and run workspace typechecks,
 affected offline unit tests, and production builds. Use fake build credentials as
-in CI. Run Linux host-script checks; leave desktop Electron E2E to CI and report
+in CI. Run Linux host-script checks; keep native desktop window checks headless and report
 that limit. Check supported Node versions and run
 focused tests for any fixes. Keep fixes strictly related to the updates. Do not
 change workflows, agent instructions, secrets, or unrelated code. Do not run

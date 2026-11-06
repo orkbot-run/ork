@@ -69,11 +69,11 @@ describe("window chrome", () => {
     expect(windowChromeKind(undefined)).toBe("spacer");
   });
 
-  it("leaves macOS traffic lights to Electron", () => {
+  it("leaves macOS traffic lights to the desktop runtime", () => {
     expect(windowChromeKind(desktop("darwin"))).toBe("darwin");
   });
 
-  it("leaves the native Windows frame to Electron when advertised", () => {
+  it("leaves the native Windows frame to the desktop runtime when advertised", () => {
     expect(windowChromeKind({ ...desktop("win32"), nativeWindowFrame: true })).toBe("spacer");
   });
 
