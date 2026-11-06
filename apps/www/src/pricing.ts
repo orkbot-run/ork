@@ -13,6 +13,7 @@ import {
   TRIAL_SANDBOX_ALLOWANCE_CENTS,
 } from "@orkbot/contracts";
 import { APP_URL, SELF_HOST_GUIDE_PATH } from "./site";
+import { COMMERCIAL_DESCRIPTION } from "./licensing";
 
 /** Whole dollars when the amount is round ("$15"), otherwise cents ("$12.50"). */
 function dollars(cents: number) {
@@ -219,7 +220,9 @@ ${PRICING_PLANS.slice(0, 1).map(planMarkdown).join("\n\n")}
 
 ## Commercial self-hosting
 
-Commercial use of new Ork work, including internal business automation, requires a paid license. Pricing is quoted individually. [Licensing and contact](https://orkbot.run/license/).
+${COMMERCIAL_DESCRIPTION}
+
+[Licensing and contact](https://orkbot.run/license/).
 
 You pay the model, computer, and integration providers you choose to use.
 `;

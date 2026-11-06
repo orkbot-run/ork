@@ -3,10 +3,10 @@
 import { GITHUB_URL, SITE_URL } from "./site";
 
 export const LICENSE_DESCRIPTION =
-  "Ork licensing: the Apache-2.0 baseline, PolyForm Noncommercial for new Ork work, and paid commercial licensing.";
+  "Ork licensing: PolyForm Noncommercial for new work, the preserved Apache-2.0 baseline, and proposed monthly commercial subscriptions per user.";
 
 export const LICENSE_INTRO =
-  "Ork is source-available. The Rakazo code and Ork material already published under Apache-2.0 keep that license. New Ork work is offered under PolyForm Noncommercial 1.0.0 or a separate paid commercial license.";
+  "New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Existing Apache-2.0 material keeps its license. Ork is source-available.";
 
 export const LICENSE_FAQS = [
   {
@@ -20,14 +20,24 @@ export const LICENSE_FAQS = [
       "Internal use does not automatically qualify as noncommercial. A for-profit business using new Ork work for customer support, sales, paid services, or its own business automation needs a paid commercial license unless the actual use is already permitted by PolyForm Noncommercial. Being a company alone does not decide the purpose.",
   },
   {
-    question: "What about a hosted service or a product built on Ork?",
+    question: "Can I use one seat on several servers?",
     answer:
-      "For commercial hosting, resale, or a paid product that includes new Ork work, ask for a separate agreement covering your intended deployment and distribution before using that work commercially.",
+      "Under the proposed terms, the same person can use one seat across the deployments covered by the order. Seats cannot be shared. To reassign one, remove the previous person's access from every covered deployment first.",
   },
   {
-    question: "Does this restrict Rakazo or earlier Apache releases?",
+    question: "What happens when I cancel?",
     answer:
-      "No. Rakazo remains Apache-2.0, and licenses already granted for earlier Ork releases remain available under their original terms. The exact Apache baseline is recorded in LICENSE.md. The new restrictions cover new Ork work after that baseline. Existing third-party notices also remain in force.",
+      "The proposed agreement keeps a cancelled seat active until the paid month ends. Commercial rights under that subscription then end, while rights held independently under Apache, PolyForm, or third-party licenses remain in place.",
+  },
+  {
+    question: "What about a hosted service or a product built on Ork?",
+    answer:
+      "Hosting is a separate service. The proposed subscription permits customer hosting when the order covers it and every person using Ork commercially has a seat. Embedding, software resale, and competing products need a separate agreement under the commercial grant. Independent rights under Apache, PolyForm, and third-party licenses remain unchanged.",
+  },
+  {
+    question: "Does this restrict earlier Apache releases?",
+    answer:
+      "Earlier Apache grants remain valid, including for commercial use. LICENSE.md records the Apache baseline. The subscription covers only the Ork work that needs a separate commercial grant, and third-party notices still apply.",
   },
   {
     question: "Is Ork open source?",
@@ -42,7 +52,7 @@ export const LICENSE_FAQS = [
 ] as const;
 
 export const COMMERCIAL_DESCRIPTION =
-  "Commercial licenses are quoted individually. The written agreement must identify the licensor and customer, the covered Ork work, permitted deployments, distribution rights, term, and price. Commercial rights start only under an executed agreement.";
+  "The proposed commercial subscription is billed monthly per named user. One seat covers that person's web, desktop, and mobile use on deployments included in the same order. Bots do not require seats. Hosting and model services are separate. The price has not been set, and subscriptions are not available for purchase yet.";
 
 export const LEGAL_REVIEW_STATUS =
   "This licensing update and the commercial agreement draft are pending legal review. This page does not grant commercial rights or confirm legal approval.";

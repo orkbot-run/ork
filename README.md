@@ -36,16 +36,6 @@ The product name is Ork. Workspace packages use `@orkbot/*`, configuration uses 
 
 GitHub Actions workflows are active under `.github/workflows/`. CI, test reports, image publishing, and diagnostic native builds use GitHub infrastructure. [GitHub Actions configuration](./docs/github-actions.md) lists the accounts and credentials needed for signed releases, store submissions, OTA, deployment, and optional integrations.
 
-Keep `origin` pointed at `orkbot-run/ork` and `upstream` at the original source repository:
-
-```bash
-git fetch upstream main
-# Review upstream changes before merging them into your Ork branch.
-git log --oneline HEAD..upstream/main
-```
-
-Until Ork has an `origin/main` branch, the development script uses `upstream/main` as its migration baseline. The initial import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`. Historical SQL migrations and cryptographic contexts keep their original identifiers so existing data remains readable.
-
 ## Checks and reference
 
 ```bash
@@ -62,19 +52,22 @@ Production-backup tests use Linux tools such as `flock` and GNU `find`. Run that
 
 ## License and attribution
 
-Ork is based on [Rakazo](https://github.com/elie222/rakazo), Copyright 2026 Rakazo
-contributors. Rakazo and the existing Apache baseline remain under
-[Apache 2.0](./LICENSE). New Ork work is offered under
-[PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM), with a paid commercial license
-available by separate agreement. Ork modifications: Copyright 2026 Ork contributors.
+New Ork work uses [PolyForm Noncommercial 1.0.0](./LICENSE-POLYFORM), with a
+separate commercial license. Existing [Apache-2.0](./LICENSE) material keeps its
+license. The combined product is source-available.
 
 Self-hosting is free for purposes permitted by PolyForm. Internal work for a
 for-profit business requires a commercial license for the PolyForm-covered work
 unless PolyForm expressly permits the use or applicable law allows it.
-Earlier Apache grants remain valid. The combined product is source-available,
-and its PolyForm parts are not OSI open source.
+Earlier Apache grants remain valid.
 
 Read the [license map](./LICENSE.md), [attribution](./NOTICE), and
-[FAQ](./docs/licensing-faq.md). Pricing is by individual quotation. The
+[FAQ](./docs/licensing-faq.md). The proposed commercial subscription is billed
+monthly per named user, across web, desktop, and mobile. Bots do not require
+seats, and hosting is separate. The per-user price has not been set. The
 [commercial agreement](./docs/commercial-license.md) and [CLA](./docs/cla/v1.md)
-are drafts pending legal review and activation.
+remain drafts pending legal review and activation. Subscriptions are not yet
+available for purchase.
+
+Copyright 2026 Ork contributors. Includes Apache-2.0 material, Copyright 2026
+Rakazo contributors. See [NOTICE](./NOTICE) for provenance and required notices.

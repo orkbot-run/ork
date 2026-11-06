@@ -18,7 +18,7 @@ putting personal or customer information in the public repository.
 
 Confirm the chain of rights for each new Ork contribution intended for commercial
 licensing. Prior Apache grants remain valid. The frozen Apache baseline is
-`7efb3c5e202ddb4a4da3cd07904cba7da4613d18`. The original Rakazo import is
+`7efb3c5e202ddb4a4da3cd07904cba7da4613d18`. The original import is
 `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`. This implementation keeps the existing
 baseline on Apache and applies PolyForm to new original work. It does not attempt
 to classify old automated renames as newly owned copyright.
@@ -28,6 +28,14 @@ commercial agreement for PolyForm-covered work unless PolyForm expressly
 permits the use or applicable law allows it. Do not advertise a general free
 business-use exception. Preserve PolyForm's actual permissions for noncommercial
 purposes and its listed noncommercial organizations regardless of their funding.
+
+The proposed commercial model is a monthly subscription per named user, shared
+across that person's web, desktop, and mobile clients on deployments covered by
+the order. Bots are not seats. Counsel must review billing, cancellation, seat
+changes, customer hosting, and the scope of separately negotiated distribution
+rights. Agree the per-seat price and licensor privately before offering sales.
+The current draft is not a checkout, payment integration, or license activation
+service. Do not advertise subscriptions as available until those steps are done.
 
 ## Activate the contributor agreement
 

@@ -146,7 +146,7 @@ The [self-hosting guide](https://orkbot.run/self-hosted-ai-agent/) covers deploy
 
 export const TERMS_MARKDOWN = `# Ork terms
 
-The Rakazo and existing Ork baseline remains under the [Apache License, Version 2.0](${GITHUB_URL}/blob/main/LICENSE). New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Read the [license scope and commercial terms](https://orkbot.run/license/) before using that work.
+Existing Apache-2.0 material keeps its terms under the [Apache License, Version 2.0](${GITHUB_URL}/blob/main/LICENSE). New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Read the [license scope and commercial terms](https://orkbot.run/license/) before using that work.
 
 This page does not create a paid subscription or a hosted-service agreement. A server operator is responsible for the terms applying to a deployment they offer.
 

@@ -5,19 +5,19 @@
 
 Ork combines Apache-licensed material with new source-available work. New Ork
 work is offered under [PolyForm Noncommercial 1.0.0](LICENSE-POLYFORM), with a
-separate paid commercial license available by agreement. PolyForm Noncommercial
+proposed monthly commercial license priced per named user. PolyForm Noncommercial
 is not an OSI-approved open source license.
 
 ## Which terms apply
 
 | Material | Terms |
 | --- | --- |
-| Rakazo code and other material already in the Apache baseline described below | [Apache License 2.0](LICENSE), subject to any existing third-party notices |
+| Material already in the Apache baseline described below | [Apache License 2.0](LICENSE), subject to any existing third-party notices |
 | New Ork files marked `PolyForm-Noncommercial-1.0.0` | [PolyForm Noncommercial 1.0.0](LICENSE-POLYFORM), or a separate signed commercial agreement |
 | New Ork changes in an inherited file marked `Apache-2.0 AND PolyForm-Noncommercial-1.0.0` | Apache for the inherited material, PolyForm Noncommercial for the new Ork changes, or a separate commercial agreement covering those changes |
 | Imported libraries, fonts, generated material, and other third-party assets | Their own licenses and notices, which this document does not replace |
 
-The Rakazo import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`.
+The original import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`.
 The Apache baseline for this transition is Ork commit
 `7efb3c5e202ddb4a4da3cd07904cba7da4613d18`. Its existing material, including the
 Ork changes already distributed there, keeps its existing terms. Unmarked
@@ -47,9 +47,17 @@ applicable law allows it.
 The license text controls, including its express permission for listed
 noncommercial organizations regardless of their funding.
 
+The proposed commercial subscription charges monthly for each named person
+(a seat), across the web, desktop, and mobile clients on deployments covered by
+the order. Bots do not count as seats. Hosting and model services are separate
+costs. Commercial use on your own server still requires seats for the people
+using the PolyForm-covered work, unless their use is independently permitted.
+
 The [FAQ](docs/licensing-faq.md) gives examples. The
-[commercial license draft](docs/commercial-license.md) is for legal review.
-Pricing is by individual quotation. To request a private sales contact, open a
+[commercial license draft](docs/commercial-license.md) describes monthly billing,
+seat assignment, and cancellation. It is pending legal review, and paid
+subscriptions are not available for purchase yet. The per-seat price will be
+agreed in the order. To request a private sales contact, open a
 [licensing inquiry](https://github.com/orkbot-run/ork/issues/new) without personal,
 customer, or contractual information. No paid rights are granted until an
 agreement identifies the parties, covered software, scope, price, and term.

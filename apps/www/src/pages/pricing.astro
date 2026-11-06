@@ -6,6 +6,7 @@ import Header from "../components/Header.astro";
 import PlanCard from "../components/PlanCard.astro";
 import { githubStarsLabel } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
+import { COMMERCIAL_DESCRIPTION, LICENSE_DESCRIPTION } from "../licensing";
 import { PRICING_PLANS } from "../pricing";
 
 const starsLabel = await githubStarsLabel();
@@ -14,7 +15,7 @@ const starsLabel = await githubStarsLabel();
 <BaseLayout
   title="Pricing · Ork"
   markdownAlternate="/pricing.md"
-  description="Self-host Ork for permitted noncommercial use. Commercial licensing for new Ork work is quoted individually."
+  description={LICENSE_DESCRIPTION}
 >
   <div class="container">
     <Header starsLabel={starsLabel} />
@@ -28,8 +29,8 @@ const starsLabel = await githubStarsLabel();
         }
       </div>
       <h2>Commercial self-hosting</h2>
-      <p>New Ork work requires a paid license for commercial use, including internal business automation.</p>
-      <p>Pricing is quoted individually. <a href="/license/#commercial">Request commercial terms</a>.</p>
+      <p>{COMMERCIAL_DESCRIPTION}</p>
+      <p><a href="/license/#commercial">Review commercial terms</a>.</p>
     </main>
     <Footer />
   </div>

@@ -49,7 +49,7 @@ business, selling hosted access, embedding Ork in a paid product, and providing
 paid automation or consulting with it. The intended purpose matters. Charging
 zero for an offering does not establish that its purpose is noncommercial.
 
-## Can I use the original Rakazo code commercially?
+## Can I use the Apache baseline commercially?
 
 Yes, under [Apache 2.0](../LICENSE). That includes the Apache material in the
 baseline identified in [LICENSE.md](../LICENSE.md). The new policy does not
@@ -71,12 +71,41 @@ PolyForm restricts commercial purposes and is not an OSI-approved open source
 license. Describe the combined product as source-available and link to its
 license map.
 
-## What does a commercial license cost?
+## How does the commercial subscription work?
 
-Pricing is by individual quotation. The scope can include internal deployment,
-hosting for customers, or redistribution, as agreed in writing. The
-[commercial terms](commercial-license.md) are a draft for legal review. A
-download, inquiry, or contributor signature does not create a commercial license.
+The proposed subscription is billed monthly for each named person, called a
+seat. That person can use the web, desktop, and mobile clients on the
+deployments covered by the order. Bots do not count as seats. A seat cannot be
+shared, and the same person does not need another seat for each device or
+covered server.
+
+The per-seat price has not been set. The
+[commercial agreement](commercial-license.md) remains a draft for legal review,
+and subscriptions are not available for purchase yet. Rights begin only after
+the agreement is finalized, accepted, and paid as agreed.
+
+## What happens when I cancel or change seats?
+
+Under the proposed terms, cancellation takes effect at the end of the paid
+month. Additional seats are charged for the remainder of that month, and seat
+reductions take effect at renewal. Before assigning a seat to another person,
+remove the previous person's access from every deployment covered by the order.
+
+## Does the license include hosting or AI services?
+
+Hosting, model access, and other services are separate from the commercial
+license. Running your own server does not remove the seat requirement for
+commercial use of PolyForm-covered work.
+
+## Can I host Ork for customers or include it in my product?
+
+The proposed standard subscription permits hosted access for named users when
+the order covers the service and every person using Ork commercially has a
+seat. Embedding, software resale, and competing products need a separate written
+agreement. These commercial terms do not reduce rights independently granted
+by Apache, PolyForm, or third-party licenses.
+
+## How do I request commercial terms?
 
 Request a private sales channel through a
 [licensing inquiry](https://github.com/orkbot-run/ork/issues/new). Keep personal,
