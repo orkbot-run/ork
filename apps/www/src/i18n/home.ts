@@ -38,6 +38,7 @@ export type HomeCopy = {
     copyWordmark: string;
     brandKit: string;
   };
+  positioning: { label: string; local: string; server: string; note: string };
   hero: {
     eyebrow: string;
     heading: string;
@@ -904,14 +905,14 @@ const TESTIMONIALS: HomeCopy["testimonials"]["items"] = [];
 
 const HOME_COPY: Record<Locale, HomeCopy> = {
   pl: {
-    title: "Ork | Alternatywa dla Grok Bot z dostępnym kodem",
+    title: "Ork | Prywatny asystent AI lokalnie lub na własnym serwerze",
     description:
-      "Ork to alternatywa dla Grok Bot z dostępnym kodem. Boty AI z własną pamięcią wykonują zadania na Twoim komputerze, z wybranym przez Ciebie modelem.",
-    ogImageAlt: "Ork. Twój zespół AI na Twoim komputerze, z Twoimi kluczami i modelem.",
+      "Ork to asystent AI z naciskiem na prywatność. Uruchom boty lokalnie lub na własnym serwerze. Wybierz model do researchu, e-maili i pracy nad kodem.",
+    ogImageAlt: "Ork. Zespół AI z naciskiem na prywatność, na Twoim komputerze lub serwerze.",
     availableLanguage: "Polish",
     skipToContent: "Przejdź do treści",
     nav: {
-      home: "Strona głównan Ork",
+      home: "Strona główna Ork",
       primary: "Nawigacja główna",
       menu: "Menu",
       docs: "Dokumentacja",
@@ -924,10 +925,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Kopiuj logotyp jako SVG",
       brandKit: "Materiały marki",
     },
+    positioning: {
+      label: "Prywatność przede wszystkim. Na własnym serwerze lub lokalnie.",
+      local: "Uruchom lokalnie",
+      server: "Własny serwer",
+      note: "Z lokalnym modelem rozmowy mogą pozostać na Twoim komputerze. Podłączone usługi przetwarzają dane według własnych zasad.",
+    },
     hero: {
       eyebrow: "Dostępny kod źródłowy",
-      heading: "Alternatywa dla Grok Bot z dostępnym kodem",
-      lead: "Zleć botom zadanie. Śledź ich pracę z dowolnego urządzenia.",
+      heading: "Zespół AI. Na Twoich zasadach.",
+      lead: "Uruchom boty na swoim komputerze lub serwerze. Wybierz model i zleć im research, przygotowanie odpowiedzi na e-maile lub pracę nad kodem.",
       getStarted: "Zacznij",
       download: {
         mac: "Pobierz na macOS",
@@ -942,8 +949,8 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Nie udało się skopiować. Spróbuj ponownie.",
     },
     selfHost: {
-      heading: "Na własnym serwerze",
-      copy: "Uruchom Ork na swoim komputerze i wybierz modele dla swoich botów.",
+      heading: "Twój komputer. Albo Twój serwer.",
+      copy: "Uruchom Ork lokalnie lub na serwerze, który kontrolujesz. Podłącz lokalny model albo wybraną usługę z modelami.",
       worksWith: "Współpracuje z",
       mock: {
         weekdays: "W dni robocze o 9:00",
@@ -953,7 +960,7 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       },
       features: [
         { title: "Twój model", body: "Wybierz inny model dla każdego bota." },
-        { title: "Praca według harmonogramu", body: "Działa także wtedy, gdy Twój komputer jest wyłączony." },
+        { title: "Praca według harmonogramu", body: "Wykonuje zaplanowane zadania, gdy komputer lub serwer z Orkiem jest włączony." },
         { title: "Ty ustalasz granice", body: "Zdecyduj, które działania wymagają Twojej zgody." },
       ],
     },
@@ -1068,10 +1075,9 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   en: {
-    title: "Ork | Source-available Grok Bot alternative",
+    title: "Ork | Privacy-first, self-hosted AI assistant",
     description: SITE_DESCRIPTION,
-    ogImageAlt:
-      "Ork. AI teammates you actually own. Your keys, your model, your machine.",
+    ogImageAlt: "Ork. Privacy-first AI teammates on your own computer or server.",
     availableLanguage: "English",
     skipToContent: "Skip to content",
     nav: {
@@ -1088,10 +1094,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Copy wordmark as SVG",
       brandKit: "Brand kit",
     },
+    positioning: {
+      label: "Privacy-first. Self-hosted or local.",
+      local: "Run locally",
+      server: "Self-host",
+      note: "With a local model, conversations can stay on your machine. Connected services follow their own data policies.",
+    },
     hero: {
       eyebrow: "Source available",
-      heading: "Source-available Grok Bot alternative",
-      lead: "Give your bots a job. Check in from any device.",
+      heading: "AI teammates. On your terms.",
+      lead: "Run AI teammates on your own computer or server, with the model you choose, to research a topic, draft email replies or work on your code.",
       getStarted: "Get started",
       download: {
         mac: "Download for macOS",
@@ -1106,13 +1118,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Copy failed. Try again.",
     },
     selfHost: {
-      heading: "Self-hosted",
-      copy: "Your machine, your models, your control.",
+      heading: "Your computer. Or your server.",
+      copy: "Run Ork locally or host it on a server you control. Connect a local model or a model service of your choice.",
       worksWith: "Works with",
       mock: { weekdays: "Weekdays at 9:00", approval: "Approval required", approve: "Approve", deny: "Deny" },
       features: [
         { title: "Your model", body: "Choose a different model for each bot." },
-        { title: "Work on a schedule", body: "Keeps working while your computer is off." },
+        { title: "Work on a schedule", body: "Runs scheduled tasks while the machine hosting Ork is on." },
         { title: "You set the limits", body: "Decide which actions need your approval." },
       ],
     },
@@ -1220,11 +1232,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   de: {
-    title: "Ork | Grok-Bot-Alternative mit verfügbarem Quellcode",
+    title: "Ork | Privater KI-Assistent, lokal oder selbst gehostet",
     description:
-      "Ork ist eine Grok-Bot-Alternative mit einsehbarem Quellcode für dauerhafte KI-Teamkollegen. Deine Schlüssel, dein Modell, deine Maschine.",
-    ogImageAlt:
-      "Ork. KI-Teamkollegen, die dir wirklich gehören. Deine Keys, dein Modell, deine Maschine.",
+      "Ork ist ein KI-Assistent mit Fokus auf Datenschutz. Betreibe Bots lokal oder auf deinem Server und wähle ein Modell für Recherche, E-Mails und Code.",
+    ogImageAlt: "Ork. KI-Teamkollegen mit Fokus auf Datenschutz auf deinem Rechner oder Server.",
     availableLanguage: "German",
     skipToContent: "Zum Inhalt springen",
     nav: {
@@ -1241,10 +1252,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Schriftzug als SVG kopieren",
       brandKit: "Markenkit",
     },
+    positioning: {
+      label: "Datenschutz zuerst. Selbst gehostet oder lokal.",
+      local: "Lokal starten",
+      server: "Selbst hosten",
+      note: "Mit einem lokalen Modell können Gespräche auf deinem Rechner bleiben. Für verbundene Dienste gelten deren eigene Datenschutzregeln.",
+    },
     hero: {
       eyebrow: "Quellcode verfügbar",
-      heading: "Grok-Bot-Alternative mit verfügbarem Quellcode",
-      lead: "Gib deinen Bots eine Aufgabe. Schau von jedem Gerät nach.",
+      heading: "KI-Teamkollegen. Nach deinen Regeln.",
+      lead: "Starte Bots auf deinem eigenen Rechner oder Server. Wähle ein Modell und lass sie recherchieren, E-Mail-Antworten entwerfen oder an deinem Code arbeiten.",
       getStarted: "Loslegen",
       download: {
         mac: "Für macOS laden",
@@ -1259,13 +1276,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Kopieren fehlgeschlagen. Erneut versuchen.",
     },
     selfHost: {
-      heading: "Self-hosted",
-      copy: "Deine Maschine, deine Modelle, deine Kontrolle.",
+      heading: "Dein Rechner. Oder dein Server.",
+      copy: "Betreibe Ork lokal oder auf einem Server, den du kontrollierst. Verbinde ein lokales Modell oder einen Modelldienst deiner Wahl.",
       worksWith: "Funktioniert mit",
       mock: { weekdays: "Mo–Fr um 9:00", approval: "Freigabe erforderlich", approve: "Genehmigen", deny: "Ablehnen" },
       features: [
         { title: "Dein Modell", body: "Wähle für jeden Bot ein anderes Modell." },
-        { title: "Arbeitet nach Zeitplan", body: "Arbeitet weiter, auch wenn dein Computer aus ist." },
+        { title: "Arbeitet nach Zeitplan", body: "Führt geplante Aufgaben aus, solange der Rechner oder Server mit Ork läuft." },
         { title: "Du setzt die Grenzen", body: "Bestimme, welche Aktionen deine Freigabe brauchen." },
       ],
     },
@@ -1377,10 +1394,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   ko: {
-    title: "Ork | 소스를 확인할 수 있는 Grok Bot 대안",
+    title: "Ork | 개인정보 보호 중심의 로컬·셀프 호스팅 AI 비서",
     description:
-      "Ork는 소스를 확인할 수 있는 Grok Bot 대안입니다. 지속형 AI 팀원이 선택한 모델로 내 컴퓨터에서 작업합니다.",
-    ogImageAlt: "Ork. 진짜로 내 것인 AI 팀원. 키, 모델, 머신, 모두 당신 것.",
+      "Ork는 개인정보 보호를 우선하는 AI 비서입니다. 내 컴퓨터나 서버에서 봇을 실행하고 조사, 이메일, 코딩에 쓸 모델을 선택하세요.",
+    ogImageAlt: "Ork. 내 컴퓨터나 서버에서 실행하는 개인정보 보호 중심의 AI 팀원.",
     availableLanguage: "Korean",
     skipToContent: "본문으로 건너뛰기",
     nav: {
@@ -1397,10 +1414,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "워드마크를 SVG로 복사",
       brandKit: "브랜드 키트",
     },
+    positioning: {
+      label: "개인정보 보호 우선. 직접 호스팅하거나 로컬에서.",
+      local: "로컬에서 실행",
+      server: "직접 호스팅",
+      note: "로컬 모델을 사용하면 대화를 내 컴퓨터에 보관할 수 있습니다. 연결한 서비스에는 각 서비스의 데이터 정책이 적용됩니다.",
+    },
     hero: {
       eyebrow: "소스 공개",
-      heading: "소스를 확인할 수 있는 Grok Bot 대안",
-      lead: "봇에게 일을 맡기세요. 어떤 기기에서든 확인하세요.",
+      heading: "AI 팀원. 내 방식대로.",
+      lead: "내 컴퓨터나 서버에서 봇을 실행하세요. 모델을 선택하고 조사, 이메일 답장 초안 작성, 코드 작업을 맡기세요.",
       getStarted: "시작하기",
       download: {
         mac: "macOS용 다운로드",
@@ -1415,13 +1438,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "복사 실패. 다시 시도하세요.",
     },
     selfHost: {
-      heading: "셀프 호스트",
-      copy: "컴퓨터도, 모델도, 제어권도 내 손에.",
+      heading: "내 컴퓨터에서. 또는 내 서버에서.",
+      copy: "Ork를 로컬이나 직접 관리하는 서버에서 실행하세요. 로컬 모델 또는 원하는 모델 서비스에 연결할 수 있습니다.",
       worksWith: "지원 모델·서비스",
       mock: { weekdays: "평일 9:00", approval: "승인 필요", approve: "승인", deny: "거부" },
       features: [
         { title: "원하는 모델", body: "봇마다 다른 모델을 선택하세요." },
-        { title: "예약한 시간에 실행", body: "컴퓨터가 꺼져 있어도 계속 일합니다." },
+        { title: "예약한 시간에 실행", body: "Ork를 호스팅하는 컴퓨터나 서버가 켜져 있는 동안 예약 작업을 실행합니다." },
         { title: "내가 정하는 권한", body: "승인이 필요한 작업을 정하세요." },
       ],
     },
@@ -1533,10 +1556,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   zh: {
-    title: "Ork | 源码可查看的 Grok Bot 替代品",
+    title: "Ork | 隐私优先的本地与自托管 AI 助手",
     description:
-      "Ork 是源码可查看的 Grok Bot 替代品。持久化 AI 队友使用你选择的模型，在你自己的机器上执行任务。",
-    ogImageAlt: "Ork：真正属于你的 AI 队友。密钥、模型、机器，都归你所有。",
+      "Ork 是注重隐私的 AI 助手。在自己的电脑或服务器上运行机器人，选择模型，让它们查资料、起草邮件回复或处理代码。",
+    ogImageAlt: "Ork。在自己的电脑或服务器上运行，注重隐私的 AI 队友。",
     availableLanguage: "Chinese",
     skipToContent: "跳到主要内容",
     nav: {
@@ -1553,10 +1576,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "复制 SVG 格式文字标识",
       brandKit: "品牌资源",
     },
+    positioning: {
+      label: "隐私优先。自行托管或本地运行。",
+      local: "本地运行",
+      server: "自行托管",
+      note: "使用本地模型时，对话可以保留在你的电脑上。所连接的服务遵循各自的数据政策。",
+    },
     hero: {
       eyebrow: "源码可查看",
-      heading: "源码可查看的 Grok Bot 替代品",
-      lead: "把工作交给 Bot，随时用任意设备查看。",
+      heading: "AI 队友。由你做主。",
+      lead: "在自己的电脑或服务器上运行机器人。选择模型，让它们查资料、起草邮件回复或处理代码。",
       getStarted: "开始使用",
       download: {
         mac: "下载 macOS 版",
@@ -1571,13 +1600,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "复制失败。请重试。",
     },
     selfHost: {
-      heading: "自托管",
-      copy: "电脑、模型、控制权，都归你。",
+      heading: "你的电脑。或你的服务器。",
+      copy: "在本地或自己控制的服务器上运行 Ork。连接本地模型或你选择的模型服务。",
       worksWith: "支持",
       mock: { weekdays: "工作日 9:00", approval: "需要审批", approve: "批准", deny: "拒绝" },
       features: [
         { title: "自选模型", body: "为每个 Bot 选择不同的模型。" },
-        { title: "按时自动执行", body: "电脑关机时也照常工作。" },
+        { title: "按时自动执行", body: "只要托管 Ork 的电脑或服务器保持运行，就能执行定时任务。" },
         { title: "由你设定权限", body: "决定哪些操作需要你批准。" },
       ],
     },
@@ -1689,11 +1718,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   ja: {
-    title: "Ork | ソースを確認できる Grok Bot 代替ツール",
+    title: "Ork | プライバシー重視のローカル・セルフホスト AI アシスタント",
     description:
-      "Ork はソースを確認できる Grok Bot 代替ツールです。常駐型 AI チームメイトが、選んだモデルを使って自分のマシンで作業します。",
-    ogImageAlt:
-      "Ork。本当に自分のものにできる AI チームメイト。キーもモデルもマシンも、すべてあなたのもの。",
+      "Ork はプライバシーを重視する AI アシスタントです。自分のコンピューターやサーバーでボットを動かし、調査やメール、コードの作業に使うモデルを選べます。",
+    ogImageAlt: "Ork。自分のコンピューターやサーバーで動く、プライバシー重視の AI の仲間。",
     availableLanguage: "Japanese",
     skipToContent: "本文へスキップ",
     nav: {
@@ -1710,10 +1738,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "ワードマークをSVGでコピー",
       brandKit: "ブランドキット",
     },
+    positioning: {
+      label: "プライバシー優先。セルフホストでもローカルでも。",
+      local: "ローカルで実行",
+      server: "セルフホスト",
+      note: "ローカルモデルを使えば、会話を自分のコンピューターに保存できます。接続先のサービスには、それぞれのデータポリシーが適用されます。",
+    },
     hero: {
       eyebrow: "ソースコード公開",
-      heading: "ソースを確認できる Grok Bot 代替ツール",
-      lead: "ボットに仕事を任せて、どのデバイスからでも確認できます。",
+      heading: "AI の仲間。自分のやり方で。",
+      lead: "自分のコンピューターやサーバーでボットを動かせます。モデルを選び、調査やメール返信の下書き、コードの作業を任せましょう。",
       getStarted: "はじめる",
       download: {
         mac: "macOS 版をダウンロード",
@@ -1728,13 +1762,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "コピーできませんでした。もう一度お試しください。",
     },
     selfHost: {
-      heading: "セルフホスト",
-      copy: "マシンもモデルも、コントロールもあなたの手に。",
+      heading: "自分のコンピューター。自分のサーバーでも。",
+      copy: "Ork をローカルや自分で管理するサーバーで実行できます。ローカルモデルや好きなモデルサービスに接続してください。",
       worksWith: "対応サービス",
       mock: { weekdays: "平日 9:00", approval: "承認が必要", approve: "承認", deny: "拒否" },
       features: [
         { title: "好きなモデルで", body: "ボットごとに別のモデルを選べます。" },
-        { title: "スケジュールどおりに実行", body: "コンピューターの電源が切れていても動き続けます。" },
+        { title: "スケジュールどおりに実行", body: "Ork をホストするコンピューターやサーバーの稼働中に、定期タスクを実行します。" },
         { title: "制限はあなたが決める", body: "どの操作に承認が必要かを決められます。" },
       ],
     },
@@ -1846,11 +1880,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "es": {
-    title: "Ork | Alternativa a Grok Bot con código disponible",
+    title: "Ork | Asistente de IA privado, en local o en tu servidor",
     description:
-      "Ork es una alternativa a Grok Bot con código disponible para compañeros de IA persistentes. Tus claves, tu modelo, tu máquina.",
-    ogImageAlt:
-      "Ork. Compañeros de IA que de verdad son tuyos. Tus claves, tu modelo, tu máquina.",
+      "Ork es un asistente de IA centrado en la privacidad. Ejecuta bots en tu equipo o servidor y elige un modelo para investigar, redactar correos y programar.",
+    ogImageAlt: "Ork. Compañeros de IA centrados en la privacidad, en tu ordenador o servidor.",
     availableLanguage: "Spanish",
     skipToContent: "Saltar al contenido",
     nav: {
@@ -1867,10 +1900,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Copiar logotipo de texto como SVG",
       brandKit: "Kit de marca",
     },
+    positioning: {
+      label: "Privacidad primero. En tu servidor o en local.",
+      local: "Ejecutar en local",
+      server: "Alojar en mi servidor",
+      note: "Con un modelo local, las conversaciones pueden quedarse en tu equipo. Los servicios conectados siguen sus propias políticas de datos.",
+    },
     hero: {
       eyebrow: "Código disponible",
-      heading: "Alternativa a Grok Bot con código disponible",
-      lead: "Dale un trabajo a tus bots. Síguelos desde cualquier dispositivo.",
+      heading: "Compañeros de IA. A tu manera.",
+      lead: "Ejecuta bots en tu propio ordenador o servidor. Elige un modelo y encárgales investigar, redactar respuestas a correos o trabajar en tu código.",
       getStarted: "Empezar",
       download: {
         mac: "Descargar para macOS",
@@ -1885,13 +1924,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "No se pudo copiar. Inténtalo de nuevo.",
     },
     selfHost: {
-      heading: "Autoalojado",
-      copy: "Tu máquina, tus modelos, tu control.",
+      heading: "Tu ordenador. O tu servidor.",
+      copy: "Ejecuta Ork en local o en un servidor que controles. Conecta un modelo local o el servicio de modelos que prefieras.",
       worksWith: "Funciona con",
       mock: { weekdays: "Días laborables a las 9:00", approval: "Requiere aprobación", approve: "Aprobar", deny: "Denegar" },
       features: [
         { title: "Tu modelo", body: "Elige un modelo distinto para cada bot." },
-        { title: "Trabaja según un horario", body: "Sigue trabajando con tu computadora apagada." },
+        { title: "Trabaja según un horario", body: "Ejecuta tareas programadas mientras el ordenador o servidor que aloja Ork siga encendido." },
         { title: "Tú pones los límites", body: "Decide qué acciones necesitan tu aprobación." },
       ],
     },
@@ -2003,11 +2042,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "fr": {
-    title: "Ork | Alternative à Grok Bot au code consultable",
+    title: "Ork | Assistant IA privé, en local ou auto-hébergé",
     description:
-      "Ork est une alternative à Grok Bot au code consultable pour des coéquipiers IA persistants. Vos clés, votre modèle, votre machine.",
-    ogImageAlt:
-      "Ork. Des coéquipiers IA qui vous appartiennent vraiment. Vos clés, votre modèle, votre machine.",
+      "Ork privilégie la confidentialité. Lancez vos bots IA en local ou sur votre serveur et choisissez un modèle pour la recherche, les e-mails et le code.",
+    ogImageAlt: "Ork. Des coéquipiers IA axés sur la confidentialité, sur votre ordinateur ou serveur.",
     availableLanguage: "French",
     skipToContent: "Aller au contenu",
     nav: {
@@ -2024,10 +2062,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Copier le logotype en SVG",
       brandKit: "Kit de marque",
     },
+    positioning: {
+      label: "Confidentialité en priorité. Auto-hébergé ou en local.",
+      local: "Lancer en local",
+      server: "Auto-héberger",
+      note: "Avec un modèle local, les conversations peuvent rester sur votre ordinateur. Les services connectés appliquent leurs propres règles de traitement des données.",
+    },
     hero: {
       eyebrow: "Code consultable",
-      heading: "Alternative à Grok Bot au code consultable",
-      lead: "Confiez une mission à vos bots. Suivez-les depuis n’importe quel appareil.",
+      heading: "Des coéquipiers IA. À votre façon.",
+      lead: "Faites tourner vos bots sur votre ordinateur ou votre serveur. Choisissez un modèle et confiez-leur des recherches, des brouillons de réponses aux e-mails ou du code.",
       getStarted: "Commencer",
       download: {
         mac: "Télécharger pour macOS",
@@ -2042,13 +2086,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Échec de la copie. Réessayez.",
     },
     selfHost: {
-      heading: "Auto-hébergé",
-      copy: "Votre machine, vos modèles, votre contrôle.",
+      heading: "Votre ordinateur. Ou votre serveur.",
+      copy: "Exécutez Ork en local ou sur un serveur que vous contrôlez. Connectez un modèle local ou le service de modèles de votre choix.",
       worksWith: "Fonctionne avec",
       mock: { weekdays: "Jours ouvrés à 9:00", approval: "Approbation requise", approve: "Approuver", deny: "Refuser" },
       features: [
         { title: "Votre modèle", body: "Choisissez un modèle différent pour chaque bot." },
-        { title: "Travaille selon un planning", body: "Continue de travailler, même ordinateur éteint." },
+        { title: "Travaille selon un planning", body: "Exécute les tâches planifiées tant que la machine qui héberge Ork reste allumée." },
         { title: "Vous fixez les limites", body: "Décidez quelles actions nécessitent votre approbation." },
       ],
     },
@@ -2160,11 +2204,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "pt-br": {
-    title: "Ork | Alternativa ao Grok Bot com código disponível",
+    title: "Ork | Assistente de IA privado, local ou no seu servidor",
     description:
-      "Ork é uma alternativa ao Grok Bot com código disponível para colegas de IA persistentes. Suas chaves, seu modelo, sua máquina.",
-    ogImageAlt:
-      "Ork. Colegas de IA que são realmente seus. Suas chaves, seu modelo, sua máquina.",
+      "Ork é um assistente de IA com foco em privacidade. Execute bots no seu computador ou servidor e escolha um modelo para pesquisas, e-mails e código.",
+    ogImageAlt: "Ork. Uma equipe de IA com foco em privacidade, no seu computador ou servidor.",
     availableLanguage: "Portuguese",
     skipToContent: "Pular para o conteúdo",
     nav: {
@@ -2181,10 +2224,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Copiar logotipo em texto como SVG",
       brandKit: "Kit de marca",
     },
+    positioning: {
+      label: "Privacidade em primeiro lugar. No seu servidor ou localmente.",
+      local: "Executar localmente",
+      server: "Hospedar no meu servidor",
+      note: "Com um modelo local, as conversas podem ficar no seu computador. Os serviços conectados seguem suas próprias políticas de dados.",
+    },
     hero: {
       eyebrow: "Código disponível",
-      heading: "Alternativa ao Grok Bot com código disponível",
-      lead: "Dê um trabalho aos seus bots. Acompanhe de qualquer dispositivo.",
+      heading: "Uma equipe de IA. Do seu jeito.",
+      lead: "Execute bots no seu computador ou servidor. Escolha um modelo e peça pesquisas, rascunhos de respostas a e-mails ou trabalho no seu código.",
       getStarted: "Começar",
       download: {
         mac: "Baixar para macOS",
@@ -2199,13 +2248,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Falha ao copiar. Tente novamente.",
     },
     selfHost: {
-      heading: "Auto-hospedado",
-      copy: "Sua máquina, seus modelos, seu controle.",
+      heading: "Seu computador. Ou seu servidor.",
+      copy: "Execute o Ork localmente ou em um servidor que você controla. Conecte um modelo local ou o serviço de modelos que preferir.",
       worksWith: "Funciona com",
       mock: { weekdays: "Dias úteis às 9:00", approval: "Aprovação necessária", approve: "Aprovar", deny: "Negar" },
       features: [
         { title: "Seu modelo", body: "Escolha um modelo diferente para cada bot." },
-        { title: "Trabalha com agendamento", body: "Continua trabalhando com seu computador desligado." },
+        { title: "Trabalha com agendamento", body: "Executa tarefas agendadas enquanto o computador ou servidor que hospeda o Ork estiver ligado." },
         { title: "Você define os limites", body: "Decida quais ações precisam da sua aprovação." },
       ],
     },
@@ -2317,11 +2366,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "nl": {
-    title: "Ork | Grok Bot-alternatief met beschikbare broncode",
+    title: "Ork | Privacygerichte AI-assistent, lokaal of zelf gehost",
     description:
-      "Ork is een Grok Bot-alternatief met beschikbare broncode voor blijvende AI-teamgenoten. Jouw sleutels, jouw model, jouw machine.",
-    ogImageAlt:
-      "Ork. AI-teamgenoten die echt van jou zijn. Jouw keys, jouw model, jouw machine.",
+      "Ork is een AI-assistent met privacy voorop. Draai bots op je eigen computer of server en kies een model voor onderzoek, e-mailantwoorden en code.",
+    ogImageAlt: "Ork. AI-teamgenoten met privacy voorop, op je eigen computer of server.",
     availableLanguage: "Dutch",
     skipToContent: "Naar inhoud springen",
     nav: {
@@ -2338,10 +2386,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Woordmerk kopiëren als SVG",
       brandKit: "Merkkit",
     },
+    positioning: {
+      label: "Privacy voorop. Zelf gehost of lokaal.",
+      local: "Lokaal starten",
+      server: "Zelf hosten",
+      note: "Met een lokaal model kunnen gesprekken op je eigen computer blijven. Voor gekoppelde diensten geldt hun eigen gegevensbeleid.",
+    },
     hero: {
       eyebrow: "Broncode beschikbaar",
-      heading: "Grok Bot-alternatief met beschikbare broncode",
-      lead: "Geef je bots een taak. Kijk mee vanaf elk apparaat.",
+      heading: "AI-teamgenoten. Op jouw manier.",
+      lead: "Draai bots op je eigen computer of server. Kies een model en laat ze onderzoek doen, e-mailantwoorden opstellen of aan je code werken.",
       getStarted: "Aan de slag",
       download: {
         mac: "Downloaden voor macOS",
@@ -2356,13 +2410,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Kopiëren mislukt. Probeer het opnieuw.",
     },
     selfHost: {
-      heading: "Zelf gehost",
-      copy: "Jouw machine, jouw modellen, jouw controle.",
+      heading: "Jouw computer. Of jouw server.",
+      copy: "Draai Ork lokaal of op een server die je zelf beheert. Koppel een lokaal model of een modeldienst naar keuze.",
       worksWith: "Werkt met",
       mock: { weekdays: "Werkdagen om 9:00", approval: "Goedkeuring vereist", approve: "Goedkeuren", deny: "Weigeren" },
       features: [
         { title: "Jouw model", body: "Kies voor elke bot een ander model." },
-        { title: "Werkt volgens schema", body: "Blijft werken, ook als je computer uit staat." },
+        { title: "Werkt volgens schema", body: "Voert geplande taken uit zolang de computer of server waarop Ork draait aanstaat." },
         { title: "Jij bepaalt de grenzen", body: "Bepaal welke acties jouw goedkeuring nodig hebben." },
       ],
     },
@@ -2474,11 +2528,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "ru": {
-    title: "Ork | Альтернатива Grok Bot с доступным кодом",
+    title: "Ork | Приватный ИИ-ассистент локально или на своём сервере",
     description:
-      "Ork - альтернатива Grok Bot с доступным кодом для постоянных ИИ-помощников. Ваши ключи, ваша модель, ваша машина.",
-    ogImageAlt:
-      "Ork. ИИ-коллеги, которые действительно принадлежат вам. Ваши ключи, ваша модель, ваш компьютер.",
+      "Ork ставит приватность на первое место. Запускайте ИИ-ботов на своём компьютере или сервере и выбирайте модель для исследований, писем и кода.",
+    ogImageAlt: "Ork. ИИ-команда с приоритетом приватности на вашем компьютере или сервере.",
     availableLanguage: "Russian",
     skipToContent: "Перейти к содержимому",
     nav: {
@@ -2495,10 +2548,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Копировать надпись логотипа в SVG",
       brandKit: "Брендбук",
     },
+    positioning: {
+      label: "Приватность прежде всего. На своём сервере или локально.",
+      local: "Запустить локально",
+      server: "Свой сервер",
+      note: "С локальной моделью переписка может оставаться на вашем компьютере. Подключённые сервисы обрабатывают данные по собственным правилам.",
+    },
     hero: {
       eyebrow: "Исходный код доступен",
-      heading: "Альтернатива Grok Bot с доступным кодом",
-      lead: "Дайте ботам работу. Следите за ней с любого устройства.",
+      heading: "ИИ-команда. По вашим правилам.",
+      lead: "Запускайте ботов на своём компьютере или сервере. Выберите модель и поручите им исследование, черновики ответов на письма или работу с кодом.",
       getStarted: "Начать",
       download: {
         mac: "Скачать для macOS",
@@ -2513,13 +2572,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Не удалось скопировать. Попробуйте ещё раз.",
     },
     selfHost: {
-      heading: "На своём сервере",
-      copy: "Ваш компьютер, ваши модели, ваш контроль.",
+      heading: "Ваш компьютер. Или ваш сервер.",
+      copy: "Запустите Ork локально или на сервере под вашим контролем. Подключите локальную модель или выбранный сервис моделей.",
       worksWith: "Работает с",
       mock: { weekdays: "По будням в 9:00", approval: "Требуется одобрение", approve: "Утвердить", deny: "Запретить" },
       features: [
         { title: "Ваша модель", body: "Выберите свою модель для каждого бота." },
-        { title: "Работа по расписанию", body: "Работает, даже когда компьютер выключен." },
+        { title: "Работа по расписанию", body: "Выполняет задачи по расписанию, пока компьютер или сервер с Ork включён." },
         { title: "Границы задаёте вы", body: "Решайте, какие действия требуют вашего одобрения." },
       ],
     },
@@ -2631,11 +2690,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "tr": {
-    title: "Ork | Kaynak kodu erişilebilir Grok Bot alternatifi",
+    title: "Ork | Gizlilik odaklı, yerel veya kendi sunucunuzda AI asistanı",
     description:
-      "Ork, kalıcı yapay zeka ekip arkadaşları için kaynak kodu erişilebilir bir Grok Bot alternatifidir. Anahtarlarınız, modeliniz, makineniz.",
-    ogImageAlt:
-      "Ork. Gerçekten size ait yapay zekâ ekip arkadaşları. Sizin anahtarlarınız, sizin modeliniz, sizin makineniz.",
+      "Ork, gizlilik odaklı bir AI asistanıdır. Botları kendi bilgisayarınızda veya sunucunuzda çalıştırın. Araştırma, e-posta ve kod için modelinizi seçin.",
+    ogImageAlt: "Ork. Kendi bilgisayarınızda veya sunucunuzda gizlilik odaklı AI ekip arkadaşları.",
     availableLanguage: "Turkish",
     skipToContent: "İçeriğe geç",
     nav: {
@@ -2652,10 +2710,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "Yazı logosunu SVG olarak kopyala",
       brandKit: "Marka kiti",
     },
+    positioning: {
+      label: "Önce gizlilik. Kendi sunucunuzda veya yerel.",
+      local: "Yerel çalıştır",
+      server: "Kendin barındır",
+      note: "Yerel bir modelle konuşmalar bilgisayarınızda kalabilir. Bağladığınız hizmetler kendi veri politikalarını uygular.",
+    },
     hero: {
       eyebrow: "Kaynak kodu erişilebilir",
-      heading: "Kaynak kodu erişilebilir Grok Bot alternatifi",
-      lead: "Botlarınıza bir iş verin. Her cihazdan takip edin.",
+      heading: "AI ekip arkadaşları. Sizin kurallarınızla.",
+      lead: "Botları kendi bilgisayarınızda veya sunucunuzda çalıştırın. Bir model seçin ve araştırma, e-posta yanıtı taslakları veya kod işlerini onlara verin.",
       getStarted: "Başlayın",
       download: {
         mac: "macOS için indir",
@@ -2670,13 +2734,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "Kopyalanamadı. Tekrar deneyin.",
     },
     selfHost: {
-      heading: "Kendi sunucunuzda",
-      copy: "Sizin makineniz, sizin modelleriniz, sizin kontrolünüz.",
+      heading: "Sizin bilgisayarınız. Ya da sunucunuz.",
+      copy: "Ork uygulamasını yerel olarak veya yönettiğiniz bir sunucuda çalıştırın. Yerel bir model ya da seçtiğiniz model hizmetini bağlayın.",
       worksWith: "Şunlarla çalışır",
       mock: { weekdays: "Hafta içi 9:00'da", approval: "Onay gerekli", approve: "Onayla", deny: "Reddet" },
       features: [
         { title: "Sizin modeliniz", body: "Her bot için farklı bir model seçin." },
-        { title: "Zamanlanmış çalışma", body: "Bilgisayarınız kapalıyken bile çalışır." },
+        { title: "Zamanlanmış çalışma", body: "Ork uygulamasını barındıran bilgisayar veya sunucu açık olduğu sürece zamanlanmış görevleri çalıştırır." },
         { title: "Sınırları siz belirlersiniz", body: "Hangi işlemlerin onayınızı gerektirdiğine karar verin." },
       ],
     },
@@ -2788,11 +2852,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "he": {
-    title: "Ork | חלופה ל-Grok Bot עם קוד זמין לעיון",
+    title: "Ork | עוזר AI עם דגש על פרטיות, מקומית או בשרת שלכם",
     description:
-      "Ork הוא חלופה ל-Grok Bot עם קוד זמין לעיון ועמיתי AI מתמשכים. המפתחות, המודל והמחשב בשליטתך.",
-    ogImageAlt:
-      "Ork. עמיתי AI ששייכים לך באמת. המפתחות שלך, המודל שלך, המכונה שלך.",
+      "Ork הוא עוזר AI עם דגש על פרטיות. הפעילו בוטים במחשב או בשרת שלכם ובחרו מודל למחקר, לטיוטות תשובה לאימיילים ולעבודה עם קוד.",
+    ogImageAlt: "Ork. צוות AI עם דגש על פרטיות, במחשב או בשרת שלכם.",
     availableLanguage: "Hebrew",
     skipToContent: "דילוג לתוכן",
     nav: {
@@ -2809,10 +2872,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "העתקת הלוגו הטקסטואלי כ-SVG",
       brandKit: "ערכת מותג",
     },
+    positioning: {
+      label: "פרטיות קודם. בשרת שלכם או מקומית.",
+      local: "הפעלה מקומית",
+      server: "אירוח עצמי",
+      note: "עם מודל מקומי, השיחות יכולות להישאר במחשב שלכם. על שירותים מחוברים חלה מדיניות הנתונים שלהם.",
+    },
     hero: {
       eyebrow: "קוד זמין לעיון",
-      heading: "חלופה ל-Grok Bot עם קוד זמין לעיון",
-      lead: "נותנים לבוטים משימה. מתעדכנים מכל מכשיר.",
+      heading: "צוות AI. בתנאים שלכם.",
+      lead: "הפעילו בוטים במחשב או בשרת שלכם. בחרו מודל ותנו להם לחקור נושא, להכין טיוטות תשובה לאימיילים או לעבוד על הקוד שלכם.",
       getStarted: "להתחיל",
       download: {
         mac: "הורדה ל-macOS",
@@ -2827,13 +2896,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "ההעתקה נכשלה. אפשר לנסות שוב.",
     },
     selfHost: {
-      heading: "באירוח עצמי",
-      copy: "המכונה שלך, המודלים שלך, השליטה שלך.",
+      heading: "המחשב שלכם. או השרת שלכם.",
+      copy: "הפעילו את Ork מקומית או בשרת שבשליטתכם. חברו מודל מקומי או שירות מודלים לבחירתכם.",
       worksWith: "עובד עם",
       mock: { weekdays: "שני עד שישי ב-9:00", approval: "נדרש אישור", approve: "אישור", deny: "דחייה" },
       features: [
         { title: "המודל שלך", body: "אפשר לבחור מודל אחר לכל בוט." },
-        { title: "עבודה לפי לוח זמנים", body: "ממשיך לעבוד גם כשהמחשב שלך כבוי." },
+        { title: "עבודה לפי לוח זמנים", body: "מבצע משימות מתוזמנות כל עוד המחשב או השרת שמארח את Ork פועל." },
         { title: "הגבולות בידיים שלך", body: "קובעים אילו פעולות דורשות את האישור שלך." },
       ],
     },
@@ -2945,11 +3014,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "hi": {
-    title: "Ork | स्रोत कोड उपलब्ध वाला Grok Bot विकल्प",
+    title: "Ork | निजता-केंद्रित AI सहायक, स्थानीय या अपने सर्वर पर",
     description:
-      "Ork स्थायी AI साथियों के लिए स्रोत कोड उपलब्ध वाला Grok Bot विकल्प है। आपकी कुंजियां, आपका मॉडल, आपकी मशीन।",
-    ogImageAlt:
-      "Ork. ऐसे AI साथी जो सच में आपके अपने हैं। आपकी कुंजियाँ, आपका मॉडल, आपकी मशीन।",
+      "Ork निजता को प्राथमिकता देने वाला AI सहायक है। अपने कंप्यूटर या सर्वर पर बॉट चलाएँ और शोध, ईमेल व कोड के लिए मॉडल चुनें।",
+    ogImageAlt: "Ork। आपके कंप्यूटर या सर्वर पर निजता को प्राथमिकता देने वाले AI साथी।",
     availableLanguage: "Hindi",
     skipToContent: "सामग्री पर जाएं",
     nav: {
@@ -2966,10 +3034,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "वर्डमार्क को SVG के रूप में कॉपी करें",
       brandKit: "ब्रांड किट",
     },
+    positioning: {
+      label: "निजता पहले। अपने सर्वर पर या स्थानीय रूप से।",
+      local: "स्थानीय रूप से चलाएँ",
+      server: "अपने सर्वर पर चलाएँ",
+      note: "स्थानीय मॉडल के साथ बातचीत आपके कंप्यूटर पर रह सकती है। जुड़ी सेवाओं पर उनकी अपनी डेटा नीतियाँ लागू होती हैं।",
+    },
     hero: {
       eyebrow: "स्रोत कोड उपलब्ध",
-      heading: "स्रोत कोड उपलब्ध वाला Grok Bot विकल्प",
-      lead: "अपने बॉट्स को काम दें। किसी भी डिवाइस से हाल देखें।",
+      heading: "AI साथी। आपकी शर्तों पर।",
+      lead: "अपने कंप्यूटर या सर्वर पर बॉट चलाएँ। मॉडल चुनें और उन्हें शोध, ईमेल के जवाबों के मसौदे या कोड का काम सौंपें।",
       getStarted: "शुरू करें",
       download: {
         mac: "macOS के लिए डाउनलोड करें",
@@ -2984,13 +3058,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "कॉपी नहीं हो सका। फिर से कोशिश करें।",
     },
     selfHost: {
-      heading: "सेल्फ़-होस्टेड",
-      copy: "आपकी मशीन, आपके मॉडल, आपका नियंत्रण।",
+      heading: "आपका कंप्यूटर। या आपका सर्वर।",
+      copy: "Ork को स्थानीय रूप से या अपने नियंत्रण वाले सर्वर पर चलाएँ। स्थानीय मॉडल या अपनी पसंद की मॉडल सेवा जोड़ें।",
       worksWith: "इनके साथ काम करता है",
       mock: { weekdays: "कार्यदिवस, 9:00 बजे", approval: "अनुमोदन ज़रूरी", approve: "अनुमोदित करें", deny: "अस्वीकार करें" },
       features: [
         { title: "आपका मॉडल", body: "हर बॉट के लिए अलग मॉडल चुनें।" },
-        { title: "शेड्यूल पर काम", body: "आपका कंप्यूटर बंद होने पर भी काम चलता रहता है।" },
+        { title: "शेड्यूल पर काम", body: "जब तक Ork चलाने वाला कंप्यूटर या सर्वर चालू है, तय समय पर काम करता है।" },
         { title: "सीमाएं आप तय करें", body: "तय करें कि किन कार्रवाइयों के लिए आपका अनुमोदन चाहिए।" },
       ],
     },
@@ -3102,10 +3176,10 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
     },
   },
   "zh-tw": {
-    title: "Ork | 原始碼可檢視的 Grok Bot 替代方案",
+    title: "Ork | 隱私優先的本機與自託管 AI 助理",
     description:
-      "Ork 是原始碼可檢視的 Grok Bot 替代方案。持續運作的 AI 隊友使用你選擇的模型，在你的機器上執行工作。",
-    ogImageAlt: "Ork：真正屬於你的 AI 隊友。金鑰、模型、機器，全都屬於你。",
+      "Ork 是重視隱私的 AI 助理。在自己的電腦或伺服器上執行機器人，選擇模型，讓它們查資料、草擬郵件回覆或處理程式碼。",
+    ogImageAlt: "Ork。在自己的電腦或伺服器上執行、重視隱私的 AI 隊友。",
     availableLanguage: "Chinese (Traditional)",
     skipToContent: "跳至主要內容",
     nav: {
@@ -3122,10 +3196,16 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyWordmark: "複製 SVG 格式文字標誌",
       brandKit: "品牌資源",
     },
+    positioning: {
+      label: "隱私優先。自行託管或在本機執行。",
+      local: "在本機執行",
+      server: "自行託管",
+      note: "使用本機模型時，對話可以保留在你的電腦上。所連接的服務遵循各自的資料政策。",
+    },
     hero: {
       eyebrow: "原始碼可檢視",
-      heading: "原始碼可檢視的 Grok Bot 替代方案",
-      lead: "把工作交給機器人，用任何裝置隨時查看。",
+      heading: "AI 隊友。由你作主。",
+      lead: "在自己的電腦或伺服器上執行機器人。選擇模型，讓它們查資料、草擬郵件回覆或處理程式碼。",
       getStarted: "開始使用",
       download: {
         mac: "下載 macOS 版",
@@ -3140,13 +3220,13 @@ const HOME_COPY: Record<Locale, HomeCopy> = {
       copyFailed: "複製失敗，請重試。",
     },
     selfHost: {
-      heading: "自行託管",
-      copy: "機器、模型、控制權，都由你掌握。",
+      heading: "你的電腦。或你的伺服器。",
+      copy: "在本機或自己控制的伺服器上執行 Ork。連接本機模型或你選擇的模型服務。",
       worksWith: "支援",
       mock: { weekdays: "工作日 9:00", approval: "需要核准", approve: "核准", deny: "拒絕" },
       features: [
         { title: "自選模型", body: "為每個機器人選擇不同的模型。" },
-        { title: "依排程執行", body: "電腦關機時也照常工作。" },
+        { title: "依排程執行", body: "只要託管 Ork 的電腦或伺服器持續運作，就能執行排程任務。" },
         { title: "由你設定界線", body: "決定哪些動作需要你核准。" },
       ],
     },

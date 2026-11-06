@@ -3,7 +3,7 @@
 export const SITE_NAME = "Ork";
 export const SITE_URL = "https://orkbot.run";
 export const SITE_DESCRIPTION =
-  "Ork is a source-available Grok Bot alternative for persistent AI teammates. Free for permitted noncommercial use, with paid commercial licensing for new Ork work.";
+  "Ork is a privacy-first AI assistant for local or self-hosted use. Choose your model and give AI teammates email, research and coding tasks. Source available.";
 
 export const APP_URL = "https://app.orkbot.run";
 export const PLUGIN_SUBMISSIONS_URL = `${APP_URL}/api/v1/plugin-submissions`;

@@ -1,4 +1,7 @@
 ---
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors. Inherited layout material remains Apache-2.0.
 import "../styles/global.css";
 import { getMarkdownAlternate } from "../agent-content";
 import {
@@ -10,12 +13,13 @@ import {
   isLocale,
   RTL_LOCALES,
   localeHomePath,
-  type Locale,
 } from "../i18n/locales";
+import type { Locale } from "../i18n/locales";
 import { SITE_NAME, SITE_URL } from "../site";
 
 type Props = {
   title?: string;
+  themeColor?: string;
   description: string;
   structuredData?: object;
   locale?: Locale;
@@ -34,6 +38,7 @@ type Props = {
 
 const {
   title = SITE_NAME,
+  themeColor = "#FDFDFD",
   description,
   structuredData,
   skipLabel = "Skip to content",
@@ -71,7 +76,7 @@ const homeUrls = Object.fromEntries(
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <meta name="robots" content={robots} />
-    <meta name="theme-color" content="#FDFDFD" />
+    <meta name="theme-color" content={themeColor} />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     {canonical && <meta property="og:url" content={canonical} />}
@@ -116,12 +121,6 @@ const homeUrls = Object.fromEntries(
     <link rel="icon" href="/favicon.png" type="image/png" sizes="128x128" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400..700&family=Geist+Mono:wght@400..600&display=swap"
-      rel="stylesheet"
-    />
     {structuredDataJson && <script is:inline type="application/ld+json" set:html={structuredDataJson} />}
     <title>{title}</title>
     <script>

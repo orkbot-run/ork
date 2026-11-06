@@ -1,618 +1,172 @@
 ---
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors. Inherited homepage material remains Apache-2.0.
+import "../styles/home.css";
+import { BRAND_COLORS } from "../brand";
 import { ANDROID_APP_STORE_URL } from "@orkbot/contracts/client-build";
-import Button from "./Button.astro";
 import Footer from "./Footer.astro";
-import GetStartedActions from "./GetStartedActions.astro";
 import Header from "./Header.astro";
-import { LandingBotAvatar } from "./LandingBotAvatar";
-import PhoneMockup from "./PhoneMockup.astro";
 import { ProductDemo } from "./ProductDemo";
-import { demoMessages, getDemoBots } from "../i18n/demo";
-import FeatureIllustration from "./FeatureIllustration.astro";
-import CapabilityIllustration from "./CapabilityIllustration.astro";
-import RepoCard from "./RepoCard.astro";
 import RosterBotAvatar from "./RosterBotAvatar.astro";
+import { demoMessages, getDemoBots } from "../i18n/demo";
+import { HOME_FEATURE_KINDS, HOME_MODEL_PROVIDERS, getHomeCopy } from "../i18n/home";
+import { DEFAULT_LOCALE, LOCALES, LOCALE_HTML_LANG, isLocale, localeHomePath } from "../i18n/locales";
 import type { Locale } from "../i18n/locales";
-import chatgptLogo from "./provider-logos/chatgpt.svg?raw";
-import claudeLogo from "./provider-logos/claude.svg?raw";
-import grokLogo from "./provider-logos/grok.svg?raw";
-import lmStudioLogo from "./provider-logos/lmstudio.svg?raw";
-import ollamaLogo from "./provider-logos/ollama.svg?raw";
-import openRouterLogo from "./provider-logos/openrouter.svg?raw";
-import imessageLogo from "./brand-logos/imessage.svg?raw";
-import slackLogo from "./brand-logos/slack.svg?raw";
-import telegramLogo from "./brand-logos/telegram.svg?raw";
-import whatsappLogo from "./brand-logos/whatsapp.svg?raw";
-import {
-  HOME_CHANNELS,
-  HOME_FEATURE_KINDS,
-  HOME_MODEL_PROVIDERS,
-  getHomeCopy,
-} from "../i18n/home";
-import {
-  DEFAULT_LOCALE,
-  LOCALES,
-  LOCALE_HTML_LANG,
-  isLocale,
-  localeHomePath,
-} from "../i18n/locales";
-import {
-  availableDesktopPlatforms,
-  desktopDownloadHref,
-  fetchDesktopDownloads,
-  fetchRecentChanges,
-  githubStarsLabel,
-} from "../github";
+import { availableDesktopPlatforms, desktopDownloadHref, fetchDesktopDownloads, githubStarsLabel } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { homeStructuredData } from "../structured-data";
-import {
-  APP_URL,
-  GITHUB_URL,
-  IOS_APP_URL,
-  SELF_HOST_GUIDE_PATH,
-  SETUP_PROMPT_URL,
-  SITE_URL,
-} from "../site";
+import { APP_URL, GITHUB_URL, IOS_APP_URL, SELF_HOST_GUIDE_PATH, SETUP_PROMPT_URL, SITE_URL } from "../site";
 
-
-const locale: Locale = isLocale(Astro.currentLocale)
-  ? Astro.currentLocale
-  : DEFAULT_LOCALE;
-
+const locale: Locale = isLocale(Astro.currentLocale) ? Astro.currentLocale : DEFAULT_LOCALE;
 const copy = getHomeCopy(locale);
-const enCopy = getHomeCopy(DEFAULT_LOCALE);
-const availableLanguages = LOCALES.map((supportedLocale) =>
-  getHomeCopy(supportedLocale).availableLanguage
-);
 const homeHref = localeHomePath(locale);
-const [starsLabel, desktopDownloads, recentChanges] = await Promise.all([
-  githubStarsLabel(),
-  fetchDesktopDownloads(),
-  fetchRecentChanges(5),
-]);
-const setupAgentPrompt = `Set up Ork for me. Follow the setup prompt at ${SETUP_PROMPT_URL}`;
+const themeColor = BRAND_COLORS.find((color) => color.name === "Black")?.hex;
+const [starsLabel, desktopDownloads] = await Promise.all([githubStarsLabel(), fetchDesktopDownloads()]);
 const desktopPlatforms = availableDesktopPlatforms(desktopDownloads);
-const PLATFORM_NAMES = { mac: "macOS", windows: "Windows", linux: "Linux" } as const;
-const PROVIDER_LOGOS: Record<string, string> = {
-  Claude: claudeLogo,
-  ChatGPT: chatgptLogo,
-  OpenRouter: openRouterLogo,
-  Grok: grokLogo,
-  Ollama: ollamaLogo,
-  "LM Studio": lmStudioLogo,
-};
-const CHANNEL_LOGOS: Record<(typeof HOME_CHANNELS)[number]["id"], string> = {
-  slack: slackLogo,
-  imessage: imessageLogo,
-  whatsapp: whatsappLogo,
-  telegram: telegramLogo,
-};
-const selfHostOnlyHref = `${SELF_HOST_GUIDE_PATH}#self-host-only`;
-const pageUrl = `${SITE_URL}${homeHref === "/" ? "/" : homeHref}`;
-
+const platformNames = { mac: "macOS", windows: "Windows", linux: "Linux" } as const;
+const setupAgentPrompt = `Set up Ork for me. Follow the setup prompt at ${SETUP_PROMPT_URL}`;
+const pageUrl = new URL(homeHref, SITE_URL).toString();
 const structuredData = homeStructuredData({
   pageUrl,
   title: copy.title,
   description: copy.description,
-  siteDescription: enCopy.description,
+  siteDescription: getHomeCopy(DEFAULT_LOCALE).description,
   inLanguage: LOCALE_HTML_LANG[locale],
   defaultInLanguage: LOCALE_HTML_LANG[DEFAULT_LOCALE],
-  availableLanguages,
+  availableLanguages: LOCALES.map((language) => getHomeCopy(language).availableLanguage),
   faq: copy.faq.items,
 });
 ---
 
-<BaseLayout
-  title={copy.title}
-  description={copy.description}
-  {structuredData}
-  locale={locale}
-  skipLabel={copy.skipToContent}
-  homeAlternates
-  ogImageAlt={copy.ogImageAlt}
->
-  <div class="container">
-    <Header locale={locale} copy={copy.nav} starsLabel={starsLabel} homeHref={homeHref} />
+<BaseLayout {themeColor} title={copy.title} description={copy.description} {structuredData} locale={locale} skipLabel={copy.skipToContent} homeAlternates ogImageAlt={copy.ogImageAlt}>
+  <div class="home-page">
+    <div class="container home-container">
+      <Header locale={locale} copy={copy.nav} starsLabel={starsLabel} homeHref={homeHref} />
+      <main id="main">
+        <section class="home-hero" aria-labelledby="home-heading">
+          <a class="home-kicker" href="#selfhost">
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2 3.5 4.5v5c0 4 6.5 8.5 6.5 8.5s6.5-4.5 6.5-8.5v-5L10 2Z" /><path d="m7 10 2 2 4-4" /></svg>
+            {copy.positioning.label}
+            <span aria-hidden="true">↗</span>
+          </a>
+          <h1 id="home-heading">{copy.hero.heading}</h1>
+          <p class="home-hero__lead">{copy.hero.lead}</p>
+          <div class="home-actions">
+            <a class="button button--primary" href="/docs/self-host/#local-source-checkout" data-attr="hero-selfhost">{copy.positioning.local}<span aria-hidden="true">↗</span></a>
+            <a class="button button--secondary" href={GITHUB_URL} target="_blank" rel="noopener" data-attr="hero-github">{copy.hero.viewOnGithub}<span aria-hidden="true">↗</span></a>
+          </div>
+        </section>
 
-    <main id="main">
-      <script is:inline>
-        (() => {
-          const ua = navigator.userAgent;
-          document.documentElement.dataset.platform =
-            /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)
-              ? "ios"
-              : /Android/.test(ua)
-                ? "android"
-                : /Windows/.test(ua)
-                  ? "windows"
-                  : /Linux|X11/.test(ua) && !/CrOS|aarch64|arm/i.test(ua)
-                    ? "linux"
-                    : /Macintosh/.test(ua)
-                      ? "mac"
-                      : "web";
-          // Chromium freezes the Linux UA at x86_64; the AppImage is x64-only.
-          if (document.documentElement.dataset.platform === "linux") {
-            navigator.userAgentData
-              ?.getHighEntropyValues(["architecture"])
-              .then(({ architecture }) => {
-                if (architecture !== "x86") document.documentElement.dataset.platform = "web";
-              })
-              .catch(() => undefined);
-          }
-        })();
-      </script>
+        <section id="demo" class="home-demo" aria-label={copy.features.heading}>
+          <ProductDemo bots={getDemoBots(locale)} strings={demoMessages(locale)} client:load />
+        </section>
 
-      <section class="hero">
-        <h1>{copy.hero.heading}</h1>
-        <p class="lead">
-          {copy.hero.lead}
-        </p>
-        <GetStartedActions
-          class="hero__actions"
-          copy={copy.hero}
-          placement="hero"
-          githubLabel={copy.openSource.starOnGithub}
-        />
-        <div class="hero__agent-setup">
-          <button
-            class="setup-copy"
-            type="button"
-            data-setup-copy={setupAgentPrompt}
-            data-setup-label={copy.hero.setupWithAgent}
-            data-setup-copied={copy.hero.copiedForAgent}
-            data-setup-failed={copy.hero.copyFailed}
-          >
-            <span class="setup-copy__prefix" aria-hidden="true">$</span>
-            <span class="setup-copy__label">{copy.hero.setupWithAgent}</span>
-            <svg class="setup-copy__icon" viewBox="0 0 24 24" aria-hidden="true">
-              <rect x="8" y="8" width="12" height="12" rx="2"></rect>
-              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
-            </svg>
-          </button>
-        </div>
-      </section>
-
-      <section id="demo">
-        <ProductDemo bots={getDemoBots(locale)} strings={demoMessages(locale)} client:load />
-      </section>
-
-      <section id="roster" class="section">
-        <div class="section-intro">
-          <div class="eyebrow">{copy.roster.eyebrow}</div>
-          <h2 class="section-heading">{copy.roster.heading}</h2>
-          <p class="section-copy">
-            {copy.roster.copy}
-          </p>
-        </div>
-        <div class="card-grid-4">
-          {
-            copy.roster.bots.map((bot) => (
-              <article class="roster-card">
+        <section id="roster" class="home-section home-roster" aria-labelledby="roster-heading">
+          <div class="home-section__intro">
+            <div class="home-section__index" aria-hidden="true">01 / ORK</div>
+            <div>
+              <h2 id="roster-heading">{copy.roster.heading}</h2>
+              <p>{copy.roster.copy}</p>
+            </div>
+          </div>
+          <div class="home-roster__grid">
+            {copy.roster.bots.map((bot) => (
+              <article class="home-bot">
                 <RosterBotAvatar color={bot.color} name={bot.name} />
-                <h3>{bot.name}</h3>
-                <p>{bot.desc}</p>
+                <div><h3>{bot.name}</h3><p>{bot.desc}</p></div>
               </article>
-            ))
-          }
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      <section id="channels" class="section channels">
-        <div class="channels__intro">
-          <h2 class="section-heading">{copy.channels.heading}</h2>
-          <p class="section-copy">{copy.channels.copy}</p>
-          <ul class="channel-list">
-            {
-              HOME_CHANNELS.map((channel) => (
-                <li class="channel-tile">
-                  <span class="channel-tile__logo"><Fragment set:html={CHANNEL_LOGOS[channel.id]} /></span>
-                  <span class="channel-tile__name">{channel.name}</span>
-                  {channel.selfHosted && (
-                    <a class="self-host-tag" href={selfHostOnlyHref}>{copy.selfHost.heading}</a>
-                  )}
-                </li>
-              ))
-            }
-          </ul>
-        </div>
-        <div class="slack-mock" aria-hidden="true">
-          <div class="slack-mock__bar">
-            <span class="slack-mock__logo"><Fragment set:html={slackLogo} /></span>
-            <b># sales</b>
+        <section id="features" class="home-section" aria-labelledby="features-heading">
+          <div class="home-section__intro">
+            <div class="home-section__index" aria-hidden="true">02 / ORK</div>
+            <h2 id="features-heading">{copy.features.heading}</h2>
           </div>
-          <div class="slack-mock__message">
-            <span class="slack-mock__person">AK</span>
-            <div>
-              <div class="slack-mock__name">Avery Kim <time>9:41</time></div>
-              <p><mark>@Sales Outbound</mark> {copy.channels.mock.ask}</p>
-            </div>
-          </div>
-          <div class="slack-mock__message">
-            <img src="/brand/job-bots/sales-outbound.webp" alt="" width="36" height="36" loading="lazy" />
-            <div>
-              <div class="slack-mock__name">Sales Outbound <span class="slack-mock__app">APP</span> <time>9:41</time></div>
-              <p>{copy.channels.mock.reply}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section id="features" class="section">
-        <div class="section-intro">
-          <h2 class="section-heading">{copy.features.heading}</h2>
-        </div>
-        <div class="card-grid-3 capability-grid">
-          {
-            HOME_FEATURE_KINDS.map((kind) => (
-              <article class="feature-card">
-                <CapabilityIllustration kind={kind} labels={copy.features.mock} />
+          <div class="home-features">
+            {HOME_FEATURE_KINDS.map((kind, index) => (
+              <article class="home-feature">
+                <span class="home-feature__number" aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
                 <h3>{copy.features.items[kind].title}</h3>
                 <p>{copy.features.items[kind].body}</p>
               </article>
-            ))
-          }
-        </div>
-      </section>
-
-      {copy.testimonials.items.length > 0 && (<section id="testimonials" class="section testimonials" aria-labelledby="testimonials-heading">
-        <div class="section-intro testimonials__heading">
-          <h2 id="testimonials-heading" class="section-heading">{copy.testimonials.heading}</h2>
-          <button
-            class="testimonial-pause"
-            type="button"
-            aria-label={copy.testimonials.pause}
-            title={copy.testimonials.pause}
-            data-testimonial-pause
-            data-pause-label={copy.testimonials.pause}
-            data-play-label={copy.testimonials.play}
-          >
-            <svg class="testimonial-pause__pause" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="3" width="2.5" height="10" rx="1" /><rect x="9.5" y="3" width="2.5" height="10" rx="1" /></svg>
-            <svg class="testimonial-pause__play" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.4v9.2a.8.8 0 0 0 1.2.7l7.4-4.6a.8.8 0 0 0 0-1.4L6.2 2.7A.8.8 0 0 0 5 3.4Z" /></svg>
-          </button>
-        </div>
-        <div
-          class="testimonial-viewport"
-          data-testimonial-marquee
-          tabindex="0"
-          role="region"
-          aria-labelledby="testimonials-heading"
-        >
-          <div class="testimonial-track">
-            {
-              [false, true].map((clone) => (
-                <div
-                  class="testimonial-group"
-                  aria-hidden={clone ? "true" : undefined}
-                  inert={clone ? true : undefined}
-                  data-testimonial-clone={clone ? "" : undefined}
-                >
-                  {copy.testimonials.items.map((item, index) => (
-                    <figure class="testimonial-card" lang="en">
-                      <blockquote>
-                        <p>{item.quote}</p>
-                      </blockquote>
-                      <figcaption>
-                        <LandingBotAvatar
-                          color={copy.roster.bots[index % copy.roster.bots.length].color}
-                          size={32}
-                          className="testimonial-avatar"
-                        />
-                        <span>{item.attribution}</span>
-                      </figcaption>
-                    </figure>
-                  ))}
-                </div>
-              ))
-            }
+            ))}
           </div>
-        </div>
-      </section>)}
+        </section>
 
-      <section id="selfhost" class="section">
-        <div class="selfhost__intro">
-          <div class="section-intro">
-            <h2 class="section-heading">{copy.selfHost.heading}</h2>
-            <p class="section-copy">
-              {copy.selfHost.copy}
-            </p>
+        <section id="selfhost" class="home-section home-ownership" aria-labelledby="selfhost-heading">
+          <div class="home-section__intro">
+            <div class="home-section__index" aria-hidden="true">03 / ORK</div>
+            <div><h2 id="selfhost-heading">{copy.selfHost.heading}</h2><p>{copy.selfHost.copy}</p></div>
           </div>
-          <div class="selfhost__actions">
-            <Button href={GITHUB_URL} external data-attr="selfhost-github">{copy.hero.viewOnGithub}</Button>
-            <Button href="/docs/self-host/" variant="secondary">{copy.openSource.readTheDocs}</Button>
-          </div>
-        </div>
-        <div class="card-grid-3">
-          {
-            copy.selfHost.features.map((feature, index) => (
-              <article class="feature-card">
-                <FeatureIllustration kind={index === 0 ? "model" : index === 1 ? "schedule" : "approval"} labels={copy.selfHost.mock} />
-                <h3>{feature.title}</h3>
-                <p>{feature.body}</p>
-              </article>
-            ))
-          }
-        </div>
-        <div class="works-with">
-          <span>{copy.selfHost.worksWith}</span>
-          {HOME_MODEL_PROVIDERS.map((name) => (
-            <span class="provider-chip">
-              <Fragment set:html={PROVIDER_LOGOS[name]} />
-              {name}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <section id="platforms" class="section platforms">
-        <div class="section-intro">
-          <h2 class="section-heading">{copy.platforms.heading}</h2>
-          <div class="platforms__cards">
-            <article class="platform-card">
-              <svg class="platform-card__icon" viewBox="0 0 48 48" aria-hidden="true">
-                <rect x="5" y="9" width="38" height="30" rx="4" />
-                <path d="M5 17h38" />
-                <circle cx="10.5" cy="13" r="1" />
-                <circle cx="14.5" cy="13" r="1" />
-                <circle cx="18.5" cy="13" r="1" />
-              </svg>
-              <h3>{copy.platforms.web}</h3>
-              <div class="platform-card__links">
-                <a href={APP_URL}>{copy.hero.getStarted}</a>
+          <div class="home-ownership__grid">
+            <div class="home-ownership__visual" aria-hidden="true">
+              <div class="home-machine">
+                <svg viewBox="0 0 160 112"><rect x="20" y="8" width="120" height="80" rx="4" /><path d="M8 102h144l-12-14H20L8 102ZM64 102h32" /><path d="m65 42 10 10-10 10M85 62h15" /></svg>
+                <span>localhost</span>
               </div>
-            </article>
-            <article class="platform-card">
-              <svg class="platform-card__icon" viewBox="0 0 48 48" aria-hidden="true">
-                <rect x="9" y="10" width="30" height="21" rx="3" />
-                <path d="M4 36h40l-3 3H7z" />
-              </svg>
-              <h3>{copy.platforms.desktop}</h3>
-              <div class="platform-card__links">
-                {desktopPlatforms.length === 0 && <a href={`${GITHUB_URL}/tree/main/apps/desktop`}>{copy.hero.viewOnGithub}</a>}
-                {desktopPlatforms.map((platform) => (
-                  <a href={desktopDownloadHref(platform)}>{PLATFORM_NAMES[platform]}</a>
-                ))}
+              <div class="home-ownership__connection"><span></span><img src="/brand/orkbot-mark.png" alt="" width="64" height="64" loading="lazy" /><span></span></div>
+              <div class="home-machine">
+                <svg viewBox="0 0 160 112"><rect x="30" y="10" width="100" height="40" rx="4" /><rect x="30" y="62" width="100" height="40" rx="4" /><path d="M46 30h40M46 82h40" /><circle cx="112" cy="30" r="3" /><circle cx="112" cy="82" r="3" /></svg>
+                <span>self-hosted</span>
               </div>
-            </article>
-            <article class="platform-card">
-              <svg class="platform-card__icon" viewBox="0 0 48 48" aria-hidden="true">
-                <rect x="14" y="5" width="20" height="38" rx="5" />
-                <path d="M21 9.5h6" />
-              </svg>
-              <h3>{copy.platforms.mobile}</h3>
-              <div class="platform-card__links">
-                <a href={IOS_APP_URL}>iOS</a>
-                <a href={ANDROID_APP_STORE_URL}>Android</a>
+            </div>
+            <div class="home-ownership__details">
+              {copy.selfHost.features.map((feature) => (<div><h3>{feature.title}</h3><p>{feature.body}</p></div>))}
+              <div class="home-ownership__links">
+                <a href="/docs/self-host/#local-source-checkout">{copy.positioning.local}<span aria-hidden="true">↗</span></a>
+                <a href={SELF_HOST_GUIDE_PATH}>{copy.positioning.server}<span aria-hidden="true">↗</span></a>
               </div>
-            </article>
+            </div>
           </div>
-        </div>
-        <PhoneMockup locale={locale} />
-      </section>
+          <div class="home-models"><span>{copy.selfHost.worksWith}</span><ul>{HOME_MODEL_PROVIDERS.map((name) => (<li>{name}</li>))}</ul></div>
+          <p class="home-privacy-note">{copy.positioning.note}</p>
+        </section>
 
-      <section id="open-source" class:list={["section", recentChanges.length > 0 && "open-source"]}>
-        <div>
-          <h2 class="section-heading">{copy.openSource.heading}</h2>
-          <p class="section-copy">
-            {copy.openSource.copy}
-          </p>
-          <div class="source-links">
-            <Button href={GITHUB_URL} external data-attr="open-source-github">
-              {copy.openSource.starOnGithub}
-            </Button>
+        <section id="platforms" class="home-section home-platforms" aria-labelledby="platforms-heading">
+          <div class="home-section__intro"><div class="home-section__index" aria-hidden="true">04 / ORK</div><h2 id="platforms-heading">{copy.platforms.heading}</h2></div>
+          <div class="home-platforms__grid">
+            <article><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="5" width="26" height="22" rx="2" /><path d="M3 11h26M7 8h1m3 0h1" /></svg><h3>{copy.platforms.web}</h3><a href={APP_URL}>{copy.hero.getStarted}<span aria-hidden="true">↗</span></a></article>
+            <article><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="5" width="20" height="17" rx="2" /><path d="M2 27h28l-4-5H6l-4 5Z" /></svg><h3>{copy.platforms.desktop}</h3><div>{desktopPlatforms.length === 0 ? (<a href="/download/">{copy.footer.links.download}<span aria-hidden="true">↗</span></a>) : desktopPlatforms.map((platform) => (<a href={desktopDownloadHref(platform)}>{platformNames[platform]}<span aria-hidden="true">↗</span></a>))}</div></article>
+            <article><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="9" y="2" width="14" height="28" rx="3" /><path d="M14 6h4M15 26h2" /></svg><h3>{copy.platforms.mobile}</h3><div><a href={IOS_APP_URL}>iOS<span aria-hidden="true">↗</span></a><a href={ANDROID_APP_STORE_URL}>Android<span aria-hidden="true">↗</span></a></div></article>
           </div>
-        </div>
-        {
-          recentChanges.length > 0 && (
-            <RepoCard locale={locale} starsLabel={starsLabel} changes={recentChanges} />
-          )
-        }
-      </section>
+        </section>
 
-      <section id="faq" class="section" aria-labelledby="faq-heading">
-        <div class="section-intro">
-          <h2 id="faq-heading" class="section-heading">{copy.faq.heading}</h2>
-        </div>
-        <div class="home-faq">
-          {
-            copy.faq.items.map((item) => (
-              <article>
-                <h3>{item.question}</h3>
-                <p>{item.answer}</p>
-              </article>
-            ))
-          }
-        </div>
-      </section>
+        <section id="faq" class="home-section home-faq-section" aria-labelledby="faq-heading">
+          <div class="home-section__intro"><div class="home-section__index" aria-hidden="true">05 / ORK</div><h2 id="faq-heading">{copy.faq.heading}</h2></div>
+          <div class="home-questions">{copy.faq.items.map((item) => (<details><summary>{item.question}<span aria-hidden="true">+</span></summary><p>{item.answer}</p></details>))}</div>
+        </section>
 
-      <section class="stats-band">
-        <div>
-          <h2>{copy.cta.heading}</h2>
-          <p>{copy.cta.copy}</p>
-          <GetStartedActions
-            class="cta-actions"
-            copy={copy.hero}
-            downloads={desktopDownloads}
-            placement="cta"
-          />
-        </div>
-        <div class="stats-grid">
-          {
-            copy.cta.stats.filter((stat) => stat.value !== "stars" || starsLabel !== "GitHub").map((stat) => (
-              <div>
-                <div class="stat-value">
-                  {stat.value === "stars"
-                    ? starsLabel
-                    : stat.value === "license"
-                      ? "PolyForm + Apache"
-                      : stat.value === "openSource"
-                        ? copy.cta.openSourceValue
-                        : copy.cta.selfHostValue}
-                </div>
-                <div class="stat-label">{stat.label}</div>
-              </div>
-            ))
-          }
-        </div>
-      </section>
-    </main>
-
-    <Footer
-      locale={locale}
-      languagesLabel={copy.footer.languagesLabel}
-      navLabel={copy.footer.navLabel}
-      homeLabel={copy.nav.home}
-      linkLabels={copy.footer.links}
-      homeHref={homeHref}
-    />
+        <section id="open-source" class="home-source">
+          <div><h2>{copy.openSource.heading}</h2><p>{copy.openSource.copy}</p></div>
+          <a href={GITHUB_URL} target="_blank" rel="noopener" data-attr="open-source-github">{copy.hero.viewOnGithub}<span aria-hidden="true">↗</span></a>
+        </section>
+        <section class="home-closing" aria-labelledby="closing-heading">
+          <img src="/brand/orkbot-mark.png" alt="" width="64" height="64" loading="lazy" />
+          <h2 id="closing-heading">{copy.cta.heading}</h2>
+          <div class="home-actions"><a class="button button--primary" href="/docs/self-host/#local-source-checkout">{copy.positioning.local}<span aria-hidden="true">↗</span></a><a class="button button--secondary" href={SELF_HOST_GUIDE_PATH}>{copy.positioning.server}<span aria-hidden="true">↗</span></a></div>
+          <button class="home-setup" type="button" data-setup-copy={setupAgentPrompt} data-setup-label={copy.hero.setupWithAgent} data-setup-copied={copy.hero.copiedForAgent} data-setup-failed={copy.hero.copyFailed}><span class="home-setup__label" role="status">{copy.hero.setupWithAgent}</span><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1" /><path d="M13 7V3H3v10h4" /></svg></button>
+        </section>
+      </main>
+      <Footer locale={locale} languagesLabel={copy.footer.languagesLabel} navLabel={copy.footer.navLabel} homeLabel={copy.nav.home} linkLabels={copy.footer.links} homeHref={homeHref} />
+    </div>
   </div>
 </BaseLayout>
 
 <script>
   import "../support-chat";
-  const setupCopy = document.querySelector<HTMLButtonElement>("[data-setup-copy]");
-  const setupCopyLabel = setupCopy?.querySelector<HTMLElement>(".setup-copy__label");
-
-  setupCopy?.addEventListener("click", async () => {
-    const prompt = setupCopy.dataset.setupCopy;
-    const idleLabel = setupCopy.dataset.setupLabel;
-    const copiedLabel = setupCopy.dataset.setupCopied;
-    const failedLabel = setupCopy.dataset.setupFailed;
-    if (!prompt || !setupCopyLabel || !idleLabel || !copiedLabel || !failedLabel) return;
-
+  const button = document.querySelector<HTMLButtonElement>("[data-setup-copy]");
+  const label = button?.querySelector<HTMLElement>(".home-setup__label");
+  button?.addEventListener("click", async () => {
+    if (!label || !button.dataset.setupCopy) return;
     try {
-      await navigator.clipboard.writeText(prompt);
-      setupCopyLabel.textContent = copiedLabel;
-      window.setTimeout(() => {
-        setupCopyLabel.textContent = idleLabel;
-      }, 2400);
+      await navigator.clipboard.writeText(button.dataset.setupCopy);
+      label.textContent = button.dataset.setupCopied ?? "";
+      window.setTimeout(() => { label.textContent = button.dataset.setupLabel ?? ""; }, 2400);
     } catch {
-      setupCopyLabel.textContent = failedLabel;
+      label.textContent = button.dataset.setupFailed ?? "";
     }
   });
-
-  const marquee = document.querySelector<HTMLElement>("[data-testimonial-marquee]");
-  const marqueeGroup = marquee?.querySelector<HTMLElement>(".testimonial-group");
-  if (marquee && marqueeGroup) {
-    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const pixelsPerSecond = 18;
-    let frame = 0;
-    let last = 0;
-    let offset = 0;
-    const pauseButton = document.querySelector<HTMLButtonElement>("[data-testimonial-pause]");
-    const pauseLabel = pauseButton?.dataset.pauseLabel ?? "Pause";
-    const playLabel = pauseButton?.dataset.playLabel ?? "Play";
-    let hovering = false;
-    let focused = false;
-    let touching = false;
-    let held = false;
-    let onScreen = typeof IntersectionObserver === "undefined";
-
-    const reduced = () => motion.matches;
-    const paused = () => reduced() || held || !onScreen || hovering || focused || touching;
-
-    const loopWidth = () => marqueeGroup.offsetWidth;
-
-    const normalize = (value: number) => {
-      const width = loopWidth();
-      if (width <= 0) return 0;
-      const next = value % width;
-      return next < 0 ? next + width : next;
-    };
-
-    const stop = () => {
-      if (!frame) return;
-      window.cancelAnimationFrame(frame);
-      frame = 0;
-    };
-
-    const tick = (now: number) => {
-      if (paused()) {
-        stop();
-        return;
-      }
-      const delta = last === 0 ? 0 : Math.min(48, now - last);
-      last = now;
-      offset = normalize(offset + (pixelsPerSecond * delta) / 1000);
-      marquee.scrollLeft = offset;
-      frame = window.requestAnimationFrame(tick);
-    };
-
-    const resume = () => {
-      offset = normalize(marquee.scrollLeft);
-      if (frame || paused()) return;
-      last = 0;
-      frame = window.requestAnimationFrame(tick);
-    };
-
-    const sync = () => {
-      const animate = !reduced();
-      marquee.classList.toggle("is-animated", animate);
-      if (!animate) {
-        stop();
-        offset = 0;
-        marquee.scrollLeft = 0;
-        return;
-      }
-      resume();
-    };
-
-    marquee.addEventListener("pointerenter", () => {
-      hovering = true;
-      stop();
-    });
-    marquee.addEventListener("pointerleave", () => {
-      hovering = false;
-      touching = false;
-      resume();
-    });
-    marquee.addEventListener("pointerdown", () => {
-      touching = true;
-      stop();
-    });
-    marquee.addEventListener("pointerup", () => {
-      touching = false;
-      resume();
-    });
-    marquee.addEventListener("pointercancel", () => {
-      touching = false;
-      resume();
-    });
-    marquee.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      const card = marquee.querySelector<HTMLElement>(".testimonial-card");
-      const step = (card?.offsetWidth ?? 280) + 16;
-      event.preventDefault();
-      marquee.scrollLeft += event.key === "ArrowRight" ? step : -step;
-      offset = normalize(marquee.scrollLeft);
-    });
-    marquee.addEventListener("focusin", () => {
-      focused = true;
-      stop();
-    });
-    marquee.addEventListener("focusout", () => {
-      focused = false;
-      resume();
-    });
-    pauseButton?.addEventListener("click", () => {
-      held = !held;
-      pauseButton.classList.toggle("is-paused", held);
-      pauseButton.setAttribute("aria-label", held ? playLabel : pauseLabel);
-      pauseButton.title = held ? playLabel : pauseLabel;
-      if (held) stop();
-      else resume();
-    });
-    motion.addEventListener("change", sync);
-    const section = document.getElementById("testimonials");
-    if (section && typeof IntersectionObserver !== "undefined") {
-      const observer = new IntersectionObserver((entries) => {
-        onScreen = entries.some((entry) => entry.isIntersecting);
-        if (onScreen) resume();
-        else stop();
-      });
-      observer.observe(section);
-    }
-    sync();
-  }
 </script>
