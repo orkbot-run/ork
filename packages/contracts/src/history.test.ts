@@ -1,5 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 history tests are preserved. Argument regression coverage is an Ork addition.
+
 import { describe, expect, it } from "vitest";
-import { HistorySearchInputSchema } from "./history.js";
+import { HistoryReadInputSchema, HistorySearchInputSchema } from "./history.js";
 
 describe("history date boundaries", () => {
   it.each([
@@ -31,13 +35,12 @@ describe("history date boundaries", () => {
 });
 
 describe("history search arguments", () => {
-  it("requires exactly one query input and normalizes variants", () => {
+  it("requires a query input and normalizes variants", () => {
     expect(
       HistorySearchInputSchema.parse({ queries: [" Aurora ", "aurora", "orbit"] }).queries,
     ).toEqual(["Aurora", "orbit"]);
     for (const input of [
       {},
-      { query: "a", queries: ["b"] },
       { queries: [] },
       { queries: [" "] },
       { queries: Array(6).fill("a") },
@@ -46,6 +49,104 @@ describe("history search arguments", () => {
       { query: "a", offset: -1 },
     ])
       expect(HistorySearchInputSchema.safeParse(input).success).toBe(false);
+  });
+
+  it("folds both query inputs with the single query first without changing the input", () => {
+    const input = { query: " Aurora ", queries: ["orbit", "aurora"] };
+    expect(HistorySearchInputSchema.parse(input)).toEqual({ queries: ["Aurora", "orbit"] });
+    expect(input).toEqual({ query: " Aurora ", queries: ["orbit", "aurora"] });
+  });
+
+  it("accepts queries as a string and preserves single-query pagination", () => {
+    expect(HistorySearchInputSchema.parse({ queries: " Aurora " })).toEqual({
+      queries: ["Aurora"],
+    });
+    expect(HistorySearchInputSchema.parse({ query: " Aurora ", beforeSeq: 0 })).toEqual({
+      query: "Aurora",
+      beforeSeq: 0,
+    });
+    expect(HistorySearchInputSchema.parse({ query: "Aurora", queries: "orbit" })).toEqual({
+      queries: ["Aurora", "orbit"],
+    });
+  });
+
+  it.each([null, "", " \n "])("omits empty optional search fields: %j", (blank) => {
+    const optional = [
+      "scope",
+      "botId",
+      "kinds",
+      "queries",
+      "offset",
+      "before",
+      "after",
+      "beforeSeq",
+      "limit",
+    ];
+    expect(
+      HistorySearchInputSchema.parse({
+        ...Object.fromEntries(optional.map((key) => [key, blank])),
+        query: "Aurora",
+      }),
+    ).toEqual({ query: "Aurora" });
+    expect(HistorySearchInputSchema.parse({ query: blank, queries: ["orbit"] })).toEqual({
+      queries: ["orbit"],
+    });
+    expect(HistorySearchInputSchema.safeParse({ query: blank, queries: blank }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects invalid values and excess combined queries instead of dropping them", () => {
+    for (const input of [
+      { query: "a", queries: 42 },
+      { query: false, queries: ["b"] },
+      { query: "a", queries: ["b", "c", "d", "e", "f"] },
+      { query: "a", limit: 0 },
+      { query: "a", beforeSeq: "0" },
+      { query: "a", scope: false },
+    ])
+      expect(HistorySearchInputSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("history read arguments", () => {
+  it.each([null, "", " \n "])("omits empty optional read fields: %j", (blank) => {
+    const optional = [
+      "threadId",
+      "linkedRunId",
+      "runAfterId",
+      "artifactAfterId",
+      "outcomeAfterSeq",
+      "textOffset",
+      "attachmentOffset",
+      "direction",
+      "limit",
+    ];
+    expect(
+      HistoryReadInputSchema.parse({
+        messageId: "message-1",
+        ...Object.fromEntries(optional.map((key) => [key, blank])),
+      }),
+    ).toEqual({ messageId: "message-1" });
+    expect(HistoryReadInputSchema.safeParse({ messageId: blank }).success).toBe(false);
+  });
+
+  it("preserves zero cursors and rejects malformed required IDs and optional values", () => {
+    const input = {
+      messageId: "message-1",
+      textOffset: 0,
+      attachmentOffset: 0,
+      outcomeAfterSeq: 0,
+    };
+    expect(HistoryReadInputSchema.parse(input)).toEqual(input);
+    for (const args of [
+      {},
+      { messageId: " " },
+      { ...input, direction: "all" },
+      { ...input, limit: false },
+    ]) {
+      expect(HistoryReadInputSchema.safeParse(args).success).toBe(false);
+    }
   });
 });
 
@@ -62,5 +163,6 @@ describe("history query byte budget", () => {
         queries: Array.from({ length: 5 }, (_, i) => "星".repeat(499) + i),
       }).success,
     ).toBe(false);
+    expect(HistorySearchInputSchema.safeParse({ query: "x", queries }).success).toBe(false);
   });
 });
