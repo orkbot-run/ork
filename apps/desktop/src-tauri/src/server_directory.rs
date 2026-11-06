@@ -34,6 +34,87 @@ pub struct Server {
     pub device_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct Preference {
+    pub server_id: Option<String>,
+}
+
+fn preference_path(directory: &Path, identity: (&str, &str)) -> std::path::PathBuf {
+    directory.join(format!(
+        "default-server-{}.json",
+        crate::settings::account_key(identity)
+    ))
+}
+
+/// Default choices belong to an Accounts identity on this device; they contain no credentials.
+pub fn preference(directory: &Path, identity: (&str, &str)) -> Result<Option<Preference>, String> {
+    match fs::symlink_metadata(directory) {
+        Ok(metadata) if metadata.is_dir() && !reparse_point(&metadata) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        _ => return Err(ERROR.into()),
+    }
+    let path = preference_path(directory, identity);
+    let metadata = match fs::symlink_metadata(&path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        _ => return Err(ERROR.into()),
+    };
+    if !metadata.is_file() || reparse_point(&metadata) || metadata.len() > 256 {
+        return Err(ERROR.into());
+    }
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options.open(path).map_err(|_| ERROR)?;
+    let after = file.metadata().map_err(|_| ERROR)?;
+    if !after.is_file() || reparse_point(&after) || after.len() > 256 {
+        return Err(ERROR.into());
+    }
+    let mut contents = Vec::new();
+    file.take(257)
+        .read_to_end(&mut contents)
+        .map_err(|_| ERROR)?;
+    if contents.len() > 256 {
+        return Err(ERROR.into());
+    }
+    let preference: Preference = serde_json::from_slice(&contents).map_err(|_| ERROR)?;
+    if preference.server_id.as_deref().is_some_and(|id| !uuid(id)) {
+        return Err(ERROR.into());
+    }
+    Ok(Some(preference))
+}
+
+pub fn save_preference(
+    directory: &Path,
+    identity: (&str, &str),
+    server_id: Option<&str>,
+) -> Result<(), String> {
+    if server_id.is_some_and(|id| !uuid(id)) {
+        return Err(ERROR.into());
+    }
+    // This also creates and validates the private application directory.
+    device_id(directory)?;
+    let value = Preference {
+        server_id: server_id.map(str::to_owned),
+    };
+    let mut file = tempfile::NamedTempFile::new_in(directory).map_err(|_| ERROR)?;
+    serde_json::to_writer(&mut file, &value).map_err(|_| ERROR)?;
+    file.as_file().sync_all().map_err(|_| ERROR)?;
+    file.persist(preference_path(directory, identity))
+        .map_err(|_| ERROR)?;
+    Ok(())
+}
+
 impl Server {
     fn validate(&self, device_id: &str) -> Result<(), String> {
         let url = normalize_server_url(&self.url)?;
@@ -73,7 +154,8 @@ pub struct Directory {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InstallationCode {
-    url: String,
+    id: String,
+    url: Option<String>,
     code: String,
     expires_at: String,
 }
@@ -81,9 +163,54 @@ struct InstallationCode {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallationCommand {
+    id: String,
     command: String,
     expires_at: String,
-    url: String,
+    url: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum InstallationPhase {
+    Waiting,
+    Preparing,
+    Pulling,
+    Starting,
+    WaitingHealthy,
+    Ready,
+    Failed,
+    Expired,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InstallationStatus {
+    id: String,
+    url: Option<String>,
+    phase: InstallationPhase,
+    expires_at: String,
+}
+
+impl InstallationStatus {
+    fn validate(&self, expected: &str) -> Result<(), String> {
+        if self.id != expected || !uuid(&self.id) || self.expires_at.len() > 64 {
+            return Err(ERROR.into());
+        }
+        time::OffsetDateTime::parse(
+            &self.expires_at,
+            &time::format_description::well_known::Rfc3339,
+        )
+        .map_err(|_| ERROR)?;
+        if let Some(raw) = &self.url {
+            let url = normalize_server_url(raw)?;
+            if !installation_origin(&url) || *raw != url.origin().ascii_serialization() {
+                return Err(ERROR.into());
+            }
+        } else if self.phase == InstallationPhase::Ready {
+            return Err(ERROR.into());
+        }
+        Ok(())
+    }
 }
 
 fn installation_origin(url: &Url) -> bool {
@@ -100,18 +227,15 @@ fn installation_origin(url: &Url) -> bool {
 
 fn installation_command(
     value: InstallationCode,
-    expected: &str,
     revision: &str,
 ) -> Result<InstallationCommand, String> {
-    let url = normalize_server_url(&value.url)?;
     let expires = time::OffsetDateTime::parse(
         &value.expires_at,
         &time::format_description::well_known::Rfc3339,
     )
     .map_err(|_| ERROR)?;
-    if !installation_origin(&url)
-        || value.url != expected
-        || value.url != url.origin().ascii_serialization()
+    if !uuid(&value.id)
+        || value.url.is_some()
         || value.code.len() != 43
         || !value
             .code
@@ -126,8 +250,9 @@ fn installation_command(
     }
     // Every interpolated field is validated before the shell command is constructed.
     let base = format!("https://raw.githubusercontent.com/orkbot-run/ork/{revision}/infra/compose");
-    let command = format!("( mkdir -p -m 700 \"$HOME/orkbot\" && cd \"$HOME/orkbot\" && ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --url '{}' --code '{}' )", value.url, value.code);
+    let command = format!("( mkdir -p -m 700 \"$HOME/orkbot\" && cd \"$HOME/orkbot\" && ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --code '{}' )", value.code);
     Ok(InstallationCommand {
+        id: value.id,
         command,
         expires_at: value.expires_at,
         url: value.url,
@@ -184,33 +309,38 @@ impl Directory {
         Ok(list.servers)
     }
 
-    pub async fn create_installation(
-        &self,
-        token: &str,
-        raw_url: &str,
-    ) -> Result<InstallationCommand, String> {
+    pub async fn create_installation(&self, token: &str) -> Result<InstallationCommand, String> {
         let revision = option_env!("ORKBOT_INSTALLER_REVISION")
             .ok_or("This app build cannot prepare a server installer.")?;
-        let url = normalize_server_url(raw_url)?;
-        if !installation_origin(&url) {
-            return Err("Use a public HTTPS domain.".into());
-        }
-        let origin = url.origin().ascii_serialization();
         let endpoint = self
             .endpoint
             .join("/api/installations")
             .map_err(|_| ERROR)?;
         let code: InstallationCode = json(
-            self.send(
-                Method::POST,
-                endpoint,
-                token,
-                Some(serde_json::json!({"url": origin})),
-            )
-            .await?,
+            self.send(Method::POST, endpoint, token, Some(serde_json::json!({})))
+                .await?,
         )
         .await?;
-        installation_command(code, &origin, revision)
+        installation_command(code, revision)
+    }
+
+    pub async fn installation_status(
+        &self,
+        token: &str,
+        id: &str,
+    ) -> Result<InstallationStatus, String> {
+        if !uuid(id) {
+            return Err(ERROR.into());
+        }
+        let mut endpoint = self
+            .endpoint
+            .join("/api/installations")
+            .map_err(|_| ERROR)?;
+        endpoint.path_segments_mut().map_err(|_| ERROR)?.push(id);
+        let status: InstallationStatus =
+            json(self.send(Method::GET, endpoint, token, None).await?).await?;
+        status.validate(id)?;
+        Ok(status)
     }
 
     pub async fn add(
@@ -433,54 +563,45 @@ mod tests {
 
     fn installation() -> InstallationCode {
         InstallationCode {
-            url: INSTALL_URL.into(),
+            id: DEVICE.into(),
+            url: None,
             code: INSTALL_CODE.into(),
             expires_at: INSTALL_EXPIRY.into(),
         }
     }
 
-    fn installation_body() -> String {
-        serde_json::json!({ "url": INSTALL_URL, "code": INSTALL_CODE, "expiresAt": INSTALL_EXPIRY })
-            .to_string()
+    fn installation_body() -> serde_json::Value {
+        serde_json::json!({ "id": DEVICE, "url": null, "code": INSTALL_CODE, "expiresAt": INSTALL_EXPIRY })
+    }
+
+    fn status_body() -> serde_json::Value {
+        serde_json::json!({ "id": DEVICE, "url": null, "phase": "waiting", "expiresAt": INSTALL_EXPIRY })
     }
 
     #[test]
-    fn installation_command_binds_code_origin_expiry_and_pinned_revision() {
-        let result = installation_command(installation(), INSTALL_URL, INSTALL_REVISION).unwrap();
-        assert_eq!(result.url, INSTALL_URL);
+    fn installation_command_binds_only_the_one_time_code_expiry_and_pinned_revision() {
+        let result = installation_command(installation(), INSTALL_REVISION).unwrap();
+        assert_eq!(result.id, DEVICE);
+        assert!(result.url.is_none());
         assert_eq!(result.expires_at, INSTALL_EXPIRY);
         assert!(result
             .command
-            .contains(&format!("--url '{INSTALL_URL}' --code '{INSTALL_CODE}'")));
+            .contains(&format!("--server --code '{INSTALL_CODE}'")));
+        assert!(!result.command.contains("--url"));
+        assert!(!result.command.contains(INSTALL_URL));
         assert!(result.command.contains(&format!("https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose/install-images.sh")));
         assert!(result.command.contains(&format!("ORKBOT_DOWNLOAD_BASE='https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose'")));
         assert!(!serde_json::to_string(&result)
             .unwrap()
             .contains(CENTRAL_BEARER));
-        for url in [
-            "http://server.example.com",
-            "https://user:pass@server.example.com",
-            "https://server.example.com/path",
-            "https://server.example.com?next=other",
-            "https://server.example.com#other",
-            "https://server.example.com:8443",
-            "https://127.0.0.1",
-            "https://[::1]",
-            "https://localhost",
-        ] {
+        let mut value = installation();
+        value.url = Some(INSTALL_URL.into());
+        assert!(installation_command(value, INSTALL_REVISION).is_err());
+        for id in ["", "../another", "11111111-1111-4111-8111-11111111111'"] {
             let mut value = installation();
-            value.url = url.into();
-            assert!(
-                installation_command(value, url, INSTALL_REVISION).is_err(),
-                "Accepted unsafe origin: {url}"
-            );
+            value.id = id.into();
+            assert!(installation_command(value, INSTALL_REVISION).is_err());
         }
-        assert!(installation_command(
-            installation(),
-            "https://different.example.com",
-            INSTALL_REVISION
-        )
-        .is_err());
         for code in [
             String::new(),
             "A".repeat(42),
@@ -492,7 +613,7 @@ mod tests {
         ] {
             let mut value = installation();
             value.code = code;
-            assert!(installation_command(value, INSTALL_URL, INSTALL_REVISION).is_err());
+            assert!(installation_command(value, INSTALL_REVISION).is_err());
         }
         for revision in [
             "main",
@@ -500,7 +621,7 @@ mod tests {
             "0123456789abcdef0123456789abcdef0123456'",
             "0123456789abcdef0123456789abcdef0123456g",
         ] {
-            assert!(installation_command(installation(), INSTALL_URL, revision).is_err());
+            assert!(installation_command(installation(), revision).is_err());
         }
         for expiry in [
             "",
@@ -510,18 +631,15 @@ mod tests {
         ] {
             let mut value = installation();
             value.expires_at = expiry.into();
-            assert!(installation_command(value, INSTALL_URL, INSTALL_REVISION).is_err());
+            assert!(installation_command(value, INSTALL_REVISION).is_err());
         }
     }
 
     #[tokio::test]
-    async fn installation_request_posts_only_the_origin_to_the_fixed_native_endpoint() {
+    async fn installation_creation_posts_no_domain_and_keeps_the_accounts_bearer_native() {
         assert_eq!(Directory::new().unwrap().endpoint.as_str(), API);
-        let (directory, wire) = response("200 OK", installation_body(), "").await;
-        let result = directory
-            .create_installation(CENTRAL_BEARER, INSTALL_URL)
-            .await
-            .unwrap();
+        let (directory, wire) = response("200 OK", installation_body().to_string(), "").await;
+        let result = directory.create_installation(CENTRAL_BEARER).await.unwrap();
         let request = wire.await.unwrap();
         assert!(request.starts_with("POST /api/installations HTTP/1.1\r\n"));
         let (headers, body) = request.split_once("\r\n\r\n").unwrap();
@@ -531,7 +649,7 @@ mod tests {
                 .eq_ignore_ascii_case(&format!("authorization: bearer {CENTRAL_BEARER}"))));
         assert_eq!(
             serde_json::from_str::<serde_json::Value>(body).unwrap(),
-            serde_json::json!({ "url": INSTALL_URL })
+            serde_json::json!({})
         );
         let serialized = serde_json::to_string(&result).unwrap();
         assert!(!serialized.contains(CENTRAL_BEARER));
@@ -539,33 +657,76 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn installation_request_never_follows_redirects_with_the_native_bearer() {
-        let destination = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let location = format!(
-            "Location: http://{}/capture\r\n",
-            destination.local_addr().unwrap()
-        );
-        let (mut directory, wire) =
-            response("307 Temporary Redirect", String::new(), &location).await;
-        // Exercise the production redirect policy, with only the destination replaced by a loopback fixture.
-        directory.client = Directory::new().unwrap().client;
-        assert!(directory
-            .create_installation(CENTRAL_BEARER, INSTALL_URL)
-            .await
-            .is_err());
-        assert!(wire
-            .await
-            .unwrap()
-            .starts_with("POST /api/installations HTTP/1.1\r\n"));
-        assert!(
-            tokio::time::timeout(Duration::from_millis(50), destination.accept())
+    async fn installation_polling_reads_only_the_selected_pairing_and_exposes_no_tokens() {
+        for phase in [
+            "waiting",
+            "preparing",
+            "pulling",
+            "starting",
+            "waiting-healthy",
+            "ready",
+            "failed",
+            "expired",
+        ] {
+            let mut body = status_body();
+            body["phase"] = serde_json::json!(phase);
+            if phase == "ready" {
+                body["url"] = serde_json::json!(INSTALL_URL);
+            }
+            if matches!(phase, "ready" | "failed" | "expired") {
+                body["expiresAt"] = serde_json::json!("2000-01-01T00:00:00Z");
+            }
+            let (directory, wire) = response("200 OK", body.to_string(), "").await;
+            let status = directory
+                .installation_status(CENTRAL_BEARER, DEVICE)
                 .await
-                .is_err()
-        );
+                .unwrap();
+            let request = wire.await.unwrap();
+            assert!(request.starts_with(&format!("GET /api/installations/{DEVICE} HTTP/1.1\r\n")));
+            let (headers, body) = request.split_once("\r\n\r\n").unwrap();
+            assert!(headers.lines().any(|line| line
+                .eq_ignore_ascii_case(&format!("authorization: bearer {CENTRAL_BEARER}"))));
+            assert!(body.is_empty());
+            let serialized = serde_json::to_string(&status).unwrap();
+            assert!(!serialized.contains(CENTRAL_BEARER));
+            assert!(!serialized.contains(INSTALL_CODE));
+        }
     }
 
     #[tokio::test]
-    async fn installation_request_rejects_invalid_origins_before_sending_credentials() {
+    async fn installation_requests_never_follow_redirects_with_the_native_bearer() {
+        for polling in [false, true] {
+            let destination = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let location = format!(
+                "Location: http://{}/capture\r\n",
+                destination.local_addr().unwrap()
+            );
+            let (mut directory, wire) =
+                response("307 Temporary Redirect", String::new(), &location).await;
+            directory.client = Directory::new().unwrap().client;
+            let result = if polling {
+                directory
+                    .installation_status(CENTRAL_BEARER, DEVICE)
+                    .await
+                    .map(|_| ())
+            } else {
+                directory
+                    .create_installation(CENTRAL_BEARER)
+                    .await
+                    .map(|_| ())
+            };
+            assert!(result.is_err());
+            wire.await.unwrap();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(50), destination.accept())
+                    .await
+                    .is_err()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn installation_polling_rejects_malformed_ids_before_sending_credentials() {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut directory = Directory::new().unwrap();
         directory.endpoint = Url::parse(&format!(
@@ -573,15 +734,14 @@ mod tests {
             listener.local_addr().unwrap()
         ))
         .unwrap();
-        for url in [
-            "http://127.0.0.1:45173",
-            "https://server.example.com:8443",
-            "https://[::1]",
-            "https://127.0.0.1",
-            "https://localhost",
+        for id in [
+            "",
+            "../other",
+            "https://different.example.test",
+            "11111111-1111-4111-8111-11111111111'",
         ] {
             assert!(directory
-                .create_installation(CENTRAL_BEARER, url)
+                .installation_status(CENTRAL_BEARER, id)
                 .await
                 .is_err());
         }
@@ -593,16 +753,81 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn installation_request_rejects_foreign_or_malformed_codes_and_error_responses() {
-        for (status, body) in [
-            ("401 Unauthorized", "{}".into()), ("403 Forbidden", "{}".into()),
-            ("200 OK", serde_json::json!({"url":"https://different.example.com","code":INSTALL_CODE,"expiresAt":INSTALL_EXPIRY}).to_string()),
-            ("200 OK", serde_json::json!({"url":INSTALL_URL,"code":"invalid","expiresAt":INSTALL_EXPIRY}).to_string()),
-            ("200 OK", serde_json::json!({"url":INSTALL_URL,"code":INSTALL_CODE,"expiresAt":"2000-01-01T00:00:00Z"}).to_string()),
-            ("200 OK", " ".repeat(MAX_BODY + 1)),
+    async fn installation_creation_rejects_malformed_codes_and_unbounded_responses() {
+        let mut invalid = Vec::new();
+        for (key, value) in [
+            ("id", serde_json::json!("invalid")),
+            ("url", serde_json::json!(INSTALL_URL)),
+            ("code", serde_json::json!("invalid")),
+            ("expiresAt", serde_json::json!("2000-01-01T00:00:00Z")),
+            ("unexpected", serde_json::json!(true)),
         ] {
-            let (directory, wire) = response(status, body, "").await;
-            assert!(directory.create_installation(CENTRAL_BEARER, INSTALL_URL).await.is_err());
+            let mut body = installation_body();
+            body[key] = value;
+            invalid.push(body.to_string());
+        }
+        invalid.push(" ".repeat(MAX_BODY + 1));
+        for body in invalid {
+            let (directory, wire) = response("200 OK", body, "").await;
+            assert!(directory.create_installation(CENTRAL_BEARER).await.is_err());
+            wire.await.unwrap();
+        }
+        for status in ["401 Unauthorized", "403 Forbidden", "404 Not Found"] {
+            let (directory, wire) = response(status, "{}".into(), "").await;
+            assert!(directory.create_installation(CENTRAL_BEARER).await.is_err());
+            wire.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn installation_polling_rejects_foreign_ids_unsafe_urls_and_invalid_phases() {
+        let mut invalid = Vec::new();
+        for (key, value) in [
+            (
+                "id",
+                serde_json::json!("11111111-1111-4111-8111-111111111111"),
+            ),
+            ("phase", serde_json::json!("unknown")),
+            ("expiresAt", serde_json::json!("invalid")),
+            ("unexpected", serde_json::json!(true)),
+        ] {
+            let mut body = status_body();
+            body[key] = value;
+            invalid.push(body.to_string());
+        }
+        for url in [
+            "http://server.example.com",
+            "https://user:pass@server.example.com",
+            "https://server.example.com/path",
+            "https://server.example.com?next=other",
+            "https://server.example.com#other",
+            "https://server.example.com:8443",
+            "https://127.0.0.1",
+            "https://[::1]",
+            "https://localhost",
+        ] {
+            let mut body = status_body();
+            body["url"] = serde_json::json!(url);
+            invalid.push(body.to_string());
+        }
+        let mut ready_without_url = status_body();
+        ready_without_url["phase"] = serde_json::json!("ready");
+        invalid.push(ready_without_url.to_string());
+        invalid.push(" ".repeat(MAX_BODY + 1));
+        for body in invalid {
+            let (directory, wire) = response("200 OK", body, "").await;
+            assert!(directory
+                .installation_status(CENTRAL_BEARER, DEVICE)
+                .await
+                .is_err());
+            wire.await.unwrap();
+        }
+        for status in ["401 Unauthorized", "403 Forbidden", "404 Not Found"] {
+            let (directory, wire) = response(status, "{}".into(), "").await;
+            assert!(directory
+                .installation_status(CENTRAL_BEARER, DEVICE)
+                .await
+                .is_err());
             wire.await.unwrap();
         }
     }
@@ -769,5 +994,112 @@ mod tests {
         assert_ne!(first, device_id(other.path()).unwrap());
         fs::write(root.path().join(DEVICE_FILE), "invalid").unwrap();
         assert!(device_id(root.path()).is_err());
+    }
+
+    #[test]
+    fn default_preferences_are_private_account_scoped_and_independent_of_last_opened_settings() {
+        let root = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "subject-a");
+        assert_eq!(preference(root.path(), identity).unwrap(), None);
+        save_preference(root.path(), identity, Some(DEVICE)).unwrap();
+        assert_eq!(
+            preference(root.path(), identity)
+                .unwrap()
+                .unwrap()
+                .server_id
+                .as_deref(),
+            Some(DEVICE)
+        );
+        assert_eq!(
+            preference(root.path(), (identity.0, "subject-b")).unwrap(),
+            None
+        );
+        assert_eq!(
+            preference(root.path(), ("https://other.example.test", identity.1)).unwrap(),
+            None
+        );
+        let contents = fs::read_to_string(preference_path(root.path(), identity)).unwrap();
+        assert!(!contents.contains(identity.0));
+        assert!(!contents.contains(identity.1));
+        crate::settings::save(
+            root.path(),
+            &crate::settings::Setup {
+                mode: crate::settings::InstanceMode::Existing,
+                server_url: Url::parse("https://different.example.test").unwrap(),
+                account: Some(crate::settings::account_key(identity)),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            preference(root.path(), identity)
+                .unwrap()
+                .unwrap()
+                .server_id
+                .as_deref(),
+            Some(DEVICE)
+        );
+        assert!(save_preference(root.path(), identity, Some("../another")).is_err());
+        assert_eq!(
+            fs::read_to_string(preference_path(root.path(), identity)).unwrap(),
+            contents
+        );
+        save_preference(root.path(), identity, None).unwrap();
+        assert_eq!(
+            preference(root.path(), identity).unwrap(),
+            Some(Preference { server_id: None })
+        );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            assert_eq!(
+                fs::metadata(preference_path(root.path(), identity))
+                    .unwrap()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+    }
+
+    #[test]
+    fn default_preferences_reject_malformed_oversized_or_nonregular_files() {
+        let root = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "subject-a");
+        let path = preference_path(root.path(), identity);
+        for value in [
+            "not json",
+            "{\"serverId\":\"invalid\"}",
+            "{\"serverId\":null,\"other\":true}",
+        ] {
+            fs::write(&path, value).unwrap();
+            assert!(preference(root.path(), identity).is_err());
+        }
+        fs::write(&path, vec![b' '; 257]).unwrap();
+        assert!(preference(root.path(), identity).is_err());
+        fs::remove_file(&path).unwrap();
+        fs::create_dir(&path).unwrap();
+        assert!(preference(root.path(), identity).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_preferences_do_not_follow_file_or_directory_links() {
+        use std::os::unix::fs::symlink;
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("private");
+        let identity = ("https://accounts.example.test", "subject-a");
+        save_preference(&directory, identity, Some(DEVICE)).unwrap();
+        let original = root.path().join("original.json");
+        let contents = fs::read(preference_path(&directory, identity)).unwrap();
+        fs::write(&original, &contents).unwrap();
+        fs::remove_file(preference_path(&directory, identity)).unwrap();
+        symlink(&original, preference_path(&directory, identity)).unwrap();
+        assert!(preference(&directory, identity).is_err());
+        save_preference(&directory, identity, None).unwrap();
+        assert_eq!(fs::read(&original).unwrap(), contents);
+        let link = root.path().join("linked");
+        symlink(&directory, &link).unwrap();
+        assert!(preference(&link, identity).is_err());
+        assert!(save_preference(&link, identity, Some(DEVICE)).is_err());
     }
 }

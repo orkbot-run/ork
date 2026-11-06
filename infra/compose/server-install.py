@@ -23,6 +23,8 @@ ISSUER = "https://api.orkbot.run"
 MAX_RESPONSE = 65536
 ENV = Path(".env")
 STATE = Path(".orkbot-server.json")
+INSTALLATION = Path(".orkbot-installation.json")
+PHASES = ("preparing", "pulling", "starting", "waiting-healthy", "ready", "failed")
 SECRETS = (
     "POSTGRES_PASSWORD", "POSTGRES_APP_PASSWORD", "BETTER_AUTH_SECRET", "ENCRYPTION_KEY",
     "SCREEN_PROXY_SECRET", "SANDBOX_SUPERVISOR_TOKEN",
@@ -114,12 +116,74 @@ def occupied_ports():
     return False
 
 
+def saved_settings():
+    regular(STATE, private=True)
+    if not STATE.exists():
+        return None
+    try:
+        saved = json.loads(STATE.read_text())
+        if (not isinstance(saved, dict) or set(saved) != {"url", "externalProxy"} or
+                not isinstance(saved.get("url"), str) or not isinstance(saved.get("externalProxy"), bool)):
+            raise ValueError()
+        origin(saved["url"])
+        return saved
+    except (ValueError, KeyError, TypeError):
+        raise SetupError("The saved server installation state is invalid.") from None
+
+
+def terminal_prompt(message):
+    try:
+        with open("/dev/tty", "r") as reader, open("/dev/tty", "w") as writer:
+            writer.write(message)
+            writer.flush()
+            value = reader.readline(1025)
+            if not value or len(value) > 1024:
+                raise SetupError("No server configuration was entered.")
+            return value.strip()
+    except OSError:
+        raise SetupError("Run this command in a server terminal, or provide --url and --external-proxy when needed.") from None
+
+
+def server_url(value):
+    if value:
+        origin(value)
+        return value
+    saved = saved_settings()
+    if saved:
+        return saved["url"]
+    value = terminal_prompt("Server domain (for example ork.example.com): ")
+    if not value.startswith("https://"):
+        value = "https://" + value
+    origin(value)
+    return value
+
+
+def proxy_mode(url, mode):
+    if mode not in ("true", "auto"):
+        raise SetupError("Invalid proxy configuration.")
+    saved = saved_settings()
+    if saved:
+        if saved["url"] != url or (mode == "true" and not saved["externalProxy"]):
+            raise SetupError("Keep the existing URL and proxy mode when resuming this installation.")
+        return saved["externalProxy"]
+    if mode == "true":
+        return True
+    if not occupied_ports():
+        return False
+    answer = terminal_prompt("Ports 80 or 443 are in use. Use your existing HTTPS proxy? [y/N]: ")
+    if answer.lower() not in ("y", "yes"):
+        raise SetupError("Keep the existing proxy; configure it or free ports 80 and 443 before retrying.")
+    print("Route " + url + " through your HTTPS proxy to 127.0.0.1:5173. Keep the API and supervisor ports private.", file=sys.stderr)
+    return True
+
+
 def preflight(url, external):
     hostname = origin(url)
     regular(ENV, private=True)
     for name in ("docker-compose.images.yml", ".env.images.example", "docker-compose.override.yml", "docker-compose.https.yml", "Caddyfile.prod", "restrict-computer-egress.sh"):
         regular(Path(name))
     regular(STATE, private=True)
+    regular(INSTALLATION, private=True)
     if STATE.exists():
         try:
             saved = json.loads(STATE.read_text())
@@ -213,6 +277,7 @@ def configure(url):
     env = environment()
     hostname = origin(url)
     values = {}
+    ticket, token = None, None
     if not configured(url, env):
         if not re.fullmatch(r"[A-Za-z0-9_-]{43}", code):
             raise SetupError("A new installation needs a one-use code from Accounts setup.")
@@ -221,6 +286,11 @@ def configure(url):
         if (not isinstance(result, dict) or result.get("url") != url or result.get("issuer") != ISSUER or
                 not safe_credential(result.get("clientId")) or not safe_credential(result.get("clientSecret"))):
             raise SetupError("Accounts returned an invalid installation configuration.")
+        ticket, token = result.get("installationTicketId"), result.get("reportToken")
+        if ticket is not None or token is not None:
+            if (not isinstance(ticket, str) or not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", ticket) or
+                    not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token)):
+                raise SetupError("Accounts returned an invalid installation status credential.")
         values.update(OIDC_ISSUER=ISSUER, OIDC_CLIENT_ID=result["clientId"], OIDC_CLIENT_SECRET=result["clientSecret"])
     values.update({
         "BETTER_AUTH_URL": url, "WEB_ORIGIN": url, "API_URL": url, "ORKBOT_HOST": hostname,
@@ -231,6 +301,33 @@ def configure(url):
     write_environment(values)
     state = {"url": url, "externalProxy": os.environ.get("ORKBOT_INSTALL_EXTERNAL_PROXY") == "true"}
     atomic(STATE, json.dumps(state) + "\n")
+    if ticket is not None:
+        atomic(INSTALLATION, json.dumps({"url": url, "installationTicketId": ticket, "reportToken": token}) + "\n")
+
+
+def progress(url, phase):
+    if phase not in PHASES:
+        raise SetupError("Invalid installation phase.")
+    regular(INSTALLATION, private=True)
+    if not INSTALLATION.exists():
+        return
+    try:
+        value = json.loads(INSTALLATION.read_text())
+        if (not isinstance(value, dict) or value.get("url") != url or
+                not isinstance(value.get("reportToken"), str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", value["reportToken"]) or
+                not isinstance(value.get("installationTicketId"), str) or
+                not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", value["installationTicketId"])):
+            raise ValueError()
+    except (ValueError, KeyError, TypeError):
+        raise SetupError("The saved installation status credential is invalid.") from None
+    for attempt in range(3 if phase == "ready" else 1):
+        try:
+            request_json(ISSUER + "/api/installations/progress", {"phase": phase}, value["reportToken"])
+            return
+        except SetupError:
+            if phase == "ready" and attempt < 2:
+                time.sleep(attempt + 1)
+    print("Could not update Accounts installation status; the server configuration was kept.", file=sys.stderr)
 
 
 def ready(url):
@@ -270,11 +367,18 @@ def pin_images(base):
 
 def main():
     operation, url = sys.argv[1:3]
+    if operation == "server-url":
+        print(server_url(url))
+        return
     if operation == "pin-images":
         pin_images(url)
         return
     origin(url)
-    if operation == "preflight":
+    if operation == "proxy-mode":
+        print("true" if proxy_mode(url, sys.argv[3]) else "false")
+    elif operation == "progress":
+        progress(url, sys.argv[3])
+    elif operation == "preflight":
         preflight(url, sys.argv[3] == "true")
     elif operation == "configured":
         print("true" if configured(url, environment()) else "false")

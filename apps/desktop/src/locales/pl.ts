@@ -89,7 +89,18 @@ export const PL_MESSAGES: Record<string, string> = {
   "You can close this tab and return to Ork.": "Możesz zamknąć tę kartę i wrócić do Ork.",
 
   // Setup window
-  "Let's get started": "Zaczynajmy",
+  "Sign in to Ork": "Zaloguj się do Ork",
+  Default: "Domyślny",
+  "Set as default": "Ustaw domyślny",
+  "Default server": "Serwer domyślny",
+  "New install command": "Nowe polecenie instalacji",
+  "Or run this command on your Linux server. Setup will ask for your domain there.":
+    "Lub uruchom to polecenie na serwerze z Linuxem. Instalator zapyta tam o domenę.",
+  "Run the command on your Linux server.": "Uruchom polecenie na serwerze z Linuxem.",
+  "Server setup failed. Run the command again on your server.":
+    "Instalacja nie powiodła się. Uruchom polecenie ponownie na serwerze.",
+  "Could not check setup. Retrying...": "Nie udało się sprawdzić instalacji. Ponawianie...",
+  "Let's get started": "Zaczynamy",
   "Getting ready...": "Przygotowywanie...",
   "Make yourself at home": "Rozgość się",
   "Sign in or create your Ork Accounts account.": "Zaloguj się lub utwórz konto Ork Accounts.",
