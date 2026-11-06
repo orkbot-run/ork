@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
+
+#[cfg(any(target_os = "macos", all(test, unix)))]
+#[path = "credentials_macos.rs"]
+mod macos;
 
 use sha2::{Digest, Sha256};
 use url::Url;
@@ -9,15 +13,17 @@ use url::Url;
 const SERVICE: &str = "run.orkbot.desktop.preview.pairing.v1";
 pub const STORAGE_ERROR: &str = "Could not access the system credential store.";
 
-/// The only persistence boundary for device tokens. There is no file fallback.
+/// Tokens persist only in the system store; denied macOS access uses process memory.
 pub trait CredentialStore: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<String>, String>;
     fn set(&self, key: &str, value: &str) -> Result<(), String>;
     fn delete(&self, key: &str) -> Result<(), String>;
 }
 
+#[cfg(not(target_os = "macos"))]
 pub struct SystemStore;
 
+#[cfg(not(target_os = "macos"))]
 impl CredentialStore for SystemStore {
     fn get(&self, key: &str) -> Result<Option<String>, String> {
         let entry = keyring::Entry::new(SERVICE, key).map_err(|_| STORAGE_ERROR)?;
@@ -58,11 +64,31 @@ pub struct Store(pub Arc<dyn CredentialStore>);
 
 impl Default for Store {
     fn default() -> Self {
-        Self(Arc::new(SystemStore))
+        #[cfg(not(target_os = "macos"))]
+        {
+            Self(Arc::new(SystemStore))
+        }
+        #[cfg(target_os = "macos")]
+        {
+            Self(Arc::new(macos::UnconfiguredStore))
+        }
     }
 }
 
 impl Store {
+    /// Configure nonsecret credential state without reading any system credentials.
+    pub fn system(directory: &Path) -> Result<Self, String> {
+        #[cfg(target_os = "macos")]
+        {
+            macos::system(directory)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = directory;
+            Ok(Self::default())
+        }
+    }
+
     pub async fn get(&self, key: String) -> Result<Option<String>, String> {
         let store = self.0.clone();
         tokio::task::spawn_blocking(move || store.get(&key))

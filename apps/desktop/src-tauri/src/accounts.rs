@@ -1374,6 +1374,13 @@ impl Drop for SignInGuard<'_> {
 }
 
 impl Accounts {
+    pub fn new(store: Store) -> Self {
+        Self {
+            store,
+            ..Self::default()
+        }
+    }
+
     pub(crate) fn invalidate(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
     }

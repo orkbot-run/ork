@@ -157,6 +157,13 @@ async fn revoke(client: &Client, origin: &Url, token: &str) {
 }
 
 impl Pairings {
+    pub fn new(store: Store) -> Self {
+        Self {
+            store,
+            ..Self::default()
+        }
+    }
+
     /// Capture before asynchronous cookie access, which can race with logout too.
     pub fn attempt(&self, origin: &Url) -> Result<Attempt, String> {
         let server = self.server(&secure_origin(origin)?)?;

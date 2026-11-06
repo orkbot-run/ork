@@ -2417,6 +2417,8 @@ fn main() {
         ])
         .setup(|app| {
             let directory = app.path().app_local_data_dir()?;
+            let credential_store =
+                credentials::Store::system(&directory).map_err(std::io::Error::other)?;
             let resources = if cfg!(debug_assertions) {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../infra/compose")
             } else {
@@ -2461,14 +2463,14 @@ fn main() {
                 switching: tokio::sync::Mutex::new(()),
                 sessions: native::Sessions::default(),
                 browser_auth,
-                accounts: accounts::Accounts::default(),
+                accounts: accounts::Accounts::new(credential_store.clone()),
                 accounts_started: Mutex::new(AccountsStarted::default()),
                 restoring: std::sync::atomic::AtomicBool::new(false),
                 restore_intent: AtomicU64::new(0),
                 setup_ready: std::sync::atomic::AtomicBool::new(false),
                 startup: Mutex::new(Startup::checking()),
                 speech: speech::SpeechManager::new(speech_helper),
-                pairings: pairing::Pairings::default(),
+                pairings: pairing::Pairings::new(credential_store),
                 warm_generation: AtomicU64::new(0),
                 pending_server: Mutex::new(None),
                 initialization: Mutex::new(None),
