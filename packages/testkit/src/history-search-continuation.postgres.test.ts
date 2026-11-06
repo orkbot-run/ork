@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 journey coverage is preserved. Argument regressions are an Ork addition.
+
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -47,13 +51,13 @@ describe.skipIf(!enabled)("unfinished broad history search", () => {
           expect(request) {
             expect(
               String(request.messages.findLast((row) => row.role === "tool")?.content),
-            ).toContain("Invalid ISO date");
+            ).toContain("before: Use an ISO date");
           },
           response: {
             type: "tool",
             id: "broad-history",
             name: "search_history",
-            arguments: { query: "Aurora", ...filters },
+            arguments: { query: "Aurora", queries: "", scope: null, botId: null, ...filters },
           },
         },
         {
@@ -125,7 +129,7 @@ describe.skipIf(!enabled)("unfinished broad history search", () => {
             type: "tool",
             id: "read-original-history",
             name: "read_history",
-            arguments: { messageId: originalId, limit: 1 },
+            arguments: { messageId: originalId, threadId: "", linkedRunId: null, limit: 1 },
           }),
         },
         {
@@ -185,7 +189,8 @@ describe.skipIf(!enabled)("unfinished broad history search", () => {
       model.assertComplete();
       expect(result).toMatchObject({
         status: "passed",
-        toolCalls: 5,
+        // The invalid date is rejected before dispatch; only valid calls reach retrieval.
+        toolCalls: 4,
         modelCalls: 6,
         cleanupFailed: false,
       });
