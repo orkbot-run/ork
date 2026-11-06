@@ -247,6 +247,16 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["updater/status"],
       ["updater/check", {}],
       ["updater/apply", {}],
+      ["serverUpdates/status"],
+      ["serverUpdates/check", {}],
+      [
+        "serverUpdates/apply",
+        {
+          candidateRevision: "a".repeat(40),
+          idempotencyKey: "9e76daf8-193b-43de-985f-8e90a3419549",
+        },
+      ],
+      ["serverUpdates/policy", { automatic: true, expectedRevision: 0 }],
       ["models/list"],
       ["models/credentials"],
       ["models/connect", { provider: "test", apiKey: "not-a-real-key" }],
