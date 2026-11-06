@@ -64,6 +64,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let pendingServer: string | null = null;
   let screen: Screen = "checking";
   let operation: Operation | null = null;
+  let browserSignIn = false;
   let generation = 0;
   let disposed = false;
   let startup: Startup = { phase: "checking" };
@@ -126,7 +127,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       startup.phase === "opening" || (operation !== null && operation !== "install");
     element("sign-out").hidden = !account;
     element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
-    element("browser-hint").hidden = operation !== "signin";
+    element("browser-hint").hidden = !browserSignIn;
     element("cancel-sign-in").hidden = operation !== "signin";
     element("sign-in").hidden = operation === "signin";
     element("retry-local").hidden =
@@ -183,6 +184,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       }
     } finally {
       if (current(version)) {
+        if (kind === "signin") browserSignIn = false;
         operation = null;
         if (pendingServer && account) showPendingServer();
         controls();
@@ -440,19 +442,37 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     target.addEventListener(event, listener);
     cleanups.push(() => target.removeEventListener(event, listener));
   };
-  async function signIn() {
+  async function signIn(restoreSession = false) {
     if (operation || disposed) return;
     show("accounts");
     await run(
       "signin",
       async (version) => {
-        const value = await transport.invoke<Account>("setup_accounts_sign_in", {
-          orkAvatar: welcomeOrk,
-        });
+        const restored = restoreSession
+          ? await transport.invoke<Account | null>("setup_accounts_session")
+          : null;
+        if (!current(version)) return;
+        let value = restored;
+        if (!value) {
+          browserSignIn = true;
+          controls();
+          value = await transport.invoke<Account>("setup_accounts_sign_in", {
+            orkAvatar: welcomeOrk,
+          });
+        }
         if (!current(version)) return;
         account = value;
-        startup = { phase: "idle" };
+        if (!restored) startup = { phase: "idle" };
         renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
+        if (pendingServer) {
+          showPendingServer();
+          return;
+        }
+        if (startup.phase !== "idle") {
+          startupScreen();
+          if (startup.phase === "failed") await loadServers(version);
+          return;
+        }
         const entries = await loadServers(version);
         if (!current(version)) return;
         if (pendingServer) {
@@ -474,7 +494,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       "accounts",
     );
   }
-  on("get-started", "click", () => void signIn());
+  on("get-started", "click", () => void signIn(true));
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
     if (!operation || operation === "install") {
@@ -513,6 +533,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     startup = { phase: "idle" };
     renderOrk(welcomeOrk);
     operation = null;
+    browserSignIn = false;
     input.value = "";
     element("account").textContent = "";
     servers.replaceChildren();
@@ -558,7 +579,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       });
   });
 
-  show("checking", false);
+  show("welcome", false);
   void run(
     "session",
     async (version) => {
@@ -635,21 +656,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       );
       if (!current(version)) return;
       receivePendingServer(state?.pendingServer);
-      const value = await transport.invoke<Account | null>("setup_accounts_session");
-      if (!current(version)) return;
-      account = value;
-      renderOrk(value?.userinfo.ork_avatar ?? welcomeOrk);
-      if (!value) {
-        show("welcome", false);
-        return;
-      }
       startup = state?.startup ?? { phase: "idle" };
-      if (pendingServer) {
-        showPendingServer();
-        return;
-      }
-      startupScreen();
-      if (startup.phase === "idle" || startup.phase === "failed") await loadServers(version);
+      show("welcome", false);
     },
     "welcome",
   );

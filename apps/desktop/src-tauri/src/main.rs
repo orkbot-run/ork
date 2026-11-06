@@ -58,6 +58,7 @@ struct DesktopState {
     sessions: native::Sessions,
     browser_auth: browser_auth::BrowserAuth,
     accounts: accounts::Accounts,
+    accounts_started: Mutex<AccountsStarted>,
     restoring: std::sync::atomic::AtomicBool,
     restore_intent: AtomicU64,
     setup_ready: std::sync::atomic::AtomicBool,
@@ -70,6 +71,27 @@ struct DesktopState {
     opening_server: Mutex<Option<OpeningServer>>,
     pending_bookmark: Mutex<Option<server_link::Bookmark>>,
     bookmark_sync: tokio::sync::Mutex<()>,
+}
+
+#[derive(Default)]
+struct AccountsStarted {
+    generation: u64,
+    started: bool,
+}
+
+impl AccountsStarted {
+    fn reset(&mut self) {
+        self.generation = self.generation.wrapping_add(1);
+        self.started = false;
+    }
+
+    fn complete(&mut self, generation: u64, signed_in: bool) -> Result<(), String> {
+        if self.generation != generation {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        self.started = signed_in;
+        Ok(())
+    }
 }
 
 struct OpeningServer {
@@ -123,6 +145,22 @@ fn opening_server_matches(
 }
 
 impl DesktopState {
+    fn accounts_have_started(&self) -> bool {
+        self.accounts_started
+            .lock()
+            .ok()
+            .is_some_and(|gate| gate.started)
+    }
+
+    fn reset_accounts_started(&self) -> Result<u64, String> {
+        let mut gate = self
+            .accounts_started
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        gate.reset();
+        Ok(gate.generation)
+    }
+
     fn stack_snapshot(&self) -> Arc<local_stack::LocalStack> {
         self.stack
             .lock()
@@ -773,7 +811,19 @@ async fn setup_accounts_session<R: tauri::Runtime>(
     state: State<'_, DesktopState>,
 ) -> Result<Option<accounts::Account>, String> {
     require_setup(&window)?;
-    state.accounts.session(&server_directory::origin()).await
+    let generation = state
+        .accounts_started
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .generation;
+    let account = state.accounts.session(&server_directory::origin()).await?;
+    require_setup(&window)?;
+    state
+        .accounts_started
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .complete(generation, account.is_some())?;
+    Ok(account)
 }
 
 #[tauri::command]
@@ -784,6 +834,7 @@ async fn setup_accounts_sign_in(
     state: State<'_, DesktopState>,
 ) -> Result<accounts::Account, String> {
     require_setup(&window)?;
+    let generation = state.reset_accounts_started()?;
     cancel_restore(&state);
     update_startup(&app, Startup::idle());
     state.accounts.invalidate();
@@ -815,6 +866,14 @@ async fn setup_accounts_sign_in(
         )
         .await;
     retire_server_windows(&app, &state);
+    if result.is_ok() {
+        require_setup(&window)?;
+        state
+            .accounts_started
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .complete(generation, true)?;
+    }
     result
 }
 
@@ -825,6 +884,7 @@ async fn setup_accounts_logout(
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    state.reset_accounts_started()?;
     *state
         .initialization
         .lock()
@@ -1849,7 +1909,8 @@ fn cancel_restore(state: &DesktopState) {
 }
 
 fn begin_restore(state: &DesktopState) -> Option<u64> {
-    if !state.setup_ready.load(Ordering::SeqCst)
+    if !state.accounts_have_started()
+        || !state.setup_ready.load(Ordering::SeqCst)
         || state
             .pending_server
             .lock()
@@ -1886,7 +1947,7 @@ async fn restore_saved_server(
 ) -> Result<bool, String> {
     let state = app.state::<DesktopState>();
     let _switch = state.switching.lock().await;
-    if state.restore_intent.load(Ordering::SeqCst) != intent {
+    if !state.accounts_have_started() || state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
     if state
@@ -1967,6 +2028,12 @@ async fn restore_saved_server(
 
 fn show_active_or_setup(app: &tauri::AppHandle) {
     if focus_active(app) {
+        return;
+    }
+    let state = app.state::<DesktopState>();
+    if !state.accounts_have_started() {
+        update_startup(app, Startup::idle());
+        let _ = show_setup(app);
         return;
     }
     if app
@@ -2212,6 +2279,7 @@ fn main() {
                 sessions: native::Sessions::default(),
                 browser_auth,
                 accounts: accounts::Accounts::default(),
+                accounts_started: Mutex::new(AccountsStarted::default()),
                 restoring: std::sync::atomic::AtomicBool::new(false),
                 restore_intent: AtomicU64::new(0),
                 setup_ready: std::sync::atomic::AtomicBool::new(false),
@@ -2342,6 +2410,7 @@ mod tests {
             sessions: native::Sessions::default(),
             browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
             accounts: accounts::Accounts::default(),
+            accounts_started: Mutex::new(AccountsStarted::default()),
             restoring: std::sync::atomic::AtomicBool::new(false),
             restore_intent: AtomicU64::new(0),
             setup_ready: std::sync::atomic::AtomicBool::new(false),
@@ -2422,11 +2491,79 @@ mod tests {
     }
 
     #[test]
+    fn cold_start_never_restores_saved_servers_before_accounts_are_started() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        state.setup_ready.store(true, Ordering::SeqCst);
+        *state.setup.lock().unwrap() = Some(settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: Url::parse("https://server.example.test").unwrap(),
+            account: Some("a".repeat(64)),
+        });
+        assert!(!state.accounts_have_started());
+        assert_eq!(begin_restore(&state), None);
+        assert!(!state.restoring.load(Ordering::SeqCst));
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(0, true)
+            .unwrap();
+        assert!(begin_restore(&state).is_some());
+    }
+
+    #[test]
+    fn logout_fences_late_accounts_results_and_a_new_explicit_attempt_can_unlock_again() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        let first = state.accounts_started.lock().unwrap().generation;
+        state.reset_accounts_started().unwrap();
+        assert!(state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(first, true)
+            .is_err());
+        assert!(!state.accounts_have_started());
+        let next = state.accounts_started.lock().unwrap().generation;
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(next, true)
+            .unwrap();
+        assert!(state.accounts_have_started());
+        state.reset_accounts_started().unwrap();
+        assert!(!state.accounts_have_started());
+    }
+
+    #[test]
+    fn absent_saved_session_does_not_enable_automatic_credential_access() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(0, false)
+            .unwrap();
+        state.setup_ready.store(true, Ordering::SeqCst);
+        assert!(!state.accounts_have_started());
+        assert_eq!(begin_restore(&state), None);
+    }
+
+    #[test]
     fn startup_waits_for_the_bundled_document_and_deduplicates_restore_until_it_finishes() {
         let directory = tempfile::tempdir().unwrap();
         let state = test_state(directory.path());
         assert_eq!(begin_restore(&state), None);
         state.setup_ready.store(true, Ordering::SeqCst);
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(0, true)
+            .unwrap();
         let intent = begin_restore(&state).unwrap();
         assert_eq!(begin_restore(&state), None);
         cancel_restore(&state);
@@ -2441,6 +2578,12 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let state = test_state(directory.path());
         state.setup_ready.store(true, Ordering::SeqCst);
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(0, true)
+            .unwrap();
         *state.pending_server.lock().unwrap() = Some("https://new.example.com".into());
         assert_eq!(begin_restore(&state), None);
         assert!(!state.restoring.load(Ordering::SeqCst));

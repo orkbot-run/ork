@@ -91,6 +91,13 @@ async function setup(
   };
 }
 
+async function continueSetup(options: Parameters<typeof setup>[0] = {}) {
+  const fixture = await setup(options);
+  node("get-started").click();
+  await flush();
+  return fixture;
+}
+
 afterEach(() => {
   for (const cleanup of cleanups.splice(0)) cleanup();
   vi.useRealTimers();
@@ -98,6 +105,45 @@ afterEach(() => {
 });
 
 describe("bundled desktop setup", () => {
+  it("reveals welcome without requesting stored credentials until the user continues", async () => {
+    const check = deferred<unknown>();
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return check.promise;
+        if (name === "list_servers") return saved;
+        return undefined;
+      },
+    });
+    expect(screen()).toBe("welcome");
+    expect(node("get-started").disabled).toBe(false);
+    expect(invoke.mock.calls.map(([name]) => name)).toEqual(["setup_state"]);
+    node("get-started").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("setup_accounts_session");
+    expect(node("browser-hint").hidden).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith("setup_accounts_sign_in", expect.anything());
+    check.resolve(account);
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(invoke).not.toHaveBeenCalledWith("setup_accounts_sign_in", expect.anything());
+  });
+
+  it("ignores stored credentials returned after the user cancels", async () => {
+    const check = deferred<unknown>();
+    const { invoke } = await setup({
+      invoke: async (name) => (name === "setup_accounts_session" ? check.promise : null),
+    });
+    node("get-started").click();
+    await flush();
+    node("cancel-sign-in").click();
+    await flush();
+    check.resolve(account);
+    await flush();
+    expect(screen()).toBe("welcome");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("list_servers");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
+  });
+
   it("opens browser sign-in directly from the localized welcome", async () => {
     vi.spyOn(window.navigator, "language", "get").mockReturnValue("pl-PL");
     const signingIn = deferred<unknown>();
@@ -108,6 +154,7 @@ describe("bundled desktop setup", () => {
     expect(node("get-started").textContent).toBe("Zaczynamy");
     expect(screen()).toBe("welcome");
     node("get-started").click();
+    await flush();
     expect(invoke.mock.calls.filter(([name]) => name === "setup_accounts_sign_in")).toHaveLength(1);
     expect(screen()).toBe("accounts");
     expect(node("browser-hint").hidden).toBe(false);
@@ -117,7 +164,7 @@ describe("bundled desktop setup", () => {
   });
 
   it("loads a verified account's picker only when native startup is idle", async () => {
-    const { invoke } = await setup({ session: account });
+    const { invoke } = await continueSetup({ session: account });
     expect(screen()).toBe("servers");
     expect(node("servers").textContent).toContain(saved[0]!.url);
     expect(invoke.mock.calls.map(([name]) => name)).toEqual([
@@ -143,7 +190,7 @@ describe("bundled desktop setup", () => {
   });
 
   it("proposes a warm link for confirmation and discards it on Back", async () => {
-    const { invoke, link } = await setup({ session: account });
+    const { invoke, link } = await continueSetup({ session: account });
     link("https://new.example.com");
     expect(screen()).toBe("selfhost");
     expect(node<HTMLInputElement>("server-url").value).toBe("https://new.example.com");
@@ -155,7 +202,7 @@ describe("bundled desktop setup", () => {
   });
 
   it("ignores malformed link events without changing the picker", async () => {
-    const { link } = await setup({ session: account });
+    const { link } = await continueSetup({ session: account });
     for (const address of [
       "https://user:secret@example.com",
       "http://example.com",
@@ -168,7 +215,7 @@ describe("bundled desktop setup", () => {
   });
 
   it("keeps the picker hidden throughout native automatic startup and displays local download progress", async () => {
-    const { invoke, emit, startup } = await setup({
+    const { invoke, emit, startup } = await continueSetup({
       session: account,
       startup: { phase: "opening", kind: "local", serverId: "local-id" },
     });
@@ -186,7 +233,10 @@ describe("bundled desktop setup", () => {
   });
 
   it("shows a failed default once, preserves alternatives and retries only on request", async () => {
-    const { invoke, startup } = await setup({ session: account, startup: { phase: "checking" } });
+    const { invoke, startup } = await continueSetup({
+      session: account,
+      startup: { phase: "checking" },
+    });
     expect(screen()).toBe("checking");
     startup({
       phase: "failed",
@@ -252,7 +302,7 @@ describe("bundled desktop setup", () => {
 
   it("sets and clears an explicit default without connecting", async () => {
     let entries = saved;
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name, args) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return entries;
@@ -273,13 +323,18 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it("waits for the initial session before revealing welcome", async () => {
+  it("keeps credential checks behind Continue and allows cancellation while they wait", async () => {
     const check = deferred<unknown>();
     await setup({
       invoke: async (name) => (name === "setup_accounts_session" ? check.promise : []),
     });
-    expect(screen()).toBe("checking");
-    expect(node("get-started").disabled).toBe(true);
+    expect(screen()).toBe("welcome");
+    expect(node("get-started").disabled).toBe(false);
+    node("get-started").click();
+    await flush();
+    expect(screen()).toBe("accounts");
+    node("cancel-sign-in").click();
+    await flush();
     check.resolve(null);
     await flush();
     expect(screen()).toBe("welcome");
@@ -302,7 +357,7 @@ describe("bundled desktop setup", () => {
 
   it("shows native local phases and ignores stale events after leaving", async () => {
     const start = deferred<unknown>();
-    const { emit } = await setup({
+    const { emit } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -330,7 +385,7 @@ describe("bundled desktop setup", () => {
 
   it("clears a late directory response when signing out", async () => {
     const directory = deferred<unknown>();
-    await setup({
+    await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return directory.promise;
@@ -347,7 +402,7 @@ describe("bundled desktop setup", () => {
   });
 
   it("immediately creates a domain-free command and keeps it while entering an existing address", async () => {
-    const { invoke } = await setup({ session: account });
+    const { invoke } = await continueSetup({ session: account });
     node("selfhost").click();
     await flush();
     expect(invoke).toHaveBeenCalledWith("create_server_installation");
@@ -366,7 +421,7 @@ describe("bundled desktop setup", () => {
 
   it("connects an entered existing server without waiting for installation polling", async () => {
     const connection = deferred<unknown>();
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
@@ -389,7 +444,7 @@ describe("bundled desktop setup", () => {
 
   it("discards a command that finishes after back or sign-out", async () => {
     const ticket = deferred<unknown>();
-    await setup({
+    await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -412,7 +467,7 @@ describe("bundled desktop setup", () => {
 
   it("expires unused commands and removes both native listeners on disposal", async () => {
     vi.useFakeTimers();
-    const { dispose, stops, invoke } = await setup({ session: account });
+    const { dispose, stops, invoke } = await continueSetup({ session: account });
     node("selfhost").click();
     await flush();
     await vi.advanceTimersByTimeAsync(60_001);
@@ -431,7 +486,7 @@ describe("bundled desktop setup", () => {
     vi.useFakeTimers();
     let phase = "preparing";
     const value = installCommand();
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
@@ -465,7 +520,7 @@ describe("bundled desktop setup", () => {
     vi.useFakeTimers();
     const progress = deferred<unknown>();
     const ticket = installCommand();
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -491,7 +546,7 @@ describe("bundled desktop setup", () => {
     const ticket = installCommand();
     let phase = "preparing";
     const deadline = new Date(Date.now() + 180_000).toISOString();
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -526,7 +581,7 @@ describe("bundled desktop setup", () => {
     const ticket = installCommand();
     const deadline = new Date(Date.now() + 12_000).toISOString();
     let online = true;
-    const { invoke } = await setup({
+    const { invoke } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -554,7 +609,7 @@ describe("bundled desktop setup", () => {
     vi.useFakeTimers();
     let fail = true;
     const ticket = installCommand();
-    await setup({
+    await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
@@ -602,7 +657,7 @@ it("carries exactly the visible welcome Ork into sign-up and restores an existin
 });
 
 it("ignores malformed avatar metadata and never inserts account HTML into artwork", async () => {
-  await setup({ session: { userinfo: { ork_avatar: '<svg onload="attacker()">' } } });
+  await continueSetup({ session: { userinfo: { ork_avatar: '<svg onload="attacker()">' } } });
   expect(node("hero").querySelector("svg")).not.toBeNull();
   expect(node("hero").innerHTML).not.toContain("attacker");
   expect(node("hero").querySelector("[onload]")).toBeNull();
