@@ -1,4 +1,5 @@
 ---
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { RichPart } from "../grok-alternative";
 import { richParts } from "../grok-alternative";
 import { splitInlineCode } from "../inline-code";
@@ -22,7 +23,7 @@ const parts: Part[] = splitInlineCode(text).flatMap((part): Part[] => {
 });
 
 function external(href: string): boolean {
-  return href.startsWith("http") && !href.startsWith("https://orkbot.run");
+  return href.startsWith("http") && !href.startsWith("https://ork.run");
 }
 ---
 

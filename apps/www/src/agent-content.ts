@@ -76,33 +76,33 @@ ${getHomeCopy("en")
 ${home.cta.copy}
 
 - [Agent setup prompt](https://github.com/orkbot-run/ork/blob/main/SETUP_PROMPT.md)
-- [Self-hosting guide](https://orkbot.run/self-hosted-ai-agent/)
+- [Self-hosting guide](https://ork.run/self-hosted-ai-agent/)
 - [Full self-hosting reference](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md)
-- [OpenClaw comparison](https://orkbot.run/openclaw-alternative/)
+- [OpenClaw comparison](https://ork.run/openclaw-alternative/)
 - [Source code](https://github.com/orkbot-run/ork)
 
 ## Site index
 
-- [Agent instructions](https://orkbot.run/llms.txt)
-- [Self-hosted AI agent](https://orkbot.run/self-hosted-ai-agent/)
-- [OpenClaw comparison](https://orkbot.run/openclaw-alternative/)
-- [Alternatives](https://orkbot.run/alternatives/)
-- [Docs](https://orkbot.run/docs/)
-- [Integrations](https://orkbot.run/integrations/)
-- [Sandboxes for AI agents](https://orkbot.run/sandboxes/)
-- [Integration platforms for AI agents](https://orkbot.run/integration-platforms/)
-- [Voice providers for AI agents](https://orkbot.run/voice-providers/)
-- [Blog](https://orkbot.run/blog/)
-- [Grok Bot alternatives](https://orkbot.run/grok-bot-alternative/)
-- [Pricing](https://orkbot.run/pricing/): free for permitted noncommercial self-hosting; commercial use of new Ork work requires a paid license.
-- [Download](https://orkbot.run/download/): desktop, mobile, and web apps.
-- [About](https://orkbot.run/about/)
-- [Brand](https://orkbot.run/brand/)
-- [Support](https://orkbot.run/support/)
-- [Privacy](https://orkbot.run/privacy/)
-- [Terms](https://orkbot.run/terms/)
-- [Licensing](https://orkbot.run/license/)
-- [Sitemap](https://orkbot.run/sitemap-index.xml)
+- [Agent instructions](https://ork.run/llms.txt)
+- [Self-hosted AI agent](https://ork.run/self-hosted-ai-agent/)
+- [OpenClaw comparison](https://ork.run/openclaw-alternative/)
+- [Alternatives](https://ork.run/alternatives/)
+- [Docs](https://ork.run/docs/)
+- [Integrations](https://ork.run/integrations/)
+- [Sandboxes for AI agents](https://ork.run/sandboxes/)
+- [Integration platforms for AI agents](https://ork.run/integration-platforms/)
+- [Voice providers for AI agents](https://ork.run/voice-providers/)
+- [Blog](https://ork.run/blog/)
+- [Grok Bot alternatives](https://ork.run/grok-bot-alternative/)
+- [Pricing](https://ork.run/pricing/): free for permitted noncommercial self-hosting; commercial use of new Ork work requires a paid license.
+- [Download](https://ork.run/download/): desktop, mobile, and web apps.
+- [About](https://ork.run/about/)
+- [Brand](https://ork.run/brand/)
+- [Support](https://ork.run/support/)
+- [Privacy](https://ork.run/privacy/)
+- [Terms](https://ork.run/terms/)
+- [Licensing](https://ork.run/license/)
+- [Sitemap](https://ork.run/sitemap-index.xml)
 `;
 
 export const ABOUT_MARKDOWN = `# About Ork
@@ -111,12 +111,12 @@ Ork is a source-available Grok Bot alternative for persistent AI teammates: bots
 
 The project started from a simple premise: useful agents should be understandable and controllable by the people who run them. Ork keeps routines in readable Markdown, supports multiple model providers, records actions in an audit log, and lets operators keep model keys, browser sessions, and deployment infrastructure under their own control.
 
-Ork targets the web, macOS, Windows, Linux, iOS, and Android. The source is public on GitHub. The Apache-2.0 baseline keeps its license. New Ork work uses PolyForm Noncommercial or a paid commercial license. See [licensing](https://orkbot.run/license/). Run it from source on your own infrastructure.
+Ork targets the web, macOS, Windows, Linux, iOS, and Android. The source is public on GitHub. The Apache-2.0 baseline keeps its license. New Ork work uses PolyForm Noncommercial or a paid commercial license. See [licensing](https://ork.run/license/). Run it from source on your own infrastructure.
 
 - [Source code](https://github.com/orkbot-run/ork)
-- [Self-hosting guide](https://orkbot.run/self-hosted-ai-agent/)
+- [Self-hosting guide](https://ork.run/self-hosted-ai-agent/)
 - [Full self-hosting reference](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md)
-- [Support](https://orkbot.run/support/)
+- [Support](https://ork.run/support/)
 `;
 
 export const DOWNLOAD_MARKDOWN = `# Download Ork
@@ -125,12 +125,12 @@ Ork can be built from source. Published installers will be listed here when an O
 
 - [Desktop source](${GITHUB_URL}/tree/main/apps/desktop)
 - [Mobile source](${GITHUB_URL}/tree/main/apps/mobile)
-- [Self-hosting guide](https://orkbot.run/self-hosted-ai-agent/)
+- [Self-hosting guide](https://ork.run/self-hosted-ai-agent/)
 `;
 
 export const SUPPORT_MARKDOWN = `# Ork support
 
-Start with the [self-hosting guide](https://orkbot.run/self-hosted-ai-agent/). For reproducible bugs or feature requests, open an issue in the [Ork GitHub repository](${GITHUB_URL}/issues). Remove credentials and private content before posting.
+Start with the [self-hosting guide](https://ork.run/self-hosted-ai-agent/). For reproducible bugs or feature requests, open an issue in the [Ork GitHub repository](${GITHUB_URL}/issues). Remove credentials and private content before posting.
 
 For account, billing, or privacy requests, contact the operator of the Ork server you use. Account settings provide deletion controls for that deployment.
 `;
@@ -141,16 +141,16 @@ This page describes the self-hosted software. Contact the operator of your Ork s
 
 The server stores account details, conversations, files, and configured connection credentials. Features you enable can send content to the model, voice, memory, and integration providers configured for your deployment. Review those settings and the providers' terms before sharing data.
 
-The [self-hosting guide](https://orkbot.run/self-hosted-ai-agent/) covers deployment configuration. The [project documentation](${GITHUB_URL}/tree/main/docs) describes storage and account controls.
+The [self-hosting guide](https://ork.run/self-hosted-ai-agent/) covers deployment configuration. The [project documentation](${GITHUB_URL}/tree/main/docs) describes storage and account controls.
 `;
 
 export const TERMS_MARKDOWN = `# Ork terms
 
-Existing Apache-2.0 material keeps its terms under the [Apache License, Version 2.0](${GITHUB_URL}/blob/main/LICENSE). New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Read the [license scope and commercial terms](https://orkbot.run/license/) before using that work.
+Existing Apache-2.0 material keeps its terms under the [Apache License, Version 2.0](${GITHUB_URL}/blob/main/LICENSE). New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Read the [license scope and commercial terms](https://ork.run/license/) before using that work.
 
 This page does not create a paid subscription or a hosted-service agreement. A server operator is responsible for the terms applying to a deployment they offer.
 
-Model services, computer providers, and integrations can have their own terms and charges. See the [self-hosting guide](https://orkbot.run/self-hosted-ai-agent/) for running Ork on your infrastructure.
+Model services, computer providers, and integrations can have their own terms and charges. See the [self-hosting guide](https://ork.run/self-hosted-ai-agent/) for running Ork on your infrastructure.
 `;
 
 export const AGENT_INSTRUCTIONS = `# Ork
@@ -168,39 +168,39 @@ Run Ork from source on your own infrastructure. Do not send model keys, password
 ## How an agent should use Ork
 
 1. Read the [setup prompt](https://github.com/orkbot-run/ork/blob/main/SETUP_PROMPT.md) before changing the user's machine.
-2. Use the [self-hosting guide](https://orkbot.run/self-hosted-ai-agent/) for setup. The [GitHub guide](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md) is the full reference for backups, upgrades, and production layout.
+2. Use the [self-hosting guide](https://ork.run/self-hosted-ai-agent/) for setup. The [GitHub guide](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md) is the full reference for backups, upgrades, and production layout.
 3. Confirm deployment choices and any host-level commands with the user, and keep secrets in local environment configuration rather than tracked files.
 4. Use the [public issue tracker](https://github.com/orkbot-run/ork/issues) for reproducible bugs. Follow SECURITY.md in the repository for security reports.
 
 ## Canonical resources
 
-- [AI Catalog](https://orkbot.run/.well-known/ai-catalog.json): machine-readable index of the public agent resources.
-- [Website](https://orkbot.run/): product overview, supported models, and common questions.
-- [Website Markdown](https://orkbot.run/index.md): the English product overview as Markdown.
-- [Alternatives](https://orkbot.run/alternatives/)
-- [Grok Bot alternatives](https://orkbot.run/grok-bot-alternative/)
-- [Pricing](https://orkbot.run/pricing/): free for permitted noncommercial self-hosting; commercial use of new Ork work requires a paid license.
-- [Download](https://orkbot.run/download/): desktop, mobile, and web apps.
-- [About](https://orkbot.run/about/)
-- [Brand](https://orkbot.run/brand/)
+- [AI Catalog](https://ork.run/.well-known/ai-catalog.json): machine-readable index of the public agent resources.
+- [Website](https://ork.run/): product overview, supported models, and common questions.
+- [Website Markdown](https://ork.run/index.md): the English product overview as Markdown.
+- [Alternatives](https://ork.run/alternatives/)
+- [Grok Bot alternatives](https://ork.run/grok-bot-alternative/)
+- [Pricing](https://ork.run/pricing/): free for permitted noncommercial self-hosting; commercial use of new Ork work requires a paid license.
+- [Download](https://ork.run/download/): desktop, mobile, and web apps.
+- [About](https://ork.run/about/)
+- [Brand](https://ork.run/brand/)
 - [Source](https://github.com/orkbot-run/ork)
-- [Self-hosting guide](https://orkbot.run/self-hosted-ai-agent/): requirements, Docker install, source setup, and desktop and mobile connections.
-- [Self-hosting Markdown](https://orkbot.run/self-hosted-ai-agent.md): the setup guide with language-tagged code examples.
+- [Self-hosting guide](https://ork.run/self-hosted-ai-agent/): requirements, Docker install, source setup, and desktop and mobile connections.
+- [Self-hosting Markdown](https://ork.run/self-hosted-ai-agent.md): the setup guide with language-tagged code examples.
 - [Full self-hosting reference](https://github.com/orkbot-run/ork/blob/main/docs/self-host.md)
-- [OpenClaw comparison](https://orkbot.run/openclaw-alternative/)
-- [Docs](https://orkbot.run/docs/): getting started, using Ork, and self-hosting. Each page has a Markdown version.
-- [Integrations](https://orkbot.run/integrations/): every app a bot can connect to. [Markdown list](https://orkbot.run/integrations.md); each app page has a Markdown version with its actions.
-- [Sandboxes for AI agents](https://orkbot.run/sandboxes/): where bot computers can run, compared, with a page per provider. Each page has a Markdown version.
-- [Integration platforms for AI agents](https://orkbot.run/integration-platforms/): Composio, Pipedream, MCP servers and API connectors compared, with a page for each. Each page has a Markdown version.
-- [Voice providers for AI agents](https://orkbot.run/voice-providers/): ElevenLabs, OpenAI, Cartesia, Fish Audio, self-hosted speech servers and macOS voices compared, with a page for each. Each page has a Markdown version.
-- [Submit a plugin](https://orkbot.run/plugins/submit/): list a plugin in the Ork marketplace. [Markdown with the API](https://orkbot.run/plugins/submit.md).
-- [Blog](https://orkbot.run/blog/)
+- [OpenClaw comparison](https://ork.run/openclaw-alternative/)
+- [Docs](https://ork.run/docs/): getting started, using Ork, and self-hosting. Each page has a Markdown version.
+- [Integrations](https://ork.run/integrations/): every app a bot can connect to. [Markdown list](https://ork.run/integrations.md); each app page has a Markdown version with its actions.
+- [Sandboxes for AI agents](https://ork.run/sandboxes/): where bot computers can run, compared, with a page per provider. Each page has a Markdown version.
+- [Integration platforms for AI agents](https://ork.run/integration-platforms/): Composio, Pipedream, MCP servers and API connectors compared, with a page for each. Each page has a Markdown version.
+- [Voice providers for AI agents](https://ork.run/voice-providers/): ElevenLabs, OpenAI, Cartesia, Fish Audio, self-hosted speech servers and macOS voices compared, with a page for each. Each page has a Markdown version.
+- [Submit a plugin](https://ork.run/plugins/submit/): list a plugin in the Ork marketplace. [Markdown with the API](https://ork.run/plugins/submit.md).
+- [Blog](https://ork.run/blog/)
 - [Releases](https://github.com/orkbot-run/ork/releases)
-- [Support](https://orkbot.run/support/)
-- [Privacy](https://orkbot.run/privacy/)
-- [Terms](https://orkbot.run/terms/)
-- [Licensing](https://orkbot.run/license/)
-- [Sitemap](https://orkbot.run/sitemap-index.xml)
+- [Support](https://ork.run/support/)
+- [Privacy](https://ork.run/privacy/)
+- [Terms](https://ork.run/terms/)
+- [Licensing](https://ork.run/license/)
+- [Sitemap](https://ork.run/sitemap-index.xml)
 `;
 
 export const BRAND_MARKDOWN = `# Ork brand
@@ -209,7 +209,7 @@ Logos and colors for writing about Ork.
 
 ## Logos
 
-${BRAND_LOGOS.map((logo) => `- [${logo.name}](https://orkbot.run${logo.file}): ${logo.format}`).join("\n")}
+${BRAND_LOGOS.map((logo) => `- [${logo.name}](https://ork.run${logo.file}): ${logo.format}`).join("\n")}
 
 ## Colors
 
@@ -217,7 +217,7 @@ ${BRAND_COLORS.map((color) => `- ${color.name}: \`${color.hex}\``).join("\n")}
 
 ## Usage
 
-Write Ork with a capital O. Use orkbot for package names and orkbot.run for the website.
+Write Ork with a capital O. Use orkbot for package names and ork.run for the website.
 
 `;
 
@@ -227,7 +227,7 @@ List a plugin in the Ork marketplace. We review every submission and email the r
 
 The plugin must be a public GitHub repository with a plugin manifest (\`plugin.json\` following [Agent Plugins](https://agent-plugins.org), \`.cursor-plugin/plugin.json\`, or \`.grok-plugin/plugin.json\`) and skills, a hosted MCP server, or both.
 
-[Build a plugin](https://orkbot.run/docs/build-a-plugin/) starts with a hosted MCP server and covers configuration, testing, and marketplace submission. Copy the [MCP server example](${GITHUB_URL}/tree/main/examples/plugins/mcp-server) for hosted tools, or the [hello world example](${GITHUB_URL}/tree/main/examples/plugins/hello-world) for skills only.
+[Build a plugin](https://ork.run/docs/build-a-plugin/) starts with a hosted MCP server and covers configuration, testing, and marketplace submission. Copy the [MCP server example](${GITHUB_URL}/tree/main/examples/plugins/mcp-server) for hosted tools, or the [hello world example](${GITHUB_URL}/tree/main/examples/plugins/hello-world) for skills only.
 
 ## Submit with the API
 
@@ -257,10 +257,10 @@ export const NOT_FOUND_MARKDOWN = `# Page not found
 
 The requested Ork page does not exist.
 
-- [Agent instructions](https://orkbot.run/llms.txt)
-- [Site map](https://orkbot.run/sitemap-index.xml)
-- [Home](https://orkbot.run/)
-- [Self-hosting guide](https://orkbot.run/self-hosted-ai-agent/)
+- [Agent instructions](https://ork.run/llms.txt)
+- [Site map](https://ork.run/sitemap-index.xml)
+- [Home](https://ork.run/)
+- [Self-hosting guide](https://ork.run/self-hosted-ai-agent/)
 `;
 
 const MARKDOWN_DOCUMENTS = new Map<string, string>([

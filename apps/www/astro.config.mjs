@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import react from "@astrojs/react";
 import { satteri } from "@astrojs/markdown-satteri";
 import sitemap from "@astrojs/sitemap";
@@ -11,7 +12,7 @@ import { resolveWwwPort } from "./www-port.mjs";
 const wwwPort = resolveWwwPort();
 
 export default defineConfig({
-  site: "https://orkbot.run",
+  site: "https://ork.run",
   output: "static",
   i18n: {
     defaultLocale: "en",

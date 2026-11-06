@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
@@ -52,7 +53,7 @@ test("ordinary accounts can add personal MCP connections without server setup", 
   await expect(page.getByRole("alert")).toContainText(message);
   await expect(page.getByRole("link", { name: "Troubleshoot", exact: true })).toHaveAttribute(
     "href",
-    "https://orkbot.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
+    "https://ork.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
   );
   await captureScreenshot(page, testInfo, "personal-mcp-callback-mismatch");
   await page.route("**/rpc/mcp/oauth/begin", (route) =>

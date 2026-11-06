@@ -573,7 +573,7 @@ jobs:
       queue: max
     environment:
       name: production
-      url: https://app.orkbot.run
+      url: https://app.ork.run
     permissions:
       contents: read
       id-token: write

@@ -67,7 +67,7 @@ describe("self-hosted passkey domain", () => {
 
   it("defaults to the hosted server's domain", async () => {
     const passkeys = await load("");
-    expect(passkeys.PASSKEY_RP_ID).toBe("app.orkbot.run");
+    expect(passkeys.PASSKEY_RP_ID).toBe("app.ork.run");
   });
 
   it("associates the build with ORKBOT_PASSKEY_RP_ID", async () => {

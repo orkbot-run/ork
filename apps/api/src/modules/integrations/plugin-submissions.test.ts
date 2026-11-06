@@ -402,7 +402,7 @@ describe("integration page claims", () => {
     const opened = await open(confirmLink(confirm!));
     expect(opened.status).toBe(303);
     expect(opened.headers.get("location")).toBe(
-      "https://orkbot.run/integrations/acme-tickets/claim/?confirmed",
+      "https://ork.run/integrations/acme-tickets/claim/?confirmed",
     );
     expect(rows[0]).toMatchObject({ status: "pending", confirmToken: null });
     await vi.waitFor(() => expect(email.sent).toHaveLength(2));
@@ -425,7 +425,7 @@ describe("integration page claims", () => {
     rows[0]!.confirmExpiresAt = new Date(Date.now() - 1);
     const opened = await open(confirmLink(email.sent[0]!));
     expect(opened.headers.get("location")).toBe(
-      "https://orkbot.run/integrations/acme-tickets/claim/?expired",
+      "https://ork.run/integrations/acme-tickets/claim/?expired",
     );
     expect(rows[0]!.status).toBe("unconfirmed");
   });

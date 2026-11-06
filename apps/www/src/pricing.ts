@@ -211,7 +211,7 @@ ${plan.price}${plan.note ? ` (${plan.note})` : ""}
 
 ${plan.features.map((feature) => `- ${feature}`).join("\n")}
 
-[${plan.action.label}](${new URL(plan.action.href, "https://orkbot.run").href})`;
+[${plan.action.label}](${new URL(plan.action.href, "https://ork.run").href})`;
 }
 
 export const PRICING_MARKDOWN = `# Ork pricing
@@ -222,7 +222,7 @@ ${PRICING_PLANS.slice(0, 1).map(planMarkdown).join("\n\n")}
 
 ${COMMERCIAL_DESCRIPTION}
 
-[Licensing and contact](https://orkbot.run/license/).
+[Licensing and contact](https://ork.run/license/).
 
 You pay the model, computer, and integration providers you choose to use.
 `;

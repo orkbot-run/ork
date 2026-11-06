@@ -2,35 +2,35 @@
   "specVersion": "1.0",
   "host": {
     "displayName": "Ork",
-    "documentationUrl": "https://orkbot.run/self-hosted-ai-agent/"
+    "documentationUrl": "https://ork.run/self-hosted-ai-agent/"
   },
   "entries": [
     {
       "identifier": "urn:air:orkbot.run:docs:llms",
       "displayName": "Ork agent guide",
       "type": "text/plain",
-      "url": "https://orkbot.run/llms.txt",
+      "url": "https://ork.run/llms.txt",
       "description": "Product overview, agent-assisted setup guidance, and canonical resources."
     },
     {
       "identifier": "urn:air:orkbot.run:docs:overview",
       "displayName": "Ork overview",
       "type": "text/markdown",
-      "url": "https://orkbot.run/index.md",
+      "url": "https://ork.run/index.md",
       "description": "Features, model choices, self-hosting, and common questions."
     },
     {
       "identifier": "urn:air:orkbot.run:docs:self-host",
       "displayName": "Self-hosting guide",
       "type": "text/html",
-      "url": "https://orkbot.run/self-hosted-ai-agent/",
+      "url": "https://ork.run/self-hosted-ai-agent/",
       "description": "Requirements, installation, and connecting desktop and mobile clients."
     },
     {
       "identifier": "urn:air:orkbot.run:docs:self-host-markdown",
       "displayName": "Self-hosting guide as Markdown",
       "type": "text/markdown",
-      "url": "https://orkbot.run/self-hosted-ai-agent.md",
+      "url": "https://ork.run/self-hosted-ai-agent.md",
       "description": "The setup guide with language-tagged command examples."
     }
   ]

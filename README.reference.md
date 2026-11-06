@@ -13,13 +13,13 @@ Adapted feature and deployment reference. Use [README.md](./README.md) for the c
 
 Ork is a source-available AI agent for persistent teammates, and a self-hosted AI assistant you
 can run on your own machine. It is available on the web, as a Tauri desktop app, and on
-[iPhone](https://orkbot.run/download/) and [Android](https://orkbot.run/download/). Bring your own model
+[iPhone](https://ork.run/download/) and [Android](https://ork.run/download/). Bring your own model
 and computer provider, or run the complete stack locally.
 
 It is a source-available, self-hosted alternative to Grok Bot, Meta Muse, OpenAI Dots, Instinct,
 OpenClaw, Hermes Agent, and Claude Duet.
 
-Ork is in beta. Learn more at [orkbot.run](https://orkbot.run).
+Ork is in beta. Learn more at [ork.run](https://ork.run).
 
 ## Features
 
@@ -267,13 +267,13 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the development workflow and test m
 
 ## How Ork compares
 
-- [Grok Bot](https://orkbot.run/grok-bot-alternative/)
-- [Muse](https://orkbot.run/muse-alternative/)
-- [Dots](https://orkbot.run/dots-alternative/)
-- [Instinct](https://orkbot.run/instinct-alternative/)
-- [OpenClaw](https://orkbot.run/openclaw-alternative/)
-- [Hermes Agent](https://orkbot.run/hermes-alternative/)
-- [All comparisons](https://orkbot.run/alternatives/)
+- [Grok Bot](https://ork.run/grok-bot-alternative/)
+- [Muse](https://ork.run/muse-alternative/)
+- [Dots](https://ork.run/dots-alternative/)
+- [Instinct](https://ork.run/instinct-alternative/)
+- [OpenClaw](https://ork.run/openclaw-alternative/)
+- [Hermes Agent](https://ork.run/hermes-alternative/)
+- [All comparisons](https://ork.run/alternatives/)
 
 ## Contributing
 

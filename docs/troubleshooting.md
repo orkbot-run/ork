@@ -45,7 +45,7 @@ Share the relevant section and error code. This prompt gives the assistant enoug
 context to start without asking for a full configuration file:
 
 ```text
-Help me troubleshoot Ork using https://orkbot.run/docs/troubleshooting/.
+Help me troubleshoot Ork using https://ork.run/docs/troubleshooting/.
 
 Error code: <code>
 App version: <version>

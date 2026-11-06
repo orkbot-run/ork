@@ -9,7 +9,7 @@
  * its entitlements must be built with the same `ORKBOT_PASSKEY_RP_ID` value.
  */
 export const PASSKEY_RP_ID =
-  process.env.ORKBOT_PASSKEY_RP_ID?.trim().toLowerCase() || "app.orkbot.run";
+  process.env.ORKBOT_PASSKEY_RP_ID?.trim().toLowerCase() || "app.ork.run";
 
 const TEAM_ID = /^[A-Z0-9]{10}$/;
 const BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;

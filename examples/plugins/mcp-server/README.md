@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # MCP server plugin
 
 A manifest, a hosted MCP connection, and an optional skill teaching bots to use it.
@@ -14,5 +16,5 @@ Keep credentials out of the repository. OAuth uses server discovery and per-user
 For a token or custom header, edit the installed server under **Manage MCP servers** → **Advanced**.
 `mcp.json` accepts optional static, non-secret `headers`; `${VAR}` placeholders are rejected.
 
-Follow [Build a plugin](https://orkbot.run/docs/build-a-plugin/) for configuration and marketplace submission.
+Follow [Build a plugin](https://ork.run/docs/build-a-plugin/) for configuration and marketplace submission.
 For a plugin without tools, see [Hello world](../hello-world/README.md).

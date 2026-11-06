@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import { describe, expect, it } from "vitest";
 import {
   ANDROID_APK_URL,
@@ -15,8 +16,8 @@ import {
 
 describe("client builds", () => {
   it("links unlisted native clients to Ork downloads and its own APK release", () => {
-    expect(IOS_APP_STORE_URL).toBe("https://orkbot.run/download/");
-    expect(ANDROID_APP_STORE_URL).toBe("https://orkbot.run/download/");
+    expect(IOS_APP_STORE_URL).toBe("https://ork.run/download/");
+    expect(ANDROID_APP_STORE_URL).toBe("https://ork.run/download/");
     expect(ANDROID_APK_URL).toBe(
       "https://github.com/orkbot-run/ork/releases/download/android/orkbot.apk",
     );

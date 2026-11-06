@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import { describe, expect, it, vi } from "vitest";
 import { OpenRouterUsageLookup, openRouterInferenceFetch } from "./openrouter-usage.js";
 
@@ -16,7 +17,7 @@ describe("OpenRouter attribution and usage recovery", () => {
     );
     const init = fetcher.mock.calls[0]![1]!;
     const headers = new Headers(init.headers);
-    expect(headers.get("HTTP-Referer")).toBe("https://orkbot.run");
+    expect(headers.get("HTTP-Referer")).toBe("https://ork.run");
     expect(headers.get("X-OpenRouter-Title")).toBe("Ork");
     expect(headers.get("Authorization")).toBe("Bearer fixture");
     expect(init.signal).toBe(controller.signal);

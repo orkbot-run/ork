@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { PluginSubmission } from "@orkbot/contracts";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, makeAdmin, signup } from "./helpers";
@@ -89,7 +90,7 @@ test("an admin reviews plugin submissions from the emailed admin link", async ({
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText("github.com/example/planning-notes");
   const claim = panel.getByRole("listitem", { name: "Acme Tickets" });
-  await expect(claim).toContainText("orkbot.run/integrations/acme-tickets");
+  await expect(claim).toContainText("ork.run/integrations/acme-tickets");
   await expect(claim.getByRole("button", { name: "Testing" })).toHaveCount(0);
   await expect(rows.first()).toContainText("maker@example.test");
   await rows.first().getByRole("button", { name: "Testing" }).click();

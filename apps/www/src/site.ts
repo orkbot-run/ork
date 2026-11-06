@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
 export const SITE_NAME = "Ork";
-export const SITE_URL = "https://orkbot.run";
+export const SITE_URL = "https://ork.run";
 export const SITE_DESCRIPTION =
   "Ork is a privacy-first AI assistant for local or self-hosted use. Choose your model and give AI teammates email, research and coding tasks. Source available.";
 
-export const APP_URL = "https://app.orkbot.run";
+export const APP_URL = "https://app.ork.run";
 export const PLUGIN_SUBMISSIONS_URL = `${APP_URL}/api/v1/plugin-submissions`;
 export const INTEGRATION_CLAIMS_URL = `${APP_URL}/api/v1/integration-claims`;
 export const CATALOG_URL = "";
 export const GITHUB_URL = "https://github.com/orkbot-run/ork";
-export const IOS_APP_URL = "https://orkbot.run/download/";
+export const IOS_APP_URL = "https://ork.run/download/";
 export const GITHUB_API_REPO = "https://api.github.com/repos/orkbot-run/ork";
 export const DOCS_URL = "https://github.com/orkbot-run/ork/blob/main/docs/self-host.md";
 export const SELF_HOST_SECRETS_URL =

@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Build a plugin
 
 ## Most plugins wrap an MCP server
@@ -111,7 +113,7 @@ preview again.
 
 ### 5. Submit to the marketplace
 
-1. Open [Submit a plugin](https://orkbot.run/plugins/submit/), also linked from Integrations.
+1. Open [Submit a plugin](https://ork.run/plugins/submit/), also linked from Integrations.
 2. Enter your email, plugin name, HTTPS logo URL, public GitHub repository or folder URL,
    description, and testing instructions. A website URL is optional.
 3. Explain how to exercise the tools and authentication without including real credentials.
@@ -121,7 +123,7 @@ Every submission is reviewed and the result is emailed to you. Approval checks t
 preview and remote endpoint safety, requires at least one skill or MCP server, and refuses
 unsupported or invalid parts. Approval lists the exact commit reviewed; later pushes do not
 automatically update the listing. Test changes and resubmit through the same form.
-The [submission API reference](https://orkbot.run/plugins/submit.md) covers submitting by API.
+The [submission API reference](https://ork.run/plugins/submit.md) covers submitting by API.
 
 ## Skills-only plugins
 

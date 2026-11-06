@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { AgentUsage, ModelUsageLookup } from "@orkbot/adapter-kit";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { z } from "zod";
@@ -18,7 +19,7 @@ export function openRouterInferenceFetch(fetcher: typeof fetch, userId?: string)
           ? input.headers
           : undefined,
     );
-    headers.set("HTTP-Referer", "https://orkbot.run");
+    headers.set("HTTP-Referer", "https://ork.run");
     headers.set("X-OpenRouter-Title", "Ork");
     const body = init?.body ?? (input instanceof Request ? await input.clone().text() : undefined);
     if (typeof body !== "string") throw new Error("OpenRouter inference requires a JSON body");

@@ -1,17 +1,19 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Mobile app
 
 Chat with your bots, answer their questions, watch their computers and take calls from your phone.
 
 ## Install
 
-Check the [Ork download page](https://orkbot.run/download/) for available builds.
+Check the [Ork download page](https://ork.run/download/) for available builds.
 Store listings are configured separately for Ork releases.
 
 You can also choose **Get the mobile app** from the account menu in the web or desktop app.
 
 ## Sign in
 
-Sign in with your orkbot.run account. To use your own server instead, tap **Use a custom server** on
+Sign in with your ork.run account. To use your own server instead, tap **Use a custom server** on
 the sign-in screen and enter its address. For a server on your local network, follow
 [Connecting a phone on the same network](./self-host-clients.md#connecting-a-phone-on-the-same-network).
 

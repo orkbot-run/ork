@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Models
 
 Choose which AI models your bots think with, using your own subscription, your own API key, or a
@@ -16,7 +18,7 @@ Open **Settings → Models**. Under **Add provider**, pick a provider and connec
 Connected providers are listed under **Providers** and are available in every [space](./spaces.md).
 
 > [!NOTE]
-> On orkbot.run you can skip this and choose **Use Ork credits**, which includes monthly model
+> On ork.run you can skip this and choose **Use Ork credits**, which includes monthly model
 > credits. See [Account and billing](./account.md).
 
 ## Main model and fallbacks

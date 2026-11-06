@@ -41,7 +41,7 @@ describe("passkeysSupported", () => {
 
   it("on the macOS app, offers passkeys only for relying parties the build is associated with", async () => {
     const mac = (rpIds?: string[] | Error) => ({
-      ...browser("app.orkbot.run"),
+      ...browser("app.ork.run"),
       desktop: {
         platform: "darwin",
         passkeys:
@@ -55,12 +55,12 @@ describe("passkeysSupported", () => {
               },
       },
     });
-    await expect(passkeysSupported("app.orkbot.run", mac(["app.orkbot.run"]))).resolves.toBe(true);
-    await expect(passkeysSupported("App.Orkbot.Run", mac(["app.orkbot.run"]))).resolves.toBe(true);
-    await expect(passkeysSupported("app.orkbot.run", mac([]))).resolves.toBe(false);
-    await expect(passkeysSupported("app.orkbot.run", mac())).resolves.toBe(false);
-    await expect(passkeysSupported("app.orkbot.run", mac(new Error("ipc")))).resolves.toBe(false);
-    const selfHosted = { ...mac(["app.orkbot.run"]), host: "orkbot.example.com" };
+    await expect(passkeysSupported("app.ork.run", mac(["app.ork.run"]))).resolves.toBe(true);
+    await expect(passkeysSupported("App.Ork.Run", mac(["app.ork.run"]))).resolves.toBe(true);
+    await expect(passkeysSupported("app.ork.run", mac([]))).resolves.toBe(false);
+    await expect(passkeysSupported("app.ork.run", mac())).resolves.toBe(false);
+    await expect(passkeysSupported("app.ork.run", mac(new Error("ipc")))).resolves.toBe(false);
+    const selfHosted = { ...mac(["app.ork.run"]), host: "orkbot.example.com" };
     await expect(passkeysSupported("orkbot.example.com", selfHosted)).resolves.toBe(false);
     expect(
       selfHosted.credential.isUserVerifyingPlatformAuthenticatorAvailable,

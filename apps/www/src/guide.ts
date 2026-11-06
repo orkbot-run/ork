@@ -260,7 +260,7 @@ export const SELF_HOST_MARKDOWN = `# Self-hosted AI agent
 
 Ork is a source-available AI agent for persistent teammates. Each bot can use a browser and a shell, keep routines as Markdown, and pause for approval when work crosses a boundary you set. Self-hosting means that stack runs on infrastructure you operate.
 
-The [license scope](https://orkbot.run/license/) separates the Apache baseline from new Ork work under PolyForm Noncommercial or a paid commercial license. Run Ork on your own infrastructure. This page is the essential setup. The [full self-hosting guide](${DOCS_URL}) on GitHub covers backups, upgrades, secrets, restricted networks, and production Compose.
+The [license scope](https://ork.run/license/) separates the Apache baseline from new Ork work under PolyForm Noncommercial or a paid commercial license. Run Ork on your own infrastructure. This page is the essential setup. The [full self-hosting guide](${DOCS_URL}) on GitHub covers backups, upgrades, secrets, restricted networks, and production Compose.
 
 ## What self-hosting gives you
 

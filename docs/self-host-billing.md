@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Billing
 
 Charge for hosted use with Stripe: an own-key plan, monthly model credits and top-ups.
@@ -71,7 +73,7 @@ repairs. Investigate `Model credit hold requires review` logs using the shared c
 missing provider evidence into a zero-cost settlement.
 
 OpenRouter inference requests include the normal Ork user ID in `user`, `HTTP-Referer`
-(`https://orkbot.run`), and `X-OpenRouter-Title` (`Ork`). These values are sent only to OpenRouter's
+(`https://ork.run`), and `X-OpenRouter-Title` (`Ork`). These values are sent only to OpenRouter's
 HTTPS inference endpoints, never to compatible custom hosts. Recovery uses the existing configured
 deployment credential; no Redis or external accounting service is required.
 

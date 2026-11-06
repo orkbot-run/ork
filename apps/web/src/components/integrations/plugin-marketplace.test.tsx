@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { CapabilityInstall, McpServer } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -210,7 +211,7 @@ describe("plugin detail", () => {
     await click("Sign in");
     const alert = container.querySelector('[role="alert"]');
     expect(alert?.querySelector("a")?.getAttribute("href")).toBe(
-      "https://orkbot.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
+      "https://ork.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
     );
     api.connect.mockRejectedValue(new Error("Could not sign in"));
     await click("Sign in");

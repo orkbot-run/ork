@@ -3,7 +3,7 @@
 
 # Ork
 
-Ork is a source-available assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Tauri client, and Expo client in one repository. Its public domain is `orkbot.run`. Use `orkbot` in package names and technical identifiers.
+Ork is a source-available assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Tauri client, and Expo client in one repository. Its public domain is `ork.run`. Use `orkbot` in package names and technical identifiers.
 
 ## Run locally
 

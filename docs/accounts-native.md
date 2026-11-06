@@ -3,6 +3,8 @@
 
 # Native Ork Accounts connection
 
+The public website uses `ork.run`. Keep `https://api.orkbot.run` as the Accounts issuer because it is part of stored account identities and session proofs.
+
 Register a public Accounts client for each native app, then supply its settings when
 building Tauri or Expo:
 

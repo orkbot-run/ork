@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Mobile builds and store releases
 
 GitHub can build a diagnostic Android APK without Expo or store credentials.
@@ -65,7 +67,7 @@ alone.
 
 ## Android APK
 
-Direct users to the [Ork download page](https://orkbot.run/download/) once builds are published.
+Direct users to the [Ork download page](https://ork.run/download/) once builds are published.
 An APK can also be published for manual installation.
 `release-mobile` publishes it, or run the `release-android-apk` workflow from
 `main` on its own. It builds the `android-apk` EAS profile, signed with the

@@ -1,3 +1,5 @@
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+
 # Account and billing
 
 Manage your sign-in, preferences, data and plan.
@@ -38,14 +40,14 @@ You can add one, replace its value, or remove it. See [Reusable credentials](./b
 In **Settings → General**:
 
 - **Export data** downloads a zip of your account: every space's chats, files and bot workspaces.
-- **Import data** loads an export, for example to move between orkbot.run and your own server.
+- **Import data** loads an export, for example to move between ork.run and your own server.
 - **Import an agent** brings in an OpenClaw, Hermes or ChatGPT assistant. See
   [Import an agent](./import-an-agent.md).
 - **Delete account** emails you a code, then permanently deletes your account and data.
 
-## Billing on orkbot.run
+## Billing on ork.run
 
-orkbot.run is free to try; the sidebar shows when your free period ends. To keep going, choose a
+ork.run is free to try; the sidebar shows when your free period ends. To keep going, choose a
 plan:
 
 - **Use my subscription or API key**: works with your ChatGPT or Claude plan, or any

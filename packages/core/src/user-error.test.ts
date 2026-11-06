@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import { describe, expect, it } from "vitest";
 import {
   authErrorMessage,
@@ -205,7 +206,7 @@ describe("isConnectionFailure", () => {
 describe("errorHelpUrl", () => {
   it("looks up a documented code independently of its message", () => {
     expect(errorHelpUrl({ code: "MCP_OAUTH_REDIRECT_MISMATCH", message: "Localized copy" })).toBe(
-      "https://orkbot.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
+      "https://ork.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
     );
   });
 

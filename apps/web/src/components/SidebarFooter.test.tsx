@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { DesktopUpdateState } from "@orkbot/contracts";
 import { Toaster } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
@@ -165,7 +166,7 @@ it("offers the Ork download page on Android", async () => {
   const mobile = [...document.querySelectorAll("a")].find(
     (link) => link.textContent === "Get the mobile app",
   )!;
-  expect(mobile.href).toBe("https://orkbot.run/download/");
+  expect(mobile.href).toBe("https://ork.run/download/");
 });
 
 it("falls back when app artwork fails and accepts replacement artwork", async () => {

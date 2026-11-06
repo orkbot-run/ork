@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { McpServer } from "@orkbot/contracts";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -714,7 +715,7 @@ it("links callback mismatches in MCP settings to the shared recovery guide", asy
     await vi.waitFor(() => expect(connectButton()).toBeDefined());
     await act(async () => connectButton()?.click());
     expect(host.querySelector('[role="alert"] a')?.getAttribute("href")).toBe(
-      "https://orkbot.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
+      "https://ork.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
     );
     expect(connectButton()?.disabled).toBe(false);
   } finally {

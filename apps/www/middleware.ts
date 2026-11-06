@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 negotiation is preserved. Canonical-domain redirects follow LICENSE.md.
+
 import { next } from "@vercel/functions";
 import {
   AGENT_DISCOVERY_LINKS,
@@ -8,8 +13,8 @@ import {
 } from "./src/agent-content.js";
 
 const VARY_HEADER = "Accept, Accept-Encoding";
-const APEX_ORIGIN = "https://orkbot.run";
-const WWW_HOST = "www.orkbot.run";
+const APEX_ORIGIN = "https://ork.run";
+const REDIRECT_HOSTS = new Set(["orkbot.run", "www.orkbot.run", "www.ork.run"]);
 
 export const config = {
   matcher: ["/((?!api|_astro|.*\\..*).*)", "/sitemap.xml"],
@@ -25,7 +30,7 @@ function permanentRedirect(location: string): Response {
 export default function middleware(request: Request): Response {
   const url = new URL(request.url);
 
-  if (url.hostname.toLowerCase() === WWW_HOST) {
+  if (REDIRECT_HOSTS.has(url.hostname.toLowerCase())) {
     const destination = new URL(`${url.pathname}${url.search}`, APEX_ORIGIN);
     return permanentRedirect(destination.toString());
   }

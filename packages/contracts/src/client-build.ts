@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 /**
  * Client/server build handshake. Every API request names the client and the build it runs, and
  * every API response names the web build deployed beside the API, so an open tab can tell it is
@@ -17,10 +18,10 @@ export type ClientKind = (typeof CLIENT_KINDS)[number];
 export type MinimumClientBuilds = Partial<Record<ClientKind, string>>;
 
 // Native store listings will use their own Ork identifiers once published.
-export const IOS_APP_STORE_URL = "https://orkbot.run/download/";
+export const IOS_APP_STORE_URL = "https://ork.run/download/";
 export const ANDROID_APK_URL =
   "https://github.com/orkbot-run/ork/releases/download/android/orkbot.apk";
-export const ANDROID_APP_STORE_URL = "https://orkbot.run/download/";
+export const ANDROID_APP_STORE_URL = "https://ork.run/download/";
 
 const BUILD_ID = /^\d{14}$/;
 

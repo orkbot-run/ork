@@ -1,3 +1,4 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { BUILTIN_AGENT_SKILLS, ORKBOT_DOCS_URLS } from "./builtin-skills.js";
@@ -14,9 +15,9 @@ describe("Ork skill", () => {
     expect(urls).toEqual(ORKBOT_DOCS_URLS);
     for (const url of urls) {
       const slug =
-        url === "https://orkbot.run/docs.md"
+        url === "https://ork.run/docs.md"
           ? publishedSlugs[0]
-          : /^https:\/\/orkbot\.run\/docs\/([\w-]+)\.md$/.exec(url)?.[1];
+          : /^https:\/\/ork\.run\/docs\/([\w-]+)\.md$/.exec(url)?.[1];
       expect(publishedSlugs, url).toContain(slug);
       expect(existsSync(repoFile(`docs/${slug}.md`)), url).toBe(true);
     }

@@ -1,8 +1,9 @@
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import * as z from "zod";
 import { SettingsScopeSchema } from "./settings-scope.js";
 
 export const AI_DISCLOSURE_VERSION = "2026-09-14";
-export const AI_PRIVACY_URL = "https://orkbot.run/privacy/";
+export const AI_PRIVACY_URL = "https://ork.run/privacy/";
 export const AiDataUseSchema = z.enum(["model", "voice", "memory"]);
 export type AiDataUse = z.infer<typeof AiDataUseSchema>;
 export const AI_DATA_DISCLOSURES: Record<AiDataUse, string> = {

@@ -2754,13 +2754,13 @@ describe("outbound destinations", () => {
     f.setCalls([
       {
         name: "web_fetch",
-        args: { url: "https://orkbot.run/docs/routines.md" },
+        args: { url: "https://ork.run/docs/routines.md" },
         executionId: "call-1",
       },
-      { name: "web_fetch", args: { url: "https://orkbot.run/?q=secret" }, executionId: "call-2" },
+      { name: "web_fetch", args: { url: "https://ork.run/?q=secret" }, executionId: "call-2" },
     ]);
     await f.run();
-    expect(f.fetchedUrls).toEqual(["https://orkbot.run/docs/routines.md"]);
+    expect(f.fetchedUrls).toEqual(["https://ork.run/docs/routines.md"]);
     expect(isApprovalPausedResult(f.results[1])).toBe(true);
   });
 

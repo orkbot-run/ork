@@ -10,7 +10,7 @@ sources:
   - label: "Ork self-hosting guide"
     href: "https://github.com/orkbot-run/ork/blob/main/docs/self-host.md"
   - label: "Self-hosted AI agent"
-    href: "https://orkbot.run/self-hosted-ai-agent/"
+    href: "https://ork.run/self-hosted-ai-agent/"
   - label: "Self-host secrets checklist"
     href: "https://github.com/orkbot-run/ork/blob/main/docs/self-host-secrets.md"
 related:
@@ -62,6 +62,8 @@ comparison:
         - "Clone, env, Postgres, and the dev commands when you are changing Ork."
         - "Required for running the published images."
 ---
+
+<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
 
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->

@@ -1,4 +1,5 @@
 /** @jsxRuntime automatic */
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { TransactionalEmail } from "@orkbot/adapter-kit";
 import { ANDROID_APP_STORE_URL, IOS_APP_STORE_URL } from "@orkbot/contracts";
 import { Link, Text } from "react-email";
@@ -7,9 +8,9 @@ import { emailText, greeting, linkStyle, message } from "./email.js";
 const APPS: Readonly<Record<string, string>> = {
   iPhone: IOS_APP_STORE_URL,
   Android: ANDROID_APP_STORE_URL,
-  Mac: "https://orkbot.run/api/download?platform=mac",
-  Windows: "https://orkbot.run/api/download?platform=windows",
-  Linux: "https://orkbot.run/api/download?platform=linux",
+  Mac: "https://ork.run/api/download?platform=mac",
+  Windows: "https://ork.run/api/download?platform=windows",
+  Linux: "https://ork.run/api/download?platform=linux",
 };
 
 export function welcomeEmail(

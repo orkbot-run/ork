@@ -23,7 +23,7 @@ ORKBOT_PASSKEY_RP_ID=app.example.com \
 pnpm --filter @orkbot/desktop build --bundles app
 ```
 
-The relying party defaults to `app.orkbot.run`. Configure the server's
+The relying party defaults to `app.ork.run`. Configure the server's
 `PASSKEY_APPLE_APP_IDS` to include `<TEAM_ID>.run.orkbot.desktop.preview` and serve its
 association file through the web origin. Preserve any existing app identifiers.
 Unsigned builds and invalid signing metadata hide macOS passkeys. Private development

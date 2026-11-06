@@ -11,13 +11,13 @@
 
 Ork は、常駐型の AI チームメイトを持てるソース公開型の AI エージェントです。自分のマシンで動かせる
 セルフホスト型の AI アシスタントでもあります。Web 版、Tauri デスクトップアプリ、
-[iPhone](https://orkbot.run/download/) 版と [Android](https://orkbot.run/download/) 版で利用できます。
+[iPhone](https://ork.run/download/) 版と [Android](https://ork.run/download/) 版で利用できます。
 モデルやコンピューターのプロバイダーは自分で選べるほか、スタック全体をローカルで動かすこともできます。
 
 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet の
 ソース公開型でセルフホスト可能な代替ツールです。
 
-Ork は現在ベータ版です。詳しくは [orkbot.run](https://orkbot.run) をご覧ください。
+Ork は現在ベータ版です。詳しくは [ork.run](https://ork.run) をご覧ください。
 
 このドキュメントは[英語版 README](./README.md) の日本語訳です。リンク先のドキュメントは現在英語のみです。
 
@@ -244,13 +244,13 @@ pnpm test:e2e
 
 ## Ork と他製品の比較
 
-- [Grok Bot](https://orkbot.run/grok-bot-alternative/)
-- [Muse](https://orkbot.run/muse-alternative/)
-- [Dots](https://orkbot.run/dots-alternative/)
-- [Instinct](https://orkbot.run/instinct-alternative/)
-- [OpenClaw](https://orkbot.run/openclaw-alternative/)
-- [Hermes Agent](https://orkbot.run/hermes-alternative/)
-- [すべての比較](https://orkbot.run/alternatives/)
+- [Grok Bot](https://ork.run/grok-bot-alternative/)
+- [Muse](https://ork.run/muse-alternative/)
+- [Dots](https://ork.run/dots-alternative/)
+- [Instinct](https://ork.run/instinct-alternative/)
+- [OpenClaw](https://ork.run/openclaw-alternative/)
+- [Hermes Agent](https://ork.run/hermes-alternative/)
+- [すべての比較](https://ork.run/alternatives/)
 
 ## コントリビュート
 

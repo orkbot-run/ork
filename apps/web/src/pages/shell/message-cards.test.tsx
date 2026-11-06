@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Modified by Ork contributors: canonical domain links now use ork.run.
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -172,7 +173,7 @@ it("links OAuth failures in chat to the shared recovery guide without approving 
     );
     await act(async () => host.querySelector("button")?.click());
     expect(host.querySelector('[role="alert"] a')?.getAttribute("href")).toBe(
-      "https://orkbot.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
+      "https://ork.run/docs/troubleshooting/#mcp-oauth-redirect-mismatch",
     );
     expect(calls.approve.mock.calls).toHaveLength(approvalsBefore);
     expect(host.querySelector("button")?.disabled).toBe(false);

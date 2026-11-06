@@ -10,13 +10,13 @@
 ![Ork：由你掌控的 AI 队友](./docs/readme-hero.png)
 
 Ork 是一个源码可用的 AI 智能体项目，让你拥有可长期协作的 AI 队友，也可以作为自托管 AI 助手在自己的电脑上运行。
-它提供网页版、Tauri 桌面应用，以及 [iPhone](https://orkbot.run/download/) 和
-[Android](https://orkbot.run/download/) 应用。
+它提供网页版、Tauri 桌面应用，以及 [iPhone](https://ork.run/download/) 和
+[Android](https://ork.run/download/) 应用。
 你可以接入自己的模型和计算环境提供商，也可以在本地运行完整服务。
 
 它是 Grok Bot、Meta Muse、OpenAI Dots、Instinct、OpenClaw、Hermes Agent、Claude Duet 和 Hark Pro 的源码可用、自托管替代方案。
 
-Ork 目前处于测试阶段。详情见 [orkbot.run](https://orkbot.run)。
+Ork 目前处于测试阶段。详情见 [ork.run](https://ork.run)。
 
 本文是 [英文 README](./README.md) 的简体中文译文，链接指向的其他文档目前仍为英文。
 
@@ -26,16 +26,16 @@ Ork 启动后，你可以像使用 Grok Bot 一样，通过聊天设置和管理
 Muse、Dots、Instinct、Claude Duet 和 Hark Pro 是托管式助手；OpenClaw 和 Hermes Agent 则同样是可以自行运行的开源智能体。
 后两者的文档介绍了安装器、配置文件和网关。Hermes Desktop 无需命令行即可开始第一次聊天；消息网关则是独立进程。
 
-- [Grok Bot](https://orkbot.run/grok-bot-alternative/)
-- [Muse](https://orkbot.run/muse-alternative/)
-- [Dots](https://orkbot.run/dots-alternative/)
-- [Instinct](https://orkbot.run/instinct-alternative/)，可通过短信或电话交流的个人助手
-- [OpenClaw](https://orkbot.run/openclaw-alternative/)
-- [Hermes Agent](https://orkbot.run/hermes-alternative/)，Nous Research 的开源智能体
-- [Claude Duet](https://orkbot.run/claude-duet-alternative/)，Anthropic 的主动式个人智能体
-- [Hark Pro](https://orkbot.run/hark-alternative/)，hark.com 提供的个人智能体
-- [全部对比](https://orkbot.run/alternatives/)
-- [自托管指南](https://orkbot.run/self-hosted-ai-agent/)
+- [Grok Bot](https://ork.run/grok-bot-alternative/)
+- [Muse](https://ork.run/muse-alternative/)
+- [Dots](https://ork.run/dots-alternative/)
+- [Instinct](https://ork.run/instinct-alternative/)，可通过短信或电话交流的个人助手
+- [OpenClaw](https://ork.run/openclaw-alternative/)
+- [Hermes Agent](https://ork.run/hermes-alternative/)，Nous Research 的开源智能体
+- [Claude Duet](https://ork.run/claude-duet-alternative/)，Anthropic 的主动式个人智能体
+- [Hark Pro](https://ork.run/hark-alternative/)，hark.com 提供的个人智能体
+- [全部对比](https://ork.run/alternatives/)
+- [自托管指南](https://ork.run/self-hosted-ai-agent/)
 
 ## 功能
 
