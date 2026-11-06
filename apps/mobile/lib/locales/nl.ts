@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "Meld je aan bij Accounts om door te gaan.",
+  "Too many attempts. Try again later.": "Te veel pogingen. Probeer het later opnieuw.",
+  "Pairing code": "Koppelcode",
+  "Approve server": "Server goedkeuren",
+  "Enter this code on your server's initialization page.":
+    "Voer deze code in op de configuratiepagina van je server.",
+  "Could not copy the code.": "De code kon niet worden gekopieerd.",
+  "Could not pair this server. Try again.":
+    "Deze server kon niet worden gekoppeld. Probeer het opnieuw.",
+  "Pairing code expired. Generate a new code.":
+    "De koppelcode is verlopen. Genereer een nieuwe code.",
+  "This server does not support pairing codes. Update it and try again.":
+    "Deze server ondersteunt geen koppelcodes. Werk de server bij en probeer het opnieuw.",
   "Get started": "Aan de slag",
   "Add rule": "Regel toevoegen",
   "Tool name": "Toolnaam",

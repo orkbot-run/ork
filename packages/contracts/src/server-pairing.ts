@@ -8,16 +8,21 @@ export const SERVER_PAIRING_PURPOSE = "orkbot-server-pairing-v1";
 export interface ServerPairing {
   id: string;
   code: string;
-  origin: string;
   /** Unix seconds, issued by Accounts. */
   expiresAt: number;
 }
 
-export type ServerPairingStatus = "pending" | "ready" | "failed" | "expired";
+export type ServerPairingStatus =
+  | "pending"
+  | "approval-required"
+  | "approved"
+  | "ready"
+  | "failed"
+  | "expired";
 
 export interface ServerPairingState {
   status: ServerPairingStatus;
-  origin: string;
+  origin: string | null;
   /** Unix seconds, issued by Accounts. */
   expiresAt: number;
 }

@@ -1199,21 +1199,13 @@ fn server_pairing_gate(state: &DesktopState) -> Result<u64, String> {
 async fn create_server_pairing<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
-    raw_url: String,
     request_id: String,
 ) -> Result<server_pairing::Pairing, String> {
     require_setup(&window)?;
     let gate = server_pairing_gate(&state)?;
-    let origin = server::normalize_server_url(&raw_url)?
-        .origin()
-        .ascii_serialization();
-    state.server_pairings.begin(
-        request_id.clone(),
-        String::new(),
-        gate,
-        origin.clone(),
-        String::new(),
-    )?;
+    state
+        .server_pairings
+        .begin(request_id.clone(), String::new(), gate, String::new())?;
     let authorization = state
         .accounts
         .authorization(&server_directory::origin())
@@ -1232,7 +1224,7 @@ async fn create_server_pairing<R: tauri::Runtime>(
         return Err("Accounts sign-in changed. Try again.".into());
     }
     let pairing = server_pairing::Broker::new()?
-        .create(authorization.directory_bearer()?, &origin)
+        .create(authorization.directory_bearer()?)
         .await?;
     let current = require_setup(&window).is_ok()
         && require_account(&state, &authorization).is_ok()
@@ -1274,6 +1266,49 @@ async fn get_server_pairing<R: tauri::Runtime>(
     {
         return Err("Accounts sign-in changed. Try again.".into());
     }
+    state
+        .server_pairings
+        .observe(&request_id, &owner, gate, &result)?;
+    Ok(result)
+}
+
+#[tauri::command]
+async fn approve_server_pairing<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    request_id: String,
+    origin: String,
+) -> Result<server_pairing::PairingState, String> {
+    require_setup(&window)?;
+    let gate = server_pairing_gate(&state)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let owner = settings::account_key(authorization.account.identity());
+    if server_pairing_gate(&state)? != gate {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    state
+        .server_pairings
+        .shown_origin(&request_id, &owner, gate, &origin)?;
+    let pairing = state.server_pairings.pairing(&request_id, &owner, gate)?;
+    let result = server_pairing::Broker::new()?
+        .approve(authorization.directory_bearer()?, &pairing, &origin)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    if server_pairing_gate(&state)? != gate {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    state
+        .server_pairings
+        .shown_origin(&request_id, &owner, gate, &origin)?;
+    state
+        .server_pairings
+        .approved(&request_id, &owner, gate, &origin)?;
     Ok(result)
 }
 
@@ -2580,6 +2615,7 @@ fn main() {
             get_server_installation,
             create_server_pairing,
             get_server_pairing,
+            approve_server_pairing,
             cancel_server_pairing,
             remove_server,
             connect_saved_server,
@@ -3281,6 +3317,7 @@ mod tests {
                 get_server_installation,
                 create_server_pairing,
                 get_server_pairing,
+                approve_server_pairing,
                 cancel_server_pairing,
                 remove_server,
             ])
@@ -3310,10 +3347,13 @@ mod tests {
             url: origin.parse().unwrap(),
             body: if matches!(
                 command,
-                "create_server_pairing" | "get_server_pairing" | "cancel_server_pairing"
+                "create_server_pairing"
+                    | "get_server_pairing"
+                    | "approve_server_pairing"
+                    | "cancel_server_pairing"
             ) {
                 tauri::ipc::InvokeBody::Json(
-                    serde_json::json!({"requestId": "fixture-request", "rawUrl": "https://server.example.test"}),
+                    serde_json::json!({"requestId": "fixture-request", "origin": "https://server.example.test"}),
                 )
             } else {
                 tauri::ipc::InvokeBody::default()
@@ -3356,6 +3396,7 @@ mod tests {
                 "get_server_installation",
                 "create_server_pairing",
                 "get_server_pairing",
+                "approve_server_pairing",
                 "cancel_server_pairing",
                 "remove_server",
                 "connect_saved_server",

@@ -65,6 +65,7 @@ fn main() {
             "get_server_installation",
             "create_server_pairing",
             "get_server_pairing",
+            "approve_server_pairing",
             "cancel_server_pairing",
             "remove_server",
             "connect_saved_server",

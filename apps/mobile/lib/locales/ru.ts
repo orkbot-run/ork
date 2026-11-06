@@ -3,6 +3,18 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "Войдите в Accounts, чтобы продолжить.",
+  "Too many attempts. Try again later.": "Слишком много попыток. Повторите позже.",
+  "Pairing code": "Код сопряжения",
+  "Approve server": "Подтвердить сервер",
+  "Enter this code on your server's initialization page.":
+    "Введите этот код на странице первоначальной настройки вашего сервера.",
+  "Could not copy the code.": "Не удалось скопировать код.",
+  "Could not pair this server. Try again.": "Не удалось подключить этот сервер. Повторите попытку.",
+  "Pairing code expired. Generate a new code.":
+    "Срок действия кода сопряжения истёк. Создайте новый код.",
+  "This server does not support pairing codes. Update it and try again.":
+    "Этот сервер не поддерживает коды сопряжения. Обновите его и повторите попытку.",
   "Get started": "Начать",
   "Add rule": "Добавить правило",
   "Tool name": "Название инструмента",

@@ -15,11 +15,15 @@ with `PUBLIC_ORIGIN` set to the public HTTPS origin. Route that domain to `web:5
 The bootstrap job saves generated secrets in private configuration volumes.
 Open the server's address in a browser.
 
-In the signed-in Tauri or mobile app, enter that same address and choose **Pairing key**.
-Enter the six-character code on the server's initialization page. It expires after five
-minutes. After verifying the account proof and creating the owner's workspace, the server
-reports completion to Accounts, which saves the server to that account's directory so the
-waiting app can connect automatically.
+In the signed-in Tauri or mobile app, choose **Pairing key**. Enter its six-character
+key on the server's initialization page and choose **Initialize**. The key expires after
+five minutes.
+
+The app now shows the server's full address for approval. Check it and approve that
+server. Accounts binds the key to the first server that requests it, so another server
+cannot replace the address while approval is pending. After preparing the owner's
+workspace, the server reports completion and Accounts saves it to the account directory.
+The waiting app connects automatically.
 
 The browser receives no product session. Accounts access tokens stay in the native app,
 and the server receives a separate one-minute proof for its exact origin and random

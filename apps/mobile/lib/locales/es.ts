@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "Inicia sesión en Accounts para continuar.",
+  "Too many attempts. Try again later.": "Demasiados intentos. Inténtalo más tarde.",
+  "Pairing code": "Código de vinculación",
+  "Approve server": "Autorizar servidor",
+  "Enter this code on your server's initialization page.":
+    "Introduce este código en la página de configuración inicial de tu servidor.",
+  "Could not copy the code.": "No se pudo copiar el código.",
+  "Could not pair this server. Try again.":
+    "No se pudo vincular este servidor. Inténtalo de nuevo.",
+  "Pairing code expired. Generate a new code.":
+    "El código de vinculación ha caducado. Genera uno nuevo.",
+  "This server does not support pairing codes. Update it and try again.":
+    "Este servidor no admite códigos de vinculación. Actualízalo e inténtalo de nuevo.",
   "Get started": "Empezar",
   "Add rule": "Añadir regla",
   "Tool name": "Nombre de la herramienta",

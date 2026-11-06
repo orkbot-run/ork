@@ -43,15 +43,22 @@
         <section data-step="selfhost" hidden>
           <h1 data-copy="Connect your server">Connect your server</h1>
           <form id="setup">
-            <label class="field-label" for="server-url" data-copy="Server address">Server address</label>
-            <input id="server-url" class="field" type="url" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
-            <button id="connect" class="button button-primary" type="submit" data-copy="Pairing key">Pairing key</button>
+            <div id="legacy-target" hidden>
+              <label class="field-label" for="server-url" data-copy="Server address">Server address</label>
+              <input id="server-url" class="field" type="url" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" />
+            </div>
+            <button id="connect" class="button button-secondary" type="submit" data-copy="New pairing key">New pairing key</button>
           </form>
           <section id="pairing" class="installation-panel" hidden>
             <label class="field-label" for="pairing-code" data-copy="Pairing key">Pairing key</label>
-            <input id="pairing-code" class="field" readonly spellcheck="false" />
+            <input id="pairing-code" class="field pairing-key" readonly spellcheck="false" />
             <div class="command-actions"><span id="pairing-expires" class="hint"></span><button id="copy-pairing" class="link" type="button" data-copy="Copy">Copy</button></div>
             <p class="hint" data-copy="Enter this key on your server's initialization page.">Enter this key on your server's initialization page.</p>
+          </section>
+          <section id="pairing-approval" class="installation-panel" hidden>
+            <p class="field-label" data-copy="Server address">Server address</p>
+            <p id="pairing-origin" class="pairing-origin"></p>
+            <div class="command-actions"><button id="approve-pairing" class="button button-primary" type="button" data-copy="Approve">Approve</button><button id="cancel-pairing" class="link" type="button" data-copy="Cancel">Cancel</button></div>
           </section>
           <details id="install" class="disclosure">
             <summary data-copy="Install a server">Install a server</summary>

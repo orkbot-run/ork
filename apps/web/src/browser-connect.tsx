@@ -12,6 +12,7 @@ export function BrowserConnect() {
   const polish = navigator.language.toLowerCase().startsWith("pl");
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
+  const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [paired, setPaired] = useState(false);
   const [error, setError] = useState(false);
   const request = useRef<AbortController | null>(null);
@@ -23,18 +24,52 @@ export function BrowserConnect() {
     const controller = new AbortController();
     request.current = controller;
     setPending(true);
+    setAwaitingApproval(false);
     setError(false);
     try {
-      const response = await fetch("/api/auth/native/pair", {
-        method: "POST",
-        credentials: "omit",
-        redirect: "error",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ code: normalized }),
-        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]),
-      });
-      if (!response.ok || (await response.json())?.paired !== true)
+      const post = (path: string, body: object) =>
+        fetch(`/api/auth/native/${path}`, {
+          method: "POST",
+          credentials: "omit",
+          redirect: "error",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(40_000)]),
+        });
+      const response = await post("pair", { code: normalized });
+      const result = response.status === 202 ? await response.json() : null;
+      if (
+        result?.pending !== true ||
+        typeof result.pairingId !== "string" ||
+        !/^[A-Za-z0-9_-]{43}$/.test(result.pairingId)
+      )
         throw new Error("Pairing failed");
+      setAwaitingApproval(true);
+      const deadline = Date.now() + 300_000;
+      while (!controller.signal.aborted) {
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timer);
+            controller.signal.removeEventListener("abort", finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, 2000);
+          controller.signal.addEventListener("abort", finish, { once: true });
+        });
+        if (controller.signal.aborted) return;
+        if (Date.now() >= deadline) throw new Error("Pairing expired");
+        let status: Response;
+        try {
+          status = await post("pair/status", { pairingId: result.pairingId });
+        } catch {
+          if (controller.signal.aborted) return;
+          continue;
+        }
+        if (status.status >= 500 || status.status === 429) continue;
+        const state = await status.json();
+        if (status.status === 200 && state?.paired === true) break;
+        if (status.status !== 202 || state?.pending !== true) throw new Error("Pairing failed");
+      }
       if (!controller.signal.aborted) setPaired(true);
     } catch {
       if (!controller.signal.aborted) setError(true);
@@ -42,6 +77,7 @@ export function BrowserConnect() {
       if (!controller.signal.aborted) {
         request.current = null;
         setPending(false);
+        setAwaitingApproval(false);
       }
     }
   };
@@ -56,10 +92,10 @@ export function BrowserConnect() {
       <h1 className="text-3xl font-semibold">Ork</h1>
       <p className="text-muted-foreground">{window.location.host}</p>
       {paired ? (
-        <p role="status">{polish ? "Połączono" : "Paired"}</p>
+        <p role="status">{polish ? "Zainicjalizowano" : "Initialized"}</p>
       ) : (
         <form className="flex w-full max-w-xs flex-col gap-3" onSubmit={pair}>
-          <label htmlFor="pairing-code">{polish ? "Kod parowania" : "Pairing code"}</label>
+          <label htmlFor="pairing-code">{polish ? "Klucz parowania" : "Pairing key"}</label>
           <Input
             id="pairing-code"
             autoComplete="off"
@@ -71,13 +107,18 @@ export function BrowserConnect() {
             disabled={pending}
           />
           <Button type="submit" disabled={pending || !normalizeServerPairingCode(code)}>
-            {polish ? "Połącz" : "Pair"}
+            {polish ? "Inicjalizuj" : "Initialize"}
           </Button>
+          {awaitingApproval && (
+            <p role="status">
+              {polish ? "Potwierdź serwer w aplikacji Ork." : "Confirm the server in Ork."}
+            </p>
+          )}
           {error && (
             <p role="alert">
               {polish
-                ? "Nie udało się połączyć. Sprawdź kod i spróbuj ponownie."
-                : "Could not pair. Check the code and try again."}
+                ? "Nie udało się zainicjalizować. Sprawdź klucz i spróbuj ponownie."
+                : "Could not initialize. Check the key and try again."}
             </p>
           )}
         </form>

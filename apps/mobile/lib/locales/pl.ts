@@ -6,13 +6,11 @@ export const PL_MESSAGES: Record<string, string> = {
   "Get started": "Rozpocznij",
   "Sign in to Accounts to continue.": "Zaloguj się do Accounts, aby kontynuować.",
   "Too many attempts. Try again later.": "Za dużo prób. Spróbuj ponownie później.",
-  "Use a self-hosted server address.": "Podaj adres własnego serwera.",
   "Pairing code": "Klucz parowania",
+  "Approve server": "Zatwierdź serwer",
   "Enter this code on your server's initialization page.":
     "Wpisz ten kod na stronie inicjalizacji serwera.",
-  "Open server": "Otwórz serwer",
   "Could not copy the code.": "Nie udało się skopiować kodu.",
-  "Could not open the server.": "Nie udało się otworzyć serwera.",
   "Could not pair this server. Try again.": "Nie udało się sparować serwera. Spróbuj ponownie.",
   "Pairing code expired. Generate a new code.": "Kod parowania wygasł. Wygeneruj nowy kod.",
   "This server does not support pairing codes. Update it and try again.":

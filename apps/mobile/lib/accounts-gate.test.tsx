@@ -154,13 +154,20 @@ beforeEach(() => {
     ticket: {
       id: "a".repeat(64),
       code: "AB23CD",
-      origin: remote.url,
       expiresAt: Date.now() / 1000 + 300,
     },
     state: vi.fn().mockResolvedValue({
       status: "pending",
-      origin: remote.url,
+      origin: null,
       expiresAt: Date.now() / 1000 + 300,
+    }),
+    approve: vi.fn().mockImplementation(async (origin: string) => {
+      vi.mocked(pairing.state).mockResolvedValue({
+        status: "ready",
+        origin,
+        expiresAt: pairing.ticket.expiresAt,
+      });
+      return { status: "approved", origin, expiresAt: pairing.ticket.expiresAt };
     }),
     cancel: vi.fn().mockResolvedValue(undefined),
   };
@@ -348,7 +355,8 @@ it("keeps a verified account at server recovery when the directory is unavailabl
   await act(async () =>
     [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
   );
-  expect(host.querySelector('input[aria-label="Server"]')).not.toBeNull();
+  expect(host.querySelector("input")).toBeNull();
+  expect(host.textContent).toContain("Pairing code");
 });
 
 it("offers other servers after the remembered server fails verification without mounting product", async () => {
@@ -398,8 +406,8 @@ function setupPairing(status = "pending") {
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: true });
   vi.mocked(pairing.state).mockResolvedValue({
-    status: status as "pending" | "ready",
-    origin: remote.url,
+    status: status as "pending" | "approval-required" | "ready",
+    origin: status === "pending" ? null : remote.url,
     expiresAt: pairing.ticket.expiresAt,
   });
 }
@@ -416,12 +424,11 @@ it("retains a connection link through Accounts login and requires a pairing code
     state.version++;
     for (const listener of state.listeners) listener();
   });
-  expect((host.querySelector("input") as HTMLInputElement).value).toBe(remote.url);
+  expect(host.querySelector("input")).toBeNull();
   expect(host.textContent).not.toContain("Product screen");
   expect(beginServerPairing).not.toHaveBeenCalled();
   await click("Pairing code");
   expect(beginServerPairing).toHaveBeenCalledWith(
-    remote.url,
     JSON.stringify([identity.issuer, identity.subject]),
     expect.any(AbortSignal),
   );
@@ -435,9 +442,10 @@ it("retains a connection link through Accounts login and requires a pairing code
 });
 
 it("automatically refreshes the directory and enters the paired server when ready", async () => {
-  setupPairing("ready");
+  setupPairing("approval-required");
   await render();
   await click("Pairing code");
+  await click("Approve server");
   expect(accountServers).toHaveBeenNthCalledWith(
     2,
     JSON.stringify([identity.issuer, identity.subject]),
@@ -453,7 +461,7 @@ it("automatically refreshes the directory and enters the paired server when read
 it.each(["cancel", "rejected", "session-change"])(
   "never enters an unverified paired product session (%s)",
   async (outcome) => {
-    setupPairing("ready");
+    setupPairing("approval-required");
     if (outcome === "cancel") vi.mocked(continueWithAccountsServer).mockResolvedValue(false);
     if (outcome === "rejected") vi.mocked(rpc).mockRejectedValue(new Error("Not admitted"));
     if (outcome === "session-change")
@@ -463,6 +471,7 @@ it.each(["cancel", "rejected", "session-change"])(
       });
     await render();
     await click("Pairing code");
+    await click("Approve server");
     expect(addAccountServer).not.toHaveBeenCalled();
     expect(pendingServerConnect()).toBe(remote.url);
     expect(host.textContent).not.toContain("Product screen");
@@ -470,10 +479,11 @@ it.each(["cancel", "rejected", "session-change"])(
 );
 
 it("never logs in before Accounts lists the paired origin", async () => {
-  setupPairing("ready");
+  setupPairing("approval-required");
   vi.mocked(accountServers).mockResolvedValueOnce([remote]).mockResolvedValueOnce([]);
   await render();
   await click("Pairing code");
+  await click("Approve server");
   expect(continueWithAccountsServer).not.toHaveBeenCalled();
   expect(saveApiBase).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain("Product screen");
@@ -506,7 +516,7 @@ it("keeps the code while backgrounded and resumes polling when the server browse
   });
   const polls = vi.mocked(pairing.state).mock.calls.length;
   vi.mocked(pairing.state).mockResolvedValue({
-    status: "ready",
+    status: "approval-required",
     origin: remote.url,
     expiresAt: pairing.ticket.expiresAt,
   });
@@ -516,6 +526,9 @@ it("keeps the code while backgrounded and resumes polling when the server browse
   await act(async () => {
     for (const listener of state.appListeners) listener("active");
   });
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  expect(host.textContent).toContain(remote.url);
+  await click("Approve server");
   expect(continueWithAccountsServer).toHaveBeenCalledOnce();
   expect(host.textContent).toContain("Product screen");
 });
@@ -546,7 +559,7 @@ it("cancels a creation that finishes after the account changes", async () => {
   );
   await render();
   await click("Pairing code");
-  const signal = vi.mocked(beginServerPairing).mock.calls[0]![2]!;
+  const signal = vi.mocked(beginServerPairing).mock.calls[0]![1]!;
   await act(async () => {
     vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
     state.version++;
@@ -664,10 +677,11 @@ it("ignores ready from a cancelled status request", async () => {
 });
 
 it("does not create a product session on an older server after pairing", async () => {
-  setupPairing("ready");
+  setupPairing("approval-required");
   vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: false });
   await render();
   await click("Pairing code");
+  await click("Approve server");
   expect(continueWithSso).not.toHaveBeenCalled();
   expect(continueWithAccountsServer).not.toHaveBeenCalled();
   expect(saveApiBase).not.toHaveBeenCalled();
@@ -695,3 +709,200 @@ it.each(["server", "product-session"])(
     expect(host.textContent).not.toContain("AB2 3CD");
   },
 );
+
+it("generates a code without a URL field or incoming server link", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  vi.mocked(accountServers).mockResolvedValue([]);
+  await render();
+  expect(host.querySelector("input")).toBeNull();
+  await click("Pairing code");
+  expect(beginServerPairing).toHaveBeenCalledWith(
+    JSON.stringify([identity.issuer, identity.subject]),
+    expect.any(AbortSignal),
+  );
+  expect(host.textContent).toContain("AB2 3CD");
+  expect(host.textContent).not.toContain("Approve server");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("shows the complete claimed origin and waits for explicit approval", async () => {
+  setupPairing("approval-required");
+  await render();
+  await click("Pairing code");
+  expect(host.textContent).toContain(remote.url);
+  expect(host.textContent).not.toContain("AB2 3CD");
+  expect(pairing.approve).not.toHaveBeenCalled();
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await click("Approve server");
+  expect(pairing.approve).toHaveBeenCalledWith(remote.url, expect.any(AbortSignal));
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+});
+
+it.each(["approved", "ready"])(
+  "rejects an unsolicited %s without product requests",
+  async (value) => {
+    setupPairing();
+    vi.mocked(pairing.state).mockResolvedValue({
+      status: value as "ready" | "approved",
+      origin: remote.url,
+      expiresAt: pairing.ticket.expiresAt,
+    });
+    await render();
+    await click("Pairing code");
+    expect(pairing.cancel).toHaveBeenCalledOnce();
+    expect(pairing.approve).not.toHaveBeenCalled();
+    expect(continueWithAccountsServer).not.toHaveBeenCalled();
+    expect(saveApiBase).not.toHaveBeenCalled();
+  },
+);
+
+it("rejects a replacement domain instead of asking to approve another server", async () => {
+  setupPairing("approval-required");
+  vi.mocked(pairing.state)
+    .mockResolvedValueOnce({
+      status: "approval-required",
+      origin: remote.url,
+      expiresAt: pairing.ticket.expiresAt,
+    })
+    .mockResolvedValue({
+      status: "approval-required",
+      origin: "https://other.example.test",
+      expiresAt: pairing.ticket.expiresAt,
+    });
+  await render();
+  await click("Pairing code");
+  expect(pairing.cancel).toHaveBeenCalledOnce();
+  expect(host.textContent).not.toContain("https://other.example.test");
+  expect(pairing.approve).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("rejects ready for a domain other than the approved origin", async () => {
+  setupPairing("approval-required");
+  vi.mocked(pairing.approve).mockImplementation(async (origin) => {
+    vi.mocked(pairing.state).mockResolvedValue({
+      status: "ready",
+      origin: "https://other.example.test",
+      expiresAt: pairing.ticket.expiresAt,
+    });
+    return { status: "approved", origin, expiresAt: pairing.ticket.expiresAt };
+  });
+  await render();
+  await click("Pairing code");
+  await click("Approve server");
+  expect(pairing.cancel).toHaveBeenCalledOnce();
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it.each(["account-change", "cancel", "unmount"])(
+  "ignores a late approval after %s",
+  async (reason) => {
+    setupPairing("approval-required");
+    let finish!: (value: Awaited<ReturnType<MobileServerPairing["approve"]>>) => void;
+    vi.mocked(pairing.approve).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await render();
+    await click("Pairing code");
+    await click("Approve server");
+    const signal = vi.mocked(pairing.approve).mock.calls[0]![1]!;
+    if (reason === "account-change")
+      await act(async () => {
+        vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+        state.version++;
+        for (const listener of state.listeners) listener();
+      });
+    else if (reason === "cancel") await click("Cancel");
+    else await act(async () => root.render(null));
+    expect(signal.aborted).toBe(true);
+    await act(async () =>
+      finish({ status: "approved", origin: remote.url, expiresAt: pairing.ticket.expiresAt }),
+    );
+    expect(pairing.cancel).toHaveBeenCalledOnce();
+    expect(continueWithAccountsServer).not.toHaveBeenCalled();
+    expect(saveApiBase).not.toHaveBeenCalled();
+  },
+);
+
+it("waits for ready after approval without repeating the approval prompt", async () => {
+  setupPairing("approval-required");
+  vi.mocked(pairing.approve).mockImplementation(async (origin) => {
+    vi.mocked(pairing.state).mockResolvedValue({
+      status: "approved",
+      origin,
+      expiresAt: pairing.ticket.expiresAt,
+    });
+    return { status: "approved", origin, expiresAt: pairing.ticket.expiresAt };
+  });
+  await render();
+  await click("Pairing code");
+  await click("Approve server");
+  expect(host.textContent).not.toContain("Approve server");
+  expect(host.textContent).toContain(remote.url);
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("background");
+  });
+  vi.mocked(pairing.state).mockResolvedValue({
+    status: "ready",
+    origin: remote.url,
+    expiresAt: pairing.ticket.expiresAt,
+  });
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Product screen");
+});
+
+it("does not replace a new code with a cancelled approval result", async () => {
+  setupPairing("approval-required");
+  const previous = pairing;
+  const replacement: MobileServerPairing = {
+    ticket: { ...pairing.ticket, id: "b".repeat(64), code: "EF45GH" },
+    state: vi
+      .fn()
+      .mockResolvedValue({ status: "pending", origin: null, expiresAt: pairing.ticket.expiresAt }),
+    approve: vi.fn(),
+    cancel: vi.fn().mockResolvedValue(undefined),
+  };
+  let finish!: (value: Awaited<ReturnType<MobileServerPairing["approve"]>>) => void;
+  vi.mocked(previous.approve).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  vi.mocked(beginServerPairing).mockResolvedValueOnce(previous).mockResolvedValueOnce(replacement);
+  await render();
+  await click("Pairing code");
+  await click("Approve server");
+  await click("Cancel");
+  await click("Pairing code");
+  await act(async () =>
+    finish({ status: "approved", origin: remote.url, expiresAt: previous.ticket.expiresAt }),
+  );
+  expect(host.textContent).toContain("EF4 5GH");
+  expect(previous.cancel).toHaveBeenCalledOnce();
+  expect(replacement.cancel).not.toHaveBeenCalled();
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+});
+
+it("shows an approval failure without allowing product login", async () => {
+  setupPairing("approval-required");
+  vi.mocked(pairing.approve).mockRejectedValueOnce(
+    new Error("Could not pair this server. Try again."),
+  );
+  await render();
+  await click("Pairing code");
+  await click("Approve server");
+  expect(host.textContent).toContain("Could not pair this server. Try again.");
+  expect(pairing.cancel).toHaveBeenCalledOnce();
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+});

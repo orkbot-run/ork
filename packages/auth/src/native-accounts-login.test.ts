@@ -12,6 +12,7 @@ import {
   nativeAccountsLogin,
   nativeLoginProof,
 } from "./native-accounts-login.js";
+import type { NativePairingStore, PairingClaim, PairingReceipt } from "./native-pairing-store.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const issuer = "https://accounts.example.test";
@@ -93,6 +94,31 @@ function fixture(expectedOwnerKey?: string) {
   const provision = vi.fn(async () => {
     seen.push(nativeLoginProof());
   });
+  let ticket: PairingReceipt;
+  let pairingState = "failed";
+  let leaseValue = "";
+  let leaseSequence = 0;
+  const pairings: NativePairingStore = {
+    create: vi.fn(async (value) => {
+      ticket = value;
+      pairingState = "pending";
+      return "p".repeat(43);
+    }),
+    acquire: vi.fn(async (): Promise<PairingClaim> => {
+      if (pairingState === "paired" || pairingState === "failed") return { state: pairingState };
+      if (pairingState === "working") return { state: "pending" };
+      pairingState = "working";
+      leaseValue = String(++leaseSequence);
+      return { state: "claimed", lease: { key: "fixture", value: leaseValue, ticket } };
+    }),
+    current: vi.fn(async (lease) => pairingState === "working" && lease.value === leaseValue),
+    finish: vi.fn(async (lease, state) => {
+      if (lease.value !== leaseValue || pairingState !== "working") return false;
+      pairingState = state;
+      return true;
+    }),
+  };
+  const issue = vi.fn(async () => ({ challenge, expiresAt: Math.floor(Date.now() / 1000) + 120 }));
   const auth = betterAuth({
     baseURL: origin,
     secret: "offline-native-login-secret-at-least-32-characters",
@@ -114,8 +140,9 @@ function fixture(expectedOwnerKey?: string) {
         verifyGrant: verify,
         verifyPairingGrant: verifyPairing,
         provisionUser: provision,
+        pairingStore: pairings,
         store: {
-          issue: async () => ({ challenge, expiresAt: Math.floor(Date.now() / 1000) + 120 }),
+          issue,
           bootstrapRequired: async () => true,
           consume,
         },
@@ -133,7 +160,7 @@ function fixture(expectedOwnerKey?: string) {
         body: JSON.stringify(body),
       }),
     );
-  return { data, consume, provision, seen, request, auth };
+  return { data, consume, provision, seen, request, auth, pairings, issue };
 }
 
 describe("native login endpoint", () => {
@@ -181,78 +208,108 @@ describe("native login endpoint", () => {
   });
 });
 
-describe("sessionless server pairing", () => {
-  const receipt = { id: "a".repeat(64), receipt: "r".repeat(43) };
+describe("approval-gated sessionless server pairing", () => {
+  const ticket = {
+    id: "a".repeat(64),
+    receipt: "r".repeat(43),
+    expiresAt: Math.floor(Date.now() / 1000) + 300,
+  };
   function broker(claims: Record<string, unknown> = {}) {
-    const fetcher = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+    const approval = { status: "pending" };
+    const fetcher = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(init!.body as string);
       if (String(url) === `${issuer}/api/server-pairings/redeem`) {
+        expect(body).toEqual({ code: "ABC234", origin });
+        expect(init!.headers).toEqual({ "content-type": "application/json" });
+        return Response.json(ticket, { status: 202 });
+      }
+      if (String(url) === `${issuer}/api/server-pairings/grant`) {
+        if (!body.challenge)
+          return Response.json(
+            { status: approval.status, expiresAt: ticket.expiresAt },
+            { status: 202 },
+          );
         const grant = await signed({ purpose: SERVER_PAIRING_PURPOSE, ...claims });
-        return Response.json({ ...receipt, grant, expiresAt: decodeJwt(grant).exp });
+        return Response.json({ ...ticket, grant, expiresAt: decodeJwt(grant).exp });
       }
       if (String(url) === `${issuer}/api/server-pairings/report`)
         return Response.json({ ok: true });
       throw new Error("Unexpected offline request");
     });
     vi.stubGlobal("fetch", fetcher);
-    return fetcher;
+    return { fetcher, approval };
   }
-  it("separates initialization authority from ordinary login tokens and ignores claimed privileges", async () => {
-    const login = await signed({ allowProvision: true });
-    expect((await verify(login, challenge)).allowProvision).toBeUndefined();
-    await expect(verifyPairing(login, challenge)).rejects.toThrow();
-    const pair = await signed({ purpose: SERVER_PAIRING_PURPOSE });
-    expect(await verifyPairing(pair, challenge)).toMatchObject({ allowProvision: true });
-    await expect(verify(pair, challenge)).rejects.toThrow();
-  });
-  it("redeems only a code at the configured issuer and provisions before reporting without a session", async () => {
-    const f = fixture();
-    const fetcher = broker();
+  async function begin(f: ReturnType<typeof fixture>) {
     const response = await f.request("pair", {
       code: "abc-234",
       origin: "https://evil.example.test",
     });
-    expect(response.status, await response.clone().text()).toBe(200);
-    expect(await response.json()).toEqual({ paired: true });
+    expect(response.status, await response.clone().text()).toBe(202);
+    const result = (await response.json()) as { pending: boolean; pairingId: string };
+    expect(result).toEqual({ pending: true, pairingId: "p".repeat(43) });
     expect(response.headers.get("set-cookie")).toBeNull();
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    return result;
+  }
+  it("separates pairing authority from a normal login token or an untrusted privilege claim", async () => {
+    const normal = await signed({ allowProvision: true });
+    expect((await verify(normal, challenge)).allowProvision).toBeUndefined();
+    await expect(verifyPairing(normal, challenge)).rejects.toThrow();
+    await expect(
+      verify(await signed({ purpose: SERVER_PAIRING_PURPOSE }), challenge),
+    ).rejects.toThrow();
+  });
+  it("waits without issuing any challenge, then provisions and reports only after approval", async () => {
+    const f = fixture();
+    const { approval, fetcher } = broker();
+    const pending = await begin(f);
+    expect(f.issue).not.toHaveBeenCalled();
+    expect(f.consume).not.toHaveBeenCalled();
+    expect(f.data.user).toHaveLength(0);
+    const status = await f.request("pair/status", pending);
+    expect(status.status).toBe(202);
+    expect(await status.json()).toEqual({ pending: true });
+    expect(f.issue).not.toHaveBeenCalled();
+    approval.status = "approved";
+    const done = await f.request("pair/status", pending);
+    expect(done.status, await done.clone().text()).toBe(200);
+    expect(await done.json()).toEqual({ paired: true });
+    expect(done.headers.get("set-cookie")).toBeNull();
     expect(f.data.session).toHaveLength(0);
+    expect(f.issue).toHaveBeenCalledOnce();
     expect(f.provision).toHaveBeenCalledOnce();
     expect(f.seen).toMatchObject([{ issuer, subject: "subject-a", allowProvision: true }]);
-    expect(f.data.user).toHaveLength(1);
-    const [url, init] = fetcher.mock.calls[0]!;
-    expect(String(url)).toBe(`${issuer}/api/server-pairings/redeem`);
-    expect(init).toMatchObject({
-      method: "POST",
-      credentials: "omit",
-      redirect: "error",
-      headers: { "content-type": "application/json" },
+    expect(JSON.parse(fetcher.mock.calls[3]![1]!.body as string)).toEqual({
+      id: ticket.id,
+      receipt: ticket.receipt,
+      challenge,
     });
-    expect(JSON.parse(init!.body as string)).toEqual({ code: "ABC234", origin, challenge });
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string)).toEqual({
-      ...receipt,
+    expect(JSON.parse(fetcher.mock.calls[4]![1]!.body as string)).toEqual({
+      id: ticket.id,
+      receipt: ticket.receipt,
       success: true,
     });
-    expect(f.provision.mock.invocationCallOrder[0]).toBeLessThan(
-      fetcher.mock.invocationCallOrder[1]!,
-    );
-    expect(nativeLoginProof()).toBeUndefined();
+    const repeated = await f.request("pair/status", pending);
+    expect(repeated.status).toBe(200);
+    expect(fetcher).toHaveBeenCalledTimes(5);
   });
   it.each([null, "https://evil.example.test", "null"])(
-    "rejects browser pairing from origin %j before any broker or database work",
+    "rejects wrong browser origin %j before broker or DB activity",
     async (requestOrigin) => {
       const f = fixture();
-      const fetcher = broker();
+      const { fetcher } = broker();
       expect((await f.request("pair", { code: "ABC234" }, requestOrigin)).status).toBe(403);
+      expect(
+        (await f.request("pair/status", { pairingId: "p".repeat(43) }, requestOrigin)).status,
+      ).toBe(403);
       expect(fetcher).not.toHaveBeenCalled();
-      expect(f.consume).not.toHaveBeenCalled();
-      expect(f.data.user).toHaveLength(0);
+      expect(f.pairings.acquire).not.toHaveBeenCalled();
     },
   );
   it.each(["ABC23", "AAAAA0", "A".repeat(17), 234567, null])(
-    "rejects invalid code %j before redemption",
+    "rejects invalid key %j before redemption",
     async (code) => {
       const f = fixture();
-      const fetcher = broker();
+      const { fetcher } = broker();
       expect((await f.request("pair", { code })).status).toBe(403);
       expect(fetcher).not.toHaveBeenCalled();
     },
@@ -262,90 +319,67 @@ describe("sessionless server pairing", () => {
     { aud: "https://evil.example.test" },
     { nonce: "wrong" },
     { email_verified: false },
-  ])("refuses invalid pairing authorization before mutation: %j", async (claims) => {
+  ])("rejects invalid signed pairing authorization %j before mutation", async (claims) => {
     const f = fixture();
-    const fetcher = broker(claims);
-    expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
+    const { approval, fetcher } = broker(claims);
+    const pending = await begin(f);
+    approval.status = "approved";
+    expect((await f.request("pair/status", pending)).status).toBe(403);
     expect(f.consume).not.toHaveBeenCalled();
     expect(f.data.user).toHaveLength(0);
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string)).toEqual({
-      ...receipt,
-      success: false,
-    });
+    expect(JSON.parse(fetcher.mock.calls.at(-1)![1]!.body as string).success).toBe(false);
+    const calls = fetcher.mock.calls.length;
+    expect((await f.request("pair/status", pending)).status).toBe(403);
+    expect(fetcher).toHaveBeenCalledTimes(calls);
   });
-  it("reports a refused owner claim as failure without provisioning", async () => {
+  it("rejects a foreign managed owner and does not report success on a provisioning error", async () => {
+    for (const managed of [true, false]) {
+      const f = fixture(managed ? oidcAccountSubject(issuer, "other") : undefined);
+      const { approval, fetcher } = broker();
+      const pending = await begin(f);
+      approval.status = "approved";
+      if (!managed) f.provision.mockRejectedValueOnce(new Error("Unavailable"));
+      expect((await f.request("pair/status", pending)).status).toBe(403);
+      expect(f.data.session).toHaveLength(0);
+      expect(JSON.parse(fetcher.mock.calls.at(-1)![1]!.body as string).success).toBe(false);
+      if (managed) expect(f.data.user).toHaveLength(0);
+    }
+  });
+  it("serializes concurrent polls and waits for report acknowledgement", async () => {
     const f = fixture();
-    const fetcher = broker();
-    f.consume.mockRejectedValueOnce(new Error("Existing owner"));
-    expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
-    expect(f.data.user).toHaveLength(0);
-    expect(f.provision).not.toHaveBeenCalled();
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string).success).toBe(false);
-  });
-  it("never reports success when workspace provisioning fails", async () => {
-    const f = fixture();
-    const fetcher = broker();
-    f.provision.mockRejectedValueOnce(new Error("Workspace unavailable"));
-    expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
-    expect(f.data.session).toHaveLength(0);
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string).success).toBe(false);
-  });
-  it("enforces the managed owner before account or workspace writes", async () => {
-    const f = fixture(oidcAccountSubject(issuer, "another-owner"));
-    const fetcher = broker();
-    expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
-    expect(f.consume).not.toHaveBeenCalled();
-    expect(f.data.user).toHaveLength(0);
-    expect(f.provision).not.toHaveBeenCalled();
-    expect(JSON.parse(fetcher.mock.calls[1]![1]!.body as string).success).toBe(false);
-  });
-  it("does not claim success before the broker acknowledges the provisioned server", async () => {
-    const f = fixture();
-    const fetcher = broker();
+    const { approval, fetcher } = broker();
+    const pending = await begin(f);
+    approval.status = "approved";
     let acknowledge!: (response: Response) => void;
-    const acknowledgement = new Promise<Response>((resolve) => {
-      acknowledge = resolve;
-    });
-    fetcher
-      .mockImplementationOnce(async () => {
-        const grant = await signed({ purpose: SERVER_PAIRING_PURPOSE });
-        return Response.json({ ...receipt, grant, expiresAt: decodeJwt(grant).exp });
-      })
-      .mockImplementationOnce(() => acknowledgement);
-    let settled = false;
-    const pairing = f.request("pair", { code: "ABC234" }).then((result) => {
-      settled = true;
-      return result;
-    });
-    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
-    expect(f.provision).toHaveBeenCalledOnce();
-    expect(settled).toBe(false);
-    acknowledge(Response.json({ ok: false }));
-    const response = await pairing;
-    expect(response.status).toBe(403);
-    expect(response.headers.get("set-cookie")).toBeNull();
-    expect(f.data.session).toHaveLength(0);
-    expect(JSON.parse(fetcher.mock.calls[2]![1]!.body as string).success).toBe(false);
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation(async (url, init) =>
+      String(url).endsWith("/report")
+        ? new Promise<Response>((resolve) => {
+            acknowledge = resolve;
+          })
+        : original(url, init),
+    );
+    const first = f.request("pair/status", pending);
+    await vi.waitFor(() => expect(f.provision).toHaveBeenCalledOnce());
+    expect((await f.request("pair/status", pending)).status).toBe(202);
+    acknowledge(Response.json({ ok: true }));
+    expect((await first).status).toBe(200);
+    expect(f.issue).toHaveBeenCalledOnce();
   });
   it.each(["oversized", "redirect", "timeout"])(
-    "rejects a %s broker response without mutation",
+    "rejects %s redemption without mutation",
     async (kind) => {
       const f = fixture();
-      const fetcher = broker();
+      const { fetcher } = broker();
       fetcher.mockImplementationOnce(async () => {
         if (kind === "timeout") throw new DOMException("Timed out", "TimeoutError");
-        if (kind === "redirect")
-          return new Response(null, {
-            status: 302,
-            headers: { location: "https://evil.example.test" },
-          });
-        return new Response("x".repeat(24 * 1024 + 1));
+        return kind === "redirect"
+          ? new Response(null, { status: 302 })
+          : new Response("x".repeat(24 * 1024 + 1));
       });
       expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
       expect(f.consume).not.toHaveBeenCalled();
       expect(f.data.user).toHaveLength(0);
-      expect(f.provision).not.toHaveBeenCalled();
-      expect(fetcher).toHaveBeenCalledOnce();
     },
   );
 });

@@ -116,6 +116,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "Connect your server": "Połącz swój serwer",
   "Check server": "Sprawdź serwer",
   "Pairing key": "Klucz parowania",
+  "New pairing key": "Nowy klucz parowania",
+  Approve: "Zatwierdź",
   "Enter this key on your server's initialization page.":
     "Wpisz ten klucz na stronie inicjalizacji swojego serwera.",
   "The pairing key has expired. Create a new one.": "Klucz parowania wygasł. Utwórz nowy.",

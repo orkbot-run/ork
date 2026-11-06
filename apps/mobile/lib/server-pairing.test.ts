@@ -21,7 +21,12 @@ vi.mock("./i18n", () => ({ t: (value: string) => value }));
 const origin = "https://server.example.test";
 const endpoint = "https://api.orkbot.run/api/server-pairings";
 const owner = JSON.stringify(["https://api.orkbot.run", "account-a"]);
-const ticket = { id: "a".repeat(64), code: "AB23CD", origin, expiresAt: 1_800_000_300 };
+const ticket = { id: "a".repeat(64), code: "AB23CD", expiresAt: 1_800_000_300 };
+const status = (state: string, server: string | null = origin) => ({
+  status: state,
+  origin: server,
+  expiresAt: ticket.expiresAt,
+});
 const response = (value: unknown, status = 200) =>
   new Response(status === 204 ? null : JSON.stringify(value), {
     status,
@@ -44,14 +49,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("sends only the origin and native bearer to the fixed central endpoint", async () => {
-  const session = await beginServerPairing(`${origin}/`, owner);
+it("creates an origin-free code with only the native bearer at Accounts", async () => {
+  const session = await beginServerPairing(owner);
   expect(session.ticket).toEqual(ticket);
+  expect(session.ticket).not.toHaveProperty("origin");
   const [url, init] = fetchMock.mock.calls[0]!;
   expect(url).toBe(endpoint);
   expect(init).toMatchObject({
     method: "POST",
-    body: JSON.stringify({ origin }),
+    body: "{}",
     headers: { authorization: "Bearer native-test-token", "content-type": "application/json" },
     credentials: "omit",
     redirect: "error",
@@ -66,15 +72,7 @@ it.each(["missing", "foreign-issuer", "different-owner"])(
     else if (kind === "foreign-issuer")
       identity.authorization!.issuer = "https://other.example.test";
     else identity.authorization!.subject = "account-b";
-    await expect(beginServerPairing(origin, owner)).rejects.toThrow("Sign in to Accounts");
-    expect(fetchMock).not.toHaveBeenCalled();
-  },
-);
-
-it.each(["http://127.0.0.1:3000", "http://localhost:3000", "http://[::1]:3000"])(
-  "rejects loopback addresses before contacting Accounts (%s)",
-  async (url) => {
-    await expect(beginServerPairing(url, owner)).rejects.toThrow();
+    await expect(beginServerPairing(owner)).rejects.toThrow("Sign in to Accounts");
     expect(fetchMock).not.toHaveBeenCalled();
   },
 );
@@ -83,27 +81,101 @@ it.each([
   { id: "invalid" },
   { code: "ABC0D1" },
   { code: "AB2 3CD" },
-  { origin: "https://other.example.test" },
   { expiresAt: 1_800_000_000 },
   { expiresAt: 1_800_000_600 },
-])("refuses an invalid or differently bound ticket (%j)", async (change) => {
+])("refuses an invalid ticket (%j)", async (change) => {
   fetchMock.mockResolvedValueOnce(response({ ...ticket, ...change }));
-  await expect(beginServerPairing(origin, owner)).rejects.toThrow("Could not pair");
+  await expect(beginServerPairing(owner)).rejects.toThrow("Could not pair");
 });
 
-it("refreshes the native credential when polling but never forwards it to the selfhost", async () => {
-  const session = await beginServerPairing(origin, owner);
+it("refreshes the credential when polling without forwarding it to a selfhost", async () => {
+  const session = await beginServerPairing(owner);
   identity.authorization!.accessToken = "refreshed-native-test-token";
-  fetchMock.mockResolvedValueOnce(response({ ...ticket, status: "ready" }));
-  await expect(session.state()).resolves.toMatchObject({ status: "ready", origin });
+  fetchMock.mockResolvedValueOnce(response(status("pending", null)));
+  await expect(session.state()).resolves.toEqual(status("pending", null));
   expect(fetchMock.mock.calls[1]).toMatchObject([
     `${endpoint}/${ticket.id}`,
     { method: "GET", headers: { authorization: "Bearer refreshed-native-test-token" } },
   ]);
 });
 
-it("cancels the original record with its original credential after an account switch", async () => {
-  const session = await beginServerPairing(origin, owner);
+it("requires a claimed origin and explicit approval before accepting ready", async () => {
+  const session = await beginServerPairing(owner);
+  await expect(session.approve(origin)).rejects.toThrow("Could not pair");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+  await expect(session.state()).resolves.toEqual(status("approval-required"));
+  await expect(session.approve("https://other.example.test")).rejects.toThrow("Could not pair");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  identity.authorization!.accessToken = "refreshed-native-test-token";
+  fetchMock.mockResolvedValueOnce(response(status("approved")));
+  await expect(session.approve(origin)).resolves.toEqual(status("approved"));
+  expect(fetchMock.mock.calls[2]).toMatchObject([
+    `${endpoint}/${ticket.id}/approve`,
+    {
+      method: "POST",
+      body: JSON.stringify({ origin }),
+      headers: {
+        authorization: "Bearer refreshed-native-test-token",
+        "content-type": "application/json",
+      },
+      credentials: "omit",
+      redirect: "error",
+    },
+  ]);
+  fetchMock.mockResolvedValueOnce(response(status("ready")));
+  await expect(session.state()).resolves.toEqual(status("ready"));
+});
+
+it.each(["approved", "ready"])("rejects unsolicited %s before a local approval", async (value) => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(response(status(value)));
+  await expect(session.state()).rejects.toThrow("Could not pair");
+});
+
+it.each(["approval-required", "approved", "ready", "failed", "expired"])(
+  "cannot replace the first claimed domain in %s",
+  async (value) => {
+    const session = await beginServerPairing(owner);
+    fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+    await session.state();
+    fetchMock.mockResolvedValueOnce(response(status(value, "https://other.example.test")));
+    await expect(session.state()).rejects.toThrow("Could not pair");
+  },
+);
+
+it.each([
+  "https://server.example.test/path",
+  "https://name@server.example.test",
+  "http://public.example.test",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://[::1]:3000",
+  "https://server.example.test/",
+  "https://server.example.test?token=value",
+])("does not display or approve a noncanonical selfhost origin (%s)", async (server) => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(response(status("approval-required", server)));
+  await expect(session.state()).rejects.toThrow("Could not pair");
+  await expect(session.approve(server)).rejects.toThrow("Could not pair");
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  status("pending"),
+  status("approval-required", null),
+  status("approved", null),
+  { ...status("pending", null), origin: undefined },
+  { ...status("pending", null), expiresAt: ticket.expiresAt + 1 },
+  status("unknown", null),
+])("rejects malformed claim state (%j)", async (value) => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(response(value));
+  await expect(session.state()).rejects.toThrow("Could not pair");
+});
+
+it("cancels the original record with its original credential after switching accounts", async () => {
+  const session = await beginServerPairing(owner);
   identity.version++;
   identity.authorization = {
     ...identity.authorization!,
@@ -119,10 +191,11 @@ it("cancels the original record with its original credential after an account sw
     { method: "DELETE", headers: { authorization: "Bearer native-test-token" } },
   ]);
   await expect(session.state()).rejects.toThrow();
+  await expect(session.approve(origin)).rejects.toThrow();
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
-it("revokes a late creation response instead of showing an old account's code", async () => {
+it("revokes a late creation response instead of displaying an old account's code", async () => {
   fetchMock
     .mockImplementationOnce(async () => {
       identity.version++;
@@ -130,57 +203,97 @@ it("revokes a late creation response instead of showing an old account's code", 
       return response(ticket);
     })
     .mockResolvedValueOnce(response(undefined, 204));
-  await expect(beginServerPairing(origin, owner)).rejects.toThrow("Sign in to Accounts");
+  await expect(beginServerPairing(owner)).rejects.toThrow("Sign in to Accounts");
   expect(fetchMock.mock.calls[1]).toMatchObject([
     `${endpoint}/${ticket.id}`,
     { method: "DELETE", headers: { authorization: "Bearer native-test-token" } },
   ]);
 });
 
-it("does not poll after the account is changed", async () => {
-  const session = await beginServerPairing(origin, owner);
+it("does not poll after the account changes", async () => {
+  const session = await beginServerPairing(owner);
   identity.version++;
   await expect(session.state()).rejects.toThrow("Sign in to Accounts");
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
-it("ignores ready if the account changes during the poll", async () => {
-  const session = await beginServerPairing(origin, owner);
+it.each(["before", "during"])("does not approve for a changed account (%s)", async (when) => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+  await session.state();
+  if (when === "before") identity.version++;
+  else
+    fetchMock.mockImplementationOnce(async () => {
+      identity.version++;
+      return response(status("approved"));
+    });
+  await expect(session.approve(origin)).rejects.toThrow("Sign in to Accounts");
+  if (when === "before") expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it.each(["ready", "approval-required"])(
+  "does not treat an unexpected approval response as consent (%s)",
+  async (value) => {
+    const session = await beginServerPairing(owner);
+    fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+    await session.state();
+    fetchMock.mockResolvedValueOnce(response(status(value)));
+    await expect(session.approve(origin)).rejects.toThrow("Could not pair");
+    fetchMock.mockResolvedValueOnce(response(status("ready")));
+    await expect(session.state()).rejects.toThrow("Could not pair");
+  },
+);
+
+it("ignores a status response after its request is cancelled", async () => {
+  const session = await beginServerPairing(owner);
+  const controller = new AbortController();
   fetchMock.mockImplementationOnce(async () => {
-    identity.version++;
-    return response({ ...ticket, status: "ready" });
+    controller.abort();
+    return response(status("approval-required"));
   });
-  await expect(session.state()).rejects.toThrow("Sign in to Accounts");
+  await expect(session.state(controller.signal)).rejects.toThrow();
 });
 
-it.each([
-  { origin: "https://other.example.test" },
-  { expiresAt: ticket.expiresAt + 1 },
-  { status: "unknown" },
-])("does not connect using a differently bound status response (%j)", async (change) => {
-  const session = await beginServerPairing(origin, owner);
-  fetchMock.mockResolvedValueOnce(response({ ...ticket, status: "ready", ...change }));
-  await expect(session.state()).rejects.toThrow("Could not pair");
-});
+it.each([false, true])(
+  "expires locally while preserving the claimed domain (%s)",
+  async (claimed) => {
+    const session = await beginServerPairing(owner);
+    if (claimed) {
+      fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+      await session.state();
+    }
+    const count = fetchMock.mock.calls.length;
+    vi.mocked(Date.now).mockReturnValue(ticket.expiresAt * 1000);
+    await expect(session.state()).resolves.toEqual(status("expired", claimed ? origin : null));
+    await expect(session.approve(origin)).rejects.toThrow();
+    expect(fetchMock).toHaveBeenCalledTimes(count);
+  },
+);
 
-it("expires locally without polling the network again", async () => {
-  const session = await beginServerPairing(origin, owner);
-  vi.mocked(Date.now).mockReturnValue(ticket.expiresAt * 1000);
-  await expect(session.state()).resolves.toEqual({
-    status: "expired",
-    origin,
-    expiresAt: ticket.expiresAt,
-  });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-});
-
-it.each([401, 404, 429, 500])("fails safely for an unavailable broker (%s)", async (status) => {
-  fetchMock.mockResolvedValueOnce(response({ error: "server detail" }, status));
-  await expect(beginServerPairing(origin, owner)).rejects.toThrow(
-    status === 401
-      ? "Sign in to Accounts"
-      : status === 429
-        ? "Too many attempts"
-        : "Could not pair",
+it.each([401, 404, 429, 500])("fails safely for an unavailable broker (%s)", async (code) => {
+  fetchMock.mockResolvedValueOnce(response({ error: "server detail" }, code));
+  await expect(beginServerPairing(owner)).rejects.toThrow(
+    code === 401 ? "Sign in to Accounts" : code === 429 ? "Too many attempts" : "Could not pair",
   );
+});
+
+it("accepts a canonical private HTTP origin for a selfhost", async () => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(
+    response(status("approval-required", "http://192.168.1.20:3000")),
+  );
+  await expect(session.state()).resolves.toEqual(
+    status("approval-required", "http://192.168.1.20:3000"),
+  );
+});
+
+it.each(["failed", "expired"])("does not approve a claim after it becomes %s", async (value) => {
+  const session = await beginServerPairing(owner);
+  fetchMock.mockResolvedValueOnce(response(status("approval-required")));
+  await session.state();
+  fetchMock.mockResolvedValueOnce(response(status(value)));
+  await session.state();
+  const count = fetchMock.mock.calls.length;
+  await expect(session.approve(origin)).rejects.toThrow("Could not pair");
+  expect(fetchMock).toHaveBeenCalledTimes(count);
 });

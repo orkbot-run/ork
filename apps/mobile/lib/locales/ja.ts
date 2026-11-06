@@ -3,6 +3,20 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "続けるにはAccountsにログインしてください。",
+  "Too many attempts. Try again later.":
+    "試行回数が多すぎます。しばらくしてからもう一度お試しください。",
+  "Pairing code": "ペアリングコード",
+  "Approve server": "サーバーを承認",
+  "Enter this code on your server's initialization page.":
+    "サーバーの初期設定ページにこのコードを入力してください。",
+  "Could not copy the code.": "コードをコピーできませんでした。",
+  "Could not pair this server. Try again.":
+    "このサーバーをペアリングできませんでした。もう一度お試しください。",
+  "Pairing code expired. Generate a new code.":
+    "ペアリングコードの有効期限が切れました。新しいコードを生成してください。",
+  "This server does not support pairing codes. Update it and try again.":
+    "このサーバーはペアリングコードに対応していません。更新してからもう一度お試しください。",
   "Get started": "始める",
   "Add rule": "ルールを追加",
   "Tool name": "ツール名",

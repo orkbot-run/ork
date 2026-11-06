@@ -26,8 +26,8 @@ for (const path of ["/", "/sign-in", "/app", "/onboarding"]) {
       "href",
       createServerConnectLink(new URL(page.url()).origin),
     );
-    await expect(page.getByRole("textbox", { name: "Pairing code", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
+    await expect(page.getByRole("textbox", { name: "Pairing key", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Initialize", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: /sign in|continue|get started/i })).toHaveCount(
       0,
     );
@@ -41,4 +41,29 @@ test("browser callback can finish without opening product screens", async ({ pag
   await page.goto("/integrations/callback");
   await expect(page.getByText("You can close this window.")).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(0);
+});
+
+test("browser initialization waits for native approval and recovers a lost status response", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/api/auth/native/pair", (route) =>
+    route.fulfill({
+      status: 202,
+      json: { pending: true, pairingId: "p".repeat(43) },
+    }),
+  );
+  let polls = 0;
+  await page.route("**/api/auth/native/pair/status", (route) => {
+    expect(route.request().postDataJSON()).toEqual({ pairingId: "p".repeat(43) });
+    return ++polls === 1 ? route.abort("failed") : route.fulfill({ json: { paired: true } });
+  });
+  await page.goto("/");
+  await page.getByRole("textbox", { name: "Pairing key", exact: true }).fill("abc-234");
+  await page.getByRole("button", { name: "Initialize", exact: true }).click();
+  await expect(page.getByRole("status")).toHaveText("Confirm the server in Ork.");
+  await expect(page.getByRole("button", { name: "Initialize", exact: true })).toBeDisabled();
+  await captureScreenshot(page, testInfo, "server-initialization-approval");
+  await expect(page.getByRole("status")).toHaveText("Initialized");
+  expect(polls).toBe(2);
+  expect(await page.context().cookies()).toEqual([]);
 });

@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "Melde dich bei Accounts an, um fortzufahren.",
+  "Too many attempts. Try again later.": "Zu viele Versuche. Versuche es später erneut.",
+  "Pairing code": "Kopplungscode",
+  "Approve server": "Server bestätigen",
+  "Enter this code on your server's initialization page.":
+    "Gib diesen Code auf der Einrichtungsseite deines Servers ein.",
+  "Could not copy the code.": "Der Code konnte nicht kopiert werden.",
+  "Could not pair this server. Try again.":
+    "Dieser Server konnte nicht gekoppelt werden. Versuche es erneut.",
+  "Pairing code expired. Generate a new code.":
+    "Der Kopplungscode ist abgelaufen. Erstelle einen neuen Code.",
+  "This server does not support pairing codes. Update it and try again.":
+    "Dieser Server unterstützt keine Kopplungscodes. Aktualisiere ihn und versuche es erneut.",
   "Get started": "Los geht's",
   "Add rule": "Regel hinzufügen",
   "Tool name": "Tool-Name",

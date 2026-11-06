@@ -3,6 +3,16 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Sign in to Accounts to continue.": "请先登录 Accounts 以继续。",
+  "Too many attempts. Try again later.": "尝试次数过多，请稍后重试。",
+  "Pairing code": "配对码",
+  "Approve server": "确认服务器",
+  "Enter this code on your server's initialization page.": "请在服务器的初始化页面输入此代码。",
+  "Could not copy the code.": "无法复制代码。",
+  "Could not pair this server. Try again.": "无法配对此服务器，请重试。",
+  "Pairing code expired. Generate a new code.": "配对码已过期，请生成新代码。",
+  "This server does not support pairing codes. Update it and try again.":
+    "此服务器不支持配对码，请更新后重试。",
   "Get started": "开始使用",
   "Add rule": "添加规则",
   "Tool name": "工具名称",

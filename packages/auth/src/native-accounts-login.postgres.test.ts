@@ -8,6 +8,7 @@ import { decodeJwt, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
 import { nativeLoginStore } from "./native-accounts-login.js";
+import { nativePairingStore } from "./native-pairing-store.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const enabled =
@@ -35,7 +36,12 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
   beforeEach(async () =>
     system(async () => {
       await prisma!.verification.deleteMany({
-        where: { identifier: { startsWith: "native-login-" } },
+        where: {
+          OR: [
+            { identifier: { startsWith: "native-login-" } },
+            { identifier: { startsWith: "native-pairing:" } },
+          ],
+        },
       });
       await prisma!.deploymentSettings.upsert({
         where: { id: "default" },
@@ -243,6 +249,54 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           ?.nativeAccountsOwnerKey,
       ).toBeNull();
     }));
+  it("leases one poll across processes and fences interrupted exchanges without holding a transaction", async () =>
+    system(async () => {
+      const stores = [nativePairingStore(prisma!), nativePairingStore(prisma!)];
+      const handle = await stores[0]!.create({
+        id: "a".repeat(64),
+        receipt: "r".repeat(43),
+        expiresAt: Math.floor(Date.now() / 1000) + 300,
+      });
+      const row = await prisma!.verification.findFirst({
+        where: { identifier: { startsWith: "native-pairing:" } },
+      });
+      expect(row!.id).not.toContain(handle);
+      expect(row!.value).not.toContain(handle);
+      const claims = await Promise.all(
+        Array.from({ length: 12 }, (_, i) => stores[i % 2]!.acquire(handle)),
+      );
+      expect(claims.filter((claim) => claim.state === "claimed")).toHaveLength(1);
+      const first = claims.find((claim) => claim.state === "claimed")!;
+      if (first.state !== "claimed") throw new Error("Missing lease");
+      expect(await stores[0]!.finish(first.lease, "pending")).toBe(true);
+      const second = await stores[1]!.acquire(handle);
+      if (second.state !== "claimed") throw new Error("Missing replacement lease");
+      expect(await stores[0]!.current(first.lease)).toBe(false);
+      expect(await stores[0]!.finish(first.lease, "paired")).toBe(false);
+      const interrupted = { ...JSON.parse(second.lease.value), leaseUntil: Date.now() - 1 };
+      await prisma!.verification.update({
+        where: { id: second.lease.key },
+        data: { value: JSON.stringify(interrupted) },
+      });
+      expect(await stores[0]!.acquire(handle)).toEqual({ state: "failed" });
+      expect(await stores[1]!.current(second.lease)).toBe(false);
+      expect(await stores[1]!.finish(second.lease, "paired")).toBe(false);
+      expect(await stores[0]!.acquire(handle)).toEqual({ state: "failed" });
+      const expiring = await stores[0]!.create({
+        id: "b".repeat(64),
+        receipt: "s".repeat(43),
+        expiresAt: Math.floor(Date.now() / 1000) + 300,
+      });
+      const expiringLease = await stores[0]!.acquire(expiring);
+      if (expiringLease.state !== "claimed") throw new Error("Missing expiry lease");
+      await prisma!.verification.update({
+        where: { id: expiringLease.lease.key },
+        data: { expiresAt: new Date(Date.now() - 1) },
+      });
+      expect(await stores[1]!.acquire(expiring)).toEqual({ state: "failed" });
+      expect(await stores[0]!.current(expiringLease.lease)).toBe(false);
+    }));
+
   it("initializes only a verified paired owner without a browser session, then admits ordinary native login", async () =>
     system(async () => {
       const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -256,6 +310,8 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
       let purpose = "orkbot-server-login-v1";
       let jwtId = randomUUID();
       const reports: boolean[] = [];
+      let approved = false;
+      const ticketExpiry = Math.floor(Date.now() / 1000) + 300;
       const sign = async (nonce: string, grantPurpose = purpose) => {
         const now = Math.floor(Date.now() / 1000);
         return new SignJWT({
@@ -284,6 +340,19 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
             expect(body.origin).toBe(origin);
             expect(body.code).toBe("ABC234");
             expect(init!.headers).toEqual({ "content-type": "application/json" });
+            expect(body).not.toHaveProperty("challenge");
+            return Response.json(
+              { id: "a".repeat(64), receipt: "r".repeat(43), expiresAt: ticketExpiry },
+              { status: 202 },
+            );
+          }
+          if (String(input) === `${issuer}/api/server-pairings/grant`) {
+            const body = JSON.parse(init!.body as string);
+            if (!body.challenge || !approved)
+              return Response.json(
+                { status: approved ? "approved" : "pending", expiresAt: ticketExpiry },
+                { status: 202 },
+              );
             const grant = await sign(body.challenge);
             return Response.json({
               id: "a".repeat(64),
@@ -319,8 +388,24 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
             body: JSON.stringify(body),
           }),
         );
-      const pair = () => request("pair", { code: "ABC234" });
+      let lastPairingId = "";
+      const pair = async () => {
+        const submitted = await request("pair", { code: "ABC234" });
+        expect(submitted.status).toBe(202);
+        const body = (await submitted.json()) as { pairingId: string };
+        lastPairingId = body.pairingId;
+        return request("pair/status", body);
+      };
       try {
+        expect((await pair()).status).toBe(202);
+        expect(
+          await prisma!.verification.count({
+            where: { identifier: { startsWith: "native-login-challenge:" } },
+          }),
+        ).toBe(0);
+        expect(await prisma!.user.count()).toBe(0);
+        expect(await prisma!.session.count()).toBe(0);
+        approved = true;
         // A signed ordinary login proof cannot grant initialization rights through either endpoint.
         expect((await pair()).status).toBe(403);
         const initial = await request("challenge", {});
@@ -339,6 +424,11 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         expect(paired.status, await paired.clone().text()).toBe(200);
         expect(await paired.json()).toEqual({ paired: true });
         expect(paired.headers.getSetCookie()).toEqual([]);
+        const reportCount = reports.length;
+        const recovered = await request("pair/status", { pairingId: lastPairingId });
+        expect(recovered.status).toBe(200);
+        expect(await recovered.json()).toEqual({ paired: true });
+        expect(reports).toHaveLength(reportCount);
         expect(await prisma!.session.count()).toBe(0);
         expect(await prisma!.user.count()).toBe(1);
         expect(await prisma!.account.count()).toBe(1);

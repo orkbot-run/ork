@@ -107,6 +107,7 @@ describe("authRateLimitOptions", () => {
       storage: "database",
       customRules: {
         "/native/pair": { window: 60, max: 10 },
+        "/native/pair/status": { window: 60, max: 60 },
         "/request-account-deletion": { window: 600, max: 3 },
         "/request-identity-code": { window: 600, max: 3 },
         "/confirm-identity": { window: 15 * 60, max: 10 },

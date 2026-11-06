@@ -6,15 +6,7 @@ import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import {
-  ActivityIndicator,
-  AppState,
-  Linking,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, AppState, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { AccountServer } from "../lib/account-servers";
 import { accountServers, addAccountServer } from "../lib/account-servers";
@@ -63,6 +55,8 @@ const welcomeOrk = welcomeAccountsOrk();
 
 type PairingWait = {
   session: MobileServerPairing;
+  origin: string | null;
+  approvedOrigin: string | null;
   account: string;
   generation: number;
   server: string;
@@ -150,13 +144,13 @@ export function AccountsGate({
   const owner = useRef("");
   const generation = useRef(0);
   const pairingRef = useRef<PairingWait | null>(null);
-  const creatingPairing = useRef<AbortController | null>(null);
+  const pairingRequest = useRef<AbortController | null>(null);
   const [pairing, setPairing] = useState<PairingWait | null>(null);
   const [pairingForeground, setPairingForeground] = useState(true);
 
   function discardPairing(update = true) {
-    const creating = creatingPairing.current;
-    creatingPairing.current = null;
+    const creating = pairingRequest.current;
+    pairingRequest.current = null;
     creating?.abort();
     if (creating) {
       operationVersion.current += 1;
@@ -251,7 +245,8 @@ export function AccountsGate({
     try {
       await operation();
     } catch (failure) {
-      if (generation.current === current) setError(errorText(failure));
+      if (generation.current === current && operationVersion.current === operationId)
+        setError(errorText(failure));
     } finally {
       if (operationVersion.current === operationId) {
         operationPending.current = false;
@@ -291,9 +286,10 @@ export function AccountsGate({
       current() &&
       currentApiBase() === wait.server &&
       currentSessionGeneration() === wait.sessionGeneration;
+    if (!wait.approvedOrigin || wait.approvedOrigin !== wait.origin) return;
     const entries = await accountServers(wait.account);
     if (!untouched()) return;
-    const entry = entries.find((value) => value.url === wait.session.ticket.origin);
+    const entry = entries.find((value) => value.url === wait.approvedOrigin);
     if (!entry) throw new Error(t("Could not pair this server. Try again."));
     const target = entry.url;
     const probe = await probeApiBase(target);
@@ -323,7 +319,7 @@ export function AccountsGate({
   }
 
   useEffect(() => {
-    if (!pairing || !pairingForeground) return;
+    if (!pairing || !pairingForeground || pending) return;
     const wait = pairing;
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -344,11 +340,29 @@ export function AccountsGate({
         if (stale()) return;
         const result = await wait.session.state(controller.signal);
         if (stale()) return;
+        if (wait.origin !== null && result.origin !== wait.origin)
+          throw new Error(t("Could not pair this server. Try again."));
         if (result.status === "ready") {
+          if (!wait.approvedOrigin || result.origin !== wait.approvedOrigin)
+            throw new Error(t("Could not pair this server. Try again."));
           pairingRef.current = null;
           setPairing(null);
           void action(() => connectPairedServer(wait));
-        } else if (result.status === "pending") {
+        } else if (result.status === "approval-required") {
+          if (!result.origin || wait.approvedOrigin)
+            throw new Error(t("Could not pair this server. Try again."));
+          if (wait.origin === null) {
+            const claimed = { ...wait, origin: result.origin };
+            pairingRef.current = claimed;
+            setPairing(claimed);
+          } else timer = setTimeout(() => void poll(), 2_000);
+        } else if (result.status === "pending" || result.status === "approved") {
+          if (
+            (result.status === "pending" && (wait.origin !== null || result.origin !== null)) ||
+            (result.status === "approved" &&
+              (!wait.approvedOrigin || result.origin !== wait.approvedOrigin))
+          )
+            throw new Error(t("Could not pair this server. Try again."));
           timer = setTimeout(() => void poll(), 2_000);
         } else {
           discardPairing();
@@ -371,17 +385,17 @@ export function AccountsGate({
       controller.abort();
       clearTimeout(timer);
     };
-  }, [pairing, pairingForeground]);
+  }, [pairing, pairingForeground, pending]);
 
   async function createPairing() {
     const controller = new AbortController();
-    creatingPairing.current = controller;
+    pairingRequest.current = controller;
     const current = generation.current;
     const account = owner.current;
     const server = currentApiBase();
     const sessionGeneration = currentSessionGeneration();
     try {
-      const session = await beginServerPairing(draft, account, controller.signal);
+      const session = await beginServerPairing(account, controller.signal);
       if (
         controller.signal.aborted ||
         generation.current !== current ||
@@ -394,6 +408,8 @@ export function AccountsGate({
       }
       const wait: PairingWait = {
         session,
+        origin: null,
+        approvedOrigin: null,
         account,
         generation: current,
         server,
@@ -402,7 +418,37 @@ export function AccountsGate({
       pairingRef.current = wait;
       setPairing(wait);
     } finally {
-      if (creatingPairing.current === controller) creatingPairing.current = null;
+      if (pairingRequest.current === controller) pairingRequest.current = null;
+    }
+  }
+
+  async function approvePairing(wait: PairingWait) {
+    const origin = wait.origin;
+    const current = () =>
+      pairingRef.current === wait &&
+      generation.current === wait.generation &&
+      owner.current === wait.account &&
+      currentApiBase() === wait.server &&
+      currentSessionGeneration() === wait.sessionGeneration;
+    if (!origin || wait.approvedOrigin || !current()) return;
+    const controller = new AbortController();
+    pairingRequest.current = controller;
+    try {
+      const result = await wait.session.approve(origin, controller.signal);
+      if (controller.signal.aborted || !current()) return;
+      if (result.status !== "approved" || result.origin !== origin)
+        throw new Error(t("Could not pair this server. Try again."));
+      const approved = { ...wait, approvedOrigin: origin };
+      pairingRef.current = approved;
+      setPairing(approved);
+    } catch (failure) {
+      if (current()) {
+        pairingRequest.current = null;
+        discardPairing();
+      }
+      throw failure;
+    } finally {
+      if (pairingRequest.current === controller) pairingRequest.current = null;
     }
   }
 
@@ -481,69 +527,92 @@ export function AccountsGate({
                 ))}
                 {adding ? (
                   <>
-                    <TextInput
-                      accessibilityLabel={t("Server")}
-                      placeholder="https://orkbot.example.com"
-                      placeholderTextColor={tokens.mutedForeground}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                      value={draft}
-                      onChangeText={setDraft}
-                      editable={!pending && !pairing}
-                      style={{
-                        color: tokens.foreground,
-                        backgroundColor: tokens.muted,
-                        padding: 16,
-                        borderRadius: 12,
-                      }}
-                    />
+                    {hasPendingServerInitialization(draft) ? (
+                      <TextInput
+                        accessibilityLabel={t("Server")}
+                        placeholder="https://orkbot.example.com"
+                        placeholderTextColor={tokens.mutedForeground}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        value={draft}
+                        onChangeText={setDraft}
+                        editable={!pending && !pairing}
+                        style={{
+                          color: tokens.foreground,
+                          backgroundColor: tokens.muted,
+                          padding: 16,
+                          borderRadius: 12,
+                        }}
+                      />
+                    ) : null}
                     {pairing ? (
                       <>
-                        <Text
-                          selectable
-                          accessibilityLabel={t("Pairing code")}
-                          style={{
-                            color: tokens.foreground,
-                            fontSize: 36,
-                            fontWeight: "600",
-                            letterSpacing: 4,
-                            textAlign: "center",
-                          }}
-                        >
-                          {pairing.session.ticket.code.slice(0, 3)}{" "}
-                          {pairing.session.ticket.code.slice(3)}
-                        </Text>
-                        <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
-                          {t("Enter this code on your server's initialization page.")}
-                        </Text>
-                        <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
-                          {t("Expires {date}", {
-                            date: new Date(
-                              pairing.session.ticket.expiresAt * 1000,
-                            ).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
-                          })}
-                        </Text>
-                        <NativeActionButton
-                          label={t("Copy code")}
-                          prominence="secondary"
-                          onPress={() =>
-                            void import("expo-clipboard")
-                              .then(({ setStringAsync }) =>
-                                setStringAsync(pairing.session.ticket.code),
-                              )
-                              .catch(() => setError(t("Could not copy the code.")))
-                          }
-                        />
-                        <NativeActionButton
-                          label={t("Open server")}
-                          prominence="secondary"
-                          onPress={() =>
-                            void Linking.openURL(pairing.session.ticket.origin).catch(() =>
-                              setError(t("Could not open the server.")),
-                            )
-                          }
-                        />
+                        {pairing.origin ? (
+                          <>
+                            <Text
+                              selectable
+                              accessibilityLabel={t("Server")}
+                              style={{
+                                color: tokens.foreground,
+                                fontSize: 22,
+                                textAlign: "center",
+                              }}
+                            >
+                              {pairing.origin}
+                            </Text>
+                            {pairing.approvedOrigin ? (
+                              <ActivityIndicator color={tokens.mutedForeground} />
+                            ) : (
+                              <NativeActionButton
+                                label={t("Approve server")}
+                                busy={pending}
+                                onPress={() => void action(() => approvePairing(pairing))}
+                              />
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <Text
+                              selectable
+                              accessibilityLabel={t("Pairing code")}
+                              style={{
+                                color: tokens.foreground,
+                                fontSize: 36,
+                                fontWeight: "600",
+                                letterSpacing: 4,
+                                textAlign: "center",
+                              }}
+                            >
+                              {pairing.session.ticket.code.slice(0, 3)}{" "}
+                              {pairing.session.ticket.code.slice(3)}
+                            </Text>
+                            <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
+                              {t("Enter this code on your server's initialization page.")}
+                            </Text>
+                            <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
+                              {t("Expires {date}", {
+                                date: new Date(
+                                  pairing.session.ticket.expiresAt * 1000,
+                                ).toLocaleTimeString(undefined, {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                }),
+                              })}
+                            </Text>
+                            <NativeActionButton
+                              label={t("Copy code")}
+                              prominence="secondary"
+                              onPress={() =>
+                                void import("expo-clipboard")
+                                  .then(({ setStringAsync }) =>
+                                    setStringAsync(pairing.session.ticket.code),
+                                  )
+                                  .catch(() => setError(t("Could not copy the code.")))
+                              }
+                            />
+                          </>
+                        )}
                         <NativeActionButton
                           label={t("Cancel")}
                           prominence="plain"
@@ -554,7 +623,7 @@ export function AccountsGate({
                       <NativeActionButton
                         label={hasPendingServerInitialization(draft) ? t("Add") : t("Pairing code")}
                         busy={pending}
-                        disabled={!draft.trim()}
+                        disabled={hasPendingServerInitialization(draft) && !draft.trim()}
                         onPress={() =>
                           void action(
                             hasPendingServerInitialization(draft)

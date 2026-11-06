@@ -19,6 +19,7 @@ const ID = /^[a-f0-9]{64}$/;
 export interface MobileServerPairing {
   ticket: ServerPairing;
   state(signal?: AbortSignal): Promise<ServerPairingState>;
+  approve(origin: string, signal?: AbortSignal): Promise<ServerPairingState>;
   cancel(): Promise<void>;
 }
 
@@ -66,15 +67,9 @@ async function request(
 
 /** The short code stays in memory; only Accounts receives its own native bearer. */
 export async function beginServerPairing(
-  input: string,
   expectedOwner: string,
   signal?: AbortSignal,
 ): Promise<MobileServerPairing> {
-  const parsed = normalizeApiBase(input);
-  if (!parsed.ok) throw new Error(parsed.error);
-  if (isLoopbackHost(new URL(parsed.url).hostname))
-    throw new Error(t("Use a self-hosted server address."));
-  const origin = parsed.url;
   const version = accountsVersion();
   const authorize = async () => {
     const value = await accountsAuthorization();
@@ -89,7 +84,7 @@ export async function beginServerPairing(
   };
   const authorization = await authorize();
   const originalAccessToken = authorization.accessToken;
-  const value = await request("POST", "", originalAccessToken, { origin }, signal);
+  const value = await request("POST", "", originalAccessToken, {}, signal);
   if (!value || typeof value !== "object" || Array.isArray(value)) throw failed();
   const item = value as Record<string, unknown>;
   if (
@@ -97,7 +92,6 @@ export async function beginServerPairing(
     !ID.test(item.id) ||
     typeof item.code !== "string" ||
     normalizeServerPairingCode(item.code) !== item.code ||
-    item.origin !== origin ||
     typeof item.expiresAt !== "number" ||
     !Number.isSafeInteger(item.expiresAt) ||
     item.expiresAt <= Date.now() / 1000 ||
@@ -107,7 +101,6 @@ export async function beginServerPairing(
   const ticket: ServerPairing = {
     id: item.id,
     code: item.code,
-    origin,
     expiresAt: item.expiresAt,
   };
   let cancelled = false;
@@ -123,14 +116,73 @@ export async function beginServerPairing(
     void cancel().catch(() => undefined);
     throw error;
   }
+  let claimedOrigin: string | null = null;
+  let approvedOrigin: string | null = null;
+  let approvalRequested = false;
+  function validateState(value: unknown): ServerPairingState {
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw failed();
+    const item = value as Record<string, unknown>;
+    const status = item.status;
+    if (
+      item.expiresAt !== ticket.expiresAt ||
+      (status !== "pending" &&
+        status !== "approval-required" &&
+        status !== "approved" &&
+        status !== "ready" &&
+        status !== "failed" &&
+        status !== "expired")
+    )
+      throw failed();
+    const origin = item.origin;
+    if (origin !== null) {
+      if (typeof origin !== "string") throw failed();
+      const parsed = normalizeApiBase(origin);
+      if (!parsed.ok || parsed.url !== origin || isLoopbackHost(new URL(origin).hostname))
+        throw failed();
+      if (claimedOrigin !== null && origin !== claimedOrigin) throw failed();
+    }
+    if (
+      (status === "pending" && origin !== null) ||
+      (status !== "pending" && status !== "failed" && status !== "expired" && origin === null) ||
+      (claimedOrigin !== null && origin !== claimedOrigin)
+    )
+      throw failed();
+    if (origin !== null) claimedOrigin = origin;
+    approvalRequested = status === "approval-required";
+    return { status, origin, expiresAt: ticket.expiresAt };
+  }
   return {
     ticket,
     cancel,
+    async approve(origin, approvalSignal) {
+      if (
+        cancelled ||
+        !approvalRequested ||
+        origin !== claimedOrigin ||
+        approvedOrigin !== null ||
+        ticket.expiresAt <= Date.now() / 1000
+      )
+        throw failed();
+      const current = await authorize();
+      const result = await request(
+        "POST",
+        `/${ticket.id}/approve`,
+        current.accessToken,
+        { origin },
+        approvalSignal,
+      );
+      await authorize();
+      if (approvalSignal?.aborted || cancelled) throw failed();
+      const state = validateState(result);
+      if (state.status !== "approved" || state.origin !== origin) throw failed();
+      approvedOrigin = origin;
+      return state;
+    },
     async state(statusSignal) {
       if (cancelled) throw failed();
       const current = await authorize();
       if (ticket.expiresAt <= Date.now() / 1000)
-        return { status: "expired", origin, expiresAt: ticket.expiresAt };
+        return { status: "expired", origin: claimedOrigin, expiresAt: ticket.expiresAt };
       const result = await request(
         "GET",
         `/${ticket.id}`,
@@ -139,22 +191,14 @@ export async function beginServerPairing(
         statusSignal,
       );
       await authorize();
+      if (statusSignal?.aborted || cancelled) throw failed();
+      const state = validateState(result);
       if (
-        statusSignal?.aborted ||
-        cancelled ||
-        !result ||
-        typeof result !== "object" ||
-        Array.isArray(result)
+        (state.status === "approved" || state.status === "ready") &&
+        (approvedOrigin === null || state.origin !== approvedOrigin)
       )
         throw failed();
-      const state = result as Record<string, unknown>;
-      if (
-        state.origin !== origin ||
-        state.expiresAt !== ticket.expiresAt ||
-        !["pending", "ready", "failed", "expired"].includes(String(state.status))
-      )
-        throw failed();
-      return state as unknown as ServerPairingState;
+      return state;
     },
   };
 }

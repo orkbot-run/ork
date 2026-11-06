@@ -424,3 +424,13 @@ footer {
     animation: none;
   }
 }
+
+.pairing-key {
+  font-family: ui-monospace, monospace;
+  font-size: 2rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+.pairing-origin {
+  overflow-wrap: anywhere;
+}

@@ -11,6 +11,8 @@ import { APIError, createAuthEndpoint } from "better-auth/api";
 import { setSessionCookie } from "better-auth/cookies";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import type { NativePairingStore } from "./native-pairing-store.js";
+import { nativePairingStore } from "./native-pairing-store.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const PURPOSE = "orkbot-server-login-v1";
@@ -259,6 +261,26 @@ export function nativeLoginStore(
   };
 }
 
+function validReceipt(value: unknown): value is { id: string; receipt: string; expiresAt: number } {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      "id" in value &&
+      typeof value.id === "string" &&
+      /^[a-f0-9]{64}$/.test(value.id) &&
+      "receipt" in value &&
+      typeof value.receipt === "string" &&
+      /^[A-Za-z0-9_-]{43}$/.test(value.receipt) &&
+      "expiresAt" in value &&
+      typeof value.expiresAt === "number" &&
+      Number.isSafeInteger(value.expiresAt),
+  );
+}
+function validTicketExpiry(expiry: number, lifetime = 300) {
+  const now = Math.floor(Date.now() / 1000);
+  return expiry > now && expiry <= now + lifetime;
+}
+
 export function nativeAccountsLogin(
   prisma: PrismaClient,
   options: {
@@ -270,6 +292,7 @@ export function nativeAccountsLogin(
     verifyPairingGrant?: NativeGrantVerifier;
     provisionUser?: (user: { id: string; email: string; emailVerified: boolean }) => Promise<void>;
     store?: NativeLoginStore;
+    pairingStore?: NativePairingStore;
   },
 ): BetterAuthPlugin {
   const verify = options.verifyGrant ?? createNativeGrantVerifier(options);
@@ -280,6 +303,7 @@ export function nativeAccountsLogin(
       purpose: SERVER_PAIRING_PURPOSE,
     });
   const store = options.store ?? nativeLoginStore(prisma, options);
+  const pairings = options.pairingStore ?? nativePairingStore(prisma);
   const provisionIdentity = async (
     ctx: Parameters<typeof setSessionCookie>[0],
     identity: NativeLoginGrant,
@@ -331,7 +355,7 @@ export function nativeAccountsLogin(
     if (!user) throw denied();
     return user;
   };
-  const brokerPost = async (path: "redeem" | "report", body: object) => {
+  const brokerPost = async (path: "redeem" | "grant" | "report", body: object) => {
     const response = await fetch(new URL(`/api/server-pairings/${path}`, options.issuer), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -344,10 +368,14 @@ export function nativeAccountsLogin(
     const result = await readBoundedJsonResponse(response, 24 * 1024);
     if (
       path === "report" &&
-      (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true)
+      (response.status !== 200 ||
+        !result ||
+        typeof result !== "object" ||
+        !("ok" in result) ||
+        result.ok !== true)
     )
       throw denied();
-    return result;
+    return { status: response.status, body: result };
   };
   return {
     id: "native-accounts-login",
@@ -358,57 +386,114 @@ export function nativeAccountsLogin(
         if (ctx.headers?.get("origin") !== options.origin || !options.provisionUser) throw denied();
         const code = normalizeServerPairingCode((ctx.body as { code?: unknown } | undefined)?.code);
         if (!code) throw denied();
-        const { challenge } = await store.issue(options.origin);
-        let receipt: { id: string; receipt: string } | undefined;
         try {
-          const redeemed = await brokerPost("redeem", { code, origin: options.origin, challenge });
+          const response = await brokerPost("redeem", { code, origin: options.origin });
+          const redeemed = response.body;
           if (
-            !redeemed ||
-            typeof redeemed !== "object" ||
-            !("id" in redeemed) ||
-            typeof redeemed.id !== "string" ||
-            !/^[a-f0-9]{64}$/.test(redeemed.id) ||
-            !("receipt" in redeemed) ||
-            typeof redeemed.receipt !== "string" ||
-            !/^[A-Za-z0-9_-]{43}$/.test(redeemed.receipt) ||
-            !("grant" in redeemed) ||
-            typeof redeemed.grant !== "string" ||
-            redeemed.grant.length > MAX_GRANT_BYTES ||
-            !("expiresAt" in redeemed) ||
-            typeof redeemed.expiresAt !== "number" ||
-            !Number.isSafeInteger(redeemed.expiresAt) ||
-            redeemed.expiresAt <= Math.floor(Date.now() / 1000) ||
-            redeemed.expiresAt > Math.floor(Date.now() / 1000) + 60
+            response.status !== 202 ||
+            !validReceipt(redeemed) ||
+            !validTicketExpiry(redeemed.expiresAt)
           )
             throw denied();
-          receipt = { id: redeemed.id, receipt: redeemed.receipt };
-          const grant = redeemed.grant;
-          const identity = await verifyPairing(grant, challenge);
-          if (identity.allowProvision !== true || identity.expiresAt !== redeemed.expiresAt)
-            throw denied();
-          if (
-            options.expectedOwnerKey &&
-            oidcAccountSubject(identity.issuer, identity.subject) !== options.expectedOwnerKey
-          )
-            throw denied();
-          const authorization = await store.consume({
-            origin: options.origin,
-            challenge,
-            identity,
+          const pairingId = await pairings.create({
+            id: redeemed.id,
+            receipt: redeemed.receipt,
+            expiresAt: redeemed.expiresAt,
           });
-          await verifiedLogin.run({ ...identity, ...authorization }, async () => {
-            const user = await provisionIdentity(ctx, identity, grant);
-            await options.provisionUser!(user);
-          });
-          await brokerPost("report", { ...receipt, success: true });
-          return ctx.json({ paired: true });
+          ctx.setStatus(202);
+          return ctx.json({ pending: true, pairingId });
         } catch {
-          if (receipt) {
-            await brokerPost("report", { ...receipt, success: false }).catch(() => {});
-          }
           throw denied();
         }
       }),
+      nativeAccountsPairStatus: createAuthEndpoint(
+        "/native/pair/status",
+        { method: "POST" },
+        async (ctx) => {
+          ctx.setHeader("Cache-Control", "no-store");
+          if (ctx.headers?.get("origin") !== options.origin || !options.provisionUser)
+            throw denied();
+          const handle = (ctx.body as { pairingId?: unknown } | undefined)?.pairingId;
+          if (typeof handle !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(handle)) throw denied();
+          const claim = await pairings.acquire(handle);
+          if (claim.state === "paired") return ctx.json({ paired: true });
+          if (claim.state === "failed") throw denied();
+          const pending = () => {
+            ctx.setStatus(202);
+            return ctx.json({ pending: true });
+          };
+          if (claim.state !== "claimed") return pending();
+          const { lease } = claim;
+          const receipt = { id: lease.ticket.id, receipt: lease.ticket.receipt };
+          try {
+            const approval = await brokerPost("grant", receipt);
+            const state = approval.body;
+            if (
+              approval.status !== 202 ||
+              !state ||
+              typeof state !== "object" ||
+              !("status" in state) ||
+              (state.status !== "pending" && state.status !== "approved") ||
+              !("expiresAt" in state) ||
+              typeof state.expiresAt !== "number" ||
+              state.expiresAt !== lease.ticket.expiresAt ||
+              !validTicketExpiry(state.expiresAt)
+            )
+              throw denied();
+            if (state.status === "pending") {
+              if (!(await pairings.finish(lease, "pending"))) throw denied();
+              return pending();
+            }
+            if (!(await pairings.current(lease))) throw denied();
+            const { challenge } = await store.issue(options.origin);
+            const response = await brokerPost("grant", { ...receipt, challenge });
+            const redeemed = response.body;
+            if (
+              response.status !== 200 ||
+              !validReceipt(redeemed) ||
+              redeemed.id !== receipt.id ||
+              redeemed.receipt !== receipt.receipt ||
+              !("grant" in redeemed) ||
+              typeof redeemed.grant !== "string" ||
+              redeemed.grant.length > MAX_GRANT_BYTES ||
+              !validTicketExpiry(redeemed.expiresAt, 60) ||
+              redeemed.expiresAt > lease.ticket.expiresAt
+            )
+              throw denied();
+            const grant = redeemed.grant;
+            const identity = await verifyPairing(grant, challenge);
+            if (
+              identity.allowProvision !== true ||
+              identity.expiresAt !== redeemed.expiresAt ||
+              !(await pairings.current(lease))
+            )
+              throw denied();
+            if (
+              options.expectedOwnerKey &&
+              oidcAccountSubject(identity.issuer, identity.subject) !== options.expectedOwnerKey
+            )
+              throw denied();
+            const authorization = await store.consume({
+              origin: options.origin,
+              challenge,
+              identity,
+            });
+            await verifiedLogin.run({ ...identity, ...authorization }, async () => {
+              if (!(await pairings.current(lease))) throw denied();
+              const user = await provisionIdentity(ctx, identity, grant);
+              await options.provisionUser!(user);
+            });
+            if (!(await pairings.current(lease))) throw denied();
+            await brokerPost("report", { ...receipt, success: true });
+            if (!(await pairings.finish(lease, "paired"))) throw denied();
+            return ctx.json({ paired: true });
+          } catch {
+            await pairings.finish(lease, "failed").catch(() => {});
+            await brokerPost("report", { ...receipt, success: false }).catch(() => {});
+            throw denied();
+          }
+        },
+      ),
       nativeAccountsChallenge: createAuthEndpoint(
         "/native/challenge",
         { method: "POST" },

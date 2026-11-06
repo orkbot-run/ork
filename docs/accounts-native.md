@@ -43,10 +43,11 @@ verified subject.
 
 Desktop and mobile require a verified central Accounts session before opening the
 product. Desktop signs in before it starts Docker or connects to an existing
-server. For a new self-hosted server, generate a six-character pairing code in the app
-and enter it on that server's browser initialization page. Accounts saves the server after
-the server confirms ownership and workspace creation. The waiting app refreshes the
-directory and connects using its own server session. Mobile loads the same account directory.
+server. To initialize a self-hosted server, generate a six-character pairing key in the app.
+Enter it on the server's browser initialization page, choose **Initialize**, then approve
+the full server address shown in the app. Accounts saves the server after ownership and
+workspace creation complete. The waiting app refreshes the directory and connects using
+its own server session. Mobile loads the same account directory.
 An empty directory leaves the server picker open.
 
 Remote entries follow the account. A Docker loopback entry belongs to the desktop
@@ -69,7 +70,8 @@ authorization browser to verify identity.
 
 The link uses `orkbot://connect?server=<encoded-origin>`. Both apps validate the
 address and retain it through Accounts sign-in. Ordinary connection links prefill the
-pairing screen, where the signed-in user can request a code for that exact origin. Only HTTPS and private-network HTTP origins are accepted. Paths,
+pairing screen. The app generates a key without requiring a server address, then asks the
+signed-in user to approve the immutable address claimed by the server. Only HTTPS and private-network HTTP origins are accepted. Paths,
 credentials, fragments, and additional parameters are rejected. The link contains
 no login token and grants no access; it can be shared without creating a session.
 
@@ -138,9 +140,10 @@ remain active if the provider has no end-session endpoint.
 ## Server-side SSO
 
 New self-hosted stacks enable native Accounts proofs during automatic initialization.
-Pairing codes expire after five minutes. The server redeems a code through Accounts,
-verifies a separate pairing-purpose proof and initializes the owner without signing the
-browser into the product. Only then does it report success for the waiting native app.
+Pairing keys expire after five minutes. Using a key claims one immutable server address.
+The app must approve that address before Accounts issues a separate pairing-purpose proof
+for the server's fresh challenge. The server initializes the owner without signing the
+browser into the product, then reports success for the waiting native app.
 Existing OIDC deployments keep their registered client configuration, and older private
 initialization links remain supported.
 See [Self-hosted accounts](self-host-accounts.md).

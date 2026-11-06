@@ -44,6 +44,7 @@ type Operation =
   | "directory"
   | "install"
   | "pair"
+  | "approve"
   | "connect"
   | "local"
   | "logout";
@@ -79,6 +80,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let pendingInitialization = false;
   let pairingRequest: string | null = null;
   let pairing: ServerPairing | null = null;
+  let pairingOrigin: string | null = null;
+  let approvedPairingOrigin: string | null = null;
   let pairingVersion = 0;
   let pairingDeadline = 0;
   let pairingPoll: number | undefined;
@@ -125,6 +128,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     const requestId = pairingRequest;
     pairingRequest = null;
     pairing = null;
+    pairingOrigin = null;
+    approvedPairingOrigin = null;
+    element("pairing-origin").textContent = "";
+    element("pairing-approval").hidden = true;
+    element("approve-pairing").hidden = false;
     pairingVersion++;
     pairingDeadline = 0;
     win?.clearTimeout(pairingPoll);
@@ -162,7 +170,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element<HTMLButtonElement>("cancel-sign-in").disabled = operation === "logout";
     element<HTMLButtonElement>("back").disabled =
       startup.phase === "opening" ||
-      (operation !== null && operation !== "install" && operation !== "pair");
+      (operation !== null &&
+        operation !== "install" &&
+        operation !== "pair" &&
+        operation !== "approve");
     element("sign-out").hidden = !account;
     element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
     element("browser-hint").hidden = !browserSignIn;
@@ -172,7 +183,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       screen !== "local" || operation !== null || startup.phase === "opening";
     element("retry-server").hidden = screen !== "servers" || !failedServer;
     input.disabled = operation !== null;
-    element("connect").textContent = t(pendingInitialization ? "Continue" : "Pairing key");
+    element("legacy-target").hidden = !pendingInitialization;
+    input.required = pendingInitialization;
+    element("connect").textContent = t(pendingInitialization ? "Continue" : "New pairing key");
+    element<HTMLButtonElement>("cancel-pairing").disabled = operation === "logout";
+    element("approve-pairing").hidden = approvedPairingOrigin !== null;
     shell?.setAttribute("aria-busy", String(operation !== null || startup.phase === "opening"));
   }
 
@@ -263,6 +278,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     input.value = pendingServer;
     startup = { phase: "idle" };
     show("selfhost");
+    if (!pendingInitialization && !operation && !pairingRequest) void createPairing();
   }
 
   async function loadServers(version: number): Promise<Server[]> {
@@ -394,8 +410,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         requestId,
       });
       if (!active()) return;
-      if (result.origin !== value.origin || result.expiresAt !== value.expiresAt)
-        throw new Error("Invalid pairing state");
+      if (result.expiresAt !== value.expiresAt) throw new Error("Invalid pairing state");
+      const origin =
+        typeof result.origin === "string"
+          ? parseServerConnectLink(createServerConnectLink(result.origin))
+          : null;
+      if (result.origin !== origin || (pairingOrigin && origin && pairingOrigin !== origin))
+        throw new Error("Invalid pairing origin");
       if (pairingDeadline <= Date.now() || result.status === "expired") {
         expirePairing();
         return;
@@ -405,8 +426,20 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         errorMessage("Could not complete that request. Try again.");
         return;
       }
+      if (result.status === "approval-required") {
+        if (!origin) throw new Error("Missing pairing origin");
+        pairingOrigin = origin;
+        element("pairing-origin").textContent = origin;
+        element("pairing-approval").hidden = false;
+        controls();
+      } else if (result.status === "approved" || result.status === "ready") {
+        if (!approvedPairingOrigin || origin !== approvedPairingOrigin)
+          throw new Error("Pairing not approved");
+      } else if (result.status !== "pending" || origin !== null || pairingOrigin !== null) {
+        throw new Error("Invalid pairing state");
+      }
       if (result.status === "ready") {
-        const origin = value.origin;
+        const origin = approvedPairingOrigin;
         clearPairing();
         const completionVersion = pairingVersion;
         await run(
@@ -424,7 +457,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         );
         return;
       }
-      if (result.status !== "pending") throw new Error("Invalid pairing state");
       status.textContent = "";
     } catch {
       if (!active()) return;
@@ -435,7 +467,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   }
 
   async function createPairing() {
-    if (!account || operation || screen !== "selfhost") return;
+    if (!account || operation || screen !== "selfhost" || pendingInitialization) return;
+    discardPendingServer();
     clearPairing();
     clearInstallation();
     const requestId = createPersonalOrkId();
@@ -445,7 +478,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       "pair",
       async (generation) => {
         const value = await transport.invoke<ServerPairing>("create_server_pairing", {
-          rawUrl: input.value,
           requestId,
         });
         if (
@@ -455,9 +487,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           screen !== "selfhost"
         )
           return;
-        const origin = parseServerConnectLink(createServerConnectLink(input.value));
         if (
-          value.origin !== origin ||
           !/^[a-f0-9]{64}$/.test(value.id) ||
           value.code.length !== 6 ||
           [...value.code].some((char) => !SERVER_PAIRING_ALPHABET.includes(char)) ||
@@ -474,7 +504,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         }
         pairing = value;
         pairingDeadline = expires;
-        input.value = value.origin;
         element<HTMLInputElement>("pairing-code").value = value.code;
         element("pairing").hidden = false;
         element("pairing-expires").textContent =
@@ -485,6 +514,51 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       "selfhost",
     );
     if (pairingRequest === requestId && !pairing) clearPairing();
+  }
+
+  async function approvePairing() {
+    const value = pairing;
+    const origin = pairingOrigin;
+    const requestId = pairingRequest;
+    const version = pairingVersion;
+    if (
+      !account ||
+      operation ||
+      !value ||
+      !origin ||
+      !requestId ||
+      approvedPairingOrigin ||
+      pairingDeadline <= Date.now()
+    )
+      return;
+    await run(
+      "approve",
+      async (generation) => {
+        const result = await transport.invoke<ServerPairingState>("approve_server_pairing", {
+          requestId,
+          origin,
+        });
+        if (
+          !current(generation) ||
+          pairing !== value ||
+          pairingRequest !== requestId ||
+          pairingVersion !== version ||
+          pairingOrigin !== origin
+        )
+          return;
+        if (
+          result.status !== "approved" ||
+          result.origin !== origin ||
+          result.expiresAt !== value.expiresAt ||
+          pairingDeadline <= Date.now()
+        )
+          throw "Could not complete that request. Try again.";
+        approvedPairingOrigin = origin;
+        status.textContent = "";
+        controls();
+      },
+      "selfhost",
+    );
   }
 
   function expireInstallation() {
@@ -660,7 +734,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("get-started", "click", () => void signIn(true));
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
-    if (!operation || operation === "install" || operation === "pair") {
+    if (!operation || operation === "install" || operation === "pair" || operation === "approve") {
       discardPendingServer();
       generation++;
       operation = null;
@@ -670,7 +744,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("selfhost", "click", () => {
     if (account && !operation) {
       show("selfhost");
-      void createInstallation();
+      if (!pendingInitialization) void createPairing();
     }
   });
   on("local", "click", () => void connect("connect_local_server", undefined, true));
@@ -682,14 +756,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("refresh", "click", () => void run("directory", loadServers, "servers"));
   on("setup", "submit", (event) => {
     event.preventDefault();
-    if (input.reportValidity()) {
+    if (!pendingInitialization || input.reportValidity()) {
       if (pendingInitialization && input.value === pendingServer) {
         pendingServer = null;
         pendingInitialization = false;
         void connect("connect_server", { rawUrl: input.value });
       } else {
-        pendingServer = null;
-        pendingInitialization = false;
+        discardPendingServer();
         void createPairing();
       }
     }
@@ -752,6 +825,19 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         input.focus();
         input.select();
       });
+  });
+  on("approve-pairing", "click", () => void approvePairing());
+  on("cancel-pairing", "click", () => {
+    generation++;
+    operation = null;
+    clearPairing();
+    controls();
+  });
+  on("install", "toggle", () => {
+    if (element<HTMLDetailsElement>("install").open && !installation && !operation) {
+      clearPairing();
+      void createInstallation();
+    }
   });
   on("create-installation", "click", () => void createInstallation());
   on("copy", "click", () => {
