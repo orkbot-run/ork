@@ -7,6 +7,20 @@ server_privileged() {
   if [[ "$EUID" == 0 ]]; then "$@"; else sudo "$@"; fi
 }
 
+server_progress() {
+  # Reporting is bounded and never turns a healthy server into a failed installation.
+  timeout --foreground 60 python3 "$server_progress_helper" progress "$server_progress_url" "$1" || true
+}
+
+server_cleanup() {
+  local result=$?
+  trap - EXIT
+  if (( result != 0 )); then server_progress failed; fi
+  rm -rf -- "$server_runtime"
+  cleanup
+  return "$result"
+}
+
 server_packages() {
   local install_docker=false
   command -v docker >/dev/null 2>&1 || install_docker=true
@@ -51,7 +65,7 @@ server_packages() {
 server_main() {
   # Codes and the redeem response must never be exposed by shell tracing.
   set +x
-  local server_url='' external_proxy=false read_code=false server_arch
+  local server_url='' external_proxy=auto read_code=false server_arch
   local code="${server_install_code:-}"
   export -n code
   unset server_install_code ORKBOT_INSTALL_CODE
@@ -68,10 +82,10 @@ server_main() {
       --external-proxy) external_proxy=true; shift ;;
       --local) skip_existing=true; shift ;;
       --pull-never) pull_never=true; shift ;;
-      *) fail "Usage: bash install-images.sh --server --url https://server.example.com [--code CODE | --code-stdin] [--external-proxy] [--pull-never]" ;;
+      *) fail "Usage: bash install-images.sh --server [--url https://server.example.com] [--code CODE | --code-stdin] [--external-proxy] [--pull-never]" ;;
     esac
   done
-  [[ "$server_url" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || fail "--url must be an exact HTTPS origin, without a port, path or trailing slash."
+  [[ -z "$server_url" || "$server_url" =~ ^https://[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || fail "--url must be an exact HTTPS origin, without a port, path or trailing slash."
   [[ "$(uname -s)" == Linux ]] || fail "--server requires Linux."
   case "$(uname -m)" in x86_64|amd64) server_arch=amd64 ;; aarch64|arm64) server_arch=arm64 ;; *) fail "--server supports amd64 and arm64." ;; esac
   if [[ "$read_code" == true ]]; then
@@ -129,6 +143,11 @@ server_main() {
 
   curl_download "${DOWNLOAD_BASE}/server-install.py" "$server_runtime/server-install.py" || fail "could not download server configuration support."
   local helper="$server_runtime/server-install.py"
+  server_url=$(python3 "$helper" server-url "$server_url") || fail "configure this server's public HTTPS domain and retry."
+  external_proxy=$(python3 "$helper" proxy-mode "$server_url" "$external_proxy") || fail "existing HTTPS proxy configuration needs attention."
+  server_progress_helper="$helper"
+  server_progress_url="$server_url"
+  trap server_cleanup EXIT
   timeout --foreground 60 python3 "$helper" preflight "$server_url" "$external_proxy" || fail "server preflight failed."
   # Keep operator files. An installer rerun is a resume, not an implicit upgrade.
   skip_existing=true
@@ -155,7 +174,7 @@ server_main() {
   fi
   validate_required_secrets
 
-  # Check firewall support and image availability before consuming a one-use code.
+  # Check firewall support before consuming a one-use code.
   local provider
   provider=$(timeout --foreground 60 python3 "$helper" provider "$server_url")
   if [[ "$provider" == docker ]]; then
@@ -165,15 +184,20 @@ server_main() {
     download "$EGRESS_SCRIPT"
     server_privileged bash "./$EGRESS_SCRIPT" || fail "could not install restricted computer egress; services were not started."
   fi
-  if [[ "$pull_never" != true ]]; then
-    timeout --foreground 900 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" pull || fail "image pull failed; the installation code has not been consumed."
-  fi
   # The only process that receives the code performs one bounded HTTPS request.
   ORKBOT_INSTALL_CODE="$code" timeout --foreground 60 python3 "$helper" configure "$server_url" || fail "could not configure Accounts; rerun with a new code if redemption already succeeded."
   unset code
+  server_progress preparing
   validate_accounts_config
   validate_required_secrets
+  if [[ "$pull_never" != true ]]; then
+    server_progress pulling
+    timeout --foreground 900 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" pull || fail "image pull failed; credentials were kept. Rerun the same command without --code."
+  fi
+  server_progress starting
   timeout --foreground 420 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" up -d --pull never --wait --wait-timeout 300 || fail "services did not become healthy; existing data and credentials were kept. Rerun the same command without --code."
+  server_progress waiting-healthy
   timeout --foreground 210 python3 "$helper" ready "$server_url" || fail "public HTTPS or Accounts is not ready; check DNS, inbound TCP 80/443, proxy settings and service logs, then rerun without --code."
+  server_progress ready
   echo "Ork is ready at ${server_url}"
 }
