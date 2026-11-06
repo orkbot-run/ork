@@ -1,12 +1,17 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Linux WebKitGTK regression coverage follows LICENSE.md.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 type Transition = { update: () => Promise<void>; done: () => void; skip: () => void };
 
 /** A fake document whose view transitions run their update only when told to. */
-function stubTransitions() {
+function stubTransitions(platform?: string) {
   const transitions: Transition[] = [];
   const classes = new Set<string>();
   vi.stubGlobal("window", {
+    orkbotDesktop: platform ? { platform } : undefined,
     matchMedia: () => ({ matches: false }),
     setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
   });
@@ -38,6 +43,28 @@ afterEach(() => {
 });
 
 describe("switching spaces in place", () => {
+  it("switches Linux desktop spaces without entering the crashing WebKitGTK transition", async () => {
+    const { transitions, classes } = stubTransitions("linux");
+    const { remountShellForSpace } = await import("./space-switch");
+    const commit = vi.fn(() => true);
+    remountShellForSpace(commit);
+    expect(commit).toHaveBeenCalledOnce();
+    expect(transitions).toHaveLength(0);
+    expect(classes.has("rk-space-switching")).toBe(false);
+  });
+
+  it.each(["darwin", "win32"])("keeps animated switching on %s", async (platform) => {
+    const { transitions } = stubTransitions(platform);
+    const { remountShellForSpace } = await import("./space-switch");
+    const commit = vi.fn(() => false);
+    remountShellForSpace(commit);
+    expect(commit).not.toHaveBeenCalled();
+    await transitions[0]!.update();
+    expect(commit).toHaveBeenCalledOnce();
+    transitions[0]!.done();
+    await Promise.resolve();
+  });
+
   it("releases a skipped transition without an unhandled rejection", async () => {
     const { transitions, classes } = stubTransitions();
     const { remountShellForSpace } = await import("./space-switch");

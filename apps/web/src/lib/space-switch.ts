@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 space switching is preserved. Linux WebKitGTK recovery follows LICENSE.md.
+
 import { useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import type { NavigateFunction, NavigateOptions, To } from "react-router-dom";
+import { desktopBridge } from "./desktop";
 
 /**
  * Switching spaces in place: the shell is keyed by this counter, so a switch
@@ -44,7 +49,14 @@ export function remountShellForSpace(commit: () => boolean): void {
     return true;
   };
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-  if (typeof document.startViewTransition !== "function" || reducedMotion) {
+  // WebKitGTK can segfault in its UI process when view transitions enter accelerated
+  // compositing (https://bugs.webkit.org/show_bug.cgi?id=324730). Feature detection
+  // succeeds on affected versions, so use the ordinary remount on Linux desktop.
+  if (
+    desktopBridge()?.platform === "linux" ||
+    typeof document.startViewTransition !== "function" ||
+    reducedMotion
+  ) {
     remount();
     return;
   }
