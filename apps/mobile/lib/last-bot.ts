@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to scope last-bot records to the selected Space. Inherited material remains Apache-2.0.
+
 import * as SecureStore from "expo-secure-store";
 import { captureApiRequestContext, currentApiBase, fetchMobileJson, selectedSpaceId } from "./api";
 import { currentSessionGeneration } from "./session";
@@ -48,7 +52,7 @@ export async function saveLastBotId(botId: string, spaceId: string | null) {
 
 /** The record belongs to the Space it was saved in; another Space or organization starts without it. */
 function inSelectedSpace(record: { spaceId?: unknown }): boolean {
-  return typeof record.spaceId !== "string" || record.spaceId === selectedSpaceId();
+  return (record.spaceId ?? null) === selectedSpaceId();
 }
 
 export async function loadLastBotId() {

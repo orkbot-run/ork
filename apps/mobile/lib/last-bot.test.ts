@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to test last-bot Space isolation. Inherited material remains Apache-2.0.
+
 import { setImmediate } from "node:timers/promises";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
@@ -80,6 +84,56 @@ describe("last bot shortcut target", () => {
     expect(await loadLastBotId()).toBe("writer");
     expect(JSON.parse(saved.get("orkbot.last_bot_id") ?? "null").spaceId).toBeNull();
   });
+
+  it.each([null, undefined])(
+    "only restores a bot saved with spaceId=%s when no Space is selected",
+    async (spaceId) => {
+      saved.set(
+        "orkbot.last_bot_id",
+        JSON.stringify({
+          botId: "researcher",
+          spaceId,
+          apiBase: "https://app.example.test",
+          userId: "account-a",
+        }),
+      );
+      expect(await loadLastBotId()).toBe("researcher");
+
+      selectedSpace.id = "shared-space";
+      expect(await loadLastBotId()).toBe("");
+
+      selectedSpace.id = null;
+      expect(await loadLastBotId()).toBe("researcher");
+    },
+  );
+
+  it.each([null, undefined])(
+    "drops a bot saved with spaceId=%s if a Space opens during owner verification",
+    async (spaceId) => {
+      saved.set(
+        "orkbot.last_bot_id",
+        JSON.stringify({
+          botId: "researcher",
+          spaceId,
+          apiBase: "https://app.example.test",
+          userId: "account-a",
+        }),
+      );
+      const started = deferred();
+      const release = deferred();
+      vi.mocked(fetchMobileJson).mockImplementationOnce(async () => {
+        started.resolve();
+        await release.promise;
+        return { response: Response.json({}), body: { user: { id: "account-a" } } };
+      });
+
+      const loading = loadLastBotId();
+      await started.promise;
+      selectedSpace.id = "shared-space";
+      release.resolve();
+      expect(await loading).toBe("");
+    },
+  );
 
   it("keeps the later chat when the first identity response is delayed", async () => {
     const started = deferred();
