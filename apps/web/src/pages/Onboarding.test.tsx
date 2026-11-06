@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 tests are preserved. Auth boundary isolation follows LICENSE.md.
+// Inherited Apache-2.0 tests are preserved. Auth isolation and onboarding recovery follow LICENSE.md.
 
+import type { Bot } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const account = vi.hoisted(() => ({ load: (_me: unknown) => {} }));
@@ -27,6 +28,11 @@ vi.mock("../lib/rpc", () => ({
           account.load = resolve;
         }),
     ),
+    onboarding: {
+      ensureFirstBot: vi.fn(async () => null),
+      start: vi.fn(),
+      promptFocus: vi.fn(),
+    },
     models: {
       list: vi.fn(async () => [
         {
@@ -53,11 +59,13 @@ vi.mock("@lingui/react/macro", () => {
   };
 });
 
+import { rpc } from "../lib/rpc";
 import { OnboardingPage } from "./Onboarding";
 
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  vi.mocked(rpc.onboarding.ensureFirstBot).mockReset().mockResolvedValue(null);
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -77,6 +85,76 @@ afterEach(async () => {
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
 });
+
+it("opens the app when setup is complete and the space needs no personal Ork", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+          <Route path="/app" element={<div data-testid="empty-space" />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    account.load({ needsModel: false, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  expect(host.querySelector('[data-testid="empty-space"]')).not.toBeNull();
+  expect(rpc.onboarding.ensureFirstBot).toHaveBeenCalledOnce();
+  expect(rpc.onboarding.start).not.toHaveBeenCalled();
+});
+
+it("keeps real provisioning failures visible during onboarding", async () => {
+  vi.mocked(rpc.onboarding.ensureFirstBot).mockRejectedValue(new Error("Setup unavailable"));
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+          <Route path="/app" element={<div data-testid="empty-space" />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    account.load({ needsModel: false, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  expect(host.querySelector('[data-testid="empty-space"]')).toBeNull();
+  expect(host.textContent).toContain("Setup unavailable");
+});
+
+it.each([null, { id: "late-bot" } as Bot])(
+  "ignores a provisioning result after leaving onboarding: %j",
+  async (result) => {
+    let resolve!: (bot: Bot | null) => void;
+    vi.mocked(rpc.onboarding.ensureFirstBot).mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={["/onboarding"]}>
+          <Link to="/app/chosen">Open chosen chat</Link>
+          <Routes>
+            <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+            <Route path="/app/chosen" element={<div data-testid="chosen-chat" />} />
+            <Route path="/app" element={<div data-testid="empty-space" />} />
+          </Routes>
+        </MemoryRouter>,
+      ),
+    );
+    await act(async () =>
+      account.load({ needsModel: false, needsSignupSurvey: false, billingEnabled: false }),
+    );
+    await act(async () => host.querySelector<HTMLAnchorElement>("a")!.click());
+    await act(async () => resolve(result));
+    expect(host.querySelector('[data-testid="chosen-chat"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="empty-space"]')).toBeNull();
+    expect(rpc.onboarding.start).not.toHaveBeenCalled();
+  },
+);
 
 it("marks onboarding as usable for the desktop only once a step shows", async () => {
   const subscribe = vi.spyOn(window, "addEventListener");

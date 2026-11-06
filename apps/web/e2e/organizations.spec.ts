@@ -1,6 +1,17 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
+
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
+import {
+  captureScreenshot,
+  completeOnboarding,
+  createBotFromPicker,
+  openUserSettings,
+  rpc,
+  signup,
+} from "./helpers";
 
 type OrganizationList = {
   organizations: Array<{ id: string; name: string; defaultSpaceId: string }>;
@@ -23,11 +34,11 @@ async function openAvatarMenu(page: Page) {
   return menu;
 }
 
-/** Resolves once a chat other than `leaving` is open, outside settings. */
-function chatOpened(page: Page, leaving: string) {
+/** Resolves once another app destination is open, outside settings. */
+function appOpened(page: Page, leaving: string) {
   return page.waitForURL(
     (url) =>
-      /^\/app\/[^/]+$/.test(url.pathname) &&
+      /^\/app(?:\/[^/]+)?$/.test(url.pathname) &&
       url.pathname !== leaving &&
       !url.searchParams.has("settings"),
   );
@@ -37,8 +48,8 @@ async function switchFromAvatarMenu(page: Page, name: string, spaceId: string) {
   const leaving = new URL(page.url()).pathname;
   const menu = await openAvatarMenu(page);
   await menu.getByRole("button", { name, exact: true }).click();
-  await chatOpened(page, leaving);
-  expect(await selectedSpace(page)).toBe(spaceId);
+  await appOpened(page, leaving);
+  await expect.poll(() => selectedSpace(page)).toBe(spaceId);
 }
 
 test("create, switch, rename and delete an organization", async ({ page }, testInfo) => {
@@ -108,7 +119,7 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
   await Promise.all([...rewrites]);
   await page.unrouteAll({ behavior: "ignoreErrors" });
   await page.getByRole("menuitemradio", { name: "Personal" }).click();
-  await chatOpened(page, "");
+  await appOpened(page, "");
   expect(await selectedSpace(page)).toBe(personal.defaultSpaceId);
 
   // Two organizations: both are listed, the active one checked.
@@ -124,8 +135,21 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
   await captureScreenshot(page, testInfo, "org-menu-two-orgs");
   await page.keyboard.press("Escape");
 
-  // Work has no bot yet, so its first visit finishes onboarding there.
+  // Another organization opens empty instead of creating another primary bot.
   await switchFromAvatarMenu(page, "Work", work.defaultSpaceId);
+  await expect(page).toHaveURL(/\/app$/);
+  await expect(
+    page
+      .locator("aside")
+      .first()
+      .getByRole("button", { name: /^Chief/ }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "org-empty-space");
+  await createBotFromPicker(page, { name: "Work bot" });
+  await expect(page.getByPlaceholder("Message Work bot")).toBeVisible();
   const workChat = new URL(page.url()).pathname;
   await switchFromAvatarMenu(page, "Personal", personal.defaultSpaceId);
 
@@ -161,7 +185,7 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
   await captureScreenshot(page, testInfo, "org-delete-confirm");
   const leaving = new URL(page.url()).pathname;
   await remove.click();
-  await chatOpened(page, leaving);
+  await appOpened(page, leaving);
   expect(await selectedSpace(page)).toBe(personal.defaultSpaceId);
 
   menu = await openAvatarMenu(page);
