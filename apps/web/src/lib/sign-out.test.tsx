@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved. Native device pairing tests are Ork additions.
+// Inherited Apache-2.0 material is preserved. Native logout and pairing tests are Ork additions.
 
 // @vitest-environment jsdom
 
@@ -23,6 +23,11 @@ const nativePairing = vi.hoisted(() => ({
   enabled: false,
   clear: vi.fn<() => Promise<void>>(async () => undefined),
 }));
+const nativeAccounts = vi.hoisted(() => ({
+  enabled: false,
+  logout: vi.fn<() => Promise<void>>(async () => undefined),
+  change: vi.fn<() => Promise<void>>(async () => undefined),
+}));
 
 const { requestSignOut, endCallBeforeSignOut, sessionChangedUnderPage } = vi.hoisted(() => ({
   requestSignOut: vi.fn(),
@@ -34,7 +39,17 @@ vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts
 vi.mock("./auth", () => ({ authClient: { signOut: requestSignOut } }));
 vi.mock("./desktop", () => ({
   desktopBridge: () =>
-    nativePairing.enabled ? { pairing: { clear: nativePairing.clear } } : undefined,
+    nativePairing.enabled || nativeAccounts.enabled
+      ? {
+          ...(nativePairing.enabled ? { pairing: { clear: nativePairing.clear } } : {}),
+          ...(nativeAccounts.enabled
+            ? {
+                accounts: { logout: nativeAccounts.logout },
+                server: { change: nativeAccounts.change },
+              }
+            : {}),
+        }
+      : undefined,
 }));
 vi.mock("./call-session", async (importOriginal) => ({
   ...(await importOriginal<typeof CallSessionModule>()),
@@ -47,6 +62,9 @@ const location = { assign: vi.fn(), reload: vi.fn() };
 beforeEach(() => {
   vi.clearAllMocks();
   nativePairing.enabled = false;
+  nativeAccounts.enabled = false;
+  nativeAccounts.logout.mockResolvedValue(undefined);
+  nativeAccounts.change.mockResolvedValue(undefined);
   sessionChangedUnderPage.mockReturnValue(false);
   nativePairing.clear.mockResolvedValue(undefined);
   vi.stubGlobal("location", location);
@@ -83,6 +101,68 @@ function mountSignOut(destination: string, onError: (message: string) => void = 
 }
 
 describe("signOut", () => {
+  it("forgets native Accounts before ending the server session and opens a fresh picker", async () => {
+    nativeAccounts.enabled = true;
+    nativePairing.enabled = true;
+    let finish = () => {};
+    nativeAccounts.logout.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const pending = signOut("/sign-in");
+    await vi.waitFor(() => expect(nativeAccounts.logout).toHaveBeenCalledOnce());
+    expect(requestSignOut).not.toHaveBeenCalled();
+    finish();
+    await pending;
+    expect(requestSignOut).toHaveBeenCalledOnce();
+    expect(nativeAccounts.change).toHaveBeenCalledOnce();
+    expect(nativePairing.clear.mock.invocationCallOrder[0]).toBeLessThan(
+      nativeAccounts.logout.mock.invocationCallOrder[0]!,
+    );
+    expect(nativeAccounts.logout.mock.invocationCallOrder[0]).toBeLessThan(
+      requestSignOut.mock.invocationCallOrder[0]!,
+    );
+    expect(requestSignOut.mock.invocationCallOrder[0]).toBeLessThan(
+      nativeAccounts.change.mock.invocationCallOrder[0]!,
+    );
+    expect(nativeAccounts.change.mock.invocationCallOrder[0]).toBeLessThan(
+      location.assign.mock.invocationCallOrder[0]!,
+    );
+    expect(location.assign).toHaveBeenCalledWith("/sign-in");
+  });
+
+  it("reports failure when native Accounts cannot be forgotten", async () => {
+    nativeAccounts.enabled = true;
+    nativeAccounts.logout.mockRejectedValueOnce(new Error("secure storage unavailable"));
+    await signOut("/sign-in");
+    expect(requestSignOut).not.toHaveBeenCalled();
+    expect(nativeAccounts.change).not.toHaveBeenCalled();
+    expect(location.reload).toHaveBeenCalledOnce();
+    expect(sessionStorage.getItem(LOG_OUT_FAILED_KEY)).toBe("1");
+  });
+
+  it("does not end a newer server session after native Accounts cleanup", async () => {
+    nativeAccounts.enabled = true;
+    sessionChangedUnderPage
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    await signOut("/sign-in");
+    expect(nativeAccounts.logout).toHaveBeenCalledOnce();
+    expect(requestSignOut).not.toHaveBeenCalled();
+    expect(nativeAccounts.change).not.toHaveBeenCalled();
+    expect(location.reload).toHaveBeenCalledOnce();
+  });
+
+  it("leaves for sign-in even if the native picker could not open", async () => {
+    nativeAccounts.enabled = true;
+    nativeAccounts.change.mockRejectedValueOnce(new Error("window unavailable"));
+    await signOut("/sign-in");
+    expect(nativeAccounts.logout).toHaveBeenCalledOnce();
+    expect(location.assign).toHaveBeenCalledWith("/sign-in");
+  });
+
   it("clears native device access before sending the web sign-out request", async () => {
     nativePairing.enabled = true;
     let finishClear = () => {};

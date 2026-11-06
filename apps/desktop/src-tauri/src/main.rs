@@ -94,6 +94,26 @@ impl AccountsStarted {
     }
 }
 
+#[derive(Clone, Copy)]
+struct AccountsLogout {
+    generation: u64,
+    restore_intent: u64,
+}
+
+impl AccountsLogout {
+    fn matches(&self, gate: &AccountsStarted, intent: u64) -> bool {
+        self.generation == gate.generation && !gate.started && self.restore_intent == intent
+    }
+
+    fn is_current(&self, state: &DesktopState) -> bool {
+        state
+            .accounts_started
+            .lock()
+            .ok()
+            .is_some_and(|gate| self.matches(&gate, state.restore_intent.load(Ordering::SeqCst)))
+    }
+}
+
 struct OpeningServer {
     label: String,
     origin: String,
@@ -461,12 +481,34 @@ async fn native_command(
             Ok(serde_json::json!(secret))
         }
         Command::AccountsLogout => {
-            state.browser_auth.cancel_owner(&owner);
-            state.accounts.logout(&document.origin).await?;
-            *state
-                .initialization
+            let previous_setup = app.get_webview_window("setup");
+            let account = state
+                .setup
                 .lock()
-                .map_err(|_| "Desktop state unavailable.")? = None;
+                .map_err(|_| "Desktop state unavailable.")?
+                .as_ref()
+                .and_then(|setup| setup.account.clone());
+            if !logout_document_matches(&state, &document, account.as_deref()) {
+                return Err("Accounts sign-in changed. Try again.".into());
+            }
+            let logout = begin_accounts_logout(&state)?;
+            state.browser_auth.cancel_owner(&owner);
+            state.speech.cancel_owner(&owner);
+            auth::close_popup(&app, &document.label);
+            update_startup(&app, Startup::idle());
+            clear_accounts_credentials(&state, &logout, Some(&document.origin), || {
+                logout_document_matches(&state, &document, account.as_deref())
+            })
+            .await?;
+            let _switch = state.switching.lock().await;
+            reset_setup_after_product_logout(
+                &app,
+                &logout,
+                &document,
+                account.as_deref(),
+                previous_setup,
+            )
+            .await?;
             Ok(unit)
         }
         Command::Hello { .. } => {
@@ -796,6 +838,153 @@ fn retire_server_windows(app: &tauri::AppHandle, state: &DesktopState) {
     let _ = refresh_menu(app);
 }
 
+fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String> {
+    let generation = state.reset_accounts_started()?;
+    cancel_restore(state);
+    state.accounts.invalidate();
+    state.deactivate_stack();
+    if let Some(host) = &state.host_computer {
+        host.activate(None);
+    }
+    state.browser_auth.cancel_owner(SETUP_ACCOUNTS_OWNER);
+    *state
+        .initialization
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
+    *state
+        .pending_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
+    *state
+        .pending_bookmark
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
+    Ok(AccountsLogout {
+        generation,
+        restore_intent: state.restore_intent.load(Ordering::SeqCst),
+    })
+}
+
+fn account_logout_origins(legacy: Option<&Url>) -> Result<Vec<Url>, String> {
+    let central = server_directory::origin();
+    let mut origins = vec![central.clone()];
+    if let Some(legacy) = legacy {
+        let legacy = server::normalize_server_url(legacy.as_str())?;
+        if legacy.origin() != central.origin() {
+            origins.push(legacy);
+        }
+    }
+    Ok(origins)
+}
+
+async fn clear_accounts_credentials(
+    state: &DesktopState,
+    logout: &AccountsLogout,
+    legacy: Option<&Url>,
+    still_current: impl Fn() -> bool,
+) -> Result<(), String> {
+    let current = || logout.is_current(state) && still_current();
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    state
+        .accounts
+        .logout(&account_logout_origins(legacy)?, current)
+        .await?;
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    Ok(())
+}
+
+fn logout_document_matches(
+    state: &DesktopState,
+    document: &native::Document,
+    account: Option<&str>,
+) -> bool {
+    state.sessions.is_current(document)
+        && state
+            .active_window
+            .lock()
+            .ok()
+            .is_some_and(|active| active.as_deref() == Some(document.label.as_str()))
+        && state
+            .setup
+            .lock()
+            .ok()
+            .and_then(|setup| setup.clone())
+            .is_some_and(|setup| {
+                setup.account.as_deref() == account
+                    && setup.server_url.origin() == document.origin.origin()
+            })
+}
+
+async fn reset_setup_after_product_logout<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    logout: &AccountsLogout,
+    document: &native::Document,
+    account: Option<&str>,
+    previous_setup: Option<WebviewWindow<R>>,
+) -> Result<(), String> {
+    let callback_app = app.clone();
+    let logout = *logout;
+    let document = document.clone();
+    let account = account.map(str::to_owned);
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    // The worker waits without holding the gate; UI checks and destruction run together.
+    app.run_on_main_thread(move || {
+        let state = callback_app.state::<DesktopState>();
+        let result = (|| {
+            let gate = state
+                .accounts_started
+                .lock()
+                .map_err(|_| "Desktop state unavailable.")?;
+            if !logout.matches(&gate, state.restore_intent.load(Ordering::SeqCst))
+                || !logout_document_matches(&state, &document, account.as_deref())
+            {
+                return Err("Accounts sign-in changed. Try again.".into());
+            }
+            // Only the captured setup is discarded; the calling product document keeps its IPC.
+            if let Some(setup) = previous_setup {
+                setup
+                    .destroy()
+                    .map_err(|_| "Could not complete that request. Try again.")?;
+                state.setup_ready.store(false, Ordering::SeqCst);
+            }
+            Ok(())
+        })();
+        let _ = sender.send(result);
+    })
+    .map_err(|_| "Desktop window unavailable.")?;
+    receiver.await.map_err(|_| "Desktop window unavailable.")?
+}
+
+async fn finish_setup_accounts_logout(
+    app: &tauri::AppHandle,
+    logout: &AccountsLogout,
+) -> Result<(), String> {
+    let callback_app = app.clone();
+    let logout = *logout;
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    app.run_on_main_thread(move || {
+        let state = callback_app.state::<DesktopState>();
+        let result = (|| {
+            let gate = state
+                .accounts_started
+                .lock()
+                .map_err(|_| "Desktop state unavailable.")?;
+            if !logout.matches(&gate, state.restore_intent.load(Ordering::SeqCst)) {
+                return Err("Accounts sign-in changed. Try again.".into());
+            }
+            retire_server_windows(&callback_app, &state);
+            Ok(())
+        })();
+        let _ = sender.send(result);
+    })
+    .map_err(|_| "Desktop window unavailable.")?;
+    receiver.await.map_err(|_| "Desktop window unavailable.")?
+}
+
 fn require_account(state: &DesktopState, account: &accounts::Authorization) -> Result<(), String> {
     account.directory_bearer()?;
     if state.accounts.is_current(account) {
@@ -884,21 +1073,15 @@ async fn setup_accounts_logout(
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     require_setup(&window)?;
-    state.reset_accounts_started()?;
-    *state
-        .initialization
-        .lock()
-        .map_err(|_| "Desktop state unavailable.")? = None;
-    cancel_restore(&state);
+    let logout = begin_accounts_logout(&state)?;
     update_startup(&app, Startup::idle());
-    state.accounts.invalidate();
-    state.browser_auth.cancel_owner(SETUP_ACCOUNTS_OWNER);
     retire_server_windows(&app, &state);
-    let result = state.accounts.logout(&server_directory::origin()).await;
-    // A candidate already being built must retire before logout completes, too.
+    let result =
+        clear_accounts_credentials(&state, &logout, None, || require_setup(&window).is_ok()).await;
+    // A candidate already being built must retire without touching a newer sign-in attempt.
     let _switch = state.switching.lock().await;
-    retire_server_windows(&app, &state);
-    result
+    let fence = finish_setup_accounts_logout(&app, &logout).await;
+    result.and(fence)
 }
 
 #[tauri::command]
@@ -2488,6 +2671,150 @@ mod tests {
             .unwrap();
         *app.state::<DesktopState>().active_window.lock().unwrap() = Some("server-missing".into());
         assert!(!focus_active(app.handle()));
+    }
+
+    #[test]
+    fn logout_always_targets_central_accounts_and_only_the_optional_legacy_server() {
+        let central = server_directory::origin();
+        assert_eq!(account_logout_origins(None).unwrap(), vec![central.clone()]);
+        assert_eq!(
+            account_logout_origins(Some(&central.join("/app").unwrap())).unwrap(),
+            vec![central.clone()]
+        );
+        assert_eq!(
+            account_logout_origins(Some(
+                &Url::parse("https://server.example.test/app?next=home").unwrap()
+            ))
+            .unwrap(),
+            vec![central, Url::parse("https://server.example.test").unwrap()]
+        );
+    }
+
+    #[test]
+    fn beginning_logout_clears_pending_auth_and_fences_new_accounts_activity() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(0, true)
+            .unwrap();
+        *state.pending_server.lock().unwrap() = Some("https://server.example.test".into());
+        *state.pending_bookmark.lock().unwrap() = Some(server_link::Bookmark {
+            origin: "https://server.example.test".into(),
+            account: "a".repeat(64),
+        });
+        *state.initialization.lock().unwrap() = server_link::parse_initialization(&format!(
+            "orkbot://initialize?server=https%3A%2F%2Fserver.example.test&secret={}",
+            "a".repeat(43)
+        ));
+        let logout = begin_accounts_logout(&state).unwrap();
+        assert!(logout.is_current(&state));
+        assert!(!state.accounts_have_started());
+        assert!(state.pending_server.lock().unwrap().is_none());
+        assert!(state.pending_bookmark.lock().unwrap().is_none());
+        assert!(state.initialization.lock().unwrap().is_none());
+        state.reset_accounts_started().unwrap();
+        assert!(!logout.is_current(&state));
+    }
+
+    #[tokio::test]
+    async fn product_logout_resets_only_bundled_setup_and_keeps_its_native_ipc_document_alive() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(test_state(directory.path()))
+            .build(app_context())
+            .unwrap();
+        let setup = WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+        let origin = Url::parse("https://server.example.test/app").unwrap();
+        let product =
+            WebviewWindowBuilder::new(&app, "server-1", WebviewUrl::External(origin.clone()))
+                .build()
+                .unwrap();
+        let state = app.state::<DesktopState>();
+        state.setup_ready.store(true, Ordering::SeqCst);
+        let proof = state.sessions.insert("server-1", &origin).unwrap();
+        let document_id = "a".repeat(64);
+        let (document, _) = state
+            .sessions
+            .authorize("server-1", &origin, &proof, &document_id, Some(1))
+            .unwrap();
+        *state.active_window.lock().unwrap() = Some("server-1".into());
+        *state.setup.lock().unwrap() = Some(settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: origin.clone(),
+            account: Some("a".repeat(64)),
+        });
+        let logout = begin_accounts_logout(&state).unwrap();
+        reset_setup_after_product_logout(
+            app.handle(),
+            &logout,
+            &document,
+            Some(&"a".repeat(64)),
+            Some(setup),
+        )
+        .await
+        .unwrap();
+        // MockRuntime does not notify AppManager of destruction; state records the reset attempt.
+        assert!(!state.setup_ready.load(Ordering::SeqCst));
+        assert!(app.get_webview_window(product.label()).is_some());
+        assert!(state.sessions.is_current(&document));
+        assert!(state
+            .sessions
+            .authorize("server-1", &origin, &proof, &document_id, None)
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn late_product_logout_never_destroys_setup_for_a_newer_account() {
+        let directory = tempfile::tempdir().unwrap();
+        let app = tauri::test::mock_builder()
+            .manage(test_state(directory.path()))
+            .build(app_context())
+            .unwrap();
+        let setup = WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+        let origin = Url::parse("https://server.example.test/app").unwrap();
+        let state = app.state::<DesktopState>();
+        state.setup_ready.store(true, Ordering::SeqCst);
+        let proof = state.sessions.insert("server-1", &origin).unwrap();
+        let (document, _) = state
+            .sessions
+            .authorize("server-1", &origin, &proof, &"a".repeat(64), Some(1))
+            .unwrap();
+        *state.active_window.lock().unwrap() = Some("server-1".into());
+        *state.setup.lock().unwrap() = Some(settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: origin,
+            account: Some("b".repeat(64)),
+        });
+        let logout = begin_accounts_logout(&state).unwrap();
+        assert!(reset_setup_after_product_logout(
+            app.handle(),
+            &logout,
+            &document,
+            Some(&"a".repeat(64)),
+            Some(setup.clone())
+        )
+        .await
+        .is_err());
+        assert!(state.setup_ready.load(Ordering::SeqCst));
+        state.setup.lock().unwrap().as_mut().unwrap().account = Some("a".repeat(64));
+        state.reset_accounts_started().unwrap();
+        assert!(reset_setup_after_product_logout(
+            app.handle(),
+            &logout,
+            &document,
+            Some(&"a".repeat(64)),
+            Some(setup)
+        )
+        .await
+        .is_err());
+        assert!(state.setup_ready.load(Ordering::SeqCst));
     }
 
     #[test]

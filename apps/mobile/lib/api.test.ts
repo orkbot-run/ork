@@ -14,6 +14,7 @@ import {
 } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { signOutAccounts } from "./accounts";
 import { promptAiConsent } from "./ai-consent";
 import type { MobileMessage, MobileModelCredential, MobileSnapshot } from "./api.js";
 import {
@@ -72,6 +73,8 @@ import {
 import type { UnsentDisk } from "./thread-feedback.js";
 import { configureUnsentSends } from "./thread-feedback.js";
 
+vi.mock("./accounts", () => ({ signOutAccounts: vi.fn(async () => undefined) }));
+
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(),
   setItemAsync: vi.fn(),
@@ -101,6 +104,7 @@ describe("mobile API authentication", () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.mocked(signOutAccounts).mockReset().mockResolvedValue(undefined);
     vi.mocked(SecureStore.getItemAsync).mockReset();
     vi.mocked(SecureStore.setItemAsync).mockReset();
     vi.mocked(SecureStore.deleteItemAsync).mockReset();
@@ -1146,6 +1150,73 @@ describe("mobile API authentication", () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  it("starts clearing central Accounts before any remote logout work", async () => {
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
+    const fetcher = vi.fn(async () => {
+      expect(signOutAccounts).toHaveBeenCalledOnce();
+      return jsonResponse({ json: null });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const logout = signOut();
+    expect(signOutAccounts).toHaveBeenCalledOnce();
+    await logout;
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
+  });
+
+  it("does not unregister a new account after Accounts cleanup changes the session", async () => {
+    vi.mocked(signOutAccounts).mockImplementationOnce(async () => {
+      await saveSessionToken("new-session");
+    });
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await signOut();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await authHeaders()).toMatchObject({ authorization: "Bearer new-session" });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
+  });
+
+  it("does not clear a newer product login after old push unregistration finishes", async () => {
+    await saveSessionToken("old-session");
+    let release!: () => void;
+    let started!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const fetcher = vi.fn(async () => {
+      started();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return jsonResponse({ json: null });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    const logout = signOut();
+    await reached;
+    await saveSessionToken("new-session");
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
+    vi.mocked(SecureStore.deleteItemAsync).mockClear();
+    release();
+    await logout;
+    expect(await authHeaders()).toMatchObject({ authorization: "Bearer new-session" });
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.space_id");
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(signOutAccounts).toHaveBeenCalledOnce();
+  });
+
+  it("clears the product session even if central credential persistence fails", async () => {
+    vi.mocked(signOutAccounts).mockRejectedValueOnce(new Error("SecureStore unavailable"));
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ json: null })),
+    );
+    await expect(signOut()).rejects.toThrow("Could not clear the local session");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.space_id");
   });
 
   it("clears the local session even when the sign-out request fails", async () => {

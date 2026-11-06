@@ -277,6 +277,41 @@ it("drops a refresh result after logout and revokes best effort", async () => {
   expect(fetched.mock.calls.some(([url]) => url.endsWith("/revoke"))).toBe(true);
 });
 
+it("finishes local logout while optional revocation stalls and preserves a newer login", async () => {
+  const { accountsAccessToken, continueWithAccounts, signOutAccounts } = await import("./accounts");
+  stored(Date.now() + 3600_000);
+  let release!: (response: Response) => void;
+  let reached!: () => void;
+  const revoking = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const request = fetched.getMockImplementation()! as (url: string) => Promise<Response>;
+  fetched.mockImplementation(async (url: string) => {
+    if (!url.endsWith("/revoke")) return request(url);
+    reached();
+    return new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+  });
+  let completed = false;
+  const logout = signOutAccounts().then(() => {
+    completed = true;
+  });
+  await revoking;
+  await Promise.resolve();
+  await Promise.resolve();
+  try {
+    expect(completed).toBe(true);
+    expect(mocks.storage.has(storageKey)).toBe(false);
+    await expect(accountsAccessToken()).resolves.toBeNull();
+    await expect(continueWithAccounts()).resolves.toBe(true);
+  } finally {
+    release(new Response(null, { status: 200 }));
+    await logout;
+  }
+  expect(JSON.parse(mocks.storage.get(storageKey)!)).toMatchObject({ accessToken: "new-access" });
+});
+
 it("clears local tokens with missing config or an unreadable credential snapshot", async () => {
   const { signOutAccounts } = await import("./accounts");
   stored();

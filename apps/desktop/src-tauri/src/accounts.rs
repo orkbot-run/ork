@@ -544,18 +544,26 @@ mod tests {
         assert!(saved.contains("rotated-refresh") && !saved.contains("old-refresh"));
         fixture
             .accounts
-            .logout_config(&fixture.origin, &config())
+            .logout_config(std::slice::from_ref(&fixture.origin), &config())
             .await
             .unwrap();
         assert!(fixture.store.0.lock().unwrap().is_empty());
-        assert!(fixture
-            .requests
-            .lock()
-            .unwrap()
-            .last()
-            .unwrap()
-            .1
-            .contains("rotated-refresh"));
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if fixture
+                    .requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|(path, body, _)| path == "/revoke" && body.contains("rotated-refresh"))
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
     }
 
     #[tokio::test]
@@ -615,7 +623,7 @@ mod tests {
         assert!(accounts.session_config(&origin, &config()).await.is_err());
         assert_eq!(
             accounts
-                .logout_config(&origin, &config())
+                .logout_config(std::slice::from_ref(&origin), &config())
                 .await
                 .unwrap_err(),
             STORAGE_ERROR
@@ -628,7 +636,11 @@ mod tests {
         let accounts = fixture.accounts.clone();
         let origin = fixture.origin.clone();
         let operation = fixture.accounts.operation.lock().await;
-        let logout = tokio::spawn(async move { accounts.logout_config(&origin, &config()).await });
+        let logout = tokio::spawn(async move {
+            accounts
+                .logout_config(std::slice::from_ref(&origin), &config())
+                .await
+        });
         tokio::task::yield_now().await;
         assert_eq!(fixture.accounts.generation.load(Ordering::SeqCst), 1);
         fixture
@@ -639,6 +651,270 @@ mod tests {
         drop(operation);
         logout.await.unwrap().unwrap();
         assert!(fixture.store.0.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn logout_clears_central_and_legacy_scopes_once_without_touching_other_servers() {
+        let fixture = Fixture::new(false).await;
+        let central = crate::server_directory::origin();
+        let other = Url::parse("https://other.example.test").unwrap();
+        fixture
+            .accounts
+            .save(&config().key(&central), &credential())
+            .await
+            .unwrap();
+        fixture
+            .accounts
+            .save(&config().key(&other), &credential())
+            .await
+            .unwrap();
+        fixture
+            .accounts
+            .logout_config(
+                &[
+                    central.clone(),
+                    fixture.origin.clone(),
+                    central.join("/app").unwrap(),
+                ],
+                &config(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(fixture.accounts.generation.load(Ordering::SeqCst), 1);
+        assert!(fixture
+            .store
+            .get(&config().key(&central))
+            .unwrap()
+            .is_none());
+        assert!(fixture
+            .store
+            .get(&config().key(&fixture.origin))
+            .unwrap()
+            .is_none());
+        assert!(fixture.store.get(&config().key(&other)).unwrap().is_some());
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                if fixture
+                    .requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|(path, _, _)| path == "/revoke")
+                    .count()
+                    == 2
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn retired_document_during_secure_read_cannot_delete_credentials() {
+        struct RetireOnRead {
+            store: Arc<MemoryStore>,
+            current: Arc<AtomicBool>,
+            deletes: AtomicU64,
+        }
+        impl CredentialStore for RetireOnRead {
+            fn get(&self, key: &str) -> Result<Option<String>, String> {
+                let value = self.store.get(key);
+                self.current.store(false, Ordering::SeqCst);
+                value
+            }
+            fn set(&self, key: &str, value: &str) -> Result<(), String> {
+                self.store.set(key, value)
+            }
+            fn delete(&self, key: &str) -> Result<(), String> {
+                self.deletes.fetch_add(1, Ordering::SeqCst);
+                self.store.delete(key)
+            }
+        }
+        let store = Arc::new(MemoryStore::default());
+        let current = Arc::new(AtomicBool::new(true));
+        let guarded = Arc::new(RetireOnRead {
+            store: store.clone(),
+            current: current.clone(),
+            deletes: AtomicU64::new(0),
+        });
+        let accounts = Accounts {
+            store: Store(guarded.clone()),
+            ..Default::default()
+        };
+        let origin = crate::server_directory::origin();
+        accounts
+            .save(&config().key(&origin), &credential())
+            .await
+            .unwrap();
+        assert!(accounts
+            .logout_config_current(std::slice::from_ref(&origin), &config(), || {
+                current.load(Ordering::SeqCst)
+            })
+            .await
+            .is_err());
+        assert_eq!(guarded.deletes.load(Ordering::SeqCst), 0);
+        assert!(store.get(&config().key(&origin)).unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn slow_revocation_does_not_delay_local_logout_or_touch_new_credentials() {
+        use http_body_util::{BodyExt, Full};
+        use hyper::{body::Bytes, service::service_fn};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}/revoke", listener.local_addr().unwrap());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let released = release.clone();
+        let (request_tx, request_rx) = tokio::sync::oneshot::channel();
+        let request_tx = Arc::new(StdMutex::new(Some(request_tx)));
+        let task = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let service = service_fn(move |request: hyper::Request<hyper::body::Incoming>| {
+                let release = released.clone();
+                let request_tx = request_tx.clone();
+                async move {
+                    let body = request.into_body().collect().await.unwrap().to_bytes();
+                    request_tx
+                        .lock()
+                        .unwrap()
+                        .take()
+                        .unwrap()
+                        .send(body)
+                        .unwrap();
+                    release.notified().await;
+                    Ok::<_, std::convert::Infallible>(hyper::Response::new(Full::new(Bytes::from(
+                        "{}",
+                    ))))
+                }
+            });
+            hyper::server::conn::http1::Builder::new()
+                .serve_connection(hyper_util::rt::TokioIo::new(stream), service)
+                .await
+                .unwrap();
+        });
+        let store = Arc::new(MemoryStore::default());
+        let mut metadata = discovery();
+        metadata.revocation_endpoint = Some(endpoint);
+        let accounts = Accounts {
+            store: Store(store.clone()),
+            discovery: Mutex::new(Some((Instant::now(), metadata))),
+            ..Default::default()
+        };
+        let origin = crate::server_directory::origin();
+        accounts
+            .save(&config().key(&origin), &credential())
+            .await
+            .unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            accounts.logout_config(std::slice::from_ref(&origin), &config()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(store.get(&config().key(&origin)).unwrap().is_none());
+        assert!(accounts.operation.try_lock().is_ok());
+        let request = tokio::time::timeout(Duration::from_secs(2), request_rx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(std::str::from_utf8(&request)
+            .unwrap()
+            .contains("token=old-refresh"));
+        let mut fresh = credential();
+        fresh.access_token = "fresh-access".into();
+        fresh.refresh_token = Some("fresh-refresh".into());
+        accounts.invalidate();
+        accounts.save(&config().key(&origin), &fresh).await.unwrap();
+        let generation = accounts.generation.load(Ordering::SeqCst);
+        release.notify_one();
+        tokio::time::timeout(Duration::from_secs(2), task)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(accounts.generation.load(Ordering::SeqCst), generation);
+        let saved: Credential =
+            serde_json::from_str(&store.get(&config().key(&origin)).unwrap().unwrap()).unwrap();
+        assert_eq!(saved.access_token, "fresh-access");
+        assert_eq!(saved.refresh_token.as_deref(), Some("fresh-refresh"));
+    }
+
+    #[tokio::test]
+    async fn queued_logout_never_deletes_credentials_after_a_newer_sign_in_starts() {
+        let fixture = Fixture::new(false).await;
+        let accounts = fixture.accounts.clone();
+        let central = crate::server_directory::origin();
+        let origins = vec![central.clone(), fixture.origin.clone()];
+        let operation = fixture.accounts.operation.lock().await;
+        let logout = tokio::spawn(async move { accounts.logout_config(&origins, &config()).await });
+        tokio::task::yield_now().await;
+        assert_eq!(fixture.accounts.generation.load(Ordering::SeqCst), 1);
+        fixture.accounts.invalidate();
+        fixture
+            .accounts
+            .save(&config().key(&central), &credential())
+            .await
+            .unwrap();
+        drop(operation);
+        assert!(logout.await.unwrap().is_err());
+        assert!(fixture
+            .store
+            .get(&config().key(&central))
+            .unwrap()
+            .is_some());
+        assert!(fixture.requests.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_legacy_secure_delete_failure_is_reported_after_central_deletion() {
+        struct FailLegacy {
+            store: Arc<MemoryStore>,
+            key: String,
+        }
+        impl CredentialStore for FailLegacy {
+            fn get(&self, key: &str) -> Result<Option<String>, String> {
+                self.store.get(key)
+            }
+            fn set(&self, key: &str, value: &str) -> Result<(), String> {
+                self.store.set(key, value)
+            }
+            fn delete(&self, key: &str) -> Result<(), String> {
+                if key == self.key {
+                    Err(STORAGE_ERROR.into())
+                } else {
+                    self.store.delete(key)
+                }
+            }
+        }
+        let store = Arc::new(MemoryStore::default());
+        let central = crate::server_directory::origin();
+        let legacy = Url::parse("https://server.example.test").unwrap();
+        let accounts = Accounts {
+            store: Store(Arc::new(FailLegacy {
+                store: store.clone(),
+                key: config().key(&legacy),
+            })),
+            ..Default::default()
+        };
+        accounts
+            .save(&config().key(&central), &credential())
+            .await
+            .unwrap();
+        accounts
+            .save(&config().key(&legacy), &credential())
+            .await
+            .unwrap();
+        assert_eq!(
+            accounts
+                .logout_config(&[central.clone(), legacy.clone()], &config())
+                .await
+                .unwrap_err(),
+            STORAGE_ERROR
+        );
+        assert!(store.get(&config().key(&central)).unwrap().is_none());
+        assert!(store.get(&config().key(&legacy)).unwrap().is_some());
     }
 
     #[tokio::test]
@@ -699,7 +975,7 @@ mod tests {
         assert!(!fixture.accounts.is_current(&authorization));
         fixture
             .accounts
-            .logout_config(&central, &config())
+            .logout_config(std::slice::from_ref(&central), &config())
             .await
             .unwrap();
         assert!(fixture
@@ -1036,6 +1312,50 @@ fn verify_access_hash(claims: &Claims, access_token: &str) -> Result<(), String>
     Ok(())
 }
 
+async fn fetch_discovery(config: &Config, client: &Client) -> Result<Discovery, String> {
+    let discovery: Discovery = json(
+        client
+            .get(format!(
+                "{}/.well-known/openid-configuration",
+                config.issuer.trim_end_matches('/')
+            ))
+            .send()
+            .await
+            .map_err(|_| ERROR)?,
+    )
+    .await?;
+    discovery.validate(config)?;
+    Ok(discovery)
+}
+
+/// Revocation owns only old tokens and immutable provider metadata, never the live credential store.
+fn revoke_old_tokens(config: Config, discovery: Option<Discovery>, tokens: Vec<String>) {
+    if tokens.is_empty() {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        let Ok(client) = client() else {
+            return;
+        };
+        let discovery = match discovery {
+            Some(discovery) => discovery,
+            None => match fetch_discovery(&config, &client).await {
+                Ok(discovery) => discovery,
+                Err(_) => return,
+            },
+        };
+        if let Some(endpoint) = discovery.revocation_endpoint {
+            for token in tokens {
+                let _ = client
+                    .post(&endpoint)
+                    .form(&[("client_id", &config.client_id), ("token", &token)])
+                    .send()
+                    .await;
+            }
+        }
+    });
+}
+
 #[derive(Default)]
 pub struct Accounts {
     store: Store,
@@ -1110,18 +1430,7 @@ impl Accounts {
                 return Ok(discovery.clone());
             }
         }
-        let discovery: Discovery = json(
-            client
-                .get(format!(
-                    "{}/.well-known/openid-configuration",
-                    config.issuer.trim_end_matches('/')
-                ))
-                .send()
-                .await
-                .map_err(|_| ERROR)?,
-        )
-        .await?;
-        discovery.validate(config)?;
+        let discovery = fetch_discovery(config, client).await?;
         *cache = Some((Instant::now(), discovery.clone()));
         Ok(discovery)
     }
@@ -1358,36 +1667,64 @@ impl Accounts {
         Ok(Some(credential))
     }
 
-    pub async fn logout(&self, origin: &Url) -> Result<(), String> {
-        self.logout_config(origin, &Config::build()?).await
+    /// Clear all native login scopes under one operation and one generation fence.
+    pub async fn logout(&self, origins: &[Url], current: impl Fn() -> bool) -> Result<(), String> {
+        self.logout_config_current(origins, &Config::build()?, current)
+            .await
     }
 
-    async fn logout_config(&self, origin: &Url, config: &Config) -> Result<(), String> {
-        self.generation.fetch_add(1, Ordering::SeqCst);
-        let _operation = self.operation.lock().await;
-        let key = config.key(origin);
-        let raw = self.store.get(key.clone()).await;
-        self.store.delete(key).await?;
-        // Local deletion is authoritative; missing discovery or revocation never blocks logout.
-        if let Ok(Some(raw)) = raw {
-            if let Ok(credential) = serde_json::from_str::<Credential>(&raw) {
-                if let Ok(client) = client() {
-                    if let Ok(discovery) = self.discover(config, &client).await {
-                        if let Some(endpoint) = discovery.revocation_endpoint {
-                            let token = credential
-                                .refresh_token
-                                .as_ref()
-                                .unwrap_or(&credential.access_token);
-                            let _ = client
-                                .post(endpoint)
-                                .form(&[("client_id", &config.client_id), ("token", token)])
-                                .send()
-                                .await;
-                        }
-                    }
+    #[cfg(test)]
+    async fn logout_config(&self, origins: &[Url], config: &Config) -> Result<(), String> {
+        self.logout_config_current(origins, config, || true).await
+    }
+
+    async fn logout_config_current(
+        &self,
+        origins: &[Url],
+        config: &Config,
+        still_current: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        if !still_current() {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let operation = self.operation.lock().await;
+        let current = || {
+            if still_current() && generation == self.generation.load(Ordering::SeqCst) {
+                Ok(())
+            } else {
+                Err("Accounts sign-in changed. Try again.".to_owned())
+            }
+        };
+        current()?;
+        let mut keys = std::collections::HashSet::new();
+        let mut tokens = Vec::new();
+        for origin in origins {
+            let key = config.key(origin);
+            if !keys.insert(key.clone()) {
+                continue;
+            }
+            let raw = self.store.get(key.clone()).await;
+            current()?;
+            self.store.delete(key).await?;
+            current()?;
+            if let Ok(Some(raw)) = raw {
+                if let Ok(credential) = serde_json::from_str::<Credential>(&raw) {
+                    tokens.push(credential.refresh_token.unwrap_or(credential.access_token));
                 }
             }
         }
+        current()?;
+        let discovery = self.discovery.try_lock().ok().and_then(|cache| {
+            cache
+                .as_ref()
+                .filter(|(time, discovery)| {
+                    time.elapsed() < Duration::from_secs(300) && discovery.issuer == config.issuer
+                })
+                .map(|(_, discovery)| discovery.clone())
+        });
+        drop(operation);
+        revoke_old_tokens(config.clone(), discovery, tokens);
         Ok(())
     }
 }

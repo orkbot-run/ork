@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved. Native device pairing integration is an Ork addition.
+// Inherited Apache-2.0 material is preserved. Native logout and device pairing are Ork additions.
 
 import { t } from "@lingui/core/macro";
 import { useEffect, useRef, useState } from "react";
@@ -35,20 +35,42 @@ export async function signOut(destination: string): Promise<void> {
     window.location.reload();
     return;
   }
+  const desktop = desktopBridge();
+  if (desktop?.accounts) {
+    try {
+      await desktop.accounts.logout();
+    } catch {
+      reloadAfterFailedSignOut();
+      return;
+    }
+    if (sessionChangedUnderPage()) {
+      window.location.reload();
+      return;
+    }
+  }
   const result = await authClient.signOut().catch(() => null);
   if (result && !result.error) {
     forgetSignedInUser();
     clearSpaceSelection();
     clearComposerDrafts();
+    if (desktop?.accounts) {
+      await Promise.resolve()
+        .then(() => desktop.server?.change())
+        .catch(() => undefined);
+    }
     window.location.assign(destination);
   } else {
-    try {
-      sessionStorage.setItem(LOG_OUT_FAILED_KEY, "1");
-    } catch {
-      // No storage: the page still reloads, without the failure message.
-    }
-    window.location.reload();
+    reloadAfterFailedSignOut();
   }
+}
+
+function reloadAfterFailedSignOut(): void {
+  try {
+    sessionStorage.setItem(LOG_OUT_FAILED_KEY, "1");
+  } catch {
+    // No storage: the page still reloads, without the failure message.
+  }
+  window.location.reload();
 }
 
 /**

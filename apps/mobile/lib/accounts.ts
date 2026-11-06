@@ -8,7 +8,6 @@ import {
   validateAccountsCallback,
 } from "@orkbot/contracts/accounts";
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
-import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 import { clearServerInitialization } from "./server-connect";
 
@@ -53,7 +52,8 @@ function accountChanged() {
   for (const listener of accountListeners) listener();
 }
 
-function config(): Config {
+async function config(): Promise<Config> {
+  const { default: Constants } = await import("expo-constants");
   return accountsConfig({
     issuer: Constants.expoConfig?.extra?.accountsIssuer,
     clientId: Constants.expoConfig?.extra?.accountsClientId,
@@ -319,7 +319,7 @@ export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean
   signingIn = true;
   const owner = ++generation;
   try {
-    const expected = config();
+    const expected = await config();
     const metadata = await discover(expected);
     const { AuthRequest, ResponseType, CodeChallengeMethod } = await import("expo-auth-session");
     const { randomUUID } = await import("expo-crypto");
@@ -388,7 +388,7 @@ export async function accountsAuthorization(): Promise<{
   const owner = generation;
   const token = await accountsAccessToken();
   if (!token || owner !== generation) return null;
-  const tokens = await load(config());
+  const tokens = await load(await config());
   return owner === generation && tokens?.accessToken === token
     ? { issuer: tokens.issuer, subject: tokens.subject, accessToken: token }
     : null;
@@ -402,7 +402,7 @@ export async function accountsIdentity(): Promise<{
   const owner = generation;
   const authorization = await accountsAuthorization();
   if (!authorization || owner !== generation) return null;
-  const tokens = await load(config());
+  const tokens = await load(await config());
   if (owner !== generation || !tokens || tokens.accessToken !== authorization.accessToken)
     return null;
   return {
@@ -414,7 +414,7 @@ export async function accountsIdentity(): Promise<{
 
 async function validAccessToken(): Promise<string | null> {
   const owner = generation;
-  const expected = config();
+  const expected = await config();
   const previous = await load(expected);
   if (!previous || owner !== generation) return null;
   if (previous.expiresAt > Date.now() + 60_000) return previous.accessToken;
@@ -469,21 +469,23 @@ export async function signOutAccounts(): Promise<void> {
     return stored ?? (pendingRefresh ? JSON.stringify(pendingRefresh) : null);
   });
   if (!previous || owner !== generation) return;
-  try {
-    const tokens = JSON.parse(previous) as Tokens;
-    const expected = accountsConfig({ issuer: tokens.issuer, clientId: tokens.clientId });
-    const metadata = await discover(expected);
-    if (!metadata.revocation_endpoint) return;
-    await requestJson(metadata.revocation_endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: expected.clientId,
-        token: tokens.refreshToken ?? tokens.accessToken,
-        token_type_hint: tokens.refreshToken ? "refresh_token" : "access_token",
-      }).toString(),
-    });
-  } catch {
-    // Revocation is best effort after the device has already forgotten its credentials.
-  }
+  void (async () => {
+    try {
+      const tokens = JSON.parse(previous) as Tokens;
+      const expected = accountsConfig({ issuer: tokens.issuer, clientId: tokens.clientId });
+      const metadata = await discover(expected);
+      if (!metadata.revocation_endpoint || owner !== generation) return;
+      await requestJson(metadata.revocation_endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: expected.clientId,
+          token: tokens.refreshToken ?? tokens.accessToken,
+          token_type_hint: tokens.refreshToken ? "refresh_token" : "access_token",
+        }).toString(),
+      });
+    } catch {
+      // Revocation cannot delay local logout or change a newer account's credentials.
+    }
+  })();
 }

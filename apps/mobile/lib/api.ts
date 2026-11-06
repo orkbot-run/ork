@@ -67,6 +67,7 @@ import {
 } from "@orkbot/core";
 import { clientCorrelationHeaders, responseCorrelation } from "@orkbot/logging/monitoring";
 import * as SecureStore from "expo-secure-store";
+import { signOutAccounts } from "./accounts";
 import { promptAiConsent } from "./ai-consent";
 import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
@@ -920,31 +921,48 @@ export async function fetchMobileJson<T>(
 }
 
 export async function signOut() {
-  await rpc("notifications/unregisterPush").catch(() => undefined);
-  const headers = await authHeaders();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-  try {
-    await withAbort(
-      fetchServer(
-        `${currentApiBase()}/api/auth/sign-out`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json", origin: "orkbot://", ...headers },
-          body: "{}",
-          signal: controller.signal,
-        },
-        currentApiBase(),
-      ),
-      controller.signal,
-      "Request timed out",
-    ).catch(() => undefined);
-  } finally {
-    clearTimeout(timer);
+  const server = currentApiBase();
+  const generation = currentSessionGeneration();
+  const current = () => server === currentApiBase() && generation === currentSessionGeneration();
+  // Invalidate Accounts before awaiting any server request or local credential read.
+  const clearingAccounts = signOutAccounts().then(
+    () => true,
+    () => false,
+  );
+  if (current()) await rpc("notifications/unregisterPush").catch(() => undefined);
+  if (current()) {
+    const headers = await authHeaders();
+    if (current()) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+      try {
+        await withAbort(
+          fetchServer(
+            `${server}/api/auth/sign-out`,
+            {
+              method: "POST",
+              headers: { "content-type": "application/json", origin: "orkbot://", ...headers },
+              body: "{}",
+              signal: controller.signal,
+            },
+            server,
+          ),
+          controller.signal,
+          "Request timed out",
+        ).catch(() => undefined);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
   }
-  const sessionCleared = await clearSessionToken();
-  const spaceCleared = await clearSpace();
-  if (!sessionCleared || !spaceCleared) throw new Error(t("Could not clear the local session"));
+  const accountsCleared = await clearingAccounts;
+  if (!current()) {
+    if (!accountsCleared) throw new Error(t("Could not clear the local session"));
+    return;
+  }
+  const [sessionCleared, spaceCleared] = await Promise.all([clearSessionToken(), clearSpace()]);
+  if (!accountsCleared || !sessionCleared || !spaceCleared)
+    throw new Error(t("Could not clear the local session"));
 }
 
 export async function deleteAccount(password?: string, token?: string) {

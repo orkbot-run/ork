@@ -212,7 +212,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           ?.nativeAccountsOwnerKey,
       ).toBeNull();
     }));
-  it("authenticates an unattended owner through production auth hooks and real PostgreSQL", async () =>
+  it("signs an unattended owner in and out with cookie and bearer sessions through production hooks", async () =>
     system(async () => {
       const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
       const jwk = {
@@ -271,6 +271,8 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           .sign(privateKey);
         return {
           bootstrapRequired,
+          challenge,
+          grant,
           response: await request("complete", {
             challenge,
             grant,
@@ -309,6 +311,66 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         const second = await login("owner-a");
         expect(second.bootstrapRequired).toBe(false);
         expect(second.response.status, await second.response.clone().text()).toBe(200);
+        const secondSession = (await second.response.json()) as { token: string };
+        const sessionWith = async (headers: Record<string, string>) => {
+          const response = await auth.handler(
+            new Request(`${origin}/api/auth/get-session`, { headers: { origin, ...headers } }),
+          );
+          expect(response.status, await response.clone().text()).toBe(200);
+          return response.json();
+        };
+        const signOut = (headers: Record<string, string>) =>
+          auth.handler(
+            new Request(`${origin}/api/auth/sign-out`, {
+              method: "POST",
+              headers: { origin, "content-type": "application/json", ...headers },
+              body: "{}",
+            }),
+          );
+        const signedOut = await signOut({ cookie });
+        expect(signedOut.status, await signedOut.clone().text()).toBe(200);
+        expect(await signedOut.json()).toMatchObject({ success: true });
+        expect(
+          signedOut.headers
+            .getSetCookie()
+            .some((value) => value.includes("session_token=;") && value.includes("Max-Age=0")),
+        ).toBe(true);
+        expect(await sessionWith({ cookie })).toBeNull();
+        expect(await sessionWith({ authorization: `Bearer ${signedIn.token}` })).toBeNull();
+        expect(
+          await prisma!.session.findUnique({ where: { token: signedIn.token.split(".")[0]! } }),
+        ).toBeNull();
+        expect(await sessionWith({ authorization: `Bearer ${secondSession.token}` })).toMatchObject(
+          {
+            user: { id: signedIn.user.id },
+          },
+        );
+        const replayed = await request("complete", {
+          challenge: first.challenge,
+          grant: first.grant,
+          bootstrapSecret: secret,
+        });
+        expect(replayed.status).toBe(403);
+        expect(await prisma!.session.count()).toBe(1);
+        const signedOutByBearer = await signOut({ authorization: `Bearer ${secondSession.token}` });
+        expect(signedOutByBearer.status, await signedOutByBearer.clone().text()).toBe(200);
+        expect(await sessionWith({ authorization: `Bearer ${secondSession.token}` })).toBeNull();
+        expect(await prisma!.session.count()).toBe(0);
+        const renewed = await login("owner-a");
+        expect(renewed.challenge).not.toBe(first.challenge);
+        expect(renewed.challenge).not.toBe(second.challenge);
+        expect(renewed.bootstrapRequired).toBe(false);
+        expect(renewed.response.status, await renewed.response.clone().text()).toBe(200);
+        const renewedSession = (await renewed.response.json()) as { token: string };
+        expect(renewedSession.token).not.toBe(signedIn.token);
+        expect(renewedSession.token).not.toBe(secondSession.token);
+        expect(
+          await sessionWith({ authorization: `Bearer ${renewedSession.token}` }),
+        ).toMatchObject({
+          user: { id: signedIn.user.id },
+        });
+        expect(await sessionWith({ cookie })).toBeNull();
+        expect(await prisma!.spaceMember.count({ where: { userId: signedIn.user.id } })).toBe(1);
         const stranger = await login("owner-b", secret);
         expect(stranger.response.status).toBe(403);
         expect(await prisma!.user.count()).toBe(1);
