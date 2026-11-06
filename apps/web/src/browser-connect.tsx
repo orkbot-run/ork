@@ -13,14 +13,53 @@ export function BrowserConnect() {
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
-  const [paired, setPaired] = useState(false);
+  const [initialization, setInitialization] = useState<
+    "loading" | "required" | "complete" | "unavailable"
+  >("loading");
+  const [checkAttempt, setCheckAttempt] = useState(0);
+  const initialized = useRef(false);
   const [error, setError] = useState(false);
   const request = useRef<AbortController | null>(null);
   useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function check() {
+      if (controller.signal.aborted || initialized.current) return;
+      if (request.current) {
+        timer = setTimeout(() => void check(), 5_000);
+        return;
+      }
+      try {
+        const response = await fetch("/api/auth/native/initialization", {
+          method: "GET",
+          credentials: "omit",
+          redirect: "error",
+          cache: "no-store",
+          signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]),
+        });
+        if (!response.ok) throw new Error("Initialization state unavailable");
+        const state = await response.json();
+        if (!state || typeof state.required !== "boolean")
+          throw new Error("Invalid initialization state");
+        if (controller.signal.aborted || initialized.current) return;
+        initialized.current = !state.required;
+        setInitialization(state.required ? "required" : "complete");
+        if (state.required) timer = setTimeout(() => void check(), 5_000);
+      } catch {
+        if (!controller.signal.aborted && !initialized.current) setInitialization("unavailable");
+      }
+    }
+    void check();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [checkAttempt]);
   const pair = async (event: FormEvent) => {
     event.preventDefault();
     const normalized = normalizeServerPairingCode(code);
-    if (!normalized || request.current) return;
+    if (initialization !== "required" || !normalized || request.current) return;
     const controller = new AbortController();
     request.current = controller;
     setPending(true);
@@ -70,7 +109,10 @@ export function BrowserConnect() {
         if (status.status === 200 && state?.paired === true) break;
         if (status.status !== 202 || state?.pending !== true) throw new Error("Pairing failed");
       }
-      if (!controller.signal.aborted) setPaired(true);
+      if (!controller.signal.aborted) {
+        initialized.current = true;
+        setInitialization("complete");
+      }
     } catch {
       if (!controller.signal.aborted) setError(true);
     } finally {
@@ -91,9 +133,7 @@ export function BrowserConnect() {
     <main className="flex min-h-full flex-col items-center justify-center gap-6 bg-background p-8 text-center text-foreground">
       <h1 className="text-3xl font-semibold">Ork</h1>
       <p className="text-muted-foreground">{window.location.host}</p>
-      {paired ? (
-        <p role="status">{polish ? "Zainicjalizowano" : "Initialized"}</p>
-      ) : (
+      {initialization === "required" && (
         <form className="flex w-full max-w-xs flex-col gap-3" onSubmit={pair}>
           <label htmlFor="pairing-code">{polish ? "Klucz parowania" : "Pairing key"}</label>
           <Input
@@ -132,12 +172,24 @@ export function BrowserConnect() {
           {polish ? "Publiczny serwer wymaga HTTPS." : "Public servers require HTTPS."}
         </p>
       )}
-      <a
-        className="text-sm text-muted-foreground underline underline-offset-4"
-        href="https://ork.run"
-      >
-        {polish ? "Pobierz Orka" : "Get Ork"}
-      </a>
+      {initialization === "unavailable" && (
+        <Button
+          onClick={() => {
+            setInitialization("loading");
+            setCheckAttempt((value) => value + 1);
+          }}
+        >
+          {polish ? "Spróbuj ponownie" : "Retry"}
+        </Button>
+      )}
+      {initialization === "required" && (
+        <a
+          className="text-sm text-muted-foreground underline underline-offset-4"
+          href="https://ork.run"
+        >
+          {polish ? "Pobierz Orka" : "Get Ork"}
+        </a>
+      )}
     </main>
   );
 }

@@ -63,6 +63,7 @@ fn main() {
             "set_default_server",
             "create_server_installation",
             "get_server_installation",
+            "server_initialization_required",
             "create_server_pairing",
             "get_server_pairing",
             "approve_server_pairing",

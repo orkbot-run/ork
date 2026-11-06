@@ -1196,6 +1196,24 @@ fn server_pairing_gate(state: &DesktopState) -> Result<u64, String> {
 }
 
 #[tauri::command]
+async fn server_initialization_required<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    raw_url: String,
+) -> Result<bool, String> {
+    require_setup(&window)?;
+    let gate = server_pairing_gate(&state)?;
+    let intent = state.restore_intent.load(Ordering::SeqCst);
+    let target = server::normalize_server_url(&raw_url)?;
+    server_login::initialization_required(&target, || {
+        require_setup(&window).is_ok()
+            && server_pairing_gate(&state).ok() == Some(gate)
+            && state.restore_intent.load(Ordering::SeqCst) == intent
+    })
+    .await
+}
+
+#[tauri::command]
 async fn create_server_pairing<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
@@ -2613,6 +2631,7 @@ fn main() {
             set_default_server,
             create_server_installation,
             get_server_installation,
+            server_initialization_required,
             create_server_pairing,
             get_server_pairing,
             approve_server_pairing,
@@ -3315,6 +3334,7 @@ mod tests {
                 set_default_server,
                 create_server_installation,
                 get_server_installation,
+                server_initialization_required,
                 create_server_pairing,
                 get_server_pairing,
                 approve_server_pairing,
@@ -3347,13 +3367,14 @@ mod tests {
             url: origin.parse().unwrap(),
             body: if matches!(
                 command,
-                "create_server_pairing"
+                "server_initialization_required"
+                    | "create_server_pairing"
                     | "get_server_pairing"
                     | "approve_server_pairing"
                     | "cancel_server_pairing"
             ) {
                 tauri::ipc::InvokeBody::Json(
-                    serde_json::json!({"requestId": "fixture-request", "origin": "https://server.example.test"}),
+                    serde_json::json!({"requestId": "fixture-request", "origin": "https://server.example.test", "rawUrl": "https://server.example.test"}),
                 )
             } else {
                 tauri::ipc::InvokeBody::default()
@@ -3361,6 +3382,11 @@ mod tests {
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.into(),
         };
+        assert_eq!(
+            tauri::test::get_ipc_response(&setup, request("server_initialization_required", local))
+                .unwrap_err(),
+            serde_json::json!("Sign in to Accounts first.")
+        );
         assert_eq!(
             tauri::test::get_ipc_response(&setup, request("create_server_pairing", local))
                 .unwrap_err(),
@@ -3394,6 +3420,7 @@ mod tests {
                 "set_default_server",
                 "create_server_installation",
                 "get_server_installation",
+                "server_initialization_required",
                 "create_server_pairing",
                 "get_server_pairing",
                 "approve_server_pairing",

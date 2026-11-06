@@ -172,6 +172,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       startup.phase === "opening" ||
       (operation !== null &&
         operation !== "install" &&
+        operation !== "directory" &&
         operation !== "pair" &&
         operation !== "approve");
     element("sign-out").hidden = !account;
@@ -274,11 +275,65 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   }
 
   function showPendingServer() {
-    if (!pendingServer) return;
+    if (!pendingServer || !account) return;
     input.value = pendingServer;
     startup = { phase: "idle" };
     show("selfhost");
-    if (!pendingInitialization && !operation && !pairingRequest) void createPairing();
+    if (pendingInitialization || operation) return;
+    const origin = pendingServer;
+    const owner = account;
+    const linkVersion = pairingVersion;
+    let unknown = false;
+    let lookupVersion = 0;
+    void run(
+      "directory",
+      async (version) => {
+        lookupVersion = version;
+        const active = () =>
+          current(version) &&
+          account === owner &&
+          pendingServer === origin &&
+          !pendingInitialization &&
+          pairingVersion === linkVersion;
+        try {
+          const entries = await loadServers(version);
+          if (!active()) return;
+          const saved = entries.find((entry) => entry.url === origin);
+          if (saved) {
+            discardPendingServer();
+            await openServer(
+              version,
+              "connect_saved_server",
+              { id: saved.id },
+              saved.kind === "local",
+            );
+          } else {
+            const required = await transport.invoke<boolean>("server_initialization_required", {
+              rawUrl: origin,
+            });
+            if (!active()) return;
+            if (typeof required !== "boolean") throw "Could not complete that request. Try again.";
+            discardPendingServer();
+            if (required) unknown = true;
+            else await openServer(version, "connect_server", { rawUrl: origin });
+          }
+        } catch (error) {
+          if (active()) discardPendingServer();
+          throw error;
+        }
+      },
+      "selfhost",
+    ).then(() => {
+      if (
+        unknown &&
+        current(lookupVersion) &&
+        account === owner &&
+        pairingVersion === linkVersion &&
+        !pendingServer &&
+        !operation
+      )
+        void createPairing();
+    });
   }
 
   async function loadServers(version: number): Promise<Server[]> {
@@ -734,7 +789,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("get-started", "click", () => void signIn(true));
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
-    if (!operation || operation === "install" || operation === "pair" || operation === "approve") {
+    if (
+      !operation ||
+      operation === "install" ||
+      operation === "directory" ||
+      operation === "pair" ||
+      operation === "approve"
+    ) {
       discardPendingServer();
       generation++;
       operation = null;

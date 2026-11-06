@@ -89,6 +89,7 @@ function fixture(expectedOwnerKey?: string) {
     session: [],
     verification: [],
   };
+  const initializationRequired = vi.fn(async () => true);
   const consume = vi.fn(async () => ({ allowProvision: true }));
   const seen: unknown[] = [];
   const provision = vi.fn(async () => {
@@ -144,23 +145,24 @@ function fixture(expectedOwnerKey?: string) {
         store: {
           issue,
           bootstrapRequired: async () => true,
+          initializationRequired,
           consume,
         },
       }),
     ],
   });
-  const request = (path: string, body: unknown, requestOrigin: string | null = origin) =>
+  const request = (path: string, body?: unknown, requestOrigin: string | null = origin) =>
     auth.handler(
       new Request(`${origin}/api/auth/native/${path}`, {
-        method: "POST",
+        method: path === "initialization" ? "GET" : "POST",
         headers: {
           "content-type": "application/json",
           ...(requestOrigin ? { origin: requestOrigin } : {}),
         },
-        body: JSON.stringify(body),
+        ...(path !== "initialization" ? { body: JSON.stringify(body) } : {}),
       }),
     );
-  return { data, consume, provision, seen, request, auth, pairings, issue };
+  return { data, consume, provision, seen, request, auth, pairings, issue, initializationRequired };
 }
 
 describe("native login endpoint", () => {
@@ -250,6 +252,64 @@ describe("approval-gated sessionless server pairing", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
     return result;
   }
+  it("reads authoritative initialization state without a challenge, cookie, or session", async () => {
+    const f = fixture();
+    const { fetcher } = broker();
+    for (const required of [true, false]) {
+      f.initializationRequired.mockResolvedValue(required);
+      const response = await f.request("initialization");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ required });
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
+    expect(f.issue).not.toHaveBeenCalled();
+    expect(f.consume).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(f.data.session).toHaveLength(0);
+  });
+  it("refuses a new pairing after admission and fences admission during redemption", async () => {
+    for (const race of [false, true]) {
+      const f = fixture();
+      const { fetcher } = broker();
+      f.initializationRequired.mockResolvedValue(false);
+      if (race) f.initializationRequired.mockResolvedValueOnce(true);
+      expect((await f.request("pair", { code: "ABC234" })).status).toBe(403);
+      expect(f.pairings.create).not.toHaveBeenCalled();
+      expect(f.consume).not.toHaveBeenCalled();
+      expect(f.data.user).toHaveLength(0);
+      if (race)
+        expect(JSON.parse(fetcher.mock.calls.at(-1)![1]!.body as string).success).toBe(false);
+      else expect(fetcher).not.toHaveBeenCalled();
+    }
+  });
+  it("refuses a pending ticket after admission without obtaining a challenge or provisioning", async () => {
+    const f = fixture();
+    const { fetcher, approval } = broker();
+    const pending = await begin(f);
+    approval.status = "approved";
+    f.initializationRequired.mockResolvedValue(false);
+    expect((await f.request("pair/status", pending)).status).toBe(403);
+    expect(f.issue).not.toHaveBeenCalled();
+    expect(f.consume).not.toHaveBeenCalled();
+    expect(f.data.user).toHaveLength(0);
+    expect(JSON.parse(fetcher.mock.calls.at(-1)![1]!.body as string).success).toBe(false);
+  });
+  it("fences admission while an approved grant is being fetched", async () => {
+    const f = fixture();
+    const { approval, fetcher } = broker();
+    const pending = await begin(f);
+    approval.status = "approved";
+    f.initializationRequired
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+    expect((await f.request("pair/status", pending)).status).toBe(403);
+    expect(f.consume).not.toHaveBeenCalled();
+    expect(f.provision).not.toHaveBeenCalled();
+    expect(f.data.user).toHaveLength(0);
+    expect(JSON.parse(fetcher.mock.calls.at(-1)![1]!.body as string).success).toBe(false);
+  });
   it("separates pairing authority from a normal login token or an untrusted privilege claim", async () => {
     const normal = await signed({ allowProvision: true });
     expect((await verify(normal, challenge)).allowProvision).toBeUndefined();
@@ -288,6 +348,7 @@ describe("approval-gated sessionless server pairing", () => {
       receipt: ticket.receipt,
       success: true,
     });
+    f.initializationRequired.mockResolvedValue(false);
     const repeated = await f.request("pair/status", pending);
     expect(repeated.status).toBe(200);
     expect(fetcher).toHaveBeenCalledTimes(5);

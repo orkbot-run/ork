@@ -130,6 +130,7 @@ export function createNativeGrantVerifier(options: {
 export interface NativeLoginStore {
   issue(origin: string): Promise<{ challenge: string; expiresAt: number }>;
   bootstrapRequired(): Promise<boolean>;
+  initializationRequired(): Promise<boolean>;
   consume(input: {
     origin: string;
     challenge: string;
@@ -160,6 +161,16 @@ export function nativeLoginStore(
       });
       return { challenge, expiresAt };
     },
+    async initializationRequired() {
+      return (
+        (await prisma.user.count({
+          where: {
+            NOT: { email: { endsWith: "@messaging.invalid" } },
+            members: { some: { spaceMemberships: { some: {} } } },
+          },
+        })) === 0
+      );
+    },
     async bootstrapRequired() {
       if (options.expectedOwnerKey) return false;
       const settings = await prisma.deploymentSettings.findUnique({
@@ -185,7 +196,7 @@ export function nativeLoginStore(
             where: { providerId: "oidc", accountId: accountKey },
             select: { userId: true },
           });
-          if (!account) {
+          if (!account || input.identity.allowProvision === true) {
             const admitted = await tx.user.count({
               where: {
                 NOT: { email: { endsWith: "@messaging.invalid" } },
@@ -201,16 +212,6 @@ export function nativeLoginStore(
               update: {},
               select: { nativeAccountsOwnerKey: true },
             });
-            if (input.identity.allowProvision === true) {
-              const otherAdmitted = await tx.user.count({
-                where: {
-                  ...(account ? { id: { not: account.userId } } : {}),
-                  NOT: { email: { endsWith: "@messaging.invalid" } },
-                  members: { some: { spaceMemberships: { some: {} } } },
-                },
-              });
-              if (otherAdmitted > 0) throw denied();
-            }
             if (settings.nativeAccountsOwnerKey && settings.nativeAccountsOwnerKey !== accountKey)
               throw denied();
             allowProvision = true;
@@ -380,12 +381,20 @@ export function nativeAccountsLogin(
   return {
     id: "native-accounts-login",
     endpoints: {
+      nativeAccountsInitialization: createAuthEndpoint(
+        "/native/initialization",
+        { method: "GET" },
+        async (ctx) => {
+          ctx.setHeader("Cache-Control", "no-store");
+          return ctx.json({ required: await store.initializationRequired() });
+        },
+      ),
       nativeAccountsPair: createAuthEndpoint("/native/pair", { method: "POST" }, async (ctx) => {
         ctx.setHeader("Cache-Control", "no-store");
         // This browser endpoint only accepts the configured server's own page.
         if (ctx.headers?.get("origin") !== options.origin || !options.provisionUser) throw denied();
         const code = normalizeServerPairingCode((ctx.body as { code?: unknown } | undefined)?.code);
-        if (!code) throw denied();
+        if (!code || !(await store.initializationRequired())) throw denied();
         try {
           const response = await brokerPost("redeem", { code, origin: options.origin });
           const redeemed = response.body;
@@ -395,6 +404,14 @@ export function nativeAccountsLogin(
             !validTicketExpiry(redeemed.expiresAt)
           )
             throw denied();
+          if (!(await store.initializationRequired())) {
+            await brokerPost("report", {
+              id: redeemed.id,
+              receipt: redeemed.receipt,
+              success: false,
+            }).catch(() => {});
+            throw denied();
+          }
           const pairingId = await pairings.create({
             id: redeemed.id,
             receipt: redeemed.receipt,
@@ -426,6 +443,7 @@ export function nativeAccountsLogin(
           const { lease } = claim;
           const receipt = { id: lease.ticket.id, receipt: lease.ticket.receipt };
           try {
+            if (!(await store.initializationRequired())) throw denied();
             const approval = await brokerPost("grant", receipt);
             const state = approval.body;
             if (
@@ -444,7 +462,8 @@ export function nativeAccountsLogin(
               if (!(await pairings.finish(lease, "pending"))) throw denied();
               return pending();
             }
-            if (!(await pairings.current(lease))) throw denied();
+            if (!(await pairings.current(lease)) || !(await store.initializationRequired()))
+              throw denied();
             const { challenge } = await store.issue(options.origin);
             const response = await brokerPost("grant", { ...receipt, challenge });
             const redeemed = response.body;
@@ -473,13 +492,15 @@ export function nativeAccountsLogin(
               oidcAccountSubject(identity.issuer, identity.subject) !== options.expectedOwnerKey
             )
               throw denied();
+            if (!(await store.initializationRequired())) throw denied();
             const authorization = await store.consume({
               origin: options.origin,
               challenge,
               identity,
             });
             await verifiedLogin.run({ ...identity, ...authorization }, async () => {
-              if (!(await pairings.current(lease))) throw denied();
+              if (!(await pairings.current(lease)) || !(await store.initializationRequired()))
+                throw denied();
               const user = await provisionIdentity(ctx, identity, grant);
               await options.provisionUser!(user);
             });

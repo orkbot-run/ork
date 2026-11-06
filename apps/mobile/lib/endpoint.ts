@@ -53,6 +53,59 @@ export async function requireAccountsSignIn(
   return { accountsLogin: false };
 }
 
+/** Read initialization state without sending Accounts or product credentials. */
+export async function serverInitializationRequired(
+  url: string,
+  fetchImpl: typeof fetch = fetch,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  const parsed = normalizeApiBase(url);
+  const failure = () => new Error(t("Could not pair this server. Try again."));
+  if (!parsed.ok || parsed.url !== url) throw failure();
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener("abort", abort, { once: true });
+  const timer = setTimeout(abort, API_PROBE_TIMEOUT_MS);
+  try {
+    const response = await withAbort(
+      fetchImpl(`${url}/api/auth/native/initialization`, {
+        method: "GET",
+        credentials: "omit",
+        redirect: "error",
+        signal: controller.signal,
+      }),
+      controller.signal,
+    );
+    if (response.status === 404) {
+      cancelResponseBody(response);
+      return false;
+    }
+    if (!response.ok) {
+      cancelResponseBody(response);
+      throw failure();
+    }
+    const value = await readBoundedJsonResponse<unknown>(
+      response,
+      MAX_API_PROBE_RESPONSE_BYTES,
+      controller.signal,
+    );
+    if (
+      !value ||
+      typeof value !== "object" ||
+      !("required" in value) ||
+      typeof value.required !== "boolean"
+    )
+      throw failure();
+    return value.required;
+  } catch {
+    throw failure();
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
+}
+
 export type EndpointResult = { ok: true; url: string } | { ok: false; error: string };
 type HealthResponse = { json?: { ok?: boolean }; error?: { message?: string } };
 

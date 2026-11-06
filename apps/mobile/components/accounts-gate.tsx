@@ -5,7 +5,7 @@ import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, AppState, ScrollView, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { AccountServer } from "../lib/account-servers";
@@ -29,7 +29,12 @@ import {
   saveApiBase,
 } from "../lib/api";
 import { loadAppearancePreference } from "../lib/appearance";
-import { displayApiHost, normalizeApiBase, requireAccountsSignIn } from "../lib/endpoint";
+import {
+  displayApiHost,
+  normalizeApiBase,
+  requireAccountsSignIn,
+  serverInitializationRequired,
+} from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import {
@@ -93,15 +98,22 @@ async function selectServer(
   entry: AccountServer,
   account: string,
   current: () => boolean,
+  expectedSession?: number,
+  expectedServer?: string,
 ): Promise<boolean> {
   return serializeOwnership(async () => {
-    if (!current()) return false;
+    const beforeSave = () =>
+      current() &&
+      (expectedSession === undefined || currentSessionGeneration() === expectedSession) &&
+      (expectedServer === undefined || currentApiBase() === expectedServer);
+    if (!beforeSave()) return false;
     const savedOwner = await SecureStore.getItemAsync(ACCOUNT_KEY);
-    if (!current() || savedOwner !== account) return false;
+    if (!beforeSave() || savedOwner !== account) return false;
     await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
-    if (!current()) return false;
+    if (!beforeSave()) return false;
     await loadApiBase();
-    if (!current()) return false;
+    if (!beforeSave()) return false;
+    // Changing the endpoint may itself clear and replace the product session.
     const saved = await saveApiBase(entry.url, serverHeaders(entry.url));
     if (!saved.ok) throw new Error(saved.error);
     if (!current()) return false;
@@ -122,11 +134,21 @@ export function AccountsGate({
   const productGate = Boolean(children);
   const tokens = useMobileTokens();
   const version = useSyncExternalStore(subscribeAccounts, accountsVersion, accountsVersion);
-  const linkedServer = useSyncExternalStore(
-    subscribeServerConnect,
-    pendingServerConnect,
-    pendingServerConnect,
+  const linkGeneration = useRef(0);
+  const subscribeLinks = useCallback(
+    (listener: () => void) =>
+      subscribeServerConnect(() => {
+        linkGeneration.current += 1;
+        listener();
+      }),
+    [],
   );
+  const linkSnapshot = useSyncExternalStore(
+    subscribeLinks,
+    () => `${linkGeneration.current}:${pendingServerConnect() ?? ""}`,
+    () => `${linkGeneration.current}:${pendingServerConnect() ?? ""}`,
+  );
+  const linkedServer = pendingServerConnect();
   const operationPending = useRef(false);
   const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
@@ -137,6 +159,7 @@ export function AccountsGate({
   const [started, setStarted] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
+  const [linkNeedsPairing, setLinkNeedsPairing] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -165,6 +188,9 @@ export function AccountsGate({
 
   useEffect(() => {
     const current = ++generation.current;
+    const receivedLink = linkGeneration.current;
+    const initializationRequest = new AbortController();
+    setLinkNeedsPairing(null);
     discardPairing();
     setPhase("loading");
     setError(null);
@@ -190,12 +216,53 @@ export function AccountsGate({
       if (!(await adoptAccount(account, () => generation.current === current))) return;
       owner.current = account;
       verified = true;
+      const directorySession = currentSessionGeneration();
+      const directoryServer = currentApiBase();
       const entries = await accountServers(account);
       if (generation.current !== current) return;
       setServers(entries);
       directoryReady = true;
       setAdding(Boolean(linkedServer) || entries.length === 0);
       if (linkedServer) setDraft(linkedServer);
+      if (linkedServer && !hasPendingServerInitialization(linkedServer)) {
+        const currentLink = () =>
+          generation.current === current &&
+          accountsVersion() === version &&
+          linkGeneration.current === receivedLink &&
+          owner.current === account &&
+          pendingServerConnect() === linkedServer &&
+          !hasPendingServerInitialization(linkedServer);
+        const handoff = {
+          current: currentLink,
+          sessionGeneration: directorySession,
+          server: directoryServer,
+        };
+        const linked = entries.find((entry) => entry.url === linkedServer);
+        if (linked) {
+          if (await select(linked, handoff)) return;
+        } else if (currentLink() && currentSessionGeneration() === directorySession) {
+          const required = await serverInitializationRequired(
+            linkedServer,
+            undefined,
+            initializationRequest.signal,
+          );
+          if (!currentLink()) return;
+          if (
+            currentSessionGeneration() !== directorySession ||
+            currentApiBase() !== handoff.server
+          )
+            throw new Error(t("Could not pair this server. Try again."));
+          setLinkNeedsPairing(required);
+          if (!required) {
+            let connected = false;
+            await action(async () => {
+              connected = await connectServer(linkedServer, handoff);
+            });
+            if (connected) return;
+          }
+        }
+        if (generation.current !== current) return;
+      }
       if (productGate && !linkedServer) {
         const selected = await SecureStore.getItemAsync(SERVER_KEY);
         if (generation.current !== current) return;
@@ -221,10 +288,11 @@ export function AccountsGate({
         if (generation.current === current) void SplashScreen.hideAsync().catch(() => undefined);
       });
     return () => {
+      initializationRequest.abort();
       generation.current += 1;
       discardPairing(false);
     };
-  }, [version, attempt, productGate, linkedServer]);
+  }, [version, attempt, productGate, linkedServer, linkSnapshot]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
@@ -255,22 +323,33 @@ export function AccountsGate({
     }
   }
 
-  async function select(entry: AccountServer) {
+  async function select(
+    entry: AccountServer,
+    handoff?: { current: () => boolean; sessionGeneration: number; server?: string },
+  ): Promise<boolean> {
     const current = generation.current;
     const account = owner.current;
+    const accountVersion = accountsVersion();
+    const active = () =>
+      generation.current === current &&
+      accountsVersion() === accountVersion &&
+      (handoff?.current() ?? true);
+    const sessionCurrent = () =>
+      handoff === undefined ||
+      (currentSessionGeneration() === handoff.sessionGeneration &&
+        (handoff.server === undefined || currentApiBase() === handoff.server));
+    if (!active() || !sessionCurrent()) return false;
     const identity = await accountsIdentity();
-    if (
-      generation.current !== current ||
-      !identity ||
-      JSON.stringify([identity.issuer, identity.subject]) !== account
-    ) {
+    if (!active() || !sessionCurrent()) return false;
+    if (!identity || JSON.stringify([identity.issuer, identity.subject]) !== account) {
       setAttempt((value) => value + 1);
-      return;
+      return false;
     }
     const probe = await probeApiBase(entry.url);
+    if (!active() || !sessionCurrent()) return false;
     if (!probe.ok) throw new Error(probe.error);
-    if (generation.current !== current) return;
-    if (!(await selectServer(entry, account, () => generation.current === current))) return;
+    if (!(await selectServer(entry, account, active, handoff?.sessionGeneration, handoff?.server)))
+      return false;
     confirmServerInitialization(entry.url, account!);
     if (onSelected) onSelected();
     else {
@@ -278,6 +357,66 @@ export function AccountsGate({
       setPhase("ready");
     }
     if (linkedServer) clearServerConnect(linkedServer);
+    return true;
+  }
+
+  async function connectServer(
+    input: string,
+    handoff?: { current: () => boolean; sessionGeneration: number; server: string },
+  ): Promise<boolean> {
+    const current = generation.current;
+    const account = owner.current;
+    const accountVersion = accountsVersion();
+    const receivedLink = linkGeneration.current;
+    const link = pendingServerConnect();
+    const server = handoff?.server ?? currentApiBase();
+    const session = handoff?.sessionGeneration ?? currentSessionGeneration();
+    const currentOperation = () =>
+      generation.current === current &&
+      owner.current === account &&
+      accountsVersion() === accountVersion &&
+      linkGeneration.current === receivedLink &&
+      pendingServerConnect() === link &&
+      (handoff?.current() ?? true);
+    const untouched = () =>
+      currentOperation() && currentApiBase() === server && currentSessionGeneration() === session;
+    if (!untouched()) return false;
+    const parsed = normalizeApiBase(input);
+    if (!parsed.ok) throw new Error(parsed.error);
+    const target = parsed.url;
+    const probe = await probeApiBase(target);
+    if (!untouched()) return false;
+    if (!probe.ok) throw new Error(probe.error);
+    const capabilities = await requireAccountsSignIn(target, serverHeaders(target));
+    if (!untouched()) return false;
+    await loadApiBase();
+    if (!untouched()) return false;
+    const saved = await saveApiBase(target, serverHeaders(target));
+    if (!currentOperation()) return false;
+    if (!saved.ok) throw new Error(saved.error);
+    if (hasPendingServerInitialization(target)) confirmServerInitialization(target, account);
+    if (!(await (capabilities.accountsLogin ? continueWithAccountsServer() : continueWithSso())))
+      return false;
+    if (!currentOperation() || currentApiBase() !== target) return false;
+    const sessionGeneration = currentSessionGeneration();
+    const me = await rpc("me");
+    if (
+      !me.userId ||
+      !currentOperation() ||
+      currentApiBase() !== target ||
+      currentSessionGeneration() !== sessionGeneration
+    )
+      return false;
+    const entry = await addAccountServer(target, account);
+    if (
+      !currentOperation() ||
+      currentApiBase() !== target ||
+      currentSessionGeneration() !== sessionGeneration
+    )
+      return false;
+    setServers((previous) => [...previous.filter((item) => item.id !== entry.id), entry]);
+    setDraft("");
+    return select(entry, { current: currentOperation, sessionGeneration });
   }
 
   async function connectPairedServer(wait: PairingWait) {
@@ -619,70 +758,27 @@ export function AccountsGate({
                           onPress={() => discardPairing()}
                         />
                       </>
-                    ) : (
+                    ) : !linkedServer ||
+                      hasPendingServerInitialization(draft) ||
+                      linkNeedsPairing !== null ? (
                       <NativeActionButton
-                        label={hasPendingServerInitialization(draft) ? t("Add") : t("Pairing code")}
+                        label={
+                          hasPendingServerInitialization(draft) || linkNeedsPairing === false
+                            ? t("Add")
+                            : t("Pairing code")
+                        }
                         busy={pending}
                         disabled={hasPendingServerInitialization(draft) && !draft.trim()}
                         onPress={() =>
                           void action(
-                            hasPendingServerInitialization(draft)
-                              ? async () => {
-                                  const current = generation.current;
-                                  const account = owner.current;
-                                  const parsed = normalizeApiBase(draft);
-                                  if (!parsed.ok) throw new Error(parsed.error);
-                                  const target = parsed.url;
-                                  const currentOperation = () =>
-                                    generation.current === current && owner.current === account;
-                                  const probe = await probeApiBase(target);
-                                  if (!probe.ok) throw new Error(probe.error);
-                                  const capabilities = await requireAccountsSignIn(
-                                    target,
-                                    serverHeaders(target),
-                                  );
-                                  if (!currentOperation()) return;
-                                  await loadApiBase();
-                                  if (!currentOperation()) return;
-                                  const saved = await saveApiBase(target, serverHeaders(target));
-                                  if (!saved.ok) throw new Error(saved.error);
-                                  if (!currentOperation()) return;
-                                  if (account) confirmServerInitialization(target, account);
-                                  if (
-                                    !(await (capabilities.accountsLogin
-                                      ? continueWithAccountsServer()
-                                      : continueWithSso()))
-                                  )
-                                    return;
-                                  if (!currentOperation() || currentApiBase() !== target) return;
-                                  const sessionGeneration = currentSessionGeneration();
-                                  const me = await rpc("me");
-                                  if (
-                                    !me.userId ||
-                                    !currentOperation() ||
-                                    currentApiBase() !== target ||
-                                    currentSessionGeneration() !== sessionGeneration
-                                  )
-                                    return;
-                                  const entry = await addAccountServer(target, account);
-                                  if (
-                                    !currentOperation() ||
-                                    currentApiBase() !== target ||
-                                    currentSessionGeneration() !== sessionGeneration
-                                  )
-                                    return;
-                                  setServers((previous) => [
-                                    ...previous.filter((item) => item.id !== entry.id),
-                                    entry,
-                                  ]);
-                                  setDraft("");
-                                  await select(entry);
-                                }
+                            hasPendingServerInitialization(draft) ||
+                              (linkedServer === draft && linkNeedsPairing === false)
+                              ? () => connectServer(draft)
                               : createPairing,
                           )
                         }
                       />
-                    )}
+                    ) : null}
                   </>
                 ) : (
                   <NativeActionButton

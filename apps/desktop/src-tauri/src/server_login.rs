@@ -3,7 +3,7 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 const ERROR: &str = "Could not continue";
@@ -29,6 +29,64 @@ pub fn audience_for_document(document_url: &Url, requested_origin: &str) -> Resu
         return Err(ERROR.into());
     }
     crate::server::normalize_server_url(requested_origin)
+}
+
+/// This public probe conveys no authority and never sends Accounts credentials to a server.
+pub async fn initialization_required(
+    origin: &Url,
+    current: impl Fn() -> bool,
+) -> Result<bool, String> {
+    const LIMIT: usize = 1024;
+    #[derive(Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Initialization {
+        required: bool,
+    }
+    if !current() || crate::server::normalize_server_url(origin.as_str())? != *origin {
+        return Err(ERROR.into());
+    }
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|_| ERROR)?;
+    let mut response = client
+        .get(
+            origin
+                .join("/api/auth/native/initialization")
+                .map_err(|_| ERROR)?,
+        )
+        .header(reqwest::header::CACHE_CONTROL, "no-store")
+        .send()
+        .await
+        .map_err(|_| ERROR)?;
+    if !current() {
+        return Err(ERROR.into());
+    }
+    // Older servers can safely be tried through their ordinary, authenticated login path.
+    if response.status() == reqwest::StatusCode::NOT_FOUND {
+        return Ok(false);
+    }
+    if response.status() != reqwest::StatusCode::OK
+        || response
+            .content_length()
+            .is_some_and(|length| length > LIMIT as u64)
+    {
+        return Err(ERROR.into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
+        if !current() || chunk.len() > LIMIT.saturating_sub(bytes.len()) {
+            return Err(ERROR.into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    if !current() {
+        return Err(ERROR.into());
+    }
+    let state: Initialization = serde_json::from_slice(&bytes).map_err(|_| ERROR)?;
+    Ok(state.required)
 }
 
 pub async fn issue(
@@ -158,6 +216,80 @@ mod tests {
             String::from_utf8(bytes).unwrap()
         });
         (url, serving)
+    }
+
+    #[tokio::test]
+    async fn public_initialization_probe_never_sends_bearers_cookies_or_browser_origin() {
+        for required in [true, false] {
+            let (endpoint, serving) = endpoint(
+                "200 OK",
+                serde_json::json!({"required": required}).to_string(),
+                None,
+            )
+            .await;
+            assert_eq!(
+                initialization_required(&endpoint.join("/").unwrap(), || true)
+                    .await
+                    .unwrap(),
+                required
+            );
+            let request = serving.await.unwrap();
+            assert!(request.starts_with("GET /api/auth/native/initialization HTTP/1.1\r\n"));
+            let headers = request.to_lowercase();
+            for forbidden in ["\r\nauthorization:", "\r\ncookie:", "\r\norigin:"] {
+                assert!(!headers.contains(forbidden));
+            }
+        }
+        let (endpoint, serving) = endpoint("404 Not Found", String::new(), None).await;
+        assert!(
+            !initialization_required(&endpoint.join("/").unwrap(), || true)
+                .await
+                .unwrap()
+        );
+        serving.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn public_initialization_probe_rejects_redirects_large_or_ambiguous_data() {
+        for (status, body) in [
+            ("302 Found", "{}".into()),
+            ("401 Unauthorized", "{}".into()),
+            ("200 OK", "x".repeat(1025)),
+            ("200 OK", "{\"required\":\"false\"}".into()),
+            ("200 OK", "{\"required\":false,\"other\":true}".into()),
+            ("200 OK", "{}".into()),
+        ] {
+            let (endpoint, serving) = endpoint(status, body, None).await;
+            assert!(
+                initialization_required(&endpoint.join("/").unwrap(), || true)
+                    .await
+                    .is_err()
+            );
+            serving.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn cancelled_initialization_probe_cannot_resolve_a_newer_link() {
+        let current = Arc::new(AtomicBool::new(true));
+        let (endpoint, serving) = endpoint(
+            "200 OK",
+            "{\"required\":false}".into(),
+            Some(current.clone()),
+        )
+        .await;
+        assert!(
+            initialization_required(&endpoint.join("/").unwrap(), || current
+                .load(Ordering::SeqCst))
+            .await
+            .is_err()
+        );
+        serving.await.unwrap();
+        assert!(
+            initialization_required(&Url::parse("http://127.0.0.1:1").unwrap(), || false)
+                .await
+                .is_err()
+        );
     }
 
     fn response() -> serde_json::Value {

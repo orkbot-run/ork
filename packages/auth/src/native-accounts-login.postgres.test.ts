@@ -224,6 +224,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         nativeLoginStore(prisma!, { expectedOwnerKey: oidcAccountSubject(issuer, "owner-a") }),
       ];
       for (const store of stores) {
+        expect(await store.initializationRequired()).toBe(false);
         const c = await store.issue(origin);
         await expect(
           store.consume({
@@ -249,6 +250,107 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           ?.nativeAccountsOwnerKey,
       ).toBeNull();
     }));
+  it("publishes sessionless initialization state only after actual admission, including partial-owner recovery", async () =>
+    system(async () => {
+      const fetcher = vi.fn();
+      vi.stubGlobal("fetch", fetcher);
+      const authEnv = {
+        secret: "offline-initialization-state-secret-at-least-32-characters",
+        baseURL: origin,
+        webOrigin: origin,
+        passwordAuth: false,
+        signupsEnabled: "false",
+        signupAllowlist: "",
+        nativeAccounts: { issuer },
+      };
+      const auth = createAuth(prisma!, authEnv);
+      const state = async (handler = auth.handler) => {
+        const response = await handler(new Request(`${origin}/api/auth/native/initialization`));
+        expect(response.status).toBe(200);
+        expect(response.headers.get("cache-control")).toBe("no-store");
+        expect(response.headers.getSetCookie()).toEqual([]);
+        return response.json();
+      };
+      try {
+        expect(await state()).toEqual({ required: true });
+        const store = nativeLoginStore(prisma!, {});
+        const signedOwner = { ...identity("partial-owner"), allowProvision: true };
+        const first = await store.issue(origin);
+        await store.consume({ origin, challenge: first.challenge, identity: signedOwner });
+        expect(await store.bootstrapRequired()).toBe(false);
+        expect(await state()).toEqual({ required: true });
+        // A failed provision can retry the same verified owner while no workspace exists.
+        const retry = await store.issue(origin);
+        await expect(
+          store.consume({
+            origin,
+            challenge: retry.challenge,
+            identity: { ...identity("partial-owner"), allowProvision: true },
+          }),
+        ).resolves.toEqual({ allowProvision: true });
+        const userId = randomUUID();
+        await prisma!.user.create({
+          data: {
+            id: userId,
+            name: "Partial",
+            email: "partial-owner@example.test",
+            emailVerified: true,
+          },
+        });
+        await prisma!.account.create({
+          data: {
+            id: randomUUID(),
+            userId,
+            providerId: "oidc",
+            accountId: oidcAccountSubject(issuer, "partial-owner"),
+          },
+        });
+        expect(await state()).toEqual({ required: true });
+        await bootstrapUserSpace(
+          prisma!,
+          { id: userId },
+          { signupsEnabled: "true", signupAllowlist: "" },
+        );
+        expect(await state()).toEqual({ required: false });
+        const freshProcess = createAuth(prisma!, authEnv);
+        try {
+          expect(await state(freshProcess.handler)).toEqual({ required: false });
+        } finally {
+          freshProcess.disposeOidcDiscovery();
+        }
+        const refused = await auth.handler(
+          new Request(`${origin}/api/auth/native/pair`, {
+            method: "POST",
+            headers: { origin, "content-type": "application/json" },
+            body: JSON.stringify({ code: "ABC234" }),
+          }),
+        );
+        expect(refused.status).toBe(403);
+        expect(fetcher).not.toHaveBeenCalled();
+        const pairing = await store.issue(origin);
+        await expect(
+          store.consume({
+            origin,
+            challenge: pairing.challenge,
+            identity: { ...identity("partial-owner"), allowProvision: true },
+          }),
+        ).rejects.toThrow();
+        // Existing ordinary native login remains valid after the browser entry closes.
+        const login = await store.issue(origin);
+        await expect(
+          store.consume({
+            origin,
+            challenge: login.challenge,
+            identity: identity("partial-owner"),
+          }),
+        ).resolves.toEqual({ allowProvision: true });
+        expect(await prisma!.session.count()).toBe(0);
+      } finally {
+        auth.disposeOidcDiscovery();
+        vi.unstubAllGlobals();
+      }
+    }));
+
   it("leases one poll across processes and fences interrupted exchanges without holding a transaction", async () =>
     system(async () => {
       const stores = [nativePairingStore(prisma!), nativePairingStore(prisma!)];
@@ -391,7 +493,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
       let lastPairingId = "";
       const pair = async () => {
         const submitted = await request("pair", { code: "ABC234" });
-        expect(submitted.status).toBe(202);
+        if (submitted.status !== 202) return submitted;
         const body = (await submitted.json()) as { pairingId: string };
         lastPairingId = body.pairingId;
         return request("pair/status", body);
@@ -438,7 +540,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           (await prisma!.deploymentSettings.findUnique({ where: { id: "default" } }))
             ?.nativeAccountsOwnerKey,
         ).toBe(ownerKey);
-        // A new challenge cannot make an already consumed JWT identifier usable again.
+        // Once admitted, even the current owner cannot start another browser initialization.
         expect((await pair()).status).toBe(403);
         subject = "foreign-owner";
         jwtId = randomUUID();
@@ -453,7 +555,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         subject = "paired-owner";
         jwtId = randomUUID();
         const again = await pair();
-        expect(again.status, await again.clone().text()).toBe(200);
+        expect(again.status, await again.clone().text()).toBe(403);
         expect(await prisma!.session.count()).toBe(0);
         const next = await request("challenge", {});
         const fresh = (await next.json()) as { challenge: string; bootstrapRequired: boolean };
@@ -466,7 +568,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         expect(native.status, await native.clone().text()).toBe(200);
         expect(native.headers.get("set-cookie")).toContain("session_token=");
         expect(await prisma!.session.count()).toBe(1);
-        expect(reports).toEqual([false, true, false, false, true]);
+        expect(reports).toEqual([false, true]);
       } finally {
         auth.disposeOidcDiscovery();
         vi.unstubAllGlobals();

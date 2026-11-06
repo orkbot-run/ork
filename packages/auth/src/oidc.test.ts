@@ -30,6 +30,7 @@ vi.mock("./native-accounts-login.js", async (original) => {
         store: {
           issue: async () => ({ challenge: "x".repeat(43), expiresAt: Date.now() / 1000 + 120 }),
           bootstrapRequired: async () => true,
+          initializationRequired: async () => true,
           consume: async () => ({ allowProvision: state.nativeProvision }),
         },
       }),

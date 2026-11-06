@@ -21,7 +21,7 @@ import {
   saveApiBase,
 } from "./api";
 import type * as Endpoint from "./endpoint";
-import { requireAccountsSignIn } from "./endpoint";
+import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
 import { clearServerConnect, pendingServerConnect, receiveServerConnect } from "./server-connect";
 import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
@@ -110,6 +110,7 @@ vi.mock("./server-headers", () => ({ serverHeaders: () => ({}) }));
 vi.mock("./endpoint", async (original) => ({
   ...(await original<typeof Endpoint>()),
   requireAccountsSignIn: vi.fn().mockResolvedValue({ accountsLogin: false }),
+  serverInitializationRequired: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("./accounts", () => ({
   welcomeAccountsOrk: () => "64cf5621-3144-4810-97f5-148acdc29c35",
@@ -190,6 +191,7 @@ beforeEach(() => {
   vi.mocked(saveApiBase).mockResolvedValue({ ok: true, url: remote.url });
   vi.mocked(probeApiBase).mockResolvedValue({ ok: true, url: remote.url });
   vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: false });
+  vi.mocked(serverInitializationRequired).mockReset().mockResolvedValue(true);
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -402,6 +404,7 @@ async function click(label: string) {
   );
 }
 function setupPairing(status = "pending") {
+  vi.mocked(accountServers).mockResolvedValueOnce([]);
   receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: true });
@@ -419,6 +422,7 @@ it("retains a connection link through Accounts login and requires a pairing code
   });
   expect(destination).toBe("/");
   await render();
+  vi.mocked(accountServers).mockResolvedValueOnce([]);
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   await act(async () => {
     state.version++;
@@ -480,7 +484,7 @@ it.each(["cancel", "rejected", "session-change"])(
 
 it("never logs in before Accounts lists the paired origin", async () => {
   setupPairing("approval-required");
-  vi.mocked(accountServers).mockResolvedValueOnce([remote]).mockResolvedValueOnce([]);
+  vi.mocked(accountServers).mockResolvedValue([]);
   await render();
   await click("Pairing code");
   await click("Approve server");
@@ -538,6 +542,7 @@ it("cancels the pending code when another central account becomes active", async
   await render();
   await click("Pairing code");
   await act(async () => {
+    vi.mocked(accountServers).mockResolvedValue([]);
     vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
     state.version++;
     for (const listener of state.listeners) listener();
@@ -561,6 +566,7 @@ it("cancels a creation that finishes after the account changes", async () => {
   await click("Pairing code");
   const signal = vi.mocked(beginServerPairing).mock.calls[0]![1]!;
   await act(async () => {
+    vi.mocked(accountServers).mockResolvedValue([]);
     vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
     state.version++;
     for (const listener of state.listeners) listener();
@@ -813,6 +819,7 @@ it.each(["account-change", "cancel", "unmount"])(
     const signal = vi.mocked(pairing.approve).mock.calls[0]![1]!;
     if (reason === "account-change")
       await act(async () => {
+        vi.mocked(accountServers).mockResolvedValue([]);
         vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
         state.version++;
         for (const listener of state.listeners) listener();
@@ -905,4 +912,289 @@ it("shows an approval failure without allowing product login", async () => {
   expect(pairing.cancel).toHaveBeenCalledOnce();
   expect(continueWithAccountsServer).not.toHaveBeenCalled();
   expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("opens an ordinary link using the current account's existing directory entry", async () => {
+  receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  await render();
+  expect(accountServers).toHaveBeenCalledWith(JSON.stringify([identity.issuer, identity.subject]));
+  expect(probeApiBase).toHaveBeenCalledWith(remote.url);
+  expect(saveApiBase).toHaveBeenCalledWith(remote.url, {});
+  expect(state.storage.get("orkbot.accounts.selected-server")).toBe(
+    `${JSON.stringify([identity.issuer, identity.subject])}:${remote.id}`,
+  );
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
+  expect(beginServerPairing).not.toHaveBeenCalled();
+  expect(addAccountServer).not.toHaveBeenCalled();
+});
+
+it("waits for Accounts login before handing off a known server link", async () => {
+  receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+  await render();
+  expect(accountServers).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await act(async () => {
+    vi.mocked(accountsIdentity).mockResolvedValue(identity);
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  expect(saveApiBase).toHaveBeenCalledWith(remote.url, {});
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
+  expect(beginServerPairing).not.toHaveBeenCalled();
+});
+
+it("switches a running app to another known server without rejecting its own session reset", async () => {
+  const next = {
+    ...remote,
+    id: "00000000-0000-4000-8000-000000000002",
+    url: "https://other.example.test",
+  };
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  vi.mocked(accountServers).mockResolvedValue([remote, next]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  vi.mocked(saveApiBase).mockImplementation(async (url) => {
+    if (url !== currentApiBase()) vi.mocked(currentSessionGeneration).mockReturnValue(2);
+    vi.mocked(currentApiBase).mockReturnValue(url);
+    return { ok: true, url };
+  });
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  await act(async () => {
+    receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(next.url)}`);
+  });
+  expect(currentApiBase()).toBe(next.url);
+  expect(state.storage.get("orkbot.accounts.selected-server")).toBe(`${account}:${next.id}`);
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
+  expect(beginServerPairing).not.toHaveBeenCalled();
+});
+
+it.each(["account", "session", "link", "repeated-link", "legacy-link"])(
+  "does not use a stale known-server catalog after a %s change",
+  async (reason) => {
+    receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+    vi.mocked(accountsIdentity).mockResolvedValue(identity);
+    let finish!: (value: (typeof remote)[]) => void;
+    vi.mocked(accountServers)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      )
+      .mockResolvedValue([]);
+    await render();
+    expect(host.textContent).not.toContain("Product screen");
+    await act(async () => {
+      if (reason === "account") {
+        vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+        state.version++;
+        for (const listener of state.listeners) listener();
+      } else if (reason === "session") vi.mocked(currentSessionGeneration).mockReturnValue(2);
+      else if (reason === "link")
+        receiveServerConnect(
+          `orkbot://connect?server=${encodeURIComponent("https://unlisted.example.test")}`,
+        );
+      else if (reason === "repeated-link")
+        receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+      else
+        receiveServerConnect(
+          `orkbot://initialize?server=${encodeURIComponent(remote.url)}&secret=${"s".repeat(43)}`,
+        );
+      finish([remote]);
+    });
+    expect(saveApiBase).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Product screen");
+    expect(beginServerPairing).not.toHaveBeenCalled();
+    expect(pendingServerConnect()).not.toBeNull();
+    if (reason === "legacy-link")
+      expect(host.querySelector('input[aria-label="Server"]')).not.toBeNull();
+  },
+);
+
+it.each(["account", "session", "link"])(
+  "stops a known-link selection before saving when %s changes during verification",
+  async (reason) => {
+    receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+    vi.mocked(accountsIdentity).mockResolvedValue(identity);
+    let finish!: (value: { accountsLogin: boolean }) => void;
+    vi.mocked(requireAccountsSignIn).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await render();
+    vi.mocked(accountServers).mockResolvedValue([]);
+    await act(async () => {
+      if (reason === "account") {
+        vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+        state.version++;
+        for (const listener of state.listeners) listener();
+      } else if (reason === "session") vi.mocked(currentSessionGeneration).mockReturnValue(2);
+      else
+        receiveServerConnect(
+          `orkbot://connect?server=${encodeURIComponent("https://unlisted.example.test")}`,
+        );
+      finish({ accountsLogin: true });
+    });
+    expect(saveApiBase).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Product screen");
+    expect(beginServerPairing).not.toHaveBeenCalled();
+  },
+);
+
+it("recovers an admitted server absent from the catalog through normal verified Accounts sign-in", async () => {
+  setupPairing();
+  vi.mocked(serverInitializationRequired).mockResolvedValue(false);
+  await render();
+  expect(serverInitializationRequired).toHaveBeenCalledWith(
+    remote.url,
+    undefined,
+    expect.any(AbortSignal),
+  );
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+  expect(addAccountServer).toHaveBeenCalledWith(
+    remote.url,
+    JSON.stringify([identity.issuer, identity.subject]),
+  );
+  expect(vi.mocked(rpc).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(addAccountServer).mock.invocationCallOrder[0]!,
+  );
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
+  expect(beginServerPairing).not.toHaveBeenCalled();
+});
+
+it.each(["rejected", "session-change", "cancel"])(
+  "does not bookmark an unverified normal recovery (%s)",
+  async (reason) => {
+    setupPairing();
+    vi.mocked(serverInitializationRequired).mockResolvedValue(false);
+    if (reason === "rejected")
+      vi.mocked(continueWithAccountsServer).mockRejectedValueOnce(new Error("Not admitted"));
+    if (reason === "cancel") vi.mocked(continueWithAccountsServer).mockResolvedValue(false);
+    if (reason === "session-change")
+      vi.mocked(rpc).mockImplementationOnce(async () => {
+        vi.mocked(currentSessionGeneration).mockReturnValue(2);
+        return { userId: "product-user" } as never;
+      });
+    await render();
+    expect(addAccountServer).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Product screen");
+    expect(host.textContent).not.toContain("Pairing code");
+    expect(beginServerPairing).not.toHaveBeenCalled();
+  },
+);
+
+it("does not manufacture pairing when the initialization query fails", async () => {
+  setupPairing();
+  vi.mocked(serverInitializationRequired).mockRejectedValueOnce(
+    new Error("Could not pair this server. Try again."),
+  );
+  await render();
+  expect(host.textContent).toContain("Could not pair this server. Try again.");
+  expect(host.textContent).not.toContain("Pairing code");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  expect(continueWithAccountsServer).not.toHaveBeenCalled();
+  expect(beginServerPairing).not.toHaveBeenCalled();
+});
+
+it.each(["account", "link", "session", "server"])(
+  "ignores an initialization query completed after %s changes",
+  async (reason) => {
+    setupPairing();
+    let finish!: (value: boolean) => void;
+    vi.mocked(serverInitializationRequired).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await render();
+    vi.mocked(accountServers).mockResolvedValue([]);
+    await act(async () => {
+      if (reason === "account") {
+        vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+        state.version++;
+        for (const listener of state.listeners) listener();
+      } else if (reason === "link")
+        receiveServerConnect(
+          `orkbot://connect?server=${encodeURIComponent("https://unlisted.example.test")}`,
+        );
+      else if (reason === "session") vi.mocked(currentSessionGeneration).mockReturnValue(2);
+      else vi.mocked(currentApiBase).mockReturnValue("https://other.example.test");
+      finish(false);
+    });
+    expect(saveApiBase).not.toHaveBeenCalled();
+    expect(continueWithAccountsServer).not.toHaveBeenCalled();
+    expect(addAccountServer).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Product screen");
+  },
+);
+
+it("finishes normal recovery when the Accounts auth browser returns to the app", async () => {
+  setupPairing();
+  vi.mocked(serverInitializationRequired).mockResolvedValue(false);
+  let finish!: (value: boolean) => void;
+  vi.mocked(continueWithAccountsServer).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await render();
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("background");
+  });
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+    finish(true);
+  });
+  expect(serverInitializationRequired).toHaveBeenCalledOnce();
+  expect(addAccountServer).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Product screen");
+});
+
+it("retries a failed bookmark write through normal login instead of initialization", async () => {
+  setupPairing();
+  vi.mocked(serverInitializationRequired).mockResolvedValue(false);
+  vi.mocked(addAccountServer).mockRejectedValueOnce(new Error("Directory unavailable"));
+  await render();
+  expect(host.textContent).not.toContain("Pairing code");
+  expect(host.textContent).toContain("Directory unavailable");
+  await click("Add");
+  expect(continueWithAccountsServer).toHaveBeenCalledTimes(2);
+  expect(addAccountServer).toHaveBeenCalledTimes(2);
+  expect(beginServerPairing).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("Product screen");
+});
+
+it("does not bookmark a normal recovery that finishes authentication for the previous account", async () => {
+  setupPairing();
+  vi.mocked(serverInitializationRequired).mockResolvedValueOnce(false).mockResolvedValue(true);
+  let finish!: (value: boolean) => void;
+  vi.mocked(continueWithAccountsServer).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await render();
+  vi.mocked(accountServers).mockResolvedValue([]);
+  await act(async () => {
+    vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+    state.version++;
+    for (const listener of state.listeners) listener();
+    finish(true);
+  });
+  expect(addAccountServer).not.toHaveBeenCalled();
+  expect(rpc).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain("Product screen");
 });
