@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests remain separately licensed. Generator-only settings coverage is an Ork addition.
+
 import type { AccountSecurity } from "@orkbot/contracts";
 import type * as UiWeb from "@orkbot/ui-web";
 import type { ReactNode } from "react";
@@ -139,6 +143,8 @@ it("flips the stored tool activity preference from the settings toggle", async (
     await act(async () => {
       root.render(<GeneralSettingsPanels name="Jamie" />);
     });
+    expect(container.querySelector('[data-testid="bot-style-select"]')).toBeNull();
+    expect(container.textContent).not.toContain("Bot style");
 
     const toggle = container.querySelector<HTMLButtonElement>(
       '[data-testid="tool-activity-toggle"]',

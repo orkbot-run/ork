@@ -7,25 +7,25 @@
 import { parseBotAvatarValue } from "@orkbot/contracts";
 import type { LogoAvatarActivity } from "@orkbot/core";
 import {
+  LOGO_AVATAR_ART_TRANSFORM,
   LOGO_AVATAR_BODY_Y,
-  LOGO_AVATAR_EYES,
-  LOGO_AVATAR_SMILE_PATH,
-  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
   logoAvatarEyeInk,
   logoAvatarTraits,
+  orkAvatarAccessoryParts,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
 } from "@orkbot/core";
-import { botEyeColor, tokens } from "@orkbot/ui-tokens";
+import { tokens } from "@orkbot/ui-tokens";
 import type { CSSProperties } from "react";
 import { memo, useId, useMemo } from "react";
 import { useAvatarMotionVisibility } from "./hooks/use-avatar-motion-visibility.js";
 import { useLogoAvatarLayers } from "./hooks/use-logo-avatar-layers.js";
 import { cn } from "./lib/utils.js";
-import { LogoAvatarBody } from "./logo-avatar-body.js";
+import { LogoAvatarBody, LogoAvatarParts } from "./logo-avatar-body.js";
 import "./logo-avatar.css";
 
 /** Generated vector logo renderer. BotAvatar owns set selection and custom images. */
-const eyes = LOGO_AVATAR_EYES;
 
 export const LogoAvatar = memo(function LogoAvatar({
   activity = "idle",
@@ -81,13 +81,18 @@ export const LogoAvatar = memo(function LogoAvatar({
       data-compact={size <= 38}
       data-paused={!visible}
       data-color={traits.color}
+      data-shape={traits.appearance.shape}
+      data-eyes={traits.appearance.eyes}
+      data-mouth={traits.appearance.mouth}
+      data-accessory={traits.appearance.accessory}
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
       style={
         {
+          width: size,
+          height: size,
           "--logo-task-stroke": Math.max(2.4, 100 / Math.max(1, size)),
-          "--logo-eye-light": eyeInk === botEyeColor ? tokens.foreground : botEyeColor,
           "--logo-blink-name": `logo-avatar-blink-${traits.blinkVariant}`,
           "--logo-blink-duration": `${traits.blinkMs}ms`,
           "--logo-blink-delay": `${traits.blinkDelayMs}ms`,
@@ -99,11 +104,6 @@ export const LogoAvatar = memo(function LogoAvatar({
         <clipPath id={`logo-plate-${id}`}>
           <rect width="100" height="100" rx="23" />
         </clipPath>
-        <linearGradient id={`logo-eye-${id}`} x2="0.8" y2="1">
-          <stop stopColor={eyeInk} stopOpacity="0.8" />
-          <stop offset="0.35" stopColor={eyeInk} />
-          <stop offset="1" stopColor={eyeInk} />
-        </linearGradient>
       </defs>
       <g clipPath={`url(#logo-plate-${id})`}>
         <rect className="logo-avatar-plate" width="100" height="100" rx="23" />
@@ -128,45 +128,47 @@ export const LogoAvatar = memo(function LogoAvatar({
           >
             <g className="logo-avatar-body">
               <g transform={`translate(0 ${LOGO_AVATAR_BODY_Y})`}>
-                <LogoAvatarBody id={`${id}-${layer.key}`} color={traits.color} />
+                <LogoAvatarBody
+                  id={`${id}-${layer.key}`}
+                  color={traits.color}
+                  appearance={traits.appearance}
+                />
                 <g className="logo-avatar-gaze">
                   <g className="logo-avatar-scan">
-                    {[eyes.leftCx, eyes.rightCx].map((x, index) => (
-                      <g
-                        className={`logo-avatar-eye-lid logo-avatar-eye-${index}`}
-                        key={x}
-                        style={{ transformOrigin: `${x}px ${eyes.cy}px` }}
-                      >
+                    <g transform={LOGO_AVATAR_ART_TRANSFORM}>
+                      {[244, 356].map((x, index) => (
                         <g
-                          className="logo-avatar-eye"
-                          style={{ transformOrigin: `${x}px ${eyes.cy}px` }}
+                          className={`logo-avatar-eye-lid logo-avatar-eye-${index}`}
+                          key={x}
+                          style={{ transformOrigin: `${x}px 302px` }}
                         >
-                          <ellipse
-                            cx={x}
-                            cy={eyes.cy}
-                            rx={eyes.width / 2}
-                            ry={eyes.height / 2}
-                            fill={`url(#logo-eye-${id})`}
-                          />
-                          <ellipse
-                            className="logo-avatar-glint"
-                            cx={x - 1.2}
-                            cy={eyes.cy - 3.6}
-                            rx="1.4"
-                            ry="2.2"
-                          />
+                          <g
+                            className="logo-avatar-eye"
+                            style={{ transformOrigin: `${x}px 302px` }}
+                          >
+                            <LogoAvatarParts
+                              parts={orkAvatarEyeParts(
+                                traits.appearance.eyes,
+                                traits.appearance.eyeSize,
+                                index === 0 ? 0 : 1,
+                                eyeInk,
+                              )}
+                            />
+                          </g>
                         </g>
+                      ))}
+                      <g className="logo-avatar-smile">
+                        <LogoAvatarParts
+                          parts={orkAvatarMouthParts(traits.appearance.mouth, eyeInk)}
+                        />
                       </g>
-                    ))}
-                    <path
-                      className="logo-avatar-smile"
-                      d={LOGO_AVATAR_SMILE_PATH}
-                      fill="none"
-                      stroke={eyeInk}
-                      strokeWidth={LOGO_AVATAR_SMILE_STROKE}
-                      strokeLinecap="round"
-                    />
+                    </g>
                   </g>
+                </g>
+                <g transform={LOGO_AVATAR_ART_TRANSFORM}>
+                  <LogoAvatarParts
+                    parts={orkAvatarAccessoryParts(traits.appearance.accessory, "front")}
+                  />
                 </g>
               </g>
               <LogoAvatarTask activity={layer.activity} id={`${id}-${layer.key}`} />

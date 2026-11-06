@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { AccountSecurity } from "@orkbot/contracts";
@@ -294,7 +298,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("offers no avatar style choice in account settings", async () => {
+it("offers no original bot or avatar style choice even for a saved legacy preference", async () => {
+  account.me.botAvatarSet = "organic";
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   document.body.append(container);
@@ -304,6 +309,8 @@ it("offers no avatar style choice in account settings", async () => {
   expect(container.querySelector('[aria-label="Appearance"]')).not.toBeNull();
   expect(container.textContent).toContain("Language");
   expect(container.querySelector('[aria-label="Avatar style"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Bot style"]')).toBeNull();
+  expect(container.textContent).not.toContain("Original");
   expect(container.textContent).not.toContain("Avatars");
   expect(container.textContent).not.toContain("Robot");
   expect(container.textContent).not.toContain("Organic");

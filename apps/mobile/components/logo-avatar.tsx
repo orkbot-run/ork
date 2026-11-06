@@ -4,20 +4,24 @@
 // Modified by Ork contributors to render the shared Ork body and face on native.
 // Inherited motion and interaction handling remain Apache-2.0. New changes follow LICENSE.md.
 
-import type { AvatarMotionMode, AvatarPoke, LogoAvatarActivity } from "@orkbot/core";
+import type { AvatarMotionMode, AvatarPoke, LogoAvatarActivity, OrkAvatarPart } from "@orkbot/core";
 import {
   avatarPokeFrame,
+  LOGO_AVATAR_ART_SCALE,
+  LOGO_AVATAR_ART_TRANSFORM,
   LOGO_AVATAR_BODY_Y,
-  LOGO_AVATAR_EYES,
-  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
-  LOGO_BODY_PATH,
   LOGO_AVATAR_LIGHTING as lighting,
   logoAvatarEyeInk,
   logoAvatarFrame,
   logoAvatarPaint,
-  logoAvatarSmilePath,
   logoAvatarTraits,
+  ORK_AVATAR_BODY_PATHS,
+  ORK_AVATAR_SATELLITES,
+  orkAvatarAccessoryParts,
+  orkAvatarCheekParts,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
 } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { useEffect, useId, useMemo } from "react";
@@ -31,6 +35,7 @@ import Animated, {
   useSharedValue,
 } from "react-native-reanimated";
 import Svg, {
+  Circle,
   ClipPath,
   Defs,
   Ellipse,
@@ -46,7 +51,6 @@ import { useLogoAvatarClock } from "../lib/logo-avatar-clock";
 import { useMobileTokens } from "../lib/native";
 
 const AnimatedG = Animated.createAnimatedComponent(G);
-const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
@@ -93,19 +97,32 @@ export function LogoAvatar({
     ],
   }));
   const eyeInk = logoAvatarEyeInk(traits.color, tokens);
-  const eyes = LOGO_AVATAR_EYES;
-  const eyeProps = (cx: number) => () => {
-    "worklet";
+  const appearance = traits.appearance;
+  const bodyPath = ORK_AVATAR_BODY_PATHS[appearance.shape];
+  const eyes = useAnimatedProps(() => {
+    const lid = frame.value.lid * frame.value.blink;
     return {
-      cx: cx + frame.value.eyeX,
-      cy: eyes.cy + LOGO_AVATAR_BODY_Y + frame.value.eyeY,
-      ry: (eyes.height / 2) * frame.value.lid * frame.value.blink,
+      opacity: 1,
+      matrix: [
+        1,
+        0,
+        0,
+        lid,
+        frame.value.eyeX / LOGO_AVATAR_ART_SCALE,
+        302 * (1 - lid) + frame.value.eyeY / LOGO_AVATAR_ART_SCALE,
+      ],
     };
-  };
-  const leftEye = useAnimatedProps(eyeProps(eyes.leftCx));
-  const rightEye = useAnimatedProps(eyeProps(eyes.rightCx));
-  const smile = useAnimatedProps(() => ({
-    d: logoAvatarSmilePath(frame.value.eyeX, LOGO_AVATAR_BODY_Y + frame.value.eyeY),
+  });
+  const mouth = useAnimatedProps(() => ({
+    opacity: 1,
+    matrix: [
+      1,
+      0,
+      0,
+      1,
+      frame.value.eyeX / LOGO_AVATAR_ART_SCALE,
+      frame.value.eyeY / LOGO_AVATAR_ART_SCALE,
+    ],
   }));
   const page = useAnimatedProps(() => ({
     opacity: 1,
@@ -133,7 +150,7 @@ export function LogoAvatar({
           <Rect width={100} height={100} rx={23} />
         </ClipPath>
         <ClipPath id={`body-${id}`}>
-          <Path d={LOGO_BODY_PATH} />
+          <Path d={bodyPath} />
         </ClipPath>
         <LinearGradient id={`fill-${id}`} {...lighting.body}>
           <Stop stopColor={paint.light} />
@@ -150,6 +167,10 @@ export function LogoAvatar({
           <Stop offset={0.4} stopColor="white" stopOpacity={lighting.crown.shoulder} />
           <Stop offset="1" stopColor="white" stopOpacity="0" />
         </RadialGradient>
+        <RadialGradient id={`satellite-${id}`} {...lighting.satellite}>
+          <Stop stopColor={paint.light} />
+          <Stop offset={1} stopColor={paint.base} />
+        </RadialGradient>
         <ClipPath id={`pages-${id}`}>
           <Path d="M26 79Q37 75 47 80V91Q37 87 26 91ZM53 80Q63 75 74 79V91Q63 87 53 91Z" />
         </ClipPath>
@@ -164,29 +185,49 @@ export function LogoAvatar({
         <Rect width={100} height={100} rx={23} fill={tokens.sidebar} />
         <AnimatedG animatedProps={body}>
           <G transform={`translate(0 ${LOGO_AVATAR_BODY_Y})`}>
-            <Path d={LOGO_BODY_PATH} fill={`url(#fill-${id})`} />
-            <Path d={LOGO_BODY_PATH} fill={`url(#light-${id})`} />
-            <G clipPath={`url(#body-${id})`}>
-              <Path
-                d={lighting.shine.path}
-                fill="none"
-                stroke="white"
-                strokeOpacity={lighting.shine.opacity}
-                strokeWidth={lighting.shine.width}
-                strokeLinecap="round"
-              />
+            <G transform={LOGO_AVATAR_ART_TRANSFORM}>
+              {ORK_AVATAR_SATELLITES.slice(0, appearance.satellites).map(([cx, cy, r]) => (
+                <G key={`${cx}-${cy}`}>
+                  <Circle cx={cx} cy={cy} r={r} fill={`url(#satellite-${id})`} />
+                  <Circle
+                    cx={cx - r * 0.26}
+                    cy={cy - r * 0.34}
+                    r={r * 0.22}
+                    fill="white"
+                    fillOpacity={0.27}
+                  />
+                </G>
+              ))}
+              <AvatarParts parts={orkAvatarAccessoryParts(appearance.accessory, "behind")} />
+              <Path d={bodyPath} fill={`url(#fill-${id})`} />
+              <Path d={bodyPath} fill={`url(#light-${id})`} />
+              {appearance.shine ? (
+                <G clipPath={`url(#body-${id})`}>
+                  <Path
+                    d={lighting.shine.path}
+                    fill="none"
+                    stroke="white"
+                    strokeOpacity={lighting.shine.opacity}
+                    strokeWidth={lighting.shine.width}
+                    strokeLinecap="round"
+                  />
+                </G>
+              ) : null}
+              {appearance.cheeks ? <AvatarParts parts={orkAvatarCheekParts()} /> : null}
+              <AnimatedG id={`eyes-${id}`} animatedProps={eyes}>
+                <AvatarParts
+                  parts={orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, eyeInk)}
+                />
+                <AvatarParts
+                  parts={orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 1, eyeInk)}
+                />
+              </AnimatedG>
+              <AnimatedG id={`mouth-${id}`} animatedProps={mouth}>
+                <AvatarParts parts={orkAvatarMouthParts(appearance.mouth, eyeInk)} />
+              </AnimatedG>
+              <AvatarParts parts={orkAvatarAccessoryParts(appearance.accessory, "front")} />
             </G>
           </G>
-          <AnimatedEllipse animatedProps={leftEye} rx={eyes.width / 2} fill={eyeInk} />
-          <AnimatedEllipse animatedProps={rightEye} rx={eyes.width / 2} fill={eyeInk} />
-          <AnimatedPath
-            animatedProps={smile}
-            d={logoAvatarSmilePath(0, LOGO_AVATAR_BODY_Y)}
-            fill="none"
-            stroke={eyeInk}
-            strokeWidth={LOGO_AVATAR_SMILE_STROKE}
-            strokeLinecap="round"
-          />
           {size >= 24 ? (
             <G
               fill="none"
@@ -259,6 +300,16 @@ export function LogoAvatar({
   ) : (
     artwork
   );
+}
+
+const avatarPartComponents = { path: Path, ellipse: Ellipse, rect: Rect, circle: Circle };
+
+/** Shared generator geometry only maps to this fixed set of native SVG primitives. */
+function AvatarParts({ parts }: { parts: readonly OrkAvatarPart[] }) {
+  return parts.map(({ tag, props }, index) => {
+    const Component = avatarPartComponents[tag];
+    return <Component key={index} {...props} />;
+  });
 }
 
 /** Reuse the existing tap clips without allocating a second continuous clock. */

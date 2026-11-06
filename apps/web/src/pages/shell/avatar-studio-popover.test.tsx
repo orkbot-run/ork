@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
 import { DEFAULT_BOT_AVATAR_COLOR } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
@@ -72,45 +76,38 @@ async function render(value: string, avatarSet?: BotAvatarSet, key = "initial") 
   await act(async () => root.render(<Harness key={key} value={value} avatarSet={avatarSet} />));
 }
 
-describe("selectable bot icon sets", () => {
-  it("keeps a legacy appearance on open, saves a Ork switch, and restores the saved set on reload", async () => {
+describe("generator-only bot appearances", () => {
+  it("opens the generator without a legacy set or manual shape selector", async () => {
     await render("#10B981");
     await click("Customize bot avatar");
-    expect(button("Original").getAttribute("aria-selected")).toBe("true");
-    expect(document.querySelector(".orkbot-organic-avatar")).not.toBeNull();
-    expect(changed).not.toHaveBeenCalled();
-    await click("Ork");
-    expect(changed).toHaveBeenLastCalledWith("#10B981", "orkbot");
+    const tabs = [...document.querySelectorAll('[role="tab"]')].map((node) => node.textContent);
+    expect(tabs).toEqual(["Bot", "Upload"]);
     expect(document.querySelector(".orkbot-logo-avatar")).not.toBeNull();
-    await render("#10B981", "orkbot", "reload");
-    await click("Customize bot avatar");
-    expect(button("Ork").getAttribute("aria-selected")).toBe("true");
-    await click("Original");
-    expect(changed).toHaveBeenLastCalledWith("#10B981", "organic");
-    expect(document.querySelector(".orkbot-organic-avatar")).not.toBeNull();
-    expect(button("wedge")).toBeDefined();
+    expect(document.querySelector(".orkbot-organic-avatar")).toBeNull();
+    expect(document.querySelector('[aria-label="wedge"]')).toBeNull();
+    expect(changed).not.toHaveBeenCalled();
   });
 
-  it("leaves a photo intact until the user explicitly selects another set", async () => {
+  it("leaves a photo intact until an explicit reset or color selection", async () => {
     const photo = "data:image/png;base64,abc";
     await render(photo);
     expect(document.querySelector(`img[src="${photo}"]`)).not.toBeNull();
     await click("Customize bot avatar");
     expect(changed).not.toHaveBeenCalled();
     expect(document.querySelector(`img[src="${photo}"]`)).not.toBeNull();
-    await click("Ork");
-    expect(changed).toHaveBeenLastCalledWith(DEFAULT_BOT_AVATAR_COLOR, "orkbot");
+    await click("Reset");
+    expect(changed).toHaveBeenLastCalledWith(DEFAULT_BOT_AVATAR_COLOR, undefined);
     expect(document.querySelector(`img[src="${photo}"]`)).toBeNull();
+    expect(document.querySelector(".orkbot-logo-avatar")).not.toBeNull();
   });
 
-  it("keeps explicit original shapes and their chosen set while changing colour", async () => {
+  it("keeps a saved legacy value unchanged on open and saves only its new color when edited", async () => {
     await render("#8B5CF6::shape_2", "organic");
     await click("Customize bot avatar");
     expect(changed).not.toHaveBeenCalled();
+    expect(document.querySelector(".orkbot-logo-avatar")).not.toBeNull();
     await click("Color #00C972");
-    expect(changed).toHaveBeenLastCalledWith("#00C972::shape_2", undefined);
-    expect(button("Original").getAttribute("aria-selected")).toBe("true");
-    await click("Ork");
-    expect(changed).toHaveBeenLastCalledWith("#00C972", "orkbot");
+    expect(changed).toHaveBeenLastCalledWith("#00C972", undefined);
+    expect(document.querySelector('[aria-label="Icon set"]')).toBeNull();
   });
 });

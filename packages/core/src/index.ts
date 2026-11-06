@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 export * from "./action-approval.js";
 export * from "./activity-sections.js";
 export * from "./agent-import/index.js";
@@ -14,7 +20,6 @@ export * from "./avatar-motion.js";
 export * from "./avatar-shape.js";
 export * from "./barge-in.js";
 export * from "./bot-avatar-colors.js";
-export * from "./bot-avatar-shapes.js";
 export * from "./bot-mentions.js";
 export * from "./bot-messages.js";
 export * from "./bot-sections.js";

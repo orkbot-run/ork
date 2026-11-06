@@ -1,14 +1,7 @@
-import {
-  avatarEyeRects,
-  avatarIdentitySeed,
-  botEyeInk,
-  ORGANIC_AVATAR_EYES,
-  ORGANIC_AVATAR_VIEWBOX,
-  organicAvatarEyeTilt,
-  organicAvatarPath,
-  SHIPPED_BOT_AVATAR_EYES,
-  SHIPPED_BOT_AVATAR_VIEWBOX,
-} from "@orkbot/core";
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 seat layout and photo handling remain. Ork faces replace legacy geometry.
+
 import type { ReactNode } from "react";
 import { memo, useId } from "react";
 import type { ColorValue } from "react-native";
@@ -33,7 +26,8 @@ import {
   groupSeats,
   groupSeatsWidth,
 } from "../lib/group-seats";
-import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
+import { native, useResolvedAppearance } from "../lib/native";
+import { LogoAvatar } from "./logo-avatar";
 
 type SeatMember = { botId?: string; name?: string; color: string };
 
@@ -60,14 +54,13 @@ export const GroupSeats = memo(function GroupSeats({
   const id = useId().replace(/:/g, "");
   // Redraws the faint "+N" when the appearance changes.
   useResolvedAppearance();
-  const page = useMobileTokens();
   const seats = groupSeats(members);
   const step = groupSeatStep(size);
   const gap = groupSeatGap(size);
   const width = groupSeatsWidth(seats.length, size);
   const arts = seats.map((seat, index) =>
     seat.kind === "member"
-      ? seatArt(seat.member, size, `${id}-${index}`, page)
+      ? seatArt(seat.member, size, `${id}-${index}`)
       : markArt(seat, size, native.systemTertiaryLabel),
   );
   const placed = (index: number, art: SeatArt) => {
@@ -151,12 +144,7 @@ function markArt(
 }
 
 /** A still face in the member's shape: the same drawing as their avatar at rest. */
-function seatArt(
-  member: SeatMember,
-  size: number,
-  key: string,
-  page: { background: string; foreground: string },
-): SeatArt {
+function seatArt(member: SeatMember, size: number, key: string): SeatArt {
   const parsed = mobileBotAvatarPresentation(member.color);
   const r = size / 2;
   if (parsed.kind === "image" && parsed.imageUrl) {
@@ -182,43 +170,18 @@ function seatArt(
       ),
     };
   }
-  if (parsed.kind === "shape") {
-    const [x, y, units] = SHIPPED_BOT_AVATAR_VIEWBOX.split(" ").map(Number) as [
-      number,
-      number,
-      number,
-    ];
-    return {
-      box: [x, y, units],
-      outline: (paint) => <Path d={parsed.shapePath} {...paint} />,
-      face: (
-        <>
-          <Path d={parsed.shapePath} fill={parsed.color} />
-          <G fill={botEyeInk(parsed.color, page)}>
-            {avatarEyeRects(SHIPPED_BOT_AVATAR_EYES).map((rect) => (
-              <Rect key={rect.x} {...rect} />
-            ))}
-          </G>
-        </>
-      ),
-    };
-  }
   const color = parsed.kind === "color" ? parsed.color : member.color;
-  const seed = avatarIdentitySeed(member.botId ?? member.name ?? color);
-  const outline = organicAvatarPath(seed);
-  const [x, y, units] = ORGANIC_AVATAR_VIEWBOX.split(" ").map(Number) as [number, number, number];
   return {
-    box: [x, y, units],
-    outline: (paint) => <Path d={outline} {...paint} />,
+    box: [0, 0, 100],
+    outline: (paint) => <Rect width={100} height={100} rx={23} {...paint} />,
     face: (
-      <>
-        <Path d={outline} fill={color} />
-        <G transform={`rotate(${organicAvatarEyeTilt(seed)})`} fill={botEyeInk(color, page)}>
-          {avatarEyeRects(ORGANIC_AVATAR_EYES).map((rect) => (
-            <Rect key={rect.x} {...rect} />
-          ))}
-        </G>
-      </>
+      <LogoAvatar
+        color={color}
+        identity={member.botId ?? member.name ?? color}
+        size={100}
+        activity="idle"
+        motion="static"
+      />
     ),
   };
 }

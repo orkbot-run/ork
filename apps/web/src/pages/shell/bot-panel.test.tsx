@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
+
 import { i18n } from "@lingui/core";
 import type { Bot, BotAvatarSet } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/client";
@@ -110,14 +114,8 @@ vi.mock("./avatar-studio-popover", () => ({
         type="button"
         aria-label="Avatar color"
         data-color={value}
-        onClick={() => onChange(value === "blue" ? "ink" : "blue")}
-      />
-      <button
-        type="button"
-        aria-label="Avatar set"
         data-avatar-set={avatarSet}
-        data-color={value}
-        onClick={() => onChange("#F97316", avatarSet === "orkbot" ? "organic" : "orkbot")}
+        onClick={() => onChange(value === "blue" ? "ink" : "blue")}
       />
     </>
   ),
@@ -726,48 +724,33 @@ it("saves a color change back to the initial value after a successful automatic 
   expect(onSave.mock.lastCall?.[0]).toHaveProperty("color", "ink");
 });
 
-describe("BotSettings avatar set persistence", () => {
-  it("interprets a legacy missing set as Original without saving a replacement", async () => {
+describe("BotSettings generator appearance persistence", () => {
+  it("uses the generator for missing legacy metadata without saving on open", async () => {
     await render();
     expect(
-      container.querySelector('[aria-label="Avatar set"]')?.getAttribute("data-avatar-set"),
-    ).toBe("organic");
+      container.querySelector('[aria-label="Avatar color"]')?.getAttribute("data-avatar-set"),
+    ).toBe("orkbot");
+    expect(container.querySelector('[aria-label="Avatar set"]')).toBeNull();
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("saves an explicit set switch atomically with its generated colour and retains it after reload", async () => {
-    await render("Billing", { color: "#10B981" });
-    const control = () => container.querySelector<HTMLButtonElement>('[aria-label="Avatar set"]')!;
-    await act(async () => control().click());
-    expect(onSave.mock.lastCall?.[0]).toMatchObject({ avatarSet: "orkbot", color: "#F97316" });
-    expect(control().getAttribute("data-avatar-set")).toBe("orkbot");
-    await act(async () => root.unmount());
-    root = createRoot(container);
-    await render("Billing", { color: "#F97316", avatarSet: "orkbot" });
-    expect(control().getAttribute("data-avatar-set")).toBe("orkbot");
-  });
-
-  it("restores the accepted colour and set when switching fails", async () => {
+  it("restores the accepted color when an appearance edit fails", async () => {
     await render("Billing", { color: "#10B981" });
     onSave.mockRejectedValueOnce(new Error("offline"));
     await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Avatar set"]')!.click(),
+      container.querySelector<HTMLButtonElement>('[aria-label="Avatar color"]')!.click(),
     );
-    const control = container.querySelector('[aria-label="Avatar set"]')!;
-    expect(control.getAttribute("data-avatar-set")).toBe("organic");
+    const control = container.querySelector('[aria-label="Avatar color"]')!;
     expect(control.getAttribute("data-color")).toBe("#10B981");
     expect(container.textContent).toContain("offline");
   });
 
-  it("keeps a colour edit in its existing set", async () => {
+  it("saves a color edit without a removed set-selection field", async () => {
     await render("Billing", { avatarSet: "orkbot" });
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Avatar color"]')!.click(),
     );
     expect(onSave.mock.lastCall?.[0]).not.toHaveProperty("avatarSet");
-    expect(
-      container.querySelector('[aria-label="Avatar set"]')?.getAttribute("data-avatar-set"),
-    ).toBe("orkbot");
   });
 });
 

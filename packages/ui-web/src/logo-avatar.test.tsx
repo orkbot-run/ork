@@ -7,10 +7,16 @@
 import {
   BOT_COLOR_LIST,
   contrastRatio,
-  LOGO_AVATAR_SMILE_PATH,
-  LOGO_BODY_PATH,
+  logoAvatarEyeInk,
+  logoAvatarTraits,
+  ORK_AVATAR_BODY_PATHS,
+  orkAvatarAccessoryParts,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
   seededLogoAvatarColor,
 } from "@orkbot/core";
+import { tokens } from "@orkbot/ui-tokens";
+import { createElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -28,19 +34,47 @@ describe("logo-derived avatar prototype", () => {
       ).toContain(`data-color="${expected}"`);
     }
   });
-  it("renders the eye-free brand body with vector eyes and an accessible name", () => {
+  it("renders studio artwork as vectors with an accessible name", () => {
     const html = renderToString(<LogoAvatar activity="reading" label="Inbox is reading" />);
     expect(html).toContain('data-vector-body="true"');
     expect(html).not.toContain("<image");
     expect(html).not.toContain("<filter");
-    expect(html).toContain(`d="${LOGO_BODY_PATH}"`);
-    expect(html).toContain(`d="${LOGO_AVATAR_SMILE_PATH}"`);
+    const { appearance } = logoAvatarTraits("default");
+    expect(html).toContain(`d="${ORK_AVATAR_BODY_PATHS[appearance.shape]}"`);
     expect(html).toContain('class="logo-avatar-smile"');
     expect(html).not.toContain("<mask");
     expect(html).not.toContain("orange-bot.png");
     expect(html).toContain("logo-avatar-gaze");
     expect(html).toContain('role="img"');
     expect(html).toContain('aria-label="Inbox is reading"');
+  });
+
+  it("renders different studio bodies, eyes, mouths and accessories for saved bot identities", () => {
+    const bodies = new Set<string>();
+    const faces = new Set<string>();
+    for (let index = 0; index < 64; index++) {
+      const identity = `bot-${index}`;
+      const appearance = logoAvatarTraits(identity).appearance;
+      const html = renderToString(
+        <LogoAvatar identity={identity} avatarValue="#123456" motion={false} />,
+      );
+      const ink = logoAvatarEyeInk("#123456", tokens);
+      const path = ORK_AVATAR_BODY_PATHS[appearance.shape];
+      expect(html).toContain(`d="${path}"`);
+      const parts = [
+        ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, ink),
+        ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 1, ink),
+        ...orkAvatarMouthParts(appearance.mouth, ink),
+        ...orkAvatarAccessoryParts(appearance.accessory, "behind"),
+        ...orkAvatarAccessoryParts(appearance.accessory, "front"),
+      ];
+      for (const part of parts)
+        expect(html).toContain(renderToString(createElement(part.tag, part.props)));
+      bodies.add(path);
+      faces.add(JSON.stringify({ path, parts }));
+    }
+    expect(bodies.size).toBe(8);
+    expect(faces.size).toBe(64);
   });
 
   it("gives repeated avatars unique local clip and gradient references", () => {
@@ -67,9 +101,10 @@ describe("logo-derived avatar prototype", () => {
     expect(html).not.toContain("bot-avatar-body.png");
   });
 
-  it("leaves a manually selected shape intact", () => {
+  it("replaces legacy selected shapes with generator artwork", () => {
     const html = renderToString(<BotAvatar color="#8B5CF6::shape_3" avatarSet="orkbot" />);
-    expect(html).toContain("bot-character-eyes");
+    expect(html).not.toContain("bot-character-eyes");
+    expect(html).toContain("orkbot-logo-avatar");
     expect(html).not.toContain("bot-avatar-body.png");
   });
 
@@ -83,23 +118,26 @@ describe("logo-derived avatar prototype", () => {
   it("retains a supplied body colour and uses light eyes on a dark body", () => {
     const html = renderToString(<LogoAvatar identity="dark-bot" avatarValue="#101014" />);
     expect(html).toContain('data-color="#101014"');
-    const eyeInk = html.match(
-      /<linearGradient[^>]*id="logo-eye[^>]*>[\s\S]*?stop-color="([^"]+)"/,
-    )?.[1];
-    expect(eyeInk).toBeDefined();
-    expect(contrastRatio("#101014", eyeInk!)).toBeGreaterThanOrEqual(3);
+    const eyeInk = logoAvatarEyeInk("#101014", tokens);
+    expect(contrastRatio("#101014", eyeInk)).toBeGreaterThanOrEqual(3);
+    const appearance = logoAvatarTraits("dark-bot").appearance;
+    for (const part of orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, eyeInk)) {
+      expect(html).toContain(renderToString(createElement(part.tag, part.props)));
+    }
     expect(html).toContain("radialGradient");
     expect(html).not.toContain("feColorMatrix");
   });
 
   it.each(BOT_COLOR_LIST)("keeps $name eyes legible", ({ hex }) => {
     const html = renderToString(<LogoAvatar identity="contrast-sample" avatarValue={hex} />);
-    const eyeInk = html.match(
-      /<linearGradient[^>]*id="logo-eye[^>]*>[\s\S]*?stop-color="([^"]+)"/,
-    )?.[1];
-    expect(eyeInk).toBeDefined();
-    expect(contrastRatio(hex, eyeInk!)).toBeGreaterThanOrEqual(3);
-    const smileInk = html.match(/class="logo-avatar-smile"[^>]*stroke="([^"]+)"/)?.[1];
-    expect(smileInk).toBe(eyeInk);
+    const eyeInk = logoAvatarEyeInk(hex, tokens);
+    expect(contrastRatio(hex, eyeInk)).toBeGreaterThanOrEqual(3);
+    const appearance = logoAvatarTraits("contrast-sample").appearance;
+    for (const part of [
+      ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, eyeInk),
+      ...orkAvatarMouthParts(appearance.mouth, eyeInk),
+    ]) {
+      expect(html).toContain(renderToString(createElement(part.tag, part.props)));
+    }
   });
 });

@@ -1010,6 +1010,11 @@ msgstr ""
 msgid "Available to shell commands as {commandVariable}"
 msgstr "Disponível para os comandos de shell como {commandVariable}"
 
+#. placeholder {0}: index + 1
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Avatar {0}"
+msgstr "Avatar {0}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "Estúdio de avatar"
@@ -1126,10 +1131,6 @@ msgstr "Tela do bot"
 #: src/pages/shell/computer-panel.tsx
 msgid "Bot screen preview"
 msgstr "Pré-visualização da tela"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Bot style"
-msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Bot's model"
@@ -1386,8 +1387,8 @@ msgid "Checking…"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Choose a bot shape, color, or upload an image"
-msgstr "Escolha uma forma e cor do bot, ou envie uma imagem"
+msgid "Choose a bot color or upload an image"
+msgstr "Escolha uma cor para o bot ou envie uma imagem"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
@@ -2450,10 +2451,6 @@ msgstr "Não foi possível carregar esta página. Tente novamente."
 msgid "Couldn't load your wallet"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update bot style"
-msgstr ""
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr ""
@@ -2617,7 +2614,6 @@ msgstr ""
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Default"
 msgstr "Padrão"
 
@@ -3496,10 +3492,6 @@ msgstr ""
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Eu terminei."
-
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Icon set"
-msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4745,19 +4737,9 @@ msgstr "Organização"
 msgid "Organization API key"
 msgstr "Chave da API da organização"
 
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Original"
-msgstr ""
-
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "Mensagem original indisponível"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
 
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
@@ -5873,14 +5855,8 @@ msgid "Setup help"
 msgstr "Ajuda"
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Shape"
 msgstr "Forma"
-
-#. placeholder {0}: index + 1
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Shape {0}"
-msgstr ""
 
 #: src/components/pages/PagesList.tsx
 #: src/components/pages/SharePopover.tsx

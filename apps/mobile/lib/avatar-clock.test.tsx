@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tap-clock regression coverage remains. Removed original-avatar scheduling is no longer tested.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -69,6 +73,8 @@ vi.mock("react-native-reanimated", () => {
       return onUI(worklet);
     },
     useReducedMotion: () => false,
+    useDerivedValue: (worklet: () => unknown) => ({ value: onUI(worklet) }),
+    withRepeat: (value: unknown) => value,
     useSharedValue: (value: unknown) => useState(() => new Shared(value))[0],
     withSpring: (value: unknown) => value,
     withTiming: (to: number, config?: { duration?: number }) => ({
@@ -80,7 +86,19 @@ vi.mock("react-native-reanimated", () => {
 });
 vi.mock("react-native-svg", () => {
   const element = ({ children }: { children?: ReactNode }) => createElement("div", null, children);
-  return { default: element, Ellipse: element, G: element, Path: element, Rect: element };
+  return {
+    default: element,
+    Circle: element,
+    Ellipse: element,
+    G: element,
+    Path: element,
+    Rect: element,
+    ClipPath: element,
+    Defs: element,
+    LinearGradient: element,
+    RadialGradient: element,
+    Stop: element,
+  };
 });
 vi.mock("react-native", () => ({
   View: ({ children }: { children?: ReactNode }) => createElement("div", null, children),
@@ -92,7 +110,14 @@ vi.mock("react-native", () => ({
 vi.mock("../components/native-symbol", () => ({ NativeSymbol: () => null }));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
 vi.mock("./native", () => ({
-  useMobileTokens: () => ({ mutedForeground: "#888", background: "#FFF", workingDot: "#3FA266" }),
+  useMobileTokens: () => ({
+    mutedForeground: "#888",
+    background: "#FFF",
+    foreground: "#141414",
+    sidebar: "#EEE",
+    border: "#CCC",
+    workingDot: "#3FA266",
+  }),
 }));
 
 const bot = { id: "bot-1", color: "#2A92FE::shape_2", status: "running" };
@@ -109,7 +134,7 @@ function body([from, to]: readonly [number, number]) {
   throw new Error("no body style");
 }
 
-describe("the activity mark's clock", () => {
+describe("the Ork activity mark's independent tap clock", () => {
   const roots: Root[] = [];
   beforeEach(() => {
     vi.useFakeTimers();
@@ -150,21 +175,4 @@ describe("the activity mark's clock", () => {
       expect(body(tapped.styles).rotate).toBeCloseTo(body(still.styles).rotate);
     },
   );
-
-  it.each([
-    ["sees running animations move", true],
-    ["only sees what it last wrote", false],
-  ])("keeps playing clips across timeline rebuilds when the JS thread %s", (_, jsSeesFrames) => {
-    thread.jsSeesFrames = jsSeesFrames;
-    const mark = mount();
-    // Long enough for the timeline to be rebuilt more than once.
-    act(() => vi.advanceTimersByTime(400_000));
-    const poses = new Set<string>();
-    for (let step = 0; step < 50; step += 1) {
-      act(() => vi.advanceTimersByTime(100));
-      const { rotate, translateY } = body(mark.styles);
-      poses.add(`${rotate.toFixed(2)} ${translateY.toFixed(4)}`);
-    }
-    expect(poses.size).toBeGreaterThan(5);
-  });
 });

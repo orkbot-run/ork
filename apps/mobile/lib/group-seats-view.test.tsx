@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 seat checks remain. Ork renderer coverage follows LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -42,6 +46,15 @@ vi.mock("react-native-svg", () => {
     Text: element("Text"),
   };
 });
+vi.mock("../components/logo-avatar", () => ({
+  LogoAvatar: (props: Record<string, unknown>) =>
+    createElement("ork-avatar", {
+      "data-identity": props.identity,
+      "data-color": props.color,
+      "data-activity": props.activity,
+      "data-motion": props.motion,
+    }),
+}));
 vi.mock("../lib/native", () => ({
   native: { systemTertiaryLabel: "tertiary", fill: "fill" },
   useResolvedAppearance: () => "light",
@@ -128,21 +141,24 @@ describe("GroupSeats", () => {
     expect(seats[0]!.querySelector("svg-path")!.getAttribute("data-stroke")).toBe("tertiary");
   });
 
-  it("gives a drawn face the same eye ink as the bot's own avatar", () => {
-    act(() =>
-      root.render(
-        <GroupSeats
-          members={[
-            { botId: "bot-a", name: "A", color: "#3EC5A8" },
-            { botId: "bot-b", name: "B", color: "#F5A03C" },
-          ]}
-        />,
+  it("reuses the generator renderer for member identities and saved legacy colours", () => {
+    const { svg } = render(3);
+    const avatars = [...svg.querySelectorAll("ork-avatar")];
+    expect(avatars.map((avatar) => avatar.getAttribute("data-identity"))).toEqual([
+      "bot-0",
+      "bot-1",
+      "bot-2",
+    ]);
+    expect(
+      avatars.every(
+        (avatar) =>
+          avatar.getAttribute("data-activity") === "idle" &&
+          avatar.getAttribute("data-motion") === "static",
       ),
-    );
-    const eyes = Array.from(container.querySelectorAll("svg-g[data-fill]"), (group) =>
-      group.getAttribute("data-fill"),
-    );
-    // Both bodies are pale, so their eyes stay dark on a light page, as on the bot's own avatar.
-    expect(eyes).toEqual(["#141414", "#141414"]);
+    ).toBe(true);
+    expect(
+      avatars.every((avatar) => !avatar.getAttribute("data-color")!.includes("::shape_")),
+    ).toBe(true);
+    expect(svg.querySelector("svg-path[data-d^='M228']")).toBeNull();
   });
 });

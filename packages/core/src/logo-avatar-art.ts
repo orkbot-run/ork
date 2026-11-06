@@ -8,17 +8,31 @@ import { botEyeColor } from "@orkbot/ui-tokens";
 import type { AvatarEyes } from "./avatar-shape.js";
 import { contrastRatio } from "./bot-avatar-colors.js";
 
+export type { AvatarPart as OrkAvatarPart } from "@orkbot/avatar/art";
+export {
+  AVATAR_BODY_PATHS as ORK_AVATAR_BODY_PATHS,
+  AVATAR_SATELLITES as ORK_AVATAR_SATELLITES,
+  accessoryParts as orkAvatarAccessoryParts,
+  cheekParts as orkAvatarCheekParts,
+  eyeParts as orkAvatarEyeParts,
+  mouthParts as orkAvatarMouthParts,
+} from "@orkbot/avatar/art";
+
 export const LOGO_AVATAR_VIEWBOX = "0 0 100 100";
 
 /** The body and face share the existing animation plate offset. */
 export const LOGO_AVATAR_BODY_Y = 9;
 
+/** Fit the studio's complete 600-unit artwork, including accessories, onto the motion plate. */
+export const LOGO_AVATAR_ART_SCALE = 0.2;
+export const LOGO_AVATAR_ART_TRANSFORM = "translate(-10 -17.4) scale(0.2)";
+
 /** Oval eyes in the body's own coordinates. */
 export const LOGO_AVATAR_EYES: AvatarEyes = {
-  width: 6.45,
-  height: 11.61,
-  leftCx: 37.96,
-  rightCx: 62.04,
+  width: 6,
+  height: 10.8,
+  leftCx: 38.8,
+  rightCx: 61.2,
   cy: 43,
 };
 
@@ -35,20 +49,6 @@ export function logoAvatarEyeInk(
     score(ink) > score(best) ? ink : best,
   );
 }
-
-/** Supplied Ork/Nunu contour, normalized to the shared animation plate. */
-export const LOGO_BODY_PATH =
-  "M33.23 1.505Q36.67-1.72 38.39 2.795L40.325 9.46Q41.185 11.825 43.98 10.965Q50 9.89 56.02 10.965Q59.03 12.04 59.89 9.46L61.825 2.795Q63.33-1.72 66.985 1.29C82.25 10.965 89.13 26.23 88.27 43C88.055 67.295 72.575 82.775 50.43 83.635C27.21 83.635 11.3 67.94 11.73 43.43C11.3 26.445 18.61 11.825 33.23 1.505Z";
-
-export const LOGO_AVATAR_SMILE_STROKE = 2.365;
-
-/** Native worklets move the smile with the same gaze frame as the eyes. */
-export function logoAvatarSmilePath(x = 0, y = 0): string {
-  "worklet";
-  return `M${45.27 + x} ${55.685 + y}Q${50 + x} ${60.63 + y} ${54.73 + x} ${55.685 + y}`;
-}
-
-export const LOGO_AVATAR_SMILE_PATH = logoAvatarSmilePath();
 
 /** Clay shading keeps every bot's saved identity color as its base. */
 export function logoAvatarPaint(hex: string) {
@@ -73,5 +73,6 @@ export function logoAvatarPaint(hex: string) {
 export const LOGO_AVATAR_LIGHTING = {
   body: { x1: "12%", y1: "5%", x2: "86%", y2: "100%" },
   crown: { cx: "28%", cy: "18%", r: "72%", peak: 0.2, shoulder: 0.06 },
-  shine: { path: "M25.92 25.585Q30.865 15.05 41.185 12.04", width: 4.945, opacity: 0.4 },
+  satellite: { cx: "28%", cy: "22%", r: "90%" },
+  shine: { path: "M188 221Q211 172 259 158", width: 23, opacity: 0.4 },
 } as const;

@@ -7,15 +7,20 @@
 // @vitest-environment jsdom
 
 import {
-  avatarIdentitySeed,
+  LOGO_AVATAR_ART_SCALE,
+  LOGO_AVATAR_ART_TRANSFORM,
   LOGO_AVATAR_BODY_Y,
-  LOGO_AVATAR_EYES,
-  LOGO_BODY_PATH,
+  LOGO_AVATAR_LIGHTING,
+  logoAvatarEyeInk,
   logoAvatarFrame,
   logoAvatarTraits,
-  organicAvatarPath,
+  ORK_AVATAR_BODY_PATHS,
+  ORK_AVATAR_SATELLITES,
+  orkAvatarAccessoryParts,
+  orkAvatarCheekParts,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
   seededLogoAvatarColor,
-  shippedBotAvatarShapePath,
 } from "@orkbot/core";
 import type { ColorTokens } from "@orkbot/ui-tokens";
 import { tokensForAppearance } from "@orkbot/ui-tokens";
@@ -88,7 +93,7 @@ vi.mock("react-native-reanimated", () => {
     withSpring: (value: unknown) => value,
     useAnimatedProps: (sample: () => Record<string, unknown>) => {
       nativeProps.push(sample);
-      return {};
+      return { __sample: sample };
     },
     useDerivedValue: (sample: () => unknown) => ({ value: sample() }),
     useAnimatedStyle: (sample: () => { transform: unknown[] }) => {
@@ -118,6 +123,10 @@ vi.mock("react-native-svg", () => {
       fill?: string;
       stopColor?: string;
       offset?: number | string;
+      id?: string;
+      stroke?: string;
+      transform?: string;
+      animatedProps?: { __sample: () => Record<string, unknown> };
     }) =>
       createElement(
         tag,
@@ -127,11 +136,17 @@ vi.mock("react-native-svg", () => {
           "data-stop-color": props.stopColor,
           "data-offset": props.offset,
           "data-offset-type": typeof props.offset,
+          "data-id": props.id,
+          "data-stroke": props.stroke,
+          "data-transform": props.transform,
+          "data-svg-props": JSON.stringify(props),
+          "data-matrix": JSON.stringify(props.animatedProps?.__sample().matrix),
         },
         children,
       );
   return {
     default: element("svg"),
+    Circle: element("circle"),
     Ellipse: element("ellipse"),
     G: element("g"),
     Path: element("path"),
@@ -169,12 +184,9 @@ describe("BotAvatar", () => {
       botId: "bot-1",
       run: { id: "native-run", botId: "bot-1", status: "running", trigger: "user" },
     });
-    render("#10B981", "orkbot");
-    const latestEye = () =>
-      nativeProps
-        .map((sample) => sample())
-        .filter((props) => typeof props.cx === "number")
-        .slice(-2)[0]!;
+    const view = render("#10B981", "orkbot");
+    const latestEye = (): number[] =>
+      JSON.parse(view.querySelector('g[data-id^="eyes-"]')!.getAttribute("data-matrix")!);
     const send = (seq: number, thinking: boolean) =>
       act(() =>
         mobileLogoAvatarActivity.apply("native-test", {
@@ -188,15 +200,13 @@ describe("BotAvatar", () => {
       );
     send(1, true);
     const frame = logoAvatarFrame("thinking", logoAvatarTraits("bot-1", "#10B981"), 0, true);
-    expect(latestEye()).toMatchObject({
-      cx: LOGO_AVATAR_EYES.leftCx + frame.eyeX,
-      cy: LOGO_AVATAR_EYES.cy + LOGO_AVATAR_BODY_Y + frame.eyeY,
-    });
+    const matrix = latestEye();
+    const lid = frame.lid * frame.blink;
+    expect(matrix[3]).toBe(lid);
+    expect(matrix[4]! * LOGO_AVATAR_ART_SCALE).toBe(frame.eyeX);
+    expect((matrix[5]! - 302 * (1 - lid)) * LOGO_AVATAR_ART_SCALE).toBeCloseTo(frame.eyeY);
     send(2, false);
-    expect(latestEye()).toMatchObject({
-      cx: LOGO_AVATAR_EYES.leftCx,
-      cy: LOGO_AVATAR_EYES.cy + LOGO_AVATAR_BODY_Y,
-    });
+    expect(latestEye()).toEqual([1, 0, 0, 1, 0, 0]);
   });
 
   it("uses the same shared seed colour as SSR for a bot without a saved colour", () => {
@@ -228,6 +238,8 @@ describe("BotAvatar", () => {
     props: Partial<BotAvatarProps> = {},
     focused = true,
   ) {
+    act(() => root?.unmount());
+    container?.remove();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     container = document.createElement("div");
     document.body.append(container);
@@ -309,17 +321,17 @@ describe("BotAvatar", () => {
     expect(nativeMotion.timings.filter((ms) => ms > 0 && ms < 1000)).toEqual([]);
   });
 
-  it("draws a plain-colour bot with the organic body for its identity", () => {
-    const view = render("#3EC5A8");
-    expect(bodies(view)).toEqual([organicAvatarPath(avatarIdentitySeed("bot-1"))]);
-    // A pale body keeps dark eyes on a light page, the same as a group title's still faces.
-    expect(Array.from(view.querySelectorAll("rect"), (eye) => eye.dataset.fill)).toEqual([
-      "#141414",
-      "#141414",
-    ]);
-    expect(view.querySelector("img")).toBeNull();
-    expect(view.querySelector("ellipse")).toBeNull();
-  });
+  it.each([undefined, "organic", "orkbot"] as const)(
+    "draws every non-photo bot with the Ork generator, including saved set %s",
+    (avatarSet) => {
+      const view = render("#3EC5A8", avatarSet);
+      expect(bodies(view)).toContain(
+        ORK_AVATAR_BODY_PATHS[logoAvatarTraits("bot-1", "#3EC5A8").appearance.shape],
+      );
+      expect(view.querySelector('g[data-id^="eyes-"]')).not.toBeNull();
+      expect(view.querySelector("img")).toBeNull();
+    },
+  );
 
   it("keeps a picture", () => {
     const view = render("data:image/png;base64,abc");
@@ -327,19 +339,20 @@ describe("BotAvatar", () => {
     expect(bodies(view)).toEqual([]);
   });
 
-  it("keeps a shape picked in Avatar Studio", () => {
-    const view = render("#8B5CF6::shape_3");
-    expect(bodies(view)).toEqual([shippedBotAvatarShapePath(3)]);
-    // Studio shapes wear the same bar eyes as organic bodies.
-    expect(view.querySelectorAll("rect")).toHaveLength(2);
-    expect(view.querySelector("ellipse")).toBeNull();
+  it("keeps a legacy shape's saved colour while drawing the Ork generator body", () => {
+    const view = render("#123456::shape_3");
+    expect(bodies(view)).toContain(
+      ORK_AVATAR_BODY_PATHS[logoAvatarTraits("bot-1", "#123456").appearance.shape],
+    );
+    expect(view.querySelector('stop[data-stop-color="#123456"]')).not.toBeNull();
   });
   it("draws the explicitly selected Ork set as paths and gradients without a raster image", () => {
     const view = render("#3EC5A8", "orkbot");
-    expect(bodies(view)).toContain(LOGO_BODY_PATH);
-    expect(bodies(view)).not.toContain(organicAvatarPath(avatarIdentitySeed("bot-1")));
+    expect(bodies(view)).toContain(
+      ORK_AVATAR_BODY_PATHS[logoAvatarTraits("bot-1", "#3EC5A8").appearance.shape],
+    );
     expect(view.querySelector("img, image")).toBeNull();
-    expect(view.querySelectorAll("ellipse")).toHaveLength(2);
+    expect(view.querySelector('g[data-id^="eyes-"]')).not.toBeNull();
     expect(view.querySelector("radialGradient")).not.toBeNull();
   });
 
@@ -357,36 +370,112 @@ describe("BotAvatar", () => {
     ]);
   });
 
+  it("renders the generator's varied bodies, faces and accessories as the same native primitives", () => {
+    const coverage = {
+      shape: new Set<string>(),
+      eyes: new Set<string>(),
+      mouth: new Set<string>(),
+      accessory: new Set<string>(),
+      satellites: new Set<number>(),
+      shine: new Set<boolean>(),
+      cheeks: new Set<boolean>(),
+    };
+    for (let index = 0; index < 96; index++) {
+      const identity = `native-variant-${index}`;
+      const traits = logoAvatarTraits(identity, "#3EC5A8");
+      const appearance = traits.appearance;
+      const view = render("#3EC5A8", "orkbot", { identity });
+      const ink = logoAvatarEyeInk(traits.color, { background: "#FFF", foreground: "#141414" });
+      const expectedParts = [
+        ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, ink),
+        ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 1, ink),
+        ...orkAvatarMouthParts(appearance.mouth, ink),
+        ...orkAvatarAccessoryParts(appearance.accessory, "behind"),
+        ...orkAvatarAccessoryParts(appearance.accessory, "front"),
+        ...(appearance.cheeks ? orkAvatarCheekParts() : []),
+      ];
+      const actualParts = Array.from(
+        view.querySelectorAll("path, ellipse, rect, circle"),
+        (part) => ({
+          tag: part.tagName.toLowerCase(),
+          props: JSON.parse(part.getAttribute("data-svg-props")!),
+        }),
+      );
+      for (const part of expectedParts)
+        expect(actualParts).toContainEqual({
+          tag: part.tag,
+          props: expect.objectContaining(part.props),
+        });
+      expect(
+        bodies(view).filter((path) => path === ORK_AVATAR_BODY_PATHS[appearance.shape]),
+      ).toHaveLength(3);
+      expect(bodies(view).includes(LOGO_AVATAR_LIGHTING.shine.path)).toBe(appearance.shine);
+      const art = view.querySelector(`g[data-transform="${LOGO_AVATAR_ART_TRANSFORM}"]`)!;
+      expect(art.parentElement?.getAttribute("data-transform")).toBe(
+        `translate(0 ${LOGO_AVATAR_BODY_Y})`,
+      );
+      const satellites = actualParts.filter(
+        (part) => part.tag === "circle" && String(part.props.fill).startsWith("url(#satellite-"),
+      );
+      expect(satellites.map(({ props }) => [props.cx, props.cy, props.r])).toEqual(
+        ORK_AVATAR_SATELLITES.slice(0, appearance.satellites),
+      );
+      expect(view.querySelector("img, image, webview, foreignObject")).toBeNull();
+      for (const key of ["shape", "eyes", "mouth", "accessory"] as const)
+        coverage[key].add(appearance[key]);
+      coverage.satellites.add(appearance.satellites);
+      coverage.shine.add(appearance.shine);
+      coverage.cheeks.add(appearance.cheeks);
+    }
+    expect([...coverage.shape].sort()).toEqual(Object.keys(ORK_AVATAR_BODY_PATHS).sort());
+    expect(coverage.eyes.size).toBe(7);
+    expect(coverage.mouth.size).toBe(7);
+    expect(coverage.accessory.size).toBe(9);
+    expect([...coverage.satellites].sort()).toEqual([0, 1, 2, 3, 4]);
+    expect([...coverage.shine].sort()).toEqual([false, true]);
+    expect([...coverage.cheeks].sort()).toEqual([false, true]);
+  });
+
   it("keeps a custom picture when the stored set is Ork", () => {
     const view = render("data:image/png;base64,abc", "orkbot");
     expect(view.querySelector("img")?.getAttribute("src")).toBe("data:image/png;base64,abc");
     expect(bodies(view)).toEqual([]);
   });
 
-  it("keeps an explicitly selected original shape when the stored set is Ork", () => {
-    const view = render("#8B5CF6::shape_3", "orkbot");
-    expect(bodies(view)).toEqual([shippedBotAvatarShapePath(3)]);
-  });
-  it("updates native SVG hosts with finite six-value matrices and numeric eye props", () => {
-    render("#3EC5A8", "orkbot");
+  it.each([
+    "idle",
+    "working",
+    "reading",
+    "writing",
+    "thinking",
+    "computer",
+    "waiting",
+    "error",
+  ] as const)("updates varied native face geometry with finite matrices while %s", (activity) => {
+    render("#3EC5A8", "orkbot", { activity });
     const updates = nativeProps.map((sample) => sample());
     const matrices = updates.flatMap((update) =>
       Array.isArray(update.matrix) ? [update.matrix] : [],
     );
-    expect(matrices).toHaveLength(5);
+    expect(matrices).toHaveLength(7);
     for (const matrix of matrices) {
       expect(matrix).toHaveLength(6);
       expect(matrix.every(Number.isFinite)).toBe(true);
     }
-    expect(updates.filter((update) => "cx" in update)).toHaveLength(2);
+    expect(updates.filter((update) => "cx" in update)).toHaveLength(0);
     expect(updates.every((update) => !("transform" in update))).toBe(true);
   });
 
   it("keeps eyes legible on a saved dark body in the light theme", () => {
     const view = render("#101014", "orkbot");
-    expect(
-      Array.from(view.querySelectorAll("ellipse"), (eye) => eye.getAttribute("data-fill")),
-    ).toEqual(["#FFF", "#FFF"]);
+    const eyes = view.querySelector('g[data-id^="eyes-"]')!;
+    const ink = Array.from(eyes.querySelectorAll("path, ellipse, circle, rect"), (eye) =>
+      eye.getAttribute("data-fill") === "none"
+        ? eye.getAttribute("data-stroke")
+        : eye.getAttribute("data-fill"),
+    );
+    expect(ink.length).toBeGreaterThanOrEqual(2);
+    expect(ink.every((color) => color === "#FFF")).toBe(true);
   });
 
   it.each([

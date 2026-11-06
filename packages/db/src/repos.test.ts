@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import type { Actor } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
@@ -49,7 +55,7 @@ function reposFor(memoryScope: string | null) {
 
 describe("createRepos.listBots", () => {
   it.each([undefined, "organic", "orkbot"])(
-    "preserves appearance metadata on reload (set=%s)",
+    "normalizes legacy sets on reload without changing identity or saved colors (set=%s)",
     async (avatarSet) => {
       const rows = ["#8B5CF6", "#8B5CF6::shape_3", "data:image/png;base64,aGVsbG8="].map(
         (color, index) => ({ ...baseBot, id: `bot-${index}`, color, avatarSet }),
@@ -62,9 +68,7 @@ describe("createRepos.listBots", () => {
       const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
       expect(
         bots.map((bot) => ({ id: bot.id, color: bot.color, avatarSet: bot.avatarSet })),
-      ).toEqual(
-        rows.map((row) => ({ id: row.id, color: row.color, avatarSet: avatarSet ?? "organic" })),
-      );
+      ).toEqual(rows.map((row) => ({ id: row.id, color: row.color, avatarSet: "orkbot" })));
     },
   );
 
@@ -485,7 +489,7 @@ describe("createRepos.listSpaceBotsForSpaces", () => {
         name: "Support",
         title: "",
         color: "#123456",
-        avatarSet: "organic",
+        avatarSet: "orkbot",
         notifyOnFinish: false,
         pinned: true,
         sectionId: null,

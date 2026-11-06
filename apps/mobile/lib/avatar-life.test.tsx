@@ -1,14 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 badge, viewport and activity checks remain. Ork motion replaces legacy faces.
+
 // @vitest-environment jsdom
 
-import {
-  AVATAR_CLIP_POOLS,
-  AVATAR_POKES,
-  AVATAR_STILL_MAX_SIZE,
-  avatarClip,
-  avatarClipPose,
-  avatarFrame,
-  avatarPokeFrame,
-} from "@orkbot/core";
+import { AVATAR_POKES, avatarPokeFrame } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { act, createElement, useRef } from "react";
 import type { Root } from "react-dom/client";
@@ -26,9 +22,7 @@ import {
   AvatarRow,
   AvatarScreenFocus,
   AvatarViewportScope,
-  AWAKE_MS,
   createAvatarViewport,
-  MORPH_SPRING,
 } from "./avatar-life";
 
 const CLOCK_MS = 24 * 60 * 60 * 1000;
@@ -62,6 +56,8 @@ vi.mock("react-native-reanimated", () => {
     useAnimatedProps: (worklet: () => unknown) => worklet(),
     useAnimatedStyle: (worklet: () => unknown) => worklet(),
     useReducedMotion: () => motion.reducedMotion,
+    useDerivedValue: (worklet: () => unknown) => ({ value: worklet() }),
+    withRepeat: (value: unknown) => value,
     useSharedValue: <T,>(value: T) => useRef({ value }).current,
     withSpring: (value: unknown, config?: Record<string, number>) => {
       motion.springs.push([value, config]);
@@ -74,9 +70,28 @@ vi.mock("react-native-reanimated", () => {
   };
 });
 vi.mock("react-native-svg", () => {
-  const element = ({ children, fill }: { children?: ReactNode; fill?: string }) =>
-    createElement("div", { "data-fill": fill }, children);
-  return { default: element, Ellipse: element, G: element, Path: element, Rect: element };
+  const element = ({
+    children,
+    fill,
+    stopColor,
+  }: {
+    children?: ReactNode;
+    fill?: string;
+    stopColor?: string;
+  }) => createElement("div", { "data-fill": fill, "data-stop-color": stopColor }, children);
+  return {
+    default: element,
+    Circle: element,
+    Ellipse: element,
+    G: element,
+    Path: element,
+    Rect: element,
+    ClipPath: element,
+    Defs: element,
+    LinearGradient: element,
+    RadialGradient: element,
+    Stop: element,
+  };
 });
 vi.mock("react-native", () => ({
   View: ({
@@ -107,6 +122,9 @@ vi.mock("../components/native-symbol", () => ({ NativeSymbol: () => null }));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
 vi.mock("./native", () => ({
   useMobileTokens: () => ({
+    foreground: "#141414",
+    sidebar: "#EEE",
+    border: "#CCC",
     mutedForeground: "#888",
     background: "#FFF",
     workingDot: "#3FA266",
@@ -138,168 +156,66 @@ describe("avatar motion on mobile", () => {
   });
   const render = (node: ReactNode) => act(() => root.render(node));
   const wait = (ms: number) => act(() => vi.advanceTimersByTime(ms));
-  const clockStarted = () => motion.timings.some(([, duration]) => duration === CLOCK_MS);
-  /** The last wake-up target: 1 moving, 0 still or only blinking. */
-  const awake = () =>
-    motion.timings
-      .filter(([target, duration]) => duration === AWAKE_MS && (target === 0 || target === 1))
-      .at(-1)?.[0];
+  const clockStarted = () => motion.timings.some(([, duration]) => duration === 24_000);
   const workingDot = () => container.querySelector('[aria-label="Working"]');
 
-  it("keeps a resting inbox avatar a still picture: no clock, no blink", () => {
+  it("keeps resting inbox avatars static and runs the Ork clock while busy", () => {
     render(<BotAvatar color={SHAPE} identity="bot-1" size={62} motion="lazy" />);
     wait(30_000);
     expect(clockStarted()).toBe(false);
-  });
-
-  it.each([
-    ["a shipped shape", SHAPE],
-    ["an organic avatar", "#FF781C"],
-  ] as const)("plays %s's working clips in the inbox while its bot works", (_, color) => {
-    render(<BotAvatar color={color} identity="bot-1" size={62} status="running" motion="lazy" />);
+    render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="running" motion="lazy" />);
     expect(clockStarted()).toBe(true);
-    expect(awake()).toBe(1);
+    const cancelled = motion.cancelled;
+    render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="completed" motion="lazy" />);
+    expect(motion.cancelled).toBeGreaterThan(cancelled);
   });
 
-  it("keeps every other avatar still, even while its bot works, and keeps the working dot", () => {
+  it("keeps a static busy avatar still and displays its working badge", () => {
     render(<BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" />);
     wait(30_000);
     expect(clockStarted()).toBe(false);
     expect(workingDot()).not.toBeNull();
   });
 
-  it("draws the working dot as a green disc ringed in the surface colour, sized for the avatar", () => {
+  it("draws the working badge in the surface colour at the avatar's size", () => {
     render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="running" motion="lazy" />);
     expect(workingDot()?.getAttribute("data-bg")).toBe("#3FA266");
     expect(workingDot()?.getAttribute("data-ring")).toBe("#FFF");
     expect(Number(workingDot()?.getAttribute("data-width"))).toBeCloseTo(12 + 2 * 62 * 0.046);
-    render(<BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" />);
-    expect(Number(workingDot()?.getAttribute("data-width"))).toBeCloseTo(10 + 2 * 28 * 0.046);
   });
 
-  it("rests a bot waiting on you: no motion, no working dot", () => {
-    render(
-      <BotAvatar color={SHAPE} identity="bot-1" size={62} status="waiting_input" motion="lazy" />,
-    );
-    expect(clockStarted()).toBe(false);
-    expect(workingDot()).toBeNull();
-  });
-
-  it("turns into the typing dots while the bot writes its reply, and back into its face after", () => {
-    render(
-      <BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" motion="running" />,
-    );
-    expect(motion.springs.at(-1)?.[0]).toBe(0);
-    render(
-      <BotAvatar
-        color={SHAPE}
-        identity="bot-1"
-        size={28}
-        status="running"
-        motion="running"
-        composing
-      />,
-    );
-    expect(motion.springs.at(-1)).toEqual([1, MORPH_SPRING]);
-    render(
-      <BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" motion="running" />,
-    );
-    expect(motion.springs.at(-1)).toEqual([0, MORPH_SPRING]);
-  });
-
-  it("drops the chat header's working dot while the bot writes, and keeps it a still picture", () => {
+  it("leaves the working badge off writing and activity avatars", () => {
     render(<BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" composing />);
     expect(workingDot()).toBeNull();
-    expect(clockStarted()).toBe(false);
-    expect(motion.springs.at(-1)?.[0]).toBe(0);
-  });
-
-  it("leaves the working dot off the chat's working avatar, which is the sign itself", () => {
     render(
       <BotAvatar color={SHAPE} identity="bot-1" size={28} status="running" motion="running" />,
     );
     expect(workingDot()).toBeNull();
-    render(
-      <BotAvatar
-        color={SHAPE}
-        identity="bot-1"
-        size={28}
-        status="running"
-        motion="running"
-        composing
-      />,
-    );
-    expect(workingDot()).toBeNull();
   });
 
-  it("lets the call card blink at rest, without moving", () => {
-    render(<BotAvatar color={SHAPE} identity="bot-1" size={28} motion="live" />);
-    expect(clockStarted()).toBe(true);
-    expect(awake()).toBe(0);
-  });
-
-  it("only blinks a busy avatar under Reduce Motion", () => {
-    motion.reducedMotion = true;
-    render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="running" motion="lazy" />);
-    expect(clockStarted()).toBe(true);
-    expect(awake()).toBe(0);
-  });
-
-  it("keeps a writing bot's face under Reduce Motion instead of turning it into moving dots", () => {
-    motion.reducedMotion = true;
-    render(
-      <BotAvatar
-        color={SHAPE}
-        identity="bot-1"
-        size={28}
-        status="running"
-        motion="running"
-        composing
-      />,
-    );
-    expect(awake()).toBe(0);
-    expect(motion.springs).not.toContainEqual([1, MORPH_SPRING]);
-    expect(motion.springs.at(-1)?.[0]).toBe(0);
-  });
-
-  it("holds a photo's place with a plain circle while the photo loads", () => {
-    render(<BotAvatar color="data:image/png;base64,AAAA" identity="bot-p" size={28} />);
-    const circle = container.querySelector('[data-bg="#EEE"]');
-    expect(circle?.getAttribute("data-width")).toBe("28");
-  });
-
-  it("keeps tiny and photo avatars still", () => {
-    render(
-      <>
+  it.each(["reduced", "tiny", "photo"])(
+    "does not allocate the continuous Ork clock for %s",
+    (condition) => {
+      motion.reducedMotion = condition === "reduced";
+      render(
         <BotAvatar
-          color={SHAPE}
+          color={condition === "photo" ? "data:image/png;base64,AAAA" : SHAPE}
           identity="bot-1"
-          size={AVATAR_STILL_MAX_SIZE}
+          size={condition === "tiny" ? 23 : 62}
           status="running"
           motion="lazy"
-        />
-        <BotAvatar
-          color="data:image/png;base64,AAAA"
-          identity="bot-2"
-          size={62}
-          status="running"
-          motion="lazy"
-        />
-      </>,
-    );
-    expect(clockStarted()).toBe(false);
+        />,
+      );
+      expect(clockStarted()).toBe(false);
+    },
+  );
+
+  it("holds a photo's place with a plain circle while it loads", () => {
+    render(<BotAvatar color="data:image/png;base64,AAAA" identity="bot-p" size={28} />);
+    expect(container.querySelector('[data-bg="#EEE"]')?.getAttribute("data-width")).toBe("28");
   });
 
-  it("keeps moving 1.4 s after the bot finishes so the pose settles, then goes still", () => {
-    render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="running" motion="lazy" />);
-    const cancelled = motion.cancelled;
-    render(<BotAvatar color={SHAPE} identity="bot-1" size={62} status="completed" motion="lazy" />);
-    expect(motion.cancelled).toBe(cancelled);
-    wait(1400);
-    expect(motion.cancelled).toBeGreaterThan(cancelled);
-  });
-
-  it("freezes a list row's avatar while it is scrolled out of view", () => {
+  it("starts an Ork clock only after its list row enters the viewport", () => {
     const viewport = createAvatarViewport();
     render(
       <AvatarViewportScope viewport={viewport}>
@@ -313,7 +229,7 @@ describe("avatar motion on mobile", () => {
     expect(clockStarted()).toBe(true);
   });
 
-  it("stops on a screen behind the visible one and resumes on return", () => {
+  it("waits for the screen to become focused before starting motion", () => {
     let focused = false;
     const listeners = new Set<() => void>();
     const navigation = {
@@ -371,10 +287,11 @@ describe("activity mark", () => {
 
   it("shows each working member of a group in turn, every 2 s", () => {
     render(<ActivityMark bots={bots} atBottom />);
-    const shown = () => container.querySelector("[data-fill]")?.getAttribute("data-fill");
-    expect(shown()).toBe("#2A92FE");
+    const shown = () =>
+      container.querySelectorAll("[data-stop-color]")[1]?.getAttribute("data-stop-color");
+    expect(shown()).toBe("#2a92fe");
     act(() => vi.advanceTimersByTime(2000));
-    expect(shown()).toBe("#FF781C");
+    expect(shown()).toBe("#ff781c");
   });
 
   it("stops cycling members and pulsing photo dots on a covered screen, and resumes on return", () => {
@@ -416,18 +333,9 @@ describe("activity mark", () => {
     expect(grewIn()).toBe(false);
   });
 
-  it("leaves room in its row for the highest hop on top of the biggest working move", () => {
-    /** How far (points) a frame lifts the top of the mark: its move up plus half its stretch. */
+  it("leaves room around the clipped Ork plate for the shared tap reactions", () => {
     const lift = (translateY: number, scaleY: number) =>
       (-translateY + (scaleY - 1) / 2) * MARK_SIZE;
-    let working = 0;
-    for (const name of new Set(AVATAR_CLIP_POOLS.working)) {
-      const clip = avatarClip(name);
-      for (let t = 0; t <= clip.duration; t += 0.01) {
-        const frame = avatarFrame(avatarClipPose(clip, t), 1);
-        working = Math.max(working, lift(frame.translateY, frame.scaleY));
-      }
-    }
     let tap = 0;
     for (const poke of AVATAR_POKES)
       for (let p = 0; p <= 1; p += 0.005) {
@@ -435,7 +343,7 @@ describe("activity mark", () => {
         tap = Math.max(tap, lift(frame.translateY, frame.scaleY));
       }
     expect(tap).toBeGreaterThan(3);
-    expect(working + tap).toBeLessThanOrEqual((ROW_HEIGHT - MARK_SIZE) / 2);
+    expect(tap).toBeLessThanOrEqual((ROW_HEIGHT - MARK_SIZE) / 2);
   });
 
   it("stays tappable for its reaction (the poke curves are tested in core)", () => {
@@ -448,9 +356,10 @@ describe("activity mark", () => {
     expect(container.querySelector("button")).not.toBeNull();
   });
 
-  it("turns into the typing dots while its bot writes", () => {
+  it("keeps the generated Ork character while its bot writes", () => {
     render(<ActivityMark bots={[{ ...bots[0]!, composing: true }]} atBottom />);
-    expect(motion.springs).toContainEqual([1, MORPH_SPRING]);
+    expect(container.querySelector("[data-stop-color]")).not.toBeNull();
+    expect(container.querySelector('[aria-label="Working"]')).toBeNull();
   });
 
   it("shows plain typing dots instead of a photo, including a photo member's turn in a group", () => {

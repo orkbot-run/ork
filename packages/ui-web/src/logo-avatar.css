@@ -1,3 +1,11 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+ * SPDX-FileCopyrightText: 2026 Rakazo contributors
+ * SPDX-FileCopyrightText: 2026 Ork contributors
+ * Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+ * Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+ */
+
 @import "@orkbot/ui-tokens/css";
 
 .orkbot-logo-avatar {
@@ -18,10 +26,6 @@
 }
 .logo-avatar-gaze {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-.logo-avatar-glint {
-  fill: var(--logo-eye-light);
-  opacity: 0.15;
 }
 .logo-avatar-eye-lid {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);

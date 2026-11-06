@@ -1,4 +1,9 @@
-import { ACTIVE_RUN_STATUSES } from "@orkbot/core";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited image and color checks remain Apache-2.0. Generator-only checks follow LICENSE.md.
+
+import { ACTIVE_RUN_STATUSES, logoAvatarTraits, ORK_AVATAR_BODY_PATHS } from "@orkbot/core";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
@@ -12,29 +17,52 @@ import {
 } from "./bot-avatar.js";
 
 describe("BotAvatar", () => {
-  it("renders distinct ring gradient IDs for concurrent working avatars", () => {
-    const html = renderToString(
-      <div>
-        <BotAvatar color="#8B5CF6::shape_0" status="running" />
-        <BotAvatar color="#10B981::shape_1" status="running" />
-      </div>,
-    );
+  it.each([undefined, "organic", "orkbot"] as const)(
+    "renders only generator icons for stored set %s",
+    (avatarSet) => {
+      const appearance = logoAvatarTraits("saved-bot").appearance;
+      for (const color of ["#123456", "#123456::shape_3"]) {
+        const html = renderToString(
+          <BotAvatar identity="saved-bot" color={color} avatarSet={avatarSet} />,
+        );
+        expect(html).toContain("orkbot-logo-avatar");
+        expect(html).toContain(`d="${ORK_AVATAR_BODY_PATHS[appearance.shape]}"`);
+        expect(html).toContain('data-color="#123456"');
+        expect(html).not.toMatch(/orkbot-organic-avatar|bot-character-eyes/);
+      }
+    },
+  );
 
-    const gradMatches = [...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
-    expect(gradMatches).toHaveLength(2);
-    expect(new Set(gradMatches).size).toBe(2);
-    for (const id of gradMatches) {
-      expect(id).toBeTruthy();
-      expect(html).toContain(`url(#${id})`);
-    }
+  it("keeps instance references unique for the same bot rendered twice", () => {
+    const html = renderToString(
+      <>
+        <BotAvatar color="#123456" identity="same-bot" />
+        <BotAvatar color="#123456" identity="same-bot" />
+      </>,
+    );
+    const ids = [...html.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]);
+    expect(ids.length).toBeGreaterThan(2);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("previews generator artwork with the picker label and selected state", () => {
+    const html = renderToString(
+      <BotShapePreview identity="preview-bot" label="Shape 1" color="#123456" selected />,
+    );
+    expect(html).toContain('aria-label="Shape 1"');
+    expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain("orkbot-logo-avatar");
+    expect(html).not.toContain("orkbot-organic-avatar");
+  });
+
+  it("strips a legacy shape suffix when restoring the default look", () => {
+    expect(defaultBotAvatarValue("#123456::shape_3")).toBe("#123456");
+    expect(defaultBotAvatarValue("#abc::shape_2")).toBe("#abc");
+    expect(defaultBotAvatarValue("data:image/png;base64,abc")).toBe(DEFAULT_BOT_AVATAR_COLOR);
+    expect(defaultBotAvatarValue("#zzzzzz::shape_1")).toBe(DEFAULT_BOT_AVATAR_COLOR);
   });
 
   // Button sizes any SVG without a size class, which beats width/height attributes but not inline styles.
-  it("sizes the shape with an inline style so icon sizing in a button cannot shrink it", () => {
-    const html = renderToString(<BotAvatar color="#8B5CF6::shape_0" size={26} />);
-    const shape = html.match(/<svg[^>]*transition-transform[^>]*>/)?.[0];
-    expect(shape).toMatch(/style="[^"]*width:26px;height:26px/);
-  });
 
   it.each([...ACTIVE_RUN_STATUSES])("marks active run status %s as working", (status) => {
     const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
@@ -120,95 +148,9 @@ describe("BotAvatar", () => {
     expect(html).not.toContain("evil.example");
   });
 
-  it("honors reduced-motion for the working mascot pulse class", () => {
-    const html = renderToString(
-      <BotAvatar color="#8B5CF6::shape_0" identity="maya" size={32} status="running" />,
-    );
-    expect(html).toContain("animate-pulse");
-    expect(html).toContain("motion-reduce:animate-none");
-  });
-
-  it("restores a plain color that renders the organic body instead of a pinned shape", () => {
-    expect(defaultBotAvatarValue(`${DEFAULT_BOT_AVATAR_COLOR}::shape_3`)).toBe(
-      DEFAULT_BOT_AVATAR_COLOR,
-    );
-    expect(defaultBotAvatarValue("#EAB308::shape_1")).toBe("#EAB308");
-    expect(defaultBotAvatarValue("#abc::shape_2")).toBe("#abc");
-    expect(defaultBotAvatarValue("#fff")).toBe("#fff");
-    expect(defaultBotAvatarValue("data:image/png;base64,abc")).toBe(DEFAULT_BOT_AVATAR_COLOR);
-    expect(defaultBotAvatarValue("#zzzzzz::shape_1")).toBe(DEFAULT_BOT_AVATAR_COLOR);
-    expect(defaultBotAvatarValue("")).toBe(DEFAULT_BOT_AVATAR_COLOR);
-
-    const restored = renderToString(
-      <BotAvatar
-        color={defaultBotAvatarValue(`${DEFAULT_BOT_AVATAR_COLOR}::shape_4`)}
-        identity="maya"
-      />,
-    );
-    const shaped = renderToString(
-      <BotAvatar color={`${DEFAULT_BOT_AVATAR_COLOR}::shape_4`} identity="maya" />,
-    );
-    expect(restored).toContain("orkbot-organic-avatar");
-    expect(restored).not.toContain("bot-character-eyes");
-    expect(shaped).toContain("bot-character-eyes");
-    expect(shaped).not.toContain("orkbot-organic-avatar");
-  });
-
-  it("exposes shape picker name and pressed state", () => {
-    const html = renderToString(
-      <BotShapePreview shapeIndex={0} color="#8B5CF6" selected onClick={() => undefined} />,
-    );
-    expect(html).toContain('aria-label="hex"');
-    expect(html).toContain('aria-pressed="true"');
-    expect(html).toContain("focus-visible:ring-2");
-  });
-
-  it("previews an organic body when no studio shape is given", () => {
-    const html = renderToString(
-      <BotShapePreview identity="maya" label="Shape 1" color="#8B5CF6" selected={false} />,
-    );
-    expect(html).toContain('aria-label="Shape 1"');
-    expect(html).toContain("orkbot-organic-avatar");
-  });
-
-  it("morphs the organic body only while working", () => {
-    const morphing = (status: string) =>
-      [
-        ...renderToString(<BotAvatar color="#8B5CF6" status={status} />).matchAll(
-          /orkbot-organic-avatar-body-(idle|working)"[^>]*>(<animate)?/g,
-        ),
-      ]
-        .filter((match) => match[2])
-        .map((match) => match[1]);
-    expect(morphing("idle")).toEqual([]);
-    expect(morphing("running")).toEqual(["working"]);
-  });
-
-  it("draws every plain-colour bot with the organic body", () => {
-    const html = renderToString(<BotAvatar color={DEFAULT_BOT_AVATAR_COLOR} identity="maya" />);
-    expect(html).toContain("orkbot-organic-avatar");
-    expect(html).not.toContain("orkbot-bot-avatar-visor");
-  });
-
   it("keeps uploaded images", () => {
     const html = renderToString(<BotAvatar color="data:image/png;base64,abc" identity="maya" />);
     expect(html).toContain("<img");
     expect(html).not.toContain("orkbot-organic-avatar");
-  });
-
-  it("keeps an encoded studio shape", () => {
-    const html = renderToString(
-      <BotAvatar color={`${DEFAULT_BOT_AVATAR_COLOR}::shape_3`} identity="maya" />,
-    );
-    expect(html).toContain("bot-character-eyes");
-    expect(html).not.toContain("orkbot-organic-avatar");
-  });
-
-  it("fills the organic body with the resolved palette hex when the custom color is invalid", () => {
-    const fallback = resolvePersonaColorDef("maya", "#zzzzzz");
-    const html = renderToString(<BotAvatar color="#zzzzzz" identity="maya" />);
-    expect(html).toContain("orkbot-organic-avatar");
-    expect(html).toContain(`fill="${fallback.hex}"`);
-    expect(html).not.toContain("#zzzzzz");
   });
 });

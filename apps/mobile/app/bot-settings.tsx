@@ -1,11 +1,13 @@
-import type { Bot, BotAvatarSet, ComputerMode, ThinkingLevel } from "@orkbot/contracts";
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 settings remain. Ork avatars replace the removed legacy style controls.
+
+import type { Bot, ComputerMode, ThinkingLevel } from "@orkbot/contracts";
 import {
-  BOT_AVATAR_SHAPE_COUNT,
   BOT_COLORS,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
-  resolveBotAvatarSet,
 } from "@orkbot/contracts";
 import {
   credentialForModel,
@@ -33,13 +35,7 @@ import { ProfileEditDialog } from "../components/profile-edit-dialog";
 import { Chevron } from "../components/row-accessories";
 import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { currentApiBase, loadSessionToken, rpc, selectedSpaceId } from "../lib/api";
-import {
-  avatarColor,
-  avatarShape,
-  isAvatarPhoto,
-  withAvatarColor,
-  withAvatarShape,
-} from "../lib/bot-avatar-edit";
+import { avatarColor, isAvatarPhoto, withAvatarColor } from "../lib/bot-avatar-edit";
 import { deviceVoices, setVoiceForBot, voiceForBot, voiceLabel } from "../lib/bot-voices";
 import { chatModelPickerChoices } from "../lib/chat-model";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
@@ -73,7 +69,6 @@ export default function BotSettingsScreen() {
   const [instructions, setInstructions] = useState("");
   const [color, setColor] = useState<string>(BOT_COLORS[0]);
   const [computerMode, setComputerMode] = useState<ComputerMode>("team");
-  const [avatarSet, setAvatarSet] = useState<BotAvatarSet>("organic");
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(focus === "model" || pickedModel !== undefined);
   const [modelKey, setModelKey] = useState("");
@@ -183,7 +178,6 @@ export default function BotSettingsScreen() {
         setDescription(next.description ?? "");
         setInstructions(next.instructions ?? "");
         setColor(next.color);
-        setAvatarSet(resolveBotAvatarSet(next.avatarSet));
         setComputerMode(next.computerMode);
         setModelKey(
           next.modelProvider && next.modelId
@@ -384,7 +378,6 @@ export default function BotSettingsScreen() {
         instructions?: string;
         expectedInstructions?: string;
         color?: string;
-        avatarSet?: BotAvatarSet;
         modelProvider?: string | null;
         modelId?: string | null;
         thinkingLevel?: ThinkingLevel | null;
@@ -398,7 +391,6 @@ export default function BotSettingsScreen() {
         input.expectedInstructions = bot.instructions;
       }
       if (color !== bot.color) input.color = color;
-      if (avatarSet !== resolveBotAvatarSet(bot.avatarSet)) input.avatarSet = avatarSet;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null);
@@ -449,7 +441,6 @@ export default function BotSettingsScreen() {
     (description.trim() !== (bot.description ?? "") ||
       instructions !== (bot.instructions ?? "") ||
       color !== bot.color ||
-      avatarSet !== resolveBotAvatarSet(bot.avatarSet) ||
       computerMode !== bot.computerMode ||
       autoSpeak !== bot.autoSpeak ||
       (selectedModel?.provider ?? null) !== (bot.modelProvider ?? null) ||
@@ -525,13 +516,7 @@ export default function BotSettingsScreen() {
               onPress={() => setAvatarOpen(true)}
               style={{ padding: 4 }}
             >
-              <BotAvatar
-                color={color}
-                avatarSet={avatarSet}
-                identity={bot.id}
-                size={64}
-                status={bot.status}
-              />
+              <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />
               <View
                 style={{
                   position: "absolute",
@@ -876,19 +861,6 @@ export default function BotSettingsScreen() {
                 </Text>
               </Pressable>
             ) : null}
-            <MenuPicker
-              label={t("Icon set")}
-              choices={[
-                { key: "organic", label: t("Original") },
-                { key: "orkbot", label: t("Ork") },
-              ]}
-              value={avatarSet}
-              onChange={(next) => {
-                setAvatarSet(resolveBotAvatarSet(next));
-                setColor((current) => avatarColor(current));
-              }}
-              plain
-            />
             <Text style={{ color: tokens.mutedForeground, marginTop: 16, fontSize: 14 }}>
               {t("Color")}
             </Text>
@@ -916,67 +888,6 @@ export default function BotSettingsScreen() {
                 />
               ))}
             </ScrollView>
-            {bot && !isAvatarPhoto(color) ? (
-              <>
-                <Text style={{ color: tokens.mutedForeground, marginTop: 16, fontSize: 14 }}>
-                  {t("Shape")}
-                </Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 10, paddingVertical: 8, paddingHorizontal: 4 }}
-                  accessibilityRole="radiogroup"
-                >
-                  <Pressable
-                    accessibilityRole="radio"
-                    accessibilityLabel={t("Default")}
-                    accessibilityState={{
-                      checked: avatarSet === "organic" && avatarShape(color) === null,
-                    }}
-                    onPress={() => {
-                      setAvatarSet("organic");
-                      setColor((current) => avatarColor(current));
-                    }}
-                    style={{
-                      padding: 4,
-                      borderRadius: 14,
-                      borderWidth: 2,
-                      borderColor:
-                        avatarSet === "organic" && avatarShape(color) === null
-                          ? tokens.foreground
-                          : "transparent",
-                    }}
-                  >
-                    <BotAvatar color={avatarColor(color)} identity={bot.id} size={36} />
-                  </Pressable>
-                  {Array.from({ length: BOT_AVATAR_SHAPE_COUNT }, (_, shape) => (
-                    <Pressable
-                      key={shape}
-                      accessibilityRole="radio"
-                      accessibilityLabel={t("Shape {number}", { number: shape + 1 })}
-                      accessibilityState={{ checked: avatarShape(color) === shape }}
-                      onPress={() => {
-                        setAvatarSet("organic");
-                        setColor((current) => withAvatarShape(current, shape));
-                      }}
-                      style={{
-                        padding: 4,
-                        borderRadius: 14,
-                        borderWidth: 2,
-                        borderColor:
-                          avatarShape(color) === shape ? tokens.foreground : "transparent",
-                      }}
-                    >
-                      <BotAvatar
-                        color={withAvatarShape(color, shape)}
-                        identity={bot.id}
-                        size={36}
-                      />
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              </>
-            ) : null}
           </ScrollView>
         </Modal>
       ) : null}

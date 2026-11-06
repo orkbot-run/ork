@@ -1,34 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// Modified by Ork contributors to use the shared Ork smile in notification portraits.
+// Modified by Ork contributors to use shared studio features in notification portraits.
 // Inherited identity and avatar selection remain Apache-2.0. New changes follow LICENSE.md.
 
-import { BotAvatarValueSchema, parseBotAvatarValue, resolveBotAvatarSet } from "@orkbot/contracts";
+import { serializeParts } from "@orkbot/avatar/art";
+import { BotAvatarValueSchema, parseBotAvatarValue } from "@orkbot/contracts";
 import { lightTokens } from "@orkbot/ui-tokens";
-import type { AvatarEyes } from "./avatar-shape.js";
+import { resolvePersonaColorDef } from "./bot-avatar-colors.js";
 import {
-  avatarEyeRects,
-  avatarIdentitySeed,
-  ORGANIC_AVATAR_EYES,
-  ORGANIC_AVATAR_VIEWBOX,
-  organicAvatarEyeTilt,
-  organicAvatarPath,
-} from "./avatar-shape.js";
-import { botEyeInk, resolvePersonaColorDef } from "./bot-avatar-colors.js";
-import {
-  SHIPPED_BOT_AVATAR_EYES,
-  SHIPPED_BOT_AVATAR_VIEWBOX,
-  shippedBotAvatarShapePath,
-} from "./bot-avatar-shapes.js";
-import {
+  LOGO_AVATAR_ART_TRANSFORM,
   LOGO_AVATAR_BODY_Y,
-  LOGO_AVATAR_EYES,
-  LOGO_AVATAR_SMILE_PATH,
-  LOGO_AVATAR_SMILE_STROKE,
   LOGO_AVATAR_VIEWBOX,
-  LOGO_BODY_PATH,
   logoAvatarEyeInk,
+  ORK_AVATAR_BODY_PATHS,
+  ORK_AVATAR_SATELLITES,
+  orkAvatarAccessoryParts,
+  orkAvatarCheekParts,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
 } from "./logo-avatar-art.js";
 import { logoAvatarTraits } from "./logo-avatar-traits.js";
 
@@ -46,36 +36,24 @@ export function notificationAvatarSource(bot: {
     bot.id,
     parsed && "color" in parsed ? parsed.color : bot.color,
   ).hex;
-  // The push is flattened onto white, so the eyes are inked for a light page.
-  let viewBox: string;
-  let body: string;
-  if (parsed?.kind === "shape") {
-    viewBox = SHIPPED_BOT_AVATAR_VIEWBOX;
-    body = `<path d="${shippedBotAvatarShapePath(parsed.shapeIndex)}" fill="${color}"/>${barEyes(SHIPPED_BOT_AVATAR_EYES, botEyeInk(color, lightTokens))}`;
-  } else if (resolveBotAvatarSet(bot.avatarSet) === "orkbot") {
-    const fill = logoAvatarTraits(bot.id, color).color;
-    const { width, height, leftCx, rightCx, cy } = LOGO_AVATAR_EYES;
-    const eyes = [leftCx, rightCx]
-      .map((cx) => `<ellipse cx="${cx}" cy="${cy}" rx="${width / 2}" ry="${height / 2}"/>`)
-      .join("");
-    viewBox = LOGO_AVATAR_VIEWBOX;
-    const ink = logoAvatarEyeInk(fill, lightTokens);
-    const smile = `<path d="${LOGO_AVATAR_SMILE_PATH}" fill="none" stroke="${ink}" stroke-width="${LOGO_AVATAR_SMILE_STROKE}" stroke-linecap="round"/>`;
-    body = `<g transform="translate(0 ${LOGO_AVATAR_BODY_Y})"><path d="${LOGO_BODY_PATH}" fill="${fill}"/><g fill="${ink}">${eyes}</g>${smile}</g>`;
-  } else {
-    const seed = avatarIdentitySeed(bot.id);
-    viewBox = ORGANIC_AVATAR_VIEWBOX;
-    body = `<path d="${organicAvatarPath(seed)}" fill="${color}"/><g transform="rotate(${organicAvatarEyeTilt(seed)})">${barEyes(ORGANIC_AVATAR_EYES, botEyeInk(color, lightTokens))}</g>`;
-  }
+  // The push is flattened onto white, so the face uses ink for a light page.
+  const { color: fill, appearance } = logoAvatarTraits(bot.id, color);
+  const viewBox = LOGO_AVATAR_VIEWBOX;
+  const ink = logoAvatarEyeInk(fill, lightTokens);
+  const parts = [
+    ...ORK_AVATAR_SATELLITES.slice(0, appearance.satellites).map(([cx, cy, r]) => ({
+      tag: "circle" as const,
+      props: { cx, cy, r, fill },
+    })),
+    ...orkAvatarAccessoryParts(appearance.accessory, "behind"),
+    { tag: "path" as const, props: { d: ORK_AVATAR_BODY_PATHS[appearance.shape], fill } },
+    ...(appearance.cheeks ? orkAvatarCheekParts() : []),
+    ...([0, 1] as const).flatMap((index) =>
+      orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, index, ink),
+    ),
+    ...orkAvatarMouthParts(appearance.mouth, ink),
+    ...orkAvatarAccessoryParts(appearance.accessory, "front"),
+  ];
+  const body = `<g transform="translate(0 ${LOGO_AVATAR_BODY_Y})"><g transform="${LOGO_AVATAR_ART_TRANSFORM}">${serializeParts(parts)}</g></g>`;
   return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="${viewBox}">${body}</svg>`)}`;
-}
-
-function barEyes(eyes: AvatarEyes, fill: string): string {
-  const rects = avatarEyeRects(eyes)
-    .map(
-      ({ x, y, width, height, rx }) =>
-        `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="${rx}"/>`,
-    )
-    .join("");
-  return `<g fill="${fill}">${rects}</g>`;
 }

@@ -1011,6 +1011,11 @@ msgstr ""
 msgid "Available to shell commands as {commandVariable}"
 msgstr "Shell 命令可透過 {commandVariable} 使用"
 
+#. placeholder {0}: index + 1
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Avatar {0}"
+msgstr "頭像 {0}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "頭像工作室"
@@ -1127,10 +1132,6 @@ msgstr "機器人螢幕"
 #: src/pages/shell/computer-panel.tsx
 msgid "Bot screen preview"
 msgstr "機器人螢幕預覽"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Bot style"
-msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Bot's model"
@@ -1387,8 +1388,8 @@ msgid "Checking…"
 msgstr "正在檢查…"
 
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Choose a bot shape, color, or upload an image"
-msgstr "選擇機器人形狀和顏色，或上傳圖片"
+msgid "Choose a bot color or upload an image"
+msgstr "選擇機器人顏色或上傳圖片"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
@@ -2451,10 +2452,6 @@ msgstr "無法載入此頁面。請再試一次。"
 msgid "Couldn't load your wallet"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update bot style"
-msgstr ""
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "無法更新訊息設定"
@@ -2618,7 +2615,6 @@ msgstr "拒絕"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Default"
 msgstr "預設"
 
@@ -3497,10 +3493,6 @@ msgstr "你會如何使用 Ork？"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "我做完了"
-
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Icon set"
-msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4746,19 +4738,9 @@ msgstr "組織"
 msgid "Organization API key"
 msgstr "組織 API 金鑰"
 
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Original"
-msgstr ""
-
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "原訊息不可用"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
 
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
@@ -5874,14 +5856,8 @@ msgid "Setup help"
 msgstr "設定說明"
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Shape"
 msgstr "形狀"
-
-#. placeholder {0}: index + 1
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Shape {0}"
-msgstr "形狀 {0}"
 
 #: src/components/pages/PagesList.tsx
 #: src/components/pages/SharePopover.tsx

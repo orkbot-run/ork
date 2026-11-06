@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { GroupAvatar } from "./group-avatar.js";
@@ -10,7 +16,7 @@ describe("GroupAvatar", () => {
 
   it("renders single BotAvatar when 1 member", () => {
     const html = renderToString(<GroupAvatar members={[{ name: "Harry", color: "#8B5CF6" }]} />);
-    expect(html).toContain("orkbot-organic-avatar");
+    expect(html).toContain("orkbot-logo-avatar");
   });
 
   it("renders 2 overlapping bot avatars for 2 members", () => {
@@ -37,7 +43,7 @@ describe("GroupAvatar", () => {
       />,
     );
     expect(html).toContain('data-working="true"');
-    expect(html).toContain("orkbot-organic-avatar");
+    expect(html).toContain("orkbot-logo-avatar");
   });
 
   it("renders 3 mini bot avatars for 3 members", () => {

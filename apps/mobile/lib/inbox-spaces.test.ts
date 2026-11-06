@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobileBot } from "./api";
 import { adoptDeletedSpaceFallback, rpc, selectedSpaceId, selectSpace } from "./api";
@@ -428,7 +434,7 @@ describe("removeInboxSpace", () => {
 describe("inbox attention pills", () => {
   beforeEach(() => mobileLogoAvatarActivity.clear());
 
-  it("does not count a read legacy row with a routine wait and no waiting indicator", () => {
+  it("counts the generated waiting indicator for a read bot with legacy avatar metadata", () => {
     const waiting = { ...bot, status: "waiting_input", sectionId: "custom" };
     const items = spaceInboxItems([
       space({
@@ -449,13 +455,17 @@ describe("inbox attention pills", () => {
       }),
     ]);
     const signals = items.map(inboxSignal);
-    expect(signals.every((signal) => signal.unread === 0 && signal.attention === 0)).toBe(true);
+    expect(signals.every((signal) => signal.unread === 0)).toBe(true);
+    expect(signals.reduce((count, signal) => count + signal.attention, 0)).toBe(1);
+    const waitingIndex = items.findIndex(
+      (item) => item.type === "bot" && item.bot.id === waiting.id,
+    );
     expect(offscreenUnreads(signals, { first: 0, last: 0 })).toEqual({
       above: undefined,
-      below: undefined,
+      below: { kind: "attention", count: 1, index: waitingIndex },
     });
-    expect(offscreenUnreads(signals, { first: 10, last: 20 })).toEqual({
-      above: undefined,
+    expect(offscreenUnreads(signals, { first: waitingIndex + 1, last: waitingIndex + 1 })).toEqual({
+      above: { kind: "attention", count: 1, index: waitingIndex },
       below: undefined,
     });
   });

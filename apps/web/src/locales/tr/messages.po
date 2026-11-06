@@ -1010,6 +1010,11 @@ msgstr "Kullanılabilir:"
 msgid "Available to shell commands as {commandVariable}"
 msgstr "Kabuk komutlarında {commandVariable} olarak kullanılabilir"
 
+#. placeholder {0}: index + 1
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Avatar {0}"
+msgstr "Avatar {0}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "Avatar Stüdyosu"
@@ -1126,10 +1131,6 @@ msgstr "Bot ekranı"
 #: src/pages/shell/computer-panel.tsx
 msgid "Bot screen preview"
 msgstr "Bot ekranı önizlemesi"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Bot style"
-msgstr "Bot stili"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Bot's model"
@@ -1386,8 +1387,8 @@ msgid "Checking…"
 msgstr "Kontrol ediliyor…"
 
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Choose a bot shape, color, or upload an image"
-msgstr "Bir bot şekli ve rengi seçin veya görüntü yükleyin"
+msgid "Choose a bot color or upload an image"
+msgstr "Bir bot rengi seçin veya bir resim yükleyin"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
@@ -2450,10 +2451,6 @@ msgstr "Bu sayfa yüklenemedi. Tekrar deneyin."
 msgid "Couldn't load your wallet"
 msgstr "Cüzdanın yüklenemedi"
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update bot style"
-msgstr "Bot stili güncellenemedi"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Mesajlaşma ayarları güncellenemedi"
@@ -2617,7 +2614,6 @@ msgstr "Reddet"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Default"
 msgstr "Varsayılan"
 
@@ -3496,10 +3492,6 @@ msgstr "Ork'yu nasıl kullanacaksın?"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Bitirdim"
-
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Icon set"
-msgstr "Simge seti"
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4745,19 +4737,9 @@ msgstr "Kuruluş"
 msgid "Organization API key"
 msgstr "Kuruluş API anahtarı"
 
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Original"
-msgstr "Orijinal"
-
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "Orijinal mesaj kullanılamıyor"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
 
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
@@ -5873,14 +5855,8 @@ msgid "Setup help"
 msgstr "Kurulum yardımı"
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Shape"
 msgstr "Şekil"
-
-#. placeholder {0}: index + 1
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Shape {0}"
-msgstr "Şekil {0}"
 
 #: src/components/pages/PagesList.tsx
 #: src/components/pages/SharePopover.tsx

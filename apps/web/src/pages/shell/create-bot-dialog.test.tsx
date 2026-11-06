@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
-import { ORGANIC_AVATAR_LOOKS } from "@orkbot/core";
+import { logoAvatarTraits } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -40,7 +44,7 @@ afterEach(() => {
 
 async function render(
   onCreate: (input: CreateBotDialogInput) => Promise<void>,
-  avatarSet: BotAvatarSet = "organic",
+  avatarSet: BotAvatarSet = "orkbot",
 ) {
   await act(async () => {
     root.render(
@@ -82,18 +86,19 @@ describe("CreateBotDialog", () => {
     expect(button("Create").disabled).toBe(false);
   });
 
-  it("draws the account's set without offering another, and leaves the set to the server", async () => {
+  it("offers only generated identities and leaves the set to the server", async () => {
     const onCreate = vi.fn(async (_input: CreateBotDialogInput) => undefined);
     await render(onCreate);
     expect(document.querySelector('[role="tablist"]')).toBeNull();
-    const family = Number(
-      document.querySelector(".orkbot-organic-avatar")?.getAttribute("data-shape-family"),
-    );
+    expect(document.querySelector(".orkbot-organic-avatar")).toBeNull();
+    expect(document.querySelectorAll('[aria-label^="Avatar "]')).toHaveLength(8);
+    expect(document.querySelector('[aria-label="wedge"]')).toBeNull();
     await typeName("Scout");
     await click(button("Create"));
-    expect(onCreate.mock.lastCall?.[0]).toMatchObject({ name: "Scout", avatarFamily: family });
+    expect(onCreate.mock.lastCall?.[0]).toMatchObject({ name: "Scout" });
+    expect(onCreate.mock.lastCall?.[0].id).toMatch(/^c[a-z0-9]{24}$/);
     expect(onCreate.mock.lastCall?.[0]).not.toHaveProperty("avatarSet");
-    expect(onCreate.mock.lastCall?.[0]).not.toHaveProperty("id");
+    expect(onCreate.mock.lastCall?.[0]).not.toHaveProperty("avatarFamily");
   });
 
   it("sends the Ork preview id without an organic family", async () => {
@@ -122,34 +127,40 @@ describe("CreateBotDialog", () => {
     expect(onCreate.mock.lastCall?.[0]).toMatchObject({ color: "#00C972" });
   });
 
-  it("sends the organic family the preview draws", async () => {
-    const onCreate = vi.fn(async (_input: CreateBotDialogInput) => undefined);
+  it("keeps the submitted generator identity and color fixed after an uncertain create response", async () => {
+    const onCreate = vi
+      .fn(async (_input: CreateBotDialogInput) => undefined)
+      .mockRejectedValueOnce(new Error("Response lost"));
     await render(onCreate);
-    await click(button("Shape 2"));
-    await click(button("Color #00C972"));
-    const preview = document.querySelector(".orkbot-organic-avatar");
-    const family = Number(preview?.getAttribute("data-shape-family"));
+    await click(button("Avatar 2"));
     await typeName("Scout");
     await click(button("Create"));
-    expect(onCreate).toHaveBeenCalledWith({
-      name: "Scout",
-      color: "#00C972",
-      avatarFamily: family,
-    });
-    expect(family).toBe(ORGANIC_AVATAR_LOOKS[1]);
+    const first = onCreate.mock.lastCall![0];
+    expect(document.querySelector("fieldset")?.disabled).toBe(true);
+    await click(button("Avatar 3"));
+    await click(button("Color #00C972"));
+    await click(button("Create"));
+    expect(onCreate.mock.lastCall![0]).toMatchObject({ id: first.id, color: first.color });
   });
 
-  it("sends a studio shape without an organic family", async () => {
+  it("persists the exact selected generator identity with an explicit color", async () => {
     const onCreate = vi.fn(async (_input: CreateBotDialogInput) => undefined);
     await render(onCreate);
-    await click(button("Color #FF781C"));
-    await click(button("wedge"));
+    await click(button("Avatar 2"));
+    await click(button("Color #00C972"));
+    const preview = document.querySelector(".orkbot-logo-avatar")!;
+    const appearance = Object.fromEntries(
+      ["shape", "eyes", "mouth", "accessory"].map((key) => [
+        key,
+        preview.getAttribute(`data-${key}`),
+      ]),
+    );
     await typeName("Scout");
     await click(button("Create"));
-    expect(onCreate).toHaveBeenCalledWith({
-      name: "Scout",
-      color: "#FF781C::shape_1",
-    });
+    const input = onCreate.mock.lastCall![0];
+    expect(input).toMatchObject({ name: "Scout", color: "#00C972" });
+    expect(input).not.toHaveProperty("avatarFamily");
+    expect(logoAvatarTraits(input.id!, input.color).appearance).toMatchObject(appearance);
   });
 
   it("shows the error and stays open when creating fails", async () => {

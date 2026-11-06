@@ -4,12 +4,55 @@
 // Modified by Ork contributors to verify replacement Ork geometry.
 // Inherited behavior checks remain Apache-2.0. New changes follow LICENSE.md.
 
-import { readFile } from "node:fs/promises";
 import { BOT_AVATAR_COLORS, LOGO_AVATAR_EYES } from "@orkbot/core";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 
 test.use({ viewport: { width: 1260, height: 1000 } });
+
+/** Compare rendered paths and primitives without paint IDs or animation clocks. */
+function renderedLooks(nodes: Element[]) {
+  const attributes = [
+    "d",
+    "x",
+    "y",
+    "cx",
+    "cy",
+    "r",
+    "rx",
+    "ry",
+    "width",
+    "height",
+    "points",
+    "transform",
+    "stroke-width",
+  ];
+  return nodes.map((node) => {
+    const geometry = (selector: string) =>
+      [...node.querySelectorAll(selector)]
+        .filter((part) => !part.closest("defs"))
+        .map((part) => [part.localName, ...attributes.map((name) => part.getAttribute(name))]);
+    return {
+      color: node.getAttribute("data-color"),
+      shape: node.getAttribute("data-shape"),
+      eyes: node.getAttribute("data-eyes"),
+      mouth: node.getAttribute("data-mouth"),
+      accessory: node.getAttribute("data-accessory"),
+      body: node
+        .querySelector('.logo-avatar-art > path[fill^="url(#body-fill-"]')
+        ?.getAttribute("d"),
+      eyeGeometry: geometry(
+        ".logo-avatar-eye :is(path, rect, circle, ellipse, polygon, polyline, line)",
+      ),
+      mouthGeometry: geometry(
+        ".logo-avatar-smile :is(path, rect, circle, ellipse, polygon, polyline, line)",
+      ),
+      parts: geometry(
+        ".logo-avatar-body > g:first-child :is(path, rect, circle, ellipse, polygon, polyline, line)",
+      ),
+    };
+  });
+}
 
 test("renders the real logo in every requested pose in both themes", async ({ page }, testInfo) => {
   const errors: string[] = [];
@@ -34,7 +77,7 @@ test("renders the real logo in every requested pose in both themes", async ({ pa
       );
     expect(smallAnimations).toEqual([]);
     await expect(page.locator(".orkbot-bot-avatar-picture img")).toBeVisible();
-    await expect(page.locator(".bot-character-eyes")).toBeVisible();
+    await expect(page.locator(".bot-character-eyes, .orkbot-organic-avatar")).toHaveCount(0);
     await captureScreenshot(page, testInfo, `logo-avatar-study-${theme}`);
   }
   expect(errors).toEqual([]);
@@ -416,7 +459,7 @@ test("thinking ponders in one direction with a long squint and a small reconside
     .evaluateAll((avatars) =>
       avatars.map((avatar) => {
         const body = avatar.querySelector(".logo-avatar-body")!;
-        const scan = avatar.querySelector(".logo-avatar-scan")!;
+        const scan = avatar.querySelector<SVGGElement>(".logo-avatar-scan")!;
         const track = scan.getAnimations()[0]!;
         track.pause();
         const delay = Number(track.effect!.getTiming().delay);
@@ -453,9 +496,18 @@ test("thinking ponders in one direction with a long squint and a small reconside
           reconsiderLooksUp: reconsider[1]! < main[1]! - 1.5,
           rest,
           squint: [lidAt(1800), lidAt(3600), lidAt(6000)],
-          eyeCenters: [...avatar.querySelectorAll(".logo-avatar-eye ellipse:first-child")].map(
-            (eye) => Number(eye.getAttribute("cx")),
-          ),
+          eyeCenters: [...avatar.querySelectorAll<SVGGElement>(".logo-avatar-eye")].map((eye) => {
+            const [x, y] = getComputedStyle(eye).transformOrigin.split(" ").map(Number.parseFloat);
+            const center = new DOMPoint(x, y).matrixTransform(
+              scan.getCTM()!.inverse().multiply(eye.getCTM()!),
+            );
+            return {
+              x: center.x,
+              y: center.y,
+              width: eye.getBBox().width,
+              height: eye.getBBox().height,
+            };
+          }),
         };
       }),
     );
@@ -471,7 +523,16 @@ test("thinking ponders in one direction with a long squint and a small reconside
     expect(avatar.reconsiderLooksUp).toBe(true);
     expect(avatar.rest).toEqual([0, -2]);
     expect(avatar.squint).toEqual([0.8, 0.68, 1]);
-    expect(avatar.eyeCenters).toEqual([LOGO_AVATAR_EYES.leftCx, LOGO_AVATAR_EYES.rightCx]);
+    expect(avatar.eyeCenters).toHaveLength(2);
+    for (const [index, center] of avatar.eyeCenters.entries()) {
+      expect(center.x).toBeCloseTo(
+        index === 0 ? LOGO_AVATAR_EYES.leftCx : LOGO_AVATAR_EYES.rightCx,
+        4,
+      );
+      expect(center.y).toBeCloseTo(LOGO_AVATAR_EYES.cy, 4);
+      expect(center.width).toBeGreaterThan(0);
+      expect(center.height).toBeGreaterThanOrEqual(0);
+    }
     for (const [start, end] of avatar.holds) expect(start).toEqual(end);
   }
 });
@@ -547,10 +608,34 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
     );
     return avatars.map((avatar) => {
       const scan = avatar.querySelector<SVGGElement>(".logo-avatar-scan")!;
-      const imageElement = avatar.querySelector<SVGPathElement>(".logo-avatar-art > path")!;
-      const eyes = [
-        ...avatar.querySelectorAll<SVGEllipseElement>(".logo-avatar-eye ellipse:first-child"),
-      ];
+      const imageElement = avatar.querySelector<SVGPathElement>(
+        '.logo-avatar-art > path[fill^="url(#body-fill-"]',
+      )!;
+      const eyes = [...avatar.querySelectorAll<SVGGElement>(".logo-avatar-eye")];
+      const samples = eyes.flatMap((eye) =>
+        [
+          ...eye.querySelectorAll<SVGGeometryElement>(
+            "path, rect, circle, ellipse, polygon, polyline, line",
+          ),
+        ].map((part) => {
+          const box = part.getBBox();
+          const style = getComputedStyle(part);
+          const points: DOMPoint[] = [];
+          for (let row = 0; row <= 4; row++)
+            for (let column = 0; column <= 4; column++) {
+              const point = new DOMPoint(
+                box.x + (box.width * column) / 4,
+                box.y + (box.height * row) / 4,
+              );
+              if (
+                (style.fill !== "none" && part.isPointInFill(point)) ||
+                (style.stroke !== "none" && part.isPointInStroke(point))
+              )
+                points.push(point);
+            }
+          return { part, points };
+        }),
+      );
       const tracks = avatar.getAnimations({ subtree: true });
       tracks.forEach((track) => {
         track.pause();
@@ -565,32 +650,24 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
         tracks.forEach((track) => {
           track.currentTime = origin + time;
         });
-        const bounds = eyes.map((eye) => eye.getBoundingClientRect());
-        centers.push({
-          x: bounds[0]!.x + bounds[0]!.width / 2,
-          y: bounds[0]!.y + bounds[0]!.height / 2,
+        const anchors = eyes.map((eye) => {
+          const [x, y] = getComputedStyle(eye).transformOrigin.split(" ").map(Number.parseFloat);
+          return new DOMPoint(x, y).matrixTransform(eye.getScreenCTM()!);
         });
+        centers.push({ x: anchors[0]!.x, y: anchors[0]!.y });
         maxSpacingError = Math.max(
           maxSpacingError,
           Math.abs(
-            bounds[1]!.x +
-              bounds[1]!.width / 2 -
-              (bounds[0]!.x + bounds[0]!.width / 2) -
+            anchors[1]!.x -
+              anchors[0]!.x -
               ((geometry.rightCx - geometry.leftCx) * Number(avatar.getAttribute("width"))) / 100,
           ),
         );
-        for (const eye of eyes) {
-          const intoArtwork = imageElement.getCTM()!.inverse().multiply(eye.getCTM()!);
-          for (let angle = 0; angle < 16; angle++) {
-            const point = new DOMPoint(
-              Number(eye.getAttribute("cx")) +
-                (geometry.width / 2) * Math.cos((angle * Math.PI) / 8),
-              geometry.cy + (geometry.height / 2) * Math.sin((angle * Math.PI) / 8),
-            ).matrixTransform(intoArtwork);
-            minAlpha = Math.min(
-              minAlpha,
-              imageElement.isPointInFill(new DOMPoint(point.x, point.y)) ? 255 : 0,
-            );
+        for (const { part, points } of samples) {
+          const intoArtwork = imageElement.getCTM()!.inverse().multiply(part.getCTM()!);
+          for (const point of points) {
+            const bodyPoint = point.matrixTransform(intoArtwork);
+            minAlpha = Math.min(minAlpha, imageElement.isPointInFill(bodyPoint) ? 255 : 0);
           }
         }
       }
@@ -601,6 +678,8 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
         xRange: Math.max(...centers.map((p) => p.x)) - Math.min(...centers.map((p) => p.x)),
         yRange: Math.max(...centers.map((p) => p.y)) - Math.min(...centers.map((p) => p.y)),
         minAlpha,
+        eyeCount: eyes.length,
+        sampledInk: samples.reduce((count, sample) => count + sample.points.length, 0),
         maxSpacingError,
       };
     });
@@ -608,6 +687,8 @@ test("expressive gaze reads at24/32/38px and stays on the logo silhouette", asyn
   expect(new Set(proof.map((item) => item.size))).toEqual(new Set([24, 32, 38]));
   for (const item of proof) {
     expect(item.animated).toBe("true");
+    expect(item.eyeCount).toBe(2);
+    expect(item.sampledInk).toBeGreaterThan(0);
     expect(item.minAlpha, `${item.activity} eye silhouette`).toBeGreaterThanOrEqual(245);
     expect(item.maxSpacingError).toBeLessThan(0.01);
     if (item.activity === "writing") {
@@ -639,7 +720,7 @@ test("reading advances lines, typing taps keys, and computer use follows a curso
     .evaluate((region) => {
       const sample = (activity: string, fraction: number) => {
         const avatar = region.querySelector(`[data-activity="${activity}"]`)!;
-        const scan = avatar.querySelector(".logo-avatar-scan")!;
+        const scan = avatar.querySelector<SVGGElement>(".logo-avatar-scan")!;
         const movement = scan.getAnimations()[0]!;
         const timing = movement.effect!.getTiming();
         const time = 24000 + Number(timing.delay) + Number(timing.duration) * fraction;
@@ -730,92 +811,102 @@ test("native small-size indicators keep one-pixel strokes and omit fine detail i
   }
 });
 
-test("clay vector body matches the supplied Ork silhouette with ears and a rounded base", async ({
+test("generated body variants fit the plate and keep their face inside the silhouette", async ({
   page,
 }) => {
-  const original = await readFile(
-    new URL("../../../packages/ui-tokens/assets/ork-nunu-monochrome.svg", import.meta.url),
-    "utf8",
-  );
-  await page.goto("/e2e/fixtures/logo-avatars.html?compare=1&theme=light");
-  const art = await page
-    .getByRole("img", { name: "Idle", exact: true })
-    .locator(".logo-avatar-art")
-    .evaluate((node) => node.outerHTML);
-  const proof = await page.evaluate(
-    async ({ art, original }) => {
-      const pixels = async (markup: string) => {
-        const image = new Image();
-        image.src = `data:image/svg+xml,${encodeURIComponent(markup)}`;
-        await image.decode();
-        const canvas = document.createElement("canvas");
-        canvas.width = canvas.height = 1024;
-        const context = canvas.getContext("2d")!;
-        context.drawImage(image, 0, 0, 1024, 1024);
-        return context.getImageData(0, 0, 1024, 1024).data;
-      };
-      const svg = (content: string) =>
-        `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 100 100">${content}</svg>`;
-      const reference = new DOMParser().parseFromString(original, "image/svg+xml");
-      const contour = reference.documentElement.querySelector(":scope > path")!.getAttribute("d");
-      const source = await pixels(
-        svg(
-          `<g transform="translate(-14.5 -21.93) scale(.215)"><path d="${contour}" fill="white"/></g>`,
-        ),
-      );
-      const vector = await pixels(svg(art));
-      let intersection = 0,
-        union = 0;
-      for (let index = 3; index < source.length; index += 4) {
-        const sourceInside = source[index]! > 127;
-        const vectorInside = vector[index]! > 127;
-        if (sourceInside || vectorInside) union++;
-        if (sourceInside && vectorInside) intersection++;
-      }
-      const alpha = (x: number, y: number) =>
-        vector[(Math.round(y * 10.24) * 1024 + Math.round(x * 10.24)) * 4 + 3]!;
-      return {
-        overlap: intersection / union,
-        ears: [alpha(36, 2), alpha(64, 2)],
-        crownGap: alpha(50, 4),
-        roundedBase: [alpha(15, 80), alpha(50, 82), alpha(85, 80)],
-        outsideAlpha: alpha(5, 43),
-      };
-    },
-    { art, original },
-  );
-  expect(proof.overlap).toBeGreaterThan(0.995);
-  expect(proof.ears).toEqual([255, 255]);
-  expect(proof.crownGap).toBe(0);
-  expect(proof.roundedBase).toEqual([0, 255, 0]);
-  expect(proof.outsideAlpha).toBe(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/e2e/fixtures/logo-avatars.html?seeded=1&count=18&theme=light");
+  await page.getByRole("button", { name: "Idle", exact: true }).click();
+  const proof = await page
+    .getByTestId("seeded-fleet")
+    .locator("article > .orkbot-logo-avatar")
+    .evaluateAll((avatars) =>
+      avatars.map((node) => {
+        const avatar = node as SVGSVGElement;
+        const body = avatar.querySelector<SVGPathElement>(
+          '.logo-avatar-art > path[fill^="url(#body-fill-"]',
+        )!;
+        const box = body.getBBox();
+        const toPlate = avatar.getCTM()!.inverse().multiply(body.getCTM()!);
+        const corners = [
+          new DOMPoint(box.x, box.y),
+          new DOMPoint(box.x + box.width, box.y + box.height),
+        ].map((p) => p.matrixTransform(toPlate));
+        const face = [
+          ...avatar.querySelectorAll<SVGGeometryElement>(
+            ".logo-avatar-eye :is(path, rect, circle, ellipse), .logo-avatar-smile :is(path, rect, circle, ellipse)",
+          ),
+        ];
+        return {
+          shape: avatar.dataset.shape,
+          body: body.getAttribute("d"),
+          bounds: corners.map((p) => ({ x: p.x, y: p.y })),
+          faceParts: face.length,
+          faceInside: face.every((part) => {
+            const bounds = part.getBBox();
+            const intoBody = body.getCTM()!.inverse().multiply(part.getCTM()!);
+            const center = new DOMPoint(
+              bounds.x + bounds.width / 2,
+              bounds.y + bounds.height / 2,
+            ).matrixTransform(intoBody);
+            return body.isPointInFill(center);
+          }),
+        };
+      }),
+    );
+  expect(proof).toHaveLength(18);
+  expect(new Set(proof.map((item) => item.shape)).size).toBeGreaterThan(1);
+  expect(new Set(proof.map((item) => item.body)).size).toBeGreaterThan(1);
+  for (const item of proof) {
+    expect(item.faceParts).toBeGreaterThanOrEqual(3);
+    expect(item.faceInside).toBe(true);
+    expect(item.bounds[0]!.x).toBeGreaterThan(0);
+    expect(item.bounds[0]!.y).toBeGreaterThan(0);
+    expect(item.bounds[1]!.x).toBeLessThan(100);
+    expect(item.bounds[1]!.y).toBeLessThan(100);
+  }
 });
 
-test("seed colours persist through rerenders and reloads at actual avatar sizes", async ({
+test("seeded variants persist through rerenders and reloads at actual avatar sizes", async ({
   page,
 }, testInfo) => {
   for (const theme of ["light", "dark"]) {
     await page.goto(`/e2e/fixtures/logo-avatars.html?seeded=1&count=18&theme=${theme}`);
     const avatars = page.getByTestId("seeded-fleet").locator(".orkbot-logo-avatar");
     await expect(avatars).toHaveCount(72);
-    const before = await avatars.evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("data-color")),
-    );
-    // Seeds pick from the shared palette, so 18 bots can share colours but never all one.
-    for (const color of before) expect(BOT_AVATAR_COLORS).toContain(color);
-    expect(new Set(before).size).toBeGreaterThan(1);
+    const before = await avatars.evaluateAll(renderedLooks);
+    for (const look of before) {
+      expect(BOT_AVATAR_COLORS).toContain(look.color);
+      for (const field of [look.shape, look.eyes, look.mouth, look.accessory])
+        expect(field).toBeTruthy();
+      expect(look.eyeGeometry.length).toBeGreaterThanOrEqual(2);
+      expect(look.mouthGeometry.length).toBeGreaterThan(0);
+    }
+    for (const field of [
+      "color",
+      "shape",
+      "eyes",
+      "mouth",
+      "accessory",
+      "body",
+      "eyeGeometry",
+      "mouthGeometry",
+    ] as const)
+      expect(
+        new Set(before.map((look) => JSON.stringify(look[field]))).size,
+        field,
+      ).toBeGreaterThan(1);
+    // A bot keeps its actual geometry at every size, independently of its motion clocks.
     for (let index = 0; index < 18; index++)
-      expect(new Set(before.slice(index * 4, index * 4 + 4)).size).toBe(1);
+      expect(before.slice(index * 4, index * 4 + 4)).toEqual(
+        Array.from({ length: 4 }, () => before[index * 4]),
+      );
     await page.getByRole("button", { name: "Rerender fleet" }).click();
     await expect(page.locator("main")).toHaveAttribute("data-renders", "1");
-    expect(
-      await avatars.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-color"))),
-    ).toEqual(before);
+    expect(await avatars.evaluateAll(renderedLooks)).toEqual(before);
     await page.reload();
     await expect(avatars).toHaveCount(72);
-    expect(
-      await avatars.evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-color"))),
-    ).toEqual(before);
+    expect(await avatars.evaluateAll(renderedLooks)).toEqual(before);
     await captureScreenshot(page, testInfo, `seeded-avatar-colours-${theme}`);
   }
 });

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { BOT_COLORS, BOT_SETTINGS_SECTIONS } from "@orkbot/contracts";
@@ -268,10 +272,8 @@ vi.mock("./i18n", () => {
 vi.mock("../components/bot-avatar", () => ({ BotAvatar: () => null }));
 vi.mock("./bot-avatar-edit", () => ({
   avatarColor: (value: string) => value,
-  avatarShape: () => null,
   isAvatarPhoto: () => false,
   withAvatarColor: (_value: string, color: string) => color,
-  withAvatarShape: (value: string) => value,
 }));
 vi.mock("../components/native-segmented-control", () => ({
   NativeSegmentedControl: ({
@@ -535,62 +537,34 @@ describe("bot settings device voice menu", () => {
 
   it("opens avatar controls from the header and closes the sheet", async () => {
     await render();
-    expect(container.textContent).not.toContain("Shape");
+    expect(container.textContent).not.toContain("Color");
     await act(async () =>
       container.querySelector<HTMLButtonElement>('[aria-label="Edit avatar"]')!.click(),
     );
-    expect(container.textContent).toContain("Shape");
+    expect(container.textContent).toContain("Color");
     await act(async () =>
       [...container.querySelectorAll("button")]
         .find((button) => button.textContent === "Done")!
         .click(),
     );
-    expect(container.textContent).not.toContain("Shape");
+    expect(container.textContent).not.toContain("Color");
   });
 
-  it("keeps a legacy set until explicitly switched, saves the choice, and reloads it", async () => {
-    await render();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Edit avatar"]')!.click(),
-    );
-    const setMenu = () => container.querySelector('[data-menu="Icon set"]')!;
-    const option = (label: string) =>
-      [...setMenu().querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === label,
-      )!;
-    expect(option("Original").dataset.state).toBe("on");
-    expect(mocks.rpc).not.toHaveBeenCalled();
-    await act(async () => option("Ork").click());
-    mocks.rpc.mockResolvedValueOnce({ avatarSet: "orkbot" });
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Save")!
-        .click(),
-    );
-    expect(mocks.rpc).toHaveBeenCalledWith("bots/update", {
-      botId: "bot-fixture",
-      avatarSet: "orkbot",
-    });
-    act(() => root.unmount());
-    root = createRoot(container);
-    mocks.avatarSet = "orkbot";
-    await render();
-    await act(async () =>
-      container.querySelector<HTMLButtonElement>('[aria-label="Edit avatar"]')!.click(),
-    );
-    expect(option("Ork").dataset.state).toBe("on");
-    await act(async () => option("Original").click());
-    mocks.rpc.mockResolvedValueOnce({ avatarSet: "organic" });
-    await act(async () =>
-      [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Save")!
-        .click(),
-    );
-    expect(mocks.rpc).toHaveBeenLastCalledWith("bots/update", {
-      botId: "bot-fixture",
-      avatarSet: "organic",
-    });
-  });
+  it.each([undefined, "organic", "orkbot"] as const)(
+    "offers photo and colour controls without old style or shape choices for %s",
+    async (avatarSet) => {
+      mocks.avatarSet = avatarSet;
+      await render();
+      await act(async () =>
+        container.querySelector<HTMLButtonElement>('[aria-label="Edit avatar"]')!.click(),
+      );
+      expect(container.textContent).toContain("Color");
+      expect(container.querySelector('[data-menu="Icon set"]')).toBeNull();
+      expect(container.textContent).not.toContain("Original");
+      expect(container.textContent).not.toContain("Shape");
+      expect(mocks.rpc).not.toHaveBeenCalledWith("bots/update", expect.anything());
+    },
+  );
 
   it("expands Advanced for a native model deep link", async () => {
     mocks.focus = "model";

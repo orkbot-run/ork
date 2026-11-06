@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+# Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 FROM node:24.22.1-bookworm@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
 # pnpm lives in the image so containers start without downloading it.
 ENV COREPACK_HOME=/usr/local/share/corepack
@@ -19,6 +25,7 @@ COPY --chmod=755 apps/www/package.json apps/www/
 COPY --chmod=755 packages/adapter-kit/package.json packages/adapter-kit/
 COPY --chmod=755 packages/adapters/package.json packages/adapters/
 COPY --chmod=755 packages/auth/package.json packages/auth/
+COPY --chmod=755 packages/avatar/package.json packages/avatar/
 COPY --chmod=755 packages/chat-ui/package.json packages/chat-ui/
 COPY --chmod=755 packages/contracts/package.json packages/contracts/
 COPY --chmod=755 packages/core/package.json packages/core/

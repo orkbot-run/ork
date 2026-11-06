@@ -7,6 +7,15 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 import {
+  AVATAR_BODY_PATHS,
+  AVATAR_SATELLITES,
+  accessoryParts,
+  cheekParts,
+  eyeParts,
+  mouthParts,
+  serializeParts,
+} from "../src/art.mjs";
+import {
   avatarFromString,
   CLASSIC_PARAMETERS,
   createAvatar,
@@ -21,6 +30,86 @@ import {
 const CLASSIC_STRING = "697495921471626208003591940531880713577";
 const LEGACY_STRING = "ork1.ZeagAAAAAAJkAAEDAw1Pcmtv";
 const normalizeIds = (avatar) => avatar.svg.replaceAll(avatar.id, "avatar");
+
+test("the studio and platform consumers share every body, face, and accessory primitive", () => {
+  assert.deepEqual(Object.keys(AVATAR_BODY_PATHS), PARAMETER_RULES.shape.values);
+  for (const shape of PARAMETER_RULES.shape.values) {
+    assert.ok(createAvatar({ shape }).svg.includes(`d="${AVATAR_BODY_PATHS[shape]}"`));
+  }
+  for (const eyes of PARAMETER_RULES.eyes.values) {
+    for (const eyeSize of [80, 100, 140]) {
+      const svg = createAvatar({ eyes, eyeSize }).svg;
+      for (const index of [0, 1]) {
+        const parts = eyeParts(eyes, eyeSize, index);
+        assert.ok(parts.length > 0);
+        assert.ok(svg.includes(serializeParts(parts)), `${eyes}/${eyeSize}/${index}`);
+        assert.ok(serializeParts(eyeParts(eyes, eyeSize, index, "#ABCDEF")).includes("#ABCDEF"));
+      }
+    }
+  }
+  for (const mouth of PARAMETER_RULES.mouth.values) {
+    assert.ok(createAvatar({ mouth }).svg.includes(serializeParts(mouthParts(mouth))));
+    assert.ok(serializeParts(mouthParts(mouth, "#ABCDEF")).includes("#ABCDEF"));
+  }
+  for (const accessory of PARAMETER_RULES.accessory.values) {
+    const svg = createAvatar({ accessory }).svg;
+    const behind = accessoryParts(accessory, "behind");
+    const front = accessoryParts(accessory, "front");
+    assert.equal(behind.length + front.length > 0, accessory !== "none");
+    assert.ok(svg.includes(serializeParts(behind)));
+    assert.ok(svg.includes(serializeParts(front)));
+  }
+  const cheeks = serializeParts(cheekParts());
+  assert.ok(createAvatar({ cheeks: true }).svg.includes(cheeks));
+  assert.ok(!createAvatar({ cheeks: false }).svg.includes(cheeks));
+});
+
+test("shared primitives retain studio coordinates, eye scaling, layering, and colors", () => {
+  assert.deepEqual(AVATAR_SATELLITES, [
+    [136, 177, 22],
+    [466, 433, 24],
+    [484, 158, 17],
+    [131, 431, 16],
+  ]);
+  assert.deepEqual(eyeParts("pill", 100, 0), [
+    { tag: "ellipse", props: { cx: 244, cy: 302, rx: 15, ry: 27, fill: "#172127" } },
+  ]);
+  assert.deepEqual(eyeParts("robot", 140, 1), [
+    { tag: "rect", props: { x: 335, y: 281, width: 42, height: 42, rx: 3, fill: "#172127" } },
+  ]);
+  assert.equal(eyeParts("wink", 100, 0)[0].tag, "path");
+  assert.equal(eyeParts("wink", 100, 1)[0].tag, "ellipse");
+  assert.equal(accessoryParts("antenna", "behind").length, 2);
+  assert.equal(accessoryParts("antenna", "front").length, 0);
+  assert.equal(accessoryParts("headphones", "behind").length, 1);
+  assert.equal(accessoryParts("headphones", "front").length, 4);
+  for (const part of accessoryParts("bow", "front")) {
+    assert.equal(part.props.transform, "translate(388 168)");
+  }
+  assert.deepEqual(
+    cheekParts().map(({ props }) => [props.cx, props.cy, props.fill, props.opacity]),
+    [
+      [199, 363, "#F38B9C", 0.45],
+      [401, 363, "#F38B9C", 0.45],
+    ],
+  );
+});
+
+test("the shared SVG serializer escapes attributes and accepts only vector primitives", () => {
+  assert.equal(
+    serializeParts([
+      { tag: "path", props: { d: "M0 0 <>&\"'", strokeWidth: 0, opacity: 0, fill: undefined } },
+    ]),
+    '<path d="M0 0 &lt;&gt;&amp;&quot;&#39;" stroke-width="0" opacity="0"/>',
+  );
+  for (const part of [
+    { tag: "script", props: { d: "unsafe" } },
+    { tag: "path", props: { onload: "unsafe" } },
+    { tag: "path", props: { strokeWidth: Infinity } },
+    { tag: "path", props: { fill: null } },
+  ])
+    assert.throws(() => serializeParts([part]), TypeError);
+});
 
 test("the numeric string contains the full configuration and has a stable canonical encoding", () => {
   assert.equal(encodeAvatar(), CLASSIC_STRING);

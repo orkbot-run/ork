@@ -6,10 +6,14 @@
 
 import {
   contrastRatio,
-  LOGO_AVATAR_SMILE_PATH,
-  LOGO_AVATAR_SMILE_STROKE,
+  logoAvatarEyeInk,
+  logoAvatarTraits,
   notificationAvatarSource,
+  ORK_AVATAR_BODY_PATHS,
+  orkAvatarEyeParts,
+  orkAvatarMouthParts,
 } from "@orkbot/core";
+import { lightTokens } from "@orkbot/ui-tokens";
 import { renderToString } from "react-dom/server";
 import { expect, it } from "vitest";
 import { BotAvatar } from "./bot-avatar.js";
@@ -41,26 +45,31 @@ it.each<[string, { color: string; avatarSet?: "orkbot" }]>([
 
   const [svg] = tags(portrait, "svg");
   expect(tags(chat, "svg")).toContainEqual(expect.objectContaining({ viewBox: svg!.viewBox }));
-  const [body] = tags(portrait, "path");
-  const bodyGeometry = bot.avatarSet === "orkbot" ? { d: body!.d } : body!;
-  expect(tags(chat, "path")).toContainEqual(expect.objectContaining(bodyGeometry));
-  if (bot.avatarSet === "orkbot") {
-    expect(chat).toContain(`data-color="${body!.fill}"`);
-    const smile = tags(portrait, "path").find((path) => path.d === LOGO_AVATAR_SMILE_PATH);
-    expect(smile).toMatchObject({
-      fill: "none",
-      "stroke-width": String(LOGO_AVATAR_SMILE_STROKE),
-      "stroke-linecap": "round",
-    });
-    const { stroke, ...geometry } = smile!;
-    expect(tags(chat, "path")).toContainEqual(expect.objectContaining(geometry));
-    expect(contrastRatio(body!.fill!, stroke!)).toBeGreaterThanOrEqual(3);
+  {
+    const { appearance, color } = logoAvatarTraits(bot.id, bot.color);
+    const body = tags(portrait, "path").find(
+      (part) => part.d === ORK_AVATAR_BODY_PATHS[appearance.shape],
+    )!;
+    expect(tags(chat, "path")).toContainEqual(expect.objectContaining({ d: body.d }));
+    expect(chat).toContain(`data-color="${body.fill}"`);
+    const ink = logoAvatarEyeInk(color, lightTokens);
+    expect(contrastRatio(body.fill!, ink)).toBeGreaterThanOrEqual(3);
+    for (const part of [
+      ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 0, ink),
+      ...orkAvatarEyeParts(appearance.eyes, appearance.eyeSize, 1, ink),
+      ...orkAvatarMouthParts(appearance.mouth, ink),
+    ]) {
+      const attributes = Object.fromEntries(
+        Object.entries(part.props).map(([key, value]) => [
+          key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`),
+          String(value),
+        ]),
+      );
+      expect(tags(portrait, part.tag)).toContainEqual(expect.objectContaining(attributes));
+      expect(tags(chat, part.tag)).toContainEqual(expect.objectContaining(attributes));
+    }
   }
   for (const transform of tags(portrait, "g").flatMap((group) => group.transform ?? [])) {
     expect(chat).toContain(`transform="${transform}"`);
   }
-  const eyes = [...tags(portrait, "rect"), ...tags(portrait, "ellipse")];
-  expect(eyes).toHaveLength(2);
-  const chatEyes = [...tags(chat, "rect"), ...tags(chat, "ellipse")];
-  for (const eye of eyes) expect(chatEyes).toContainEqual(expect.objectContaining(eye));
 });

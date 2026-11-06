@@ -980,6 +980,9 @@ importers:
       '@observablehq/plot':
         specifier: 0.6.17
         version: 0.6.17
+      '@orkbot/avatar':
+        specifier: workspace:*
+        version: link:../avatar
       '@orkbot/contracts':
         specifier: workspace:*
         version: link:../contracts

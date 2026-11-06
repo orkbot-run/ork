@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
+
 import { useLingui } from "@lingui/react/macro";
-import type { BotAvatarSet, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
+import type { SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -43,8 +47,6 @@ export function SettingsOverlay({
   onNameSaved,
   timezone,
   onTimezoneChange,
-  botAvatarSet,
-  onBotAvatarSetChange,
   onAccountImported,
   onImportAgent,
   billingEnabled = false,
@@ -73,8 +75,6 @@ export function SettingsOverlay({
   onNameSaved?: () => Promise<void>;
   timezone: string | null;
   onTimezoneChange: (timezone: string) => Promise<void>;
-  botAvatarSet?: BotAvatarSet;
-  onBotAvatarSetChange?: (set: BotAvatarSet) => Promise<void>;
   onAccountImported?: () => Promise<void>;
   onImportAgent?: () => void;
   billingEnabled?: boolean;
@@ -361,8 +361,6 @@ export function SettingsOverlay({
                         onNameSaved={onNameSaved}
                         timezone={timezone}
                         onTimezoneChange={onTimezoneChange}
-                        botAvatarSet={botAvatarSet}
-                        onBotAvatarSetChange={onBotAvatarSetChange}
                         onAccountImported={onAccountImported}
                         onImportAgent={onImportAgent}
                       />

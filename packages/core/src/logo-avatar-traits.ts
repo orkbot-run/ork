@@ -1,3 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited motion traits remain Apache-2.0. Generator appearance follows LICENSE.md.
+
+import { decodeAvatar } from "@orkbot/avatar";
+
 import {
   BOT_AVATAR_COLORS,
   resolvePersonaColorDef,
@@ -26,7 +33,11 @@ export function logoAvatarTraits(identity: string, color?: string) {
   const side = random() > 0.5 ? 1 : -1;
   const energy = 0.92 + random() * 0.16;
   const colorDef = resolvePersonaColorDef(identity, color || seededLogoAvatarColor(identity));
+  const { shape, eyes, mouth, accessory, satellites, eyeSize, shine, cheeks } = decodeAvatar(
+    String(shippedHash(`logo-avatar/appearance/v1/${identity}`)),
+  );
   return {
+    appearance: { shape, eyes, mouth, accessory, satellites, eyeSize, shine, cheeks },
     color: colorDef.hex,
     originalOrange: colorDef.id === "orange",
     blinkMs,

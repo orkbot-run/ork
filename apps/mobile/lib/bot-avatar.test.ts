@@ -1,19 +1,20 @@
-import { shippedBotAvatarShapePath } from "@orkbot/core";
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import { mobileBotAvatarPresentation } from "./bot-avatar.js";
 
 describe("mobile bot avatar presentation", () => {
-  it("keeps the stored shape path instead of dropping it to a color fill", () => {
-    const presented = mobileBotAvatarPresentation("#8B5CF6::shape_3");
-    expect(presented).toEqual({
-      kind: "shape",
+  it("keeps the colour from obsolete shape markers without exposing legacy geometry", () => {
+    expect(mobileBotAvatarPresentation("#8B5CF6::shape_3")).toEqual({
+      kind: "color",
       color: "#A97EFE",
-      shapeIndex: 3,
-      shapePath: shippedBotAvatarShapePath(3),
     });
-    expect(presented.kind === "shape" && presented.shapePath).not.toBe(
-      shippedBotAvatarShapePath(0),
-    );
+    expect(mobileBotAvatarPresentation("#123456::shape_0")).toEqual({
+      kind: "color",
+      color: "#123456",
+    });
   });
 
   it("draws a color saved as its earlier value as the current one", () => {

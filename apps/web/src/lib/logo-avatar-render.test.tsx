@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 import type { ProductEvent } from "@orkbot/contracts";
 import { BotAvatar, BotAvatarActivityProvider } from "@orkbot/ui-web";
@@ -67,10 +73,10 @@ async function mount(status?: string) {
   );
 }
 const live = () => container.querySelector<SVGSVGElement>('[data-testid="live"] svg')!;
-it("projects production feed events into the live avatar and subscribes only live Ork consumers", async () => {
+it("subscribes generated avatars to production feed events while keeping photos and explicit poses static", async () => {
   const subscribe = vi.spyOn(webLogoAvatarActivity, "subscribe");
   await mount();
-  expect(subscribe).toHaveBeenCalledTimes(1);
+  expect(subscribe).toHaveBeenCalledTimes(3);
   expect(live().dataset.activity).toBe("idle");
   await act(async () => webLogoAvatarActivity.hydrate("chat", snapshot));
   const steps = [
@@ -99,7 +105,7 @@ it("projects production feed events into the live avatar and subscribes only liv
     expect(live().dataset.activity).toBe(expected);
     expect(live().dataset.working).toBe(String(expected !== "idle" && expected !== "error"));
   }
-  expect(subscribe).toHaveBeenCalledTimes(1);
+  expect(subscribe).toHaveBeenCalledTimes(3);
 });
 it("retains the live pose through overlapping feed hydration, hidden updates and reconnect", async () => {
   await mount();

@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createGroupRepos } from "./groups.js";
@@ -63,12 +69,12 @@ describe("listSpaceGroupsForSpaces", () => {
         pinned: true,
         sectionId: null,
         members: [
-          { botId: "bot-1", name: "Triage", color: "#111", avatarSet: "organic", status: "idle" },
+          { botId: "bot-1", name: "Triage", color: "#111", avatarSet: "orkbot", status: "idle" },
           {
             botId: "bot-2",
             name: "Responder",
             color: "#222",
-            avatarSet: "organic",
+            avatarSet: "orkbot",
             status: "running",
           },
         ],

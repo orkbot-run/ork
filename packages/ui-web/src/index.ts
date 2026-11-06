@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 export { AppMarkStack } from "./app-mark-stack.js";
 export {
   BOT_AVATAR_COLORS,
-  BOT_MASCOT_SHAPES,
   BotAvatar,
   BotShapePreview,
   DEFAULT_BOT_AVATAR_COLOR,

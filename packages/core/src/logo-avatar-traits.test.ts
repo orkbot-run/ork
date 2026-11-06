@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import { BOT_AVATAR_COLORS } from "./bot-avatar-colors.js";
 import { seededLogoAvatarColor } from "./logo-avatar-traits.js";
@@ -36,6 +42,22 @@ describe("seeded logo colours", () => {
 import { LOGO_AVATAR_LOOP_MS, logoAvatarTraits } from "./logo-avatar-traits.js";
 
 describe("stable logo avatar traits", () => {
+  it("gives a fleet distinct studio bodies, faces and accessories independent of saved colour", () => {
+    const fleet = Array.from({ length: 256 }, (_, index) => logoAvatarTraits(`bot-${index}`));
+    expect(new Set(fleet.map((bot) => bot.appearance.shape)).size).toBe(8);
+    expect(new Set(fleet.map((bot) => bot.appearance.eyes)).size).toBe(7);
+    expect(new Set(fleet.map((bot) => bot.appearance.mouth)).size).toBe(7);
+    expect(new Set(fleet.map((bot) => bot.appearance.accessory)).size).toBe(9);
+    expect(new Set(fleet.map((bot) => JSON.stringify(bot.appearance))).size).toBe(256);
+    expect(new Set(fleet.map((bot) => bot.appearance.satellites))).toEqual(
+      new Set([0, 1, 2, 3, 4]),
+    );
+    for (let index = 0; index < fleet.length; index++) {
+      expect(logoAvatarTraits(`bot-${index}`, "#123456").appearance).toEqual(
+        fleet[index]!.appearance,
+      );
+    }
+  });
   it("reproduces colour, phase and timing from the same identity", () => {
     const first = logoAvatarTraits("inbox-01");
     for (let index = 0; index < 20; index++) expect(logoAvatarTraits("inbox-01")).toEqual(first);

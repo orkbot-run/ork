@@ -1010,6 +1010,11 @@ msgstr ""
 msgid "Available to shell commands as {commandVariable}"
 msgstr "シェルコマンドで{commandVariable}として利用可能"
 
+#. placeholder {0}: index + 1
+#: src/pages/shell/avatar-studio-popover.tsx
+msgid "Avatar {0}"
+msgstr "アバター {0}"
+
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Avatar Studio"
 msgstr "Avatar Studio"
@@ -1126,10 +1131,6 @@ msgstr "ボットの画面"
 #: src/pages/shell/computer-panel.tsx
 msgid "Bot screen preview"
 msgstr "ボットの画面プレビュー"
-
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Bot style"
-msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Bot's model"
@@ -1386,8 +1387,8 @@ msgid "Checking…"
 msgstr "確認中…"
 
 #: src/pages/shell/avatar-studio-popover.tsx
-msgid "Choose a bot shape, color, or upload an image"
-msgstr "ボットの形や色を選ぶか、画像をアップロード"
+msgid "Choose a bot color or upload an image"
+msgstr "ボットの色を選択するか、画像をアップロードしてください"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
@@ -2450,10 +2451,6 @@ msgstr "このページを読み込めませんでした。もう一度お試し
 msgid "Couldn't load your wallet"
 msgstr ""
 
-#: src/pages/AccountSettingsOverlay.tsx
-msgid "Couldn't update bot style"
-msgstr ""
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "メッセージ設定を更新できませんでした"
@@ -2617,7 +2614,6 @@ msgstr "拒否"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Default"
 msgstr "デフォルト"
 
@@ -3496,10 +3492,6 @@ msgstr "Orkをどのように使いますか？"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "完了しました"
-
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Icon set"
-msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4745,19 +4737,9 @@ msgstr "組織"
 msgid "Organization API key"
 msgstr "組織のAPIキー"
 
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Original"
-msgstr ""
-
 #: src/pages/shell/chat-context.tsx
 msgid "Original message unavailable"
 msgstr "元のメッセージを表示できません"
-
-#: src/pages/AccountSettingsOverlay.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Ork"
-msgstr "Ork"
 
 #: src/pages/Onboarding.tsx
 msgid "Ork credits"
@@ -5873,14 +5855,8 @@ msgid "Setup help"
 msgstr "設定ヘルプ"
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/shell/avatar-studio-popover.tsx
 msgid "Shape"
 msgstr "形"
-
-#. placeholder {0}: index + 1
-#: src/pages/shell/avatar-studio-popover.tsx
-msgid "Shape {0}"
-msgstr "形 {0}"
 
 #: src/components/pages/PagesList.tsx
 #: src/components/pages/SharePopover.tsx

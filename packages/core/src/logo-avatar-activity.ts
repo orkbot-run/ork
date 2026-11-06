@@ -1,8 +1,10 @@
-import {
-  hasThinkingActivityMarker,
-  parseBotAvatarValue,
-  resolveBotAvatarSet,
-} from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
+import { hasThinkingActivityMarker, parseBotAvatarValue } from "@orkbot/contracts";
 import { isBackgroundRunTrigger, isRunWaitingOnUser, isRunWorking } from "./run-state.js";
 
 /** Minimal public stream fields used by web and native activity projections. */
@@ -37,11 +39,7 @@ export function botAvatarActivity(
 
 export function usesLogoAvatar(bot: { avatarSet?: string; color: string }): boolean {
   const parsed = parseBotAvatarValue(bot.color);
-  return (
-    resolveBotAvatarSet(bot.avatarSet) === "orkbot" &&
-    parsed.kind !== "image" &&
-    parsed.kind !== "shape"
-  );
+  return parsed.kind !== "image";
 }
 
 export function logoAvatarNeedsAttention(activity: LogoAvatarActivity): boolean {

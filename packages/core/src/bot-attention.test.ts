@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   botAvatarActivity,
@@ -41,10 +47,7 @@ describe("avatar attention", () => {
   });
 
   it.each([
-    { ...bot, avatarSet: "organic" },
-    { color: "orange" },
     { ...bot, color: "data:image/png;base64,fixture" },
-    { ...bot, color: "orange::shape_3" },
     { ...bot, archivedAt: "2026-01-01T00:00:00.000Z" },
   ])("excludes avatars without a visible waiting state: %j", (avatar) => {
     expect(logoAvatarNeedsAttention(botAvatarActivity(avatar, "waiting"))).toBe(false);
@@ -73,6 +76,15 @@ describe("avatar attention", () => {
   it("uses the same avatar selection as rendering", () => {
     expect(usesLogoAvatar(bot)).toBe(true);
     expect(botAvatarActivity(bot, "waiting")).toBe("waiting");
+  });
+
+  it.each([
+    { ...bot, avatarSet: "organic" },
+    { color: "orange" },
+    { ...bot, color: "orange::shape_3" },
+  ])("keeps live attention after replacing a legacy icon: %j", (avatar) => {
+    expect(usesLogoAvatar(avatar)).toBe(true);
+    expect(logoAvatarNeedsAttention(botAvatarActivity(avatar, "waiting"))).toBe(true);
   });
 
   it("keeps activity on the saved logo avatar set from before the rename", () => {

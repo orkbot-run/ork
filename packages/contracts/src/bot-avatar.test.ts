@@ -74,15 +74,15 @@ describe("per-bot avatar sets", () => {
     ).toBe("orkbot");
   });
 
-  it("keeps missing or unknown legacy metadata on the original renderer", () => {
-    expect(resolveBotAvatarSet()).toBe("organic");
-    expect(resolveBotAvatarSet(null)).toBe("organic");
-    expect(resolveBotAvatarSet("future-set")).toBe("organic");
-    expect(resolveBotAvatarSet("organic")).toBe("organic");
+  it("uses the generator for missing and legacy set metadata", () => {
+    expect(resolveBotAvatarSet()).toBe("orkbot");
+    expect(resolveBotAvatarSet(null)).toBe("orkbot");
+    expect(resolveBotAvatarSet("future-set")).toBe("orkbot");
+    expect(resolveBotAvatarSet("organic")).toBe("orkbot");
     expect(resolveBotAvatarSet("orkbot")).toBe("orkbot");
   });
 
-  it("uses the Ork set for new bots while retaining the legacy metadata fallback", () => {
+  it("uses the Ork set for new bots", () => {
     expect(DEFAULT_NEW_BOT_AVATAR_SET).toBe("orkbot");
     expect(CreateBotInput.parse({ name: "Scout" }).avatarSet).toBeUndefined();
   });

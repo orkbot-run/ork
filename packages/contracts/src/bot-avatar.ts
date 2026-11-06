@@ -4,15 +4,15 @@
 
 import * as z from "zod";
 
-/** Per-bot set. Missing values belong to the original renderer. */
+/** Legacy set values remain readable; every built-in avatar now uses the Ork generator. */
 export const BotAvatarSetSchema = z
   .enum(["organic", "orkbot", "rakazo"])
   .transform((value) => (value === "rakazo" ? "orkbot" : value));
 export type BotAvatarSet = z.infer<typeof BotAvatarSetSchema>;
 export const DEFAULT_NEW_BOT_AVATAR_SET: BotAvatarSet = "orkbot";
 
-export function resolveBotAvatarSet(value?: string | null): BotAvatarSet {
-  return value === "orkbot" || value === "rakazo" ? "orkbot" : "organic";
+export function resolveBotAvatarSet(_value?: string | null): BotAvatarSet {
+  return "orkbot";
 }
 
 /** Matches the eight shipped mascot shapes in `@orkbot/core`. */
