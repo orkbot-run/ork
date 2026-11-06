@@ -4,7 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createEasypanelServerUpdateAdapter } from "./easypanel-server-updates.js";
 
-const trigger = "https://panel.example.test/api/deploy/fixture-deploy-token";
+const trigger = "https://panel.example.test/api/compose/deploy/fixture-deploy-token";
 const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 const INDEX = "application/vnd.oci.image.index.v1+json";

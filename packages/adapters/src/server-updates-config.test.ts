@@ -42,6 +42,18 @@ afterEach(() => {
 });
 
 describe("private operator update configuration", () => {
+  it.each(["/api/compose/deploy/", "/api/deploy/"])(
+    "accepts the scoped HTTPS deployment trigger at %s",
+    (path) => {
+      const deploymentTrigger = `https://panel.example.test${path}fixture-deploy-token`;
+      expect(
+        parseServerUpdatesConfig({
+          ...config,
+          adapter: { ...config.adapter, deploymentTrigger },
+        }).adapter.deploymentTrigger,
+      ).toBe(deploymentTrigger);
+    },
+  );
   it("is disabled when absent and atomically persists separate private configuration", () => {
     const { root, path } = fixture();
     writeFileSync(join(root, "environment.json"), "fixture-existing-secrets", { mode: 0o600 });
@@ -91,6 +103,9 @@ describe("private operator update configuration", () => {
       "http://panel.example.test/api/deploy/fixture-deploy-token",
       "https://panel.example.test/api/deploy/short",
       "https://panel.example.test/api/other/fixture-deploy-token",
+      "https://panel.example.test/api/app/deploy/fixture-deploy-token",
+      "http://panel.example.test/api/compose/deploy/fixture-deploy-token",
+      "https://panel.example.test/api/compose/deploy/fixture-deploy-token?secret=private",
       "https://panel.example.test/api/deploy/fixture-deploy-token?secret=private",
       "https://user:secret@panel.example.test/api/deploy/fixture-deploy-token",
       "https://panel.example.test/api/deploy/fixture-deploy-token#hash",

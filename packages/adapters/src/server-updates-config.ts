@@ -42,7 +42,7 @@ export function validateDeploymentTrigger(input: unknown): string {
       url.password ||
       url.search ||
       url.hash ||
-      !/^\/api\/deploy\/[A-Za-z0-9_-]{16,256}$/.test(url.pathname) ||
+      !/^\/api\/(?:compose\/)?deploy\/[A-Za-z0-9_-]{16,256}$/.test(url.pathname) ||
       url.href !== input
     )
       throw invalid();

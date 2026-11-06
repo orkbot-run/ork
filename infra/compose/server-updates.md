@@ -4,8 +4,9 @@
 # Updates through your deployment panel
 
 Keep Easypanel in charge of its Compose service. Ork can request a deployment through
-that service's secret Deployment Trigger URL. The trigger must use HTTPS and have the
-path `/api/deploy/<token>`. Keep it private.
+that service's secret Deployment Trigger URL. Use the panel's public HTTPS origin
+with the service's trigger path, `/api/compose/deploy/<token>` or `/api/deploy/<token>`.
+Keep it private.
 
 Set the service's image channel in the panel before enabling requests from Ork.
 `ORKBOT_IMAGE_TAG=edge` follows preview builds. Stable releases use `latest`, which
@@ -23,7 +24,7 @@ service. Use a local editor so the token stays out of shell history.
   "channel": "preview",
   "adapter": {
     "kind": "easypanel",
-    "deploymentTrigger": "https://panel.example.test/api/deploy/replace-with-service-token"
+    "deploymentTrigger": "https://panel.example.test/api/compose/deploy/replace-with-service-token"
   }
 }
 ```
