@@ -159,6 +159,7 @@ import { mountAccountExportRoute } from "#modules/accounts/account-export";
 import { mountAccountImportRoute } from "#modules/accounts/account-import";
 import { expireNonOidcSessions } from "#modules/accounts/accounts-only-sessions";
 import { mountAuthCallback } from "#modules/accounts/auth-callback";
+import { managedAccountKeyForRequest } from "#modules/accounts/managed-account";
 import { createBillingService } from "#modules/billing/billing";
 import { mountBillingRoutes } from "#modules/billing/billing-webhook";
 import { marketingEmailRoutes, sendWelcomeEmail } from "#modules/billing/marketing-email";
@@ -539,8 +540,12 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       : new PiAgentRuntime({
           sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
         }));
-  if (env.passwordAuth === false && env.oidc) {
-    await expireNonOidcSessions(prisma, env.oidc.issuer);
+  if (env.passwordAuth === false && (env.oidc || env.accountsEnabled)) {
+    await expireNonOidcSessions(
+      prisma,
+      env.oidc?.issuer ?? "https://api.orkbot.run",
+      env.desktopAccountKey,
+    );
   }
   const pushTokens = new PrismaPushTokenStore(prisma, env.encryptionKey);
   const notifications =
@@ -567,12 +572,16 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     passwordAuth: env.passwordAuth,
     breachedPasswordCheck: env.breachedPasswordCheck,
     oidc: env.oidc,
+    nativeAccounts: env.accountsEnabled
+      ? { issuer: "https://api.orkbot.run", bootstrapSecret: env.bootstrapSecret }
+      : undefined,
     secret: env.authSecret,
     baseURL: env.authUrl,
     webOrigin: env.webOrigin,
     signupsEnabled: env.signupsEnabled,
     signupAllowlist: env.signupAllowlist,
     singleAccount: Boolean(env.desktopStackToken),
+    singleAccountOwnerKey: env.desktopAccountKey,
     email,
     logger: {
       level: "error",
@@ -931,6 +940,12 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   }
   app.get("/api/auth/capabilities", (c) => {
     return c.json({
+      accountsLogin: env.accountsEnabled || undefined,
+      managedAccountKey: managedAccountKeyForRequest(
+        env.desktopAccountKey,
+        env.desktopStackToken,
+        c.req.header("x-orkbot-desktop-stack-token"),
+      ),
       sso: env.oidc
         ? { name: env.oidc.name, availability: auth.ssoAvailability() ?? "checking" }
         : null,

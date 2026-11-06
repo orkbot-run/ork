@@ -8,6 +8,83 @@ import { expireNonOidcSessions } from "./accounts-only-sessions.js";
 
 const databaseUrl = process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined;
 
+it.skipIf(!databaseUrl || !process.env.COPY_TEST_DATABASE)(
+  "expires a previously valid different owner session without changing users or accounts",
+  async () => {
+    const { prisma, pool } = createDb(databaseUrl!);
+    const issuer = "https://identity.example.test";
+    const suffix = randomUUID();
+    const expectedOwnerKey = "ab".repeat(32);
+    const owners = ["owner", "other"];
+    const expiresAt = new Date(Date.now() + 60 * 60_000);
+    try {
+      await runAsSystem("seed managed native owners", async () => {
+        for (const name of owners) {
+          const userId = `${name}-${suffix}`;
+          await prisma.user.create({
+            data: { id: userId, name, email: `${userId}@example.test`, emailVerified: true },
+          });
+          await prisma.account.create({
+            data: {
+              id: `account-${userId}`,
+              userId,
+              providerId: "oidc",
+              accountId: name === "owner" ? expectedOwnerKey : "cd".repeat(32),
+            },
+          });
+          await prisma.session.create({
+            data: { id: `session-${userId}`, userId, token: `token-${userId}`, expiresAt },
+          });
+          await prisma.verification.create({
+            data: {
+              id: `proof-${userId}`,
+              identifier: `oidc-session-v1-session-${userId}`,
+              value: JSON.stringify([issuer, userId]),
+              expiresAt,
+            },
+          });
+          await prisma.userDevice.create({
+            data: {
+              id: `device-${userId}`,
+              userId,
+              name,
+              platform: "macos",
+              tokenHash: `hash-${userId}`,
+              sessionId: `session-${userId}`,
+            },
+          });
+        }
+      });
+      expect(await expireNonOidcSessions(prisma, issuer, expectedOwnerKey)).toEqual({
+        expiredSessions: 1,
+        revokedDevices: 1,
+      });
+      await runAsSystem("inspect preserved native ownership", async () => {
+        const sessions = await prisma.session.findMany({
+          where: { userId: { in: owners.map((name) => `${name}-${suffix}`) } },
+        });
+        for (const session of sessions)
+          expect(session.expiresAt.getTime() > Date.now()).toBe(
+            session.userId === `owner-${suffix}`,
+          );
+        expect(
+          await prisma.user.count({
+            where: { id: { in: owners.map((name) => `${name}-${suffix}`) } },
+          }),
+        ).toBe(2);
+        expect(
+          await prisma.account.count({
+            where: { userId: { in: owners.map((name) => `${name}-${suffix}`) } },
+          }),
+        ).toBe(2);
+      });
+    } finally {
+      await prisma.$disconnect();
+      await pool.end();
+    }
+  },
+);
+
 // This startup policy scans the whole installation, so never run it in a shared database.
 it.skipIf(!databaseUrl || !process.env.COPY_TEST_DATABASE)(
   "expires only unproven sessions and revokes their devices without deleting accounts",

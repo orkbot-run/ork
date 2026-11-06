@@ -11,6 +11,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SignIn from "../app/sign-in";
 import { accountsIdentity } from "./accounts";
+import { continueWithAccountsServer } from "./accounts-login";
 import {
   loadSessionToken,
   passwordResetCapabilities,
@@ -32,6 +33,7 @@ vi.mock("./accounts", () => ({
   accountsIdentity: vi.fn().mockResolvedValue(null),
   welcomeAccountsOrk: () => "64cf5621-3144-4810-97f5-148acdc29c35",
 }));
+vi.mock("./accounts-login", () => ({ continueWithAccountsServer: vi.fn() }));
 vi.mock("expo-router", () => ({
   Redirect: ({ href }: { href: string }) => {
     route.redirect(href);
@@ -530,6 +532,25 @@ it("returns to the pending share after SSO", async () => {
   await render();
   await act(async () => ssoButtons()[0]!.click());
   expect(router.replace).toHaveBeenCalledWith("/share");
+});
+
+it("uses native Accounts proofs when the server has no OIDC client", async () => {
+  vi.mocked(passwordResetCapabilities).mockResolvedValue({
+    passwordAuth: false,
+    passwordReset: false,
+    resetUrl: null,
+    sso: null,
+    accountsLogin: true,
+  });
+  vi.mocked(continueWithAccountsServer).mockResolvedValue(true);
+  await render();
+  const button = [...host.querySelectorAll("button")].find(
+    (item) => item.textContent === "Continue with Ork Accounts",
+  );
+  expect(button).toBeDefined();
+  await act(async () => button!.click());
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+  expect(continueWithSso).not.toHaveBeenCalled();
 });
 
 it("returns an existing session to the pending share", async () => {

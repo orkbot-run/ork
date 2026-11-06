@@ -1825,10 +1825,9 @@ msgstr "Continuar en segundo plano"
 msgid "Continue to checkout"
 msgstr "Continuar al pago"
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "Continuar con {0}"
+msgid "Continue with {ssoName}"
+msgstr "Continuar con {ssoName}"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

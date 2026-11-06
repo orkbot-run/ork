@@ -14,7 +14,9 @@ it("checks the product's Accounts-only capability without any central credential
       Response.json({ passwordAuth: false, sso: { name: "Accounts", availability: "available" } }),
     );
   vi.stubGlobal("fetch", fetcher);
-  await expect(requireAccountsSignIn("https://server.example.test")).resolves.toBeUndefined();
+  await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
+    accountsLogin: false,
+  });
   expect(fetcher).toHaveBeenCalledWith(
     "https://server.example.test/api/auth/capabilities",
     expect.objectContaining({ headers: {}, credentials: "omit", redirect: "error" }),
@@ -22,6 +24,7 @@ it("checks the product's Accounts-only capability without any central credential
 });
 
 it.each([
+  { passwordAuth: true, accountsLogin: true, sso: null },
   { passwordAuth: true, sso: { name: "Accounts" } },
   { passwordAuth: false, sso: null },
   { passwordAuth: false, sso: { name: 42 } },
@@ -33,4 +36,16 @@ it.each([
   await expect(requireAccountsSignIn("https://server.example.test")).rejects.toThrow(
     "must use Accounts sign-in",
   );
+});
+
+it("accepts native Accounts proofs without an OIDC provider", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValue(Response.json({ passwordAuth: false, accountsLogin: true, sso: null })),
+  );
+  await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
+    accountsLogin: true,
+  });
 });

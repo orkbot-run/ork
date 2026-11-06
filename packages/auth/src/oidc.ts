@@ -129,10 +129,10 @@ export function oidcDiscovery(config: OidcConfig) {
         requiresIdTokenNonce: true,
         createAuthorizationURL: async (data) => {
           const url = await (await getProvider()).createAuthorizationURL(data);
-          // Only authenticated, server-bound reauthentication needs an interactive
-          // provider login. Apply these last so client parameters cannot weaken it.
-          const expectedUser = (await getOAuthState())?.serverContext?.reauthUserId;
-          if (typeof expectedUser === "string") {
+          // Recovery must not silently reuse a refused provider account. Apply these
+          // last so client parameters cannot weaken recovery or reauthentication.
+          const context = (await getOAuthState())?.serverContext;
+          if (typeof context?.reauthUserId === "string" || context?.forceOidcLogin === true) {
             url.searchParams.set("prompt", "login");
             url.searchParams.set("max_age", "0");
           }

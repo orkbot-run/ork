@@ -13,6 +13,7 @@ mod host_runner;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
 mod local_stack;
+mod local_stack_scope;
 mod locale;
 mod menu;
 mod native;
@@ -22,6 +23,7 @@ mod profile;
 mod server;
 mod server_directory;
 mod server_link;
+mod server_login;
 mod settings;
 mod speech;
 mod updates;
@@ -46,7 +48,7 @@ use url::Url;
 struct DesktopState {
     directory: PathBuf,
     setup: Mutex<Option<settings::Setup>>,
-    stack: local_stack::LocalStack,
+    stack: Mutex<local_stack_scope::AccountStacks>,
     host_computer: Option<host_computer::HostComputer>,
     computer_choice: tokio::sync::Mutex<()>,
     computer_prompt: std::sync::atomic::AtomicBool,
@@ -64,8 +66,168 @@ struct DesktopState {
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
     pending_server: Mutex<Option<String>>,
+    initialization: Mutex<Option<server_link::Initialization>>,
+    opening_server: Mutex<Option<OpeningServer>>,
     pending_bookmark: Mutex<Option<server_link::Bookmark>>,
     bookmark_sync: tokio::sync::Mutex<()>,
+}
+
+struct OpeningServer {
+    label: String,
+    origin: String,
+    account: String,
+    intent: u64,
+}
+
+impl OpeningServer {
+    fn permits(&self, document: &native::Document, account: Option<&str>, intent: u64) -> bool {
+        self.label == document.label
+            && self.origin == document.origin.origin().ascii_serialization()
+            && account.is_none_or(|account| self.account == account)
+            && self.intent == intent
+    }
+}
+
+struct OpeningServerGuard<'a> {
+    state: &'a DesktopState,
+    label: String,
+}
+
+impl Drop for OpeningServerGuard<'_> {
+    fn drop(&mut self) {
+        if let Ok(mut opening) = self.state.opening_server.lock() {
+            if opening
+                .as_ref()
+                .is_some_and(|opening| opening.label == self.label)
+            {
+                *opening = None;
+            }
+        }
+    }
+}
+
+fn opening_server_matches(
+    state: &DesktopState,
+    document: &native::Document,
+    account: Option<&str>,
+) -> bool {
+    state.opening_server.lock().ok().is_some_and(|opening| {
+        opening.as_ref().is_some_and(|opening| {
+            opening.permits(
+                document,
+                account,
+                state.restore_intent.load(Ordering::SeqCst),
+            )
+        })
+    })
+}
+
+impl DesktopState {
+    fn stack_snapshot(&self) -> Arc<local_stack::LocalStack> {
+        self.stack
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .snapshot()
+    }
+
+    fn deactivate_stack(&self) {
+        self.stack
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .deactivate();
+    }
+}
+
+/// Choose a scope only from a current verified Accounts authorization.
+fn select_local_stack(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+) -> Result<(Arc<local_stack::LocalStack>, u64), String> {
+    require_account(state, authorization)?;
+    let owner = settings::account_key(authorization.account.identity());
+    let callback_app = app.clone();
+    let callback_owner = owner.clone();
+    let mut stacks = state
+        .stack
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    let stack = stacks.select(
+        &state.directory,
+        &owner,
+        move |scope| {
+            let directory = scope.directory.clone();
+            Some(Arc::new(move |value| {
+                let Some(state) = callback_app.try_state::<DesktopState>() else {
+                    return;
+                };
+                let accepts = state.stack.lock().ok().is_some_and(|stacks| {
+                    stacks.accepts_output(&callback_owner, &directory, value.generation)
+                });
+                if accepts {
+                    if let Some(window) = callback_app.get_webview_window("setup") {
+                        let _ = window.emit("desktop-stack-changed", value);
+                    }
+                }
+            }))
+        },
+        |scope| {
+            state.host_computer.as_ref().map(|host| {
+                host.scoped_connection(
+                    &owner,
+                    scope.project_name == local_stack::LEGACY_PROJECT_NAME,
+                )
+            })
+        },
+        || state.accounts.is_current(authorization),
+    )?;
+    require_account(state, authorization)?;
+    if let Some(host) = &state.host_computer {
+        if let Some(connection) = stack.host_connection() {
+            host.select_connection(&connection);
+        }
+    }
+    Ok((stack.clone(), stack.intent()))
+}
+
+fn require_current_stack(
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+    stack: &Arc<local_stack::LocalStack>,
+) -> Result<(), String> {
+    require_account(state, authorization)?;
+    if state
+        .stack
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .is_selected(stack)
+    {
+        Ok(())
+    } else {
+        Err("Accounts sign-in changed. Try again.".into())
+    }
+}
+
+fn current_server_account(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    document: &native::Document,
+    authorization: &accounts::Authorization,
+) -> bool {
+    let owner = settings::account_key(authorization.account.identity());
+    state.accounts.is_current(authorization)
+        && state.sessions.is_current(document)
+        && (opening_server_matches(state, document, Some(&owner))
+            || (active_document(app).is_some_and(|active| active.owner() == document.owner())
+                && state
+                    .setup
+                    .lock()
+                    .ok()
+                    .and_then(|setup| setup.clone())
+                    .is_some_and(|setup| {
+                        setup.belongs_to(authorization.account.identity())
+                            && setup.server_url.origin() == document.origin.origin()
+                    })))
 }
 
 fn active_document(app: &tauri::AppHandle) -> Option<native::Document> {
@@ -119,7 +281,7 @@ fn cancel_native_document(app: &tauri::AppHandle, label: &str) {
 
 pub(crate) fn shutdown_native(app: &tauri::AppHandle) {
     if let Some(state) = app.try_state::<DesktopState>() {
-        state.stack.abort();
+        state.deactivate_stack();
         state.browser_auth.cancel_all();
         state.speech.shutdown();
         if let Some(host) = &state.host_computer {
@@ -163,7 +325,13 @@ async fn native_command(
         .map_err(|_| "Desktop state unavailable.")?
         .as_deref()
         == Some(window.label());
-    if !active && !command.read_only() {
+    let opening_auth = matches!(
+        &command,
+        native::Command::AccountsCreateServerLoginGrant { .. }
+            | native::Command::AccountsConsumeServerInitializationSecret
+            | native::Command::ServerRemember
+    ) && opening_server_matches(&state, &document, None);
+    if !active && !command.read_only() && !opening_auth {
         return Err("This desktop window is not active.".into());
     }
     let owner = document.owner();
@@ -212,9 +380,56 @@ async fn native_command(
             }
             serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
         }
+        Command::AccountsCreateServerLoginGrant { origin, challenge } => {
+            if origin != document.origin.origin().ascii_serialization()
+                || !server_login::valid_challenge(&challenge)
+            {
+                return Err("Could not continue".into());
+            }
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            let result = server_login::issue(
+                authorization.directory_bearer()?,
+                &document.origin,
+                &challenge,
+                || current_server_account(&app, &state, &document, &authorization),
+            )
+            .await?;
+            serde_json::to_value(result).map_err(|_| "Could not continue".into())
+        }
+        Command::AccountsConsumeServerInitializationSecret => {
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization) {
+                return Err("Could not continue".into());
+            }
+            let mut pending = state
+                .initialization
+                .lock()
+                .map_err(|_| "Desktop state unavailable.")?;
+            let secret = pending.as_mut().and_then(|initialization| {
+                initialization.consume(
+                    &document.origin.origin().ascii_serialization(),
+                    &document.label,
+                    &settings::account_key(authorization.account.identity()),
+                )
+            });
+            if secret.is_some() {
+                *pending = None;
+            }
+            Ok(serde_json::json!(secret))
+        }
         Command::AccountsLogout => {
             state.browser_auth.cancel_owner(&owner);
             state.accounts.logout(&document.origin).await?;
+            *state
+                .initialization
+                .lock()
+                .map_err(|_| "Desktop state unavailable.")? = None;
             Ok(unit)
         }
         Command::Hello { .. } => {
@@ -384,21 +599,41 @@ async fn native_command(
     }
 }
 
-/// Only the app-owned stack can receive the private local host capability.
-fn managed_computer_document(app: &tauri::AppHandle, document: &native::Document) -> bool {
+/// Only the selected account's app-owned stack can receive the private local host capability.
+fn managed_stack(
+    app: &tauri::AppHandle,
+    document: &native::Document,
+) -> Option<Arc<local_stack::LocalStack>> {
     let state = app.state::<DesktopState>();
-    active_document(app).is_some_and(|active| active.owner() == document.owner())
-        && state.sessions.is_current(document)
-        && state
-            .setup
-            .lock()
-            .ok()
-            .and_then(|setup| setup.clone())
-            .is_some_and(|setup| {
-                setup.mode == settings::InstanceMode::New
-                    && setup.server_url.origin() == state.stack.web_url().origin()
-                    && document.origin.origin() == state.stack.web_url().origin()
-            })
+    if !active_document(app).is_some_and(|active| active.owner() == document.owner())
+        || !state.sessions.is_current(document)
+    {
+        return None;
+    }
+    let setup = state.setup.lock().ok()?.clone()?;
+    let stacks = state.stack.lock().ok()?;
+    let stack = stacks.snapshot();
+    if setup.mode != settings::InstanceMode::New
+        || setup.account.as_deref() != stacks.owner()
+        || !stacks.is_selected(&stack)
+        || setup.server_url.origin() != stack.web_url().origin()
+        || document.origin.origin() != stack.web_url().origin()
+    {
+        return None;
+    }
+    Some(stack)
+}
+
+fn managed_computer_document(app: &tauri::AppHandle, document: &native::Document) -> bool {
+    managed_stack(app, document).is_some()
+}
+
+fn managed_stack_is_current(
+    app: &tauri::AppHandle,
+    document: &native::Document,
+    stack: &Arc<local_stack::LocalStack>,
+) -> bool {
+    managed_stack(app, document).is_some_and(|selected| Arc::ptr_eq(&selected, stack))
 }
 
 fn native_text(app: &tauri::AppHandle, text: &str) -> String {
@@ -412,9 +647,8 @@ async fn request_computer_access(
     app: &tauri::AppHandle,
     document: &native::Document,
 ) -> Result<bool, String> {
-    if !managed_computer_document(app, document) {
-        return Err("Local computer access requires an app-managed local instance.".into());
-    }
+    let stack = managed_stack(app, document)
+        .ok_or("Local computer access requires an app-managed local instance.")?;
     let state = app.state::<DesktopState>();
     let host = state
         .host_computer
@@ -446,23 +680,23 @@ async fn request_computer_access(
         return Ok(false);
     };
     let _choice = state.computer_choice.lock().await;
-    if !managed_computer_document(app, document)
-        || !state.stack.matches_desired_stack().await
-        || !managed_computer_document(app, document)
+    if !managed_stack_is_current(app, document, &stack)
+        || !stack.matches_desired_stack().await
+        || !managed_stack_is_current(app, document, &stack)
     {
         return Ok(false);
     }
     if !host.grant(&owner, intent) {
         return Ok(false);
     }
-    if let Err(error) = state.stack.save_host_choice("this-mac").await {
-        host.revoke();
+    if let Err(error) = stack.save_host_choice("this-mac").await {
+        host.revoke_owner(&owner);
         let _ = refresh_menu(app);
         return Err(error);
     }
     // The window or consent can change while the server persists its choice.
-    if !managed_computer_document(app, document) || host.intent(&owner) != Some(intent) {
-        host.revoke();
+    if !managed_stack_is_current(app, document, &stack) || host.intent(&owner) != Some(intent) {
+        host.revoke_owner(&owner);
         return Ok(false);
     }
     let _ = refresh_menu(app);
@@ -470,13 +704,18 @@ async fn request_computer_access(
 }
 
 async fn revoke_computer_access(app: &tauri::AppHandle) -> Result<(), String> {
+    let document = active_document(app).ok_or("Local computer unavailable.")?;
+    let stack = managed_stack(app, &document).ok_or("Local computer unavailable.")?;
     let state = app.state::<DesktopState>();
     if let Some(host) = &state.host_computer {
-        host.revoke();
+        host.revoke_owner(&document.owner());
     }
     let _ = refresh_menu(app);
     let _choice = state.computer_choice.lock().await;
-    state.stack.save_host_choice("docker").await
+    if !managed_stack_is_current(app, &document, &stack) {
+        return Err("This local server is no longer active.".into());
+    }
+    stack.save_host_choice("docker").await
 }
 
 fn is_setup_document(label: &str, url: &Url) -> bool {
@@ -503,7 +742,7 @@ fn require_setup<R: tauri::Runtime>(window: &WebviewWindow<R>) -> Result<(), Str
 const SETUP_ACCOUNTS_OWNER: &str = "desktop-setup-accounts";
 
 fn retire_server_windows(app: &tauri::AppHandle, state: &DesktopState) {
-    state.stack.abort();
+    state.deactivate_stack();
     if let Some(host) = &state.host_computer {
         host.activate(None);
     }
@@ -549,7 +788,7 @@ async fn setup_accounts_sign_in(
     cancel_restore(&state);
     update_startup(&app, Startup::idle());
     state.accounts.invalidate();
-    state.stack.abort();
+    state.deactivate_stack();
     let _switch = state.switching.lock().await;
     retire_server_windows(&app, &state);
     let opener = app.clone();
@@ -587,6 +826,10 @@ async fn setup_accounts_logout(
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    *state
+        .initialization
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
     cancel_restore(&state);
     update_startup(&app, Startup::idle());
     state.accounts.invalidate();
@@ -818,7 +1061,16 @@ async fn connect_directory_server(
     require_account(state, authorization)?;
     match server.kind {
         server_directory::Kind::Local => {
-            start_local_server(window, app, state, authorization, directory, device).await
+            start_local_server(
+                window,
+                app,
+                state,
+                authorization,
+                directory,
+                device,
+                Some(&server.url),
+            )
+            .await
         }
         server_directory::Kind::Selfhosted => {
             let target = server::normalize_server_url(&server.url)?;
@@ -995,7 +1247,7 @@ fn local_stack_state<R: tauri::Runtime>(
     state: State<DesktopState>,
 ) -> Result<local_stack::LocalStackState, String> {
     require_setup(&window)?;
-    Ok(state.stack.state())
+    Ok(state.stack_snapshot().state())
 }
 
 #[tauri::command]
@@ -1015,7 +1267,16 @@ async fn connect_local_server(
         .map_err(|_| "A connection is already in progress.")?;
     let device = server_directory::device_id(&state.directory)?;
     let directory = server_directory::Directory::new()?;
-    start_local_server(&window, &app, &state, &authorization, &directory, &device).await
+    start_local_server(
+        &window,
+        &app,
+        &state,
+        &authorization,
+        &directory,
+        &device,
+        None,
+    )
+    .await
 }
 
 async fn start_local_server(
@@ -1025,27 +1286,36 @@ async fn start_local_server(
     authorization: &accounts::Authorization,
     directory: &server_directory::Directory,
     device: &str,
+    expected_url: Option<&str>,
 ) -> Result<(), String> {
     require_setup(window)?;
-    require_account(state, authorization)?;
-    let result = state.stack.start().await;
+    let (stack, intent) = select_local_stack(app, state, authorization)?;
+    if expected_url.is_some_and(|url| !stack.matches_saved_url(url)) {
+        return Err("This saved local instance is unavailable for this account. Choose This computer to create or open your instance.".into());
+    }
+    require_current_stack(state, authorization, &stack)?;
+    let result = stack.start_for(intent).await;
     require_setup(window)?;
     let authorization = state
         .accounts
         .renew(authorization, &server_directory::origin())
         .await?;
-    if result.phase != local_stack::LocalStackPhase::Ready
-        || !state.stack.matches_desired_stack().await
-    {
+    require_current_stack(state, &authorization, &stack)?;
+    if result.phase != local_stack::LocalStackPhase::Ready || !stack.matches_desired_stack().await {
         return Err(result
             .message
             .unwrap_or_else(|| "Could not start the local server.".into()));
     }
-    require_account(state, &authorization)?;
+    require_current_stack(state, &authorization, &stack)?;
+    if expected_url.is_some_and(|url| !stack.matches_saved_url(url)) {
+        return Err(
+            "The local server address changed. Choose This computer to open your instance.".into(),
+        );
+    }
     directory
         .add(
             authorization.directory_bearer()?,
-            &state.stack.web_url(),
+            &stack.web_url(),
             server_directory::Kind::Local,
             device,
         )
@@ -1056,7 +1326,7 @@ async fn start_local_server(
         state,
         settings::Setup {
             mode: settings::InstanceMode::New,
-            server_url: state.stack.web_url(),
+            server_url: stack.web_url(),
             account: None,
         },
         &authorization,
@@ -1077,13 +1347,23 @@ async fn open_server(
     server::require_accounts_only(&choice.server_url).await?;
     require_setup(window)?;
     require_account(state, authorization)?;
-    if choice.mode == settings::InstanceMode::New {
+    let local = if choice.mode == settings::InstanceMode::New {
+        let stack = state.stack_snapshot();
+        require_current_stack(state, authorization, &stack)?;
+        if stack.web_url().origin() != choice.server_url.origin() {
+            return Err("This local server is no longer active.".into());
+        }
+        Some(stack)
+    } else {
+        None
+    };
+    if let Some(stack) = &local {
         if let Some(host) = &state.host_computer {
             host.activate(None);
         }
-        state.stack.save_host_choice("docker").await?;
+        stack.save_host_choice("docker").await?;
         require_setup(window)?;
-        require_account(state, authorization)?;
+        require_current_stack(state, authorization, stack)?;
     }
     let target = choice.server_url.clone();
     let label = format!("server-{}", state.sequence.fetch_add(1, Ordering::Relaxed));
@@ -1096,6 +1376,28 @@ async fn open_server(
         state.sessions.remove(&label);
         return Err("Could not secure the desktop window.".into());
     }
+    let opening = OpeningServer {
+        label: label.clone(),
+        origin: target.origin().ascii_serialization(),
+        account: settings::account_key(authorization.account.identity()),
+        intent,
+    };
+    if let Some(initialization) = state
+        .initialization
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .as_mut()
+    {
+        initialization.confirm(&opening.origin, &label, &opening.account);
+    }
+    *state
+        .opening_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = Some(opening);
+    let _opening = OpeningServerGuard {
+        state,
+        label: label.clone(),
+    };
     let navigation_target = target.clone();
     let builder = profile::configure(
         WebviewWindowBuilder::new(app, &label, WebviewUrl::External(target.clone())),
@@ -1161,6 +1463,12 @@ async fn open_server(
         .await
         .and_then(|()| require_setup(window))
         .and_then(|()| require_account(state, authorization))
+        .and_then(|()| {
+            if let Some(stack) = &local {
+                require_current_stack(state, authorization, stack)?;
+            }
+            Ok(())
+        })
         .and_then(|()| {
             if state.restore_intent.load(Ordering::SeqCst) == intent {
                 Ok(())
@@ -1249,6 +1557,10 @@ fn clear_server_link<R: tauri::Runtime>(
         .map_err(|_| "Desktop state unavailable.")?;
     if pending.as_deref() == Some(raw_url.as_str()) {
         *pending = None;
+        *state
+            .initialization
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")? = None;
     }
     Ok(())
 }
@@ -1261,13 +1573,21 @@ fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String
 }
 
 fn receive_server_link(app: &tauri::AppHandle, input: &str) {
-    let Some(origin) = server_link::parse(input) else {
+    let initialization = server_link::parse_initialization(input);
+    let Some(origin) = server_link::parse(input).or_else(|| {
+        initialization
+            .as_ref()
+            .map(|initialization| initialization.origin.clone())
+    }) else {
         return;
     };
     let Some(state) = app.try_state::<DesktopState>() else {
         return;
     };
     cancel_restore(&state);
+    if let Ok(mut pending) = state.initialization.lock() {
+        *pending = initialization;
+    }
     if let Ok(mut pending) = state.pending_server.lock() {
         *pending = Some(origin.clone());
     }
@@ -1320,10 +1640,8 @@ async fn save_connected_server(
         .authorization(&server_directory::origin())
         .await?;
     let current = || {
-        state.accounts.is_current(&authorization)
+        current_server_account(app, state, document, &authorization)
             && bookmark.account == settings::account_key(authorization.account.identity())
-            && state.sessions.is_current(document)
-            && active_document(app).is_some_and(|active| active.owner() == document.owner())
             && state
                 .pending_bookmark
                 .lock()
@@ -1527,7 +1845,7 @@ fn cancel_restore(state: &DesktopState) {
     state.restore_intent.fetch_add(1, Ordering::SeqCst);
     if state.restoring.load(Ordering::SeqCst) {
         state.accounts.invalidate();
-        state.stack.abort();
+        state.deactivate_stack();
     }
 }
 
@@ -1729,13 +2047,22 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
             let _ = show_setup(app);
         }
         MenuAction::StopLocalServer => {
+            let Some(document) = active_document(app) else {
+                return;
+            };
+            let Some(stack) = managed_stack(app, &document) else {
+                return;
+            };
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let state = app.state::<DesktopState>();
-                if let Some(host) = &state.host_computer {
-                    host.activate(None);
+                if managed_stack_is_current(&app, &document, &stack) {
+                    if let Some(host) = &state.host_computer {
+                        host.activate(None);
+                    }
                 }
-                state.stack.stop().await;
+                // An account switch cannot retarget a stop that the user already requested.
+                stack.stop().await;
                 let _ = refresh_menu(&app);
             });
         }
@@ -1810,10 +2137,10 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
-            if !args
-                .iter()
-                .any(|argument| server_link::parse(argument).is_some())
-            {
+            if !args.iter().any(|argument| {
+                server_link::parse(argument).is_some()
+                    || server_link::parse_initialization(argument).is_some()
+            }) {
                 show_active_or_setup(app);
             }
         }))
@@ -1847,7 +2174,6 @@ fn main() {
                 app.path().resource_dir()?.join("stack")
             };
             let host_computer = host_computer::HostComputer::prepare(&directory).ok();
-            let callback_app = app.handle().clone();
             let stack = local_stack::LocalStack::new(
                 directory.join("stack"),
                 resources,
@@ -1856,11 +2182,7 @@ fn main() {
                     !cfg!(debug_assertions),
                     option_env!("ORKBOT_INSTALLER_REVISION"),
                 ),
-                Some(Arc::new(move |state| {
-                    if let Some(window) = callback_app.get_webview_window("setup") {
-                        let _ = window.emit("desktop-stack-changed", state);
-                    }
-                })),
+                None,
                 host_computer.as_ref().map(|host| host.connection.clone()),
             );
             let auth_app = app.handle().clone();
@@ -1880,7 +2202,7 @@ fn main() {
             app.manage(Mutex::new(locale::Locale::new(directory.clone())));
             app.manage(DesktopState {
                 setup: Mutex::new(settings::load(&directory)),
-                stack,
+                stack: Mutex::new(local_stack_scope::AccountStacks::new(stack)),
                 host_computer,
                 computer_choice: tokio::sync::Mutex::new(()),
                 computer_prompt: std::sync::atomic::AtomicBool::new(false),
@@ -1899,6 +2221,8 @@ fn main() {
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
                 pending_server: Mutex::new(None),
+                initialization: Mutex::new(None),
+                opening_server: Mutex::new(None),
                 pending_bookmark: Mutex::new(None),
                 bookmark_sync: tokio::sync::Mutex::new(()),
             });
@@ -2004,13 +2328,15 @@ mod tests {
             host_computer: None,
             computer_choice: tokio::sync::Mutex::new(()),
             computer_prompt: std::sync::atomic::AtomicBool::new(false),
-            stack: local_stack::LocalStack::new(
-                directory.join("stack"),
-                directory.join("resources"),
-                "edge".into(),
-                None,
-                None,
-            ),
+            stack: Mutex::new(local_stack_scope::AccountStacks::new(
+                local_stack::LocalStack::new(
+                    directory.join("stack"),
+                    directory.join("resources"),
+                    "edge".into(),
+                    None,
+                    None,
+                ),
+            )),
             active_window: Mutex::new(None),
             sequence: AtomicU64::new(1),
             switching: tokio::sync::Mutex::new(()),
@@ -2025,9 +2351,34 @@ mod tests {
             pairings: pairing::Pairings::default(),
             warm_generation: AtomicU64::new(0),
             pending_server: Mutex::new(None),
+            initialization: Mutex::new(None),
+            opening_server: Mutex::new(None),
             pending_bookmark: Mutex::new(None),
             bookmark_sync: tokio::sync::Mutex::new(()),
         }
+    }
+
+    #[test]
+    fn pending_native_auth_is_bound_to_the_confirmed_document_origin_account_and_intent() {
+        let pending = OpeningServer {
+            label: "server-new".into(),
+            origin: "https://server.example.test".into(),
+            account: "account-a".into(),
+            intent: 3,
+        };
+        let mut document = native::Document {
+            label: "server-new".into(),
+            id: "document".into(),
+            origin: Url::parse("https://server.example.test").unwrap(),
+        };
+        assert!(pending.permits(&document, Some("account-a"), 3));
+        assert!(!pending.permits(&document, Some("account-b"), 3));
+        assert!(!pending.permits(&document, Some("account-a"), 4));
+        document.label = "server-old".into();
+        assert!(!pending.permits(&document, Some("account-a"), 3));
+        document.label = "server-new".into();
+        document.origin = Url::parse("https://other.example.test").unwrap();
+        assert!(!pending.permits(&document, Some("account-a"), 3));
     }
 
     #[test]

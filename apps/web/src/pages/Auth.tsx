@@ -27,6 +27,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { IconTooltip } from "../components/IconTooltip";
 import { PasskeySignIn } from "../components/PasskeySignIn";
+import { signInWithNativeAccounts } from "../lib/accounts-login";
 import { authClient } from "../lib/auth";
 import type { AuthCapabilities } from "../lib/auth-capabilities";
 import { fetchAuthCapabilities } from "../lib/auth-capabilities";
@@ -66,6 +67,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   // Signup triggers a session refresh that remounts the anonymous auth page.
   const sent = resetSent || searchParams.get("verify") === "email";
   const [reset, setReset] = useState<AuthCapabilities | null>(null);
+  const ssoName = reset?.accountsLogin ? "Ork Accounts" : reset?.sso?.name;
   const [capabilityError, setCapabilityError] = useState(false);
   const [capabilityAttempt, setCapabilityAttempt] = useState(0);
   const [codeSent, setCodeSent] = useState(false);
@@ -227,6 +229,25 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
   async function signInWithSso() {
     setError(null);
+    if (reset?.accountsLogin) {
+      if (pending) return;
+      setPending(true);
+      try {
+        await signInWithNativeAccounts();
+        authClient.$store.notify("$sessionSignal");
+        enterApp();
+      } catch (failure) {
+        setError(
+          authErrorText(
+            { code: failure instanceof Error ? failure.message : undefined },
+            t`Could not continue`,
+          ),
+        );
+      } finally {
+        if (!entering.current) setPending(false);
+      }
+      return;
+    }
     try {
       const result = await runSsoFlow(
         (disableRedirect, callbackURL) =>
@@ -238,6 +259,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               searchParams.get("next") === "/integrations/setup" ? "/integrations/setup" : "/app",
             ),
             errorCallbackURL: callbackURL("/sign-in"),
+            ...(searchParams.get("error") === "REGISTRATION_CLOSED"
+              ? { additionalData: { forceLogin: true } }
+              : {}),
           }),
         ["/app", "/onboarding", "/integrations/setup", "/sign-in"],
         welcomeOrk,
@@ -284,14 +308,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               </Button>
             </div>
           ) : null}
-          {reset?.sso && !reset.passwordAuth && mode !== "forgot" ? (
+          {reset && ssoName && !reset.passwordAuth && mode !== "forgot" ? (
             <Button
               type="button"
               disabled={pending}
               className={submitClass}
               onClick={() => (started ? void signInWithSso() : setStarted(true))}
             >
-              {started ? <Trans>Continue with {reset.sso.name}</Trans> : <Trans>Get started</Trans>}
+              {started ? <Trans>Continue with {ssoName}</Trans> : <Trans>Get started</Trans>}
             </Button>
           ) : null}
           {error && !reset?.passwordAuth ? (
@@ -448,7 +472,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                   <Trans>Back</Trans>
                 </Button>
               ) : null}
-              {reset.sso && mode !== "forgot" && !codeStep ? (
+              {ssoName && mode !== "forgot" && !codeStep ? (
                 <Button
                   type="button"
                   variant="link"
@@ -457,7 +481,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
                   className="mt-3 text-muted-foreground"
                   onClick={() => void signInWithSso()}
                 >
-                  <Trans>Continue with {reset.sso.name}</Trans>
+                  <Trans>Continue with {ssoName}</Trans>
                 </Button>
               ) : null}
               {codeStep ? null : (

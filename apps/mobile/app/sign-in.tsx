@@ -29,6 +29,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { LogoAvatar } from "../components/logo-avatar";
 import { NativeActionButton } from "../components/native-action-button";
 import { accountsIdentity, welcomeAccountsOrk } from "../lib/accounts";
+import { continueWithAccountsServer } from "../lib/accounts-login";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import type { PasswordResetCapabilities } from "../lib/api";
 import {
@@ -86,6 +87,7 @@ export default function SignIn() {
   const [hasSession, setHasSession] = useState(false);
   const [apiBase, setApiBase] = useState(() => currentApiBase());
   const [reset, setReset] = useState<PasswordResetCapabilities | null>(null);
+  const ssoName = reset?.accountsLogin ? "Ork Accounts" : reset?.sso?.name;
   const [capabilityError, setCapabilityError] = useState(false);
   const [capabilityAttempt, setCapabilityAttempt] = useState(0);
   const [resetSent, setResetSent] = useState(false);
@@ -338,11 +340,15 @@ export default function SignIn() {
                       style={{ marginTop: 16 }}
                     />
                   ) : null}
-                  {reset?.sso && !reset.passwordAuth && mode !== "forgot" ? (
+                  {reset && ssoName && !reset.passwordAuth && mode !== "forgot" ? (
                     <NativeActionButton
-                      label={t("Continue with {name}", { name: reset.sso.name })}
+                      label={t("Continue with {name}", { name: ssoName })}
                       disabled={pending}
-                      onPress={() => void externalSignIn(continueWithSso)}
+                      onPress={() =>
+                        void externalSignIn(
+                          reset.accountsLogin ? continueWithAccountsServer : continueWithSso,
+                        )
+                      }
                       style={{ marginTop: 16 }}
                     />
                   ) : null}
@@ -532,12 +538,16 @@ export default function SignIn() {
                           style={{ marginTop: 12 }}
                         />
                       ) : null}
-                      {reset.sso && mode !== "forgot" ? (
+                      {ssoName && mode !== "forgot" ? (
                         <NativeActionButton
-                          label={t("Continue with {name}", { name: reset.sso.name })}
+                          label={t("Continue with {name}", { name: ssoName })}
                           prominence="quiet"
                           disabled={pending}
-                          onPress={() => void externalSignIn(continueWithSso)}
+                          onPress={() =>
+                            void externalSignIn(
+                              reset.accountsLogin ? continueWithAccountsServer : continueWithSso,
+                            )
+                          }
                           style={{ alignSelf: "center", marginTop: 16 }}
                         />
                       ) : null}

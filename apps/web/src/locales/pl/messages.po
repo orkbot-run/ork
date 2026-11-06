@@ -1825,10 +1825,9 @@ msgstr "Kontynuuj w tle"
 msgid "Continue to checkout"
 msgstr "Przejdź do płatności"
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "Kontynuuj z {0}"
+msgid "Continue with {ssoName}"
+msgstr "Kontynuuj z {ssoName}"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

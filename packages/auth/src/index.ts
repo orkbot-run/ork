@@ -44,8 +44,9 @@ import { breachedPasswordCheck } from "./breached-password.js";
 import type { EmailLocaleOf } from "./email.js";
 import { emailLocale, passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
 import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
+import { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
 import type { OidcConfig } from "./oidc.js";
-import { isCurrentOidcAccount, oidcDiscovery } from "./oidc.js";
+import { isCurrentOidcAccount, oidcAccountSubject, oidcDiscovery } from "./oidc.js";
 import { passkeyRelyingParty } from "./passkey.js";
 import type { TokenKey } from "./token-storage.js";
 import { encryptStoredOAuthTokens, openIdToken, sealIdToken } from "./token-storage.js";
@@ -58,6 +59,7 @@ export {
 } from "./email.js";
 export type { HomeDeletionReason } from "./home-deletion-email.js";
 export { homeDeletionEmail } from "./home-deletion-email.js";
+export { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
 export type { OidcConfig } from "./oidc.js";
 export { passkeyRelyingParty } from "./passkey.js";
 export {
@@ -75,6 +77,7 @@ export interface AuthEnv {
   /** Opt-in: rejects new passwords found in Have I Been Pwned. Calls an outside service. */
   breachedPasswordCheck?: boolean;
   oidc?: OidcConfig;
+  nativeAccounts?: { issuer: string; bootstrapSecret?: string };
   secret: string;
   baseURL: string;
   webOrigin: string;
@@ -82,6 +85,8 @@ export interface AuthEnv {
   signupAllowlist: string | undefined;
   /** Admits a new account only while there is none, for a deployment that serves one person. */
   singleAccount?: boolean;
+  /** A native-managed instance admits only this verified issuer/subject hash. */
+  singleAccountOwnerKey?: string;
   extraOrigins?: string[];
   /** SHA-256 signing certificate fingerprints of Android apps allowed to use this server's passkeys. */
   androidAppCertFingerprints?: string[];
@@ -163,8 +168,16 @@ export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
 }
 
 export function createAuth(prisma: PrismaClient, env: AuthEnv) {
-  if (env.passwordAuth === false && !env.oidc)
-    throw new Error("Password auth requires OIDC when disabled");
+  if (env.passwordAuth === false && !env.oidc && !env.nativeAccounts)
+    throw new Error("Disabled password auth requires a verified identity provider");
+  if (
+    env.singleAccountOwnerKey !== undefined &&
+    (!/^[a-f0-9]{64}$/.test(env.singleAccountOwnerKey) ||
+      !env.singleAccount ||
+      env.passwordAuth !== false ||
+      (!env.oidc && !env.nativeAccounts))
+  )
+    throw new Error("A managed account binding requires single-account identity authentication");
   // A failed lookup still sends the email, in the asking browser's language.
   const emailLocaleOf: EmailLocaleOf = async (account, headers) => {
     try {
@@ -300,6 +313,18 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       },
       validateUserInfo: async ({ user, source }, ctx) => {
         if (source.method !== "oauth" || source.oauth?.providerId !== "oidc") return;
+        const native = nativeLoginProof();
+        // The signed provider profile, never an email or client request, owns this instance.
+        if (env.singleAccountOwnerKey) {
+          const subject = native?.subject ?? source.oauth.profile?.sub;
+          const issuer = native?.issuer ?? env.oidc?.issuer;
+          if (
+            typeof subject !== "string" ||
+            !issuer ||
+            oidcAccountSubject(issuer, subject) !== env.singleAccountOwnerKey
+          )
+            return { error: "REGISTRATION_CLOSED" };
+        }
         const expectedUser = (await getOAuthState())?.serverContext?.reauthUserId;
         if (typeof expectedUser === "string" && user.id !== expectedUser)
           return { error: "REAUTHENTICATION_REQUIRED" };
@@ -322,10 +347,19 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         }
         if (source.action === "create-user") {
           const policy = await admission();
-          if (!policy.enabled) return { error: "REGISTRATION_CLOSED" };
-          if (!env.oidc?.allowSignupBypass && !emailAllowed(email, policy.allowlist))
+          const provision = native?.allowProvision === true;
+          // Bootstrap authority cannot replace a different, already admitted local owner.
+          if (provision && env.singleAccount && (await hasAdmittedAccount(prisma)))
+            return { error: "REGISTRATION_CLOSED" };
+          if (!policy.enabled && !provision) return { error: "REGISTRATION_CLOSED" };
+          if (!provision && !env.oidc?.allowSignupBypass && !emailAllowed(email, policy.allowlist))
             return { error: "EMAIL_NOT_ALLOWED" };
-          if (!env.oidc?.allowSignupBypass && policy.allowlist.length > 0 && !verified)
+          if (
+            !provision &&
+            !env.oidc?.allowSignupBypass &&
+            policy.allowlist.length > 0 &&
+            !verified
+          )
             return { error: "EMAIL_VERIFICATION_REQUIRED" };
           return;
         }
@@ -376,11 +410,21 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         env.email,
         emailLocaleOf,
         env.oidc?.name,
-        env.oidc?.issuer,
+        env.oidc?.issuer ?? env.nativeAccounts?.issuer,
         env.passwordAuth !== false,
       ),
       identityConfirmation(env.email, emailLocaleOf, env.passwordAuth !== false),
       ...(discovery ? [discovery.plugin] : []),
+      ...(env.nativeAccounts
+        ? [
+            nativeAccountsLogin(prisma, {
+              origin: env.webOrigin,
+              issuer: env.nativeAccounts.issuer,
+              bootstrapSecret: env.nativeAccounts.bootstrapSecret,
+              expectedOwnerKey: env.singleAccountOwnerKey,
+            }),
+          ]
+        : []),
       ...(emailCodeSignIn
         ? [
             emailOTP({
@@ -427,6 +471,12 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             message: "Invalid profile field",
           });
         }
+        if (
+          ctx.path === "/sign-in/social" &&
+          ctx.body?.provider === "oidc" &&
+          ctx.body?.additionalData?.forceLogin === true
+        )
+          await addOAuthServerContext({ forceOidcLogin: true });
         if (
           ctx.path === "/sign-in/social" &&
           ctx.body?.provider === "oidc" &&
@@ -570,7 +620,10 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                     );
                     if (
                       !proof ||
-                      proof.value !== JSON.stringify([env.oidc?.issuer, session.user.id]) ||
+                      ![env.oidc?.issuer, env.nativeAccounts?.issuer].some(
+                        (issuer) =>
+                          issuer && proof.value === JSON.stringify([issuer, session.user.id]),
+                      ) ||
                       proof.expiresAt.getTime() <= Date.now()
                     )
                       return null;
@@ -641,13 +694,33 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             const user = await ctx?.context.internalAdapter.findUserById(session.userId);
             const policy = signupPolicyFromEnv(env);
             const oidcSignIn = isOidcCallback(ctx);
-            if (env.passwordAuth === false && !oidcSignIn) {
+            const native = nativeLoginProof();
+            if (env.passwordAuth === false && !oidcSignIn && !native) {
               throw new APIError("FORBIDDEN", {
                 code: "PASSWORD_AUTH_DISABLED",
                 message: "Sign in with the identity provider",
               });
             }
-            const bypassAllowlist = oidcSignIn && env.oidc?.allowSignupBypass;
+            const provision = native?.allowProvision === true;
+            const bypassAllowlist = (oidcSignIn && env.oidc?.allowSignupBypass) || provision;
+            if (env.singleAccountOwnerKey) {
+              const accounts = user ? await ctx?.context.internalAdapter.findAccounts(user.id) : [];
+              const owner = accounts?.find(
+                (account) =>
+                  account.providerId === "oidc" && account.accountId === env.singleAccountOwnerKey,
+              );
+              if (
+                !owner ||
+                (native
+                  ? oidcAccountSubject(native.issuer, native.subject) !== env.singleAccountOwnerKey
+                  : !(await isCurrentOidcAccount(owner, env.oidc?.issuer, await tokenKey())))
+              ) {
+                throw new APIError("FORBIDDEN", {
+                  code: "REGISTRATION_CLOSED",
+                  message: "Registration is closed",
+                });
+              }
+            }
             if (!user || isMessagingEmail(user.email)) {
               throw new APIError("FORBIDDEN", {
                 code: "EMAIL_VERIFICATION_REQUIRED",
@@ -664,7 +737,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
             if (!membership) {
               if (
-                !policy.enabled ||
+                (!policy.enabled && !provision) ||
                 (!bypassAllowlist && !emailAllowed(user.email, policy.allowlist))
               ) {
                 throw new APIError("FORBIDDEN", {
@@ -683,10 +756,13 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
           after: async (session, ctx) => {
             // A linked identity does not prove how an older session authenticated.
             // Only a verified callback may mark this exact session as OIDC-authenticated.
-            if (ctx && isOidcCallback(ctx) && env.oidc) {
+            const native = nativeLoginProof();
+            const issuer =
+              native?.issuer ?? (ctx && isOidcCallback(ctx) ? env.oidc?.issuer : undefined);
+            if (ctx && issuer) {
               await ctx.context.internalAdapter.createVerificationValue({
                 identifier: oidcSessionKey(session.id),
-                value: JSON.stringify([env.oidc.issuer, session.userId]),
+                value: JSON.stringify([issuer, session.userId]),
                 expiresAt: session.expiresAt,
               });
             }

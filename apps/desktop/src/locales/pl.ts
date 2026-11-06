@@ -142,6 +142,13 @@ export const PL_MESSAGES: Record<string, string> = {
   "Welcome to Ork": "Witaj w Ork",
   "Choose which server this app should use.": "Wybierz serwer, z którego ma korzystać aplikacja.",
   Instance: "Instancja",
+  "This saved local instance is unavailable for this account. Choose This computer to create or open your instance.":
+    'Ta zapisana instancja lokalna jest niedostępna dla tego konta. Wybierz "Ten komputer", aby utworzyć lub otworzyć swoją instancję.',
+  "The local server address changed. Choose This computer to open your instance.":
+    'Adres serwera lokalnego się zmienił. Wybierz "Ten komputer", aby otworzyć swoją instancję.',
+  "This local server is no longer active.": "Ten serwer lokalny nie jest już aktywny.",
+  "The local server could not verify this account. Update the local server and retry.":
+    "Serwer lokalny nie mógł zweryfikować tego konta. Zaktualizuj serwer i spróbuj ponownie.",
   "This computer": "Ten komputer",
   "Existing instance": "Istniejąca instancja",
   "Technical details": "Szczegóły techniczne",

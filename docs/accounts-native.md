@@ -16,8 +16,7 @@ ORK_ACCOUNTS_MOBILE_CLIENT_ID=replace-with-mobile-public-client-id
 
 Client IDs are public. Use a separate ID for each app and keep client secrets out
 of both binaries. If configuration is missing, requesting an Accounts connection
-fails with a configuration error. The app-managed local server also requires the
-desktop public client ID. Rebuild after changing these settings or URL schemes.
+fails with a configuration error. Rebuild after changing these settings or URL schemes.
 
 ## Provider registration
 
@@ -88,12 +87,10 @@ renderer entry directly; ordinary browser tests use the connection page.
 ## Local server sign-in
 
 "This computer" uses Ork Accounts as its only sign-in method. The desktop build supplies
-the public client ID to its local API, which uses PKCE without a client secret.
-The registered `http://127.0.0.1/callback` accepts the allocated loopback port.
-The web proxy forwards that exact path to the API, which sends it to the shared
-OIDC callback handler without changing the code or state.
+an account-bound login proof to its local API. The public client ID belongs to the
+native Accounts connection. The local API needs no OIDC client settings.
 
-Accounts verifies the identity. The local API verifies the ID token and creates a
+Accounts verifies the identity. The local API verifies the login proof and creates a
 product session for that identity. Passwords, email codes and passkeys on the local
 server cannot sign in or confirm sensitive actions. Old product sessions without
 verified OIDC provenance expire when the API starts in this mode, including their
@@ -102,20 +99,30 @@ paired-device credentials. Account and workspace data stay in place.
 Set the repository variable `ORK_ACCOUNTS_DESKTOP_CLIENT_ID` for desktop builds
 and `ORK_ACCOUNTS_MOBILE_CLIENT_ID` for mobile builds.
 For a local build, export the same variable before compiling. A missing client ID
-stops local-server startup rather than enabling another sign-in method.
+prevents native Accounts sign-in.
+
+Each verified central account gets a separate Compose project, configuration directory
+and database. Switching accounts keeps the other projects and their data in place.
+An older shared local stack is reused only when its private `.desktop-owner` marker
+has been bound to the verified issuer/subject hash by the operator. Saved picker choices
+and directory bookmarks cannot establish that ownership.
 
 ## Credentials and sessions
 
 Desktop exposes `window.orkbotDesktop.accounts.signIn()`, `.session()` and `.logout()`
-through the trusted document bridge. Only identity metadata crosses that bridge.
+through the trusted document bridge. Its server login method returns a short proof
+bound to the selected server and challenge. The central bearer stays in native code.
 Mobile exposes `continueWithAccounts()`, `accountsAccessToken()` and
 `signOutAccounts()` from `lib/sso`. Desktop uses the operating system credential
 store. Mobile uses SecureStore.
 
-The selected Ork server owns a separate Better Auth session. Its existing Expo
-authorization proxy and desktop SSO flow continue to provide that session.
-Accounts access tokens stay separate from server session bearers. The API gains
-no token exchange or bearer acceptance in this change.
+The selected Ork server owns a separate Better Auth session. Existing OIDC installations
+still use the Expo authorization proxy or desktop SSO flow to create it.
+
+New installations exchange native Accounts proofs for that session. The app obtains a
+one-minute proof from the fixed Accounts endpoint and sends it to the selected server,
+which checks the signature, exact audience and one-use challenge before issuing its own
+session. The central bearer stays in the app.
 
 With `offline_access`, the provider can return a refresh token. Both apps use it to
 renew expiring access tokens and save the replacement credentials. A connection
@@ -129,10 +136,12 @@ remain active if the provider has no end-session endpoint.
 
 ## Server-side SSO
 
-For API-managed OIDC, use `OIDC_ISSUER=https://api.orkbot.run` together with the
-operator's separately registered confidential client settings. See
-[Self-hosted accounts](self-host-accounts.md#openid-connect-sso). Use separate
-credentials for the API's confidential client.
+New self-hosted stacks enable native Accounts proofs during automatic initialization.
+The initialization link carries an operator secret used to claim the first owner.
+The app releases it once after confirming the server and account. Ordinary connection
+links remain safe to share. Existing OIDC deployments keep their registered client
+configuration.
+See [Self-hosted accounts](self-host-accounts.md).
 
 ## Verification
 

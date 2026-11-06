@@ -1,0 +1,131 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Set only PUBLIC_ORIGIN. Route HTTPS to web:5173 and open the initialization link in bootstrap logs.
+
+x-image: &image ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
+x-runtime: &runtime
+  image: *image
+  init: true
+  restart: unless-stopped
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  pids_limit: 256
+  mem_limit: 1536m
+
+services:
+  bootstrap:
+    image: *image
+    user: "0:0"
+    restart: "no"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER, DAC_OVERRIDE]
+    pids_limit: 64
+    mem_limit: 256m
+    network_mode: none
+    command: [node, /app/infra/compose/selfhost-init.mjs, "${PUBLIC_ORIGIN:?Set the public HTTPS origin}", "${COMPOSE_PROJECT_NAME:?Compose project name is required}-api-private"]
+    volumes:
+      - configuration:/configuration
+      - api-configuration:/configuration/api
+      - worker-configuration:/configuration/worker
+      - web-configuration:/configuration/web
+      - migration-configuration:/configuration/migrate
+      - database-configuration:/configuration/database
+      - server-data:/data
+
+  ork-selfhost-database:
+    image: postgres:16@sha256:e17e86066e5ef83e0952a9347f5c792b7ece00972e2aa787a6986f471b3dd3d5
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    pids_limit: 200
+    mem_limit: 2g
+    environment:
+      POSTGRES_USER: orkbot
+      POSTGRES_DB: orkbot
+      POSTGRES_PASSWORD_FILE: /run/orkbot/password
+    volumes:
+      - database-data:/var/lib/postgresql/data
+      - database-configuration:/run/orkbot:ro
+    networks: [data]
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U orkbot -d orkbot]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  migrate:
+    <<: *runtime
+    restart: "no"
+    working_dir: /app/apps/api
+    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, pnpm, db:deploy]
+    volumes: [migration-configuration:/run/orkbot:ro]
+    networks: [data]
+    depends_on:
+      ork-selfhost-database: {condition: service_healthy}
+
+  api:
+    <<: *runtime
+    working_dir: /app/apps/api
+    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, dist/index.js]
+    volumes: [api-configuration:/run/orkbot:ro, server-data:/data]
+    networks:
+      app:
+        aliases: ["${COMPOSE_PROJECT_NAME:?required}-api-private"]
+      data: {}
+    expose: ["3100"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3100/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+
+  worker:
+    <<: *runtime
+    working_dir: /app/apps/worker
+    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, dist/index.js]
+    stop_grace_period: 50m
+    pids_limit: 512
+    mem_limit: 2g
+    volumes: [worker-configuration:/run/orkbot:ro, server-data:/data]
+    networks: [app, data]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, dist/health-check.js]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 2m
+
+  web:
+    <<: *runtime
+    working_dir: /app/apps/web
+    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node_modules/.bin/vite, preview, --host, 0.0.0.0, --port, "5173"]
+    pids_limit: 128
+    mem_limit: 512m
+    volumes: [web-configuration:/run/orkbot:ro, webassets:/app/apps/web/asset-archive]
+    networks: [app]
+    expose: ["5173"]
+    depends_on:
+      api: {condition: service_healthy}
+
+volumes:
+  configuration:
+  api-configuration:
+  worker-configuration:
+  web-configuration:
+  migration-configuration:
+  database-configuration:
+  database-data:
+  server-data:
+  webassets:
+
+networks:
+  app:
+  data:
+    internal: true

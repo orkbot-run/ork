@@ -178,12 +178,13 @@ pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
     }
     let value: Value = serde_json::from_slice(&body).map_err(|_| ERROR)?;
     if value.get("passwordAuth") != Some(&Value::Bool(false))
-        || !value.get("sso").is_some_and(|sso| {
-            sso.get("name")
-                .and_then(Value::as_str)
-                .is_some_and(|name| !name.trim().is_empty())
-                && sso.get("availability").and_then(Value::as_str) == Some("available")
-        })
+        || !(value.get("accountsLogin") == Some(&Value::Bool(true))
+            || value.get("sso").is_some_and(|sso| {
+                sso.get("name")
+                    .and_then(Value::as_str)
+                    .is_some_and(|name| !name.trim().is_empty())
+                    && sso.get("availability").and_then(Value::as_str) == Some("available")
+            }))
     {
         return Err(ERROR.into());
     }
@@ -425,8 +426,24 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn accounts_only_capability_check_accepts_native_grants_without_server_oidc() {
+        let (server, request) = serve_once(http_response(
+            "200 OK",
+            r#"{"passwordAuth":false,"accountsLogin":true,"sso":null}"#,
+        ));
+        require_accounts_only(&server).await.unwrap();
+        assert!(!request
+            .join()
+            .unwrap()
+            .to_lowercase()
+            .contains("authorization:"));
+    }
+
+    #[tokio::test]
     async fn accounts_only_capability_check_rejects_legacy_unavailable_and_unsafe_responses() {
         for body in [
+            r#"{"passwordAuth":true,"accountsLogin":true,"sso":null}"#,
+            r#"{"passwordAuth":false,"accountsLogin":"true","sso":null}"#,
             r#"{"passwordAuth":true,"sso":{"name":"Accounts","availability":"available"}}"#,
             r#"{"passwordAuth":false,"sso":null}"#,
             r#"{"passwordAuth":false,"sso":{"name":"Accounts"}}"#,

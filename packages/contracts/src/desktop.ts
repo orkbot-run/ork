@@ -102,6 +102,13 @@ export interface OrkDesktop {
     signIn: () => Promise<OrkDesktopAccount>;
     session: () => Promise<OrkDesktopAccount | null>;
     logout: () => Promise<void>;
+    /** Only an audience-bound proof crosses the bridge; the central bearer stays native. */
+    createServerLoginGrant?: (request: {
+      origin: string;
+      challenge: string;
+    }) => Promise<{ grant: string; expiresAt: number }>;
+    /** Released once to the confirmed server document, never persisted in its bookmark. */
+    consumeServerInitializationSecret?: () => Promise<string | null>;
   };
   /** Optional for compatibility with hosts without native device pairing. */
   pairing?: {

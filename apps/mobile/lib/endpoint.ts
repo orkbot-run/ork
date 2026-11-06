@@ -15,7 +15,7 @@ export const MAX_API_PROBE_RESPONSE_BYTES = 64 * 1024;
 export async function requireAccountsSignIn(
   url: string,
   headers: Record<string, string> = {},
-): Promise<void> {
+): Promise<{ accountsLogin: boolean }> {
   const parsed = normalizeApiBase(url);
   if (!parsed.ok || parsed.url !== url) throw new Error("Invalid server address.");
   const response = await fetch(`${url}/api/auth/capabilities`, {
@@ -26,6 +26,15 @@ export async function requireAccountsSignIn(
   });
   if (!response.ok) throw new Error("Could not read the server's sign-in options.");
   const value = await readBoundedJsonResponse<unknown>(response, MAX_API_PROBE_RESPONSE_BYTES);
+  if (
+    value &&
+    typeof value === "object" &&
+    "passwordAuth" in value &&
+    value.passwordAuth === false &&
+    "accountsLogin" in value &&
+    value.accountsLogin === true
+  )
+    return { accountsLogin: true };
   if (
     !value ||
     typeof value !== "object" ||
@@ -41,6 +50,7 @@ export async function requireAccountsSignIn(
     value.sso.availability !== "available"
   )
     throw new Error("This server must use Accounts sign-in.");
+  return { accountsLogin: false };
 }
 
 export type EndpointResult = { ok: true; url: string } | { ok: false; error: string };

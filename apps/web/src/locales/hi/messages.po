@@ -1825,10 +1825,9 @@ msgstr ""
 msgid "Continue to checkout"
 msgstr ""
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "{0} के साथ जारी रखें"
+msgid "Continue with {ssoName}"
+msgstr "{ssoName} के साथ जारी रखें"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

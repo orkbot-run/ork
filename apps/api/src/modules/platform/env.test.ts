@@ -12,6 +12,59 @@ const base = {
 };
 
 describe("loadEnv", () => {
+  it("binds managed native instances only with an exact owner key and OIDC", () => {
+    const configured = {
+      ...base,
+      AUTH_PASSWORD_ENABLED: "false",
+      OIDC_ISSUER: "https://identity.example.test",
+      OIDC_CLIENT_ID: "public-client",
+      ORKBOT_DESKTOP_STACK_TOKEN: "cd".repeat(32),
+      ORKBOT_DESKTOP_ACCOUNT_KEY: "ab".repeat(32),
+    };
+    expect(loadEnv(configured).desktopAccountKey).toBe(configured.ORKBOT_DESKTOP_ACCOUNT_KEY);
+    expect(loadEnv(base).desktopAccountKey).toBeUndefined();
+    for (const key of ["invalid", "AB".repeat(32), "a".repeat(63)])
+      expect(() => loadEnv({ ...configured, ORKBOT_DESKTOP_ACCOUNT_KEY: key })).toThrow(
+        "ORKBOT_DESKTOP_ACCOUNT_KEY",
+      );
+    expect(() => loadEnv({ ...configured, ORKBOT_DESKTOP_STACK_TOKEN: undefined })).toThrow(
+      "ORKBOT_DESKTOP_ACCOUNT_KEY",
+    );
+    expect(() => loadEnv({ ...configured, AUTH_PASSWORD_ENABLED: "true" })).toThrow(
+      "ORKBOT_DESKTOP_ACCOUNT_KEY",
+    );
+    expect(() =>
+      loadEnv({
+        ...configured,
+        OIDC_ISSUER: undefined,
+        OIDC_CLIENT_ID: undefined,
+        AUTH_PASSWORD_ENABLED: "true",
+      }),
+    ).toThrow("ORKBOT_DESKTOP_ACCOUNT_KEY");
+  });
+
+  it("supports native Accounts without operator OIDC credentials", () => {
+    const config = {
+      ...base,
+      AUTH_ACCOUNTS_ENABLED: "true",
+      AUTH_PASSWORD_ENABLED: "false",
+      ORKBOT_BOOTSTRAP_SECRET: "offline-bootstrap-secret-with-32-characters",
+      ORKBOT_DESKTOP_STACK_TOKEN: "cd".repeat(32),
+      ORKBOT_DESKTOP_ACCOUNT_KEY: "ab".repeat(32),
+    };
+    const env = loadEnv(config);
+    expect(env.accountsEnabled).toBe(true);
+    expect(env.oidc).toBeUndefined();
+    expect(env.desktopAccountKey).toBe(config.ORKBOT_DESKTOP_ACCOUNT_KEY);
+    expect(env.bootstrapSecret).toBe(config.ORKBOT_BOOTSTRAP_SECRET);
+    expect(() => loadEnv({ ...config, AUTH_ACCOUNTS_ENABLED: "yes" })).toThrow(
+      "AUTH_ACCOUNTS_ENABLED must be true or false",
+    );
+    expect(() => loadEnv({ ...config, ORKBOT_BOOTSTRAP_SECRET: "short" })).toThrow(
+      "ORKBOT_BOOTSTRAP_SECRET",
+    );
+  });
+
   it("defaults the attachment count to four and accepts configured bounds", () => {
     expect(loadEnv(base).maxAttachmentsPerMessage).toBe(4);
     expect(loadEnv({ ...base, MAX_ATTACHMENTS_PER_MESSAGE: " " }).maxAttachmentsPerMessage).toBe(4);
@@ -439,6 +492,21 @@ describe("product API authentication boundary", () => {
     OIDC_ISSUER: "https://api.orkbot.run",
     OIDC_CLIENT_ID: "offline-public-client",
   };
+
+  it("starts native Accounts without a client registration and keeps local auth closed", () => {
+    const config = { ...base, AUTH_ACCOUNTS_ENABLED: "true" };
+    const env = loadProductEnv(config);
+    expect(env.accountsEnabled).toBe(true);
+    expect(env.passwordAuth).toBe(false);
+    expect(env.oidc).toBeUndefined();
+    expect(loadProductEnv({ ...config, OIDC_ISSUER: configured.OIDC_ISSUER }).oidc).toBeUndefined();
+    expect(() => loadProductEnv({ ...config, AUTH_PASSWORD_ENABLED: "true" })).toThrow(
+      "AUTH_PASSWORD_ENABLED must be false",
+    );
+    expect(() =>
+      loadProductEnv({ ...config, OIDC_ISSUER: "https://different.example.test" }),
+    ).toThrow("OIDC_ISSUER must be https://api.orkbot.run");
+  });
 
   it("requires explicit central issuer and client settings before startup", () => {
     expect(() => loadProductEnv(base)).toThrow("OIDC_ISSUER");

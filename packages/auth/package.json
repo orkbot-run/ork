@@ -23,6 +23,7 @@
     "@orkbot/db": "workspace:*",
     "@orkbot/ui-tokens": "workspace:*",
     "better-auth": "1.7.16",
+    "jose": "6.2.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-email": "6.11.6"

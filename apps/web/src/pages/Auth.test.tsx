@@ -8,6 +8,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { signInWithNativeAccounts } from "../lib/accounts-login";
 import { authClient } from "../lib/auth";
 import type { AuthCapabilities } from "../lib/auth-capabilities";
 import { fetchAuthCapabilities } from "../lib/auth-capabilities";
@@ -67,8 +68,10 @@ vi.mock("@orkbot/ui-web", () => ({
   ),
 }));
 vi.mock("../lib/auth-capabilities", () => ({ fetchAuthCapabilities: vi.fn() }));
+vi.mock("../lib/accounts-login", () => ({ signInWithNativeAccounts: vi.fn() }));
 vi.mock("../lib/auth", () => ({
   authClient: {
+    $store: { notify: vi.fn() },
     signIn: { social: vi.fn(async () => ({})), email: vi.fn(), emailOtp: vi.fn() },
     emailOtp: { sendVerificationOtp: vi.fn() },
   },
@@ -94,10 +97,10 @@ afterEach(async () => {
   vi.restoreAllMocks();
   delete window.orkbotDesktop;
 });
-async function render(mode: "in" | "up" | "forgot" = "in", start = true) {
+async function render(mode: "in" | "up" | "forgot" = "in", start = true, route = "/") {
   await act(async () =>
     root.render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
         <AuthPage mode={mode} />
       </MemoryRouter>,
     ),
@@ -208,6 +211,39 @@ it("lets the desktop app change its server from sign in", async () => {
   );
   expect(change).toHaveBeenCalledOnce();
 });
+
+it("signs in through the native Accounts proof without server OIDC", async () => {
+  vi.mocked(fetchAuthCapabilities).mockResolvedValue({
+    ...capabilities,
+    sso: null,
+    accountsLogin: true,
+  });
+  vi.mocked(signInWithNativeAccounts).mockResolvedValue(undefined);
+  await render();
+  await act(async () => button("Continue with Ork Accounts").click());
+  expect(signInWithNativeAccounts).toHaveBeenCalledOnce();
+  expect(authClient.signIn.social).not.toHaveBeenCalled();
+  expect(authClient.$store.notify).toHaveBeenCalledWith("$sessionSignal");
+  expect(clearSpaceSelection).toHaveBeenCalledOnce();
+});
+
+it.each(["REGISTRATION_CLOSED", "SSO_UNAVAILABLE", undefined])(
+  "forces provider login only when retrying a registration refusal (%s)",
+  async (error) => {
+    vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
+    vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+    vi.mocked(authClient.signIn.social).mockResolvedValue({
+      data: null,
+      error: { message: "Unavailable", status: 503, statusText: "Unavailable" },
+    });
+    await render("in", true, error ? `/sign-in?error=${error}` : "/sign-in");
+    await act(async () => button("Continue with Example").click());
+    const request = vi.mocked(authClient.signIn.social).mock.calls[0]![0];
+    if (error === "REGISTRATION_CLOSED")
+      expect(request).toHaveProperty("additionalData", { forceLogin: true });
+    else expect(request).not.toHaveProperty("additionalData");
+  },
+);
 
 it("offers no server change in a browser", async () => {
   vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);

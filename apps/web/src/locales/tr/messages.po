@@ -1825,10 +1825,9 @@ msgstr "Arka planda devam et"
 msgid "Continue to checkout"
 msgstr "Ödemeye devam et"
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "{0} ile devam et"
+msgid "Continue with {ssoName}"
+msgstr "{ssoName} ile devam et"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

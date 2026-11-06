@@ -2,7 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, it } from "vitest";
-import { createServerConnectLink, parseServerConnectLink } from "./server-connect.js";
+import {
+  createServerConnectLink,
+  createServerInitializeLink,
+  parseServerConnectLink,
+  parseServerInitializeLink,
+} from "./server-connect.js";
 
 describe("server connection links", () => {
   it.each([
@@ -45,5 +50,30 @@ describe("server connection links", () => {
     "orkbot://connect/?server=https%3A%2F%2Fexample.test",
   ])("rejects malformed links: %s", (link) => {
     expect(parseServerConnectLink(link)).toBeNull();
+  });
+});
+
+describe("server initialization links", () => {
+  const origin = "https://server.example.test";
+  const secret = "a".repeat(43);
+  it("keeps initialization separate from ordinary connection links", () => {
+    const link = createServerInitializeLink(origin, secret);
+    expect(parseServerInitializeLink(link)).toEqual({ server: origin, secret });
+    expect(parseServerConnectLink(link)).toBeNull();
+    expect(parseServerInitializeLink(createServerConnectLink(origin))).toBeNull();
+  });
+  it.each([
+    `orkbot://initialize?server=${encodeURIComponent(origin)}&secret=${secret}&secret=${secret}`,
+    `orkbot://initialize?server=${encodeURIComponent(origin)}&secret=${secret}&extra=1`,
+    `orkbot://initialize/?server=${encodeURIComponent(origin)}&secret=${secret}`,
+    `orkbot://initialize?server=${encodeURIComponent(origin)}&secret=short`,
+    `orkbot://initialize?server=${encodeURIComponent("http://public.example.test")}&secret=${secret}`,
+    `orkbot://initialize?server=${encodeURIComponent(origin)}&secret=${secret}#fragment`,
+  ])("rejects ambiguous initialization credentials: %s", (link) => {
+    expect(parseServerInitializeLink(link)).toBeNull();
+  });
+  it("rejects invalid initialization credentials at construction", () => {
+    expect(() => createServerInitializeLink(origin, "short")).toThrow();
+    expect(() => createServerInitializeLink("http://public.example.test", secret)).toThrow();
   });
 });

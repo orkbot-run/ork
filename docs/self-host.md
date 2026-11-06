@@ -11,10 +11,27 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 ## What you need
 
 - Docker Engine 26 or newer with the Compose plugin, curl and OpenSSL.
-- A registered Ork Accounts client for this installation ([Accounts sign-in](./self-host-accounts.md)).
 - A model: an OpenRouter key, a connection added in the app after signup, or a model server you
   run yourself ([models](./self-host-models.md)).
 - For a public host, a domain and TLS ([production deployment](./self-host-production.md)).
+
+## Automatic initialization
+
+For a new server behind Easypanel or another HTTPS proxy, use
+[`docker-compose.selfhost.yml`](../infra/compose/docker-compose.selfhost.yml).
+Set `PUBLIC_ORIGIN` to the server's HTTPS origin and route that domain to `web:5173`.
+The bootstrap service saves generated database passwords and encryption keys in private
+volumes. Open the initialization link from its logs in Ork on desktop or mobile to claim
+the server with your Accounts identity. Server OIDC credentials are unnecessary.
+
+Back up the configuration volumes too. You need their keys to read the database and
+files after a restore. On restart, the stack reuses its saved configuration and refuses
+a changed origin or inconsistent settings. Add model connections in the app after
+sign-in. Computer providers start disabled.
+
+[Accounts sign-in](./self-host-accounts.md) explains how the server verifies identity and
+admits its first owner. The installers below keep the earlier OIDC setup path for
+existing deployments.
 
 ## Linux server setup
 
@@ -54,7 +71,7 @@ Do not publish the API or supervisor ports. Automatic Caddy setup requires ports
 
 Success is reported only after the public certificate, API health and Accounts sign-in
 are ready. Ork then connects to the server automatically. You can also open its HTTPS
-address and sign in with the same Accounts account. Creating a workspace does not grant
+address to hand the connection to a native app. Creating a workspace does not grant
 server-administration permissions.
 
 Rerunning from the same directory preserves credentials, database volumes and bot files.

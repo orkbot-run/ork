@@ -1825,10 +1825,9 @@ msgstr "在后台继续"
 msgid "Continue to checkout"
 msgstr "继续结账"
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "通过 {0} 继续"
+msgid "Continue with {ssoName}"
+msgstr "通过 {ssoName} 继续"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

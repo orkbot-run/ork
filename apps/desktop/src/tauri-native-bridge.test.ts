@@ -210,6 +210,35 @@ describe("Tauri native bridge", () => {
     ]);
   });
 
+  it("requests server-scoped login grants and consumes initialization only through the native proof", async () => {
+    const grant = { grant: "header.payload.signature", expiresAt: 1234567890 };
+    const { window, invoke } = runBridge({
+      invoke: async (_command, request) => {
+        if (request.command.type === "accounts.createServerLoginGrant") return grant;
+        if (request.command.type === "accounts.consumeServerInitializationSecret")
+          return "s".repeat(43);
+        return undefined;
+      },
+    });
+    const accounts = desktop(window).accounts!;
+    await expect(
+      accounts.createServerLoginGrant!({
+        origin: "https://app.example.com",
+        challenge: "a".repeat(43),
+      }),
+    ).resolves.toEqual(grant);
+    await expect(accounts.consumeServerInitializationSecret!()).resolves.toBe("s".repeat(43));
+    expect(invoke.mock.calls.slice(1).map(([, request]) => request.command)).toEqual([
+      {
+        type: "accounts.createServerLoginGrant",
+        origin: "https://app.example.com",
+        challenge: "a".repeat(43),
+      },
+      { type: "accounts.consumeServerInitializationSecret" },
+    ]);
+    expect(JSON.stringify(accounts)).not.toContain("s".repeat(43));
+  });
+
   it("syncs pairing after native activation once the document handshake succeeds", async () => {
     let acceptHello = () => {};
     const hello = new Promise<void>((resolve) => {

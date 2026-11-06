@@ -9,10 +9,32 @@ import { memoryAdapter } from "better-auth/adapters/memory";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Auth, AuthEnv } from "./index.js";
 import { createAuth } from "./index.js";
+import type * as NativeLogin from "./native-accounts-login.js";
 import { isCurrentOidcAccount, oidcAccountSubject } from "./oidc.js";
 import { encryptStoredOAuthTokens, openIdToken, sealIdToken } from "./token-storage.js";
 
-const state = vi.hoisted(() => ({ db: {} as Record<string, Record<string, unknown>[]> }));
+const state = vi.hoisted(() => ({
+  db: {} as Record<string, Record<string, unknown>[]>,
+  nativeProvision: true,
+}));
+vi.mock("./native-accounts-login.js", async (original) => {
+  const actual = await original<typeof NativeLogin>();
+  return {
+    ...actual,
+    nativeAccountsLogin: (
+      prisma: Parameters<typeof actual.nativeAccountsLogin>[0],
+      options: Parameters<typeof actual.nativeAccountsLogin>[1],
+    ) =>
+      actual.nativeAccountsLogin(prisma, {
+        ...options,
+        store: {
+          issue: async () => ({ challenge: "x".repeat(43), expiresAt: Date.now() / 1000 + 120 }),
+          bootstrapRequired: async () => true,
+          consume: async () => ({ allowProvision: state.nativeProvision }),
+        },
+      }),
+  };
+});
 vi.mock("better-auth/adapters/prisma", () => ({ prismaAdapter: () => memoryAdapter(state.db) }));
 vi.mock("@orkbot/db", async (original) => ({
   ...(await original<typeof Db>()),
@@ -62,9 +84,19 @@ function jwt(claims: Record<string, unknown>) {
 
 function setup(options: Partial<AuthEnv> = {}, hasMembership = true) {
   const prisma: Record<string, unknown> = {
+    $executeRaw: vi.fn(async () => 1),
     deploymentSettings: {
       findUnique: vi.fn(async () => null),
       updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    user: {
+      findMany: vi.fn(async ({ where }: { where?: { id?: { not?: string } } } = {}) =>
+        rows("user").filter(
+          (user) =>
+            user.id !== where?.id?.not &&
+            !String(user.email).toLowerCase().endsWith("@messaging.invalid"),
+        ),
+      ),
     },
     spaceMember: {
       findFirst: vi.fn(async () => (hasMembership ? { id: "existing-space" } : null)),
@@ -188,8 +220,9 @@ async function start(
   const url = new URL(((await response.json()) as { url: string }).url);
   const code = `code-${++sequence}`;
   expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-  expect(url.searchParams.get("prompt")).toBe(reauthenticate ? "login" : null);
-  expect(url.searchParams.get("max_age")).toBe(reauthenticate ? "0" : null);
+  const interactive = reauthenticate || additionalData.forceLogin === true;
+  expect(url.searchParams.get("prompt")).toBe(interactive ? "login" : null);
+  expect(url.searchParams.get("max_age")).toBe(interactive ? "0" : null);
   codes.set(code, {
     challenge: url.searchParams.get("code_challenge")!,
     nonce: url.searchParams.get("nonce")!,
@@ -223,6 +256,7 @@ beforeEach(() => {
     member: [],
     invitation: [],
   };
+  state.nativeProvision = true;
   discoveryDown = false;
   activeIssuer = issuer;
   sequence = 0;
@@ -251,7 +285,7 @@ beforeEach(() => {
               id_token_signing_alg_values_supported: ["RS256"],
             });
       if (url.pathname === "/userinfo") return json(userInfoClaims);
-      if (url.pathname === "/jwks") return json({ keys: [jwk] });
+      if (["/jwks", "/api/auth/jwks"].includes(url.pathname)) return json({ keys: [jwk] });
       if (url.pathname === "/token") {
         const body = new URLSearchParams(String(init?.body));
         tokenRequests.push({ headers: new Headers(init?.headers), body });
@@ -279,6 +313,87 @@ afterEach(() => {
   auth?.disposeOidcDiscovery();
   vi.unstubAllGlobals();
   vi.useRealTimers();
+});
+
+describe("native Accounts production session hooks", () => {
+  const challenge = "x".repeat(43);
+  const grant = (subject = "subject-1") =>
+    jwt({
+      aud: origin,
+      sub: subject,
+      email: "native@example.test",
+      email_verified: true,
+      name: "Native owner",
+      nonce: challenge,
+      jti: "native-unique-proof-test",
+      purpose: "orkbot-server-login-v1",
+      exp: Math.floor(Date.now() / 1000) + 60,
+    });
+  const options = {
+    oidc: undefined,
+    nativeAccounts: { issuer },
+    passwordAuth: false,
+    signupsEnabled: "false",
+    signupAllowlist: "different@example.test",
+    singleAccount: true,
+    singleAccountOwnerKey: oidcAccountSubject(issuer, "subject-1"),
+  };
+  it("bootstraps only the verified owner despite closed signups and preserves session provenance", async () => {
+    setup(options, false);
+    const response = await request("/native/complete", { challenge, grant: grant() });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(rows("user")).toHaveLength(1);
+    expect(rows("account")).toHaveLength(1);
+    expect(rows("session")).toHaveLength(1);
+    const issued = (await response.json()) as { token: string };
+    expect(issued.token).toContain(".");
+    cookies = "";
+    const session = await request("/get-session", undefined, issued.token);
+    expect(session.status).toBe(200);
+    expect(await session.json()).toMatchObject({ user: { email: "native@example.test" } });
+    const repeated = await request("/native/complete", { challenge, grant: grant() });
+    expect(repeated.status, await repeated.clone().text()).toBe(200);
+    expect(rows("user")).toHaveLength(1);
+    expect(rows("session")).toHaveLength(2);
+  });
+  it("reports native login without advertising unavailable interactive reauthentication", async () => {
+    setup(options, false);
+    const response = await request("/native/complete", { challenge, grant: grant() });
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await (await request("/account-security")).json()).toMatchObject({
+      sso: null,
+      ssoLinked: true,
+      freshOidcAuth: false,
+      hasPassword: false,
+      passwordChangeEnabled: false,
+      emailDeletion: false,
+    });
+    const [session] = rows("session");
+    expect(
+      await auth.hasRecentIdentityConfirmation({
+        sessionId: String(session!.id),
+        userId: String(session!.userId),
+      }),
+    ).toBe(false);
+    expect((await request("/delete-user", {})).status).toBe(403);
+    expect(rows("user")).toHaveLength(1);
+  });
+  it("rejects another verified account before writing users, links, or sessions", async () => {
+    setup(options, false);
+    const response = await request("/native/complete", { challenge, grant: grant("other-owner") });
+    expect(response.status).toBe(403);
+    expect(rows("user")).toHaveLength(0);
+    expect(rows("account")).toHaveLength(0);
+    expect(rows("session")).toHaveLength(0);
+  });
+  it("does not turn an ordinary valid grant into provisioning authority", async () => {
+    state.nativeProvision = false;
+    setup(options, false);
+    const response = await request("/native/complete", { challenge, grant: grant() });
+    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(rows("user")).toHaveLength(0);
+    expect(rows("session")).toHaveLength(0);
+  });
 });
 
 describe("OIDC callbacks", () => {
@@ -733,6 +848,95 @@ describe("OIDC callbacks", () => {
     setup({ signupAllowlist: "sso@example.test" });
     expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
   });
+  it.each([false, true])(
+    "rejects a different managed owner before first provisioning with bypass=%s",
+    async (allowSignupBypass) => {
+      setup({
+        passwordAuth: false,
+        email: undefined,
+        singleAccount: true,
+        singleAccountOwnerKey: oidcAccountSubject(issuer, "expected-owner"),
+        oidc: {
+          issuer,
+          clientId: "test-client",
+          clientSecret: "fake-secret",
+          name: "SSO",
+          scopes: [],
+          allowSignupBypass,
+        },
+      });
+      expect((await signIn()).headers.get("location")).toContain("error=REGISTRATION_CLOSED");
+      expect(rows("user")).toHaveLength(0);
+      expect(rows("account")).toHaveLength(0);
+      expect(rows("session")).toHaveLength(0);
+    },
+  );
+  it("admits only the configured managed owner and preserves returning ownership", async () => {
+    const owner = oidcAccountSubject(issuer, "subject-1");
+    setup({
+      passwordAuth: false,
+      email: undefined,
+      singleAccount: true,
+      singleAccountOwnerKey: owner,
+    });
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    expect(rows("account")[0]!.accountId).toBe(owner);
+    cookies = "";
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    expect(rows("user")).toHaveLength(1);
+    expect(rows("account")).toHaveLength(1);
+    expect(rows("session")).toHaveLength(2);
+  });
+  it("does not apply a managed owner restriction to an unmanaged deployment", async () => {
+    setup({ passwordAuth: false, email: undefined });
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    expect(rows("user")).toHaveLength(1);
+  });
+  it("refuses a returning session when the managed owner binding changes", async () => {
+    setup({ passwordAuth: false, email: undefined });
+    expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
+    auth.disposeOidcDiscovery();
+    setup({
+      passwordAuth: false,
+      email: undefined,
+      singleAccount: true,
+      singleAccountOwnerKey: oidcAccountSubject(issuer, "different-owner"),
+    });
+    expect((await signIn()).headers.get("location")).toContain("error=REGISTRATION_CLOSED");
+    expect(rows("user")).toHaveLength(1);
+    expect(rows("account")).toHaveLength(1);
+    expect(rows("session")).toHaveLength(1);
+  });
+  it.each([true, false, "true", undefined])(
+    "requires interactive login only for an explicit recovery flag (%s)",
+    async (forceLogin) => {
+      setup({ passwordAuth: false, email: undefined });
+      const callback = await start(undefined, false, `${origin}/app`, false, {
+        forceLogin,
+        serverContext: { forceOidcLogin: true },
+      });
+      expect((await request(callback)).headers.get("location")).toBe(`${origin}/app`);
+      expect(await (await request("/account-security")).json()).toMatchObject({
+        freshOidcAuth: false,
+      });
+    },
+  );
+  it("recovery interaction never bypasses the configured owner", async () => {
+    setup({
+      passwordAuth: false,
+      email: undefined,
+      singleAccount: true,
+      singleAccountOwnerKey: oidcAccountSubject(issuer, "expected-owner"),
+    });
+    expect(
+      (
+        await request(await start(undefined, false, `${origin}/app`, false, { forceLogin: true }))
+      ).headers.get("location"),
+    ).toContain("error=REGISTRATION_CLOSED");
+    expect(rows("user")).toHaveLength(0);
+    expect(rows("account")).toHaveLength(0);
+    expect(rows("session")).toHaveLength(0);
+  });
   it("redirects an unprovisioned identity when registration closes", async () => {
     setup();
     expect((await signIn()).headers.get("location")).toBe(`${origin}/app`);
@@ -902,7 +1106,9 @@ describe("OIDC callbacks", () => {
     expect(rows("user")).toHaveLength(0);
   });
   it("refuses password-off without an alternative", () => {
-    expect(() => setup({ passwordAuth: false, oidc: undefined })).toThrow(/requires OIDC/);
+    expect(() => setup({ passwordAuth: false, oidc: undefined })).toThrow(
+      /requires a verified identity provider/,
+    );
   });
 });
 

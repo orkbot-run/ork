@@ -6,6 +6,7 @@
 
 use std::{
     convert::Infallible,
+    fs,
     net::{Ipv4Addr, TcpListener},
     path::Path,
     pin::Pin,
@@ -14,6 +15,7 @@ use std::{
     time::Duration,
 };
 
+use hmac::{Hmac, Mac};
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::{
     body::{Body, Bytes, Frame, Incoming},
@@ -26,7 +28,7 @@ use tokio::sync::{mpsc, watch, Semaphore};
 
 use crate::{
     host_runner::HostRunner,
-    local_stack::{private_directory, read_private, write_private},
+    local_stack::{private_directory, read_owned_private, read_private, write_private},
 };
 
 const MAX_BODY: usize = 12 * 1024 * 1024;
@@ -56,6 +58,8 @@ pub struct HostComputer {
     pub connection: Connection,
     runner: HostRunner,
     consent: Mutex<Consent>,
+    accepted_token: Arc<Mutex<String>>,
+    scope_secret: String,
     shutdown: watch::Sender<bool>,
 }
 
@@ -67,6 +71,19 @@ impl HostComputer {
             );
         }
         private_directory(directory)?;
+        let scope_file = directory.join("host-computer-scope-key");
+        let scope_secret = match fs::symlink_metadata(&scope_file) {
+            Ok(_) => read_owned_private(&scope_file, 64)
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .filter(|value| valid_token(value))
+                .ok_or("Local computer settings are unavailable.")?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let value = random_token()?;
+                write_private(&scope_file, value.as_bytes())?;
+                value
+            }
+            Err(_) => return Err("Local computer settings are unavailable.".into()),
+        };
         let file = directory.join("host-computer.json");
         let saved = read_private(&file, 1024)
             .and_then(|bytes| serde_json::from_slice::<SavedConnection>(&bytes).ok())
@@ -105,7 +122,13 @@ impl HostComputer {
         )?;
         let runner = HostRunner::new(directory.join("computers"));
         let (shutdown, cancel) = watch::channel(false);
-        tauri::async_runtime::spawn(serve(listener, token.clone(), runner.clone(), cancel));
+        let accepted_token = Arc::new(Mutex::new(token.clone()));
+        tauri::async_runtime::spawn(serve(
+            listener,
+            accepted_token.clone(),
+            runner.clone(),
+            cancel,
+        ));
         Ok(Self {
             connection: Connection {
                 url: format!("http://host.docker.internal:{port}"),
@@ -113,8 +136,43 @@ impl HostComputer {
             },
             runner,
             consent: Mutex::new(Consent::default()),
+            accepted_token,
+            scope_secret,
             shutdown,
         })
+    }
+
+    /// The trusted legacy owner retains its existing credential; new scopes never share it.
+    pub fn scoped_connection(&self, owner: &str, legacy: bool) -> Connection {
+        if legacy {
+            return self.connection.clone();
+        }
+        let mut mac = Hmac::<Sha256>::new_from_slice(self.scope_secret.as_bytes())
+            .expect("HMAC accepts a fixed native key");
+        mac.update(b"orkbot-desktop-local-host-v1\0");
+        mac.update(owner.as_bytes());
+        let token = mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        Connection {
+            url: self.connection.url.clone(),
+            token,
+        }
+    }
+
+    /// Switching authorization and retiring requests share the same lock as HTTP authentication.
+    pub fn select_connection(&self, connection: &Connection) {
+        let mut accepted = self
+            .accepted_token
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if *accepted != connection.token {
+            self.activate(None);
+            *accepted = connection.token.clone();
+        }
     }
 
     pub fn activate(&self, owner: Option<String>) {
@@ -181,6 +239,22 @@ impl HostComputer {
         true
     }
 
+    /// A late native request may revoke only the document whose consent it captured.
+    pub fn revoke_owner(&self, owner: &str) -> bool {
+        let mut consent = self
+            .consent
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        if consent.owner.as_deref() != Some(owner) {
+            return false;
+        }
+        consent.generation += 1;
+        consent.allowed = false;
+        self.runner.set_enabled(false);
+        true
+    }
+
+    #[cfg(test)]
     pub fn revoke(&self) {
         let mut consent = self
             .consent
@@ -234,7 +308,7 @@ fn authorized(request: &Request<Incoming>, token: &str) -> bool {
 
 async fn serve(
     listener: TcpListener,
-    token: String,
+    token: Arc<Mutex<String>>,
     runner: HostRunner,
     mut shutdown: watch::Receiver<bool>,
 ) {
@@ -286,16 +360,19 @@ fn empty(status: StatusCode) -> Response<ResponseBody> {
 
 async fn handle(
     request: Request<Incoming>,
-    token: String,
+    token: Arc<Mutex<String>>,
     runner: HostRunner,
 ) -> Result<Response<ResponseBody>, Infallible> {
-    if !authorized(&request, &token) {
-        return Ok(empty(StatusCode::UNAUTHORIZED));
-    }
-    let epoch = runner.epoch();
-    if !runner.is_enabled() {
-        return Ok(empty(StatusCode::FORBIDDEN));
-    }
+    let epoch = {
+        let accepted = token.lock().unwrap_or_else(|error| error.into_inner());
+        if !authorized(&request, &accepted) {
+            return Ok(empty(StatusCode::UNAUTHORIZED));
+        }
+        if !runner.is_enabled() {
+            return Ok(empty(StatusCode::FORBIDDEN));
+        }
+        runner.epoch()
+    };
     if request.method() != hyper::Method::POST || request.uri() != "/computer" {
         return Ok(empty(StatusCode::NOT_FOUND));
     }
@@ -360,6 +437,87 @@ impl Drop for Frames {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn account_host_tokens_are_native_keyed_and_old_servers_cannot_use_new_consent() {
+        let root = tempfile::tempdir().unwrap();
+        let host = HostComputer::prepare(root.path()).unwrap();
+        let first = host.scoped_connection(&"a".repeat(64), false);
+        let second = host.scoped_connection(&"b".repeat(64), false);
+        assert_ne!(first.token, second.token);
+        assert_ne!(first.token, host.connection.token);
+        assert_eq!(
+            host.scoped_connection(&"a".repeat(64), false).token,
+            first.token
+        );
+        assert_eq!(
+            host.scoped_connection(&"a".repeat(64), true).token,
+            host.connection.token
+        );
+        let mut legacy_mac =
+            Hmac::<Sha256>::new_from_slice(host.connection.token.as_bytes()).unwrap();
+        legacy_mac.update(b"orkbot-desktop-local-host-v1\0");
+        legacy_mac.update("b".repeat(64).as_bytes());
+        let forged: String = legacy_mac
+            .finalize()
+            .into_bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        assert_ne!(forged, second.token);
+        let url = host
+            .connection
+            .url
+            .replace("host.docker.internal", "127.0.0.1")
+            + "/computer";
+        let client = reqwest::Client::new();
+        host.select_connection(&first);
+        host.activate(Some("server-a:document".into()));
+        assert!(host.grant(
+            "server-a:document",
+            host.intent("server-a:document").unwrap()
+        ));
+        host.select_connection(&second);
+        assert!(!host.is_enabled());
+        host.activate(Some("server-b:document".into()));
+        assert!(host.grant(
+            "server-b:document",
+            host.intent("server-b:document").unwrap()
+        ));
+        assert!(!host.revoke_owner("server-a:document"));
+        assert!(host.is_enabled());
+        for token in [&host.connection.token, &first.token, &forged] {
+            assert_eq!(
+                client
+                    .post(&url)
+                    .bearer_auth(token)
+                    .body("invalid")
+                    .send()
+                    .await
+                    .unwrap()
+                    .status(),
+                401
+            );
+        }
+        assert_eq!(
+            client
+                .post(&url)
+                .bearer_auth(&second.token)
+                .body("invalid")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            400
+        );
+        host.close();
+        let reopened = HostComputer::prepare(root.path()).unwrap();
+        assert_eq!(
+            reopened.scoped_connection(&"b".repeat(64), false).token,
+            second.token
+        );
+        reopened.close();
+    }
 
     #[test]
     fn consent_is_scoped_to_the_live_document_and_revoke_invalidates_open_prompts() {

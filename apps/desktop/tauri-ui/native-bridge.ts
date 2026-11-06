@@ -70,6 +70,8 @@ if (
       signIn: () => call("accounts.signIn"),
       session: () => call("accounts.session"),
       logout: () => call("accounts.logout"),
+      createServerLoginGrant: (request) => call("accounts.createServerLoginGrant", request),
+      consumeServerInitializationSecret: () => call("accounts.consumeServerInitializationSecret"),
     },
     pairing: {
       sync: () => call("pairing.sync"),

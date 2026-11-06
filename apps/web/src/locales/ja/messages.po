@@ -1825,10 +1825,9 @@ msgstr "バックグラウンドで続行"
 msgid "Continue to checkout"
 msgstr "購入手続きへ進む"
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "{0}で続行"
+msgid "Continue with {ssoName}"
+msgstr "{ssoName}で続行"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

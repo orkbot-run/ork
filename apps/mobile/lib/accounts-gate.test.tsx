@@ -11,6 +11,7 @@ import { redirectSystemPath } from "../app/+native-intent";
 import { AccountsGate } from "../components/accounts-gate";
 import { accountServers, addAccountServer } from "./account-servers";
 import { accountsIdentity, continueWithAccounts } from "./accounts";
+import { continueWithAccountsServer } from "./accounts-login";
 import {
   clearProductAccountSession,
   currentApiBase,
@@ -105,7 +106,7 @@ vi.mock("./user-error", () => ({ errorText: (error: Error) => error.message }));
 vi.mock("./server-headers", () => ({ serverHeaders: () => ({}) }));
 vi.mock("./endpoint", async (original) => ({
   ...(await original<typeof Endpoint>()),
-  requireAccountsSignIn: vi.fn().mockResolvedValue(undefined),
+  requireAccountsSignIn: vi.fn().mockResolvedValue({ accountsLogin: false }),
 }));
 vi.mock("./accounts", () => ({
   welcomeAccountsOrk: () => "64cf5621-3144-4810-97f5-148acdc29c35",
@@ -122,6 +123,7 @@ vi.mock("./account-servers", () => ({ accountServers: vi.fn(), addAccountServer:
 vi.mock("./incoming-share", () => ({ receiveIncomingShare: vi.fn() }));
 vi.mock("./session", () => ({ currentSessionGeneration: vi.fn(() => 1) }));
 vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
+vi.mock("./accounts-login", () => ({ continueWithAccountsServer: vi.fn() }));
 vi.mock("./api", () => ({
   currentApiBase: vi.fn(),
   rpc: vi.fn(),
@@ -152,13 +154,14 @@ beforeEach(() => {
   vi.mocked(currentSessionGeneration).mockReset().mockReturnValue(1);
   vi.mocked(currentApiBase).mockReturnValue(remote.url);
   vi.mocked(continueWithSso).mockResolvedValue(true);
+  vi.mocked(continueWithAccountsServer).mockResolvedValue(true);
   vi.mocked(rpc).mockResolvedValue({ userId: "product-user" } as never);
   vi.mocked(addAccountServer).mockResolvedValue(remote);
   vi.mocked(accountServers).mockResolvedValue([remote]);
   vi.mocked(clearProductAccountSession).mockResolvedValue(undefined);
   vi.mocked(saveApiBase).mockResolvedValue({ ok: true, url: remote.url });
   vi.mocked(probeApiBase).mockResolvedValue({ ok: true, url: remote.url });
-  vi.mocked(requireAccountsSignIn).mockResolvedValue(undefined);
+  vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: false });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -421,6 +424,24 @@ it.each(["cancel", "rejected", "session-change"])(
     expect(host.textContent).not.toContain("Product screen");
   },
 );
+
+it("uses a native proof to add a server without an OIDC client", async () => {
+  receiveServerConnect(
+    `orkbot://initialize?server=${encodeURIComponent(remote.url)}&secret=${"s".repeat(43)}`,
+  );
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  vi.mocked(requireAccountsSignIn).mockResolvedValue({ accountsLogin: true });
+  await render();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  expect(continueWithAccountsServer).toHaveBeenCalledOnce();
+  expect(continueWithSso).not.toHaveBeenCalled();
+  expect(addAccountServer).toHaveBeenCalledWith(
+    remote.url,
+    JSON.stringify([identity.issuer, identity.subject]),
+  );
+});
 
 it("finishes verified product login when its auth browser returns to the foreground", async () => {
   let finish: (value: boolean) => void = () => undefined;

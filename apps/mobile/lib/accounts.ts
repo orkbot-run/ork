@@ -10,6 +10,7 @@ import {
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
+import { clearServerInitialization } from "./server-connect";
 
 export const ACCOUNTS_REDIRECT_URI = "run.orkbot.app:/oauth2/callback";
 const STORAGE_KEY = "orkbot.accounts.tokens";
@@ -452,6 +453,7 @@ async function validAccessToken(): Promise<string | null> {
 
 /** Clears local tokens before attempting optional revocation; no end-session endpoint is needed. */
 export async function signOutAccounts(): Promise<void> {
+  clearServerInitialization();
   const pendingRefresh = refreshSnapshot;
   const owner = ++generation;
   invalidated = true;

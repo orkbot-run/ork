@@ -1825,10 +1825,9 @@ msgstr "המשך ברקע"
 msgid "Continue to checkout"
 msgstr ""
 
-#. placeholder {0}: reset.sso.name
 #: src/pages/Auth.tsx
-msgid "Continue with {0}"
-msgstr "המשך עם {0}"
+msgid "Continue with {ssoName}"
+msgstr "המשך עם {ssoName}"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"

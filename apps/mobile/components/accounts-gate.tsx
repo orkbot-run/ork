@@ -18,6 +18,7 @@ import {
   subscribeAccounts,
   welcomeAccountsOrk,
 } from "../lib/accounts";
+import { continueWithAccountsServer } from "../lib/accounts-login";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import {
   clearProductAccountSession,
@@ -33,6 +34,7 @@ import { bootstrapI18n, useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import {
   clearServerConnect,
+  confirmServerInitialization,
   pendingServerConnect,
   subscribeServerConnect,
 } from "../lib/server-connect";
@@ -228,6 +230,7 @@ export function AccountsGate({
     if (!probe.ok) throw new Error(probe.error);
     if (generation.current !== current) return;
     if (!(await selectServer(entry, account, () => generation.current === current))) return;
+    confirmServerInitialization(entry.url, account!);
     if (onSelected) onSelected();
     else {
       setReadyAt({ version, attempt });
@@ -342,14 +345,23 @@ export function AccountsGate({
                             generation.current === current && owner.current === account;
                           const probe = await probeApiBase(target);
                           if (!probe.ok) throw new Error(probe.error);
-                          await requireAccountsSignIn(target, serverHeaders(target));
+                          const capabilities = await requireAccountsSignIn(
+                            target,
+                            serverHeaders(target),
+                          );
                           if (!currentOperation()) return;
                           await loadApiBase();
                           if (!currentOperation()) return;
                           const saved = await saveApiBase(target, serverHeaders(target));
                           if (!saved.ok) throw new Error(saved.error);
                           if (!currentOperation()) return;
-                          if (!(await continueWithSso())) return;
+                          if (account) confirmServerInitialization(target, account);
+                          if (
+                            !(await (capabilities.accountsLogin
+                              ? continueWithAccountsServer()
+                              : continueWithSso()))
+                          )
+                            return;
                           if (!currentOperation() || currentApiBase() !== target) return;
                           const sessionGeneration = currentSessionGeneration();
                           const me = await rpc("me");

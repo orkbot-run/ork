@@ -550,6 +550,8 @@ model Invitation {
 }
 
 model DeploymentSettings {
+  /// Verified central identity that claimed an unattended self-hosted installation.
+  nativeAccountsOwnerKey           String?
   modelCreditsEnabled             Boolean  @default(false)
   id                              String   @id @default("default")
   /// Deprecated: retained for rolling-release compatibility; never authorizes app users.

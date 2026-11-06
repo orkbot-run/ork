@@ -16,7 +16,7 @@ corepack pnpm db:up
 corepack pnpm dev
 ```
 
-Before starting the API, set the registered Accounts public client ID in `.env` as `OIDC_CLIENT_ID`. The local callback is `http://127.0.0.1/callback`, with the development port supplied at runtime. See [Accounts sign-in](docs/accounts-native.md#local-server-sign-in).
+Before starting the API, set the registered Accounts public client ID in `.env` as `OIDC_CLIENT_ID`. The local callback is `http://127.0.0.1/callback`, with the development port supplied at runtime. See [Accounts sign-in](docs/self-host-accounts.md#local-desktop-and-development).
 
 The development URL printed after migrations finish, usually `http://127.0.0.1:5173`, offers an **Open in Ork** link. It does not expose browser login or product screens. Open the link in an installed app, confirm the server, and sign in through Ork Accounts. The server is added to your account after its product session is verified. No model key is needed to open the app.
 

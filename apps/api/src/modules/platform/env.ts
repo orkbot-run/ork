@@ -48,6 +48,9 @@ export interface AppEnv {
   oidc?: OidcConfig;
   nodeEnv: string;
   desktopStackToken?: string;
+  desktopAccountKey?: string;
+  accountsEnabled?: boolean;
+  bootstrapSecret?: string;
   databaseUrl: string;
   realtimeDatabaseUrl: string;
   authSecret: string;
@@ -185,6 +188,13 @@ export interface AppEnv {
 /** Enforce the shipped API's identity boundary without changing injectable library fixtures. */
 export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const issuer = optional(source.OIDC_ISSUER);
+  if (source.AUTH_ACCOUNTS_ENABLED === "true") {
+    if (issuer && issuer !== "https://api.orkbot.run")
+      throw new Error("OIDC_ISSUER must be https://api.orkbot.run");
+    if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
+      throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
+    return loadEnv({ ...source, AUTH_PASSWORD_ENABLED: "false" });
+  }
   if (issuer !== "https://api.orkbot.run")
     throw new Error("OIDC_ISSUER must be https://api.orkbot.run");
   if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
@@ -201,9 +211,11 @@ export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv 
 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   secretStoreOptionsFromEnv(source);
-  const issuer = optional(source.OIDC_ISSUER);
+  const accountsEnabled = source.AUTH_ACCOUNTS_ENABLED === "true";
   const clientId = optional(source.OIDC_CLIENT_ID);
   const clientSecret = optional(source.OIDC_CLIENT_SECRET);
+  const issuer =
+    accountsEnabled && !clientId && !clientSecret ? undefined : optional(source.OIDC_ISSUER);
   if ((issuer || clientId || clientSecret) && !(issuer && clientId)) {
     throw new Error("OIDC_ISSUER and OIDC_CLIENT_ID must be configured together");
   }
@@ -218,6 +230,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   }
   for (const key of [
     "AUTH_PASSWORD_ENABLED",
+    "AUTH_ACCOUNTS_ENABLED",
     "AUTH_BREACHED_PASSWORD_CHECK_ENABLED",
     "OIDC_ALLOW_SIGNUP_BYPASS",
   ]) {
@@ -226,7 +239,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       throw new Error(`${key} must be true or false`);
   }
   const passwordAuth = source.AUTH_PASSWORD_ENABLED !== "false";
-  if (!passwordAuth && !issuer)
+  if (!passwordAuth && !issuer && !accountsEnabled)
     throw new Error("AUTH_PASSWORD_ENABLED=false requires OIDC configuration");
   const webOrigin = resolveWebOrigin(source.WEB_ORIGIN, DEFAULT_WEB_ORIGIN, "WEB_ORIGIN");
   const authUrl = resolveWebOrigin(source.BETTER_AUTH_URL, webOrigin, "BETTER_AUTH_URL");
@@ -266,6 +279,19 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
           allowSignupBypass: source.OIDC_ALLOW_SIGNUP_BYPASS === "true",
         }
       : undefined;
+  const desktopStackToken = optional(source.ORKBOT_DESKTOP_STACK_TOKEN);
+  const desktopAccountKey = optional(source.ORKBOT_DESKTOP_ACCOUNT_KEY);
+  if (
+    desktopAccountKey &&
+    (!/^[a-f0-9]{64}$/.test(desktopAccountKey) ||
+      !desktopStackToken ||
+      passwordAuth ||
+      (!oidc && !accountsEnabled))
+  )
+    throw new Error("ORKBOT_DESKTOP_ACCOUNT_KEY requires a native-managed identity binding");
+  const bootstrapSecret = optional(source.ORKBOT_BOOTSTRAP_SECRET);
+  if (bootstrapSecret && (bootstrapSecret.length < 32 || bootstrapSecret.length > 4096))
+    throw new Error("ORKBOT_BOOTSTRAP_SECRET must contain at least 32 characters");
   const authSecret = resolveAuthSecret(source);
   const sandboxProvider = resolveSandboxProvider(source);
   const cloudAgentProvider = resolveCloudAgentProvider(source);
@@ -277,7 +303,10 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     nodeEnv: source.NODE_ENV ?? "",
     databaseUrl: required(source, "DATABASE_URL"),
     realtimeDatabaseUrl: source.REALTIME_DATABASE_URL ?? required(source, "DATABASE_URL"),
-    desktopStackToken: optional(source.ORKBOT_DESKTOP_STACK_TOKEN),
+    desktopStackToken,
+    desktopAccountKey,
+    accountsEnabled,
+    bootstrapSecret,
     authSecret,
     authUrl,
     webOrigin,

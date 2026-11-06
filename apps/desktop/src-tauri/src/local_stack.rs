@@ -28,7 +28,7 @@ use url::Url;
 
 use crate::host_computer::Connection;
 
-const PROJECT_NAME: &str = "orkbot-desktop-tauri";
+pub(crate) const LEGACY_PROJECT_NAME: &str = "orkbot-desktop-tauri";
 const COMPOSE_FILE: &str = "docker-compose.images.yml";
 const ENV_TEMPLATE: &str = ".env.images.example";
 const ENV_FILE: &str = ".env";
@@ -71,6 +71,8 @@ pub struct LocalStackState {
     pub output: Vec<String>,
     pub layer_bytes: BTreeMap<String, u64>,
     pub image_tag: String,
+    #[serde(skip)]
+    pub generation: u64,
 }
 
 impl LocalStackState {
@@ -81,6 +83,7 @@ impl LocalStackState {
             output: Vec::new(),
             layer_bytes: BTreeMap::new(),
             image_tag: image_tag.to_owned(),
+            generation: 0,
         }
     }
 }
@@ -97,6 +100,8 @@ struct Current {
 /// Owns only this preview's Compose project. Bot execution remains in the Ork Server.
 pub struct LocalStack {
     directory: PathBuf,
+    project_name: String,
+    account_key: Option<String>,
     resources: PathBuf,
     image_tag: String,
     environment: Environment,
@@ -124,6 +129,8 @@ impl LocalStack {
         });
         Self {
             directory,
+            project_name: LEGACY_PROJECT_NAME.to_owned(),
+            account_key: None,
             resources,
             image_tag: image_tag.clone(),
             environment: std::env::vars_os()
@@ -142,6 +149,39 @@ impl LocalStack {
             host,
             choice_save: tokio::sync::Mutex::new(()),
         }
+    }
+
+    /// Reuse only process configuration. Each account owns its Compose project and private files.
+    pub fn scoped(
+        &self,
+        directory: PathBuf,
+        project_name: String,
+        account_key: String,
+        on_change: Option<StateListener>,
+        host: Option<Connection>,
+    ) -> Self {
+        let mut stack = Self::new(
+            directory,
+            self.resources.clone(),
+            self.image_tag.clone(),
+            on_change,
+            host,
+        );
+        stack.project_name = project_name;
+        stack.account_key = Some(account_key);
+        stack.environment = self.environment.clone();
+        stack.runner = self.runner.clone();
+        stack
+    }
+
+    pub fn host_connection(&self) -> Option<Connection> {
+        self.host.clone()
+    }
+
+    /// Saved local bookmarks must identify this account's existing instance before it starts.
+    pub fn matches_saved_url(&self, expected: &str) -> bool {
+        read_web_url(&self.directory)
+            .is_some_and(|url| url.origin().ascii_serialization() == expected)
     }
 
     pub fn state(&self) -> LocalStackState {
@@ -167,8 +207,19 @@ impl LocalStack {
     }
 
     /// A second click joins the existing intent instead of starting another Compose process.
+    #[cfg(test)]
     pub async fn start(&self) -> LocalStackState {
-        let generation = self.generation.load(Ordering::SeqCst);
+        self.start_for(self.intent()).await
+    }
+
+    pub fn intent(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
+    }
+
+    pub async fn start_for(&self, generation: u64) -> LocalStackState {
+        if generation != self.intent() {
+            return self.state();
+        }
         if self.stopping.load(Ordering::SeqCst) {
             return self.state();
         }
@@ -181,7 +232,9 @@ impl LocalStack {
         {
             self.abort();
         }
-        self.replace_state(LocalStackState::initial(&self.image_tag));
+        let mut initial = LocalStackState::initial(&self.image_tag);
+        initial.generation = generation;
+        self.replace_state(initial);
         self.phase(LocalStackPhase::CheckingDocker);
         if let Err(message) = self.start_once(cancel).await {
             self.fail(message);
@@ -268,18 +321,19 @@ impl LocalStack {
             return false;
         };
         probe_owned_stack(&self.web_url(), &token, &self.image_tag).await
+            && match &self.account_key {
+                Some(owner) => probe_managed_account(&self.web_url(), &token, owner).await,
+                None => true,
+            }
             && !self.stopping.load(Ordering::SeqCst)
     }
 
     fn host_config_identity(&self) -> String {
         let mut hash = Sha256::new();
-        hash.update(b"accounts-only-v1\0");
-        hash.update(
-            accounts_client_id(&self.environment)
-                .unwrap_or_default()
-                .as_bytes(),
-        );
+        hash.update(b"accounts-only-owner-v2\0");
+        hash.update(self.account_key.as_deref().unwrap_or_default().as_bytes());
         hash.update([0]);
+
         if let Some(host) = &self.host {
             hash.update(host.url.as_bytes());
             hash.update([0]);
@@ -411,9 +465,6 @@ impl LocalStack {
         }
 
         self.phase(LocalStackPhase::Preparing);
-        if accounts_client_id(&self.environment).is_none() {
-            return Err("Accounts sign-in is not configured for this build.".into());
-        }
         let compose = read_private(&self.resources.join(COMPOSE_FILE), FILE_BYTES)
             .ok_or("Could not read the bundled local server configuration.")?;
         write_private(&self.directory.join(COMPOSE_FILE), &compose)?;
@@ -505,6 +556,12 @@ impl LocalStack {
                 _ = cancellation.changed() => return Err("The start was interrupted. Retry to continue.".into()),
             };
             if ready {
+                if let Some(owner) = &self.account_key {
+                    if !probe_managed_account(&web_url, &token, owner).await {
+                        return Err("The local server could not verify this account. Update the local server and retry.".into());
+                    }
+                    check_cancelled(&cancel)?;
+                }
                 write_private(
                     &self.directory.join(HOST_CONFIG_FILE),
                     self.host_config_identity().as_bytes(),
@@ -589,7 +646,7 @@ impl LocalStack {
             "-f",
             COMPOSE_FILE,
             "--project-name",
-            PROJECT_NAME,
+            &self.project_name,
         ]);
         arguments.extend(args.iter().map(|arg| (*arg).to_owned()));
         self.docker(binary, arguments, timeout, Some(token), cancel, redactions)
@@ -605,12 +662,15 @@ impl LocalStack {
         cancel: watch::Receiver<bool>,
         mut redactions: Vec<String>,
     ) -> DockerResult {
+        if let Some(owner) = &self.account_key {
+            redactions.push(owner.clone());
+        }
         if let Some(host) = &self.host {
             redactions.push(host.token.clone());
             redactions.sort_by_key(|value| std::cmp::Reverse(value.len()));
             redactions.dedup();
         }
-        let environment = docker_environment(
+        let mut environment = docker_environment(
             &self.environment,
             binary,
             &self.web_url(),
@@ -618,6 +678,9 @@ impl LocalStack {
             token,
             self.host.as_ref(),
         );
+        if let Some(owner) = &self.account_key {
+            environment.insert("ORKBOT_DESKTOP_ACCOUNT_KEY".into(), OsString::from(owner));
+        }
         let current = Arc::clone(&self.current);
         let listener = self.on_change.clone();
         let output_redactions = redactions.clone();
@@ -744,6 +807,14 @@ pub(crate) fn private_directory(directory: &Path) -> Result<(), String> {
 }
 
 pub(crate) fn read_private(path: &Path, limit: u64) -> Option<Vec<u8>> {
+    read_regular_file(path, limit, false)
+}
+
+pub(crate) fn read_owned_private(path: &Path, limit: u64) -> Option<Vec<u8>> {
+    read_regular_file(path, limit, true)
+}
+
+fn read_regular_file(path: &Path, limit: u64, private: bool) -> Option<Vec<u8>> {
     let before = fs::symlink_metadata(path).ok()?;
     if !before.is_file() || reparse_point(&before) || before.len() > limit {
         return None;
@@ -768,16 +839,26 @@ pub(crate) fn read_private(path: &Path, limit: u64) -> Option<Vec<u8>> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        if before.dev() != after.dev() || before.ino() != after.ino() {
+        // SAFETY: geteuid has no preconditions and never changes process credentials.
+        let uid = unsafe { libc::geteuid() };
+        if before.dev() != after.dev()
+            || before.ino() != after.ino()
+            || (private && (after.uid() != uid || after.mode() & 0o077 != 0))
+        {
             return None;
         }
+    }
+    #[cfg(not(unix))]
+    if private {
+        // Without an ACL ownership check, an old instance remains unbound and untouched.
+        return None;
     }
     let mut contents = Vec::new();
     file.take(limit + 1).read_to_end(&mut contents).ok()?;
     (contents.len() as u64 <= limit).then_some(contents)
 }
 
-fn reparse_point(metadata: &Metadata) -> bool {
+pub(crate) fn reparse_point(metadata: &Metadata) -> bool {
     #[cfg(unix)]
     {
         metadata.file_type().is_symlink()
@@ -967,9 +1048,9 @@ async fn save_local_computer_host(
     Ok(())
 }
 
-async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
+async fn probe_stack_json(url: &Url, path: &str, token: &str) -> Option<serde_json::Value> {
     if !local_stack_target(url) {
-        return false;
+        return None;
     }
     let Ok(client) = reqwest::Client::builder()
         .no_proxy()
@@ -977,10 +1058,10 @@ async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
         .timeout(Duration::from_secs(2))
         .build()
     else {
-        return false;
+        return None;
     };
-    let Ok(target) = url.join("/.well-known/orkbot-desktop-stack") else {
-        return false;
+    let Ok(target) = url.join(path) else {
+        return None;
     };
     let Ok(mut response) = client
         .get(target)
@@ -988,14 +1069,14 @@ async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
         .send()
         .await
     else {
-        return false;
+        return None;
     };
     if !response.status().is_success()
         || response
             .content_length()
             .is_some_and(|bytes| bytes > OUTPUT_BYTES as u64)
     {
-        return false;
+        return None;
     }
     let mut bytes = Vec::new();
     loop {
@@ -1004,14 +1085,30 @@ async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
                 bytes.extend_from_slice(&chunk)
             }
             Ok(None) => break,
-            _ => return false,
+            _ => return None,
         }
     }
-    let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) else {
-        return false;
-    };
-    value.get("ok") == Some(&serde_json::Value::Bool(true))
-        && value.get("imageTag").and_then(serde_json::Value::as_str) == Some(image_tag)
+    serde_json::from_slice(&bytes).ok()
+}
+
+async fn probe_owned_stack(url: &Url, token: &str, image_tag: &str) -> bool {
+    probe_stack_json(url, "/.well-known/orkbot-desktop-stack", token)
+        .await
+        .is_some_and(|value| {
+            value.get("ok") == Some(&serde_json::Value::Bool(true))
+                && value.get("imageTag").and_then(serde_json::Value::as_str) == Some(image_tag)
+        })
+}
+
+async fn probe_managed_account(url: &Url, token: &str, owner: &str) -> bool {
+    probe_stack_json(url, "/api/auth/capabilities", token)
+        .await
+        .is_some_and(|value| {
+            value
+                .get("managedAccountKey")
+                .and_then(serde_json::Value::as_str)
+                == Some(owner)
+        })
 }
 
 fn redactions(values: &BTreeMap<String, String>, token: &str) -> Vec<String> {
@@ -1228,14 +1325,7 @@ fn docker_environment(
         ("CONTENT_ENCRYPTION", "off".to_owned()),
         ("AUTH_PASSWORD_ENABLED", "false".to_owned()),
         ("MESSAGING_OPEN_SIGNUP", "false".to_owned()),
-        ("OIDC_ISSUER", "https://api.orkbot.run".to_owned()),
-        (
-            "OIDC_CLIENT_ID",
-            accounts_client_id(source).unwrap_or_default().to_owned(),
-        ),
-        ("OIDC_CLIENT_SECRET", String::new()),
-        ("OIDC_NAME", "Ork Accounts".to_owned()),
-        ("OIDC_REDIRECT_URI", format!("{origin}/callback")),
+        ("AUTH_ACCOUNTS_ENABLED", "true".to_owned()),
         ("ORKBOT_WEB_BIND", "127.0.0.1".to_owned()),
         ("ORKBOT_WEB_PORT", url.port().unwrap_or(80).to_string()),
         ("ORKBOT_API_PORT", "0".to_owned()),
@@ -1250,14 +1340,6 @@ fn docker_environment(
         environment.insert("ORKBOT_DESKTOP_STACK_TOKEN".into(), OsString::from(token));
     }
     environment
-}
-
-fn accounts_client_id(source: &Environment) -> Option<&str> {
-    source
-        .get("ORK_ACCOUNTS_DESKTOP_CLIENT_ID")
-        .and_then(|value| value.to_str())
-        .or(option_env!("ORK_ACCOUNTS_DESKTOP_CLIENT_ID"))
-        .filter(|value| !value.trim().is_empty() && value.trim() == *value)
 }
 
 fn compose_supports_wait_timeout(version: &str) -> bool {
@@ -1700,6 +1782,11 @@ mod tests {
                             .to_str()
                             .unwrap()
                             .to_owned();
+                        let owner = request
+                            .environment
+                            .get("ORKBOT_DESKTOP_ACCOUNT_KEY")
+                            .and_then(|value| value.to_str())
+                            .map(str::to_owned);
                         let tag = request.environment["ORKBOT_IMAGE_TAG"]
                             .to_str()
                             .unwrap()
@@ -1715,6 +1802,14 @@ mod tests {
                             assert!(request.to_lowercase().contains(&format!("x-orkbot-desktop-stack-token: {token}\r\n")));
                             let body = serde_json::json!({"ok": true, "imageTag": tag}).to_string();
                             stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                            if let Some(owner) = owner {
+                                let (mut stream, _) = listener.accept().await.unwrap();
+                                let request = read_request(&mut stream).await;
+                                assert!(request.starts_with("GET /api/auth/capabilities HTTP/1.1\r\n"));
+                                assert!(request.to_lowercase().contains(&format!("x-orkbot-desktop-stack-token: {token}\r\n")));
+                                let body = serde_json::json!({"managedAccountKey": owner}).to_string();
+                                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                            }
                         }));
                         DockerResult {
                             code: 0,
@@ -1777,6 +1872,78 @@ mod tests {
         (root, stack, runner)
     }
 
+    #[tokio::test]
+    async fn a_retired_start_intent_never_calls_docker_or_creates_an_instance() {
+        let (_root, stack, runner) = fixture(vec![]);
+        let intent = stack.intent();
+        stack.abort();
+        assert_eq!(stack.start_for(intent).await.phase, LocalStackPhase::Idle);
+        assert!(runner.requests.lock().unwrap().is_empty());
+        assert!(!stack.directory.exists());
+    }
+
+    #[tokio::test]
+    async fn two_scopes_keep_their_own_secrets_ports_projects_and_late_stop_target() {
+        use crate::local_stack_scope::AccountStacks;
+        let (root, template, runner) = fixture(vec![
+            ok("2.24.0"),
+            ok("29.0.0"),
+            ok(""),
+            Reply::Healthy,
+            ok("2.24.0"),
+            ok("29.0.0"),
+            ok(""),
+            Reply::Healthy,
+            ok(""),
+        ]);
+        let mut scopes = AccountStacks::new(template);
+        let first = scopes
+            .select(root.path(), &"a".repeat(64), |_| None, |_| None, || true)
+            .unwrap();
+        assert_eq!(first.start().await.phase, LocalStackPhase::Ready);
+        let original_env = fs::read(first.directory.join(ENV_FILE)).unwrap();
+        let original_token = read_token(&first.directory).unwrap();
+        let original_port = first.web_url();
+        let second = scopes
+            .select(root.path(), &"b".repeat(64), |_| None, |_| None, || true)
+            .unwrap();
+        assert_eq!(second.start().await.phase, LocalStackPhase::Ready);
+        assert_ne!(first.directory, second.directory);
+        assert_ne!(first.project_name, second.project_name);
+        assert_ne!(
+            original_env,
+            fs::read(second.directory.join(ENV_FILE)).unwrap()
+        );
+        assert_ne!(original_token, read_token(&second.directory).unwrap());
+        assert!(first.matches_saved_url(&original_port.origin().ascii_serialization()));
+        assert!(!second.matches_saved_url(&original_port.origin().ascii_serialization()));
+        assert_eq!(first.stop().await.phase, LocalStackPhase::Idle);
+        assert!(scopes.is_selected(&second));
+        assert_eq!(
+            fs::read(first.directory.join(ENV_FILE)).unwrap(),
+            original_env
+        );
+        assert_eq!(read_token(&first.directory).unwrap(), original_token);
+        let requests = runner.requests.lock().unwrap();
+        let stop = requests.last().unwrap();
+        assert_eq!(stop.cwd, first.directory);
+        let project = stop
+            .args
+            .iter()
+            .position(|arg| arg == "--project-name")
+            .unwrap();
+        assert_eq!(stop.args[project + 1], first.project_name);
+        assert_eq!(stop.args.last().map(String::as_str), Some("stop"));
+        assert_eq!(
+            stop.environment["ORKBOT_WEB_PORT"],
+            OsString::from(original_port.port().unwrap().to_string())
+        );
+        assert!(requests.iter().all(|request| !request
+            .args
+            .iter()
+            .any(|arg| matches!(arg.as_str(), "down" | "--volumes" | "rm"))));
+    }
+
     #[test]
     fn image_tags_follow_release_versions_and_moving_development_images() {
         let revision = "0123456789abcdef0123456789abcdef01234567";
@@ -1795,18 +1962,16 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn missing_accounts_configuration_never_starts_a_password_server() {
-        let (_root, mut stack, runner) = fixture(vec![ok("2.24.0"), ok("29.0.0")]);
-        stack
-            .environment
-            .insert("ORK_ACCOUNTS_DESKTOP_CLIENT_ID".into(), OsString::new());
-        let result = stack.start().await;
-        assert_eq!(result.phase, LocalStackPhase::Failed);
-        assert_eq!(
-            result.message.as_deref(),
-            Some("Accounts sign-in is not configured for this build.")
-        );
-        assert_eq!(runner.requests.lock().unwrap().len(), 2);
+    async fn native_login_needs_no_server_oidc_client_configuration() {
+        let (_root, mut stack, runner) =
+            fixture(vec![ok("2.24.0"), ok("29.0.0"), ok(""), Reply::Healthy]);
+        stack.environment.remove("ORK_ACCOUNTS_DESKTOP_CLIENT_ID");
+        assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
+        let requests = runner.requests.lock().unwrap();
+        let environment = &requests.last().unwrap().environment;
+        assert_eq!(environment["AUTH_ACCOUNTS_ENABLED"], "true");
+        assert_eq!(environment["AUTH_PASSWORD_ENABLED"], "false");
+        assert!(environment.keys().all(|key| !key.starts_with("OIDC_")));
     }
 
     #[test]
@@ -1979,10 +2144,8 @@ mod tests {
         assert_eq!(env["SANDBOX_HOST_TOKEN"], "");
         assert_eq!(env["AUTH_PASSWORD_ENABLED"], "false");
         assert_eq!(env["MESSAGING_OPEN_SIGNUP"], "false");
-        assert_eq!(env["OIDC_ISSUER"], "https://api.orkbot.run");
-        assert_eq!(env["OIDC_CLIENT_ID"], "fake-public-client");
-        assert_eq!(env["OIDC_CLIENT_SECRET"], "");
-        assert_eq!(env["OIDC_REDIRECT_URI"], "http://127.0.0.1:45173/callback");
+        assert_eq!(env["AUTH_ACCOUNTS_ENABLED"], "true");
+        assert!(env.keys().all(|key| !key.starts_with("OIDC_")));
     }
 
     fn host_connection() -> Connection {
@@ -2249,7 +2412,7 @@ mod tests {
                 "-f",
                 COMPOSE_FILE,
                 "--project-name",
-                PROJECT_NAME,
+                LEGACY_PROJECT_NAME,
                 "up",
                 "-d",
                 "--wait",
@@ -2470,6 +2633,66 @@ mod tests {
                 ])
             );
         }
+    }
+
+    #[tokio::test]
+    async fn managed_account_probe_rejects_missing_or_different_owner_without_sending_accounts_tokens(
+    ) {
+        let owner = "a".repeat(64);
+        for (value, expected) in [
+            (serde_json::json!({"managedAccountKey":owner}), true),
+            (
+                serde_json::json!({"managedAccountKey":"b".repeat(64)}),
+                false,
+            ),
+            (serde_json::json!({"passwordAuth":false}), false),
+            (serde_json::Value::Null, false),
+        ] {
+            let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+                .await
+                .unwrap();
+            let url = Url::parse(&format!("http://{}", listener.local_addr().unwrap())).unwrap();
+            let serving = tokio::spawn(async move {
+                let (mut stream, _) = listener.accept().await.unwrap();
+                let request = read_request(&mut stream).await;
+                assert!(request.starts_with("GET /api/auth/capabilities HTTP/1.1\r\n"));
+                assert!(request
+                    .to_lowercase()
+                    .contains("x-orkbot-desktop-stack-token: private-fixture-token\r\n"));
+                assert!(!request.to_lowercase().contains("authorization:"));
+                let body = value.to_string();
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+            });
+            assert_eq!(
+                probe_managed_account(&url, "private-fixture-token", &owner).await,
+                expected
+            );
+            serving.await.unwrap();
+        }
+    }
+
+    #[test]
+    fn managed_owner_changes_the_recreation_identity_without_changing_legacy_files() {
+        let (_root, template, _runner) = fixture(vec![]);
+        let first = template.scoped(
+            template.directory.join("a"),
+            "project-a".into(),
+            "a".repeat(64),
+            None,
+            None,
+        );
+        let second = template.scoped(
+            template.directory.join("b"),
+            "project-b".into(),
+            "b".repeat(64),
+            None,
+            None,
+        );
+        assert_ne!(first.host_config_identity(), second.host_config_identity());
+        assert_ne!(
+            first.host_config_identity(),
+            template.host_config_identity()
+        );
     }
 
     #[tokio::test]

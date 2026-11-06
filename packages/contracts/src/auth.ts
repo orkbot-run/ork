@@ -1,12 +1,23 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited auth contracts are preserved; native account proof is an Ork addition.
+
 import { z } from "zod";
 
 export const authCapabilitiesSchema = z.object({
+  /** Native Accounts proofs are exchanged for a server session, without server OIDC credentials. */
+  accountsLogin: z.boolean().optional(),
   sso: z
     .object({
       name: z.string().min(1),
       availability: z.enum(["available", "unavailable", "checking"]),
     })
     .nullable(),
+  /** Returned only to native main with its private instance capability. */
+  managedAccountKey: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   passwordAuth: z.boolean(),
   passwordReset: z.boolean(),
   resetUrl: z.string().url().nullable(),
