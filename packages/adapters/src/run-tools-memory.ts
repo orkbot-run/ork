@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 memory tools are preserved. Argument handling is an Ork addition.
+
 import { MEMORY_REVISION_CONFLICT_ERROR } from "@orkbot/adapter-kit";
 import {
   HistoryReadInputSchema,
@@ -11,6 +15,7 @@ import { MAX_RECALLED_MEMORIES } from "./history-compaction.js";
 import { editMemory } from "./memory-tools.js";
 import type { RunContext } from "./run-context.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
+import { argsError } from "./tool-args.js";
 
 /** Cross-chat history requires a surviving direct human request in this app thread. */
 export function historyMyChatsAllowed(
@@ -29,10 +34,16 @@ export function historyMyChatsAllowed(
 async function readHistoryTool(ctx: RunContext, call: ToolCall) {
   const { deps, run } = ctx;
   const { name, args } = call;
+  const parsed =
+    name === "search_history"
+      ? { ...HistorySearchInputSchema.safeParse(args), kind: "search" as const }
+      : { ...HistoryReadInputSchema.safeParse(args), kind: "read" as const };
+  if (!parsed.success) return call.finish({ error: argsError(parsed.error) });
+  const input = parsed.data;
   const crossChat =
     name === "search_history"
-      ? args.scope === "my_chats"
-      : typeof args.threadId === "string" && args.threadId !== run.threadId;
+      ? "scope" in input && input.scope === "my_chats"
+      : "threadId" in input && input.threadId !== undefined && input.threadId !== run.threadId;
   // Channel or webhook text claimed mid-turn revokes the grant for the rest of the run.
   const allowMyChats =
     crossChat && ctx.source.myChatsAllowed && !(await ctx.trust.receivedOutsideMessage());
@@ -47,9 +58,9 @@ async function readHistoryTool(ctx: RunContext, call: ToolCall) {
     searchAt: run.createdAt,
   };
   const response =
-    name === "search_history"
-      ? await searchHistory(deps.prisma, scope, HistorySearchInputSchema.parse(args))
-      : await readHistory(deps.prisma, scope, HistoryReadInputSchema.parse(args));
+    parsed.kind === "search"
+      ? await searchHistory(deps.prisma, scope, parsed.data)
+      : await readHistory(deps.prisma, scope, parsed.data);
   const redacted = redactConnectorPayload(response, ctx.secrets);
   // Redaction can expand short synthetic credentials; never let Pi clip the JSON.
   if (Buffer.byteLength(JSON.stringify(redacted), "utf8") > 11_000) {

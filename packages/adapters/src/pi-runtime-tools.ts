@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 runtime tools are preserved. History argument handling is an Ork addition.
+
 import type { Agent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import { validateToolArguments } from "@earendil-works/pi-ai";
@@ -11,7 +15,11 @@ import type {
   ModelCallObserver,
 } from "@orkbot/adapter-kit";
 import { DEFAULT_CONTEXT_STRATEGY } from "@orkbot/adapter-kit";
-import { FLEET_TOOL_NAMES } from "@orkbot/contracts";
+import {
+  FLEET_TOOL_NAMES,
+  HistoryReadInputSchema,
+  HistorySearchInputSchema,
+} from "@orkbot/contracts";
 import { batchActions, humanizeToolName } from "@orkbot/core";
 import {
   isInternalTermination,
@@ -37,6 +45,7 @@ import { recordPiTelemetryContent, withPiTelemetrySpan } from "./pi-telemetry.js
 import { VERBATIM_TOOL_RESULTS } from "./runtime-context.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import type { FinishedShellCommand } from "./shell-command-stream.js";
+import { argsError } from "./tool-args.js";
 import { textContentArg } from "./tool-text.js";
 import { isVerbatimMcpResult } from "./verbatim-mcp-result.js";
 import { positiveIntegerArg } from "./workspace-file-tools.js";
@@ -375,6 +384,13 @@ function toAgentTool(
     parameters: parametersFor(tool),
     prepareArguments: (args: unknown) => {
       const raw = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
+      if (tool.name === "search_history" || tool.name === "read_history") {
+        const parsed = (
+          tool.name === "search_history" ? HistorySearchInputSchema : HistoryReadInputSchema
+        ).safeParse(args);
+        if (!parsed.success) throw new Error(argsError(parsed.error));
+        return parsed.data;
+      }
       if (tool.name === "remember") {
         return {
           content: String(raw.content ?? ""),
