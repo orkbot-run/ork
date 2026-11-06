@@ -188,9 +188,7 @@
 
 .orkbot-bot-avatar[data-working="true"] .orkbot-bot-avatar-picture {
   animation: orkbot-avatar-breathe 1.6s ease-in-out infinite;
-  box-shadow:
-    0 0 0 2px var(--status-working),
-    0 0 10px color-mix(in srgb, var(--status-working) 60%, transparent);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--status-working) 60%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

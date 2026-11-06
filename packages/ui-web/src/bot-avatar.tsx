@@ -101,7 +101,7 @@ export const BotAvatar = memo(function BotAvatar({
         data-working={isWorking}
         style={{ width: size, height: size }}
       >
-        <div className="orkbot-bot-avatar-picture relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-border bg-secondary">
+        <div className="orkbot-bot-avatar-picture relative flex h-full w-full items-center justify-center overflow-hidden rounded-full bg-secondary">
           <img src={parsed.imageUrl} alt="" className="h-full w-full object-cover" />
         </div>
         {isWorking ? (
