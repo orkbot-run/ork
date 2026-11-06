@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Recovery scheduling changes follow LICENSE.md.
+
 import { setImmediate } from "node:timers/promises";
 import type { JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
@@ -145,30 +150,44 @@ export function createJobReconciler(
   let controlCursor: ControlCursor | undefined;
   let controlScanDeadline: Date | undefined;
 
+  // External housekeeping runs beside recovery scans. Only the same task waits for its last pass.
+  const housekeeping = [
+    deps.reconcileCloudAgents,
+    deps.reconcilePurchases,
+    deps.reconcileMediaVideos,
+    deps.reconcileModelCredits,
+    deps.reconcileComputerUpdates,
+    deps.reconcileRoutineRetryNotices,
+    deps.reconcileStrategicInitiatives,
+    deps.reconcileSecurityEventRetention,
+    deps.reconcileAuditLog,
+    deps.reconcileHomeStorage,
+    deps.reconcileIdleComputers,
+    deps.reconcileDeadJobs,
+  ].filter((reconcile) => reconcile !== undefined);
+  const housekeepingRunning = new Map<() => Promise<void>, Promise<void>>();
+  const startHousekeeping = () => {
+    for (const reconcile of housekeeping) {
+      if (housekeepingRunning.has(reconcile)) continue;
+      const running = Promise.resolve()
+        .then(reconcile)
+        .catch((error) => getLogger().error("auxiliary reconciliation", error))
+        .finally(() => housekeepingRunning.delete(reconcile));
+      housekeepingRunning.set(reconcile, running);
+    }
+  };
+
   const reconcileOnce = async () => {
     if (reconciling) return reconciling;
     if (stopping) return;
     reconciling = (async () => {
       if (deps.leadership && !(await deps.leadership.tryAcquire())) return;
 
-      const auxiliary = await Promise.allSettled(
-        [
-          () => reconcileCallRequests(deps),
-          () => reconcileComputerRuns(deps.prisma),
-          deps.reconcileCloudAgents,
-          deps.reconcilePurchases,
-          deps.reconcileMediaVideos,
-          deps.reconcileModelCredits,
-          deps.reconcileComputerUpdates,
-          deps.reconcileRoutineRetryNotices,
-          deps.reconcileStrategicInitiatives,
-          deps.reconcileSecurityEventRetention,
-          deps.reconcileAuditLog,
-          deps.reconcileHomeStorage,
-          deps.reconcileIdleComputers,
-          deps.reconcileDeadJobs,
-        ].map(async (reconcile) => reconcile?.()),
-      );
+      startHousekeeping();
+      const auxiliary = await Promise.allSettled([
+        reconcileCallRequests(deps),
+        reconcileComputerRuns(deps.prisma),
+      ]);
       for (const result of auxiliary) {
         if (result.status === "rejected")
           getLogger().error("auxiliary reconciliation", result.reason);
@@ -483,6 +502,8 @@ export function createJobReconciler(
       if (timer) clearInterval(timer);
       timer = undefined;
       await reconciling?.catch(() => undefined);
+      // A pass waiting for leadership can start housekeeping after stop() begins.
+      await Promise.allSettled(housekeepingRunning.values());
       await deps.leadership?.release();
     },
   };

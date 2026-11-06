@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Recovery scheduling changes follow LICENSE.md.
+
 import type { BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import { stuckWorkStatusMessages } from "@orkbot/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@orkbot/db";
@@ -80,6 +85,115 @@ describe("createJobReconciler", () => {
     expect(prisma.routine.findMany).toHaveBeenCalled();
     expect(prisma.computer.findMany).toHaveBeenCalled();
     expect(prisma.messagingOutbound.findFirst).toHaveBeenCalled();
+  });
+
+  it("recovers work on every pass while one housekeeping task is pending", async () => {
+    const at = new Date();
+    const prisma = fakePrisma([], [{ id: "routine-due", nextRunAt: at }]);
+    for (let pass = 0; pass < 2; pass += 1) {
+      vi.mocked(prisma.run.findMany)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ id: "run-due", status: "queued", updatedAt: at }] as never)
+        .mockResolvedValueOnce([]);
+    }
+    vi.mocked(prisma.messagingOutbound.findFirst).mockResolvedValue({ id: "outbound-1" } as never);
+    const { jobs, enqueue } = publisher();
+    const storage = deferred();
+    const reconcileHomeStorage = vi.fn(() => storage.promise);
+    const reconcileCloudAgents = vi.fn(async () => undefined);
+    const reconciler = createJobReconciler({
+      prisma,
+      jobs,
+      reconcileHomeStorage,
+      reconcileCloudAgents,
+    });
+    const initialCompletion = reconciler.lastCompletedAt();
+    let completed = false;
+    const pass = reconciler.reconcileOnce().then(() => {
+      completed = true;
+    });
+    try {
+      await vi.waitFor(() => expect(completed).toBe(true), { timeout: 500 });
+      await reconciler.reconcileOnce();
+      for (const name of ["run.continue", "routine.wakeup", "messaging.deliver"]) {
+        expect(enqueue.mock.calls.filter(([job]) => job.name === name)).toHaveLength(2);
+      }
+      expect(reconciler.lastCompletedAt()).toBeGreaterThan(initialCompletion);
+      expect(reconcileHomeStorage).toHaveBeenCalledOnce();
+      expect(reconcileCloudAgents).toHaveBeenCalledTimes(2);
+      let stopped = false;
+      const stopping = reconciler.stop().then(() => {
+        stopped = true;
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      storage.resolve();
+      await stopping;
+    } finally {
+      storage.resolve();
+      await pass;
+      await reconciler.stop();
+    }
+  });
+
+  it("waits for housekeeping started by a pass acquiring leadership during shutdown", async () => {
+    const acquired = deferred();
+    const storage = deferred();
+    const leadership: ReconciliationLeadership = {
+      tryAcquire: vi.fn(async () => {
+        await acquired.promise;
+        return true;
+      }),
+      release: vi.fn(async () => undefined),
+    };
+    const reconcileHomeStorage = vi.fn(() => storage.promise);
+    const { jobs } = publisher();
+    const reconciler = createJobReconciler({
+      prisma: fakePrisma(),
+      jobs,
+      leadership,
+      reconcileHomeStorage,
+    });
+    const pass = reconciler.reconcileOnce();
+    let stopped = false;
+    const stopping = reconciler.stop().then(() => {
+      stopped = true;
+    });
+    try {
+      acquired.resolve();
+      await vi.waitFor(() => expect(reconcileHomeStorage).toHaveBeenCalledOnce());
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(stopped).toBe(false);
+      expect(leadership.release).not.toHaveBeenCalled();
+      storage.resolve();
+      await Promise.all([pass, stopping]);
+      expect(leadership.release).toHaveBeenCalledOnce();
+    } finally {
+      acquired.resolve();
+      storage.resolve();
+      await Promise.all([pass, stopping]);
+    }
+  });
+
+  it("retries housekeeping after synchronous and asynchronous failures", async () => {
+    const reconcileCloudAgents = vi.fn(() => {
+      throw new Error("cloud unavailable");
+    });
+    const reconcileHomeStorage = vi.fn(async () => {
+      throw new Error("storage unavailable");
+    });
+    const { jobs } = publisher();
+    const reconciler = createJobReconciler({
+      prisma: fakePrisma(),
+      jobs,
+      reconcileCloudAgents,
+      reconcileHomeStorage,
+    });
+    await reconciler.reconcileOnce();
+    await reconciler.reconcileOnce();
+    await reconciler.stop();
+    expect(reconcileCloudAgents).toHaveBeenCalledTimes(2);
+    expect(reconcileHomeStorage).toHaveBeenCalledTimes(2);
   });
 
   it("restores a due pending messaging outbox drain", async () => {
