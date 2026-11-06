@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, BotAvatarSet, BotSection, Group, Space } from "@orkbot/contracts";
 import {
@@ -361,7 +365,7 @@ export function ShellDialogs({
               void refreshBots();
               return;
             }
-            window.location.assign("/onboarding");
+            window.location.assign("/app");
           }}
         />
       ) : null}

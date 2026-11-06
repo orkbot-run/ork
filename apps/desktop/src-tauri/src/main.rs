@@ -57,6 +57,7 @@ struct DesktopState {
     restoring: std::sync::atomic::AtomicBool,
     restore_intent: AtomicU64,
     setup_ready: std::sync::atomic::AtomicBool,
+    startup: Mutex<Startup>,
     speech: speech::SpeechManager,
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
@@ -303,6 +304,8 @@ async fn native_command(
             ))
         }
         Command::ServerChange => {
+            cancel_restore(&state);
+            update_startup(&app, Startup::idle());
             show_setup(&app).map_err(|_| "Could not open server settings.")?;
             Ok(unit)
         }
@@ -549,6 +552,8 @@ async fn setup_accounts_sign_in(
     state: State<'_, DesktopState>,
 ) -> Result<accounts::Account, String> {
     require_setup(&window)?;
+    cancel_restore(&state);
+    update_startup(&app, Startup::idle());
     state.accounts.invalidate();
     state.stack.abort();
     let _switch = state.switching.lock().await;
@@ -588,6 +593,8 @@ async fn setup_accounts_logout(
     state: State<'_, DesktopState>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    cancel_restore(&state);
+    update_startup(&app, Startup::idle());
     state.accounts.invalidate();
     state.browser_auth.cancel_owner(SETUP_ACCOUNTS_OWNER);
     retire_server_windows(&app, &state);
@@ -602,7 +609,7 @@ async fn setup_accounts_logout(
 async fn list_servers<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
-) -> Result<Vec<server_directory::Server>, String> {
+) -> Result<Vec<DirectoryEntry>, String> {
     require_setup(&window)?;
     let authorization = state
         .accounts
@@ -614,14 +621,84 @@ async fn list_servers<R: tauri::Runtime>(
         .await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
-    Ok(servers)
+    let choice = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    let preference =
+        server_directory::preference(&state.directory, authorization.account.identity())?;
+    let selected = startup_server(
+        preference.as_ref(),
+        choice.as_ref(),
+        authorization.account.identity(),
+        &servers,
+    )
+    .map(|server| server.id.clone());
+    // Migrate the previous saved choice once; future manual connections do not replace it.
+    if preference.is_none() {
+        if let Some(id) = selected.as_deref() {
+            server_directory::save_preference(
+                &state.directory,
+                authorization.account.identity(),
+                Some(id),
+            )?;
+        }
+    }
+    Ok(servers
+        .into_iter()
+        .map(|server| DirectoryEntry {
+            is_default: selected.as_deref() == Some(server.id.as_str()),
+            server,
+        })
+        .collect())
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DirectoryEntry {
+    #[serde(flatten)]
+    server: server_directory::Server,
+    is_default: bool,
+}
+
+#[tauri::command]
+async fn set_default_server<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    id: Option<String>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let device = server_directory::device_id(&state.directory)?;
+    let servers = server_directory::Directory::new()?
+        .list(authorization.directory_bearer()?, &device)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    if id
+        .as_ref()
+        .is_some_and(|id| !servers.iter().any(|server| &server.id == id))
+    {
+        return Err("That server is no longer available.".into());
+    }
+    let _preference = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    server_directory::save_preference(
+        &state.directory,
+        authorization.account.identity(),
+        id.as_deref(),
+    )
 }
 
 #[tauri::command]
 async fn create_server_installation<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
-    raw_url: String,
 ) -> Result<server_directory::InstallationCommand, String> {
     require_setup(&window)?;
     let authorization = state
@@ -629,11 +706,30 @@ async fn create_server_installation<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let command = server_directory::Directory::new()?
-        .create_installation(authorization.directory_bearer()?, &raw_url)
+        .create_installation(authorization.directory_bearer()?)
         .await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     Ok(command)
+}
+
+#[tauri::command]
+async fn get_server_installation<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    id: String,
+) -> Result<server_directory::InstallationStatus, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let status = server_directory::Directory::new()?
+        .installation_status(authorization.directory_bearer()?, &id)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(status)
 }
 
 #[tauri::command]
@@ -660,7 +756,21 @@ async fn remove_server<R: tauri::Runtime>(
     directory
         .remove(authorization.directory_bearer()?, &id)
         .await?;
-    require_account(&state, &authorization)
+    require_account(&state, &authorization)?;
+    let _preference = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if server_directory::preference(&state.directory, authorization.account.identity())?
+        .is_some_and(|preference| preference.server_id.as_deref() == Some(id.as_str()))
+    {
+        server_directory::save_preference(
+            &state.directory,
+            authorization.account.identity(),
+            None,
+        )?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -740,6 +850,47 @@ async fn connect_directory_server(
 struct SetupState {
     server_url: Option<String>,
     mode: settings::InstanceMode,
+    startup: Startup,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Startup {
+    phase: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    server_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    kind: Option<server_directory::Kind>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    message: Option<String>,
+}
+
+impl Startup {
+    fn checking() -> Self {
+        Self {
+            phase: "checking",
+            server_id: None,
+            kind: None,
+            message: None,
+        }
+    }
+
+    fn idle() -> Self {
+        Self {
+            phase: "idle",
+            ..Self::checking()
+        }
+    }
+}
+
+fn update_startup(app: &tauri::AppHandle, startup: Startup) {
+    let state = app.state::<DesktopState>();
+    if let Ok(mut value) = state.startup.lock() {
+        *value = startup.clone();
+    }
+    if let Some(window) = app.get_webview_window("setup") {
+        let _ = window.emit("desktop-startup-changed", startup);
+    }
 }
 
 #[tauri::command]
@@ -759,6 +910,11 @@ fn setup_state<R: tauri::Runtime>(
         mode: saved
             .as_ref()
             .map_or(settings::InstanceMode::Existing, |setup| setup.mode),
+        startup: state
+            .startup
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .clone(),
     })
 }
 
@@ -1200,6 +1356,36 @@ fn saved_server<'a>(
     })
 }
 
+fn startup_server<'a>(
+    preference: Option<&server_directory::Preference>,
+    choice: Option<&settings::Setup>,
+    identity: (&str, &str),
+    servers: &'a [server_directory::Server],
+) -> Option<&'a server_directory::Server> {
+    match preference {
+        Some(preference) => {
+            if let Some(server) = preference
+                .server_id
+                .as_ref()
+                .and_then(|id| servers.iter().find(|server| &server.id == id))
+            {
+                return Some(server);
+            }
+        }
+        None => {
+            if let Some(server) = choice.and_then(|choice| saved_server(choice, identity, servers))
+            {
+                return Some(server);
+            }
+        }
+    }
+    if servers.len() == 1 {
+        servers.first()
+    } else {
+        None
+    }
+}
+
 fn cancel_restore(state: &DesktopState) {
     state.restore_intent.fetch_add(1, Ordering::SeqCst);
     if state.restoring.load(Ordering::SeqCst) {
@@ -1244,22 +1430,19 @@ async fn restore_saved_server(
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
-    let choice = state
-        .setup
-        .lock()
-        .map_err(|_| "Desktop state unavailable")?
-        .clone();
-    let Some(choice) = choice else {
+    if state
+        .accounts
+        .session(&server_directory::origin())
+        .await?
+        .is_none()
+    {
         return Ok(false);
-    };
+    }
     let authorization = state
         .accounts
         .authorization(&server_directory::origin())
         .await?;
     if state.restore_intent.load(Ordering::SeqCst) != intent {
-        return Ok(false);
-    }
-    if !choice.belongs_to(authorization.account.identity()) {
         return Ok(false);
     }
     let device = server_directory::device_id(&state.directory)?;
@@ -1268,14 +1451,49 @@ async fn restore_saved_server(
         .list(authorization.directory_bearer()?, &device)
         .await?;
     require_account(&state, &authorization)?;
-    let Some(server) = saved_server(&choice, authorization.account.identity(), &entries) else {
-        return Ok(false);
+    let server = {
+        let choice = state
+            .setup
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        let preference =
+            server_directory::preference(&state.directory, authorization.account.identity())?;
+        let Some(server) = startup_server(
+            preference.as_ref(),
+            choice.as_ref(),
+            authorization.account.identity(),
+            &entries,
+        )
+        .cloned() else {
+            return Ok(false);
+        };
+        if state.restore_intent.load(Ordering::SeqCst) != intent {
+            return Ok(false);
+        }
+        if preference.is_none() {
+            server_directory::save_preference(
+                &state.directory,
+                authorization.account.identity(),
+                Some(&server.id),
+            )?;
+        }
+        server
     };
+    update_startup(
+        app,
+        Startup {
+            phase: "opening",
+            server_id: Some(server.id.clone()),
+            kind: Some(server.kind),
+            message: None,
+        },
+    );
+    show_setup(app).map_err(|_| "Could not open server settings.")?;
     connect_directory_server(
         window,
         app,
         &state,
-        server,
+        &server,
         &authorization,
         &directory,
         &device,
@@ -1312,12 +1530,37 @@ fn show_active_or_setup(app: &tauri::AppHandle) {
         state.restoring.store(false, Ordering::SeqCst);
         return;
     };
+    update_startup(app, Startup::checking());
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let restored = restore_saved_server(&app, &window, intent).await;
         app.state::<DesktopState>()
             .restoring
             .store(false, Ordering::SeqCst);
+        if app
+            .state::<DesktopState>()
+            .restore_intent
+            .load(Ordering::SeqCst)
+            != intent
+        {
+            // A late activation may have hidden the picker requested by Change Server or logout.
+            let _ = show_setup(&app);
+            return;
+        }
+        let startup = match &restored {
+            Err(error) => Startup {
+                phase: "failed",
+                message: Some(error.clone()),
+                ..app
+                    .state::<DesktopState>()
+                    .startup
+                    .lock()
+                    .map(|value| value.clone())
+                    .unwrap_or_else(|_| Startup::idle())
+            },
+            _ => Startup::idle(),
+        };
+        update_startup(&app, startup);
         if !matches!(restored, Ok(true)) && !focus_active(&app) {
             let _ = show_setup(&app);
         }
@@ -1340,6 +1583,7 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
         MenuAction::ChangeServer => {
             let state = app.state::<DesktopState>();
             cancel_restore(&state);
+            update_startup(app, Startup::idle());
             let _ = show_setup(app);
         }
         MenuAction::StopLocalServer => {
@@ -1435,7 +1679,9 @@ fn main() {
             setup_accounts_sign_in,
             setup_accounts_logout,
             list_servers,
+            set_default_server,
             create_server_installation,
+            get_server_installation,
             remove_server,
             connect_saved_server,
             connect_server,
@@ -1459,6 +1705,7 @@ fn main() {
                 local_stack::image_tag(
                     &app.package_info().version.to_string(),
                     !cfg!(debug_assertions),
+                    option_env!("ORKBOT_INSTALLER_REVISION"),
                 ),
                 Some(Arc::new(move |state| {
                     if let Some(window) = callback_app.get_webview_window("setup") {
@@ -1498,6 +1745,7 @@ fn main() {
                 restoring: std::sync::atomic::AtomicBool::new(false),
                 restore_intent: AtomicU64::new(0),
                 setup_ready: std::sync::atomic::AtomicBool::new(false),
+                startup: Mutex::new(Startup::checking()),
                 speech: speech::SpeechManager::new(speech_helper),
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
@@ -1607,6 +1855,7 @@ mod tests {
             restoring: std::sync::atomic::AtomicBool::new(false),
             restore_intent: AtomicU64::new(0),
             setup_ready: std::sync::atomic::AtomicBool::new(false),
+            startup: Mutex::new(Startup::checking()),
             speech: speech::SpeechManager::new(PathBuf::new()),
             pairings: pairing::Pairings::default(),
             warm_generation: AtomicU64::new(0),
@@ -1743,6 +1992,76 @@ mod tests {
     }
 
     #[test]
+    fn startup_uses_one_server_and_keeps_an_explicit_default_after_a_temporary_switch() {
+        let identity = ("https://accounts.example.test", "subject-a");
+        let first = server_directory::Server {
+            id: "11111111-1111-4111-8111-111111111111".into(),
+            url: "https://first.example.test".into(),
+            kind: server_directory::Kind::Selfhosted,
+            device_id: None,
+        };
+        let second = server_directory::Server {
+            id: "22222222-2222-4222-8222-222222222222".into(),
+            url: "https://second.example.test".into(),
+            ..first.clone()
+        };
+        let entries = [first, second];
+        assert_eq!(
+            startup_server(None, None, identity, &entries[..1])
+                .unwrap()
+                .id,
+            entries[0].id
+        );
+        assert!(startup_server(None, None, identity, &[]).is_none());
+        assert!(startup_server(None, None, identity, &entries).is_none());
+        let last_opened = settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: Url::parse(&entries[1].url).unwrap(),
+            account: Some(settings::account_key(identity)),
+        };
+        let preference = server_directory::Preference {
+            server_id: Some(entries[0].id.clone()),
+        };
+        assert_eq!(
+            startup_server(Some(&preference), Some(&last_opened), identity, &entries)
+                .unwrap()
+                .id,
+            entries[0].id
+        );
+        assert_eq!(
+            startup_server(None, Some(&last_opened), identity, &entries)
+                .unwrap()
+                .id,
+            entries[1].id
+        );
+        assert!(startup_server(
+            None,
+            Some(&last_opened),
+            (identity.0, "other-subject"),
+            &entries
+        )
+        .is_none());
+        let ask = server_directory::Preference { server_id: None };
+        assert!(startup_server(Some(&ask), Some(&last_opened), identity, &entries).is_none());
+        assert_eq!(
+            startup_server(Some(&ask), Some(&last_opened), identity, &entries[..1])
+                .unwrap()
+                .id,
+            entries[0].id
+        );
+        let removed = server_directory::Preference {
+            server_id: Some("33333333-3333-4333-8333-333333333333".into()),
+        };
+        assert!(startup_server(Some(&removed), Some(&last_opened), identity, &entries).is_none());
+        assert_eq!(
+            startup_server(Some(&removed), Some(&last_opened), identity, &entries[..1])
+                .unwrap()
+                .id,
+            entries[0].id
+        );
+    }
+
+    #[test]
     fn setup_commands_require_the_bundled_document_and_window() {
         for accepted in [
             "tauri://localhost",
@@ -1780,7 +2099,9 @@ mod tests {
                 local_stack_state,
                 setup_accounts_session,
                 list_servers,
+                set_default_server,
                 create_server_installation,
+                get_server_installation,
                 remove_server,
             ])
             .build(app_context())
@@ -1814,7 +2135,9 @@ mod tests {
         tauri::test::assert_ipc_response(
             &setup,
             request("setup_state", local),
-            Ok(serde_json::json!({"serverUrl": null, "mode": "existing"})),
+            Ok(
+                serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "checking"}}),
+            ),
         );
         for (window, origin) in [
             (&setup, "https://orkbot.example.com"),
@@ -1824,7 +2147,9 @@ mod tests {
             for command in [
                 "setup_accounts_session",
                 "list_servers",
+                "set_default_server",
                 "create_server_installation",
+                "get_server_installation",
                 "remove_server",
                 "connect_saved_server",
                 "setup_accounts_sign_in",

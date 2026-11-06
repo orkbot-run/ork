@@ -125,6 +125,7 @@ export function OnboardingPage() {
   const [modelProbe] = useState(() => createModelProbe(setProbe));
   const resetOpenAiCompatibleProbe = modelProbe.reset;
   const createStartedRef = useRef(false);
+  const createAttemptRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const { signingOut, logOut } = useSignOut("/sign-in", setError);
   const [notice, setNotice] = useState<string | null>(null);
@@ -480,21 +481,29 @@ export function OnboardingPage() {
   async function createFirstBot() {
     if (createStartedRef.current) return;
     createStartedRef.current = true;
+    const attempt = ++createAttemptRef.current;
     setError(null);
     try {
       const bot = await rpc.onboarding.ensureFirstBot();
-      if (!bot) throw new Error(t`Could not create your bot`);
+      if (attempt !== createAttemptRef.current) return;
+      if (!bot) {
+        navigate("/app", { replace: true });
+        return;
+      }
       // Onboarding continues conversationally in the thread: greeting first,
       // then the focus choice (immediate for the first bot).
       const started = await rpc.onboarding
         .start({ botId: bot.id })
         .then(() => true)
         .catch(() => false);
+      if (attempt !== createAttemptRef.current) return;
       if (started) {
         await rpc.onboarding.promptFocus({ botId: bot.id }).catch(() => undefined);
       }
+      if (attempt !== createAttemptRef.current) return;
       navigate(`/app/${bot.id}`);
     } catch (err) {
+      if (attempt !== createAttemptRef.current) return;
       createStartedRef.current = false;
       setError(errorText(err, t`Could not create your bot`));
     }
@@ -503,6 +512,10 @@ export function OnboardingPage() {
   useEffect(() => {
     if (step !== "bot") return;
     void createFirstBot();
+    return () => {
+      createAttemptRef.current += 1;
+      createStartedRef.current = false;
+    };
   }, [step]);
 
   // Loading, and creating the first bot, both wait on one spinner until the chat opens.

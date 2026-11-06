@@ -21,6 +21,8 @@ installer = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(installer)
 URL = "https://server.example.com"
 CODE = "a" * 43
+TICKET = "6d2d8377-3af0-4ca8-8c12-ab25ba2f7a6d"
+REPORT_TOKEN = "b" * 43
 
 
 class InstallerTests(unittest.TestCase):
@@ -69,6 +71,55 @@ class InstallerTests(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(installer.SetupError):
                 installer.origin(value)
 
+    def test_domain_is_requested_only_on_the_server_and_saved_for_resume(self):
+        with patch.object(installer, "terminal_prompt", return_value="server.example.com") as prompt:
+            self.assertEqual(installer.server_url(""), URL)
+        prompt.assert_called_once()
+        installer.atomic(installer.STATE, json.dumps({"url": URL, "externalProxy": True}))
+        with patch.object(installer, "terminal_prompt") as prompt:
+            self.assertEqual(installer.server_url(""), URL)
+            self.assertTrue(installer.proxy_mode(URL, "auto"))
+        prompt.assert_not_called()
+        with self.assertRaises(installer.SetupError):
+            installer.proxy_mode("https://other.example.com", "auto")
+
+    def test_terminal_prompt_requires_a_terminal_and_bounds_input(self):
+        with patch("builtins.open", side_effect=OSError()), self.assertRaises(installer.SetupError):
+            installer.terminal_prompt("Domain: ")
+        for answer in ("", "a" * 1025):
+            terminal = io.StringIO(answer)
+            terminal.write = lambda value: len(value)
+            with patch("builtins.open", return_value=terminal), self.assertRaises(installer.SetupError):
+                installer.terminal_prompt("Domain: ")
+
+    @unittest.skipUnless(hasattr(os, "openpty"), "A POSIX terminal is required")
+    def test_domain_prompt_works_with_a_nonseekable_terminal(self):
+        master, slave = os.openpty()
+        original_open = open
+        terminal = os.ttyname(slave)
+        try:
+            os.write(master, b"server.example.com\n")
+            with patch("builtins.open", side_effect=lambda path, mode: original_open(terminal if path == "/dev/tty" else path, mode)):
+                self.assertEqual(installer.terminal_prompt("Domain: "), "server.example.com")
+        finally:
+            os.close(master)
+            os.close(slave)
+
+    def test_proxy_is_detected_without_changing_the_existing_proxy(self):
+        with patch.object(installer, "occupied_ports", return_value=False), patch.object(installer, "terminal_prompt") as prompt:
+            self.assertFalse(installer.proxy_mode(URL, "auto"))
+        prompt.assert_not_called()
+        with patch.object(installer, "occupied_ports", return_value=True), patch.object(installer, "terminal_prompt", return_value="yes"):
+            self.assertTrue(installer.proxy_mode(URL, "auto"))
+        with patch.object(installer, "occupied_ports", return_value=True), patch.object(installer, "terminal_prompt", return_value="no"), self.assertRaises(installer.SetupError):
+            installer.proxy_mode(URL, "auto")
+
+    def test_saved_settings_reject_malformed_types_and_additional_fields(self):
+        for value in ({"url": 42, "externalProxy": False}, {"url": URL, "externalProxy": "false"}, {"url": URL, "externalProxy": False, "extra": "value"}, []):
+            installer.atomic(installer.STATE, json.dumps(value))
+            with self.subTest(value=value), self.assertRaises(installer.SetupError):
+                installer.server_url("")
+
     def test_dns_rejects_any_private_result(self):
         public = [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443))]
         with patch.object(installer.socket, "getaddrinfo", return_value=public):
@@ -101,6 +152,45 @@ class InstallerTests(unittest.TestCase):
         self.assertNotIn(CODE, text)
         self.assertNotIn(CODE, installer.STATE.read_text())
         self.assertEqual(json.loads(installer.STATE.read_text()), {"url": URL, "externalProxy": False})
+
+    def test_status_credential_is_private_and_separate_from_docker_environment(self):
+        with patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": CODE}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json", return_value=self.result(installationTicketId=TICKET, reportToken=REPORT_TOKEN)):
+            installer.configure(URL)
+        self.assertEqual(json.loads(installer.INSTALLATION.read_text()), {"url": URL, "installationTicketId": TICKET, "reportToken": REPORT_TOKEN})
+        self.assertEqual(installer.INSTALLATION.stat().st_mode & 0o777, 0o600)
+        self.assertNotIn(REPORT_TOKEN, installer.ENV.read_text())
+        self.assertNotIn(CODE, installer.INSTALLATION.read_text())
+        before = installer.INSTALLATION.read_bytes()
+        self.configured_env()
+        with patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json") as request:
+            installer.configure(URL)
+        request.assert_not_called()
+        self.assertEqual(before, installer.INSTALLATION.read_bytes())
+
+    def test_progress_has_a_fixed_endpoint_phase_only_and_bounded_best_effort_retries(self):
+        installer.atomic(installer.INSTALLATION, json.dumps({"url": URL, "installationTicketId": TICKET, "reportToken": REPORT_TOKEN}))
+        with patch.object(installer, "request_json", return_value={}) as request:
+            installer.progress(URL, "pulling")
+        request.assert_called_once_with(installer.ISSUER + "/api/installations/progress", {"phase": "pulling"}, REPORT_TOKEN)
+        with patch.object(installer, "request_json", side_effect=installer.SetupError("Unavailable")) as request, patch.object(installer.time, "sleep") as sleep, patch("sys.stderr", new_callable=io.StringIO) as output:
+            installer.progress(URL, "ready")
+        self.assertEqual(request.call_count, 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertNotIn(REPORT_TOKEN, output.getvalue())
+        with patch.object(installer, "request_json") as request, self.assertRaises(installer.SetupError):
+            installer.progress(URL, "arbitrary-status")
+        request.assert_not_called()
+        with patch.object(installer, "request_json") as request, self.assertRaises(installer.SetupError):
+            installer.progress("https://other.example.com", "ready")
+        request.assert_not_called()
+
+    def test_invalid_status_credential_never_changes_existing_configuration(self):
+        for changes in ({"installationTicketId": "bad", "reportToken": REPORT_TOKEN}, {"installationTicketId": TICKET, "reportToken": "short"}, {"installationTicketId": TICKET}, {"reportToken": REPORT_TOKEN}):
+            before = installer.ENV.read_bytes()
+            with self.subTest(changes=changes), patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": CODE}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json", return_value=self.result(**changes)), self.assertRaises(installer.SetupError):
+                installer.configure(URL)
+            self.assertEqual(before, installer.ENV.read_bytes())
+            self.assertFalse(installer.INSTALLATION.exists())
 
     def test_invalid_enrollment_never_changes_existing_configuration(self):
         for changes in ({"url": "https://other.example.com"}, {"issuer": "https://other.example.com"}, {"clientId": ""}, {"clientSecret": "bad\nOIDC_ISSUER=x"}, {"clientSecret": "bad'quote"}, {"clientSecret": "bad\\escape"}, {"clientSecret": "x" * 4097}):

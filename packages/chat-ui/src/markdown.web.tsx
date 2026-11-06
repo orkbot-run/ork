@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to preserve streamed block state. Inherited material remains Apache-2.0.
+
 import type { CSSProperties, MouseEvent, ReactNode, RefObject } from "react";
 import {
   Component,
@@ -779,7 +783,7 @@ const MarkdownBlock = memo(function MarkdownBlock({
   );
 });
 
-type SourceBlock = { start: number; source: string };
+type SourceBlock = { start: number; source: string; type: string };
 type SplitSource = { text: string; blocks: SourceBlock[] };
 
 const blockParser = unified().use(remarkParse).use(remarkGfm);
@@ -791,29 +795,29 @@ const definition = /\]:/;
  * one before it (a list continued after a blank line), so only those two are parsed again.
  */
 function splitSource(text: string, previous: SplitSource | undefined): SplitSource {
-  const whole = { text, blocks: [{ start: 0, source: text }] };
+  const whole = { text, blocks: [{ start: 0, source: text, type: "root" }] };
   if (definition.test(text)) return whole;
   const kept = previous && text.startsWith(previous.text) ? previous.blocks.slice(0, -2) : [];
   const from = previous?.blocks[kept.length]?.start ?? 0;
   const tail = text.slice(from);
-  let starts: number[];
+  let starts: { start: number; type: string }[];
   try {
-    starts = blockParser
-      .parse(tail)
-      .children.map((child, index) =>
-        index === 0 ? 0 : tail.lastIndexOf("\n", (child.position?.start.offset ?? 1) - 1) + 1,
-      );
+    starts = blockParser.parse(tail).children.map((child, index) => ({
+      start: index === 0 ? 0 : tail.lastIndexOf("\n", (child.position?.start.offset ?? 1) - 1) + 1,
+      type: child.type,
+    }));
   } catch {
     return whole;
   }
-  if (starts.length === 0) starts = [0];
+  if (starts.length === 0) starts = [{ start: 0, type: "root" }];
   return {
     text,
     blocks: [
       ...kept,
-      ...starts.map((start, index) => ({
+      ...starts.map(({ start, type }, index) => ({
         start: from + start,
-        source: tail.slice(start, starts[index + 1] ?? tail.length),
+        source: tail.slice(start, starts[index + 1]?.start ?? tail.length),
+        type,
       })),
     ],
   };
@@ -833,7 +837,13 @@ export const ChatMarkdown = memo(function ChatMarkdown({
   const blocks = useMemo(() => {
     if (!split) return undefined;
     previousSplit.current = splitSource(children, previousSplit.current);
-    return previousSplit.current.blocks;
+    // Prose inserted before a table must not reset its sort, page, or open dialog.
+    const counts = new Map<string, number>();
+    return previousSplit.current.blocks.map((block) => {
+      const index = counts.get(block.type) ?? 0;
+      counts.set(block.type, index + 1);
+      return { ...block, key: `${block.type}:${index}` };
+    });
   }, [children, split]);
 
   const inlineChips = useMemo(() => ({ renderMention, onOpenPage }), [renderMention, onOpenPage]);
@@ -847,7 +857,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
             <PlainTextOnFailure text={children}>
               {blocks ? (
                 blocks.map((block, index) => (
-                  <Fragment key={block.start}>
+                  <Fragment key={block.key}>
                     {/* The line break react-markdown puts between blocks, so the DOM matches. */}
                     {index > 0 ? "\n" : null}
                     <MarkdownBlock
