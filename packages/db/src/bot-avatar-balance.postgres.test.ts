@@ -116,7 +116,7 @@ describePostgres("new bot avatars (PostgreSQL)", () => {
     expect(after).toEqual(expect.arrayContaining(before));
   });
 
-  it("defaults new creation to Ork and reloads explicit sets without altering photos or shapes", async () => {
+  it("normalizes legacy sets to Ork on creation and reload without altering saved values", async () => {
     const repos = createRepos(prisma);
     const created = await runAsTenant(owner, () =>
       repos.createBot(actor(), botInput("Ork default")),
@@ -124,16 +124,16 @@ describePostgres("new bot avatars (PostgreSQL)", () => {
     expect(created.avatarSet).toBe("orkbot");
     expect(created.color).toBe(seededLogoAvatarColor(created.id));
     for (const color of ["#8B5CF6", "#8B5CF6::shape_3", "data:image/png;base64,aGVsbG8="]) {
-      const original = await runAsTenant(owner, () =>
-        repos.createBot(actor(), { ...botInput("Original look"), avatarSet: "organic", color }),
+      const saved = await runAsTenant(owner, () =>
+        repos.createBot(actor(), { ...botInput("Legacy look"), avatarSet: "organic", color }),
       );
-      expect(original).toMatchObject({ avatarSet: "organic", color });
+      expect(saved).toMatchObject({ avatarSet: "orkbot", color });
       await asSystem(prisma).bot.update({
-        where: { id: original.id },
-        data: { avatarSet: "orkbot" },
+        where: { id: saved.id },
+        data: { avatarSet: "organic" },
       });
       const reloaded = await runAsTenant(owner, () => repos.listBots(actor()));
-      expect(reloaded.find((bot) => bot.id === original.id)).toMatchObject({
+      expect(reloaded.find((bot) => bot.id === saved.id)).toMatchObject({
         avatarSet: "orkbot",
         color,
       });
