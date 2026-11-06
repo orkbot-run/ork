@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for reasoning effort recovery. See LICENSE.md.
+
 import type { Model } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, getSupportedThinkingLevels, Type } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
@@ -7,6 +10,7 @@ import {
   openAiCompatibleModel,
   registerOpenAiCompatibleRuntime,
 } from "./pi-openai-compatible-provider.js";
+import { acceptedReasoningEfforts, thinkingLevelFor } from "./pi-runtime-models.js";
 
 /** Fixtures connect as the deployment owner, who may use local model servers. */
 const connectAsOwner = (
@@ -89,6 +93,7 @@ describe("OpenAI-compatible standard thinking transport", () => {
     reasoning?: "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
     supportsThinking = true,
     maxTokens?: number,
+    thinkingLevelMap?: Model<"openai-completions">["thinkingLevelMap"],
   ) {
     let payload: Payload | undefined;
     const mockFetch = vi.fn<typeof fetch>(async (input, init) => {
@@ -105,7 +110,7 @@ describe("OpenAI-compatible standard thinking transport", () => {
     });
     const model = models.getModel(provider, modelId) as Model<"openai-completions">;
     const stream = models.streamSimple(
-      model,
+      thinkingLevelMap ? { ...model, thinkingLevelMap } : model,
       {
         systemPrompt: "Use the fixture.",
         messages: [{ role: "user", content: "Look it up.", timestamp: 1 }],
@@ -145,6 +150,20 @@ describe("OpenAI-compatible standard thinking transport", () => {
     const { payload } = await capture();
     expect(payload.reasoning_effort).toBe("none");
     expect(payload.chat_template_kwargs).toBeUndefined();
+  });
+
+  it("omits reasoning_effort after an off effort is refused without choices", async () => {
+    const model = openAiCompatibleModel(modelId, baseUrl, true);
+    const levels = acceptedReasoningEfforts(model, "400: Unsupported reasoning effort");
+    expect(levels).toBeDefined();
+    const thinkingLevel = thinkingLevelFor({ ...model, thinkingLevelMap: levels }, "off");
+    const { payload } = await capture(
+      thinkingLevel === "off" ? undefined : thinkingLevel,
+      true,
+      undefined,
+      levels,
+    );
+    expect(payload).not.toHaveProperty("reasoning_effort");
   });
 
   it.each([undefined, "high", "xhigh", "max"] as const)(
