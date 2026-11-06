@@ -61,10 +61,6 @@ ${home.selfHost.features.map((feature) => `- **${feature.title}:** ${feature.bod
 
 ${home.selfHost.worksWith}: ${HOME_MODEL_PROVIDERS.join(", ")}.
 
-## ${home.openSource.heading}
-
-${home.openSource.copy}
-
 ## FAQ
 
 ${getHomeCopy("en")

@@ -139,10 +139,6 @@ const structuredData = homeStructuredData({
           <div class="home-questions">{copy.faq.items.map((item) => (<details><summary>{item.question}<span aria-hidden="true">+</span></summary><p>{item.answer}</p></details>))}</div>
         </section>
 
-        <section id="open-source" class="home-source">
-          <div><h2>{copy.openSource.heading}</h2><p>{copy.openSource.copy}</p></div>
-          <a href={GITHUB_URL} target="_blank" rel="noopener" data-attr="open-source-github">{copy.hero.viewOnGithub}<span aria-hidden="true">↗</span></a>
-        </section>
         <section class="home-closing" aria-labelledby="closing-heading">
           <img src="/brand/orkbot-mark.png" alt="" width="64" height="64" loading="lazy" />
           <h2 id="closing-heading">{copy.cta.heading}</h2>
