@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApprovedEffectReplayQueue, terminatingToolResult } from "./approval-effect.js";
 
@@ -34,6 +37,22 @@ function dispatchContext(tainted: boolean) {
   return {
     deps: {
       prisma: {
+        bot: {
+          findUniqueOrThrow: async () => ({
+            name: "Assistant",
+            description: "Test assistant",
+            instructions: "Draft only",
+            color: "blue",
+            notifyOnFinish: false,
+            dailyCheckIns: false,
+            modelProvider: "provider-a",
+            modelId: "current-model",
+            thinkingLevel: null,
+            autoSpeak: false,
+            voiceId: null,
+          }),
+        },
+        deploymentSettings: { findUnique: async () => ({ modelCreditsEnabled: false }) },
         user: {
           findUniqueOrThrow: async () => ({
             timezone: "UTC" as string | null,
@@ -42,7 +61,8 @@ function dispatchContext(tainted: boolean) {
         },
       },
     },
-    run: { userId: "user-1" },
+    run: { userId: "user-1", spaceId: "space-1" },
+    bot: { id: "bot-1" },
     source: { ownerStartedRun: true },
     runId: "run-1",
     state: { tainted, handedOff: false, ownerSettingsRefused: false },

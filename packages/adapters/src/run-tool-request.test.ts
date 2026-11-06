@@ -1,21 +1,50 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import { describe, expect, it, vi } from "vitest";
+import type { OwnBotSettingsRow } from "./own-bot-settings.js";
 import type { ToolRequest } from "./run-tool-request.js";
 import { prepareToolRequest } from "./run-tool-request.js";
 
 function ownBotUpdateCall() {
+  const live: OwnBotSettingsRow = {
+    name: "Scout",
+    description: "Finds papers",
+    instructions: "Cite sources.",
+    color: "blue",
+    notifyOnFinish: false,
+    dailyCheckIns: false,
+    modelProvider: "provider-a",
+    modelId: "model-1",
+    thinkingLevel: null,
+    autoSpeak: false,
+    voiceId: null,
+  };
+  const defaults = {
+    defaultModelProvider: "provider-a",
+    defaultModelId: "fresh-default",
+    modelCreditsEnabled: false,
+  };
   const ctx = {
     deps: {
       prisma: {
         bot: {
           findUnique: async () => ({ fleetManagement: true }),
-          findUniqueOrThrow: async () => ({ instructions: "" }),
+          findUniqueOrThrow: vi.fn(async () => live),
         },
+        deploymentSettings: { findUnique: vi.fn(async () => defaults) },
+        spaceSettingOverride: { findUnique: async () => null },
+        userModelRoleChoice: { findMany: async () => [] },
       },
     },
-    run: { trigger: "user", threadId: "thread-1" },
+    run: { trigger: "user", threadId: "thread-1", userId: "user-1", spaceId: "space-1" },
     bot: { id: "bot-1" },
     source: { ownerStartedRun: true },
-    state: { tainted: true, earlierAttempt: Promise.resolve(false) },
+    state: {
+      tainted: true,
+      earlierAttempt: Promise.resolve(false),
+      ownInstructionsBaseline: live.instructions,
+    },
     trust: {
       loadAutoReviewPreference: async () => ({ enabled: true, skipApprovals: false }),
       receivedOutsideMessage: async () => false,
@@ -43,7 +72,7 @@ function ownBotUpdateCall() {
     purchase: undefined,
     cardUse: undefined,
   };
-  return { ctx, request: () => structuredClone(request) };
+  return { ctx, live, defaults, request: () => structuredClone(request) };
 }
 
 describe("prepareToolRequest: update_bot owner settings after outside content", () => {
@@ -72,6 +101,88 @@ describe("prepareToolRequest: update_bot owner settings after outside content", 
     for (let index = 0; index < 3; index += 1) {
       await expect(prepareToolRequest(ctx as never, request())).resolves.toBeUndefined();
     }
+  });
+});
+
+describe("prepareToolRequest: unchanged own settings and paging", () => {
+  it("allows an echoed settings read after outside content without requiring approval", async () => {
+    const { ctx, live, request } = ownBotUpdateCall();
+    ctx.source.ownerStartedRun = false;
+    const call = request();
+    call.args = {
+      name: live.name,
+      instructions: live.instructions,
+      model: "provider-a/model-1",
+      notifyOnFinish: "false",
+      dailyCheckIns: false,
+      readAloud: "false",
+      thinkingLevel: "default",
+      voice: "default",
+      instructions_offset: 0,
+    };
+    await expect(prepareToolRequest(ctx as never, call)).resolves.toBeUndefined();
+    expect(call.args).toEqual({});
+    expect(call.heldForApproval).toBe(false);
+    expect(call.effectRequest).toEqual({});
+  });
+
+  it("treats paging as a read even when model, instructions and forbidden fields are supplied", async () => {
+    const { ctx, request } = ownBotUpdateCall();
+    ctx.source.ownerStartedRun = false;
+    const call = request();
+    call.args = {
+      instructions_offset: 8000,
+      model: "other/model",
+      instructions: "Changed",
+      fleetManagement: true,
+    };
+    await expect(prepareToolRequest(ctx as never, call)).resolves.toBeUndefined();
+    expect(call.args.instructions_offset).toBe(8000);
+    expect(call.heldForApproval).toBe(false);
+    expect(ctx.deps.prisma.bot.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+
+  it("does not let zero offset bypass the checks for a real owner settings change", async () => {
+    const { ctx, request } = ownBotUpdateCall();
+    ctx.source.ownerStartedRun = false;
+    const call = request();
+    call.args = { instructions_offset: 0, model: "other/model" };
+    await expect(prepareToolRequest(ctx as never, call)).resolves.toEqual({
+      error:
+        "Only the owner can change your model, thinking, voice or read-aloud, from their own chat.",
+    });
+  });
+
+  it("removes zero offset and echoed profile fields before preparing instruction approval", async () => {
+    const { ctx, live, request } = ownBotUpdateCall();
+    const call = request();
+    call.args = { instructions_offset: 0, name: live.name, instructions: "Use citations." };
+    await expect(prepareToolRequest(ctx as never, call)).resolves.toBeUndefined();
+    expect(call.heldForApproval).toBe(true);
+    expect(call.args).toMatchObject({
+      instructions: "Use citations.",
+      previousInstructions: live.instructions,
+      previousInstructionsFromBaseline: true,
+    });
+  });
+
+  it("compares inherited models to the fresh default instead of an earlier attempt model", async () => {
+    const { ctx, live, defaults, request } = ownBotUpdateCall();
+    live.modelId = null;
+    live.modelProvider = null;
+    ctx.source.ownerStartedRun = false;
+    const echoed = request();
+    echoed.args = { model: "provider-a/fresh-default" };
+    await expect(prepareToolRequest(ctx as never, echoed)).resolves.toBeUndefined();
+    expect(echoed.args).toEqual({});
+    defaults.defaultModelId = "new-default";
+    const stale = request();
+    stale.args = { model: "provider-a/fresh-default" };
+    await expect(prepareToolRequest(ctx as never, stale)).resolves.toHaveProperty("error");
+    const fresh = request();
+    fresh.args = { model: "provider-a/new-default" };
+    await expect(prepareToolRequest(ctx as never, fresh)).resolves.toBeUndefined();
+    expect(fresh.args).toEqual({});
   });
 });
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import type { AdapterContext, SecretStore } from "@orkbot/adapter-kit";
 import { VoiceAccountError } from "@orkbot/adapter-kit";
 import type { Actor, BotSettingsValues, VoiceInfo } from "@orkbot/contracts";
@@ -9,7 +12,45 @@ import { modelLabel } from "./fleet-tools.js";
 import { connectedModelChoices, echoedQuery, resolveModelChoice, words } from "./model-choice.js";
 import { prepareAllowedThinkingLevels, validateBotModelChange } from "./model-selection.js";
 import { OPENAI_COMPATIBLE_VOICE_PROVIDER_ID } from "./openai-compatible-voice.js";
+import { argumentGiven, dropUnchangedOwnBotArgs } from "./update-bot-patch.js";
 import { createVoiceProvider } from "./voice-factory.js";
+
+export const OWN_BOT_SETTINGS_SELECT = {
+  name: true,
+  description: true,
+  instructions: true,
+  color: true,
+  notifyOnFinish: true,
+  dailyCheckIns: true,
+  modelProvider: true,
+  modelId: true,
+  thinkingLevel: true,
+  autoSpeak: true,
+  voiceId: true,
+} as const;
+
+/** Use the current space default, rather than the model snapshot of the running attempt. */
+export async function normalizeOwnBotUpdateArgs(
+  deps: FleetPrepareDeps,
+  bot: OwnBotSettingsRow,
+  args: Record<string, unknown>,
+) {
+  const effective = argumentGiven(args.model)
+    ? bot.modelProvider && bot.modelId
+      ? { provider: bot.modelProvider, model: bot.modelId }
+      : await deps.modelChange.defaultModel()
+    : undefined;
+  return dropUnchangedOwnBotArgs(
+    args,
+    bot,
+    effective
+      ? {
+          ...effective,
+          label: `${modelLabel(effective.provider, effective.model)}${bot.modelId ? "" : " (default)"}`,
+        }
+      : undefined,
+  );
+}
 
 export type OwnBotSettingsRow = {
   name: string;
