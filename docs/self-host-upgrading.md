@@ -248,8 +248,10 @@ Updates and rollbacks run one at a time. A failed pull leaves running services a
 pin and attempts to redeploy the cached previous image. A failed fork build also restores the
 pre-update branch and commit (including when checkout succeeded but merge did not) so a later
 manual `--build` cannot deploy the rejected or unintended revision. Database migrations are not
-reversed. The sidecar never recreates itself, never touches Postgres or Caddy, and never runs
-migrations — that ordering belongs to the API's dependency on the `migrate` service.
+reversed. The sidecar never recreates itself and does not explicitly target Postgres or Caddy.
+Compose still reconciles service dependencies. A dependency can be recreated when its effective
+configuration changes, including differences between Compose CLI versions. The API's dependency
+on the `migrate` service orders migrations before the new API becomes healthy.
 
 Only `https://` and `ssh://` git remotes are accepted. Merges are fast-forward only. A dirty or
 untracked source tree fails closed before anything runs (the application Dockerfile uses `COPY . .`).

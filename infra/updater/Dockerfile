@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-# Modified by Ork contributors to include license notices. See LICENSE.md.
+# Modified by Ork contributors to include license notices and the core package's avatar dependency. See LICENSE.md.
 # The updater is the only service that gets the Docker CLI and the Docker socket, so it is built
 # separately from the application image rather than adding root-equivalent tooling to api, worker,
 # and web. It is also the only service the update never recreates, so its own image moves on the
@@ -23,6 +23,7 @@ COPY docs/cla/v1.md ./docs/cla/v1.md
 COPY patches patches
 COPY packages/contracts packages/contracts
 COPY packages/core packages/core
+COPY packages/avatar packages/avatar
 COPY packages/ui-tokens packages/ui-tokens
 COPY packages/logging packages/logging
 COPY infra/updater infra/updater
