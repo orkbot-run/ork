@@ -106,7 +106,6 @@ export const LogoAvatar = memo(function LogoAvatar({
         </clipPath>
       </defs>
       <g clipPath={`url(#logo-plate-${id})`}>
-        <rect className="logo-avatar-plate" width="100" height="100" rx="23" />
         {layers.map((layer) => (
           <g
             key={layer.key}
@@ -176,7 +175,6 @@ export const LogoAvatar = memo(function LogoAvatar({
           </g>
         ))}
       </g>
-      <rect className="logo-avatar-outline" x="0.5" y="0.5" width="99" height="99" rx="22.5" />
     </svg>
   );
 });
