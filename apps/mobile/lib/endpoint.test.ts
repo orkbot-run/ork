@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited endpoint tests are preserved. Native initialization checks are Ork additions.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   API_PROBE_TIMEOUT_MS,
@@ -7,6 +11,7 @@ import {
   MAX_API_PROBE_RESPONSE_BYTES,
   normalizeApiBase,
   probeApiBase,
+  serverInitializationRequired,
   usesCustomApiBase,
 } from "./endpoint.js";
 
@@ -168,5 +173,82 @@ describe("probeApiBase", () => {
       error: "Could not reach that server",
     });
     expect(cancel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("serverInitializationRequired", () => {
+  const origin = "https://server.example.test";
+  it.each([true, false])(
+    "reads initialization state without any credential headers (%s)",
+    async (required) => {
+      const request = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(JSON.stringify({ required })));
+      await expect(serverInitializationRequired(origin, request)).resolves.toBe(required);
+      const [url, init] = request.mock.calls[0]!;
+      expect(url).toBe(`${origin}/api/auth/native/initialization`);
+      expect(init).toMatchObject({
+        method: "GET",
+        credentials: "omit",
+        redirect: "error",
+        signal: expect.any(AbortSignal),
+      });
+      expect(init).not.toHaveProperty("headers");
+      expect(init).not.toHaveProperty("body");
+    },
+  );
+  it("treats a missing legacy endpoint as normal sign-in, without manufacturing initialization", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 404 }));
+    await expect(serverInitializationRequired(origin, request)).resolves.toBe(false);
+  });
+  it.each([{}, null, [], { required: "false" }])(
+    "rejects invalid state without inferring a fresh server (%j)",
+    async (value) => {
+      const request = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(value)));
+      await expect(serverInitializationRequired(origin, request)).rejects.toThrow(
+        "Could not pair this server. Try again.",
+      );
+    },
+  );
+  it.each([401, 403, 429, 500])(
+    "does not treat a failed state query as initialization permission (%s)",
+    async (status) => {
+      const request = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response("private detail", { status }));
+      await expect(serverInitializationRequired(origin, request)).rejects.toThrow(
+        "Could not pair this server. Try again.",
+      );
+    },
+  );
+  it("rejects oversized state responses", async () => {
+    const request = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('{"required":true}', {
+        headers: { "content-length": String(MAX_API_PROBE_RESPONSE_BYTES + 1) },
+      }),
+    );
+    await expect(serverInitializationRequired(origin, request)).rejects.toThrow(
+      "Could not pair this server. Try again.",
+    );
+  });
+  it.each([
+    `${origin}/path`,
+    `https://user:pass@server.example.test`,
+    "http://public.example.test",
+  ])("does not send a request to a noncanonical origin (%s)", async (url) => {
+    const request = vi.fn<typeof fetch>();
+    await expect(serverInitializationRequired(url, request)).rejects.toThrow(
+      "Could not pair this server. Try again.",
+    );
+    expect(request).not.toHaveBeenCalled();
+  });
+  it("bounds a hanging state query and aborts its network request", async () => {
+    vi.useFakeTimers();
+    const request = vi.fn<typeof fetch>().mockImplementation(() => new Promise(() => undefined));
+    const result = serverInitializationRequired(origin, request);
+    const assertion = expect(result).rejects.toThrow("Could not pair this server. Try again.");
+    await vi.advanceTimersByTimeAsync(API_PROBE_TIMEOUT_MS);
+    await assertion;
+    expect(request.mock.calls[0]![1]!.signal!.aborted).toBe(true);
   });
 });

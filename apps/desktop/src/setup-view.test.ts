@@ -75,6 +75,7 @@ async function setup(
     if (command === "setup_accounts_sign_in") return account;
     if (command === "create_server_installation") return installCommand();
     if (command === "create_server_pairing") return pairingTicket();
+    if (command === "server_initialization_required") return true;
     return undefined;
   });
   const transport: SetupTransport = {
@@ -208,6 +209,169 @@ describe("bundled desktop setup", () => {
     });
     expect(node<HTMLInputElement>("pairing-code").value).toBe("2A3B4C");
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+  });
+
+  it("opens the exact saved server from a cold handoff after the user starts Accounts", async () => {
+    const { invoke } = await setup({ pendingServer: saved[1]!.url });
+    expect(invoke).not.toHaveBeenCalledWith("list_servers", undefined);
+    expect(invoke).not.toHaveBeenCalledWith("setup_accounts_session", undefined);
+    node("get-started").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("list_servers");
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+  });
+
+  it("opens a warm handoff's exact bookmark instead of generating another pairing key", async () => {
+    const { invoke, link } = await continueSetup({ session: account });
+    link(saved[1]!.url);
+    await flush();
+    expect(invoke.mock.calls.filter(([name]) => name === "list_servers")).toHaveLength(3);
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("server_initialization_required", expect.anything());
+  });
+
+  it.each([true, false])(
+    "routes an unlisted origin using its authoritative initialization state: %s",
+    async (required) => {
+      const { invoke, link } = await continueSetup({
+        invoke: async (name) => {
+          if (name === "setup_accounts_session") return account;
+          if (name === "list_servers") return saved;
+          if (name === "server_initialization_required") return required;
+          if (name === "create_server_pairing") return pairingTicket();
+          return undefined;
+        },
+      });
+      link(pairingOrigin);
+      await flush();
+      expect(invoke).toHaveBeenCalledWith("server_initialization_required", {
+        rawUrl: pairingOrigin,
+      });
+      if (required) {
+        expect(invoke).toHaveBeenCalledWith("create_server_pairing", {
+          requestId: expect.any(String),
+        });
+        expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+      } else {
+        expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: pairingOrigin });
+        expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+      }
+    },
+  );
+
+  it("keeps a foreign initialized server behind ordinary login rejection without reinitializing it", async () => {
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return saved;
+        if (name === "server_initialization_required") return false;
+        if (name === "connect_server") throw "Could not continue";
+        return undefined;
+      },
+    });
+    link(pairingOrigin);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: pairingOrigin });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(node("status").textContent).toBe("Could not continue");
+    expect(node("pairing").hidden).toBe(true);
+  });
+
+  it("does not open an old origin when another link arrives during its initialization probe", async () => {
+    const oldProbe = deferred<unknown>();
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return saved;
+        if (name === "server_initialization_required") return oldProbe.promise;
+        return undefined;
+      },
+    });
+    link(pairingOrigin);
+    await flush();
+    link(saved[1]!.url);
+    oldProbe.resolve(false);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", { rawUrl: pairingOrigin });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+  });
+
+  it("ignores an old link lookup when a newer target arrives", async () => {
+    const oldDirectory = deferred<unknown>();
+    let lookups = 0;
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return ++lookups === 2 ? oldDirectory.promise : saved;
+        return undefined;
+      },
+    });
+    link(saved[0]!.url);
+    await flush();
+    link(saved[1]!.url);
+    oldDirectory.resolve(saved);
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+  });
+
+  it("cannot open an old account's bookmark after logout and a new account starts", async () => {
+    const oldDirectory = deferred<unknown>();
+    const other = { userinfo: { name: "Another account" } };
+    const others = saved.map((entry) => ({
+      ...entry,
+      id: `other-${entry.id}`,
+      url: entry.url.replace(".example.com", ".example.test"),
+    }));
+    let owner = account;
+    let lookups = 0;
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return owner;
+        if (name === "list_servers")
+          return ++lookups === 2 ? oldDirectory.promise : owner === account ? saved : others;
+        return undefined;
+      },
+    });
+    link(saved[0]!.url);
+    await flush();
+    node("sign-out").click();
+    await flush();
+    owner = other;
+    node("get-started").click();
+    await flush();
+    oldDirectory.resolve(saved);
+    await flush();
+    expect(node("account").textContent).toBe("Another account");
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    expect(node("servers").textContent).not.toContain(saved[0]!.url);
+  });
+
+  it("Back cancels an in-flight saved-server lookup without opening or pairing", async () => {
+    const directory = deferred<unknown>();
+    let lookups = 0;
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return ++lookups === 2 ? directory.promise : saved;
+        return undefined;
+      },
+    });
+    link(saved[0]!.url);
+    await flush();
+    node("back").click();
+    await flush();
+    directory.resolve(saved);
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
   });
 
   it("proposes a warm link for confirmation and discards it on Back", async () => {

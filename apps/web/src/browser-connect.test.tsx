@@ -22,10 +22,13 @@ import { BrowserConnect } from "./browser-connect";
 
 let host: HTMLDivElement;
 let root: Root;
+let initializationFetch = vi.fn();
 beforeEach(async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.body.appendChild(document.createElement("div"));
+  initializationFetch = vi.fn(async () => Response.json({ required: true }));
+  vi.stubGlobal("fetch", initializationFetch);
   root = createRoot(host);
   await act(async () => root.render(<BrowserConnect />));
 });
@@ -53,7 +56,7 @@ async function submit() {
   );
 }
 
-it("renders pairing without a session request and waits for a canonical six-character code", async () => {
+it("checks initialization without a session request and waits for a canonical six-character code", async () => {
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
   expect(host.querySelector("label")?.textContent).toBe("Pairing key");
@@ -70,19 +73,17 @@ it.each([
     language: "en",
     label: "Pairing key",
     action: "Initialize",
-    success: "Initialized",
     pending: "Confirm the server in Ork.",
   },
   {
     language: "pl",
     label: "Klucz parowania",
     action: "Inicjalizuj",
-    success: "Zainicjalizowano",
     pending: "Potwierdź serwer w aplikacji Ork.",
   },
 ])(
   "sends only the normalized code and renders a sessionless result in $language",
-  async ({ language, label, action, success, pending }) => {
+  async ({ language, label, action, pending }) => {
     vi.stubGlobal("navigator", { language });
     await act(async () => root.render(<BrowserConnect />));
     expect(host.querySelector("label")?.textContent).toBe(label);
@@ -123,7 +124,8 @@ it.each([
         body: JSON.stringify({ code: "ABC234" }),
       }),
     );
-    expect(host.querySelector('[role="status"]')?.textContent).toBe(success);
+    expect(host.querySelector('[role="status"]')).toBeNull();
+    expect(host.querySelector('a[href="https://ork.run"]')).toBeNull();
     expect(host.querySelector("form")).toBeNull();
   },
 );
@@ -149,7 +151,7 @@ it("keeps failed pairing retryable and never renders response details", async ()
   await submit();
   await poll();
   expect(fetcher).toHaveBeenCalledTimes(3);
-  expect(host.querySelector('[role="status"]')?.textContent).toBe("Initialized");
+  expect(host.querySelector("form")).toBeNull();
 });
 
 it("sends only one request while pending and aborts it when the page unmounts", async () => {
@@ -178,4 +180,68 @@ it("stops approval polling when the page is retired", async () => {
   await vi.advanceTimersByTimeAsync(10_000);
   expect(fetcher).toHaveBeenCalledOnce();
   root = createRoot(host);
+});
+
+async function remount(fetcher: typeof initializationFetch) {
+  await act(async () => root.unmount());
+  vi.stubGlobal("fetch", fetcher);
+  root = createRoot(host);
+  await act(async () => root.render(<BrowserConnect />));
+}
+
+it("shows only the native handoff for an initialized server after a fresh page load", async () => {
+  const fetcher = vi.fn(async () => Response.json({ required: false }));
+  await remount(fetcher);
+  expect(host.querySelector("form")).toBeNull();
+  expect(host.querySelector("input")).toBeNull();
+  expect(host.querySelector("button")).toBeNull();
+  expect(host.querySelectorAll("a")).toHaveLength(1);
+  expect(host.querySelector("a")?.textContent).toBe("Open in Ork");
+  expect(host.querySelector("a")?.getAttribute("href")).toMatch(/^orkbot:\/\/connect/);
+  expect(fetcher).toHaveBeenCalledWith(
+    "/api/auth/native/initialization",
+    expect.objectContaining({ method: "GET", credentials: "omit", cache: "no-store" }),
+  );
+  await act(async () => vi.advanceTimersByTimeAsync(20_000));
+  expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("does not flash pairing while initialization state is loading", async () => {
+  let resolve!: (value: Response) => void;
+  const fetcher = vi.fn(
+    () =>
+      new Promise<Response>((done) => {
+        resolve = done;
+      }),
+  );
+  await remount(fetcher);
+  expect(host.querySelector("form")).toBeNull();
+  await act(async () => resolve(Response.json({ required: false })));
+  expect(host.querySelector("form")).toBeNull();
+});
+
+it("retires pairing when the server is initialized from another page", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ required: true }))
+    .mockResolvedValueOnce(Response.json({ required: false }));
+  await remount(fetcher);
+  expect(host.querySelector("form")).not.toBeNull();
+  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  expect(host.querySelector("form")).toBeNull();
+  expect(host.querySelectorAll("a")).toHaveLength(1);
+});
+
+it("keeps pairing hidden on an unavailable or malformed state and permits a safe retry", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ required: "false", token: "private" }))
+    .mockResolvedValueOnce(Response.json({ required: true }));
+  await remount(fetcher);
+  expect(host.querySelector("form")).toBeNull();
+  expect(host.textContent).not.toContain("private");
+  const retry = host.querySelector("button")!;
+  expect(retry.textContent).toBe("Retry");
+  await act(async () => retry.click());
+  expect(host.querySelector("form")).not.toBeNull();
 });
