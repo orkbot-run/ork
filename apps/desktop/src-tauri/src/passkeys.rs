@@ -400,11 +400,25 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn codesign_parses_the_inline_requirement_and_rejects_an_ad_hoc_executable() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("ad-hoc-test");
+        std::fs::copy(std::env::current_exe().unwrap(), &executable).unwrap();
+        // Intel linkers can leave test binaries unsigned; prepare the same fixture on both CPUs.
+        let signature = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--sign", "-"])
+            .arg(&executable)
+            .output()
+            .unwrap();
+        assert!(
+            signature.status.success(),
+            "{}",
+            String::from_utf8_lossy(&signature.stderr)
+        );
         let (signed, profile) = metadata();
         let result = verified_association(&signed, &profile, BUNDLE, |requirement| {
             let output = std::process::Command::new("/usr/bin/codesign")
                 .args(["--verify", "--strict", "--test-requirement", requirement])
-                .arg(std::env::current_exe().unwrap())
+                .arg(&executable)
                 .env("LC_ALL", "C")
                 .output()
                 .unwrap();
