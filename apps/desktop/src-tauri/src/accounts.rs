@@ -244,6 +244,13 @@ mod tests {
         .unwrap();
         let values: HashMap<_, _> = url.query_pairs().collect();
         assert_eq!(values["scope"], SCOPES);
+        assert_eq!(values["prompt"], "consent");
+        assert_eq!(
+            url.query_pairs()
+                .filter(|(name, _)| name == "prompt")
+                .count(),
+            1
+        );
         assert_eq!(values["code_challenge_method"], "S256");
         assert_eq!(values["code_challenge"], proof.challenge());
         assert!(!values.contains_key("client_secret"));
@@ -1161,6 +1168,7 @@ impl Proof {
         url.query_pairs_mut().extend_pairs([
             ("client_id", config.client_id.as_str()),
             ("response_type", "code"),
+            ("prompt", "consent"),
             ("redirect_uri", redirect),
             ("scope", SCOPES),
             ("state", &self.state),

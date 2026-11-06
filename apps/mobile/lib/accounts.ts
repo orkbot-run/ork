@@ -331,7 +331,11 @@ export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean
       responseType: ResponseType.Code,
       usePKCE: true,
       codeChallengeMethod: CodeChallengeMethod.S256,
-      extraParams: { nonce, ...(isPersonalOrkId(welcomeOrk) ? { ork_avatar: welcomeOrk } : {}) },
+      extraParams: {
+        prompt: "consent",
+        nonce,
+        ...(isPersonalOrkId(welcomeOrk) ? { ork_avatar: welcomeOrk } : {}),
+      },
     });
     const discovery = { authorizationEndpoint: metadata.authorization_endpoint };
     await request.makeAuthUrlAsync(discovery);

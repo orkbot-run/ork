@@ -128,7 +128,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it("uses Expo S256 with the exact redirect and saves verified tokens in device-only SecureStore", async () => {
+it("requests explicit consent with Expo S256 and saves verified tokens in device-only SecureStore", async () => {
   const { continueWithAccounts } = await import("./accounts");
   await expect(continueWithAccounts()).resolves.toBe(true);
   expect(mocks.options).toHaveBeenCalledWith(
@@ -138,7 +138,7 @@ it("uses Expo S256 with the exact redirect and saves verified tokens in device-o
       codeChallengeMethod: "S256",
       responseType: "code",
       scopes: ["openid", "email", "profile", "offline_access"],
-      extraParams: { nonce: "nonce-value" },
+      extraParams: { prompt: "consent", nonce: "nonce-value" },
     }),
   );
   const exchange = fetched.mock.calls.find(([url]) => url.endsWith("/token"))!;
@@ -431,7 +431,7 @@ it("passes a welcome seed only as a cosmetic hint and restores the account's own
   await expect(continueWithAccounts(preview)).resolves.toBe(true);
   expect(mocks.options).toHaveBeenCalledWith(
     expect.objectContaining({
-      extraParams: { nonce: "nonce-value", ork_avatar: preview },
+      extraParams: { prompt: "consent", nonce: "nonce-value", ork_avatar: preview },
     }),
   );
   expect(await accountsIdentity()).toEqual({ issuer, subject: userSub, orkAvatar: saved });
@@ -442,7 +442,7 @@ it("does not pass malformed welcome data to Accounts", async () => {
   const { continueWithAccounts } = await import("./accounts");
   await continueWithAccounts("https://untrusted.example.test/seed");
   expect(mocks.options).toHaveBeenCalledWith(
-    expect.objectContaining({ extraParams: { nonce: "nonce-value" } }),
+    expect.objectContaining({ extraParams: { prompt: "consent", nonce: "nonce-value" } }),
   );
 });
 
