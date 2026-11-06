@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
-<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+<!-- Modified by Ork contributors for Tauri desktop cleanup and interrupted maintenance recovery. Inherited material remains Apache-2.0. -->
 
 # Computer runtime
 
@@ -171,14 +171,22 @@ warns that unsaved work may be lost.
 
 The reconciler republishes queued operations after a missed enqueue. Jobs already
 claimed are never destructively replayed. A worker that stops heartbeating for ten
-minutes is marked interrupted and remains reserved until its provider calls settle.
-Only then is recovery available. If a worker has permanently disappeared, an operator
-must stop the affected workers and verify that provider operations have stopped before
-using the server-owner-only **Release computer** action in the interrupted dialog.
-Its confirmation requires an explicit assertion that workers and provider operations
-have stopped, then makes normal recovery available. The corresponding RPC is
-`computer/releaseInterrupted` with `{ id, workersStopped: true }`; it accepts only
-interrupted operations in the owner’s current workspace. A stale heartbeat alone
-never authorizes takeover. Progress reports
+minutes is marked interrupted. Its reservation stays in place while the worker has
+an hour from that interruption to settle. After that hour, reconciliation marks the
+operation failed and releases its reservation in the same database transaction.
+The operation's status and observed row timestamp fence this write: a worker that
+already settled wins, and a late worker cannot overwrite the timeout result or
+release a newer reservation.
+
+Timeout is not proof that provider calls have stopped. A computer with an attached
+provider reference is quarantined, retains that reference, and requires Recover
+before bots can use it. Without a provider reference, a computer left running,
+booting, or suspending moves to error; other states are preserved. Clearing the
+reservation also advances the computer row timestamp, fencing late provisioning
+writes. Queued and stalled operations have independent batch limits, and stalled
+operations are settled before queued jobs are published, so a queue backlog or
+publishing failure cannot hide an abandoned reservation. The legacy
+`computer/releaseInterrupted` endpoint remains disabled; automatic expiry does not
+grant manual release permissions. Progress reports
 actual lifecycle stages rather than estimated percentages; workspace files and
 browser profiles are portable, while system packages outside the workspace are not.

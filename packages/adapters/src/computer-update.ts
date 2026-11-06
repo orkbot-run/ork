@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 maintenance behavior is preserved. Interrupted update expiry follows LICENSE.md.
+
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import { computerControlExpireJobKey, SandboxAllowanceUsedError } from "@orkbot/adapter-kit";
 import type { ComputerUpdate } from "@orkbot/contracts";
@@ -23,6 +27,7 @@ type QueueDeps = Pick<Deps, "prisma" | "jobs"> &
     events?: Pick<ThreadEvents, "append">;
   };
 const STALE_MS = 10 * 60_000;
+const INTERRUPTED_TIMEOUT_MS = 60 * 60_000;
 // reserving: claimed, provider release not started. revoking: call not returned.
 // revoked: provider release returned, lease write still missing.
 const UNCONFIRMED_HANDBACK_STATUSES = ["reserving", "revoking"] as const;
@@ -606,25 +611,53 @@ async function finishUpdate(
 }
 
 export async function reconcileComputerUpdates(deps: Pick<Deps, "prisma" | "jobs">) {
-  const updates = await deps.prisma.computerUpdate.findMany({
-    where: {
-      OR: [
-        { status: "queued" },
-        { status: "running", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
-        { status: "reserving", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
-        { status: "revoking", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
-        { status: "revoked", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
-      ],
-    },
-    take: 100,
-    orderBy: { updatedAt: "asc" },
-  });
-  for (const update of updates) {
-    if (update.status === "queued") {
-      await deps.jobs.enqueue({
-        name: "computer.update",
-        payload: { updateId: update.id },
-        replaceKey: `computer.update:${update.id}`,
+  const now = Date.now();
+  const staleAt = new Date(now - STALE_MS);
+  // Independent limits keep a queued backlog from hiding abandoned reservations.
+  const [queued, stalled] = await Promise.all([
+    deps.prisma.computerUpdate.findMany({
+      where: { status: "queued" },
+      take: 100,
+      orderBy: { updatedAt: "asc" },
+    }),
+    deps.prisma.computerUpdate.findMany({
+      where: {
+        OR: [
+          { status: "running", updatedAt: { lt: staleAt } },
+          { status: "reserving", updatedAt: { lt: staleAt } },
+          { status: "revoking", updatedAt: { lt: staleAt } },
+          { status: "revoked", updatedAt: { lt: staleAt } },
+          {
+            status: "interrupted",
+            updatedAt: { lt: new Date(now - INTERRUPTED_TIMEOUT_MS) },
+          },
+        ],
+      },
+      take: 100,
+      orderBy: { updatedAt: "asc" },
+    }),
+  ]);
+  for (const update of stalled) {
+    if (update.status === "interrupted") {
+      await deps.prisma.$transaction(async (tx) => {
+        const expired = await tx.computerUpdate.updateMany({
+          where: { id: update.id, status: "interrupted", updatedAt: update.updatedAt },
+          data: { status: "failed" },
+        });
+        // A settled worker or another reconciler won; its result owns the reservation.
+        if (expired.count !== 1) return;
+        const where = { id: update.computerId, maintenanceId: update.id };
+        // Timeout does not prove a provider call stopped. Keep any attached machine
+        // out of bot execution until Recover, and advance its provisioning fence.
+        await tx.computer.updateMany({
+          where: { ...where, providerRef: { not: null } },
+          data: { maintenanceId: null, state: "quarantined" },
+        });
+        await tx.computer.updateMany({
+          where: { ...where, state: { in: ["booting", "suspending", "running"] } },
+          data: { maintenanceId: null, state: "error" },
+        });
+        await tx.computer.updateMany({ where, data: { maintenanceId: null } });
       });
     } else if (
       update.status === "reserving" ||
@@ -668,10 +701,17 @@ export async function reconcileComputerUpdates(deps: Pick<Deps, "prisma" | "jobs
           where: { id: update.id, status: "running", updatedAt: update.updatedAt },
           data: { status: "interrupted" },
         });
-        // A stale heartbeat is not proof that provider calls have stopped. Only
-        // the worker's settled path can release this reservation.
+        // Allow the worker to settle before timeout-based quarantine becomes available.
         if (stale.count !== 1) return;
       });
     }
+  }
+  // Release abandoned reservations before publishing any queued work, even if enqueue fails.
+  for (const update of queued) {
+    await deps.jobs.enqueue({
+      name: "computer.update",
+      payload: { updateId: update.id },
+      replaceKey: `computer.update:${update.id}`,
+    });
   }
 }
