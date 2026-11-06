@@ -254,17 +254,6 @@ impl HostComputer {
         true
     }
 
-    #[cfg(test)]
-    pub fn revoke(&self) {
-        let mut consent = self
-            .consent
-            .lock()
-            .unwrap_or_else(|error| error.into_inner());
-        consent.generation += 1;
-        consent.allowed = false;
-        self.runner.set_enabled(false);
-    }
-
     pub fn close(&self) {
         self.shutdown.send_replace(true);
         self.activate(None);
@@ -527,7 +516,7 @@ mod tests {
         assert_eq!(host.intent("server-2:other"), None);
         host.activate(Some("server-1:one".into()));
         let intent = host.intent("server-1:one").unwrap();
-        host.revoke();
+        assert!(host.revoke_owner("server-1:one"));
         assert!(!host.grant("server-1:one", intent));
         assert!(host.grant("server-1:one", host.intent("server-1:one").unwrap()));
         assert!(host.is_enabled());
@@ -593,7 +582,7 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(frames[0]["value"]["home"].is_string());
         assert_eq!(frames.last(), Some(&serde_json::json!({"done":true})));
-        host.revoke();
+        assert!(host.revoke_owner("fixture"));
         assert_eq!(call().send().await.unwrap().status(), 403);
     }
 
@@ -679,7 +668,7 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(&accepted, b"HTTP/1.1 100 Continue\r\n\r\n");
-        host.revoke();
+        assert!(host.revoke_owner("fixture"));
         host.grant("fixture", host.intent("fixture").unwrap());
         stream.write_all(body.as_bytes()).await.unwrap();
         let mut response = String::new();
