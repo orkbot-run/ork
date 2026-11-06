@@ -135,7 +135,7 @@ impl<B: Backend> QuietStore<B> {
 
 impl<B: Backend> CredentialStore for QuietStore<B> {
     fn get(&self, key: &str) -> Result<Option<String>, String> {
-        let memory = self.memory.lock().map_err(|_| STORAGE_ERROR)?;
+        let mut memory = self.memory.lock().map_err(|_| STORAGE_ERROR)?;
         let blocked = self.tombstones.blocked(key)?;
         if let Some(value) = memory.get(key) {
             return Ok(Some(value.clone()));
@@ -144,7 +144,12 @@ impl<B: Backend> CredentialStore for QuietStore<B> {
             return Ok(None);
         }
         match self.backend.get(key) {
-            Ok(value) => Ok(value),
+            Ok(value) => {
+                if let Some(value) = &value {
+                    memory.insert(key.into(), value.clone());
+                }
+                Ok(value)
+            }
             Err(BackendError::Unavailable) => {
                 self.tombstones.mark(key)?;
                 Ok(None)
@@ -159,7 +164,11 @@ impl<B: Backend> CredentialStore for QuietStore<B> {
         self.tombstones.mark(key)?;
         memory.remove(key);
         match self.backend.set(key, value) {
-            Ok(()) => self.tombstones.clear(key),
+            Ok(()) => {
+                self.tombstones.clear(key)?;
+                memory.insert(key.into(), value.into());
+                Ok(())
+            }
             Err(BackendError::Unavailable) => {
                 memory.insert(key.into(), value.into());
                 Ok(())
@@ -411,6 +420,53 @@ mod tests {
             restarted.get("account").unwrap().as_deref(),
             Some("new-token")
         );
+    }
+
+    #[test]
+    fn successful_write_keeps_the_process_session_when_further_reads_are_denied() {
+        let directory = tempfile::tempdir().unwrap();
+        let backend = backend(directory.path());
+        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
+        store.set("account", "new-token").unwrap();
+        assert!(!store.tombstones.blocked("account").unwrap());
+        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
+        assert_eq!(store.get("account").unwrap().as_deref(), Some("new-token"));
+        assert_eq!(*backend.calls.lock().unwrap(), ["set"]);
+        store.delete("account").unwrap();
+        assert_eq!(store.get("account").unwrap(), None);
+        assert!(store.tombstones.blocked("account").unwrap());
+        drop(store);
+        *backend.failure.lock().unwrap() = None;
+        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
+        assert_eq!(restarted.get("account").unwrap(), None);
+        assert_eq!(*backend.calls.lock().unwrap(), ["set", "delete"]);
+    }
+
+    #[test]
+    fn restored_session_remains_available_only_until_delete_or_process_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        let backend = backend(directory.path());
+        backend
+            .values
+            .lock()
+            .unwrap()
+            .insert("account".into(), "restored-token".into());
+        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
+        assert_eq!(
+            store.get("account").unwrap().as_deref(),
+            Some("restored-token")
+        );
+        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
+        assert_eq!(
+            store.get("account").unwrap().as_deref(),
+            Some("restored-token")
+        );
+        assert_eq!(*backend.calls.lock().unwrap(), ["get"]);
+        drop(store);
+        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
+        assert_eq!(restarted.get("account").unwrap(), None);
+        assert!(restarted.tombstones.blocked("account").unwrap());
+        assert_eq!(*backend.calls.lock().unwrap(), ["get", "get"]);
     }
 
     #[test]
