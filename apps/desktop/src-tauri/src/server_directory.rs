@@ -126,7 +126,7 @@ fn installation_command(
     }
     // Every interpolated field is validated before the shell command is constructed.
     let base = format!("https://raw.githubusercontent.com/orkbot-run/ork/{revision}/infra/compose");
-    let command = format!("( ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --url '{}' --code '{}' )", value.url, value.code);
+    let command = format!("( mkdir -p -m 700 \"$HOME/orkbot\" && cd \"$HOME/orkbot\" && ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --url '{}' --code '{}' )", value.url, value.code);
     Ok(InstallationCommand {
         command,
         expires_at: value.expires_at,

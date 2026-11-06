@@ -12,6 +12,7 @@ import socket
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parent
@@ -169,13 +170,40 @@ class InstallerTests(unittest.TestCase):
             with self.assertRaises(installer.SetupError):
                 installer.preflight("https://other.example.com", False)
 
-    def test_readiness_checks_actual_health_rpc_and_accounts_contract(self):
-        responses = [{"ok": True}, {"json": {"ok": True, "version": "test"}}, {"passwordAuth": False, "sso": {"name": "Accounts", "availability": "available"}}]
+    def test_external_proxy_readiness_accepts_rpc_and_accounts_when_health_is_spa_html(self):
+        class Response(io.BytesIO):
+            status = 200
+
+        class Opener:
+            def __init__(self):
+                self.paths = []
+
+            def open(self, request, timeout):
+                path = urllib.parse.urlsplit(request.full_url).path
+                self.paths.append(path)
+                if path == "/health":
+                    return Response(b"<!doctype html><html><body>Ork</body></html>")
+                if path == "/rpc/health":
+                    self.rpc_method, self.rpc_body = request.get_method(), json.loads(request.data)
+                    return Response(b'{"json":{"ok":true,"version":"test"}}')
+                if path == "/api/auth/capabilities":
+                    return Response(b'{"passwordAuth":false,"sso":{"name":"Accounts","availability":"available"}}')
+                raise AssertionError("Unexpected readiness request")
+
+        opener = Opener()
+        with patch.object(installer, "public_dns"), patch.object(installer.urllib.request, "build_opener", return_value=opener), patch.object(installer.time, "monotonic", side_effect=[0, 181]):
+            installer.ready(URL)
+        self.assertEqual(opener.paths, ["/rpc/health", "/api/auth/capabilities"])
+        self.assertEqual(opener.rpc_method, "POST")
+        self.assertEqual(opener.rpc_body, {"json": {}})
+
+    def test_readiness_checks_actual_rpc_and_accounts_contract(self):
+        responses = [{"json": {"ok": True, "version": "test"}}, {"passwordAuth": False, "sso": {"name": "Accounts", "availability": "available"}}]
         with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=responses) as request:
             installer.ready(URL)
-        self.assertEqual([call.args for call in request.call_args_list], [(URL + "/health",), (URL + "/rpc/health", {"json": {}}), (URL + "/api/auth/capabilities",)])
+        self.assertEqual([call.args for call in request.call_args_list], [(URL + "/rpc/health", {"json": {}}), (URL + "/api/auth/capabilities",)])
         for field in ({"passwordAuth": True, "sso": {"name": "Accounts", "availability": "available"}}, {"passwordAuth": False, "sso": {"name": "Accounts", "availability": "checking"}}, {"passwordAuth": False, "sso": None}):
-            with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=responses[:2] + [field]), patch.object(installer.time, "monotonic", side_effect=[0, 181]), self.assertRaises(installer.SetupError):
+            with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=responses[:1] + [field]), patch.object(installer.time, "monotonic", side_effect=[0, 181]), self.assertRaises(installer.SetupError):
                 installer.ready(URL)
 
     def test_http_request_has_bounded_body_no_redirect_and_no_secret_errors(self):

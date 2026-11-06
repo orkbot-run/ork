@@ -19,8 +19,8 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 ## Linux server setup
 
 In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's
-HTTPS address. Copy the generated command into a private installation directory on that
-Linux server. The command pins the installer and its files to one source revision.
+HTTPS address. Run the generated command in a terminal on that Linux server. It installs
+into `~/orkbot` and pins the installer and its files to one source revision.
 
 Point the domain's public DNS records at the server first. Inbound TCP 80 and 443 must
 reach it. The installer supports amd64 and arm64, installs missing prerequisites on

@@ -309,7 +309,7 @@ For an agent-assisted install, use the [setup prompt](${SETUP_PROMPT_URL}).
 
 ## Run it on a server
 
-In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's HTTPS address. Copy the generated command to a private directory on the Linux server. It pins the installer and its files to one source revision.
+In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's HTTPS address. Run the generated command in a terminal on that Linux server. It installs into \`~/orkbot\` and pins its files to one source revision.
 
 Point the domain at the server and allow inbound TCP 80 and 443 first. On Debian or Ubuntu, the installer can install Docker and its prerequisites, configure HTTPS and check Accounts sign-in. Local Docker computers need no remote sandbox account. Existing settings and data stay in place.
 

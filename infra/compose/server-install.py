@@ -238,11 +238,9 @@ def ready(url):
     while True:
         try:
             public_dns(origin(url))
-            health = request_json(url + "/health")
             rpc = request_json(url + "/rpc/health", {"json": {}})
             capabilities = request_json(url + "/api/auth/capabilities")
-            if (not isinstance(health, dict) or health.get("ok") is not True or
-                    not isinstance(rpc, dict) or not isinstance(rpc.get("json"), dict) or rpc["json"].get("ok") is not True or
+            if (not isinstance(rpc, dict) or not isinstance(rpc.get("json"), dict) or rpc["json"].get("ok") is not True or
                     not isinstance(rpc["json"].get("version"), str) or not isinstance(capabilities, dict)):
                 raise SetupError("The public origin did not respond like an Ork server.")
             sso = capabilities.get("sso")
