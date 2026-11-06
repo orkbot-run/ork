@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Modified by Ork contributors for release preparation. Inherited entries remain Apache-2.0. New entries follow LICENSE.md. -->
+
 # Changelog
 
 Notable product changes in Ork. See GitHub Releases for tagged builds.
@@ -5,6 +8,48 @@ Notable product changes in Ork. See GitHub Releases for tagged builds.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-06
+
+Prepared for release. Publication is pending the licensing rollout review.
+
+### Security
+
+- Native Accounts sign-in uses PKCE and secure credential storage. Account credentials stay separate from server sessions, and switching accounts retires the previous session and pending operations.
+- Group roster updates with implausible future timestamps are ignored, so they cannot change membership or prevent later updates from taking effect.
+
+### Added
+
+- A Tauri desktop preview for macOS, Windows and Linux, with a local Docker server and connections to existing servers.
+- Computer sharing on macOS and Linux. Bots need native consent before using the host computer, and access can be revoked.
+- An Accounts server directory shared across desktop and mobile, with saved servers associated with the signed-in account.
+- Guided server setup and a personal Ork in the account's original Space. New Spaces and organizations receive their own bot.
+- Memory browsing and editing on mobile, along with richer routine scheduling and run history.
+- Deterministic generated avatars and refreshed Ork artwork.
+
+### Changed
+
+- Draft commercial terms propose monthly billing for each named person across web, desktop and mobile on deployments covered by the order, with bots requiring no seats. The agreement remains a draft pending legal review, with no price set or subscriptions available for purchase. Existing Apache and third-party rights remain unchanged.
+- Model OAuth refreshes are coordinated across server instances, preventing simultaneous use of the same rotating refresh token.
+- Interrupted organization deletions can resume, and stalled housekeeping no longer holds up recovery of queued work, routines or message deliveries.
+
+### Removed
+
+- The Electron desktop client. Desktop builds now use Tauri.
+
+### Fixed
+
+- Mobile keeps unsent messages after session rejection.
+- Repeated bot settings are treated as reads, and history tools accept common argument shapes produced by models.
+- Compatible model endpoints can retry a request when they reject an explicit disabled reasoning effort.
+- The updater image includes the workspace dependency needed at startup, avoiding a missing-module failure before it can process updates.
+
+### Self-host upgrade notes
+
+- Configure the registered public Accounts client before starting a local server. See [Accounts sign-in](docs/accounts-native.md#local-server-sign-in).
+- The optional updater installs stable server releases using their full source-commit image tags. Its private API must be invoked by deployment tooling. Enabling the profile does not schedule updates. See [upgrading](docs/self-host-upgrading.md).
+- Keep the previous application image cached for rollback. Rollback does not reverse database migrations.
+- Desktop downloads remain unsigned diagnostic artifacts. Signed native releases and their update channel still need configuration and platform testing.
 
 ## [0.7.0] - 2026-11-04
 

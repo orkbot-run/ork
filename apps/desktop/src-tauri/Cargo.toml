@@ -3,7 +3,7 @@
 
 [package]
 name = "orkbot-desktop-preview"
-version = "0.7.0"
+version = "1.0.0"
 description = "Experimental Ork system WebView client"
 license = "Apache-2.0 AND PolyForm-Noncommercial-1.0.0"
 edition = "2021"
