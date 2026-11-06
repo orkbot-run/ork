@@ -7,8 +7,11 @@ name: Accounts sign-in
 - launchApp:
     stopApp: true
 - extendedWaitUntil:
-    visible: "Continue with Accounts|Kontynuuj przez Accounts"
+    visible: "Get started|Rozpocznij"
     timeout: 40000
+- takeScreenshot: 01-welcome
+- tapOn: "Get started|Rozpocznij"
+- assertVisible: "Continue with Accounts|Kontynuuj przez Accounts"
 - assertNotVisible: "Password|Hasło"
 - assertNotVisible: "Continue as guest|Skip sign-in"
 - takeScreenshot: 01-accounts-required

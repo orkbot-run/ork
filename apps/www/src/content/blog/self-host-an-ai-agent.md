@@ -99,18 +99,20 @@ From an empty directory on the machine that should run Ork:
 ```bash
 mkdir -p orkbot && cd orkbot &&
 curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
-bash install-images.sh
+bash install-images.sh --prepare-only
 ```
 
-The installer downloads the Compose file and `.env.images.example`, creates `.env` with random secrets, and starts Ork. Run it again and it keeps an existing `.env`. The default image tag is `edge`, which tracks builds from the main branch for `linux/amd64` and `linux/arm64`. Do not assume a `latest` tag until a stable release exists.
+The prepare step downloads the Compose file and `.env.images.example`, then creates `.env` with random secrets. Configure a registered Accounts client before running `bash install-images.sh` to start the services. Run it again and it keeps an existing `.env`. The default image tag is `edge`, which tracks builds from the main branch for `linux/amd64` and `linux/arm64`. Do not assume a `latest` tag until a stable release exists.
 
 If you want to set the public URL, the image tag, or an optional provider before the first start, run `bash install-images.sh --prepare-only`, edit `.env`, then run `bash install-images.sh` again. The flags `--prepare-only` and `--local` can be combined.
 
 `SANDBOX_PROVIDER` defaults to `docker`. The images Compose file runs a sandbox supervisor on the internal network and pulls the computer image. Signup and local Docker computers work without an E2B account. The published-images stack requires `SANDBOX_SUPERVISOR_TOKEN` for every provider. Leave it empty and Compose fails closed rather than starting a supervisor with no token.
 
-Open `http://127.0.0.1:5173`. The first registered user becomes the deployment owner. Connect a model in the app, or set `OPENROUTER_API_KEY` before startup. Local Docker computers are on by default.
+Open `http://127.0.0.1:5173` and sign in with Accounts. Workspace ownership grants no server-administration permissions. Connect a model in the app, or set `OPENROUTER_API_KEY` before startup. Local Docker computers are on by default.
 
 The image pull is the variable part. A fast link and a warm cache finish sooner than a laptop on a slow network pulling the app, the computer image, and Postgres for the first time. Treat "10 minutes" as a description of how small the installer is, then look at your own pull.
+
+For an automatic Linux server install with HTTPS, use the self-hosted path in Ork setup. Its one-use command registers the Accounts client and checks the public server. The [Linux setup guide](/self-hosted-ai-agent/) covers the prerequisites.
 
 ## Create a bot
 

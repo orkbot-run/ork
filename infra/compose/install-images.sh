@@ -2,8 +2,9 @@
 # SPDX-FileCopyrightText: 2026 Rakazo contributors
 # SPDX-FileCopyrightText: 2026 Ork contributors
 # SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-# Inherited Apache-2.0 installer is preserved. Accounts configuration validation is an Ork addition.
+# Inherited Apache-2.0 installer is preserved. Accounts validation and Linux server setup are Ork additions.
 
+set +x
 set -Eeuo pipefail
 
 DOWNLOAD_BASE="${ORKBOT_DOWNLOAD_BASE:-https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose}"
@@ -37,7 +38,13 @@ if [[ "${ORKBOT_PULL_NEVER:-}" == "1" ]]; then
   pull_never=true
 fi
 
+server_mode=false
 for arg in "$@"; do
+  [[ "$arg" != --server ]] || server_mode=true
+done
+
+for arg in "$@"; do
+  [[ "$server_mode" != true ]] || break
   case "$arg" in
     --prepare-only)
       prepare_only=true
@@ -73,20 +80,6 @@ fail() {
   echo "Ork setup failed: $*" >&2
   exit 1
 }
-
-required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
-if [[ "$offline" == true ]]; then
-  for filename in "${required_files[@]}"; do
-    [[ -f "$filename" ]] || fail "--offline requires local ${filename}; copy it into the working directory first."
-  done
-else
-  command -v curl >/dev/null 2>&1 || fail "'curl' is required."
-fi
-
-for command_name in docker openssl; do
-  command -v "$command_name" >/dev/null 2>&1 || fail "'$command_name' is required."
-done
-docker compose version >/dev/null 2>&1 || fail "the Docker Compose plugin is required."
 
 # Optional proxy knobs from an existing .env (operators often set them there for
 # containers). Do not override values already present in the shell. Treat each
@@ -192,13 +185,13 @@ curl_download() {
   local max_attempts=3
 
   if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
-    curl -fsSL --proto-redir =https --retry 3 --retry-delay 2 --retry-all-errors "$url" -o "$out"
+    curl -fsSL --connect-timeout 15 --max-time 120 --proto =https --proto-redir =https --retry 3 --retry-delay 2 --retry-all-errors "$url" -o "$out"
     return $?
   fi
 
   attempt=1
   while [[ "$attempt" -le "$max_attempts" ]]; do
-    if curl -fsSL --proto-redir =https "$url" -o "$out"; then
+    if curl -fsSL --connect-timeout 15 --max-time 120 --proto =https --proto-redir =https "$url" -o "$out"; then
       return 0
     fi
     if [[ "$attempt" -eq "$max_attempts" ]]; then
@@ -402,6 +395,36 @@ configure_computer_egress() {
   echo "Warning: bot computers can reach this host, its LAN and cloud metadata ($reason)." >&2
   echo "See Restricted computer egress in docs/self-host-docker-computers.md." >&2
 }
+
+# The public server path reuses downloads, secret generation and validation below.
+# Its helper comes from the same revision or operator mirror as the Compose files.
+if [[ "$server_mode" == true ]]; then
+  server_install_code="${ORKBOT_INSTALL_CODE:-}"
+  export -n server_install_code
+  unset ORKBOT_INSTALL_CODE
+  command -v curl >/dev/null 2>&1 || fail "'curl' is required."
+  server_runtime=$(mktemp -d)
+  trap 'rm -rf -- "$server_runtime"; cleanup' EXIT
+  curl_download "${DOWNLOAD_BASE}/server-install.sh" "$server_runtime/server-install.sh" || fail "could not download the server installer."
+  # shellcheck source=server-install.sh
+  source "$server_runtime/server-install.sh"
+  server_main "$@"
+  exit 0
+fi
+
+required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
+if [[ "$offline" == true ]]; then
+  for filename in "${required_files[@]}"; do
+    [[ -f "$filename" ]] || fail "--offline requires local ${filename}; copy it into the working directory first."
+  done
+else
+  command -v curl >/dev/null 2>&1 || fail "'curl' is required."
+fi
+
+for command_name in docker openssl; do
+  command -v "$command_name" >/dev/null 2>&1 || fail "'$command_name' is required."
+done
+docker compose version >/dev/null 2>&1 || fail "the Docker Compose plugin is required."
 
 for filename in "${required_files[@]}"; do
   download "$filename"

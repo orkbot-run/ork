@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+# Optional HTTPS edge for the pull-only images stack. Never expose the API or supervisor.
+services:
+  api:
+    environment:
+      TRUSTED_PROXIES: caddy
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d}
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    pids_limit: 128
+    mem_limit: 256m
+    environment:
+      ORKBOT_HOST: ${ORKBOT_HOST:?Set ORKBOT_HOST in .env}
+      GODEBUG: multipathtcp=0
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    networks:
+      - app
+    tmpfs:
+      - /tmp
+    depends_on:
+      web:
+        condition: service_started
+volumes:
+  caddydata:
+  caddyconfig:

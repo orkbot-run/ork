@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
+
 export const NL_MESSAGES: Record<string, string> = {
+  "Get started": "Aan de slag",
   "Add rule": "Regel toevoegen",
   "Tool name": "Toolnaam",
   Address: "Adres",

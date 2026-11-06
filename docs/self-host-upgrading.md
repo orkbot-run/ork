@@ -39,6 +39,28 @@ Source checkouts (not Compose) still upgrade the old way: pull, rebuild with
 `GIT_SHA=$(git rev-parse HEAD)`, run `pnpm db:migrate`, then restart API and worker.
 Product contracts stay compatible across cloud and self-hosted.
 
+## Published-images server installations
+
+The `--server` installer resumes an installation with its current Compose files and
+`.env`. It never replaces those files or changes the saved domain and proxy mode.
+Keep a backup before upgrading, including `.env`, database data and bot homes.
+
+Choose a published release or full commit image tag and use the matching files from
+that source revision. Keep the existing `.env` and named volumes. With the HTTPS overlay:
+
+```bash
+docker compose --env-file .env -f docker-compose.images.yml -f docker-compose.https.yml pull
+docker compose --env-file .env -f docker-compose.images.yml -f docker-compose.https.yml \
+  up -d --pull never --wait --wait-timeout 300
+```
+
+For an external proxy, omit the HTTPS overlay. If the installation has an operator
+`docker-compose.override.yml`, include it after the base file on every invocation.
+Check the public HTTPS origin and Accounts sign-in after the upgrade. A CLI recreate
+has no automatic rollback. Keep the previous image cached and its tag recorded so it
+can be restored without pulling a moving tag. Database migrations are not reversed.
+Never use `docker compose down -v` for an upgrade.
+
 ## Upgrading to the separate app database login
 
 Releases with [database roles](./self-host-configuration.md#database-roles) need `POSTGRES_APP_PASSWORD` in `.env`. The

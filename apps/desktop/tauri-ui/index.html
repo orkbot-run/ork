@@ -5,44 +5,75 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ork Preview</title>
+    <title>Ork</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="setup.css" />
   </head>
   <body>
-    <main class="shell">
-      <h1 class="heading">Ork Preview</h1>
-      <section id="signed-out">
-        <button id="sign-in" class="button button-primary" type="button" disabled>Sign in to Accounts</button>
-      </section>
-      <section id="signed-in" hidden>
-        <div class="account-row">
-          <span id="account"></span>
-          <button id="sign-out" class="link" type="button">Sign out</button>
-        </div>
-        <section id="servers" class="server-list" aria-label="Your servers"></section>
-        <button id="refresh" class="link" type="button">Refresh</button>
-        <details id="add-server" class="headers">
-          <summary>Add server</summary>
-      <form id="setup">
-        <fieldset class="choices">
-          <legend class="sr-only">Instance</legend>
-          <label class="choice"><input type="radio" name="mode" value="existing" checked /><span class="choice-title">Existing instance</span></label>
-          <label class="choice"><input type="radio" name="mode" value="new" /><span class="choice-title">This computer</span></label>
-        </fieldset>
-        <section id="existing-server">
-        <label class="field-label" for="server-url">Server address</label>
-        <input id="server-url" class="field" type="text" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
+    <main class="shell" data-screen="checking" aria-busy="true">
+      <header class="topbar">
+        <button id="back" class="link" type="button" hidden data-copy="Back">Back</button>
+        <span class="wordmark">Ork</span>
+        <button id="sign-out" class="link" type="button" hidden data-copy="Sign out">Sign out</button>
+      </header>
+      <div class="content">
+        <div id="hero" class="welcome-ork" aria-hidden="true"></div>
+        <section data-step="checking"><h1 data-copy="Getting ready...">Getting ready...</h1></section>
+        <section data-step="welcome" hidden>
+          <h1 data-copy="Welcome to Ork">Welcome to Ork</h1>
+          <button id="get-started" class="button button-primary" type="button" data-copy="Let's get started">Let's get started</button>
         </section>
-        <details id="details" class="headers" hidden><summary>Technical details</summary><pre id="output" class="stack-output"></pre></details>
-        <div class="actions">
-          <button id="connect" class="button button-primary" type="submit" disabled>Connect</button>
-        </div>
-      </form>
-        </details>
-      </section>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
-      <div class="actions"><button id="quit" class="button button-secondary" type="button">Quit</button></div>
+        <section data-step="accounts" hidden>
+          <h1 data-copy="Make yourself at home">Make yourself at home</h1>
+          <p class="subheading" data-copy="Sign in or create your Ork Accounts account.">Sign in or create your Ork Accounts account.</p>
+          <button id="sign-in" class="button button-primary" type="button" data-copy="Continue with Accounts">Continue with Accounts</button>
+          <p id="browser-hint" class="hint" hidden data-copy="Finish signing in in your browser.">Finish signing in in your browser.</p>
+          <button id="cancel-sign-in" class="link" type="button" hidden data-copy="Cancel">Cancel</button>
+        </section>
+        <section data-step="servers" hidden>
+          <h1 data-copy="Where will Ork live?">Where will Ork live?</h1>
+          <p id="account" class="subheading"></p>
+          <section id="servers" class="server-list" aria-label="Your servers"></section>
+          <div class="choices">
+            <button id="local" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></span><span><strong data-copy="This computer">This computer</strong><small data-copy="Run Ork here with Docker.">Run Ork here with Docker.</small></span><span aria-hidden="true">→</span></button>
+            <button id="selfhost" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="8" rx="2"/><rect x="4" y="13" width="16" height="8" rx="2"/><path d="M8 7h.01M8 17h.01"/></svg></span><span><strong data-copy="Self-hosted">Self-hosted</strong><small data-copy="Connect or install on your own server.">Connect or install on your own server.</small></span><span aria-hidden="true">→</span></button>
+          </div>
+          <button id="refresh" class="link" type="button" data-copy="Refresh servers">Refresh servers</button>
+        </section>
+        <section data-step="selfhost" hidden>
+          <h1 data-copy="Connect your server">Connect your server</h1>
+          <form id="setup">
+            <label class="field-label" for="server-url" data-copy="Server address">Server address</label>
+            <input id="server-url" class="field" type="url" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
+            <button id="connect" class="button button-primary" type="submit" data-copy="Check server">Check server</button>
+          </form>
+          <details id="install" class="disclosure">
+            <summary data-copy="Install a server">Install a server</summary>
+            <p class="hint" data-copy="Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.">Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.</p>
+            <button id="create-installation" class="button button-secondary" type="button" data-copy="Create install command">Create install command</button>
+            <div id="installation" hidden>
+              <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
+              <textarea id="install-command" class="command" rows="4" readonly spellcheck="false"></textarea>
+              <div class="command-actions"><span id="expires" class="hint"></span><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>
+            </div>
+          </details>
+        </section>
+        <section data-step="local" hidden>
+          <h1 data-copy="Making room for Ork">Making room for Ork</h1>
+          <ol id="progress" class="progress" aria-label="Setup progress">
+            <li data-phase="checking-docker" data-copy="Check Docker">Check Docker</li>
+            <li data-phase="preparing" data-copy="Prepare server">Prepare server</li>
+            <li data-phase="pulling" data-copy="Download Ork">Download Ork</li>
+            <li data-phase="starting" data-copy="Start services">Start services</li>
+            <li data-phase="waiting-healthy" data-copy="Wait for server">Wait for server</li>
+          </ol>
+          <button id="retry-local" class="button button-primary" type="button" hidden data-copy="Try again">Try again</button>
+        </section>
+        <section data-step="opening" hidden><h1 data-copy="Opening Ork...">Opening Ork...</h1></section>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <details id="details" class="disclosure" hidden><summary data-copy="Technical details">Technical details</summary><pre id="output" class="stack-output"></pre></details>
+      </div>
+      <footer><button id="quit" class="link" type="button" data-copy="Quit">Quit</button></footer>
     </main>
     <script src="setup.js"></script>
   </body>

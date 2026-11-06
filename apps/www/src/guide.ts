@@ -19,11 +19,9 @@ export const OPENCLAW_GITHUB_URL = "https://github.com/openclaw/openclaw";
 
 export const PUBLISHED_IMAGES_INSTALL = `mkdir -p orkbot && cd orkbot &&
 curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
-bash install-images.sh`;
+bash install-images.sh --prepare-only`;
 
-export const PUBLISHED_IMAGES_SERVER = `bash install-images.sh --prepare-only
-# Edit .env, then:
-bash install-images.sh`;
+export const PUBLISHED_IMAGES_SERVER = `bash install-images.sh --server --url https://server.example.com --code-stdin`;
 
 export const SOURCE_CHECKOUT = `git clone https://github.com/orkbot-run/ork.git orkbot
 cd orkbot
@@ -38,10 +36,6 @@ pnpm db:generate
 pnpm db:migrate
 pnpm sandbox:build
 pnpm dev`;
-
-export const CADDY_SNIPPET = `app.example.com {
-	reverse_proxy 127.0.0.1:5173
-}`;
 
 export const RUN_ON_YOUR_MAC =
   "Run on your Mac with the desktop app. This computer installs Ork on that Mac. A Mac Mini can stay on as the always-on box.";
@@ -307,27 +301,27 @@ A source checkout needs Node.js 22.22.2 or newer on the 22.x line, Node.js 24.x,
 ${PUBLISHED_IMAGES_INSTALL}
 \`\`\`
 
-The installer downloads the Compose file and \`.env.images.example\`, creates \`.env\` with random secrets, and starts Ork. It keeps an existing \`.env\` when you run it again. The default image tag is \`edge\` (builds from the main branch, \`linux/amd64\` and \`linux/arm64\`).
+The prepare step downloads Compose and creates \`.env\` with random secrets. Configure the registered Accounts client in that file, then run \`bash install-images.sh\`. Existing settings are kept. The default image tag is \`edge\` for \`linux/amd64\` and \`linux/arm64\`.
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173) and create an account. The first registered user becomes the deployment owner. Connect a model in the app, or set \`OPENROUTER_API_KEY\` before startup. Local Docker computers are on by default.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173) and sign in through Accounts. Connect a model in the app. Local Docker computers are on by default. Workspace ownership grants no server-administration permissions.
 
 For an agent-assisted install, use the [setup prompt](${SETUP_PROMPT_URL}).
 
 ## Run it on a server
 
-Use the same installer on a VPS when bots should stay running. Images Compose binds the web app to loopback \`127.0.0.1:5173\`. Terminate TLS on the host and proxy there. Do not publish port 3100. The web server proxies \`/api\`.
+In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's HTTPS address. Copy the generated command to a private directory on the Linux server. It pins the installer and its files to one source revision.
+
+Point the domain at the server and allow inbound TCP 80 and 443 first. On Debian or Ubuntu, the installer can install Docker and its prerequisites, configure HTTPS and check Accounts sign-in. Local Docker computers need no remote sandbox account. Existing settings and data stay in place.
+
+For an installer already downloaded from the same pinned source, a one-use code can be entered on stdin:
 
 \`\`\`bash
 ${PUBLISHED_IMAGES_SERVER}
 \`\`\`
 
-Before the second command, set \`ORKBOT_HOST\` to the hostname and set \`BETTER_AUTH_URL\`, \`WEB_ORIGIN\`, and \`API_URL\` to that same \`https://\` origin. For a remote computer instead of local Docker, set \`SANDBOX_PROVIDER\` to \`e2b\`, \`daytona\`, \`createos\`, or \`boat\` and add that provider's API key.
+Paste the code and press Enter. It expires after 15 minutes. If a reverse proxy already uses ports 80 or 443, add \`--external-proxy\` and route it to \`127.0.0.1:5173\`. Otherwise the installer adds Caddy for HTTPS. It reports success after checking the public certificate, API and Accounts availability. Then open the HTTPS address and sign in with Accounts.
 
-\`\`\`Caddyfile
-${CADDY_SNIPPET}
-\`\`\`
-
-Replace \`app.example.com\` with your host. Desktop clients should use **Existing instance** with the \`https://\` address. The [public single-VM section](${DOCS_URL}#public-single-vm-deployment) covers production Compose, host hardening, signup allowlists, and SMTP.
+The [Linux setup guide](${DOCS_URL}#linux-server-setup) covers retries and existing proxies. The [production guide](https://github.com/orkbot-run/ork/blob/main/docs/self-host-production.md) covers operator-managed deployments and host hardening.
 
 If downloads are blocked, use the [restricted-network guide](${SELF_HOST_RESTRICTED_URL}). Secret names and recovery are in the [secrets checklist](${SELF_HOST_SECRETS_URL}).
 

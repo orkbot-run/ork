@@ -8,7 +8,6 @@ import FaqSection from "../components/FaqSection.astro";
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import {
-  CADDY_SNIPPET,
   faqPageStructuredData,
   PUBLISHED_IMAGES_INSTALL,
   PUBLISHED_IMAGES_SERVER,
@@ -108,12 +107,14 @@ const structuredData = faqPageStructuredData(SELF_HOST_FAQS);
       <p>From an empty directory on the machine that should run Ork:</p>
       <pre><code>{PUBLISHED_IMAGES_INSTALL}</code></pre>
       <p>
-        The installer downloads the Compose file and <code>.env.images.example</code>, creates <code>.env</code> with random secrets, and starts Ork. It keeps an existing <code>.env</code> when you run it again. The default image tag is <code>edge</code> (builds
-        from the main branch, <code>linux/amd64</code> and <code>linux/arm64</code>).
+        The prepare step downloads Compose and creates <code>.env</code> with random secrets.
+        Configure the registered Accounts client in that file, then run <code>bash install-images.sh</code>.
+        Existing settings are kept. The default image tag is <code>edge</code> for <code>linux/amd64</code> and <code>linux/arm64</code>.
       </p>
       <p>
-        Open <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a> and create an account. The first
-        registered user becomes the deployment owner. Connect a model in the app, or set <code>OPENROUTER_API_KEY</code> before startup. Local Docker computers are on by default.
+        Open <a href="http://127.0.0.1:5173">http://127.0.0.1:5173</a> and sign in through Accounts.
+        Connect a model in the app. Local Docker computers are on by default.
+        Workspace ownership grants no server-administration permissions.
       </p>
       <CaptionedImage
         src="/graphics/chat/create-bot.png"
@@ -149,19 +150,25 @@ const structuredData = faqPageStructuredData(SELF_HOST_FAQS);
 
       <h2>Run it on a server</h2>
       <p>
-        Use the same installer on a VPS when bots should stay running. Images Compose binds the web
-        app to loopback <code>127.0.0.1:5173</code>. Terminate TLS on the host and proxy there. Do not
-        publish port 3100. The web server proxies <code>/api</code>.
+        In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's HTTPS address.
+        Copy the generated command to a private directory on the Linux server. It pins the installer and its files to one source revision.
       </p>
+      <p>
+        Point the domain at the server and allow inbound TCP 80 and 443 first. On Debian or Ubuntu,
+        the installer can install Docker and its prerequisites, configure HTTPS and check Accounts sign-in.
+        Local Docker computers need no remote sandbox account. Existing settings and data stay in place.
+      </p>
+      <p>For an installer already downloaded from the same pinned source, a one-use code can be entered on stdin:</p>
       <pre><code>{PUBLISHED_IMAGES_SERVER}</code></pre>
       <p>
-        Before the second command, set <code>ORKBOT_HOST</code> to the hostname and set <code>BETTER_AUTH_URL</code>, <code>WEB_ORIGIN</code>, and <code>API_URL</code> to that same <code>https://</code> origin. For a remote computer instead of local Docker, set <code>SANDBOX_PROVIDER</code> to <code>e2b</code>, <code>daytona</code>, <code>createos</code>,
-        or <code>boat</code> and add that provider's API key.
+        Paste the code and press Enter. It expires after 15 minutes. If a reverse proxy already uses ports 80 or 443,
+        add <code>--external-proxy</code> and route it to <code>127.0.0.1:5173</code>.
+        Otherwise the installer adds Caddy for HTTPS. It reports success after checking the public certificate,
+        API and Accounts availability. Then open the HTTPS address and sign in with Accounts.
       </p>
-      <pre><code>{CADDY_SNIPPET}</code></pre>
       <p>
-        Replace <code>app.example.com</code> with your host. Desktop clients should use <strong>Existing instance</strong> with the <code>https://</code> address. The <a href={`${DOCS_URL}#public-single-vm-deployment`}>public single-VM section</a> covers
-        production Compose, host hardening, signup allowlists, and SMTP.
+        The <a href={`${DOCS_URL}#linux-server-setup`}>Linux setup guide</a> covers retries and existing proxies.
+        The <a href="https://github.com/orkbot-run/ork/blob/main/docs/self-host-production.md">production guide</a> covers operator-managed deployments and host hardening.
       </p>
       <p>
         If downloads are blocked, use the <a href={SELF_HOST_RESTRICTED_URL}>restricted-network guide</a>. Secret names and recovery are

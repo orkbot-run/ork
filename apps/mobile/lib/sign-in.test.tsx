@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
+
 import { tokensForAppearance } from "@orkbot/ui-tokens";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -33,6 +37,9 @@ vi.mock("expo-router", () => ({
   useFocusEffect: (effect: () => void) => {
     server.refocus = effect;
   },
+}));
+vi.mock("../components/logo-avatar", () => ({
+  LogoAvatar: ({ identity }: { identity: string }) => <span data-welcome-avatar={identity} />,
 }));
 vi.mock("react-native", () => {
   const Container = ({ children }: { children: ReactNode }) => <div>{children}</div>;
@@ -228,6 +235,10 @@ it.each(["in", "up"])(
       passwordAuth: false,
     });
     await render();
+    expect(host.textContent).toContain("Welcome to Ork");
+    expect(host.textContent).not.toContain("Sign up for Ork");
+    expect(host.querySelector('[data-welcome-avatar="ork-welcome-10099"]')).not.toBeNull();
+    expect(continueWithSso).not.toHaveBeenCalled();
     expect(ssoButtons()).toHaveLength(1);
     expect(ssoButtons()[0]!.dataset.prominence).toBe("primary");
     expect(host.querySelector('button[data-prominence="quiet"]')).toBeNull();

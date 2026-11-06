@@ -70,6 +70,70 @@ pub struct Directory {
     client: Client,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InstallationCode {
+    url: String,
+    code: String,
+    expires_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallationCommand {
+    command: String,
+    expires_at: String,
+    url: String,
+}
+
+fn installation_origin(url: &Url) -> bool {
+    url.scheme() == "https"
+        && url.port().is_none()
+        && matches!(url.host(), Some(url::Host::Domain(host)) if host.len() <= 253
+        && host.contains('.') && host.split('.').all(|label| {
+            !label.is_empty() && label.len() <= 63
+                && label.as_bytes()[0].is_ascii_alphanumeric()
+                && label.as_bytes()[label.len() - 1].is_ascii_alphanumeric()
+                && label.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        }))
+}
+
+fn installation_command(
+    value: InstallationCode,
+    expected: &str,
+    revision: &str,
+) -> Result<InstallationCommand, String> {
+    let url = normalize_server_url(&value.url)?;
+    let expires = time::OffsetDateTime::parse(
+        &value.expires_at,
+        &time::format_description::well_known::Rfc3339,
+    )
+    .map_err(|_| ERROR)?;
+    if !installation_origin(&url)
+        || value.url != expected
+        || value.url != url.origin().ascii_serialization()
+        || value.code.len() != 43
+        || !value
+            .code
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        || value.expires_at.len() > 64
+        || expires <= time::OffsetDateTime::now_utc()
+        || revision.len() != 40
+        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(ERROR.into());
+    }
+    // Every interpolated field is validated before the shell command is constructed.
+    let base = format!("https://raw.githubusercontent.com/orkbot-run/ork/{revision}/infra/compose");
+    let command = format!("( ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --url '{}' --code '{}' )", value.url, value.code);
+    Ok(InstallationCommand {
+        command,
+        expires_at: value.expires_at,
+        url: value.url,
+    })
+}
+
 impl Directory {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
@@ -118,6 +182,35 @@ impl Directory {
             }
         }
         Ok(list.servers)
+    }
+
+    pub async fn create_installation(
+        &self,
+        token: &str,
+        raw_url: &str,
+    ) -> Result<InstallationCommand, String> {
+        let revision = option_env!("ORKBOT_INSTALLER_REVISION")
+            .ok_or("This app build cannot prepare a server installer.")?;
+        let url = normalize_server_url(raw_url)?;
+        if !installation_origin(&url) {
+            return Err("Use a public HTTPS domain.".into());
+        }
+        let origin = url.origin().ascii_serialization();
+        let endpoint = self
+            .endpoint
+            .join("/api/installations")
+            .map_err(|_| ERROR)?;
+        let code: InstallationCode = json(
+            self.send(
+                Method::POST,
+                endpoint,
+                token,
+                Some(serde_json::json!({"url": origin})),
+            )
+            .await?,
+        )
+        .await?;
+        installation_command(code, &origin, revision)
     }
 
     pub async fn add(
@@ -330,6 +423,188 @@ mod tests {
                 .unwrap(),
         };
         (directory, task)
+    }
+
+    const INSTALL_URL: &str = "https://server.example.com";
+    const INSTALL_CODE: &str = "AbCdEf0123456789_-AbCdEf0123456789_-AbCdEf0";
+    const INSTALL_REVISION: &str = "0123456789abcdef0123456789abcdef01234567";
+    const INSTALL_EXPIRY: &str = "2999-01-01T00:00:00Z";
+    const CENTRAL_BEARER: &str = "private-fixture-central-bearer";
+
+    fn installation() -> InstallationCode {
+        InstallationCode {
+            url: INSTALL_URL.into(),
+            code: INSTALL_CODE.into(),
+            expires_at: INSTALL_EXPIRY.into(),
+        }
+    }
+
+    fn installation_body() -> String {
+        serde_json::json!({ "url": INSTALL_URL, "code": INSTALL_CODE, "expiresAt": INSTALL_EXPIRY })
+            .to_string()
+    }
+
+    #[test]
+    fn installation_command_binds_code_origin_expiry_and_pinned_revision() {
+        let result = installation_command(installation(), INSTALL_URL, INSTALL_REVISION).unwrap();
+        assert_eq!(result.url, INSTALL_URL);
+        assert_eq!(result.expires_at, INSTALL_EXPIRY);
+        assert!(result
+            .command
+            .contains(&format!("--url '{INSTALL_URL}' --code '{INSTALL_CODE}'")));
+        assert!(result.command.contains(&format!("https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose/install-images.sh")));
+        assert!(result.command.contains(&format!("ORKBOT_DOWNLOAD_BASE='https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose'")));
+        assert!(!serde_json::to_string(&result)
+            .unwrap()
+            .contains(CENTRAL_BEARER));
+        for url in [
+            "http://server.example.com",
+            "https://user:pass@server.example.com",
+            "https://server.example.com/path",
+            "https://server.example.com?next=other",
+            "https://server.example.com#other",
+            "https://server.example.com:8443",
+            "https://127.0.0.1",
+            "https://[::1]",
+            "https://localhost",
+        ] {
+            let mut value = installation();
+            value.url = url.into();
+            assert!(
+                installation_command(value, url, INSTALL_REVISION).is_err(),
+                "Accepted unsafe origin: {url}"
+            );
+        }
+        assert!(installation_command(
+            installation(),
+            "https://different.example.com",
+            INSTALL_REVISION
+        )
+        .is_err());
+        for code in [
+            String::new(),
+            "A".repeat(42),
+            "A".repeat(44),
+            format!("{}'", "A".repeat(42)),
+            format!("{}\n", "A".repeat(42)),
+            format!("{}$(id)", "A".repeat(38)),
+            format!("{}é", "A".repeat(41)),
+        ] {
+            let mut value = installation();
+            value.code = code;
+            assert!(installation_command(value, INSTALL_URL, INSTALL_REVISION).is_err());
+        }
+        for revision in [
+            "main",
+            "",
+            "0123456789abcdef0123456789abcdef0123456'",
+            "0123456789abcdef0123456789abcdef0123456g",
+        ] {
+            assert!(installation_command(installation(), INSTALL_URL, revision).is_err());
+        }
+        for expiry in [
+            "",
+            "invalid",
+            "2000-01-01T00:00:00Z",
+            "2999-01-01T00:00:00Z\n'$(echo invalid)",
+        ] {
+            let mut value = installation();
+            value.expires_at = expiry.into();
+            assert!(installation_command(value, INSTALL_URL, INSTALL_REVISION).is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn installation_request_posts_only_the_origin_to_the_fixed_native_endpoint() {
+        assert_eq!(Directory::new().unwrap().endpoint.as_str(), API);
+        let (directory, wire) = response("200 OK", installation_body(), "").await;
+        let result = directory
+            .create_installation(CENTRAL_BEARER, INSTALL_URL)
+            .await
+            .unwrap();
+        let request = wire.await.unwrap();
+        assert!(request.starts_with("POST /api/installations HTTP/1.1\r\n"));
+        let (headers, body) = request.split_once("\r\n\r\n").unwrap();
+        assert!(headers
+            .lines()
+            .any(|line| line
+                .eq_ignore_ascii_case(&format!("authorization: bearer {CENTRAL_BEARER}"))));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(body).unwrap(),
+            serde_json::json!({ "url": INSTALL_URL })
+        );
+        let serialized = serde_json::to_string(&result).unwrap();
+        assert!(!serialized.contains(CENTRAL_BEARER));
+        assert!(serialized.contains(INSTALL_CODE));
+    }
+
+    #[tokio::test]
+    async fn installation_request_never_follows_redirects_with_the_native_bearer() {
+        let destination = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let location = format!(
+            "Location: http://{}/capture\r\n",
+            destination.local_addr().unwrap()
+        );
+        let (mut directory, wire) =
+            response("307 Temporary Redirect", String::new(), &location).await;
+        // Exercise the production redirect policy, with only the destination replaced by a loopback fixture.
+        directory.client = Directory::new().unwrap().client;
+        assert!(directory
+            .create_installation(CENTRAL_BEARER, INSTALL_URL)
+            .await
+            .is_err());
+        assert!(wire
+            .await
+            .unwrap()
+            .starts_with("POST /api/installations HTTP/1.1\r\n"));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), destination.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn installation_request_rejects_invalid_origins_before_sending_credentials() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut directory = Directory::new().unwrap();
+        directory.endpoint = Url::parse(&format!(
+            "http://{}/api/servers",
+            listener.local_addr().unwrap()
+        ))
+        .unwrap();
+        for url in [
+            "http://127.0.0.1:45173",
+            "https://server.example.com:8443",
+            "https://[::1]",
+            "https://127.0.0.1",
+            "https://localhost",
+        ] {
+            assert!(directory
+                .create_installation(CENTRAL_BEARER, url)
+                .await
+                .is_err());
+        }
+        assert!(
+            tokio::time::timeout(Duration::from_millis(50), listener.accept())
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn installation_request_rejects_foreign_or_malformed_codes_and_error_responses() {
+        for (status, body) in [
+            ("401 Unauthorized", "{}".into()), ("403 Forbidden", "{}".into()),
+            ("200 OK", serde_json::json!({"url":"https://different.example.com","code":INSTALL_CODE,"expiresAt":INSTALL_EXPIRY}).to_string()),
+            ("200 OK", serde_json::json!({"url":INSTALL_URL,"code":"invalid","expiresAt":INSTALL_EXPIRY}).to_string()),
+            ("200 OK", serde_json::json!({"url":INSTALL_URL,"code":INSTALL_CODE,"expiresAt":"2000-01-01T00:00:00Z"}).to_string()),
+            ("200 OK", " ".repeat(MAX_BODY + 1)),
+        ] {
+            let (directory, wire) = response(status, body, "").await;
+            assert!(directory.create_installation(CENTRAL_BEARER, INSTALL_URL).await.is_err());
+            wire.await.unwrap();
+        }
     }
 
     fn entry() -> serde_json::Value {

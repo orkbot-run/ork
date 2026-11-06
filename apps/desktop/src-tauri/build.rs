@@ -2,6 +2,47 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=ORKBOT_INSTALLER_REVISION");
+    let revision = std::env::var("ORKBOT_INSTALLER_REVISION").ok().or_else(|| {
+        let output = std::process::Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .ok()?;
+        output
+            .status
+            .success()
+            .then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    });
+    for reference in [
+        Some("HEAD".to_owned()),
+        std::process::Command::new("git")
+            .args(["symbolic-ref", "-q", "HEAD"])
+            .output()
+            .ok()
+            .filter(|result| result.status.success())
+            .map(|result| String::from_utf8_lossy(&result.stdout).trim().to_owned()),
+        Some("packed-refs".to_owned()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if let Ok(output) = std::process::Command::new("git")
+            .args(["rev-parse", "--git-path", &reference])
+            .output()
+        {
+            if output.status.success() {
+                println!(
+                    "cargo:rerun-if-changed={}",
+                    String::from_utf8_lossy(&output.stdout).trim()
+                );
+            }
+        }
+    }
+    if let Some(revision) = revision
+        .filter(|value| value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    {
+        println!("cargo:rustc-env=ORKBOT_INSTALLER_REVISION={revision}");
+    }
     for variable in [
         "ORK_ACCOUNTS_ISSUER",
         "ORK_ACCOUNTS_DESKTOP_CLIENT_ID",
@@ -19,6 +60,7 @@ fn main() {
             "setup_accounts_sign_in",
             "setup_accounts_logout",
             "list_servers",
+            "create_server_installation",
             "remove_server",
             "connect_saved_server",
             "connect_server",

@@ -16,6 +16,55 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
   run yourself ([models](./self-host-models.md)).
 - For a public host, a domain and TLS ([production deployment](./self-host-production.md)).
 
+## Linux server setup
+
+In Ork setup, sign in to Accounts, choose the self-hosted option and enter the server's
+HTTPS address. Copy the generated command into a private installation directory on that
+Linux server. The command pins the installer and its files to one source revision.
+
+Point the domain's public DNS records at the server first. Inbound TCP 80 and 443 must
+reach it. The installer supports amd64 and arm64, installs missing prerequisites on
+Debian or Ubuntu from the distribution and Docker's official package repositories, and
+uses sudo when needed. It keeps existing Docker daemon, firewall and SSH configuration.
+A conflicting Docker package or an older Engine needs an operator-managed update.
+
+The one-use code expires after 15 minutes and belongs to that exact HTTPS address.
+The installer checks the host and pulls images before redeeming it. Accounts then
+registers the installation's client and admits its owner. The client secret stays in
+`.env` with mode 600. Keep the copied command private while its code is valid.
+
+For an installer already downloaded from the same pinned source, a code can be supplied
+on stdin instead of a command argument:
+
+```bash
+bash install-images.sh --server --url https://server.example.com --code-stdin
+```
+
+Paste the code and press Enter. `ORKBOT_INSTALL_CODE` is also accepted. The installer
+configures Caddy HTTPS, public origins and restricted Docker-computer egress. It stops
+if those firewall rules cannot be applied. Local Docker computers are the default.
+Models and remote computer providers remain optional settings in `.env`.
+
+If an existing proxy owns ports 80 or 443, add `--external-proxy` and route the public
+HTTPS origin to `127.0.0.1:5173`. Keep that proxy's current TLS configuration. Do not
+publish the API or supervisor ports. Automatic Caddy setup requires those ports to be free.
+
+Success is reported only after the public certificate, API health and Accounts sign-in
+are ready. Open the HTTPS address and sign in with the same Accounts account. Creating
+a workspace does not grant server-administration permissions.
+
+Rerunning from the same directory preserves credentials, database volumes and bot files.
+A configured installation resumes without redeeming another code. After an interrupted
+redeem whose response was lost, request a new code. The installer never retries redemption.
+Keep the same URL and proxy mode. Updating the installed files is a separate operator
+step covered in [Upgrading](./self-host-upgrading.md#published-images-server-installations).
+
+If an image pull is denied, the installer stops before using the code. Official packages
+must allow public pulls. An operator can instead use a reachable registry mirror, or
+preload the images and add `--pull-never`. The [restricted-network guide](./self-host-restricted-network.md)
+covers those paths. Secrets and data backups are covered in the [secrets checklist](./self-host-secrets.md)
+and [backup guide](./self-host-backups.md).
+
 ## Published images (no checkout)
 
 Pull Postgres and `ghcr.io/orkbot-run/ork/app` into any empty folder. No clone or image build.

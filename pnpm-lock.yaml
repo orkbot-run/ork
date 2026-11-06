@@ -147,9 +147,15 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@orkbot/avatar':
+        specifier: workspace:*
+        version: link:../../packages/avatar
       '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@orkbot/core':
+        specifier: workspace:*
+        version: link:../../packages/core
     devDependencies:
       '@orkbot/ui-tokens':
         specifier: workspace:*

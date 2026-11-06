@@ -29,9 +29,13 @@ vi.mock("expo-secure-store", () => ({
   },
 }));
 vi.mock("expo-splash-screen", () => ({ hideAsync: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("../components/logo-avatar", () => ({
+  LogoAvatar: ({ identity }: { identity: string }) => <span data-welcome-avatar={identity} />,
+}));
 vi.mock("react-native", () => ({
   AppState: { addEventListener: () => ({ remove: vi.fn() }) },
   ActivityIndicator: () => <span>Loading</span>,
+  View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ScrollView: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   TextInput: ({
@@ -144,13 +148,16 @@ async function render() {
 
 it("requires Accounts before product screens, directory lookup or product requests", async () => {
   await render();
-  expect(host.textContent).toContain("Continue with Accounts");
+  expect(host.textContent).toContain("Get started");
   expect(host.textContent).not.toContain("Product screen");
   expect(host.querySelector("input")).toBeNull();
   expect(accountServers).not.toHaveBeenCalled();
   expect(loadApiBase).not.toHaveBeenCalled();
   expect(probeApiBase).not.toHaveBeenCalled();
   expect(saveApiBase).not.toHaveBeenCalled();
+  await act(async () => host.querySelector("button")!.click());
+  expect(continueWithAccounts).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("Continue with Accounts");
   await act(async () => host.querySelector("button")!.click());
   expect(continueWithAccounts).toHaveBeenCalledTimes(1);
 });
@@ -197,7 +204,7 @@ it("unmounts product screens when the central session is lost", async () => {
     for (const listener of state.listeners) listener();
   });
   expect(host.textContent).not.toContain("Product screen");
-  expect(host.textContent).toContain("Continue with Accounts");
+  expect(host.textContent).toContain("Get started");
   expect(clearProductAccountSession).toHaveBeenCalledTimes(1);
 });
 
@@ -265,4 +272,39 @@ it("cannot activate an old account's server after a pending endpoint load is sup
   );
   expect(state.storage.has("orkbot.accounts.selected-server")).toBe(false);
   expect(host.textContent).not.toContain("Product screen");
+});
+
+it("keeps a verified account at server recovery when the directory is unavailable", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  vi.mocked(accountServers).mockRejectedValueOnce(new Error("Directory unavailable"));
+  await render();
+  expect(host.textContent).toContain("Server");
+  expect(host.textContent).toContain("Directory unavailable");
+  expect(host.textContent).not.toContain("Continue with Accounts");
+  expect(host.textContent).not.toContain("Get started");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Retry")!.click(),
+  );
+  expect(host.textContent).toContain("server.example.test");
+  expect(host.querySelector("input")).toBeNull();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  expect(host.querySelector('input[aria-label="Server"]')).not.toBeNull();
+});
+
+it("offers other servers after the remembered server fails verification without mounting product", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  vi.mocked(requireAccountsSignIn).mockRejectedValueOnce(new Error("Server unavailable"));
+  await render();
+  expect(host.textContent).toContain("server.example.test");
+  expect(host.textContent).toContain("Server unavailable");
+  expect(host.textContent).not.toContain("Get started");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
 });

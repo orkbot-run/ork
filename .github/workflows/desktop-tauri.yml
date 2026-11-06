@@ -13,6 +13,8 @@ on:
       - "apps/web/src/lib/desktop.ts"
       - "apps/web/src/lib/sso-flow.ts"
       - "packages/contracts/src/desktop.ts"
+      - "packages/avatar/**"
+      - "packages/core/src/logo-avatar-traits.ts"
       - "scripts/pnpm.mjs"
       - "pnpm-lock.yaml"
       - "package.json"

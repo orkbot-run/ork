@@ -1,8 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
+
 import {
   credentialIssue,
   MAX_PASSWORD_LENGTH,
   PASSWORD_RULES,
   suggestEmailCorrection,
+  WELCOME_AVATAR_COLOR,
+  WELCOME_AVATAR_IDENTITY,
 } from "@orkbot/core";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LogoAvatar } from "../components/logo-avatar";
 import { NativeActionButton } from "../components/native-action-button";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import type { PasswordResetCapabilities } from "../lib/api";
@@ -256,6 +263,15 @@ export default function SignIn() {
               keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
               keyboardShouldPersistTaps="handled"
             >
+              <View style={{ alignItems: "center", marginBottom: 24 }}>
+                <LogoAvatar
+                  identity={WELCOME_AVATAR_IDENTITY}
+                  color={WELCOME_AVATAR_COLOR}
+                  size={200}
+                  activity="idle"
+                  motion="live"
+                />
+              </View>
               <Text
                 accessibilityRole="header"
                 style={{
@@ -267,11 +283,13 @@ export default function SignIn() {
               >
                 {resetSent || codeStep
                   ? t("Check your email")
-                  : mode === "in"
-                    ? t("Sign in to Ork")
-                    : mode === "up"
-                      ? t("Sign up for Ork")
-                      : t("Reset your password")}
+                  : !reset?.passwordAuth
+                    ? t("Welcome to Ork")
+                    : mode === "in"
+                      ? t("Sign in to Ork")
+                      : mode === "up"
+                        ? t("Sign up for Ork")
+                        : t("Reset your password")}
               </Text>
               {resetSent ? (
                 <View style={{ alignItems: "center", marginTop: 28 }}>

@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
+
 export const ZH_MESSAGES: Record<string, string> = {
+  "Get started": "开始使用",
   "Add rule": "添加规则",
   "Tool name": "工具名称",
   Address: "地址",

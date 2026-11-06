@@ -615,6 +615,25 @@ async fn list_servers<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+async fn create_server_installation<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    raw_url: String,
+) -> Result<server_directory::InstallationCommand, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let command = server_directory::Directory::new()?
+        .create_installation(authorization.directory_bearer()?, &raw_url)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(command)
+}
+
+#[tauri::command]
 async fn remove_server<R: tauri::Runtime>(
     window: WebviewWindow<R>,
     state: State<'_, DesktopState>,
@@ -1057,7 +1076,7 @@ fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewW
             .store(false, Ordering::SeqCst);
         WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
             .title("Ork Preview")
-            .inner_size(580.0, 520.0)
+            .inner_size(580.0, 640.0)
             .resizable(false)
             .visible(visible)
             .on_navigation(|url| is_setup_document("setup", url))
@@ -1413,6 +1432,7 @@ fn main() {
             setup_accounts_sign_in,
             setup_accounts_logout,
             list_servers,
+            create_server_installation,
             remove_server,
             connect_saved_server,
             connect_server,
@@ -1757,6 +1777,7 @@ mod tests {
                 local_stack_state,
                 setup_accounts_session,
                 list_servers,
+                create_server_installation,
                 remove_server,
             ])
             .build(app_context())
@@ -1800,6 +1821,7 @@ mod tests {
             for command in [
                 "setup_accounts_session",
                 "list_servers",
+                "create_server_installation",
                 "remove_server",
                 "connect_saved_server",
                 "setup_accounts_sign_in",

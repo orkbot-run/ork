@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Preserves the inherited Polish catalog and adds the progressive Ork welcome.
+
 export const PL_MESSAGES: Record<string, string> = {
   // Menus
   "About {name}": "O {name}",
@@ -84,6 +89,43 @@ export const PL_MESSAGES: Record<string, string> = {
   "You can close this tab and return to Ork.": "Możesz zamknąć tę kartę i wrócić do Ork.",
 
   // Setup window
+  "Let's get started": "Zaczynajmy",
+  "Getting ready...": "Przygotowywanie...",
+  "Make yourself at home": "Rozgość się",
+  "Sign in or create your Ork Accounts account.": "Zaloguj się lub utwórz konto Ork Accounts.",
+  "Continue with Accounts": "Kontynuuj z Accounts",
+  "Finish signing in in your browser.": "Dokończ logowanie w przeglądarce.",
+  "Sign out": "Wyloguj się",
+  "Where will Ork live?": "Gdzie zamieszka Ork?",
+  "Your servers": "Twoje serwery",
+  "Run Ork here with Docker.": "Uruchom Ork tutaj z Dockerem.",
+  "Self-hosted": "Własny serwer",
+  "Connect or install on your own server.": "Połącz się lub zainstaluj Ork na swoim serwerze.",
+  "Refresh servers": "Odśwież serwery",
+  "Connect your server": "Połącz swój serwer",
+  "Check server": "Sprawdź serwer",
+  "Install a server": "Zainstaluj serwer",
+  "Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.":
+    "Skieruj tę domenę na swój serwer z Linuxem i uruchom na nim polecenie. Instalator skonfiguruje Dockera i HTTPS na Debianie lub Ubuntu. Porty 80 i 443 muszą być wolne.",
+  "Create install command": "Utwórz polecenie instalacji",
+  "Install command": "Polecenie instalacji",
+  "Copy command": "Kopiuj polecenie",
+  Copied: "Skopiowano",
+  "Valid until": "Ważne do",
+  "Select and copy the command.": "Zaznacz i skopiuj polecenie.",
+  "The install command has expired. Create a new one.":
+    "Polecenie instalacji wygasło. Utwórz nowe.",
+  "Making room for Ork": "Przygotowujemy miejsce dla Ork",
+  "Check Docker": "Sprawdzenie Dockera",
+  "Prepare server": "Przygotowanie serwera",
+  "Download Ork": "Pobranie Ork",
+  "Start services": "Uruchomienie usług",
+  "Wait for server": "Oczekiwanie na serwer",
+  "Try again": "Spróbuj ponownie",
+  "Opening Ork...": "Otwieranie Ork...",
+  Remove: "Usuń",
+  "Could not complete that request. Try again.":
+    "Nie udało się wykonać tej czynności. Spróbuj ponownie.",
   "Set up Ork": "Skonfiguruj Ork",
   "Quit Ork": "Zakończ Ork",
   "Welcome to Ork": "Witaj w Ork",

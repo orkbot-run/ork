@@ -10,14 +10,21 @@ server creates its own session after verifying the central identity.
 
 ## Server configuration
 
-Register a client for the installation and configure the API:
+The [Linux server installer](self-host.md#linux-server-setup) registers its client using
+a one-use code from the signed-in setup flow. The code is bound to the exact HTTPS origin
+and expires after 15 minutes. Redemption returns the server's confidential client settings
+and grants the owner access to that installation. Keep the returned client secret on the
+server. An Accounts directory bookmark alone grants no installation access.
+
+For a manually managed installation, register its client with an Accounts operator and
+configure the API:
 
 ```env
 OIDC_ISSUER=https://api.orkbot.run
 OIDC_CLIENT_ID=replace-with-registered-client-id
 OIDC_CLIENT_SECRET=replace-with-server-client-secret
-OIDC_NAME=Ork Accounts
-OIDC_SCOPES=openid email profile
+OIDC_NAME="Ork Accounts"
+OIDC_SCOPES="openid email profile"
 AUTH_PASSWORD_ENABLED=false
 OIDC_ALLOW_SIGNUP_BYPASS=false
 ```

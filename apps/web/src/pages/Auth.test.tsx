@@ -23,6 +23,7 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("@orkbot/ui-web", () => ({
+  LogoAvatar: ({ identity }: { identity: string }) => <span data-welcome-avatar={identity} />,
   Button: ({
     children,
     variant,
@@ -92,7 +93,7 @@ afterEach(async () => {
   vi.restoreAllMocks();
   delete window.orkbotDesktop;
 });
-async function render(mode: "in" | "up" | "forgot" = "in") {
+async function render(mode: "in" | "up" | "forgot" = "in", start = true) {
   await act(async () =>
     root.render(
       <MemoryRouter>
@@ -100,6 +101,7 @@ async function render(mode: "in" | "up" | "forgot" = "in") {
       </MemoryRouter>,
     ),
   );
+  if (start && button("Get started")) await act(async () => button("Get started").click());
 }
 async function enter(input: Element | null, value: string) {
   await act(async () => {
@@ -116,13 +118,14 @@ async function submit() {
   });
 }
 it.each(["in", "up", "forgot"] as const)(
-  "stays blank while capabilities load on %s",
+  "shows the welcome frame while capabilities load on %s",
   async (mode) => {
     vi.mocked(fetchAuthCapabilities).mockReturnValue(new Promise(() => undefined));
     await render(mode);
     expect(host.querySelector("input")).toBeNull();
-    expect(host.textContent).toBe("");
-    expect(host.querySelector("form")).toBeNull();
+    expect(host.textContent).toBe("Welcome to Ork");
+    expect(host.querySelector("[role=status]")).not.toBeNull();
+    expect(host.querySelector("button")).toBeNull();
   },
 );
 it.each(["in", "up"] as const)("offers SSO and hides credentials on %s", async (mode) => {
@@ -146,7 +149,7 @@ it("retries failed capabilities without exposing a password form", async () => {
   )!;
   await act(async () => retry.click());
   expect(fetchAuthCapabilities).toHaveBeenCalledTimes(2);
-  expect(host.textContent).toContain("Continue with Example");
+  expect(host.textContent).toContain("Get started");
 });
 it.each(["in", "up"] as const)("puts quiet SSO below the primary action on %s", async (mode) => {
   vi.mocked(fetchAuthCapabilities).mockResolvedValue({ ...capabilities, passwordAuth: true });
@@ -342,4 +345,16 @@ it("leaves the password form unchanged without email codes", async () => {
   expect(host.querySelector('input[type="password"]')).not.toBeNull();
   expect(host.querySelector<HTMLInputElement>('input[type="password"]')!.required).toBe(true);
   expect(host.querySelector('button[type="submit"]')!.textContent).toBe("Sign in");
+});
+
+it("introduces Accounts only after Get started without opening authorization as a render side effect", async () => {
+  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  await render("up", false);
+  expect(host.textContent).toContain("Welcome to Ork");
+  expect(host.textContent).not.toContain("Create your Ork");
+  expect(host.querySelector('[data-welcome-avatar="ork-welcome-10099"]')).not.toBeNull();
+  expect(button("Continue with Example")).toBeUndefined();
+  await act(async () => button("Get started").click());
+  expect(button("Continue with Example")).toBeDefined();
+  expect(authClient.signIn.social).not.toHaveBeenCalled();
 });

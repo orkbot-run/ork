@@ -9,6 +9,11 @@
       "development": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./logo-avatar-traits": {
+      "types": "./src/logo-avatar-traits.ts",
+      "development": "./src/logo-avatar-traits.ts",
+      "default": "./src/logo-avatar-traits.ts"
+    },
     "./user-error": {
       "types": "./src/user-error.ts",
       "development": "./src/user-error.ts",

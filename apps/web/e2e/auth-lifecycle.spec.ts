@@ -35,6 +35,10 @@ test("SSO keeps the product open and completes in a separate window", async ({
     route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
   );
   await page.goto("/sign-in");
+  await expect(page.getByRole("heading", { name: "Welcome to Ork" })).toBeVisible();
+  await expect(page.locator("svg[data-shape=ork][data-eyes=pill][data-mouth=happy]")).toBeVisible();
+  await captureScreenshot(page, testInfo, "accounts-welcome");
+  await page.getByRole("button", { name: "Get started" }).click();
   const opened = page.waitForEvent("popup");
   await page.getByRole("button", { name: "Continue with Accounts" }).click();
   const popup = await opened;
@@ -84,6 +88,7 @@ test("SSO reports a failed popup callback in the original product window", async
     route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
   );
   await page.goto("/sign-in");
+  await page.getByRole("button", { name: "Get started" }).click();
   const opened = page.waitForEvent("popup");
   await page.getByRole("button", { name: "Continue with Accounts" }).click();
   const popup = await opened;
@@ -98,7 +103,7 @@ test("SSO reports a failed popup callback in the original product window", async
 });
 
 test(
-  "sign-up stays blank until session and sign-in options are ready",
+  "sign-up waits for a session then shows the welcome while sign-in options load",
   { tag: "@nightly" },
   async ({ page }, testInfo) => {
     let releaseSession = () => {};
@@ -129,7 +134,8 @@ test(
     releaseSession();
     await capabilitiesRequested;
     await expect(page.locator('[data-orkbot-app-state="ready"]')).toBeVisible();
-    await expect(page.locator("#root")).toHaveText("");
+    await expect(page.getByRole("heading", { name: "Welcome to Ork" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Get started" })).toHaveCount(0);
     await captureScreenshot(page, testInfo, "signup-options-pending");
 
     releaseCapabilities();

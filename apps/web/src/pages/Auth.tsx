@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
   credentialIssue,
@@ -5,8 +9,18 @@ import {
   MIN_PASSWORD_LENGTH,
   signupRequiresEmailVerification,
   suggestEmailCorrection,
+  WELCOME_AVATAR_COLOR,
+  WELCOME_AVATAR_IDENTITY,
 } from "@orkbot/core";
-import { Button, Input, InputOTP, InputOTPGroup, InputOTPSlot, Label } from "@orkbot/ui-web";
+import {
+  Button,
+  Input,
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+  Label,
+  LogoAvatar,
+} from "@orkbot/ui-web";
 import { Server } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -41,6 +55,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     if (!code) return null;
     return authErrorText({ code }, t`Could not continue`);
   });
+  const [started, setStarted] = useState(() =>
+    Boolean(desktopBridge()?.server || searchParams.get("error")),
+  );
   const [pending, setPending] = useState(false);
   const entering = useRef(false);
   const [resetSent, setResetSent] = useState(false);
@@ -59,6 +76,8 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const title =
     sent || codeStep ? (
       <Trans>Check your email</Trans>
+    ) : !reset || (!reset.passwordAuth && mode !== "forgot") ? (
+      <Trans>Welcome to Ork</Trans>
     ) : mode === "in" ? (
       <Trans>Sign in to Ork</Trans>
     ) : mode === "up" ? (
@@ -227,7 +246,15 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   }
 
   if (!sent && !reset && !capabilityError) {
-    return <div className="h-full bg-background" />;
+    return (
+      <AuthFrame onSubmit={submit} title={<Trans>Welcome to Ork</Trans>}>
+        <span
+          role="status"
+          className="size-5 animate-spin rounded-full border-2 border-muted border-t-foreground motion-reduce:animate-none"
+          aria-label={t`Loading…`}
+        />
+      </AuthFrame>
+    );
   }
 
   return (
@@ -259,9 +286,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
               type="button"
               disabled={pending}
               className={submitClass}
-              onClick={() => void signInWithSso()}
+              onClick={() => (started ? void signInWithSso() : setStarted(true))}
             >
-              <Trans>Continue with {reset.sso.name}</Trans>
+              {started ? <Trans>Continue with {reset.sso.name}</Trans> : <Trans>Get started</Trans>}
             </Button>
           ) : null}
           {error && !reset?.passwordAuth ? (
@@ -579,10 +606,12 @@ export function AuthFrame({
       </div>
       <div className="flex flex-1 items-center justify-center px-6 pb-16">
         <form onSubmit={onSubmit} className="flex w-full max-w-[460px] flex-col items-center">
-          <div className="flex h-[74px] w-[74px] items-center justify-center gap-[11px] rounded-full bg-muted">
-            <span className="h-5 w-[9px] rounded-full bg-primary" />
-            <span className="h-5 w-[9px] rounded-full bg-primary" />
-          </div>
+          <LogoAvatar
+            identity={WELCOME_AVATAR_IDENTITY}
+            avatarValue={WELCOME_AVATAR_COLOR}
+            size={220}
+            motion
+          />
           <h1 aria-live="polite" className="mb-9 mt-7 text-4xl font-medium tracking-tight">
             {title}
           </h1>

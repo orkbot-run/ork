@@ -22,6 +22,9 @@ export function seededLogoAvatarColor(identity: string): string {
   return BOT_AVATAR_COLORS[Math.floor(random() * BOT_AVATAR_COLORS.length)]!;
 }
 
+export const WELCOME_AVATAR_IDENTITY = "ork-welcome-10099";
+export const WELCOME_AVATAR_COLOR = seededLogoAvatarColor(WELCOME_AVATAR_IDENTITY);
+
 /** Evaluate once per identity, never on an animation frame or from React's useId. */
 export function logoAvatarTraits(identity: string, color?: string) {
   const random = shippedRandom(shippedHash(`logo-avatar/v2/${identity}`));
