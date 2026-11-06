@@ -191,11 +191,11 @@ jobs:
             packages/testkit/src/ios-screenshot-catalog.test.ts \
             --shard=${{ matrix.shard }}/3
 
-  # The required check and the deploy gate, under one stable name.
+  # Report failures, but let superseded runs cancel and release their concurrency group.
   checks:
     name: Checks
     needs: [static-checks, unit-tests-shard]
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - run: test "${{ needs.static-checks.result }}" = success && test "${{ needs.unit-tests-shard.result }}" = success
@@ -264,7 +264,7 @@ jobs:
   test-integration:
     name: Postgres journeys
     needs: test-integration-shard
-    if: always()
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - run: test "${{ needs.test-integration-shard.result }}" = success
