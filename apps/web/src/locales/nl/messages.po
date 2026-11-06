@@ -2340,6 +2340,10 @@ msgstr "De gegevens opslaan mislukt"
 msgid "Could not save this choice"
 msgstr "Deze keuze opslaan mislukt"
 
+#: src/lib/use-remember-desktop-server.ts
+msgid "Could not save your server."
+msgstr "Je server kon niet worden opgeslagen."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Catalogus doorzoeken mislukt"
@@ -5461,6 +5465,7 @@ msgstr "Je werkruimte herstellen"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/lib/use-remember-desktop-server.ts
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx

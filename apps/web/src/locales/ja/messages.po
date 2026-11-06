@@ -2340,6 +2340,10 @@ msgstr "認証情報を保存できませんでした"
 msgid "Could not save this choice"
 msgstr "この選択を保存できませんでした"
 
+#: src/lib/use-remember-desktop-server.ts
+msgid "Could not save your server."
+msgstr "サーバーを保存できませんでした。"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "カタログを検索できませんでした"
@@ -5461,6 +5465,7 @@ msgstr "ワークスペースを復元中"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/lib/use-remember-desktop-server.ts
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx

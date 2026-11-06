@@ -2340,6 +2340,10 @@ msgstr "无法保存凭据"
 msgid "Could not save this choice"
 msgstr "无法保存此选择"
 
+#: src/lib/use-remember-desktop-server.ts
+msgid "Could not save your server."
+msgstr "无法保存你的服务器。"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "无法搜索目录"
@@ -5461,6 +5465,7 @@ msgstr "正在恢复工作区"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/lib/use-remember-desktop-server.ts
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx

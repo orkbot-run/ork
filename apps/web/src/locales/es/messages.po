@@ -2340,6 +2340,10 @@ msgstr "No se pudo guardar la credencial"
 msgid "Could not save this choice"
 msgstr "No se pudo guardar esta opción"
 
+#: src/lib/use-remember-desktop-server.ts
+msgid "Could not save your server."
+msgstr "No se pudo guardar tu servidor."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "No se pudo buscar en el catálogo"
@@ -5461,6 +5465,7 @@ msgstr "Restaurando tu espacio de trabajo"
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PasskeySettings.tsx
+#: src/lib/use-remember-desktop-server.ts
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
