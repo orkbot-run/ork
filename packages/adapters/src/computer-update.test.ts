@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Interrupted maintenance regression coverage follows LICENSE.md.
+
 import { SandboxAllowanceUsedError } from "@orkbot/adapter-kit";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -34,17 +38,38 @@ function fixture(status = "queued") {
       scope: "team",
       spaceId: "space",
       userId: "user",
+      state: "running",
+      providerRef: "provider-1" as string | null,
+      maintenanceId: "update-1" as string | null,
       bots: [{ id: "bot-1", name: "Writer" }],
     },
   };
   const computer = {
-    updateMany: vi.fn(async () => ({ count: 1 })),
+    updateMany: vi.fn(
+      async (_args: {
+        where: {
+          maintenanceId?: string | null;
+          providerRef?: { not: null };
+          state?: { in: string[] };
+        };
+        data: object;
+      }) => ({ count: 1 }),
+    ),
     findUniqueOrThrow: vi.fn(async () => row.computer),
   };
   const computerUpdate = {
     create: vi.fn(async () => row),
     findUniqueOrThrow: vi.fn(async () => row),
-    findMany: vi.fn(async () => [row]),
+    findMany: vi.fn(async ({ where }) => {
+      const choices = where.OR ?? [where];
+      return choices.some(
+        (choice: { status: string; updatedAt?: { lt: Date } }) =>
+          choice.status === row.status &&
+          (!choice.updatedAt || row.updatedAt < choice.updatedAt.lt),
+      )
+        ? [{ ...row }]
+        : [];
+    }),
     updateMany: vi.fn(async ({ where, data }) => {
       if (
         where.status &&
@@ -53,7 +78,9 @@ function fixture(status = "queued") {
           : !where.status.in.includes(row.status))
       )
         return { count: 0 };
-      Object.assign(row, data);
+      if (where.updatedAt && where.updatedAt.getTime() !== row.updatedAt.getTime())
+        return { count: 0 };
+      Object.assign(row, { updatedAt: new Date() }, data);
       return { count: 1 };
     }),
   };
@@ -144,6 +171,8 @@ describe("background computer maintenance", () => {
     });
     const work = performComputerUpdate(deps, row.id);
     await vi.waitFor(() => expect(replacement).toHaveBeenCalled());
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.now() + 11 * 60_000);
     await reconcileComputerUpdates(deps);
     expect(row.status).toBe("interrupted");
     expect(computer.updateMany).not.toHaveBeenCalled();
@@ -160,6 +189,119 @@ describe("background computer maintenance", () => {
       "Computer is busy",
     );
     expect(jobs.enqueue).not.toHaveBeenCalled();
+  });
+
+  it.each(["stopped", "running", "booting", "suspending", "error", "quarantined"])(
+    "expires interrupted maintenance of a %s computer safely, with or without a provider reference",
+    async (state) => {
+      for (const action of ["update", "recover"]) {
+        for (const providerRef of [null, "provider-1"]) {
+          const { row, deps, jobs } = interruptedFixture(state, providerRef);
+          row.action = action;
+          await reconcileComputerUpdates(deps);
+          expect(row.status).toBe("failed");
+          expect(row.computer.maintenanceId).toBeNull();
+          expect(row.computer.providerRef).toBe(providerRef);
+          expect(row.computer.state).toBe(
+            providerRef
+              ? "quarantined"
+              : ["booting", "suspending", "running"].includes(state)
+                ? "error"
+                : state,
+          );
+          expect(jobs.enqueue).not.toHaveBeenCalled();
+        }
+      }
+    },
+  );
+
+  it.each([59 * 60_000, 60 * 60_000, 60 * 60_000 + 1])(
+    "holds an interrupted reservation for the full hour (%i ms)",
+    async (elapsed) => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const { row, deps, computer } = interruptedFixture();
+      row.updatedAt = new Date(Date.now() - elapsed);
+      await reconcileComputerUpdates(deps);
+      expect(row.status).toBe(elapsed > 60 * 60_000 ? "failed" : "interrupted");
+      if (elapsed <= 60 * 60_000) expect(computer.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["completed", "failed", "interrupted"])(
+    "keeps a concurrent worker's %s result or refreshed row",
+    async (status) => {
+      const { row, deps, computer, computerUpdate } = interruptedFixture();
+      const updateMany = computerUpdate.updateMany.getMockImplementation()!;
+      computerUpdate.updateMany.mockImplementationOnce(async (args) => {
+        row.status = status;
+        row.updatedAt = new Date();
+        return updateMany(args);
+      });
+      await reconcileComputerUpdates(deps);
+      expect(row.status).toBe(status);
+      expect(computer.updateMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it("never clears a newer maintenance reservation", async () => {
+    const { row, deps } = interruptedFixture();
+    row.computer.maintenanceId = "update-new";
+    await reconcileComputerUpdates(deps);
+    expect(row.status).toBe("failed");
+    expect(row.computer.maintenanceId).toBe("update-new");
+    expect(row.computer.state).toBe("running");
+  });
+
+  it.each([false, true])(
+    "ignores a late worker settlement after expiry (fails: %s)",
+    async (fails) => {
+      const { row, deps } = interruptedFixture();
+      row.status = "queued";
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      replacement.mockImplementationOnce(async () => {
+        await pending;
+        if (fails) throw new Error("provider failed late");
+        return {} as Awaited<ReturnType<typeof replaceComputer>>;
+      });
+      const work = performComputerUpdate(deps, row.id);
+      await vi.waitFor(() => expect(replacement).toHaveBeenCalled());
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(Date.now() + 11 * 60_000);
+      await reconcileComputerUpdates(deps);
+      expect(row.status).toBe("interrupted");
+      vi.setSystemTime(Date.now() + 61 * 60_000);
+      await reconcileComputerUpdates(deps);
+      release();
+      await work;
+      expect(row.status).toBe("failed");
+      expect(row.computer.state).toBe("quarantined");
+      expect(row.computer.maintenanceId).toBeNull();
+    },
+  );
+
+  it("settles interrupted work before publishing a full queued batch, even when publishing fails", async () => {
+    const { row, deps, computerUpdate, jobs } = interruptedFixture();
+    const findMany = computerUpdate.findMany.getMockImplementation()!;
+    const queued = Array.from({ length: 100 }, (_, index) => ({
+      ...row,
+      id: `queued-${index}`,
+      status: "queued",
+    }));
+    computerUpdate.findMany.mockImplementation(async (args) =>
+      args.where.status === "queued" ? queued : findMany(args),
+    );
+    jobs.enqueue.mockImplementation(async () => {
+      expect(row.status).toBe("failed");
+      expect(row.computer.maintenanceId).toBeNull();
+      throw new Error("queue unavailable");
+    });
+    await expect(reconcileComputerUpdates(deps)).rejects.toThrow("queue unavailable");
+    expect(computerUpdate.findMany).toHaveBeenCalledTimes(2);
+    expect(computerUpdate.findMany.mock.calls.map(([args]) => args.take)).toEqual([100, 100]);
+    expect(row.status).toBe("failed");
   });
 
   it("claims maintenance and an idle takeover together, then revokes before publishing", async () => {
@@ -666,6 +808,21 @@ describe("background computer maintenance", () => {
   });
 });
 
+function interruptedFixture(state = "running", providerRef: string | null = "provider-1") {
+  const harness = fixture("interrupted");
+  const current = harness.row.computer;
+  current.state = state;
+  current.providerRef = providerRef;
+  harness.computer.updateMany.mockImplementation(async ({ where, data }) => {
+    if (where.maintenanceId !== current.maintenanceId) return { count: 0 };
+    if (where.providerRef && current.providerRef === null) return { count: 0 };
+    if (where.state && !where.state.in.includes(current.state)) return { count: 0 };
+    Object.assign(current, data);
+    return { count: 1 };
+  });
+  return harness;
+}
+
 function takeoverQueue(
   overrides: {
     controlHolder?: string;
@@ -727,8 +884,10 @@ function takeoverQueue(
         return { count: 1 };
       },
     ),
-    findMany: vi.fn(async (args?: { where?: { OR?: { status?: string }[] } }) => {
-      const statuses = args?.where?.OR?.flatMap((item) => (item.status ? [item.status] : []));
+    findMany: vi.fn(async (args?: { where?: { status?: string; OR?: { status?: string }[] } }) => {
+      const statuses =
+        args?.where?.OR?.flatMap((item) => (item.status ? [item.status] : [])) ??
+        (args?.where?.status ? [args.where.status] : undefined);
       if (statuses && statuses.length > 0 && !statuses.includes(updateRow.status)) return [];
       return [updateRow];
     }),
