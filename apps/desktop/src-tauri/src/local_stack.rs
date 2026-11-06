@@ -426,7 +426,7 @@ impl LocalStack {
         }
         check_cancelled(&cancel)?;
 
-        let mut cached = stable_version(self.image_tag.strip_prefix('v').unwrap_or(""))
+        let mut cached = immutable_image_tag(&self.image_tag)
             && self
                 .images_cached(&binary, &token, cancel.clone(), redactions.clone())
                 .await;
@@ -675,12 +675,23 @@ impl Drop for LocalStack {
     }
 }
 
-pub fn image_tag(version: &str, packaged: bool) -> String {
-    if packaged && stable_version(version) {
+pub fn image_tag(version: &str, packaged: bool, revision: Option<&str>) -> String {
+    if let Some(revision) = revision.filter(|revision| packaged && source_revision(revision)) {
+        format!("sha-{revision}")
+    } else if packaged && stable_version(version) {
         format!("v{version}")
     } else {
         "edge".into()
     }
+}
+
+fn source_revision(value: &str) -> bool {
+    value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn immutable_image_tag(value: &str) -> bool {
+    value.strip_prefix("sha-").is_some_and(source_revision)
+        || value.strip_prefix('v').is_some_and(stable_version)
 }
 
 fn stable_version(version: &str) -> bool {
@@ -1768,10 +1779,18 @@ mod tests {
 
     #[test]
     fn image_tags_follow_release_versions_and_moving_development_images() {
-        assert_eq!(image_tag("0.7.0", true), "v0.7.0");
-        assert_eq!(image_tag("0.7.0", false), "edge");
+        let revision = "0123456789abcdef0123456789abcdef01234567";
+        assert_eq!(
+            image_tag("0.7.0", true, Some(revision)),
+            format!("sha-{revision}")
+        );
+        assert_eq!(image_tag("0.7.0", true, None), "v0.7.0");
+        assert_eq!(image_tag("0.7.0", false, Some(revision)), "edge");
+        for invalid in ["main", "", "0123456789abcdef0123456789abcdef0123456g"] {
+            assert_eq!(image_tag("0.7.0", true, Some(invalid)), "v0.7.0");
+        }
         for version in ["", "0.7", "0.7.0-beta.1", "v0.7.0", "0.7.0\n", "0..0"] {
-            assert_eq!(image_tag(version, true), "edge");
+            assert_eq!(image_tag(version, true, None), "edge");
         }
     }
 
@@ -2419,36 +2438,38 @@ mod tests {
 
     #[tokio::test]
     async fn cached_release_images_start_without_a_registry_pull() {
-        let (_root, mut stack, runner) = fixture(vec![
-            ok("2.24.0"),
-            ok("29.0.0"),
-            ok("registry.example.com/app:v0.7.0\nregistry.example.com/computer:v0.7.0\nregistry.example.com/app:v0.7.0\n"),
-            ok("sha256:app\nsha256:computer\n"),
-            Reply::Healthy,
-        ]);
-        stack.image_tag = "v0.7.0".to_owned();
-        assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
-        let requests = runner.requests.lock().unwrap();
-        assert_eq!(requests.len(), 5);
-        assert!(requests[4]
-            .args
-            .windows(2)
-            .any(|args| args == ["--pull", "never"]));
-        assert!(!requests
-            .iter()
-            .any(|request| request.args.iter().any(|arg| arg == "pull")));
-        assert_eq!(
-            requests[3].args,
-            strings(&[
-                "image",
-                "inspect",
-                "--format",
-                "{{.Id}}",
-                "--",
-                "registry.example.com/app:v0.7.0",
-                "registry.example.com/computer:v0.7.0",
-            ])
-        );
+        for tag in ["v0.7.0", "sha-0123456789abcdef0123456789abcdef01234567"] {
+            let (_root, mut stack, runner) = fixture(vec![
+                ok("2.24.0"),
+                ok("29.0.0"),
+                ok(&format!("registry.example.com/app:{tag}\nregistry.example.com/computer:{tag}\nregistry.example.com/app:{tag}\n")),
+                ok("sha256:app\nsha256:computer\n"),
+                Reply::Healthy,
+            ]);
+            stack.image_tag = tag.to_owned();
+            assert_eq!(stack.start().await.phase, LocalStackPhase::Ready);
+            let requests = runner.requests.lock().unwrap();
+            assert_eq!(requests.len(), 5);
+            assert!(requests[4]
+                .args
+                .windows(2)
+                .any(|args| args == ["--pull", "never"]));
+            assert!(!requests
+                .iter()
+                .any(|request| request.args.iter().any(|arg| arg == "pull")));
+            assert_eq!(
+                requests[3].args,
+                strings(&[
+                    "image",
+                    "inspect",
+                    "--format",
+                    "{{.Id}}",
+                    "--",
+                    &format!("registry.example.com/app:{tag}"),
+                    &format!("registry.example.com/computer:{tag}"),
+                ])
+            );
+        }
     }
 
     #[tokio::test]

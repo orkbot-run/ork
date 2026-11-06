@@ -13,9 +13,17 @@ import { mountSetup } from "./setup-view.js";
 
 const markup = readFileSync(path.join(import.meta.dirname, "../tauri-ui/index.html"), "utf8");
 const account = { userinfo: { name: "Test account" } };
-const saved = [{ id: "saved-server", kind: "selfhosted", url: "https://ork.example.com" }];
+const saved = [
+  { id: "first-server", kind: "selfhosted", url: "https://one.example.com", isDefault: false },
+  { id: "second-server", kind: "selfhosted", url: "https://two.example.com", isDefault: false },
+];
 const cleanups: (() => void)[] = [];
-
+const installCommand = () => ({
+  id: "10000000-0000-4000-8000-000000000001",
+  command: "bash install-images.sh --server --code one-time-test-code",
+  expiresAt: new Date(Date.now() + 60_000).toISOString(),
+  url: null,
+});
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -26,7 +34,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 async function flush() {
-  for (let i = 0; i < 8; i++) await Promise.resolve();
+  for (let i = 0; i < 20; i++) await Promise.resolve();
 }
 function node<T extends HTMLElement = HTMLButtonElement>(id: string): T {
   return document.getElementById(id) as T;
@@ -37,27 +45,30 @@ function screen() {
 async function setup(
   options: {
     session?: unknown;
+    startup?: unknown;
     invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
   } = {},
 ) {
   document.open();
   document.write(markup);
   document.close();
-  let stackEvent:
-    | ((event: { payload: { phase: string; message: string | null; output: string[] } }) => void)
-    | undefined;
-  const stop = vi.fn();
+  const listeners = new Map<string, (event: { payload: unknown }) => void>();
+  const stops = new Map<string, ReturnType<typeof vi.fn>>();
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
+    if (command === "setup_state") return { startup: options.startup ?? { phase: "idle" } };
     if (options.invoke) return options.invoke(command, args);
     if (command === "setup_accounts_session") return options.session ?? null;
     if (command === "list_servers") return saved;
     if (command === "setup_accounts_sign_in") return account;
+    if (command === "create_server_installation") return installCommand();
     return undefined;
   });
   const transport: SetupTransport = {
     invoke: invoke as SetupTransport["invoke"],
-    listen: async (_event, callback) => {
-      stackEvent = callback as typeof stackEvent;
+    listen: async (event, callback) => {
+      listeners.set(event, callback as (event: { payload: unknown }) => void);
+      const stop = vi.fn(() => listeners.delete(event));
+      stops.set(event, stop);
       return stop;
     },
   };
@@ -67,9 +78,10 @@ async function setup(
   return {
     invoke,
     dispose,
-    stop,
+    stops,
     emit: (phase: string, output: string[] = []) =>
-      stackEvent?.({ payload: { phase, message: null, output } }),
+      listeners.get("desktop-stack-changed")?.({ payload: { phase, message: null, output } }),
+    startup: (value: unknown) => listeners.get("desktop-startup-changed")?.({ payload: value }),
   };
 }
 
@@ -80,46 +92,146 @@ afterEach(() => {
 });
 
 describe("bundled desktop setup", () => {
-  it("uses the existing Polish catalog for the visible welcome and actions", async () => {
+  it("opens browser sign-in directly from the localized welcome", async () => {
     vi.spyOn(window.navigator, "language", "get").mockReturnValue("pl-PL");
-    await setup();
+    const signingIn = deferred<unknown>();
+    const { invoke } = await setup({
+      invoke: async (name) => (name === "setup_accounts_sign_in" ? signingIn.promise : null),
+    });
     expect(document.documentElement.lang).toBe("pl");
-    expect(document.querySelector('[data-step="welcome"] h1')?.textContent).toBe("Witaj w Ork");
-    expect(node("get-started").textContent).toBe("Zaczynajmy");
-    node("get-started").click();
-    expect(node("sign-in").textContent).toBe("Kontynuuj z Accounts");
-  });
-
-  it("progresses from welcome to browser sign-in and only then loads the server directory", async () => {
-    const { invoke } = await setup();
+    expect(node("get-started").textContent).toBe("Zaczynamy");
     expect(screen()).toBe("welcome");
-    expect(invoke).not.toHaveBeenCalledWith("list_servers", undefined);
-    expect(node("hero").querySelector("svg")).not.toBeNull();
-    expect(node("hero").querySelector("style")).toBeNull();
     node("get-started").click();
+    expect(invoke.mock.calls.filter(([name]) => name === "setup_accounts_sign_in")).toHaveLength(1);
     expect(screen()).toBe("accounts");
-    node("sign-in").click();
     expect(node("browser-hint").hidden).toBe(false);
-    await flush();
-    expect(screen()).toBe("servers");
-    expect(node("account").textContent).toBe("Test account");
-    expect(node("servers").textContent).toContain(saved[0]?.url);
+    expect(node("sign-in").hidden).toBe(true);
+    expect(document.body.textContent).not.toContain("Rozgość się");
+    expect(invoke).not.toHaveBeenCalledWith("list_servers", undefined);
   });
 
-  it("skips welcome for a verified session without starting Docker or connecting", async () => {
+  it("loads a verified account's picker only when native startup is idle", async () => {
     const { invoke } = await setup({ session: account });
     expect(screen()).toBe("servers");
-    expect(invoke.mock.calls.map(([command]) => command)).toEqual([
+    expect(node("servers").textContent).toContain(saved[0]!.url);
+    expect(invoke.mock.calls.map(([name]) => name)).toEqual([
       "setup_accounts_session",
+      "setup_state",
       "list_servers",
     ]);
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it("does not present welcome until the initial session check finishes", async () => {
+  it("keeps the picker hidden throughout native automatic startup and displays local download progress", async () => {
+    const { invoke, emit, startup } = await setup({
+      session: account,
+      startup: { phase: "opening", kind: "local", serverId: "local-id" },
+    });
+    expect(screen()).toBe("local");
+    expect(invoke).not.toHaveBeenCalledWith("list_servers", undefined);
+    emit("pulling", ["Downloading image"]);
+    expect(document.querySelector('[data-phase="pulling"]')?.getAttribute("data-state")).toBe(
+      "current",
+    );
+    expect(node("output").textContent).toBe("Downloading image");
+    startup({ phase: "idle" });
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(invoke.mock.calls.filter(([name]) => name === "connect_saved_server")).toHaveLength(0);
+  });
+
+  it("shows a failed default once, preserves alternatives and retries only on request", async () => {
+    const { invoke, startup } = await setup({ session: account, startup: { phase: "checking" } });
+    expect(screen()).toBe("checking");
+    startup({
+      phase: "failed",
+      serverId: saved[0]!.id,
+      kind: "selfhosted",
+      message: "Server unavailable",
+    });
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(node("status").textContent).toBe("Server unavailable");
+    expect(node("retry-server").hidden).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    node("refresh").click();
+    await flush();
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    node("retry-server").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+  });
+
+  it("auto-connects the effective default after fresh sign-in", async () => {
+    const connection = deferred<unknown>();
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return null;
+        if (name === "setup_accounts_sign_in") return account;
+        if (name === "list_servers") return [saved[0], { ...saved[1], isDefault: true }];
+        if (name === "connect_saved_server") return connection.promise;
+        return undefined;
+      },
+    });
+    node("get-started").click();
+    await flush();
+    expect(screen()).toBe("opening");
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    connection.resolve(undefined);
+    await flush();
+    expect(screen()).toBe("servers");
+  });
+
+  it("auto-connects an only server after sign-in and keeps local phases visible", async () => {
+    const connection = deferred<unknown>();
+    const { invoke, emit } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return null;
+        if (name === "setup_accounts_sign_in") return account;
+        if (name === "list_servers") return [{ ...saved[0], kind: "local" }];
+        if (name === "connect_saved_server") return connection.promise;
+        return undefined;
+      },
+    });
+    node("get-started").click();
+    await flush();
+    expect(screen()).toBe("local");
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    emit("pulling", ["Downloaded layer"]);
+    expect(node("output").textContent).toBe("Downloaded layer");
+    connection.reject("Docker stopped. Try again.");
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(node("retry-server").hidden).toBe(false);
+  });
+
+  it("sets and clears an explicit default without connecting", async () => {
+    let entries = saved;
+    const { invoke } = await setup({
+      invoke: async (name, args) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return entries;
+        if (name === "set_default_server")
+          entries = saved.map((server) => ({ ...server, isDefault: server.id === args?.id }));
+        return undefined;
+      },
+    });
+    node("servers").querySelector<HTMLButtonElement>(".server-default")!.click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("set_default_server", { id: saved[0]!.id });
+    expect(node("servers").querySelector(".server-default")?.getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    node("servers").querySelector<HTMLButtonElement>(".server-default")!.click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("set_default_server", { id: null });
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+
+  it("waits for the initial session before revealing welcome", async () => {
     const check = deferred<unknown>();
     await setup({
-      invoke: (command) =>
-        command === "setup_accounts_session" ? check.promise : Promise.resolve([]),
+      invoke: async (name) => (name === "setup_accounts_session" ? check.promise : []),
     });
     expect(screen()).toBe("checking");
     expect(node("get-started").disabled).toBe(true);
@@ -128,64 +240,55 @@ describe("bundled desktop setup", () => {
     expect(screen()).toBe("welcome");
   });
 
-  it("ignores a completed sign-in after cancellation", async () => {
+  it("ignores a completed sign-in after cancellation and allows retry", async () => {
     const signIn = deferred<unknown>();
     const { invoke } = await setup({
-      invoke: async (command) => {
-        if (command === "setup_accounts_sign_in") return signIn.promise;
-        return null;
-      },
+      invoke: async (name) => (name === "setup_accounts_sign_in" ? signIn.promise : null),
     });
     node("get-started").click();
-    node("sign-in").click();
     node("cancel-sign-in").click();
     await flush();
     signIn.resolve(account);
     await flush();
-    expect(screen()).toBe("accounts");
+    expect(screen()).toBe("welcome");
     expect(node("sign-out").hidden).toBe(true);
-    expect(invoke.mock.calls.map(([command]) => command)).not.toContain("list_servers");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("list_servers");
   });
 
-  it("shows real local phases and ignores stack events outside a local operation", async () => {
+  it("shows native local phases and ignores stale events after leaving", async () => {
     const start = deferred<unknown>();
     const { emit } = await setup({
-      invoke: async (command) => {
-        if (command === "setup_accounts_session") return account;
-        if (command === "list_servers") return [];
-        if (command === "connect_local_server") return start.promise;
-        return null;
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "connect_local_server") return start.promise;
+        return undefined;
       },
     });
-    emit("pulling", ["old output"]);
+    emit("pulling", ["stale"]);
     expect(node("output").textContent).toBe("");
     node("local").click();
-    expect(screen()).toBe("local");
     emit("pulling", ["Downloading image"]);
+    expect(screen()).toBe("local");
     expect(
       document.querySelector('[data-phase="checking-docker"]')?.getAttribute("data-state"),
     ).toBe("done");
-    expect(document.querySelector('[data-phase="pulling"]')?.getAttribute("data-state")).toBe(
-      "current",
-    );
     expect(node("details").hidden).toBe(false);
-    expect((node("details") as HTMLDetailsElement).open).toBe(false);
     start.reject("Docker stopped. Try again.");
     await flush();
     expect(node("retry-local").hidden).toBe(false);
-    expect(node("status").textContent).toBe("Docker stopped. Try again.");
     node("back").click();
-    emit("ready", ["stale result"]);
+    emit("ready", ["stale"]);
     expect(screen()).toBe("servers");
     expect(node("output").textContent).toBe("");
   });
 
-  it("clears account data on logout while ignoring a late directory response", async () => {
+  it("clears a late directory response when signing out", async () => {
     const directory = deferred<unknown>();
     await setup({
-      invoke: async (command) => {
-        if (command === "setup_accounts_session") return account;
-        if (command === "list_servers") return directory.promise;
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return directory.promise;
         return undefined;
       },
     });
@@ -193,136 +296,255 @@ describe("bundled desktop setup", () => {
     await flush();
     directory.resolve(saved);
     await flush();
-    expect(screen()).toBe("accounts");
+    expect(screen()).toBe("welcome");
     expect(node("servers").textContent).toBe("");
     expect(node("account").textContent).toBe("");
-    expect(node<HTMLInputElement>("server-url").value).toBe("");
   });
 
-  it("checks the entered server through native IPC and leaves a picker for reopening setup", async () => {
+  it("immediately creates a domain-free command and keeps it while entering an existing address", async () => {
+    const { invoke } = await setup({ session: account });
+    node("selfhost").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("create_server_installation");
+    const value = node<HTMLTextAreaElement>("install-command").value;
+    expect(value).toContain("--server --code");
+    expect(value).not.toContain("--url");
+    expect(node("installation").hidden).toBe(false);
+    node<HTMLInputElement>("server-url").value = "https://new.example.com";
+    node("server-url").dispatchEvent(new Event("input"));
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe(value);
+    node("copy").click();
+    await flush();
+    expect(document.activeElement?.id).toBe("install-command");
+    expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(value.length);
+  });
+
+  it("connects an entered existing server without waiting for installation polling", async () => {
     const connection = deferred<unknown>();
     const { invoke } = await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
+        if (name === "create_server_installation") return installCommand();
         if (name === "connect_server") return connection.promise;
         return undefined;
       },
     });
     node("selfhost").click();
+    await flush();
     node<HTMLInputElement>("server-url").value = "https://new.example.com";
     node<HTMLFormElement>("setup").dispatchEvent(new Event("submit", { cancelable: true }));
     expect(screen()).toBe("opening");
     expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
-    expect(node("local").disabled).toBe(true);
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
     connection.resolve(undefined);
     await flush();
     expect(screen()).toBe("servers");
   });
 
-  it("keeps installation codes transient, clears them on address changes, and selects on clipboard denial", async () => {
-    const command = "bash install-images.sh --setup-code test-one-use-code";
-    const { invoke } = await setup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation")
-          return {
-            command,
-            url: "https://new.example.com",
-            expiresAt: new Date(Date.now() + 60_000).toISOString(),
-          };
-        return undefined;
-      },
-    });
-    node("selfhost").click();
-    node<HTMLInputElement>("server-url").value = "https://new.example.com";
-    node<HTMLDetailsElement>("install").open = true;
-    node("create-installation").click();
-    await flush();
-    expect(invoke).toHaveBeenCalledWith("create_server_installation", {
-      rawUrl: "https://new.example.com",
-    });
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe(command);
-    node("copy").click();
-    await flush();
-    expect(document.activeElement?.id).toBe("install-command");
-    expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(command.length);
-    node("server-url").dispatchEvent(new Event("input"));
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-    expect(node("installation").hidden).toBe(true);
-  });
-
-  it("drops a late install command when signing out and never restores it", async () => {
-    const installation = deferred<unknown>();
+  it("discards a command that finishes after back or sign-out", async () => {
+    const ticket = deferred<unknown>();
     await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
-        if (name === "create_server_installation") return installation.promise;
+        if (name === "create_server_installation") return ticket.promise;
         return undefined;
       },
     });
     node("selfhost").click();
-    node<HTMLInputElement>("server-url").value = "https://new.example.com";
-    node<HTMLDetailsElement>("install").open = true;
-    node("create-installation").click();
+    node("back").click();
+    ticket.resolve(installCommand());
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
+    node("selfhost").click();
     node("sign-out").click();
     await flush();
-    installation.resolve({
-      command: "test-code",
-      url: "https://new.example.com",
-      expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    });
-    await flush();
-    expect(screen()).toBe("accounts");
+    expect(screen()).toBe("welcome");
     expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
   });
 
-  it("expires displayed commands and removes the native listener on disposal", async () => {
+  it("expires unused commands and removes both native listeners on disposal", async () => {
     vi.useFakeTimers();
-    const { stop, dispose } = await setup({
+    const { dispose, stops, invoke } = await setup({ session: account });
+    node("selfhost").click();
+    await flush();
+    await vi.advanceTimersByTimeAsync(60_001);
+    expect(node("installation").hidden).toBe(true);
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
+    expect(node("create-installation").hidden).toBe(false);
+    expect(node("installation-status").textContent).toContain("expired");
+    const count = invoke.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(invoke.mock.calls).toHaveLength(count);
+    dispose();
+    for (const stop of stops.values()) expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("shows remote installation progress and connects only after ready", async () => {
+    vi.useFakeTimers();
+    let phase = "preparing";
+    const value = installCommand();
+    const { invoke } = await setup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation")
+        if (name === "list_servers") return saved;
+        if (name === "create_server_installation") return value;
+        if (name === "get_server_installation")
           return {
-            command: "test-code",
+            ...value,
+            phase,
+            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
             url: "https://new.example.com",
-            expiresAt: new Date(Date.now() + 10_000).toISOString(),
           };
         return undefined;
       },
     });
     node("selfhost").click();
-    node<HTMLInputElement>("server-url").value = "https://new.example.com";
-    node<HTMLDetailsElement>("install").open = true;
-    node("create-installation").click();
     await flush();
-    expect(node("installation").hidden).toBe(false);
-    vi.advanceTimersByTime(10_001);
+    await vi.advanceTimersByTimeAsync(3000);
     expect(node("installation").hidden).toBe(true);
+    expect(node("installation-status").textContent).toBe("Prepare server");
+    phase = "pulling";
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation-status").textContent).toBe("Download Ork");
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+    phase = "ready";
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
+    expect(screen()).toBe("servers");
+  });
+
+  it("ignores an installation result arriving after logout", async () => {
+    vi.useFakeTimers();
+    const progress = deferred<unknown>();
+    const ticket = installCommand();
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "create_server_installation") return ticket;
+        if (name === "get_server_installation") return progress.promise;
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    await vi.advanceTimersByTimeAsync(3000);
+    node("sign-out").click();
+    await flush();
+    progress.resolve({ ...ticket, phase: "ready", url: "https://new.example.com" });
+    await flush();
+    expect(screen()).toBe("welcome");
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
     expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-    dispose();
-    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it("allows retrying a failed installation with the same command and follows its resumed status", async () => {
+    vi.useFakeTimers();
+    const ticket = installCommand();
+    let phase = "preparing";
+    const deadline = new Date(Date.now() + 180_000).toISOString();
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "create_server_installation") return ticket;
+        if (name === "get_server_installation")
+          return { ...ticket, phase, expiresAt: deadline, url: "https://new.example.com" };
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    await vi.advanceTimersByTimeAsync(63_000);
+    phase = "failed";
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation").hidden).toBe(false);
+    expect(node<HTMLTextAreaElement>("install-command").value).toBe(ticket.command);
+    expect(node("create-installation").hidden).toBe(true);
+    node("copy").click();
+    await flush();
+    expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(ticket.command.length);
+    phase = "pulling";
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation").hidden).toBe(true);
+    expect(node("installation-status").textContent).toBe("Download Ork");
+    expect(
+      invoke.mock.calls.filter(([name]) => name === "create_server_installation"),
+    ).toHaveLength(1);
+  });
+
+  it("stops polling at the reported absolute deadline when Accounts goes offline after pairing", async () => {
+    vi.useFakeTimers();
+    const ticket = installCommand();
+    const deadline = new Date(Date.now() + 12_000).toISOString();
+    let online = true;
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "create_server_installation") return ticket;
+        if (name === "get_server_installation") {
+          if (!online) throw new Error("Offline");
+          return { ...ticket, phase: "pulling", expiresAt: deadline };
+        }
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation-status").textContent).toBe("Download Ork");
+    online = false;
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(node("installation-status").textContent).toContain("expired");
+    const requests = invoke.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(invoke.mock.calls).toHaveLength(requests);
+  });
+
+  it("keeps polling after a temporary status error and stops on an expired ticket", async () => {
+    vi.useFakeTimers();
+    let fail = true;
+    const ticket = installCommand();
+    await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "create_server_installation") return ticket;
+        if (name === "get_server_installation") {
+          if (fail) throw new Error("Offline");
+          return { ...ticket, phase: "expired" };
+        }
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation-status").textContent).toContain("Retrying");
+    fail = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(node("installation-status").textContent).toContain("expired");
+    expect(node("create-installation").hidden).toBe(false);
   });
 });
 
 it("carries exactly the visible welcome Ork into sign-up and restores an existing account Ork", async () => {
   const savedSeed = "f4c2f322-7b3b-4a53-a44c-47647614fdc0";
   const { invoke } = await setup({
-    invoke: async (command) => {
-      if (command === "setup_accounts_sign_in") return { userinfo: { ork_avatar: savedSeed } };
-      return command === "list_servers" ? [] : null;
+    invoke: async (name) => {
+      if (name === "setup_accounts_sign_in") return { userinfo: { ork_avatar: savedSeed } };
+      return name === "list_servers" ? [] : null;
     },
   });
   const visible = node("hero").querySelector("svg")?.id;
   node("get-started").click();
-  node("sign-in").click();
   await flush();
-  const args = invoke.mock.calls.find(([command]) => command === "setup_accounts_sign_in")?.[1];
+  const args = invoke.mock.calls.find(([name]) => name === "setup_accounts_sign_in")?.[1];
   expect(isPersonalOrkId(args?.orkAvatar)).toBe(true);
-  const seed = args!.orkAvatar as string;
   const portrait = (id: string) =>
     createAvatar({
       ...logoAvatarTraits(id, seededLogoAvatarColor(id)).appearance,
@@ -330,11 +552,11 @@ it("carries exactly the visible welcome Ork into sign-up and restores an existin
       background: "transparent",
       animate: false,
     }).id;
-  expect(visible).toBe(portrait(seed));
+  expect(visible).toBe(portrait(args!.orkAvatar as string));
   expect(node("hero").querySelector("svg")?.id).toBe(portrait(savedSeed));
 });
 
-it("ignores malformed avatar metadata and never inserts account HTML into the welcome artwork", async () => {
+it("ignores malformed avatar metadata and never inserts account HTML into artwork", async () => {
   await setup({ session: { userinfo: { ork_avatar: '<svg onload="attacker()">' } } });
   expect(node("hero").querySelector("svg")).not.toBeNull();
   expect(node("hero").innerHTML).not.toContain("attacker");

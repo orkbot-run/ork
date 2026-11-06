@@ -24,9 +24,8 @@
           <button id="get-started" class="button button-primary" type="button" data-copy="Let's get started">Let's get started</button>
         </section>
         <section data-step="accounts" hidden>
-          <h1 data-copy="Make yourself at home">Make yourself at home</h1>
-          <p class="subheading" data-copy="Sign in or create your Ork Accounts account.">Sign in or create your Ork Accounts account.</p>
-          <button id="sign-in" class="button button-primary" type="button" data-copy="Continue with Accounts">Continue with Accounts</button>
+          <h1 data-copy="Sign in to Ork">Sign in to Ork</h1>
+          <button id="sign-in" class="button button-primary" type="button" data-copy="Try again">Try again</button>
           <p id="browser-hint" class="hint" hidden data-copy="Finish signing in in your browser.">Finish signing in in your browser.</p>
           <button id="cancel-sign-in" class="link" type="button" hidden data-copy="Cancel">Cancel</button>
         </section>
@@ -38,6 +37,7 @@
             <button id="local" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></span><span><strong data-copy="This computer">This computer</strong><small data-copy="Run Ork here with Docker.">Run Ork here with Docker.</small></span><span aria-hidden="true">→</span></button>
             <button id="selfhost" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="8" rx="2"/><rect x="4" y="13" width="16" height="8" rx="2"/><path d="M8 7h.01M8 17h.01"/></svg></span><span><strong data-copy="Self-hosted">Self-hosted</strong><small data-copy="Connect or install on your own server.">Connect or install on your own server.</small></span><span aria-hidden="true">→</span></button>
           </div>
+          <button id="retry-server" class="button button-secondary" type="button" hidden data-copy="Try again">Try again</button>
           <button id="refresh" class="link" type="button" data-copy="Refresh servers">Refresh servers</button>
         </section>
         <section data-step="selfhost" hidden>
@@ -47,16 +47,16 @@
             <input id="server-url" class="field" type="url" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" required />
             <button id="connect" class="button button-primary" type="submit" data-copy="Check server">Check server</button>
           </form>
-          <details id="install" class="disclosure">
-            <summary data-copy="Install a server">Install a server</summary>
-            <p class="hint" data-copy="Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.">Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.</p>
-            <button id="create-installation" class="button button-secondary" type="button" data-copy="Create install command">Create install command</button>
+          <section id="install" class="installation-panel" aria-label="Install a server">
+            <p class="hint" data-copy="Or run this command on your Linux server. Setup will ask for your domain there.">Or run this command on your Linux server. Setup will ask for your domain there.</p>
             <div id="installation" hidden>
               <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
               <textarea id="install-command" class="command" rows="4" readonly spellcheck="false"></textarea>
               <div class="command-actions"><span id="expires" class="hint"></span><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>
             </div>
-          </details>
+            <p id="installation-status" class="hint" role="status" aria-live="polite"></p>
+            <button id="create-installation" class="button button-secondary" type="button" data-copy="New install command">New install command</button>
+          </section>
         </section>
         <section data-step="local" hidden>
           <h1 data-copy="Making room for Ork">Making room for Ork</h1>

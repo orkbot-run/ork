@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// Modified by Ork contributors to test streamed block identity. Inherited material remains Apache-2.0.
 
 import type { ReactNode } from "react";
 import { act, useRef } from "react";
@@ -807,6 +810,45 @@ describe("web markdown mentions", () => {
 });
 
 describe("web markdown streaming", () => {
+  it("keeps each table's sort when prose is inserted and another table is appended", async () => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    const table = (name: string) => `| ${name} | Qty |\n| --- | --- |\n| a | 2 |\n| b | 1 |`;
+    const initial = `${table("First")}\n\nBetween tables.\n\n${table("Second")}`;
+    const cards = () => [...container.querySelectorAll('[data-testid="table-card"]')];
+    try {
+      await act(async () => root.render(<ChatMarkdown streaming>{initial}</ChatMarkdown>));
+      expect(cards()).toHaveLength(2);
+      const first = cards()[0]!;
+      const second = cards()[1]!;
+      const firstSort = first.querySelector<HTMLButtonElement>('[aria-label="Sort by Qty"]')!;
+      const secondSort = second.querySelector<HTMLButtonElement>('[aria-label="Sort by Qty"]')!;
+      await act(async () => firstSort.click());
+      await act(async () => secondSort.click());
+      await act(async () => secondSort.click());
+
+      const updated = `Results updated.\n\n${initial}`;
+      await act(async () => root.render(<ChatMarkdown streaming>{updated}</ChatMarkdown>));
+      expect(cards()[0]).toBe(first);
+      expect(cards()[1]).toBe(second);
+      expect(first.querySelector('[aria-sort="ascending"]')).not.toBeNull();
+      expect(second.querySelector('[aria-sort="descending"]')).not.toBeNull();
+
+      await act(async () => {
+        root.render(<ChatMarkdown streaming>{`${updated}\n\n${table("Third")}`}</ChatMarkdown>);
+      });
+      expect(cards()).toHaveLength(3);
+      expect(cards()[0]).toBe(first);
+      expect(cards()[1]).toBe(second);
+      expect(cards()[2]!.querySelector("[aria-sort]")).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  });
+
   it("draws every streamed prefix as the whole text would be drawn", async () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     const reply = [

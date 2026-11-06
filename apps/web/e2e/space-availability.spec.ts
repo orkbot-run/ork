@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
+
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openNewSpace, rpc, signup } from "./helpers";
 
@@ -6,6 +10,7 @@ test("a new space chooses what it can use, and a skill can be limited to some sp
 }, testInfo) => {
   await signup(page, `availability-${Date.now()}@orkbot.test`, "password12", "Space Owner");
   await completeOnboarding(page);
+  const { spaceId: personalSpaceId } = await rpc<{ spaceId: string }>(page, "me", {});
   await rpc(page, "agentSkills/create", {
     content: [
       "---",
@@ -32,16 +37,23 @@ test("a new space chooses what it can use, and a skill can be limited to some sp
   await chooser.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(chooser).toHaveCount(0);
 
-  // Continue switches to the new space and opens its own Chief in the background. Let that land
-  // before leaving it, or its late remount overrides the click below or closes the Skills dialog.
-  const chiefs = page
-    .locator("aside")
-    .first()
-    .getByRole("button", { name: /^Chief/ });
-  await expect(chiefs.nth(1)).toHaveAttribute("aria-current", "page");
-  const personalChief = chiefs.first();
+  // Continue opens an empty space; the account's primary bot stays in Personal.
+  await expect(page).toHaveURL(/\/app$/);
+  const sidebar = page.locator("aside").first();
+  await expect(sidebar.getByText("Clients", { exact: true })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
+    .not.toBe(personalSpaceId);
+  await expect(
+    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
+  ).toBeVisible();
+  const personalChief = sidebar.getByRole("button", { name: /^Chief/ });
+  await expect(personalChief).toHaveCount(1);
   await personalChief.click();
   await expect(personalChief).toHaveAttribute("aria-current", "page");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
+    .toBe(personalSpaceId);
   await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
   await page.getByTestId("user-menu-trigger").click();
   await page.getByRole("button", { name: "Skills", exact: true }).click();
