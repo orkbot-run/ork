@@ -1584,6 +1584,11 @@ async fn open_server(
     authorization: &accounts::Authorization,
 ) -> Result<(), String> {
     let intent = state.restore_intent.load(Ordering::SeqCst);
+    let accounts_generation = state
+        .accounts_started
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .generation;
     require_setup(window)?;
     require_account(state, authorization)?;
     server::require_accounts_only(&choice.server_url).await?;
@@ -1731,7 +1736,18 @@ async fn open_server(
         let _ = next.destroy();
         return Err(error);
     }
-    if next.show().is_err() {
+    let setup_window = window.clone();
+    let presentation_app = app.clone();
+    let current = move || {
+        let state = presentation_app.state::<DesktopState>();
+        state.restore_intent.load(Ordering::SeqCst) == intent
+            && state
+                .accounts_started
+                .lock()
+                .is_ok_and(|gate| gate.generation == accounts_generation)
+            && require_setup(&setup_window).is_ok()
+    };
+    if show_only_window_if(&next, current.clone()).is_err() {
         cancel_native_document(app, &label);
         state.sessions.remove(&label);
         let previous = state
@@ -1742,7 +1758,9 @@ async fn open_server(
             Some(previous) => settings::save(&state.directory, previous),
             None => settings::clear(&state.directory),
         };
+        drop(previous);
         let _ = next.destroy();
+        let _ = show_only_window_if(window, current);
         return Err(if restored.is_ok() {
             "Could not show that server.".into()
         } else {
@@ -1781,7 +1799,6 @@ async fn open_server(
     if let Some(document) = state.sessions.current(&label) {
         send_native_event(app, &document, "pairing", ());
     }
-    window.hide().map_err(|_| "Could not hide setup")?;
     let _ = refresh_menu(app);
     Ok(())
 }
@@ -1918,23 +1935,53 @@ fn show_setup(app: &tauri::AppHandle) -> tauri::Result<()> {
     setup_window(app, true).map(|_| ())
 }
 
+fn show_only_window<R: tauri::Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+    show_only_window_if(window, || true)
+}
+
+fn show_only_window_if<R: tauri::Runtime>(
+    window: &WebviewWindow<R>,
+    current: impl FnOnce() -> bool + Send + 'static,
+) -> tauri::Result<()> {
+    let target = window.clone();
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    // Keep presentation changes together so concurrent activations cannot reveal two windows.
+    window.app_handle().run_on_main_thread(move || {
+        let result = (|| {
+            if !current() {
+                return Err(tauri::Error::FailedToReceiveMessage);
+            }
+            for (label, other) in target.app_handle().webview_windows() {
+                if label != target.label() && (label == "setup" || label.starts_with("server-")) {
+                    other.hide()?;
+                }
+            }
+            target.show()?;
+            target.unminimize()?;
+            target.set_focus()
+        })();
+        let _ = sender.send(result);
+    })?;
+    receiver
+        .recv()
+        .map_err(|_| tauri::Error::FailedToReceiveMessage)?
+}
+
 fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewWindow> {
     if let Some(window) = app.get_webview_window("setup") {
         if visible {
-            window.show()?;
-            window.unminimize()?;
-            window.set_focus()?;
+            show_only_window(&window)?;
         }
         Ok(window)
     } else {
         app.state::<DesktopState>()
             .setup_ready
             .store(false, Ordering::SeqCst);
-        WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
+        let window = WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
             .title("Ork Preview")
             .inner_size(580.0, 640.0)
             .resizable(false)
-            .visible(visible)
+            .visible(false)
             .on_navigation(|url| is_setup_document("setup", url))
             .on_page_load(move |window, payload| {
                 if payload.event() == tauri::webview::PageLoadEvent::Finished
@@ -1951,7 +1998,11 @@ fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewW
                 }
             })
             .on_new_window(|_, _| NewWindowResponse::Deny)
-            .build()
+            .build()?;
+        if visible {
+            show_only_window(&window)?;
+        }
+        Ok(window)
     }
 }
 
@@ -2018,16 +2069,8 @@ fn focus_active<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     // The warm-window reaper checks this generation under the same active-window lock.
     state.warm_generation.fetch_add(1, Ordering::Relaxed);
     drop(active);
-    if window
-        .show()
-        .and_then(|()| window.unminimize())
-        .and_then(|()| window.set_focus())
-        .is_err()
-    {
+    if show_only_window(&window).is_err() {
         return false;
-    }
-    if let Some(setup) = app.get_webview_window("setup") {
-        let _ = setup.hide();
     }
     true
 }
@@ -2210,19 +2253,19 @@ async fn restore_saved_server(
 }
 
 fn show_active_or_setup(app: &tauri::AppHandle) {
+    if app
+        .get_webview_window("setup")
+        .is_some_and(|window| window.is_visible().unwrap_or(false))
+    {
+        let _ = show_setup(app);
+        return;
+    }
     if focus_active(app) {
         return;
     }
     let state = app.state::<DesktopState>();
     if !state.accounts_have_started() {
         update_startup(app, Startup::idle());
-        let _ = show_setup(app);
-        return;
-    }
-    if app
-        .get_webview_window("setup")
-        .is_some_and(|window| window.is_visible().unwrap_or(false))
-    {
         let _ = show_setup(app);
         return;
     }

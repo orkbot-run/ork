@@ -21,7 +21,7 @@ use http_body_util::Full;
 use hyper::{
     body::Bytes,
     header::{
-        CACHE_CONTROL, CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST,
+        HeaderValue, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_SECURITY_POLICY, CONTENT_TYPE, HOST,
         REFERRER_POLICY, TRANSFER_ENCODING, X_CONTENT_TYPE_OPTIONS,
     },
     server::conn::http1,
@@ -36,6 +36,9 @@ use tokio::{
     task::JoinSet,
 };
 use url::{Host, Position, Url};
+
+const CALLBACK_SUCCESS_HTML: &str = "<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Ork</title><p>You can close this tab and return to Ork.</p><script>window.addEventListener('load',()=>{history.replaceState(null,'',location.pathname);window.close();});</script></html>";
+const CALLBACK_SUCCESS_CSP: &str = "default-src 'none'; script-src 'sha256-Am+sVqt0UnXuYTImafAAwCxARTAf6Cymy9li9FHd2ys='; frame-ancestors 'none'";
 
 const MAX_AUTHORIZATION_BYTES: usize = 16_384;
 const MAX_OWNER_BYTES: usize = 512;
@@ -589,10 +592,7 @@ async fn serve_connection(
                         .is_ok()
                 {
                     *pending.lock().unwrap_or_else(|error| error.into_inner()) = Some(callback);
-                    return Ok::<_, Infallible>(response(
-                        StatusCode::OK,
-                        "You can close this tab and return to Ork.",
-                    ));
+                    return Ok::<_, Infallible>(callback_success_response());
                 }
             }
             Ok::<_, Infallible>(response(
@@ -669,6 +669,19 @@ fn validate_callback<B>(request: &Request<B>, callback: &CallbackTarget) -> Opti
     })
 }
 
+fn callback_success_response() -> Response<Full<Bytes>> {
+    let mut response = response(StatusCode::OK, CALLBACK_SUCCESS_HTML);
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    response.headers_mut().insert(
+        CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static(CALLBACK_SUCCESS_CSP),
+    );
+    response
+}
+
 fn response(status: StatusCode, body: &'static str) -> Response<Full<Bytes>> {
     Response::builder()
         .status(status)
@@ -690,6 +703,34 @@ mod tests {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[tokio::test]
+    async fn success_csp_authorizes_only_the_static_url_cleanup_and_close_script() {
+        use base64::{engine::general_purpose::STANDARD, Engine};
+        use http_body_util::BodyExt;
+        use sha2::{Digest, Sha256};
+        let response = callback_success_response();
+        let csp = response.headers()[CONTENT_SECURITY_POLICY]
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let html = std::str::from_utf8(&body).unwrap();
+        let (before, rest) = html.split_once("<script>").unwrap();
+        let (script, after) = rest.split_once("</script>").unwrap();
+        assert!(!before.contains("<script") && !after.contains("<script"));
+        let hash = STANDARD.encode(Sha256::digest(script.as_bytes()));
+        assert_eq!(
+            csp,
+            format!("default-src 'none'; script-src 'sha256-{hash}'; frame-ancestors 'none'")
+        );
+        assert!(script.starts_with("window.addEventListener('load',"));
+        let cleanup = script
+            .find("history.replaceState(null,'',location.pathname)")
+            .unwrap();
+        assert!(cleanup < script.find("window.close()").unwrap());
+        assert!(before.contains("You can close this tab and return to Ork."));
+    }
+
+    #[tokio::test]
     async fn public_client_reserves_ipv4_redirect_before_opening_browser() {
         let auth = BrowserAuth::new(Arc::new(|_, _| {
             panic!("public callback crossed legacy bridge")
@@ -706,6 +747,11 @@ mod tests {
                 let redirect = Url::parse(&values(&url, "redirect_uri")[0]).unwrap();
                 let response = client().get(return_url(&redirect, "code=public-code&state=test-state&iss=https%3A%2F%2Fidentity.example.com")).send().await.unwrap();
                 assert!(response.status().is_success());
+                let body = response.text().await.unwrap();
+                assert_eq!(body, CALLBACK_SUCCESS_HTML);
+                assert!(!body.contains("public-code"));
+                assert!(!body.contains("test-state"));
+                assert!(!body.contains("identity.example.com"));
                 Ok(())
             },
         ).await.unwrap();
@@ -828,9 +874,12 @@ mod tests {
             assert_eq!(response.headers()[REFERRER_POLICY], "no-referrer");
             assert_eq!(
                 response.headers()[CONTENT_SECURITY_POLICY],
-                "default-src 'none'; frame-ancestors 'none'"
+                CALLBACK_SUCCESS_CSP
             );
+            assert_eq!(response.headers()[CONTENT_TYPE], "text/html; charset=utf-8");
+            assert_eq!(response.headers()[X_CONTENT_TYPE_OPTIONS], "nosniff");
             let body = response.text().await.unwrap();
+            assert_eq!(body, CALLBACK_SUCCESS_HTML);
             assert!(!body.contains("example-code"));
             assert!(!body.contains("test-state"));
             Ok(())
@@ -879,14 +928,26 @@ mod tests {
             "error=denied&state=test-state",
             "code=x&state=test-state&error=",
         ] {
+            let response = client()
+                .get(return_url(&callback, query))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), 400);
             assert_eq!(
-                client()
-                    .get(return_url(&callback, query))
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                400
+                response.headers()[CONTENT_TYPE],
+                "text/plain; charset=utf-8"
+            );
+            assert_eq!(response.headers()[CACHE_CONTROL], "no-store");
+            assert_eq!(response.headers()[REFERRER_POLICY], "no-referrer");
+            assert_eq!(response.headers()[X_CONTENT_TYPE_OPTIONS], "nosniff");
+            assert_eq!(
+                response.headers()[CONTENT_SECURITY_POLICY],
+                "default-src 'none'; frame-ancestors 'none'"
+            );
+            assert_eq!(
+                response.text().await.unwrap(),
+                "Sign-in callback rejected. Return to Ork to retry."
             );
         }
         let mut wrong_path = return_url(&callback, "code=x&state=test-state");
