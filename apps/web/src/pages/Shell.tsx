@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   AgentSkillCatalogEntry,
@@ -156,7 +160,7 @@ function SpaceShell() {
     setOverlay,
   } = useShellNavigation();
   const queries = spaceQueries(userId ?? null, shellSpaceId);
-  const roster = useSpaceRoster({ rpc, seed, botId, groupId, navigate, redirectKeepingOverlay });
+  const roster = useSpaceRoster({ rpc, seed, botId, groupId, redirectKeepingOverlay });
   const {
     groups,
     setGroups,

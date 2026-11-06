@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import type {
   AppBootstrap,
@@ -35,14 +39,12 @@ export function useSpaceRoster({
   seed,
   botId,
   groupId,
-  navigate,
   redirectKeepingOverlay,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
   seed: AppBootstrap | undefined;
   botId: string | undefined;
   groupId: string | undefined;
-  navigate: Navigation["navigate"];
   redirectKeepingOverlay: Navigation["redirectKeepingOverlay"];
 }) {
   const [groups, setGroups] = useState<Group[]>(seed?.groups ?? []);
@@ -113,20 +115,6 @@ export function useSpaceRoster({
         setSpaces((previous) => replaceEqualDeep(previous, navigation.spaces));
         setInitialBotsLoaded(true);
         botsRefreshApplied.current = request;
-        if (
-          includeArchived &&
-          list.length === 0 &&
-          archived?.length === 0 &&
-          groupList.length === 0 &&
-          archivedGroupList?.length === 0 &&
-          !navigation.spaces.some((space) => space.hasContent)
-        ) {
-          // Only the very first bot everywhere needs onboarding. An empty
-          // current space with content elsewhere stays in the app so the
-          // space can be switched to or deleted instead of trapping the user.
-          navigate("/onboarding", { replace: true });
-          return;
-        }
         const currentGroupId = routeGroupId.current;
         if (currentGroupId) {
           if (!groupList.some((group) => group.id === currentGroupId)) {
@@ -142,7 +130,7 @@ export function useSpaceRoster({
         botsRefreshInFlight.current -= 1;
       }
     },
-    [navigate],
+    [redirectKeepingOverlay, rpc],
   );
 
   const flushBotOrder = useCallback(async () => {
@@ -336,7 +324,7 @@ export function useSpaceBootstrap({
     let cancelled = false;
     const appliedAtStart = botsRefreshApplied.current;
     void takeInitialBootstrap(botId ?? startChat?.botId)
-      .then((bootstrap) => {
+      .then(async (bootstrap) => {
         // Kept for the space it belongs to, so switching back to it can paint at once.
         saveSeed(bootstrap);
         if (cancelled) return;
@@ -405,7 +393,26 @@ export function useSpaceBootstrap({
           bootstrap.archivedGroups.length === 0 &&
           !bootstrap.spaces.some((space) => space.hasContent)
         ) {
-          navigate("/onboarding", { replace: true });
+          if (bootstrap.me.needsModel || bootstrap.me.needsSignupSurvey) {
+            navigate("/onboarding", { replace: true });
+            return;
+          }
+          // The server provisions only the account's original workspace. Other empty Spaces
+          // stay usable without creating another personal Ork.
+          const stillCurrent = () =>
+            !cancelled && routeBotId.current === botId && routeGroupId.current === groupId;
+          let primary: Bot | null;
+          try {
+            primary = await rpc.onboarding.ensureFirstBot();
+          } catch {
+            if (stillCurrent()) navigate("/onboarding", { replace: true });
+            return;
+          }
+          if (!stillCurrent() || appliedAtStart !== botsRefreshApplied.current) return;
+          if (primary) {
+            roster.addCreatedBot(primary);
+            redirectKeepingOverlay(`/app/${primary.id}`);
+          }
           return;
         }
         if (groupId) {
