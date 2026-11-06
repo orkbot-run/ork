@@ -30,6 +30,18 @@ export async function ensureOnboardingBot(
     select: { id: true },
   });
   if (existing) return (await repos.listBots(actor)).find((bot) => bot.id === existing.id) ?? null;
+  const priorContent = await Promise.all([
+    prisma.bot.findFirst({
+      where: { spaceId: actor.spaceId, userId: actor.userId, archivedAt: { not: null } },
+      select: { id: true },
+    }),
+    prisma.botDeletion.findFirst({
+      where: { spaceId: actor.spaceId, deletedByUserId: actor.userId },
+      select: { id: true },
+    }),
+  ]);
+  // Reopening a Space after its last bot was removed must keep it empty.
+  if (priorContent.some(Boolean)) return null;
   return repos.createBot(actor, {
     name: "Chief",
     description: "",

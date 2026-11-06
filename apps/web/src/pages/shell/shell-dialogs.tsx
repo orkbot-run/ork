@@ -365,7 +365,7 @@ export function ShellDialogs({
               void refreshBots();
               return;
             }
-            window.location.assign("/app");
+            window.location.assign("/onboarding");
           }}
         />
       ) : null}
