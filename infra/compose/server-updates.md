@@ -35,11 +35,11 @@ one-off command, while the running API keeps its read-only mount.
 
 ```bash
 docker compose run --rm --no-deps -T --user 1000:1000 \
-  --volume '<existing-api-configuration-volume>:/run/orkbot:rw' \
+  --volume '<existing-api-configuration-volume>:/configure-updates:rw' \
   api node /app/infra/compose/selfhost-runtime.mjs \
   /run/orkbot/environment.json node --enable-source-maps \
   dist/cli/configure-server-updates.js \
-  --delegate-current-owner --root /run/orkbot < /private/path/updates-input.json
+  --delegate-current-owner --root /configure-updates < /private/path/updates-input.json
 ```
 
 The command reads the initialized Accounts owner from the database and delegates
