@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved. Auth boundary isolation follows LICENSE.md.
 
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -7,6 +10,13 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const account = vi.hoisted(() => ({ load: (_me: unknown) => {} }));
+
+// The router has already authenticated this page; model setup must not start a real auth transport.
+vi.mock("../lib/auth", () => ({
+  authClient: {
+    useSession: () => ({ data: { user: { email: "member@example.test" } } }),
+  },
+}));
 
 vi.mock("../lib/rpc", () => ({
   selectedSpaceId: () => null,
@@ -45,7 +55,11 @@ vi.mock("@lingui/react/macro", () => {
 
 import { OnboardingPage } from "./Onboarding";
 
+let host: HTMLDivElement;
+let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  host = document.body.appendChild(document.createElement("div"));
+  root = createRoot(host);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -57,14 +71,15 @@ beforeEach(() => {
   );
   Element.prototype.scrollIntoView = () => {};
 });
-afterEach(() => {
+afterEach(async () => {
+  await act(async () => root.unmount());
+  vi.restoreAllMocks();
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
 });
 
 it("marks onboarding as usable for the desktop only once a step shows", async () => {
-  const host = document.body.appendChild(document.createElement("div"));
-  const root = createRoot(host);
+  const subscribe = vi.spyOn(window, "addEventListener");
   // The shell sends a new account to /onboarding, which loads before it picks a step.
   await act(async () =>
     root.render(
@@ -83,11 +98,10 @@ it("marks onboarding as usable for the desktop only once a step shows", async ()
   );
   expect(host.querySelector("h1")?.textContent).toBe("Connect a model");
   expect(marked()).not.toBeNull();
-  act(() => root.unmount());
+  expect(subscribe).not.toHaveBeenCalledWith("storage", expect.any(Function));
 });
 
 it("finds and searches a long custom endpoint list during onboarding", async () => {
-  const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () =>
     root.render(
       <MemoryRouter initialEntries={["/onboarding"]}>
@@ -129,5 +143,4 @@ it("finds and searches a long custom endpoint list during onboarding", async () 
   ]);
   await act(async () => document.querySelector<HTMLElement>("[cmdk-item]")!.click());
   expect(document.querySelector('[aria-label="Models from server"]')?.textContent).toBe("found-10");
-  await act(async () => root.unmount());
 });
