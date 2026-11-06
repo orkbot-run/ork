@@ -30,11 +30,22 @@ export function confirmServerInitialization(server: string, account: string): vo
   if (pending === server && initialization?.server === server) initialization.account = account;
 }
 
-export function consumeServerInitializationSecret(server: string, account: string): string | null {
+export function serverInitializationSecret(server: string, account: string): string | null {
   if (initialization?.server !== server || initialization.account !== account) return null;
-  const secret = initialization.secret;
-  initialization = null;
-  return secret;
+  return initialization.secret;
+}
+
+export function completeServerInitialization(
+  server: string,
+  account: string,
+  secret: string | null,
+): void {
+  if (
+    initialization?.server === server &&
+    initialization.account === account &&
+    initialization.secret === secret
+  )
+    initialization = null;
 }
 
 export function clearServerInitialization(): void {

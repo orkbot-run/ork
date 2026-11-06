@@ -95,3 +95,36 @@ it("never spends an expired native proof on the server", async () => {
   await expect(signInWithNativeAccounts()).rejects.toThrow();
   expect(state.fetcher).toHaveBeenCalledTimes(1);
 });
+
+it("retains the initialization secret when grant issuance fails", async () => {
+  const state = setup(true);
+  state.consumeServerInitializationSecret
+    .mockResolvedValueOnce("a".repeat(43))
+    .mockResolvedValue(null);
+  state.createServerLoginGrant.mockRejectedValueOnce(new Error("temporarily unavailable"));
+  await expect(signInWithNativeAccounts()).rejects.toThrow();
+  await signInWithNativeAccounts();
+  expect(state.consumeServerInitializationSecret).toHaveBeenCalledOnce();
+  expect(JSON.parse(state.fetcher.mock.calls[2]![1].body).bootstrapSecret).toBe("a".repeat(43));
+});
+
+it("retains initialization through a failed completion request and clears it after success", async () => {
+  const state = setup(true);
+  state.consumeServerInitializationSecret
+    .mockResolvedValueOnce("a".repeat(43))
+    .mockResolvedValue(null);
+  const request = state.fetcher.getMockImplementation()!;
+  let failed = false;
+  state.fetcher.mockImplementation(async (path: string) => {
+    if (path.endsWith("complete") && !failed) {
+      failed = true;
+      throw new Error("connection lost");
+    }
+    return request(path);
+  });
+  await expect(signInWithNativeAccounts()).rejects.toThrow();
+  await signInWithNativeAccounts();
+  expect(state.consumeServerInitializationSecret).toHaveBeenCalledOnce();
+  await expect(signInWithNativeAccounts()).rejects.toThrow("REGISTRATION_CLOSED");
+  expect(state.consumeServerInitializationSecret).toHaveBeenCalledTimes(2);
+});

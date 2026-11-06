@@ -4,6 +4,8 @@
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { desktopBridge } from "./desktop";
 
+const initializationSecrets = new WeakMap<object, { origin: string; secret: string }>();
+
 async function request(path: string, body: unknown): Promise<Record<string, unknown>> {
   const signal = AbortSignal.timeout(15_000);
   const response = await fetch(path, {
@@ -34,9 +36,13 @@ export async function signInWithNativeAccounts(): Promise<void> {
     typeof challenge.bootstrapRequired !== "boolean"
   )
     throw new Error("Could not continue");
-  const bootstrapSecret = challenge.bootstrapRequired
-    ? await accounts.consumeServerInitializationSecret?.()
-    : undefined;
+  let bootstrapSecret: string | undefined;
+  if (challenge.bootstrapRequired) {
+    const saved = initializationSecrets.get(accounts);
+    bootstrapSecret = saved?.origin === origin ? saved.secret : undefined;
+    bootstrapSecret ??= (await accounts.consumeServerInitializationSecret?.()) ?? undefined;
+    if (bootstrapSecret) initializationSecrets.set(accounts, { origin, secret: bootstrapSecret });
+  }
   if (challenge.bootstrapRequired && !bootstrapSecret) throw new Error("REGISTRATION_CLOSED");
   const { grant, expiresAt } = await accounts.createServerLoginGrant({
     origin,
@@ -62,4 +68,5 @@ export async function signInWithNativeAccounts(): Promise<void> {
     typeof complete.user.id !== "string"
   )
     throw new Error("Could not continue");
+  initializationSecrets.delete(accounts);
 }

@@ -381,9 +381,8 @@ async fn native_command(
             serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
         }
         Command::AccountsCreateServerLoginGrant { origin, challenge } => {
-            if origin != document.origin.origin().ascii_serialization()
-                || !server_login::valid_challenge(&challenge)
-            {
+            let audience = server_login::audience_for_document(&document.origin, &origin)?;
+            if !server_login::valid_challenge(&challenge) {
                 return Err("Could not continue".into());
             }
             let authorization = state
@@ -392,7 +391,7 @@ async fn native_command(
                 .await?;
             let result = server_login::issue(
                 authorization.directory_bearer()?,
-                &document.origin,
+                &audience,
                 &challenge,
                 || current_server_account(&app, &state, &document, &authorization),
             )

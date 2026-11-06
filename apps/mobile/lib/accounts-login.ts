@@ -4,7 +4,7 @@
 import { accountsAuthorization } from "./accounts";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import { t } from "./i18n";
-import { consumeServerInitializationSecret } from "./server-connect";
+import { completeServerInitialization, serverInitializationSecret } from "./server-connect";
 import { currentSessionGeneration, replaceSessionTokenIfCurrent } from "./session";
 import { authErrorText, authResponseErrorText } from "./user-error";
 
@@ -65,7 +65,7 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     )
       throw new Error(t("Could not continue"));
     const bootstrapSecret = challenge.bootstrapRequired
-      ? consumeServerInitializationSecret(server, account)
+      ? serverInitializationSecret(server, account)
       : null;
     if (challenge.bootstrapRequired && !bootstrapSecret)
       throw new Error(authErrorText({ code: "REGISTRATION_CLOSED" }, t("Could not continue")));
@@ -96,10 +96,11 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     )
       throw new Error(t("Sign-in did not return a session"));
     await current();
+    completeServerInitialization(server, account, bootstrapSecret);
     if (!(await clearSpace()))
       throw new Error(t("Could not save your sign-in on this device. Try again."));
     await current();
-    return replaceSessionTokenIfCurrent(sessionGeneration, completed.token, "sign_in");
+    return await replaceSessionTokenIfCurrent(sessionGeneration, completed.token, "sign_in");
   } finally {
     inFlight = false;
   }

@@ -23,6 +23,14 @@ pub fn valid_challenge(challenge: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
+/// Native document URLs include their current route; only the confirmed origin is an audience.
+pub fn audience_for_document(document_url: &Url, requested_origin: &str) -> Result<Url, String> {
+    if requested_origin != document_url.origin().ascii_serialization() {
+        return Err(ERROR.into());
+    }
+    crate::server::normalize_server_url(requested_origin)
+}
+
 pub async fn issue(
     token: &str,
     origin: &Url,
@@ -185,6 +193,52 @@ mod tests {
         assert!(!serde_json::to_string(&result)
             .unwrap()
             .contains("native-fixture-bearer"));
+    }
+
+    #[tokio::test]
+    async fn a_native_document_on_signup_requests_a_grant_for_the_origin_alone() {
+        let sessions = crate::native::Sessions::default();
+        let server = Url::parse("https://server.example.test").unwrap();
+        let proof = sessions.insert("server-1", &server).unwrap();
+        let route = server.join("/sign-up?next=%2Fapp").unwrap();
+        let (document, _) = sessions
+            .authorize("server-1", &route, &proof, &"a".repeat(64), Some(1))
+            .unwrap();
+        assert_eq!(document.origin.path(), "/sign-up");
+        let origin =
+            audience_for_document(&document.origin, "https://server.example.test").unwrap();
+        assert_eq!(origin, server);
+        let (endpoint, serving) = endpoint("200 OK", response().to_string(), None).await;
+        let challenge = "a".repeat(43);
+        issue_at(
+            &endpoint,
+            "native-fixture-bearer",
+            &origin,
+            &challenge,
+            || sessions.is_current(&document),
+        )
+        .await
+        .unwrap();
+        let request = serving.await.unwrap();
+        let body: serde_json::Value =
+            serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(
+            body,
+            serde_json::json!({"origin":"https://server.example.test", "challenge":challenge})
+        );
+        assert!(audience_for_document(&document.origin, "https://other.example.test").is_err());
+        assert!(
+            audience_for_document(&document.origin, "https://server.example.test/sign-up").is_err()
+        );
+        assert!(issue_at(
+            &Url::parse("http://127.0.0.1:1/never").unwrap(),
+            "native-fixture-bearer",
+            &document.origin,
+            &challenge,
+            || true
+        )
+        .await
+        .is_err());
     }
 
     #[tokio::test]

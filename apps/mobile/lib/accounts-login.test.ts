@@ -3,7 +3,11 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { continueWithAccountsServer } from "./accounts-login";
-import { confirmServerInitialization, receiveServerConnect } from "./server-connect";
+import {
+  confirmServerInitialization,
+  receiveServerConnect,
+  serverInitializationSecret,
+} from "./server-connect";
 
 const state = vi.hoisted(() => ({
   origin: "https://server.example.test",
@@ -119,4 +123,71 @@ it("requires confirmation of both server and account before releasing a bootstra
   expect(JSON.parse(state.request.mock.calls[2]![1].body).bootstrapSecret).toBe(secret);
   await expect(continueWithAccountsServer()).rejects.toThrow();
   expect(state.replace).toHaveBeenCalledTimes(1);
+});
+
+it("keeps initialization available after a failed grant request", async () => {
+  receiveServerConnect(
+    `orkbot://initialize?server=${encodeURIComponent(state.origin)}&secret=${"s".repeat(43)}`,
+  );
+  confirmServerInitialization(
+    state.origin,
+    JSON.stringify([state.identity.issuer, state.identity.subject]),
+  );
+  const request = state.request.getMockImplementation()!;
+  let failed = false;
+  state.request.mockImplementation(async (...args: unknown[]) => {
+    if (String(args[0]).endsWith("server-login-grants") && !failed) {
+      failed = true;
+      throw new Error("connection lost");
+    }
+    const result = await request(...args);
+    if (String(args[0]).endsWith("challenge")) result.body.bootstrapRequired = true;
+    return result;
+  });
+  await expect(continueWithAccountsServer()).rejects.toThrow();
+  expect(await continueWithAccountsServer()).toBe(true);
+  const completion = state.request.mock.calls.find(([url]) => String(url).endsWith("complete"));
+  expect(JSON.parse(completion![1].body).bootstrapSecret).toBe("s".repeat(43));
+  expect(state.replace).toHaveBeenCalledOnce();
+});
+
+it("keeps a second attempt out until the session has been saved", async () => {
+  let saved: (value: boolean) => void = () => undefined;
+  let saving: () => void = () => undefined;
+  const started = new Promise<void>((resolve) => {
+    saving = resolve;
+  });
+  state.replace.mockImplementation(() => {
+    saving();
+    return new Promise<boolean>((resolve) => {
+      saved = resolve;
+    });
+  });
+  const first = continueWithAccountsServer();
+  await started;
+  expect(await continueWithAccountsServer()).toBe(false);
+  saved(true);
+  expect(await first).toBe(true);
+});
+
+it("preserves a newer initialization link when an older attempt completes", async () => {
+  const account = JSON.stringify([state.identity.issuer, state.identity.subject]);
+  receiveServerConnect(
+    `orkbot://initialize?server=${encodeURIComponent(state.origin)}&secret=${"a".repeat(43)}`,
+  );
+  confirmServerInitialization(state.origin, account);
+  const request = state.request.getMockImplementation()!;
+  state.request.mockImplementation(async (...args: unknown[]) => {
+    const result = await request(...args);
+    if (String(args[0]).endsWith("challenge")) result.body.bootstrapRequired = true;
+    if (String(args[0]).endsWith("complete")) {
+      receiveServerConnect(
+        `orkbot://initialize?server=${encodeURIComponent(state.origin)}&secret=${"b".repeat(43)}`,
+      );
+      confirmServerInitialization(state.origin, account);
+    }
+    return result;
+  });
+  expect(await continueWithAccountsServer()).toBe(true);
+  expect(serverInitializationSecret(state.origin, account)).toBe("b".repeat(43));
 });
