@@ -150,6 +150,8 @@ export interface OrkDesktop {
   server?: {
     /** Opens the desktop setup window to pick another Ork server. */
     change: () => Promise<void>;
+    /** Saves a confirmed connection only after native verification of its product session. */
+    remember?: () => Promise<void>;
   };
   /** Absent on older desktop releases, which have no Settings… menu item. */
   settings?: {

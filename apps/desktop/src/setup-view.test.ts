@@ -46,6 +46,7 @@ async function setup(
   options: {
     session?: unknown;
     startup?: unknown;
+    pendingServer?: string;
     invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
   } = {},
 ) {
@@ -55,7 +56,11 @@ async function setup(
   const listeners = new Map<string, (event: { payload: unknown }) => void>();
   const stops = new Map<string, ReturnType<typeof vi.fn>>();
   const invoke = vi.fn(async (command: string, args?: Record<string, unknown>) => {
-    if (command === "setup_state") return { startup: options.startup ?? { phase: "idle" } };
+    if (command === "setup_state")
+      return {
+        startup: options.startup ?? { phase: "idle" },
+        pendingServer: options.pendingServer,
+      };
     if (options.invoke) return options.invoke(command, args);
     if (command === "setup_accounts_session") return options.session ?? null;
     if (command === "list_servers") return saved;
@@ -82,6 +87,7 @@ async function setup(
     emit: (phase: string, output: string[] = []) =>
       listeners.get("desktop-stack-changed")?.({ payload: { phase, message: null, output } }),
     startup: (value: unknown) => listeners.get("desktop-startup-changed")?.({ payload: value }),
+    link: (value: unknown) => listeners.get("desktop-server-link")?.({ payload: value }),
   };
 }
 
@@ -115,11 +121,50 @@ describe("bundled desktop setup", () => {
     expect(screen()).toBe("servers");
     expect(node("servers").textContent).toContain(saved[0]!.url);
     expect(invoke.mock.calls.map(([name]) => name)).toEqual([
-      "setup_accounts_session",
       "setup_state",
+      "setup_accounts_session",
       "list_servers",
     ]);
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+
+  it("retains a cold-start server link through Accounts sign-in without opening a saved default", async () => {
+    const { invoke } = await setup({ pendingServer: "https://new.example.com" });
+    expect(screen()).toBe("welcome");
+    node("get-started").click();
+    await flush();
+    expect(screen()).toBe("selfhost");
+    expect(node<HTMLInputElement>("server-url").value).toBe("https://new.example.com");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_server");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_saved_server");
+    node("setup").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
+  });
+
+  it("proposes a warm link for confirmation and discards it on Back", async () => {
+    const { invoke, link } = await setup({ session: account });
+    link("https://new.example.com");
+    expect(screen()).toBe("selfhost");
+    expect(node<HTMLInputElement>("server-url").value).toBe("https://new.example.com");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_server");
+    node("back").click();
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(invoke).toHaveBeenCalledWith("clear_server_link", { rawUrl: "https://new.example.com" });
+  });
+
+  it("ignores malformed link events without changing the picker", async () => {
+    const { link } = await setup({ session: account });
+    for (const address of [
+      "https://user:secret@example.com",
+      "http://example.com",
+      "https://example.com/path",
+      { url: "https://example.com" },
+    ]) {
+      link(address);
+      expect(screen()).toBe("servers");
+    }
   });
 
   it("keeps the picker hidden throughout native automatic startup and displays local download progress", async () => {

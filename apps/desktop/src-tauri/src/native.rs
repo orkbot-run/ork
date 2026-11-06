@@ -61,6 +61,8 @@ pub enum Command {
     BadgeSet { count: f64 },
     #[serde(rename = "server.change")]
     ServerChange,
+    #[serde(rename = "server.remember")]
+    ServerRemember,
     #[serde(rename = "locale.set")]
     LocaleSet { locale: String },
     #[serde(rename = "monitoring.enabled")]

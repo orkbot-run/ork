@@ -1,6 +1,10 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { createDb } from "../../../packages/db/src/index";
 import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 import { expectReadableNames } from "./visible-name-guard";
 
 test("legacy opaque names never appear in navigation, account, chats or Activity", async ({

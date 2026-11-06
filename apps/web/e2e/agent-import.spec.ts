@@ -1,8 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { Bot, MemoryDocument } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -11,6 +14,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 const skill = (name: string, description: string) =>
   `---\nname: ${name}\ndescription: ${description}\n---\n\nSteps.\n`;

@@ -44,8 +44,9 @@ verified subject.
 
 Desktop and mobile require a verified central Accounts session before opening the
 product. Desktop signs in before it starts Docker or connects to an existing
-server. It then saves the selected server in the account directory. Mobile loads
-that directory after sign-in and lets the user select or add an external server.
+server. A new self-hosted server is saved in the account directory only after its
+product session has been verified. Mobile loads that directory after sign-in and
+lets the user select or add an external server.
 An empty directory leaves the server picker open.
 
 Remote entries follow the account. A Docker loopback entry belongs to the desktop
@@ -58,6 +59,31 @@ The directory accepts central access tokens only at the fixed Accounts endpoint.
 Native apps never send those tokens to saved servers. Switching central accounts
 retires product sessions and pending operations before the next account opens.
 Desktop also keeps each account and server in a separate browser profile.
+
+## Server connection links
+
+Opening a self-hosted server in a browser shows its address and an **Open in Ork**
+link. Product screens and product login are available only in the native apps.
+The browser still handles protocol callbacks, and Accounts can use the system
+authorization browser to verify identity.
+
+The link uses `orkbot://connect?server=<encoded-origin>`. Both apps validate the
+address, retain it through Accounts sign-in, and ask the user to confirm it before
+connecting. Only HTTPS and private-network HTTP origins are accepted. Paths,
+credentials, fragments, and additional parameters are rejected. The link contains
+no login token and grants no access; it can be shared without creating a session.
+
+The selected server checks its own access policy. Failed or cancelled login does
+not add it to the directory. Desktop verifies the session using native cookies;
+mobile verifies the returned server session before saving the entry. A failed
+desktop directory write offers a retry and retries when connectivity returns.
+Device pairing is independent of saving the server.
+
+Installed desktop builds register the `orkbot` scheme. Development registration
+is platform-dependent; use the existing server address input when an unpackaged
+build cannot receive links. Expo requires a development or release binary with
+the configured schemes. The renderer Playwright fixture opens the native
+renderer entry directly; ordinary browser tests use the connection page.
 
 ## Local server sign-in
 

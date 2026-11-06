@@ -17,6 +17,7 @@
     }
   },
   "plugins": {
+    "deep-link": { "desktop": { "schemes": ["orkbot"] } },
     "updater": { "pubkey": "", "requireSignedVersion": true }
   },
   "bundle": {

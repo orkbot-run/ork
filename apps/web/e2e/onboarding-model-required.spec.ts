@@ -1,5 +1,9 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { captureScreenshot, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test.afterEach(async ({ page }) => {
   // Not "wait": a handler whose fulfill() lost a race to the route teardown never settles,

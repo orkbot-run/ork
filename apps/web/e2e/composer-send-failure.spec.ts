@@ -5,8 +5,8 @@
 
 import type { Routine } from "@orkbot/contracts";
 import type { Locator, Page } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import { activeBotId, completeOnboarding, createNamedBot, rpc, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 async function openComposer(page: Page, prefix: string) {
   await signup(page, `${prefix}-${Date.now()}@orkbot.test`, "password12", "Draft Keeper");

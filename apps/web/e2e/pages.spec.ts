@@ -1,5 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import type { Page, Route } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -9,6 +12,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { expect, useNativeRenderer as installNativeRenderer, test } from "./renderer-test";
 
 function dashboard(churn: string) {
   return `const data = { signups: [42, 51, 47, 63, 58, 71, 66], labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] };
@@ -224,6 +228,7 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
 
   // Signed out, the link opens the page and nothing else.
   const visitor = await browser.newContext({ colorScheme: "dark" });
+  await installNativeRenderer(visitor);
   const outside = await visitor.newPage();
   // The link is the page's only key: no search engine indexes it and no Referer carries it on.
   const served = await outside.goto(shareUrl);

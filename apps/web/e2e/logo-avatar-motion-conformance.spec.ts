@@ -1,8 +1,12 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import type { LogoAvatarActivity } from "../../../packages/core/src/logo-avatar-activity";
 import type { LogoAvatarFrame } from "../../../packages/core/src/logo-avatar-motion";
 import { logoAvatarFrame } from "../../../packages/core/src/logo-avatar-motion";
 import { logoAvatarTraits } from "../../../packages/core/src/logo-avatar-traits";
+import { expect, test } from "./renderer-test";
 
 const identities = ["inbox-01", "scout-02", "studio-03", "atlas-04", "ledger-05", "muse-06"];
 // Web idle avatars hold still (SVG motion repaints on the main thread), so idle is not sampled.

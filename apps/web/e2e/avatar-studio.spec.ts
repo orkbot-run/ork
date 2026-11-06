@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 coverage is preserved. Generator avatar defaults are an Ork addition.
 
-import { expect, test } from "@playwright/test";
 import {
   activeBotId,
   captureScreenshot,
@@ -10,6 +9,7 @@ import {
   openBotPanelTab,
   signup,
 } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 /** Paint IDs and animation phases can change without changing a saved bot's appearance. */
 function renderedVariant(node: Element) {

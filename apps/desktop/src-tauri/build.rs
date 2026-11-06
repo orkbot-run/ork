@@ -69,6 +69,7 @@ fn main() {
             "connect_local_server",
             "local_stack_state",
             "quit_setup",
+            "clear_server_link",
             "native_command",
         ]),
     ))

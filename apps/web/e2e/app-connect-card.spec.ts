@@ -1,4 +1,7 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import {
   activeBotId,
   captureScreenshot,
@@ -7,6 +10,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("a bot connects an app inline in a normal chat", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });

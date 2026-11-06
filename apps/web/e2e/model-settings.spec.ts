@@ -1,8 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Route } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import {
   captureScreenshot,
   completeOnboarding,
@@ -15,6 +18,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 const LOCAL_MODEL_ID = "orkbot-e2e-local";
 const SECOND_MODEL_ID = "orkbot-e2e-second";

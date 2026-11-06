@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited messaging settings are preserved; native popup refusal handling is an Ork addition.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { MessagingChannelMembership, MessagingInstallationsStatus } from "@orkbot/contracts";
 import { isRetryableError, messagingConnectOptions } from "@orkbot/core";
@@ -18,6 +22,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { SettingsGroup, SettingsRow } from "../components/SettingsRows";
+import { supportsNativeSsoPopup } from "../lib/desktop";
 import { providerLabel } from "../lib/messaging";
 import { useSpaceQueries } from "../lib/query";
 import { rpc } from "../lib/rpc";
@@ -221,6 +226,8 @@ export function MessagingSettingsPanel() {
     if (popup) popup.opener = null;
     void act(async () => {
       try {
+        if (!popup && supportsNativeSsoPopup())
+          throw new Error("Native authorization popup unavailable.");
         const { url } = await rpc.messaging.installations.start({});
         if (popup) popup.location.href = url;
         else window.location.assign(url);

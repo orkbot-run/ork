@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import type { Route } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import { computerProviderDescriptors } from "../../../packages/adapters/src/fake-computer-settings.test-support";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 async function adminComputers(route: Route) {
   const response = await route.fetch();

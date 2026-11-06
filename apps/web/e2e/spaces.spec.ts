@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
 
-import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openNewSpace, rpc, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("a new space creates its own bot, is renamed, and is deleted with its bots", async ({
   page,

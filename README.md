@@ -3,7 +3,7 @@
 
 # Ork
 
-Ork is a source-available assistant for persistent bots that share conversations and work on isolated computers, with a web app, API, worker, Tauri client, and Expo client in one repository. Its public domain is `ork.run`. Use `orkbot` in package names and technical identifiers.
+Ork is a source-available assistant for persistent bots that share conversations and work on isolated computers. It runs in Tauri desktop and Expo mobile apps, backed by an API and worker. The web renderer runs inside Tauri. Its public domain is `ork.run`. Use `orkbot` in package names and technical identifiers.
 
 ## Run locally
 
@@ -18,7 +18,9 @@ corepack pnpm dev
 
 Before starting the API, set the registered Accounts public client ID in `.env` as `OIDC_CLIENT_ID`. The local callback is `http://127.0.0.1/callback`, with the development port supplied at runtime. See [Accounts sign-in](docs/accounts-native.md#local-server-sign-in).
 
-Open the development URL printed after migrations finish, usually `http://127.0.0.1:5173`. Continue through Ork Accounts to sign in. No model key is needed to open the app.
+The development URL printed after migrations finish, usually `http://127.0.0.1:5173`, offers an **Open in Ork** link. It does not expose browser login or product screens. Open the link in an installed app, confirm the server, and sign in through Ork Accounts. The server is added to your account after its product session is verified. No model key is needed to open the app.
+
+For desktop development, configure the registered native Accounts client as described in [Accounts sign-in](docs/accounts-native.md), then run `corepack pnpm --filter @orkbot/desktop dev`. Desktop development opens a native window.
 
 `setup:local` creates `.env` with random database passwords and independent encryption, authentication, supervisor, and screen-proxy secrets. Keep it private. Running setup again preserves the existing file. PostgreSQL uses the `ork` Compose project and a named volume, with its host port bound to loopback at `127.0.0.1:5433`.
 
@@ -32,7 +34,7 @@ Stop development with Ctrl+C. `corepack pnpm db:stop` stops PostgreSQL and keeps
 
 ## Project identity
 
-The product name is Ork. Workspace packages use `@orkbot/*`, configuration uses the `ORKBOT_` prefix, and the web and native clients use Ork identities. Published images, store listings, signing credentials, and hosted services require their own release configuration. Use the source commands above for local development.
+The product name is Ork. Workspace packages use `@orkbot/*`, configuration uses the `ORKBOT_` prefix, and both native clients use Ork identities. Published images, store listings, signing credentials, and hosted services require their own release configuration. Use the source commands above for local development.
 
 GitHub Actions workflows are active under `.github/workflows/`. CI, test reports, image publishing, and diagnostic native builds use GitHub infrastructure. [GitHub Actions configuration](./docs/github-actions.md) lists the accounts and credentials needed for signed releases, store submissions, OTA, deployment, and optional integrations.
 

@@ -4,8 +4,8 @@
 
 import { isPersonalOrkId, logoAvatarTraits } from "@orkbot/core";
 import type { Request } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup, signupThroughForm } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("SSO keeps the product open and completes in a separate window", async ({
   page,

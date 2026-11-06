@@ -3,7 +3,6 @@
 // Inherited Apache-2.0 coverage is preserved. Default Ork avatars are an Ork addition.
 
 import type { Page } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import {
   captureScreenshot,
   completeOnboarding,
@@ -12,6 +11,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 async function createBot(page: Page, name: string) {
   return createNamedBot(page, name);

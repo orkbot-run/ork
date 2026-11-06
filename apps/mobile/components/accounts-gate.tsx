@@ -19,12 +19,26 @@ import {
   welcomeAccountsOrk,
 } from "../lib/accounts";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
-import { clearProductAccountSession, loadApiBase, probeApiBase, saveApiBase } from "../lib/api";
+import {
+  clearProductAccountSession,
+  currentApiBase,
+  loadApiBase,
+  probeApiBase,
+  rpc,
+  saveApiBase,
+} from "../lib/api";
 import { loadAppearancePreference } from "../lib/appearance";
-import { displayApiHost, requireAccountsSignIn } from "../lib/endpoint";
+import { displayApiHost, normalizeApiBase, requireAccountsSignIn } from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import {
+  clearServerConnect,
+  pendingServerConnect,
+  subscribeServerConnect,
+} from "../lib/server-connect";
 import { serverHeaders } from "../lib/server-headers";
+import { currentSessionGeneration } from "../lib/session";
+import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
 import { LogoAvatar } from "./logo-avatar";
 import { NativeActionButton } from "./native-action-button";
@@ -93,6 +107,12 @@ export function AccountsGate({
   const productGate = Boolean(children);
   const tokens = useMobileTokens();
   const version = useSyncExternalStore(subscribeAccounts, accountsVersion, accountsVersion);
+  const linkedServer = useSyncExternalStore(
+    subscribeServerConnect,
+    pendingServerConnect,
+    pendingServerConnect,
+  );
+  const operationPending = useRef(false);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
     "loading",
   );
@@ -138,8 +158,9 @@ export function AccountsGate({
       if (generation.current !== current) return;
       setServers(entries);
       directoryReady = true;
-      setAdding(entries.length === 0);
-      if (productGate) {
+      setAdding(Boolean(linkedServer) || entries.length === 0);
+      if (linkedServer) setDraft(linkedServer);
+      if (productGate && !linkedServer) {
         const selected = await SecureStore.getItemAsync(SERVER_KEY);
         if (generation.current !== current) return;
         const previous = entries.find((entry) => `${account}:${entry.id}` === selected);
@@ -166,17 +187,18 @@ export function AccountsGate({
     return () => {
       generation.current += 1;
     };
-  }, [version, attempt, productGate]);
+  }, [version, attempt, productGate, linkedServer]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") setAttempt((value) => value + 1);
+      if (state === "active" && !operationPending.current) setAttempt((value) => value + 1);
     });
     return () => subscription.remove();
   }, []);
 
   async function action(operation: () => Promise<unknown>) {
-    if (pending) return;
+    if (operationPending.current) return;
+    operationPending.current = true;
     const current = generation.current;
     setPending(true);
     setError(null);
@@ -185,6 +207,7 @@ export function AccountsGate({
     } catch (failure) {
       if (generation.current === current) setError(errorText(failure));
     } finally {
+      operationPending.current = false;
       if (generation.current === current) setPending(false);
     }
   }
@@ -210,9 +233,16 @@ export function AccountsGate({
       setReadyAt({ version, attempt });
       setPhase("ready");
     }
+    if (linkedServer) clearServerConnect(linkedServer);
   }
 
-  if (phase === "ready" && readyAt.version === version && readyAt.attempt === attempt && children)
+  if (
+    phase === "ready" &&
+    readyAt.version === version &&
+    readyAt.attempt === attempt &&
+    !linkedServer &&
+    children
+  )
     return <>{children}</>;
   const visiblePhase =
     readyAt.version === version && readyAt.attempt === attempt ? phase : "loading";
@@ -305,8 +335,38 @@ export function AccountsGate({
                         void action(async () => {
                           const current = generation.current;
                           const account = owner.current;
-                          const entry = await addAccountServer(draft, account);
-                          if (generation.current !== current) return;
+                          const parsed = normalizeApiBase(draft);
+                          if (!parsed.ok) throw new Error(parsed.error);
+                          const target = parsed.url;
+                          const currentOperation = () =>
+                            generation.current === current && owner.current === account;
+                          const probe = await probeApiBase(target);
+                          if (!probe.ok) throw new Error(probe.error);
+                          await requireAccountsSignIn(target, serverHeaders(target));
+                          if (!currentOperation()) return;
+                          await loadApiBase();
+                          if (!currentOperation()) return;
+                          const saved = await saveApiBase(target, serverHeaders(target));
+                          if (!saved.ok) throw new Error(saved.error);
+                          if (!currentOperation()) return;
+                          if (!(await continueWithSso())) return;
+                          if (!currentOperation() || currentApiBase() !== target) return;
+                          const sessionGeneration = currentSessionGeneration();
+                          const me = await rpc("me");
+                          if (
+                            !me.userId ||
+                            !currentOperation() ||
+                            currentApiBase() !== target ||
+                            currentSessionGeneration() !== sessionGeneration
+                          )
+                            return;
+                          const entry = await addAccountServer(target, account);
+                          if (
+                            !currentOperation() ||
+                            currentApiBase() !== target ||
+                            currentSessionGeneration() !== sessionGeneration
+                          )
+                            return;
                           setServers((previous) => [
                             ...previous.filter((item) => item.id !== entry.id),
                             entry,

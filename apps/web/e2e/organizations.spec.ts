@@ -3,8 +3,8 @@
 // Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
 
 import type { Page } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 type OrganizationList = {
   organizations: Array<{ id: string; name: string; defaultSpaceId: string }>;

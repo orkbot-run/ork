@@ -1,5 +1,9 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("adds a tool rule and switches it between Ask and Block", async ({ page }, testInfo) => {
   await signup(page, `approval-rules-${Date.now()}@orkbot.test`, "password12", "Permissions");

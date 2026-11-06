@@ -1,5 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import type { Locator } from "@playwright/test";
-import { expect } from "@playwright/test";
+import { expect } from "./renderer-test";
 
 /** Scan controlled fixture screens, not arbitrary user-authored messages/code or inputs. */
 export async function expectReadableNames(region: Locator) {

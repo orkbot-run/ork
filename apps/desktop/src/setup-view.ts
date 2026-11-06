@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createAvatar } from "@orkbot/avatar";
+import { createServerConnectLink, parseServerConnectLink } from "@orkbot/contracts";
 import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
 import { createPersonalOrkId, isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { PL_MESSAGES } from "./locales/pl.js";
@@ -60,6 +61,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   const steps = [...doc.querySelectorAll<HTMLElement>("[data-step]")];
   const phases = [...doc.querySelectorAll<HTMLElement>("[data-phase]")];
   let account: Account | null = null;
+  let pendingServer: string | null = null;
   let screen: Screen = "checking";
   let operation: Operation | null = null;
   let generation = 0;
@@ -182,9 +184,36 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     } finally {
       if (current(version)) {
         operation = null;
+        if (pendingServer && account) showPendingServer();
         controls();
       }
     }
+  }
+
+  function receivePendingServer(value: unknown) {
+    if (typeof value !== "string") return;
+    try {
+      const origin = parseServerConnectLink(createServerConnectLink(value));
+      if (!origin) return;
+      pendingServer = origin;
+      if (account && !operation) showPendingServer();
+    } catch {
+      // Ignore malformed native events without changing the selected server.
+    }
+  }
+
+  function discardPendingServer() {
+    const address = pendingServer;
+    pendingServer = null;
+    if (address)
+      void transport.invoke("clear_server_link", { rawUrl: address }).catch(errorMessage);
+  }
+
+  function showPendingServer() {
+    if (!pendingServer) return;
+    input.value = pendingServer;
+    startup = { phase: "idle" };
+    show("selfhost");
   }
 
   async function loadServers(version: number): Promise<Server[]> {
@@ -426,6 +455,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
         const entries = await loadServers(version);
         if (!current(version)) return;
+        if (pendingServer) {
+          showPendingServer();
+          return;
+        }
         const selected =
           entries.find((entry) => entry.isDefault) ??
           (entries.length === 1 ? entries[0] : undefined);
@@ -445,6 +478,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
     if (!operation || operation === "install") {
+      discardPendingServer();
       generation++;
       operation = null;
       show(account ? "servers" : "welcome");
@@ -465,10 +499,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("refresh", "click", () => void run("directory", loadServers, "servers"));
   on("setup", "submit", (event) => {
     event.preventDefault();
-    if (input.reportValidity()) void connect("connect_server", { rawUrl: input.value });
+    if (input.reportValidity()) {
+      pendingServer = null;
+      void connect("connect_server", { rawUrl: input.value });
+    }
   });
   async function logout() {
     if (operation === "logout" || disposed) return;
+    discardPendingServer();
     generation++;
     account = null;
     failedServer = null;
@@ -584,6 +622,19 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       }
       cleanups.push(stopStartup);
+      const stopLinks = await transport.listen<string>("desktop-server-link", ({ payload }) => {
+        if (!disposed) receivePendingServer(payload);
+      });
+      if (!current(version)) {
+        stopLinks();
+        return;
+      }
+      cleanups.push(stopLinks);
+      const state = await transport.invoke<{ startup?: Startup; pendingServer?: string } | null>(
+        "setup_state",
+      );
+      if (!current(version)) return;
+      receivePendingServer(state?.pendingServer);
       const value = await transport.invoke<Account | null>("setup_accounts_session");
       if (!current(version)) return;
       account = value;
@@ -592,9 +643,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         show("welcome", false);
         return;
       }
-      const state = await transport.invoke<{ startup?: Startup } | null>("setup_state");
-      if (!current(version)) return;
       startup = state?.startup ?? { phase: "idle" };
+      if (pendingServer) {
+        showPendingServer();
+        return;
+      }
       startupScreen();
       if (startup.phase === "idle" || startup.phase === "failed") await loadServers(version);
     },

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Vite configuration is preserved; browser shell retirement is an Ork addition.
+
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { ClientRequest, IncomingMessage, ServerResponse } from "node:http";
@@ -43,7 +47,7 @@ import {
   rewrittenNovncHeaders,
   shouldInjectNovncStorageShim,
 } from "./src/novnc-html.js";
-import { orkbotPwa } from "./src/pwa/plugin.js";
+import { browserShellRetirement } from "./src/pwa/retire-build.js";
 import type { ScreenTargetFailure } from "./src/screen-proxy.js";
 import {
   checkScreenAuthorization,
@@ -541,7 +545,7 @@ export default defineConfig(({ command, mode }) => {
       babel({ plugins: ["@lingui/babel-plugin-lingui-macro"] }),
       lingui(),
       tailwindcss(),
-      orkbotPwa(buildId),
+      browserShellRetirement(),
       {
         // Dev keeps React Refresh unrestricted in app pages; screen documents always use CSP.
         name: "orkbot-content-security-policy",

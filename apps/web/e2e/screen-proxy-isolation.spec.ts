@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import type { Server } from "node:http";
@@ -13,9 +17,9 @@ import {
   openScreenCapability,
 } from "@orkbot/core/node/screen-capability";
 import { screenProbeUrl } from "@orkbot/core/screen-reconnect";
-import { expect, test } from "@playwright/test";
 import type { Plugin, ViteDevServer } from "vite";
 import { createServer, preview } from "vite";
+import { expect, test } from "./renderer-test";
 
 const scope = {
   botId: "bot",

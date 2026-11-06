@@ -3,8 +3,8 @@
 // Inherited Apache-2.0 coverage is preserved. Default Ork avatars are an Ork addition.
 
 import type { Page, TestInfo } from "@playwright/test";
-import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("shows peer lines in transcript and opens view-only peer chat", async ({ page }, testInfo) => {
   const stamp = Date.now();

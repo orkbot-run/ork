@@ -98,7 +98,7 @@ if (
       onCommand: (listener) => subscribe<DesktopMenuCommand>("menu", listener),
     },
     settings: { onOpen: (listener) => subscribe("settings", listener) },
-    server: { change: () => call("server.change") },
+    server: { change: () => call("server.change"), remember: () => call("server.remember") },
     locale: { set: (locale) => call("locale.set", { locale }) },
     monitoring: { enabled: () => call("monitoring.enabled") },
     passkeys: { rpIds: () => call("passkeys.rpIds") },

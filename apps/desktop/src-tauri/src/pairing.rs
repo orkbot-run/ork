@@ -143,6 +143,12 @@ async fn session(client: &Client, origin: &Url, cookies: &str) -> Result<Option<
     }))
 }
 
+/// Verify a product login without requiring device pairing support or minting a device token.
+pub async fn has_session(origin: &Url, cookies: &str) -> Result<bool, String> {
+    let origin = crate::server::normalize_server_url(origin.as_str())?;
+    Ok(session(&client()?, &origin, cookies).await?.is_some())
+}
+
 async fn revoke(client: &Client, origin: &Url, token: &str) {
     if let Ok(target) = origin.join("/api/devices/self") {
         // No cookies and no redirect following: a token can only reach its own server.
@@ -577,6 +583,25 @@ mod tests {
             .unwrap()
             .values()
             .any(|value| value.contains("\"token\""))
+    }
+
+    #[tokio::test]
+    async fn login_verification_does_not_pair_or_store_credentials() {
+        let server = Server::new().await;
+        assert!(has_session(&server.origin, "session=fixture")
+            .await
+            .unwrap());
+        server.state.lock().unwrap().identity = None;
+        assert!(!has_session(&server.origin, "session=fixture")
+            .await
+            .unwrap());
+        let state = server.state.lock().unwrap();
+        assert_eq!(state.pairs, 0);
+        assert!(state.requests.iter().all(|(path, authorization, cookies)| {
+            path == "/api/auth/get-session"
+                && authorization.is_empty()
+                && cookies == "session=fixture"
+        }));
     }
 
     #[tokio::test]

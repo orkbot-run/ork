@@ -1,10 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { chromium, expect, test } from "@playwright/test";
+import { chromium } from "@playwright/test";
+import { expect, useNativeRenderer as installNativeRenderer, test } from "./renderer-test";
 
 const execute = promisify(execFile);
 const helper = path.resolve(
@@ -41,6 +46,7 @@ test("live page helper preserves identity, masks passwords, and reports partial 
       ...BROWSER,
       args: ["--remote-debugging-port=0"],
     });
+    await installNativeRenderer(context);
     let port = "";
     await expect(async () => {
       port = (await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]!;
@@ -209,6 +215,7 @@ test("live page helper waits for a site's sign-in check, or says the page is sti
       ...BROWSER,
       args: ["--remote-debugging-port=0"],
     });
+    await installNativeRenderer(context);
     let port = "";
     await expect(async () => {
       port = (await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]!;
@@ -267,6 +274,7 @@ test("live page helper reaches a form past the control limit by query or by scro
       ...BROWSER,
       args: ["--remote-debugging-port=0"],
     });
+    await installNativeRenderer(context);
     let port = "";
     await expect(async () => {
       port = (await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]!;
@@ -509,6 +517,7 @@ test("live page helper types codes as real key presses into one-box-per-digit fi
       ...BROWSER,
       args: ["--remote-debugging-port=0"],
     });
+    await installNativeRenderer(context);
     let port = "";
     await expect(async () => {
       port = (await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]!;
@@ -819,6 +828,7 @@ test("live page helper types a purchase's card into a payment provider's frame o
       // Payment frames run in their own renderer, as on any real checkout.
       args: ["--remote-debugging-port=0", "--site-per-process"],
     });
+    await installNativeRenderer(context);
     let port = "";
     await expect(async () => {
       port = (await readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n")[0]!;

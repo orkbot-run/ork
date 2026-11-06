@@ -7,17 +7,29 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { redirectSystemPath } from "../app/+native-intent";
 import { AccountsGate } from "../components/accounts-gate";
-import { accountServers } from "./account-servers";
+import { accountServers, addAccountServer } from "./account-servers";
 import { accountsIdentity, continueWithAccounts } from "./accounts";
-import { clearProductAccountSession, loadApiBase, probeApiBase, saveApiBase } from "./api";
+import {
+  clearProductAccountSession,
+  currentApiBase,
+  loadApiBase,
+  probeApiBase,
+  rpc,
+  saveApiBase,
+} from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn } from "./endpoint";
+import { clearServerConnect, pendingServerConnect, receiveServerConnect } from "./server-connect";
+import { currentSessionGeneration } from "./session";
+import { continueWithSso } from "./sso";
 
 const state = vi.hoisted(() => ({
   storage: new Map<string, string>(),
   version: 0,
   listeners: new Set<() => void>(),
+  appListeners: new Set<(state: string) => void>(),
 }));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async (key: string) => state.storage.get(key) ?? null,
@@ -33,7 +45,12 @@ vi.mock("../components/logo-avatar", () => ({
   LogoAvatar: ({ identity }: { identity: string }) => <span data-welcome-avatar={identity} />,
 }));
 vi.mock("react-native", () => ({
-  AppState: { addEventListener: () => ({ remove: vi.fn() }) },
+  AppState: {
+    addEventListener: (_event: string, listener: (value: string) => void) => {
+      state.appListeners.add(listener);
+      return { remove: () => state.appListeners.delete(listener) };
+    },
+  },
   ActivityIndicator: () => <span>Loading</span>,
   View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   ScrollView: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -102,7 +119,12 @@ vi.mock("./accounts", () => ({
   },
 }));
 vi.mock("./account-servers", () => ({ accountServers: vi.fn(), addAccountServer: vi.fn() }));
+vi.mock("./incoming-share", () => ({ receiveIncomingShare: vi.fn() }));
+vi.mock("./session", () => ({ currentSessionGeneration: vi.fn(() => 1) }));
+vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
 vi.mock("./api", () => ({
+  currentApiBase: vi.fn(),
+  rpc: vi.fn(),
   clearProductAccountSession: vi.fn(),
   loadApiBase: vi.fn(),
   probeApiBase: vi.fn(),
@@ -120,10 +142,18 @@ let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.clearAllMocks();
+  const linked = pendingServerConnect();
+  if (linked) clearServerConnect(linked);
   state.storage.clear();
   state.version = 0;
   state.listeners.clear();
+  state.appListeners.clear();
   vi.mocked(accountsIdentity).mockResolvedValue(null);
+  vi.mocked(currentSessionGeneration).mockReset().mockReturnValue(1);
+  vi.mocked(currentApiBase).mockReturnValue(remote.url);
+  vi.mocked(continueWithSso).mockResolvedValue(true);
+  vi.mocked(rpc).mockResolvedValue({ userId: "product-user" } as never);
+  vi.mocked(addAccountServer).mockResolvedValue(remote);
   vi.mocked(accountServers).mockResolvedValue([remote]);
   vi.mocked(clearProductAccountSession).mockResolvedValue(undefined);
   vi.mocked(saveApiBase).mockResolvedValue({ ok: true, url: remote.url });
@@ -331,4 +361,150 @@ it("keeps the welcome Ork through signup and restores the account Ork for an exi
   expect(host.querySelector("[data-welcome-avatar]")?.getAttribute("data-welcome-avatar")).toBe(
     saved,
   );
+});
+
+it("retains a connection link through Accounts login and requires confirmation before product login", async () => {
+  const destination = redirectSystemPath({
+    path: `orkbot://connect?server=${encodeURIComponent(remote.url)}`,
+    initial: false,
+  });
+  expect(destination).toBe("/");
+  await act(async () =>
+    root.render(
+      <AccountsGate>
+        {destination === "/" ? <span>Product screen</span> : <AccountsGate onSelected={vi.fn()} />}
+      </AccountsGate>,
+    ),
+  );
+  expect(addAccountServer).not.toHaveBeenCalled();
+  expect(continueWithSso).not.toHaveBeenCalled();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  expect((host.querySelector("input") as HTMLInputElement).value).toBe(remote.url);
+  expect(host.textContent).not.toContain("Product screen");
+  expect(continueWithSso).not.toHaveBeenCalled();
+  expect(addAccountServer).not.toHaveBeenCalled();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  expect(continueWithSso).toHaveBeenCalledOnce();
+  expect(rpc).toHaveBeenCalledWith("me");
+  expect(addAccountServer).toHaveBeenCalledWith(
+    remote.url,
+    JSON.stringify([identity.issuer, identity.subject]),
+  );
+  expect(vi.mocked(rpc).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(addAccountServer).mock.invocationCallOrder[0]!,
+  );
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
+});
+
+it.each(["cancel", "rejected", "session-change"])(
+  "never bookmarks an unverified product login (%s)",
+  async (outcome) => {
+    receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+    vi.mocked(accountsIdentity).mockResolvedValue(identity);
+    if (outcome === "cancel") vi.mocked(continueWithSso).mockResolvedValue(false);
+    if (outcome === "rejected") vi.mocked(rpc).mockRejectedValue(new Error("Not admitted"));
+    if (outcome === "session-change")
+      vi.mocked(currentSessionGeneration).mockReturnValueOnce(1).mockReturnValue(2);
+    await render();
+    await act(async () =>
+      [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+    );
+    expect(addAccountServer).not.toHaveBeenCalled();
+    expect(pendingServerConnect()).toBe(remote.url);
+    expect(host.textContent).not.toContain("Product screen");
+  },
+);
+
+it("finishes verified product login when its auth browser returns to the foreground", async () => {
+  let finish: (value: boolean) => void = () => undefined;
+  vi.mocked(continueWithSso).mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  await render();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  expect(addAccountServer).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+    finish(true);
+  });
+  expect(addAccountServer).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Product screen");
+});
+
+it("does not save a pending login under a newly selected central account", async () => {
+  let finish: (value: boolean) => void = () => undefined;
+  vi.mocked(continueWithSso).mockImplementationOnce(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  receiveServerConnect(`orkbot://connect?server=${encodeURIComponent(remote.url)}`);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  await render();
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  await act(async () => {
+    vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "subject-b" });
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  await act(async () => finish(true));
+  expect(addAccountServer).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(pendingServerConnect()).toBe(remote.url);
+});
+
+it("interrupts a mounted product for a warm link and restores the saved server after cancelled login", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  vi.mocked(saveApiBase).mockImplementation(async (url) => {
+    vi.mocked(currentApiBase).mockReturnValue(url);
+    return { ok: true, url };
+  });
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  const incoming = "https://other.example.test";
+  await act(async () => {
+    expect(
+      redirectSystemPath({
+        path: `orkbot://connect?server=${encodeURIComponent(incoming)}`,
+        initial: false,
+      }),
+    ).toBe("/");
+  });
+  expect(host.textContent).not.toContain("Product screen");
+  expect((host.querySelector("input") as HTMLInputElement).value).toBe(incoming);
+  vi.mocked(continueWithSso).mockResolvedValue(false);
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+  );
+  expect(addAccountServer).not.toHaveBeenCalled();
+  expect(state.storage.get("orkbot.accounts.selected-server")).toBe(`${account}:${remote.id}`);
+  expect(host.textContent).not.toContain("Product screen");
+  await act(async () =>
+    [...host.querySelectorAll("button")]
+      .find((item) => item.textContent === "server.example.test")!
+      .click(),
+  );
+  expect(currentApiBase()).toBe(remote.url);
+  expect(pendingServerConnect()).toBeNull();
+  expect(host.textContent).toContain("Product screen");
 });

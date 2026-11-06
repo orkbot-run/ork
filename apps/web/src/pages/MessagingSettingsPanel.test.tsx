@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited messaging coverage is preserved; native popup refusal coverage is an Ork addition.
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { supportsNativeSsoPopup } from "../lib/desktop";
+
+vi.mock("../lib/desktop", () => ({ supportsNativeSsoPopup: vi.fn(() => false) }));
 
 const messaging = vi.hoisted(() => ({
   status: vi.fn(),
@@ -120,6 +126,7 @@ async function renderOverlay() {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.mocked(supportsNativeSsoPopup).mockReturnValue(false);
   messaging.installations.list.mockResolvedValue({ available: false, installations: [] });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement("div");
@@ -292,6 +299,28 @@ it("connects Slack to the default bot through workspace authorization", async ()
     expect(messaging.link.start).not.toHaveBeenCalled();
     expect(popup.opener).toBeNull();
     expect(popup.location.href).toBe("https://slack.example.test/authorize");
+  } finally {
+    open.mockRestore();
+  }
+});
+
+it("keeps the native product open and reports failure when its authorization popup is refused", async () => {
+  messaging.status.mockResolvedValue({ ...statusWith([]), providers: ["slack"] });
+  messaging.installations.list.mockResolvedValue({ available: true, installations: [] });
+  vi.mocked(supportsNativeSsoPopup).mockReturnValue(true);
+  const open = vi.spyOn(window, "open").mockReturnValue(null);
+  const previous = window.location.href;
+  try {
+    await renderOverlay();
+    await act(async () =>
+      [...container.querySelectorAll("button")]
+        .find((button) => button.textContent === "Connect")!
+        .click(),
+    );
+    expect(open).toHaveBeenCalledWith("about:blank", "orkbot-slack-install");
+    expect(messaging.installations.start).not.toHaveBeenCalled();
+    expect(window.location.href).toBe(previous);
+    expect(container.textContent).toContain("Couldn't update messaging settings");
   } finally {
     open.mockRestore();
   }

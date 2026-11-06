@@ -1,5 +1,9 @@
-import { expect, test } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 // Icons the API would have fetched; the test stands in for it so CI never contacts a real site.
 const icons: Record<string, string> = {

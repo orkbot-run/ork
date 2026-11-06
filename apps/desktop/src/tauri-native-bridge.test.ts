@@ -266,6 +266,7 @@ describe("Tauri native bridge", () => {
     await bridge.window.toggleMaximize();
     await bridge.window.state();
     await bridge.server?.change();
+    await bridge.server?.remember?.();
     await bridge.monitoring?.enabled();
     await bridge.passkeys?.rpIds();
     await bridge.update.state();
@@ -291,6 +292,7 @@ describe("Tauri native bridge", () => {
       { type: "window.toggleMaximize" },
       { type: "window.state" },
       { type: "server.change" },
+      { type: "server.remember" },
       { type: "monitoring.enabled" },
       { type: "passkeys.rpIds" },
       { type: "update.state" },

@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { redirectSystemPath } from "../app/+native-intent";
+import { clearServerConnect, pendingServerConnect } from "./server-connect";
 import {
   closeSettingsSheet,
   isSettingsLink,
@@ -111,4 +112,33 @@ describe("settings links", () => {
     expect(close).toHaveBeenCalledTimes(3);
     unregister();
   });
+});
+
+it.each([true, false])(
+  "captures a server connection before routing a cold/warm launch (%s)",
+  (initial) => {
+    const close = vi.fn();
+    const unregister = registerSettingsSheet(close);
+    const url = "https://server.example.test";
+    expect(
+      redirectSystemPath({ path: `orkbot://connect?server=${encodeURIComponent(url)}`, initial }),
+    ).toBe("/");
+    expect(pendingServerConnect()).toBe(url);
+    expect(close).toHaveBeenCalledOnce();
+    clearServerConnect(url);
+    unregister();
+  },
+);
+
+it("does not replace a pending server with an invalid connection link", () => {
+  const url = "https://server.example.test";
+  redirectSystemPath({ path: `orkbot://connect?server=${encodeURIComponent(url)}`, initial: true });
+  redirectSystemPath({
+    path: "orkbot://connect?server=https%3A%2F%2Fuser%3Asecret%40other.example.test",
+    initial: false,
+  });
+  expect(pendingServerConnect()).toBe(url);
+  clearServerConnect("https://other.example.test");
+  expect(pendingServerConnect()).toBe(url);
+  clearServerConnect(url);
 });

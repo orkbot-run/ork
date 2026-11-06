@@ -3,8 +3,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // Inherited photo-avatar coverage is preserved. Generator-only fixtures follow LICENSE.md.
 
-import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test("photo working avatars show a visible ring while idle avatars stay plain", async ({
   page,

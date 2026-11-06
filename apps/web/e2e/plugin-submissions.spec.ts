@@ -1,7 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 // Modified by Ork contributors: canonical domain links now use ork.run.
 import type { PluginSubmission } from "@orkbot/contracts";
-import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, makeAdmin, signup } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#888"/></svg>`;
 

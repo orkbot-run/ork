@@ -5,8 +5,8 @@
 // Inherited behavior checks remain Apache-2.0. New changes follow LICENSE.md.
 
 import { BOT_AVATAR_COLORS, LOGO_AVATAR_EYES } from "@orkbot/core";
-import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
+import { expect, test } from "./renderer-test";
 
 test.use({ viewport: { width: 1260, height: 1000 } });
 

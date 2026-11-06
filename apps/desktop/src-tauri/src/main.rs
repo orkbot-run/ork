@@ -21,6 +21,7 @@ mod passkeys;
 mod profile;
 mod server;
 mod server_directory;
+mod server_link;
 mod settings;
 mod speech;
 mod updates;
@@ -37,6 +38,7 @@ use tauri::{
     webview::NewWindowResponse, Emitter, Manager, State, WebviewUrl, WebviewWindow,
     WebviewWindowBuilder,
 };
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
@@ -61,6 +63,9 @@ struct DesktopState {
     speech: speech::SpeechManager,
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
+    pending_server: Mutex<Option<String>>,
+    pending_bookmark: Mutex<Option<server_link::Bookmark>>,
+    bookmark_sync: tokio::sync::Mutex<()>,
 }
 
 fn active_document(app: &tauri::AppHandle) -> Option<native::Document> {
@@ -242,23 +247,7 @@ async fn native_command(
             }
             let origin = pairing::secure_origin(&document.origin)?;
             let attempt = state.pairings.attempt(&origin)?;
-            let cookie_window = window.clone();
-            let cookie_url = origin
-                .join("/api/auth/get-session")
-                .map_err(|_| "Invalid server.")?;
-            // WebView2 cookie access must run outside the UI thread. Cookies stay native.
-            let cookies = tokio::task::spawn_blocking(move || {
-                cookie_window.cookies_for_url(cookie_url).map(|cookies| {
-                    cookies
-                        .iter()
-                        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
-                        .collect::<Vec<_>>()
-                        .join("; ")
-                })
-            })
-            .await
-            .map_err(|_| "Could not read the server session.")?
-            .map_err(|_| "Could not read the server session.")?;
+            let cookies = server_session_cookies(&window, &origin).await?;
             state
                 .pairings
                 .sync(&origin, &cookies, || {
@@ -267,6 +256,11 @@ async fn native_command(
                         && active_document(&app).is_some_and(|current| current.owner() == owner)
                 })
                 .await?;
+            Ok(unit)
+        }
+        Command::ServerRemember => {
+            let cookies = server_session_cookies(&window, &document.origin).await?;
+            save_connected_server(&app, &state, &document, &cookies).await?;
             Ok(unit)
         }
         Command::PairingClear => {
@@ -851,6 +845,7 @@ struct SetupState {
     server_url: Option<String>,
     mode: settings::InstanceMode,
     startup: Startup,
+    pending_server: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -915,6 +910,11 @@ fn setup_state<R: tauri::Runtime>(
             .lock()
             .map_err(|_| "Desktop state unavailable.")?
             .clone(),
+        pending_server: state
+            .pending_server
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .clone(),
     })
 }
 
@@ -948,16 +948,24 @@ async fn connect_server(
     server::probe_server(&target).await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
-    let device = server_directory::device_id(&state.directory)?;
-    server_directory::Directory::new()?
-        .add(
-            authorization.directory_bearer()?,
-            &target,
-            server_directory::Kind::Selfhosted,
-            &device,
-        )
-        .await?;
-    open_server(
+    let bookmark = server_link::Bookmark {
+        origin: target.origin().ascii_serialization(),
+        account: settings::account_key(authorization.account.identity()),
+    };
+    *state
+        .pending_bookmark
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = Some(bookmark.clone());
+    {
+        let mut pending = state
+            .pending_server
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        if pending.as_deref() == Some(bookmark.origin.as_str()) {
+            *pending = None;
+        }
+    }
+    let result = open_server(
         &window,
         &app,
         &state,
@@ -968,7 +976,17 @@ async fn connect_server(
         },
         &authorization,
     )
-    .await
+    .await;
+    if result.is_err() {
+        let mut pending = state
+            .pending_bookmark
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        if pending.as_ref() == Some(&bookmark) {
+            *pending = None;
+        }
+    }
+    result
 }
 
 #[tauri::command]
@@ -1053,6 +1071,7 @@ async fn open_server(
     mut choice: settings::Setup,
     authorization: &accounts::Authorization,
 ) -> Result<(), String> {
+    let intent = state.restore_intent.load(Ordering::SeqCst);
     require_setup(window)?;
     require_account(state, authorization)?;
     server::require_accounts_only(&choice.server_url).await?;
@@ -1142,6 +1161,13 @@ async fn open_server(
         .await
         .and_then(|()| require_setup(window))
         .and_then(|()| require_account(state, authorization))
+        .and_then(|()| {
+            if state.restore_intent.load(Ordering::SeqCst) == intent {
+                Ok(())
+            } else {
+                Err("This connection is no longer active.".into())
+            }
+        })
     {
         cancel_native_document(app, &label);
         state.sessions.remove(&label);
@@ -1211,9 +1237,120 @@ async fn open_server(
 }
 
 #[tauri::command]
+fn clear_server_link<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<DesktopState>,
+    raw_url: String,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let mut pending = state
+        .pending_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if pending.as_deref() == Some(raw_url.as_str()) {
+        *pending = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_setup(&window)?;
     app.exit(0);
+    Ok(())
+}
+
+fn receive_server_link(app: &tauri::AppHandle, input: &str) {
+    let Some(origin) = server_link::parse(input) else {
+        return;
+    };
+    let Some(state) = app.try_state::<DesktopState>() else {
+        return;
+    };
+    cancel_restore(&state);
+    if let Ok(mut pending) = state.pending_server.lock() {
+        *pending = Some(origin.clone());
+    }
+    update_startup(app, Startup::idle());
+    if let Ok(window) = setup_window(app, true) {
+        let _ = window.emit("desktop-server-link", origin);
+    }
+}
+
+async fn server_session_cookies(window: &WebviewWindow, origin: &Url) -> Result<String, String> {
+    let cookie_window = window.clone();
+    let cookie_url = origin
+        .join("/api/auth/get-session")
+        .map_err(|_| "Invalid server.")?;
+    // WebView2 cookie access must run outside the UI thread. Cookies stay native.
+    tokio::task::spawn_blocking(move || {
+        cookie_window.cookies_for_url(cookie_url).map(|cookies| {
+            cookies
+                .iter()
+                .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+                .collect::<Vec<_>>()
+                .join("; ")
+        })
+    })
+    .await
+    .map_err(|_| "Could not read the server session.")?
+    .map_err(|_| "Could not read the server session.".into())
+}
+
+async fn save_connected_server(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    document: &native::Document,
+    cookies: &str,
+) -> Result<(), String> {
+    let _operation = state.bookmark_sync.lock().await;
+    let Some(bookmark) = state
+        .pending_bookmark
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .clone()
+    else {
+        return Ok(());
+    };
+    if bookmark.origin != document.origin.origin().ascii_serialization() {
+        return Ok(());
+    }
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let current = || {
+        state.accounts.is_current(&authorization)
+            && bookmark.account == settings::account_key(authorization.account.identity())
+            && state.sessions.is_current(document)
+            && active_document(app).is_some_and(|active| active.owner() == document.owner())
+            && state
+                .pending_bookmark
+                .lock()
+                .ok()
+                .is_some_and(|pending| pending.as_ref() == Some(&bookmark))
+    };
+    if !current() || !pairing::has_session(&document.origin, cookies).await? || !current() {
+        return Ok(());
+    }
+    let device = server_directory::device_id(&state.directory)?;
+    server_directory::Directory::new()?
+        .add(
+            authorization.directory_bearer()?,
+            &document.origin,
+            server_directory::Kind::Selfhosted,
+            &device,
+        )
+        .await?;
+    if current() {
+        let mut pending = state
+            .pending_bookmark
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        if pending.as_ref() == Some(&bookmark) {
+            *pending = None;
+        }
+    }
     Ok(())
 }
 
@@ -1396,6 +1533,11 @@ fn cancel_restore(state: &DesktopState) {
 
 fn begin_restore(state: &DesktopState) -> Option<u64> {
     if !state.setup_ready.load(Ordering::SeqCst)
+        || state
+            .pending_server
+            .lock()
+            .ok()
+            .is_some_and(|pending| pending.is_some())
         || state
             .restoring
             .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
@@ -1667,9 +1809,15 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            show_active_or_setup(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _| {
+            if !args
+                .iter()
+                .any(|argument| server_link::parse(argument).is_some())
+            {
+                show_active_or_setup(app);
+            }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -1688,6 +1836,7 @@ fn main() {
             connect_local_server,
             local_stack_state,
             quit_setup,
+            clear_server_link,
             native_command
         ])
         .setup(|app| {
@@ -1749,11 +1898,27 @@ fn main() {
                 speech: speech::SpeechManager::new(speech_helper),
                 pairings: pairing::Pairings::default(),
                 warm_generation: AtomicU64::new(0),
+                pending_server: Mutex::new(None),
+                pending_bookmark: Mutex::new(None),
+                bookmark_sync: tokio::sync::Mutex::new(()),
             });
             app.manage(updates::UpdateCheck::default());
             updates::start_background(app.handle().clone());
             refresh_menu(app.handle())?;
             setup_window(app.handle(), false)?;
+            #[cfg(any(windows, target_os = "linux"))]
+            app.deep_link().register_all()?;
+            let link_app = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    receive_server_link(&link_app, url.as_str());
+                }
+            });
+            if let Some(urls) = app.deep_link().get_current()? {
+                for url in urls {
+                    receive_server_link(app.handle(), url.as_str());
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -1859,6 +2024,9 @@ mod tests {
             speech: speech::SpeechManager::new(PathBuf::new()),
             pairings: pairing::Pairings::default(),
             warm_generation: AtomicU64::new(0),
+            pending_server: Mutex::new(None),
+            pending_bookmark: Mutex::new(None),
+            bookmark_sync: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -1916,6 +2084,16 @@ mod tests {
         assert_eq!(begin_restore(&state), None);
         state.restoring.store(false, Ordering::SeqCst);
         assert_eq!(begin_restore(&state), Some(intent + 1));
+    }
+
+    #[test]
+    fn a_pending_external_link_prevents_automatic_default_server_restore() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        state.setup_ready.store(true, Ordering::SeqCst);
+        *state.pending_server.lock().unwrap() = Some("https://new.example.com".into());
+        assert_eq!(begin_restore(&state), None);
+        assert!(!state.restoring.load(Ordering::SeqCst));
     }
 
     #[test]
@@ -2136,7 +2314,7 @@ mod tests {
             &setup,
             request("setup_state", local),
             Ok(
-                serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "checking"}}),
+                serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "checking"}, "pendingServer": null}),
             ),
         );
         for (window, origin) in [
@@ -2154,6 +2332,7 @@ mod tests {
                 "connect_saved_server",
                 "setup_accounts_sign_in",
                 "setup_accounts_logout",
+                "clear_server_link",
             ] {
                 assert!(tauri::test::get_ipc_response(window, request(command, origin)).is_err());
             }

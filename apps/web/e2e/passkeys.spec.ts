@@ -1,5 +1,9 @@
-import { test as base, expect } from "@playwright/test";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import { test as base, expect } from "./renderer-test";
 
 // Loopback deployments use the WebAuthn relying party `localhost` (IP hosts cannot hold
 // passkeys), so this flow runs on the localhost twin of the configured origin.

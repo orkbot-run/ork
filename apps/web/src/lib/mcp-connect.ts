@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited OAuth completion is preserved; native popup session handling is an Ork addition.
+
+import { supportsNativeSsoPopup } from "./desktop";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 import { rpc } from "./rpc";
 
@@ -25,14 +30,15 @@ export function mcpOAuthRedirectUri(): string {
 export async function connectMcpOauth(serverId: string): Promise<McpOauthResult> {
   const started = await rpc.mcp.oauth.begin({ serverId, redirectUri: mcpOAuthRedirectUri() });
   if (started.status !== "authorization_required") return started.status;
+  const native = supportsNativeSsoPopup();
   const popup = window.open(
-    started.authorizationUrl,
+    native ? "about:blank" : started.authorizationUrl,
     MCP_OAUTH_CHANNEL,
     "popup,width=560,height=720",
   );
   if (!popup) {
-    // Popup blocked: navigate this tab instead; the callback page returns to /app.
-    window.location.assign(started.authorizationUrl);
+    // A native product must keep its authenticated document and shared-cookie popup.
+    if (!native) window.location.assign(started.authorizationUrl);
     return "cancelled";
   }
   return await new Promise<McpOauthResult>((resolve) => {
@@ -61,5 +67,16 @@ export async function connectMcpOauth(serverId: string): Promise<McpOauthResult>
       if ((event.data as { type?: string } | null)?.type !== "mcp-oauth-complete") return;
       finish("connected");
     };
+    if (native) {
+      // Tauri can create a related popup only from a trusted same-origin or blank entry.
+      // Subscribe first so an already authorized provider cannot outrun completion capture.
+      try {
+        popup.opener = null;
+        popup.location.href = started.authorizationUrl;
+      } catch {
+        popup.close();
+        finish("cancelled");
+      }
+    }
   });
 }
