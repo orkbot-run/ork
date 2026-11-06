@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+
 import type { Href } from "expo-router";
 
 // On iOS a screen opened on the root stack while the settings sheet is open is presented as a
@@ -26,6 +30,7 @@ const settingsScreens = new Set([
   "skills",
   "space",
   "team-conversation",
+  "updates",
   "vault",
   "voice",
   "wallet",

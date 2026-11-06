@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
 import { getLogger } from "@orkbot/logging";
@@ -160,6 +164,8 @@ export const ROW_SECURITY_MODELS: ReadonlySet<string> = new Set([
   "UserActionAutoReviewPreference",
   "SecurityEvent",
   "AuditEvent",
+  "ServerUpdateControl",
+  "ServerUpdateRequest",
   "Page",
   "PageVersion",
 ]);

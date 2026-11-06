@@ -13,6 +13,7 @@ import { SETTINGS_CONTENT_WIDTH, SettingsGroup, SettingsRow } from "../component
 import { VaultSettings } from "../components/VaultSettings";
 import { canChooseOwnComputer } from "../lib/computer-sandbox";
 import { desktopBridge } from "../lib/desktop";
+import { useServerUpdates } from "../lib/server-updates";
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import {
   ComputerSettingsPanel,
@@ -104,7 +105,9 @@ export function SettingsOverlay({
     keepComputerRecovery ||
     computersAreUnavailable(sandboxProvider) ||
     canChooseOwnComputer(sandboxProvider);
-  const showUpdates = Boolean(desktopBridge()?.update);
+  const serverUpdates = useServerUpdates(requestedSection === "updates");
+  const showUpdates =
+    Boolean(desktopBridge()?.update) || serverUpdates.state.status?.available === true;
   // A section that isn't available yet (billing before its flag loads) shows General until it is.
   const section =
     (requestedSection === "computer" && !showComputer) ||
@@ -422,7 +425,9 @@ export function SettingsOverlay({
                     />
                   ) : null}
                   {section === "billing" && billingEnabled ? <BillingSettingsPanel /> : null}
-                  {section === "updates" && showUpdates ? <UpdatesSettingsPanel /> : null}
+                  {section === "updates" && showUpdates ? (
+                    <UpdatesSettingsPanel serverUpdates={serverUpdates} />
+                  ) : null}
                   {section === "models" ? (
                     <ModelSettingsOverlay embedded scope="account" onClose={requestClose} />
                   ) : null}

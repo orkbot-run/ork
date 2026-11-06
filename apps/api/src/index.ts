@@ -5,6 +5,7 @@
 
 import type { Socket } from "node:net";
 import { unwrapEnvFromKeyManager } from "@orkbot/adapters";
+import { loadServerUpdatesConfig } from "@orkbot/adapters/server-updates-config";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
 
@@ -21,7 +22,21 @@ const logger = await createRootLogger(SERVICE_NAMES.api);
 
 try {
   const env = loadProductEnv();
-  const { app, stop, handleUpgrade } = await createApp({ ...env, logger });
+  const updates = await loadServerUpdatesConfig();
+  const serverUpdateSetup = updates
+    ? {
+        installationId: updates.installationId,
+        delegatedAccountKey: updates.controllerAccountKey,
+        adapter: (
+          await import("@orkbot/adapters/easypanel-server-updates")
+        ).createEasypanelServerUpdateAdapter({
+          channel: updates.channel,
+          currentRevision: env.gitSha ?? null,
+          deploymentTrigger: updates.adapter.deploymentTrigger,
+        }),
+      }
+    : undefined;
+  const { app, stop, handleUpgrade } = await createApp({ ...env, logger, serverUpdateSetup });
   const server = serve({ fetch: app.fetch, port: env.port, hostname: env.apiHost }, () => {
     logger.info("api listening", { "http.host": env.apiHost, "http.port": env.port });
   });

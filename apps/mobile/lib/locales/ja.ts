@@ -3,6 +3,14 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  Updates: "アップデート",
+  "Check for updates": "アップデートを確認",
+  "Update server": "サーバーを更新",
+  "Automatic updates": "自動アップデート",
+  "Deployment requested": "デプロイをリクエストしました",
+  "Check deployment in server panel": "サーバーパネルでデプロイを確認してください",
+  "Could not complete the update. Try again.":
+    "アップデートを完了できませんでした。もう一度お試しください。",
   "Sign in to Accounts to continue.": "続けるにはAccountsにログインしてください。",
   "Too many attempts. Try again later.":
     "試行回数が多すぎます。しばらくしてからもう一度お試しください。",

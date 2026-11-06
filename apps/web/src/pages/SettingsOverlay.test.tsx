@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -52,6 +56,12 @@ vi.mock("../lib/rpc", () => ({
   selectedSpaceId: () => null,
   rpcForSpace: (spaceId: string) => ({
     memory: { providerConfig: () => providerConfig(spaceId) },
+  }),
+}));
+const serverUpdatesVisibility = vi.hoisted(() => ({ available: false }));
+vi.mock("../lib/server-updates", () => ({
+  useServerUpdates: () => ({
+    state: { status: serverUpdatesVisibility.available ? { available: true } : null },
   }),
 }));
 vi.mock("./BillingSettingsPanel", () => ({ BillingSettingsPanel: () => null }));
@@ -315,6 +325,18 @@ it("offers Wallet only when the deployment has a wallet provider", async () => {
     expect(container.querySelector('[data-testid="settings-nav-wallet"]')).not.toBeNull();
     expect(shown()).toBe("wallet");
   } finally {
+    await cleanup();
+  }
+});
+
+it("offers Updates for an authorized supported server without a desktop updater", async () => {
+  serverUpdatesVisibility.available = true;
+  const { container, cleanup } = await render({ section: "updates" });
+  try {
+    expect(updatesNav(container)).not.toBeNull();
+    expect(updaterStatus).not.toHaveBeenCalled();
+  } finally {
+    serverUpdatesVisibility.available = false;
     await cleanup();
   }
 });

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+
 import { Stack, useNavigation } from "expo-router";
 import { HeaderBackButton } from "expo-router/react-navigation";
 import { useEffect } from "react";
@@ -74,6 +78,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="model-connection" options={glassHeaderOptions(t("Model"))} />
       <Stack.Screen name="billing" options={glassHeaderOptions(t("Billing"))} />
       <Stack.Screen name="models" options={glassHeaderOptions(t("Models"))} />
+      <Stack.Screen name="updates" options={glassHeaderOptions(t("Updates"))} />
       <Stack.Screen name="voice" options={glassHeaderOptions(t("Voice"))} />
       <Stack.Screen name="wallet" options={glassHeaderOptions(t("Wallet"))} />
       <Stack.Screen

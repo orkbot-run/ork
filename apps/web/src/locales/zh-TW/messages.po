@@ -998,6 +998,10 @@ msgstr "自動"
 msgid "Automated senders"
 msgstr "自動化傳送者"
 
+#: src/components/ServerUpdates.tsx
+msgid "Automatic updates"
+msgstr "自動更新"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "儲存例行任務後可用"
@@ -1338,6 +1342,10 @@ msgstr "聊天"
 msgid "Check again"
 msgstr "再次檢查"
 
+#: src/components/ServerUpdates.tsx
+msgid "Check deployment in server panel"
+msgstr "請在伺服器面板中檢查部署"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
 msgstr "檢查間隔"
@@ -1348,6 +1356,7 @@ msgid "Check failed: {0}"
 msgstr "檢查失敗：{0}"
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Check for updates"
 msgstr "檢查更新"
 
@@ -1948,6 +1957,7 @@ msgid "Could not complete sign-in. Retry or ask your administrator to check acce
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "無法完成更新，請再試一次。"
 
@@ -2738,6 +2748,10 @@ msgstr "拒絕"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Deployment default ({0})"
 msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Deployment requested"
+msgstr "已請求部署"
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
@@ -5001,6 +5015,7 @@ msgid "Preferences"
 msgstr "偏好設定"
 
 #: src/components/integrations/skills-dialog.tsx
+#: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Preview"
 msgstr ""
@@ -5821,6 +5836,10 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Serenity endpoint is required."
 msgstr "請填寫 Serenity 端點。"
+
+#: src/components/ServerUpdates.tsx
+msgid "Server"
+msgstr "伺服器"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -6825,6 +6844,10 @@ msgstr "更新進度"
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "需要更新"
+
+#: src/components/ServerUpdates.tsx
+msgid "Update server"
+msgstr "更新伺服器"
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

@@ -9,6 +9,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
 import { nativeLoginStore } from "./native-accounts-login.js";
 import { nativePairingStore } from "./native-pairing-store.js";
+import { verifiedNativeSessionIdentity } from "./native-session-identity.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const enabled =
@@ -652,6 +653,12 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         expect(first.response.status, await first.response.clone().text()).toBe(200);
         const signedIn = (await first.response.json()) as { token: string; user: { id: string } };
         expect(signedIn.token).toContain(".");
+        const nativeSession = await prisma!.session.findFirstOrThrow({
+          where: { userId: signedIn.user.id },
+        });
+        expect(
+          await verifiedNativeSessionIdentity(prisma!, nativeSession.id, signedIn.user.id, issuer),
+        ).toBe(oidcAccountSubject(issuer, "owner-a"));
         const cookie = first.response.headers
           .getSetCookie()
           .map((value) => value.split(";")[0])
@@ -699,6 +706,9 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
             .some((value) => value.includes("session_token=;") && value.includes("Max-Age=0")),
         ).toBe(true);
         expect(await sessionWith({ cookie })).toBeNull();
+        expect(
+          await verifiedNativeSessionIdentity(prisma!, nativeSession.id, signedIn.user.id, issuer),
+        ).toBeNull();
         expect(await sessionWith({ authorization: `Bearer ${signedIn.token}` })).toBeNull();
         expect(
           await prisma!.session.findUnique({ where: { token: signedIn.token.split(".")[0]! } }),

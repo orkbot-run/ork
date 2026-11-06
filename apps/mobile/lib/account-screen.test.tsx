@@ -34,6 +34,7 @@ const { element, account } = vi.hoisted(() => ({
         children,
       ),
   account: {
+    serverUpdates: false,
     me: { userId: "user-1", name: "Tester", email: "tester@example.test" } as Record<
       string,
       unknown
@@ -45,6 +46,11 @@ const { element, account } = vi.hoisted(() => ({
   },
 }));
 
+vi.mock("./server-updates", () => ({
+  useServerUpdates: () => ({
+    state: { status: account.serverUpdates ? { available: true } : null },
+  }),
+}));
 vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("expo-notifications", () => ({
   getPermissionsAsync: vi.fn(async () => ({ status: "granted" })),
@@ -286,6 +292,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   account.me = { userId: "user-1", name: "Tester", email: "tester@example.test" };
   account.rules = [];
+  account.serverUpdates = false;
   account.messaging = { enabled: true };
   vi.mocked(fetchAccountSecurity).mockResolvedValue(security());
 });
@@ -572,4 +579,12 @@ it("hangs up the active call before signing out", async () => {
   });
   await view.press("Sign out");
   expect(order).toEqual(["hang-up", "sign-out"]);
+});
+
+it("offers native Updates navigation only for a supported authorized server", async () => {
+  account.serverUpdates = true;
+  const view = await renderAccount();
+  expect(view.button("Updates")).toBeDefined();
+  await view.press("Updates");
+  expect(account.push).toHaveBeenCalledWith("/updates");
 });

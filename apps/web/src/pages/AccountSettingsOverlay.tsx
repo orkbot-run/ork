@@ -4,6 +4,7 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
+import type { createServerUpdates, ServerUpdatesView } from "@orkbot/core";
 import {
   accountDisplay,
   displayName,
@@ -44,6 +45,7 @@ import {
 } from "../components/ComputersUnavailableHint";
 import { DesktopUpdateSection } from "../components/DesktopUpdates";
 import { PasskeySettings } from "../components/PasskeySettings";
+import { ServerUpdateSection } from "../components/ServerUpdates";
 import { SettingsGroup, SettingsRow } from "../components/SettingsRows";
 import { TrustedLinkSitesSettings } from "../components/TrustedLinkSitesSettings";
 import { authClient } from "../lib/auth";
@@ -602,10 +604,15 @@ export function ComputerSettingsPanel({
   );
 }
 
-export function UpdatesSettingsPanel() {
+export function UpdatesSettingsPanel({
+  serverUpdates,
+}: {
+  serverUpdates: { updates: ReturnType<typeof createServerUpdates>; state: ServerUpdatesView };
+}) {
   return (
     <div className="space-y-5">
       <DesktopUpdateSection />
+      <ServerUpdateSection {...serverUpdates} />
     </div>
   );
 }

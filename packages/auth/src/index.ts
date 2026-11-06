@@ -45,6 +45,7 @@ import type { EmailLocaleOf } from "./email.js";
 import { emailLocale, passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
 import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
 import { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
+import { nativeSessionIdentityKey } from "./native-session-identity.js";
 import type { OidcConfig } from "./oidc.js";
 import { isCurrentOidcAccount, oidcAccountSubject, oidcDiscovery } from "./oidc.js";
 import { passkeyRelyingParty } from "./passkey.js";
@@ -60,6 +61,11 @@ export {
 export type { HomeDeletionReason } from "./home-deletion-email.js";
 export { homeDeletionEmail } from "./home-deletion-email.js";
 export { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
+export {
+  NATIVE_SESSION_IDENTITY_PREFIX,
+  nativeSessionIdentityKey,
+  verifiedNativeSessionIdentity,
+} from "./native-session-identity.js";
 export type { OidcConfig } from "./oidc.js";
 export { passkeyRelyingParty } from "./passkey.js";
 export {
@@ -776,6 +782,17 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
               await ctx.context.internalAdapter.createVerificationValue({
                 identifier: oidcSessionKey(session.id),
                 value: JSON.stringify([issuer, session.userId]),
+                expiresAt: session.expiresAt,
+              });
+            }
+            if (ctx && native) {
+              await ctx.context.internalAdapter.createVerificationValue({
+                identifier: nativeSessionIdentityKey(session.id),
+                value: JSON.stringify([
+                  native.issuer,
+                  session.userId,
+                  oidcAccountSubject(native.issuer, native.subject),
+                ]),
                 expiresAt: session.expiresAt,
               });
             }

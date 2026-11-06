@@ -997,6 +997,10 @@ msgstr "ऑटो"
 msgid "Automated senders"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Automatic updates"
+msgstr "अपने आप अपडेट करें"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr ""
@@ -1337,6 +1341,10 @@ msgstr "चैट"
 msgid "Check again"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Check deployment in server panel"
+msgstr "सर्वर पैनल में डिप्लॉयमेंट जाँचें"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
 msgstr "जाँच का अंतराल"
@@ -1347,6 +1355,7 @@ msgid "Check failed: {0}"
 msgstr "जाँच विफल: {0}"
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Check for updates"
 msgstr ""
 
@@ -1947,6 +1956,7 @@ msgid "Could not complete sign-in. Retry or ask your administrator to check acce
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr ""
 
@@ -2737,6 +2747,10 @@ msgstr "अस्वीकार करें"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Deployment default ({0})"
 msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Deployment requested"
+msgstr "डिप्लॉयमेंट का अनुरोध भेजा गया"
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
@@ -5000,6 +5014,7 @@ msgid "Preferences"
 msgstr "प्राथमिकताएँ"
 
 #: src/components/integrations/skills-dialog.tsx
+#: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Preview"
 msgstr ""
@@ -5820,6 +5835,10 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Serenity endpoint is required."
 msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Server"
+msgstr "सर्वर"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -6824,6 +6843,10 @@ msgstr ""
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "अपडेट आवश्यक है"
+
+#: src/components/ServerUpdates.tsx
+msgid "Update server"
+msgstr "सर्वर अपडेट करें"
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

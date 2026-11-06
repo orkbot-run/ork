@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./server-updates-config": "./src/server-updates-config.ts",
+    "./easypanel-server-updates": "./src/easypanel-server-updates.ts",
     "./agent-desktop-host-screen": "./src/agent-desktop-host-screen.ts",
     "./cua-host-screen": "./src/cua-host-screen.ts",
     "./host-computer-server": "./src/host-computer-server.ts",

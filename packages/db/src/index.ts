@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+
 export * from "./account-export.js";
 export * from "./approval-settings.js";
 export * from "./artifact-versions.js";
@@ -45,6 +49,7 @@ export * from "./run-turn-checkpoint.js";
 export * from "./sandbox-allowance.js";
 export * from "./scope.js";
 export * from "./security-events.js";
+export * from "./server-updates.js";
 export * from "./sessions.js";
 export * from "./space-settings.js";
 export * from "./spaces.js";

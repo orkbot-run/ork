@@ -997,6 +997,10 @@ msgstr "自動"
 msgid "Automated senders"
 msgstr "自動送信者"
 
+#: src/components/ServerUpdates.tsx
+msgid "Automatic updates"
+msgstr "自動アップデート"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Available after the routine is saved"
 msgstr "ルーティンの保存後に利用可能"
@@ -1337,6 +1341,10 @@ msgstr "チャット"
 msgid "Check again"
 msgstr "再確認"
 
+#: src/components/ServerUpdates.tsx
+msgid "Check deployment in server panel"
+msgstr "サーバーパネルでデプロイを確認してください"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
 msgstr "確認間隔"
@@ -1347,6 +1355,7 @@ msgid "Check failed: {0}"
 msgstr "確認に失敗しました: {0}"
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Check for updates"
 msgstr "アップデートを確認"
 
@@ -1947,6 +1956,7 @@ msgid "Could not complete sign-in. Retry or ask your administrator to check acce
 msgstr ""
 
 #: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "アップデートを完了できませんでした。もう一度お試しください。"
 
@@ -2737,6 +2747,10 @@ msgstr "拒否"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Deployment default ({0})"
 msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Deployment requested"
+msgstr "デプロイをリクエストしました"
 
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
@@ -5000,6 +5014,7 @@ msgid "Preferences"
 msgstr "環境設定"
 
 #: src/components/integrations/skills-dialog.tsx
+#: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Preview"
 msgstr ""
@@ -5820,6 +5835,10 @@ msgstr ""
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Serenity endpoint is required."
 msgstr "Serenityのエンドポイントは必須です。"
+
+#: src/components/ServerUpdates.tsx
+msgid "Server"
+msgstr "サーバー"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
@@ -6824,6 +6843,10 @@ msgstr "更新の進行状況"
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "アップデートが必要です"
+
+#: src/components/ServerUpdates.tsx
+msgid "Update server"
+msgstr "サーバーを更新"
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

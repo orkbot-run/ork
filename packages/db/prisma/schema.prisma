@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 schema is preserved. Ork avatar defaults are PolyForm-covered additions.
+// Inherited Apache-2.0 schema is preserved. Ork avatar defaults and server update records are PolyForm-covered additions.
 
 generator client {
   provider = "prisma-client"
@@ -26,6 +26,7 @@ model AiDataConsent {
 }
 
 model User {
+  serverUpdateConsents ServerUpdateControl[]
   aiDataConsents AiDataConsent[]
   pages          Page[]
   id                          String                       @id
@@ -2404,4 +2405,49 @@ model CapabilityInstallSpace {
   @@id([installId, spaceId])
   @@index([spaceId, userId])
   @@map("capability_install_spaces")
+}
+
+/// Installation-scoped operator consent and coordination, never an app user's tenant settings.
+model ServerUpdateControl {
+  id String @id
+  delegatedAccountKey String
+  channel String
+  automatic Boolean @default(false)
+  consentedAccountKey String?
+  consentedUserId String?
+  consentedUser User? @relation(fields: [consentedUserId], references: [id], onDelete: SetNull)
+  policyRevision Int @default(0)
+  candidateBaseRevision String?
+  candidateRevision String?
+  candidateVersion String?
+  lastCheckedAt DateTime?
+  checkFailed Boolean @default(false)
+  nextCheckAt DateTime @default(now())
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  requests ServerUpdateRequest[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("server_update_controls")
+}
+
+/// Trigger requests record acknowledgement only, never successful deployment or rollback.
+model ServerUpdateRequest {
+  id String @id @default(uuid())
+  installationId String
+  control ServerUpdateControl @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  idempotencyKey String
+  revision String
+  state String @default("queued")
+  automatic Boolean
+  policyRevision Int
+  delegatedAccountKey String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([installationId, idempotencyKey])
+  @@index([installationId, createdAt])
+  @@index([installationId, revision])
+  @@map("server_update_requests")
 }

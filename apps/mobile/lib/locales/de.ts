@@ -3,6 +3,14 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  Updates: "Aktualisierungen",
+  "Check for updates": "Nach Updates suchen",
+  "Update server": "Server aktualisieren",
+  "Automatic updates": "Automatische Updates",
+  "Deployment requested": "Bereitstellung angefordert",
+  "Check deployment in server panel": "Prüfe die Bereitstellung im Server-Panel",
+  "Could not complete the update. Try again.":
+    "Die Aktualisierung konnte nicht abgeschlossen werden. Versuche es erneut.",
   "Sign in to Accounts to continue.": "Melde dich bei Accounts an, um fortzufahren.",
   "Too many attempts. Try again later.": "Zu viele Versuche. Versuche es später erneut.",
   "Pairing code": "Kopplungscode",

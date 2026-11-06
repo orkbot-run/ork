@@ -68,6 +68,29 @@ test("restart and interrupted initialization reuse every credential", (t) => {
   assert.equal(readFileSync(join(options.root, "api/environment.json"), "utf8"), original);
 });
 
+test("optional operator update configuration survives bootstrap without changing secrets", (t) => {
+  const options = fixture(t);
+  initialize(options);
+  const installation = readFileSync(join(options.root, "installation.json"), "utf8");
+  const environment = readFileSync(join(options.root, "api/environment.json"), "utf8");
+  const path = join(options.root, "api/updates.json");
+  const updateConfig = JSON.stringify({
+    version: 1,
+    installationId: "00000000-0000-4000-8000-000000000001",
+    controllerAccountKey: "a".repeat(64),
+    channel: "preview",
+    adapter: {
+      kind: "easypanel",
+      deploymentTrigger: "https://panel.example.test/api/deploy/fixture-deploy-token",
+    },
+  });
+  writeFileSync(path, updateConfig, { mode: 0o600 });
+  initialize(options);
+  assert.equal(readFileSync(path, "utf8"), updateConfig);
+  assert.equal(readFileSync(join(options.root, "installation.json"), "utf8"), installation);
+  assert.equal(readFileSync(join(options.root, "api/environment.json"), "utf8"), environment);
+});
+
 test("changed domain, missing state, and edited runtime files never rotate existing secrets", (t) => {
   const options = fixture(t);
   initialize(options);

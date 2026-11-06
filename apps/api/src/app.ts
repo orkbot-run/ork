@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 composition is preserved. Native OIDC callback wiring is an Ork addition.
+// Inherited Apache-2.0 composition is preserved. Native OIDC callbacks and delegated server updates are Ork additions.
 
 import { hostname } from "node:os";
 import type {
@@ -15,6 +15,7 @@ import type {
   NotificationProvider,
   RealtimeFanout,
   SandboxProvider,
+  ServerUpdateAdapter,
   TransactionalEmailProvider,
 } from "@orkbot/adapter-kit";
 import {
@@ -211,6 +212,7 @@ import { createRouter } from "#modules/platform/router";
 import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
 import { createAuthResponseAudit } from "#modules/security/security-audit";
+import { createServerUpdates } from "#modules/server-updates/service";
 import { createSpeechSummarizer } from "#modules/voice/speech-summary";
 import {
   mountVoiceHttpRoutes,
@@ -261,6 +263,12 @@ export function createApp(overrides: CreateAppOverrides = {}): Promise<AppHandle
 }
 
 type CreateAppOverrides = Partial<AppEnv> & {
+  /** Explicit operator delegation; workspace roles never enable deployment control. */
+  serverUpdateSetup?: {
+    adapter: ServerUpdateAdapter;
+    installationId: string;
+    delegatedAccountKey: string;
+  };
   prisma?: PrismaClient;
   realtime?: RealtimeFanout;
   sandbox?: SandboxProvider;
@@ -287,6 +295,7 @@ type CreateAppOverrides = Partial<AppEnv> & {
 
 async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const {
+    serverUpdateSetup,
     prisma: prismaOverride,
     realtime: realtimeOverride,
     sandbox: sandboxOverride,
@@ -826,7 +835,18 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     (error) => getLogger().error("stalled organization deletion failed", error),
   );
 
+  const serverUpdates = serverUpdateSetup
+    ? createServerUpdates({
+        prisma,
+        ...serverUpdateSetup,
+        issuer: "https://api.orkbot.run",
+        currentRevision: env.gitSha ?? null,
+      })
+    : undefined;
+  serverUpdates?.start();
+
   const router = createRouter({
+    serverUpdates,
     speechSummary:
       env.voiceSummaryMinChars === undefined
         ? undefined
@@ -1541,6 +1561,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       auth.disposeOidcDiscovery();
+      const serverUpdatesStopped = serverUpdates?.stop();
       shutdown.abort();
       // Aborted runs hand themselves back while realtime is still open to announce them.
       const runsStopped = runs?.stop();
@@ -1566,6 +1587,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       await stopHomeRetention?.();
       await stopOrganizationDeletions();
       await reconciler?.stop();
+      await serverUpdatesStopped;
       await oauthTokenUpgrade;
       await mcpArgsMove;
       await runsStopped;

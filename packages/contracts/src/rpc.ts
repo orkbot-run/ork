@@ -183,6 +183,12 @@ import {
 } from "./runs.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { SecurityEventListInputSchema, SecurityEventSchema } from "./security-events.js";
+import {
+  ServerUpdatesApplySchema,
+  ServerUpdatesCheckSchema,
+  ServerUpdatesPolicySchema,
+  ServerUpdatesStatusSchema,
+} from "./server-updates.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
 
 const botId = z.object({ botId: Id });
@@ -437,11 +443,14 @@ export const appContract = {
   audit: {
     events: oc.input(AuditEventListInputSchema).output(AuditEventPageSchema),
   },
-  /**
-   * Deployment-owner product updates. When the Compose updater sidecar is reachable, these proxy
-   * to its `/state` `/plan` `/apply` contract. Rollback stays on the sidecar for ops only and is
-   * not exposed here. Never git-fetch from the API process.
-   */
+  /** Operator-delegated channel updates. Acknowledgement confirms a deployment request. */
+  serverUpdates: {
+    status: oc.output(ServerUpdatesStatusSchema),
+    check: oc.input(ServerUpdatesCheckSchema).output(ServerUpdatesStatusSchema),
+    apply: oc.input(ServerUpdatesApplySchema).output(ServerUpdatesStatusSchema),
+    policy: oc.input(ServerUpdatesPolicySchema).output(ServerUpdatesStatusSchema),
+  },
+  /** Legacy wire compatibility; product routes reject these host updater operations. */
   updater: {
     status: oc.output(ServerUpdateStatusSchema),
     check: oc.input(ServerUpdateRequestSchema).output(ServerUpdateCheckSchema),

@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Auth, AuthEnv } from "./index.js";
 import { createAuth } from "./index.js";
 import type * as NativeLogin from "./native-accounts-login.js";
+import { nativeSessionIdentityKey } from "./native-session-identity.js";
 import { isCurrentOidcAccount, oidcAccountSubject } from "./oidc.js";
 import { encryptStoredOAuthTokens, openIdToken, sealIdToken } from "./token-storage.js";
 
@@ -346,6 +347,18 @@ describe("native Accounts production session hooks", () => {
     expect(rows("user")).toHaveLength(1);
     expect(rows("account")).toHaveLength(1);
     expect(rows("session")).toHaveLength(1);
+    expect(rows("verification")).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          identifier: nativeSessionIdentityKey(String(rows("session")[0]!.id)),
+          value: JSON.stringify([
+            issuer,
+            rows("user")[0]!.id,
+            oidcAccountSubject(issuer, "subject-1"),
+          ]),
+        }),
+      ]),
+    );
     const issued = (await response.json()) as { token: string };
     expect(issued.token).toContain(".");
     cookies = "";

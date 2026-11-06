@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
 
 import type {
   AgentHomeStore,
@@ -53,6 +54,8 @@ import { memoryRoutes } from "#modules/memory/routes/memory";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
 import { routinesRoutes } from "#modules/routines/routes/routines";
+import { serverUpdateRoutes } from "#modules/server-updates/routes";
+import type { ServerUpdatesService } from "#modules/server-updates/service";
 import { availabilityRoutes } from "#modules/spaces/routes/availability";
 import { spacesRoutes } from "#modules/spaces/routes/spaces";
 import { threadsRoutes } from "#modules/threads/routes/threads";
@@ -65,6 +68,7 @@ export { callMarkerClientNonce } from "#modules/threads/routes/threads";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 
 export interface RouterDeps {
+  serverUpdates?: ServerUpdatesService;
   pushTokens: PushTokenStore;
   /** Stops a call's ring on the owner's other devices once it is settled. */
   notifications?: NotificationProvider;
@@ -163,6 +167,7 @@ export function createRouter(deps: RouterDeps) {
     ...threadsRoutes(ctx),
     ...computerRoutes(ctx),
     ...computerProviderRoutes(ctx),
+    ...serverUpdateRoutes(ctx),
     ...memoryRoutes(ctx),
     ...routinesRoutes(ctx),
     ...boardsRoutes(ctx),

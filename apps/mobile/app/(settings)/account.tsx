@@ -89,6 +89,7 @@ import {
   subscribeResponseStreaming,
 } from "../../lib/response-streaming";
 import { promptSectionName } from "../../lib/section-name-prompt";
+import { useServerUpdates } from "../../lib/server-updates";
 import { isSettingsLink, openFromSettingsSheet } from "../../lib/settings-sheet";
 import { ACCOUNT_SETTINGS } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
@@ -189,6 +190,7 @@ export default function Account() {
   const styles = useThemedStyles(createAccountStyles);
   const versionInfo = getAppVersionInfo();
   const updateLabel = formatUpdateLabel(versionInfo.update, t);
+  const serverUpdates = useServerUpdates(false);
   const versionAccessibility = [versionInfo.nativeLabel, updateLabel].filter(Boolean).join(". ");
   const approvals = useApprovalSettings(ACCOUNT_SETTINGS);
   const organizations = useOrganizations().data;
@@ -691,6 +693,9 @@ export default function Account() {
               { title: t("Memory"), href: "/memory" },
               ...(messagingEnabled ? [{ title: t("Messaging"), href: "/messaging" } as const] : []),
               { title: t("AI data sharing"), href: "/ai-data-sharing" },
+              ...(serverUpdates.state.status?.available
+                ? [{ title: t("Updates"), href: "/updates" } as const]
+                : []),
             ] as const
           ).map(settingsLink)}
         </SettingsGroup>

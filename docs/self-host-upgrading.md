@@ -1,4 +1,24 @@
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- Modified by Ork contributors to document scoped panel update requests. -->
+<!-- Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md. -->
+
 # Upgrading
+
+## Self-hosted Compose behind a deployment panel
+
+For `docker-compose.selfhost.yml`, keep the panel as the deployment manager.
+[Configure its scoped deployment trigger](../infra/compose/server-updates.md) to let
+the explicitly delegated Accounts owner request updates and opt into automatic requests.
+The adapter requests the configured channel once and records an unknown result if the
+panel's acknowledgement is lost. Check the panel's deployment output before retrying.
+
+The updater sidecar below remains a separate operator tool for standalone deployments.
+The new panel integration does not activate the older sidecar RPCs or add Docker access
+to the application.
+
+## Standalone deployments
 
 Move a deployment to a new release, handle one-time migrations, and let the updater sidecar do it
 for you.

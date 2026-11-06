@@ -3,6 +3,13 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  Updates: "更新",
+  "Check for updates": "檢查更新",
+  "Update server": "更新伺服器",
+  "Automatic updates": "自動更新",
+  "Deployment requested": "已請求部署",
+  "Check deployment in server panel": "請在伺服器面板中檢查部署",
+  "Could not complete the update. Try again.": "無法完成更新，請再試一次。",
   "Sign in to Accounts to continue.": "請先登入 Accounts 以繼續。",
   "Too many attempts. Try again later.": "嘗試次數過多，請稍後再試。",
   "Pairing code": "配對碼",
