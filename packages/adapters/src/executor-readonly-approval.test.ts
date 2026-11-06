@@ -2038,7 +2038,10 @@ describe("own settings through update_bot", () => {
           instructions: "test-secret",
           fleetManagement: true,
           ...Object.fromEntries(
-            Array.from({ length: 30 }, (_, i) => [`field-${i}-${"z".repeat(1000)}`, "test-secret"]),
+            Array.from({ length: 30 }, (_, i) => [
+              `field-${i}-${"\u0000".repeat(1000)}`,
+              "test-secret",
+            ]),
           ),
         },
         executionId: "call-1",
@@ -2057,7 +2060,7 @@ describe("own settings through update_bot", () => {
     });
     const result = f.results[0] as { ignoredFields: string[] };
     expect(result.ignoredFields).toHaveLength(12);
-    expect(result.ignoredFields.every((key) => key.length <= 64)).toBe(true);
+    expect(result.ignoredFields.every((key) => key.length <= 24)).toBe(true);
     expect(JSON.stringify(result)).not.toContain("test-secret");
     expect(JSON.stringify(result).length).toBeLessThan(11_000);
     expect(f.instructionState.instructions).toBe(long);

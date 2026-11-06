@@ -306,7 +306,7 @@ export const fleetTools: ToolHandlers = {
                   argumentGiven(args[key]),
               )
               .slice(0, 12)
-              .map((key) => key.slice(0, 64))
+              .map((key) => key.slice(0, 24))
           : [];
       return call.finish({ ...settings, ...(ignoredFields.length ? { ignoredFields } : {}) });
     }
