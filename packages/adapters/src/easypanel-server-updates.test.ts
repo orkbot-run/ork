@@ -8,6 +8,14 @@ const trigger = "https://panel.example.test/api/deploy/fixture-deploy-token";
 const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 const INDEX = "application/vnd.oci.image.index.v1+json";
+const ciUrl = `https://api.github.com/repos/orkbot-run/ork/actions/workflows/ci.yml/runs?head_sha=${revision}&event=push&per_page=1`;
+const successfulRun = {
+  head_sha: revision,
+  head_branch: "main",
+  event: "push",
+  status: "completed",
+  conclusion: "success",
+};
 function fixture(
   channel: "stable" | "preview" = "stable",
   overrides: Record<string, () => Response> = {},
@@ -23,6 +31,10 @@ function fixture(
       return Response.json({ tag_name: "v1.2.3", draft: false, prerelease: false });
     if (url.includes("/commits?")) return Response.json([{ sha: revision }]);
     if (url.includes("/compare/")) return Response.json({ status: "ahead" });
+    if (url.includes("/actions/workflows/ci.yml/runs?"))
+      return Response.json({
+        workflow_runs: [{ ...successfulRun, head_sha: new URL(url).searchParams.get("head_sha") }],
+      });
     if (url.startsWith("https://ghcr.io/token?")) {
       expect(init?.headers).toBeUndefined();
       return Response.json({ token: "fixture-public-pull-capability" });
@@ -55,6 +67,7 @@ describe("configured channel deployment adapter", () => {
       "https://api.github.com/repos/orkbot-run/ork/releases/latest",
       "https://api.github.com/repos/orkbot-run/ork/commits?sha=v1.2.3&per_page=1",
       `https://api.github.com/repos/orkbot-run/ork/compare/${"9".repeat(40)}...${revision}?per_page=1&page=2`,
+      ciUrl,
       "https://ghcr.io/token?service=ghcr.io&scope=repository:orkbot-run/ork/app:pull",
       `https://ghcr.io/v2/orkbot-run/ork/app/manifests/sha-${revision}`,
       "https://ghcr.io/v2/orkbot-run/ork/app/manifests/latest",
@@ -113,11 +126,14 @@ describe("configured channel deployment adapter", () => {
 
   it("submits exactly one credential-free request and treats acknowledgement only as requested", async () => {
     const { adapter, fetch } = fixture();
-    await expect(adapter.submit()).resolves.toBeUndefined();
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch.mock.calls[0]?.[1]).toMatchObject({ method: "POST", redirect: "error" });
-    expect(fetch.mock.calls[0]?.[1]?.headers).toBeUndefined();
-    expect(fetch.mock.calls[0]?.[1]?.body).toBeUndefined();
+    await expect(adapter.check()).resolves.toMatchObject({ revision });
+    await expect(adapter.submit(revision)).resolves.toBeUndefined();
+    const requests = fetch.mock.calls.filter(([url]) => url === trigger);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.[1]).toMatchObject({ method: "POST", redirect: "error" });
+    expect(requests[0]?.[1]?.headers).toBeUndefined();
+    expect(requests[0]?.[1]?.body).toBeUndefined();
+    expect(fetch.mock.calls.filter(([url]) => url === ciUrl)).toHaveLength(2);
   });
 
   it.each([302, 400, 500])(
@@ -126,23 +142,23 @@ describe("configured channel deployment adapter", () => {
       const { adapter, fetch } = fixture("stable", {
         [trigger]: () => new Response(trigger, { status }),
       });
-      await expect(adapter.submit()).rejects.toThrow(
+      await expect(adapter.submit(revision)).rejects.toThrow(
         /^Could not contact the deployment service\.$/,
       );
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(1);
     },
   );
 
   it("sanitizes thrown network errors and never retries ambiguous submissions", async () => {
-    const fetch = vi.fn(async () => {
-      throw new Error(trigger);
+    const { adapter, fetch } = fixture("stable", {
+      [trigger]: () => {
+        throw new Error(trigger);
+      },
     });
-    const adapter = createEasypanelServerUpdateAdapter(
-      { channel: "stable", deploymentTrigger: trigger, currentRevision: revision },
-      { fetch },
+    await expect(adapter.submit(revision)).rejects.toThrow(
+      /^Could not contact the deployment service\.$/,
     );
-    await expect(adapter.submit()).rejects.toThrow(/^Could not contact the deployment service\.$/);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(1);
   });
 
   it.each(["behind", "diverged", "identical"])(
@@ -166,6 +182,94 @@ describe("configured channel deployment adapter", () => {
       { fetch },
     );
     await expect(adapter.check()).resolves.toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["queued", { status: "queued", conclusion: null }],
+    ["running", { status: "in_progress", conclusion: null }],
+    ["failed", { conclusion: "failure" }],
+    ["cancelled", { conclusion: "cancelled" }],
+    ["timed out", { conclusion: "timed_out" }],
+    ["neutral", { conclusion: "neutral" }],
+    ["wrong revision", { head_sha: "c".repeat(40) }],
+    ["wrong branch", { head_branch: "other" }],
+    ["wrong event", { event: "pull_request" }],
+  ])("withholds a candidate for %s official CI", async (_name, overrides) => {
+    const { adapter, fetch } = fixture("preview", {
+      [ciUrl]: () =>
+        Response.json({ workflow_runs: [{ ...successfulRun, ...(overrides as object) }] }),
+    });
+    await expect(adapter.check()).resolves.toBeNull();
+    await expect(adapter.submit(revision)).rejects.toThrow(
+      /^Could not contact the deployment service\.$/,
+    );
+    expect(
+      fetch.mock.calls.some(
+        ([url]) => String(url).startsWith("https://ghcr.io") || url === trigger,
+      ),
+    ).toBe(false);
+  });
+
+  it.each([() => Response.json({ workflow_runs: [] }), () => new Response(null, { status: 404 })])(
+    "withholds missing official CI and refuses submission",
+    async (response) => {
+      const { adapter, fetch } = fixture("preview", { [ciUrl]: response });
+      await expect(adapter.check()).resolves.toBeNull();
+      await expect(adapter.submit(revision)).rejects.toThrow();
+      expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+    },
+  );
+
+  it("rechecks CI after discovery and refuses a now-cancelled run before posting", async () => {
+    let cancelled = false;
+    const { adapter, fetch } = fixture("preview", {
+      [ciUrl]: () =>
+        Response.json({
+          workflow_runs: [{ ...successfulRun, conclusion: cancelled ? "cancelled" : "success" }],
+        }),
+    });
+    await expect(adapter.check()).resolves.toMatchObject({ revision });
+    cancelled = true;
+    await expect(adapter.submit(revision)).rejects.toThrow();
+    expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+  });
+
+  it("refuses a changed published candidate even when its CI also succeeds", async () => {
+    let moved = false;
+    const { adapter, fetch } = fixture("preview", {
+      "https://api.github.com/repos/orkbot-run/ork/commits?sha=main&per_page=1": () =>
+        Response.json([{ sha: moved ? "c".repeat(40) : revision }]),
+    });
+    await expect(adapter.check()).resolves.toMatchObject({ revision });
+    moved = true;
+    await expect(adapter.submit(revision)).rejects.toThrow();
+    expect(
+      fetch.mock.calls.some(([url]) => String(url).includes(`manifests/sha-${"c".repeat(40)}`)),
+    ).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+  });
+
+  it("rechecks the rolling manifest before posting", async () => {
+    let moved = false;
+    const { adapter, fetch } = fixture("preview", {
+      "https://ghcr.io/v2/orkbot-run/ork/app/manifests/edge": () =>
+        new Response(null, {
+          headers: {
+            "content-type": INDEX,
+            "docker-content-digest": moved ? `sha256:${"c".repeat(64)}` : digest,
+          },
+        }),
+    });
+    await expect(adapter.check()).resolves.toMatchObject({ revision });
+    moved = true;
+    await expect(adapter.submit(revision)).rejects.toThrow();
+    expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+  });
+
+  it("rejects malformed expected revisions before any request", async () => {
+    const { adapter, fetch } = fixture();
+    await expect(adapter.submit("main")).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
 });

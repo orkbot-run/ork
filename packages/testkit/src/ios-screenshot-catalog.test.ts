@@ -20,6 +20,8 @@ const UNCOVERED: Record<string, string> = {
   "integration-setup": "redirects to Integrations",
   "oauth2/callback": "native Accounts consumes this callback before redirecting; no standalone UI",
   share: "Android only: iOS has no share extension yet",
+  updates:
+    "requires private operator delegation and a verified native Accounts session; screenshot fixtures use local password sessions",
 };
 
 /** Route names under app/, without route groups, layouts, or Expo Router hooks. */

@@ -237,6 +237,7 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
       ),
     ).toBe(true);
     await vi.waitFor(() => expect(deployment.submit).toHaveBeenCalledOnce());
+    expect(deployment.submit).toHaveBeenCalledWith(revision);
     expect(await system(() => prisma!.session.count())).toBe(1);
     await expect(
       updates.apply(actor, { ...input, idempotencyKey: randomUUID() }),

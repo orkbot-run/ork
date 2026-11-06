@@ -172,7 +172,7 @@ export function createServerUpdates(options: {
     }
     // Submission is outside every transaction. An ambiguous transport outcome is never retried.
     try {
-      await adapter.submit();
+      await adapter.submit(request.revision);
       await store.settle(request.id, "requested");
     } catch {
       await store.settle(request.id, "unknown");

@@ -54,6 +54,9 @@ Automatic requests start disabled. Ork offers a candidate only after the officia
 channel and full-commit image tags point to the same published image index.
 It also verifies that the candidate descends from the running full-commit revision.
 Unknown, older, or diverged revisions are withheld.
+Successful CI is required. Ork checks that the candidate's official `ci.yml` push run
+completed successfully on `main`, then repeats discovery, CI, and image checks
+immediately before submitting the expected revision.
 
 Automatic checks run every six hours, and each candidate gets one automatic attempt.
 Requests have a one-hour cooldown. Older native sessions need a fresh Accounts
@@ -69,5 +72,7 @@ request after a restart. Check deployment output in Easypanel before trying agai
 The trigger always deploys the panel's current configuration. Pin a known version in
 the panel and redeploy there when you need to recover an earlier image. Database
 migrations remain applied, so keep backups and check version compatibility first.
+Channel movement can still race the panel's image pull after this final check.
+An immutable target removes that race.
 For a standalone Compose installation, use the existing private updater instead of
 this panel trigger. Enable one deployment manager for each installation.
