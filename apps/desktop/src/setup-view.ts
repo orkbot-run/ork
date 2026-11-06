@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createAvatar } from "@orkbot/avatar";
-import { createServerConnectLink, parseServerConnectLink } from "@orkbot/contracts";
+import type { ServerPairing, ServerPairingState } from "@orkbot/contracts";
+import {
+  createServerConnectLink,
+  parseServerConnectLink,
+  SERVER_PAIRING_ALPHABET,
+  SERVER_PAIRING_LIFETIME_SECONDS,
+} from "@orkbot/contracts";
 import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
 import { createPersonalOrkId, isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { PL_MESSAGES } from "./locales/pl.js";
@@ -32,7 +38,15 @@ type InstallationStatus = {
   expiresAt: string;
 };
 type Screen = "checking" | "welcome" | "accounts" | "servers" | "selfhost" | "local" | "opening";
-type Operation = "session" | "signin" | "directory" | "install" | "connect" | "local" | "logout";
+type Operation =
+  | "session"
+  | "signin"
+  | "directory"
+  | "install"
+  | "pair"
+  | "connect"
+  | "local"
+  | "logout";
 
 export interface SetupTransport {
   invoke<T>(command: string, args?: Record<string, unknown>): Promise<T>;
@@ -62,6 +76,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   const phases = [...doc.querySelectorAll<HTMLElement>("[data-phase]")];
   let account: Account | null = null;
   let pendingServer: string | null = null;
+  let pendingInitialization = false;
+  let pairingRequest: string | null = null;
+  let pairing: ServerPairing | null = null;
+  let pairingVersion = 0;
+  let pairingDeadline = 0;
+  let pairingPoll: number | undefined;
+  let pairingExpiry: number | undefined;
   let screen: Screen = "checking";
   let operation: Operation | null = null;
   let browserSignIn = false;
@@ -100,6 +121,22 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   }
   renderOrk(welcomeOrk);
 
+  function clearPairing() {
+    const requestId = pairingRequest;
+    pairingRequest = null;
+    pairing = null;
+    pairingVersion++;
+    pairingDeadline = 0;
+    win?.clearTimeout(pairingPoll);
+    win?.clearTimeout(pairingExpiry);
+    element<HTMLInputElement>("pairing-code").value = "";
+    element("pairing").hidden = true;
+    element("pairing-expires").textContent = "";
+    element("copy-pairing").textContent = t("Copy");
+    if (requestId)
+      void transport.invoke("cancel_server_pairing", { requestId }).catch(() => undefined);
+  }
+
   function clearInstallation() {
     win?.clearTimeout(expiryTimer);
     win?.clearTimeout(pollTimer);
@@ -124,7 +161,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element<HTMLButtonElement>("sign-out").disabled = operation === "logout";
     element<HTMLButtonElement>("cancel-sign-in").disabled = operation === "logout";
     element<HTMLButtonElement>("back").disabled =
-      startup.phase === "opening" || (operation !== null && operation !== "install");
+      startup.phase === "opening" ||
+      (operation !== null && operation !== "install" && operation !== "pair");
     element("sign-out").hidden = !account;
     element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
     element("browser-hint").hidden = !browserSignIn;
@@ -134,11 +172,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       screen !== "local" || operation !== null || startup.phase === "opening";
     element("retry-server").hidden = screen !== "servers" || !failedServer;
     input.disabled = operation !== null;
+    element("connect").textContent = t(pendingInitialization ? "Continue" : "Pairing key");
     shell?.setAttribute("aria-busy", String(operation !== null || startup.phase === "opening"));
   }
 
   function show(next: Screen, focus = true) {
     if (screen !== next) {
+      clearPairing();
       clearInstallation();
       status.textContent = "";
       delete status.dataset.error;
@@ -193,11 +233,17 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   }
 
   function receivePendingServer(value: unknown) {
-    if (typeof value !== "string") return;
+    const payload =
+      typeof value === "object" && value !== null
+        ? (value as { origin?: unknown; initialize?: unknown })
+        : { origin: value };
+    if (typeof payload.origin !== "string") return;
     try {
-      const origin = parseServerConnectLink(createServerConnectLink(value));
+      const origin = parseServerConnectLink(createServerConnectLink(payload.origin));
       if (!origin) return;
+      clearPairing();
       pendingServer = origin;
+      pendingInitialization = payload.initialize === true;
       if (account && !operation) showPendingServer();
     } catch {
       // Ignore malformed native events without changing the selected server.
@@ -207,6 +253,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   function discardPendingServer() {
     const address = pendingServer;
     pendingServer = null;
+    pendingInitialization = false;
     if (address)
       void transport.invoke("clear_server_link", { rawUrl: address }).catch(errorMessage);
   }
@@ -322,6 +369,122 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         controls();
       }
     }
+  }
+
+  function expirePairing() {
+    clearPairing();
+    status.textContent = t("The pairing key has expired. Create a new one.");
+  }
+
+  async function pollPairing(value: ServerPairing, requestId: string, version: number) {
+    const active = () =>
+      !disposed &&
+      screen === "selfhost" &&
+      !!account &&
+      pairing === value &&
+      pairingRequest === requestId &&
+      pairingVersion === version;
+    if (!active()) return;
+    if (pairingDeadline <= Date.now()) {
+      expirePairing();
+      return;
+    }
+    try {
+      const result = await transport.invoke<ServerPairingState>("get_server_pairing", {
+        requestId,
+      });
+      if (!active()) return;
+      if (result.origin !== value.origin || result.expiresAt !== value.expiresAt)
+        throw new Error("Invalid pairing state");
+      if (pairingDeadline <= Date.now() || result.status === "expired") {
+        expirePairing();
+        return;
+      }
+      if (result.status === "failed") {
+        clearPairing();
+        errorMessage("Could not complete that request. Try again.");
+        return;
+      }
+      if (result.status === "ready") {
+        const origin = value.origin;
+        clearPairing();
+        const completionVersion = pairingVersion;
+        await run(
+          "connect",
+          async (generation) => {
+            const entries = await loadServers(generation);
+            if (!current(generation) || pairingVersion !== completionVersion) return;
+            const selected = entries.find(
+              (entry) => entry.kind === "selfhosted" && entry.url === origin,
+            );
+            if (!selected) throw "Could not complete that request. Try again.";
+            await openServer(generation, "connect_saved_server", { id: selected.id });
+          },
+          "selfhost",
+        );
+        return;
+      }
+      if (result.status !== "pending") throw new Error("Invalid pairing state");
+      status.textContent = "";
+    } catch {
+      if (!active()) return;
+      errorMessage("Could not complete that request. Try again.");
+    }
+    if (active())
+      pairingPoll = win?.setTimeout(() => void pollPairing(value, requestId, version), 2000);
+  }
+
+  async function createPairing() {
+    if (!account || operation || screen !== "selfhost") return;
+    clearPairing();
+    clearInstallation();
+    const requestId = createPersonalOrkId();
+    pairingRequest = requestId;
+    const version = pairingVersion;
+    await run(
+      "pair",
+      async (generation) => {
+        const value = await transport.invoke<ServerPairing>("create_server_pairing", {
+          rawUrl: input.value,
+          requestId,
+        });
+        if (
+          !current(generation) ||
+          pairingRequest !== requestId ||
+          version !== pairingVersion ||
+          screen !== "selfhost"
+        )
+          return;
+        const origin = parseServerConnectLink(createServerConnectLink(input.value));
+        if (
+          value.origin !== origin ||
+          !/^[a-f0-9]{64}$/.test(value.id) ||
+          value.code.length !== 6 ||
+          [...value.code].some((char) => !SERVER_PAIRING_ALPHABET.includes(char)) ||
+          !Number.isSafeInteger(value.expiresAt)
+        )
+          throw "Could not complete that request. Try again.";
+        const expires = Math.min(
+          value.expiresAt * 1000,
+          Date.now() + SERVER_PAIRING_LIFETIME_SECONDS * 1000,
+        );
+        if (expires <= Date.now()) {
+          expirePairing();
+          return;
+        }
+        pairing = value;
+        pairingDeadline = expires;
+        input.value = value.origin;
+        element<HTMLInputElement>("pairing-code").value = value.code;
+        element("pairing").hidden = false;
+        element("pairing-expires").textContent =
+          `${t("Valid until")} ${new Date(expires).toLocaleTimeString(doc.documentElement.lang, { hour: "2-digit", minute: "2-digit" })}`;
+        pairingExpiry = win?.setTimeout(expirePairing, expires - Date.now());
+        pairingPoll = win?.setTimeout(() => void pollPairing(value, requestId, version), 2000);
+      },
+      "selfhost",
+    );
+    if (pairingRequest === requestId && !pairing) clearPairing();
   }
 
   function expireInstallation() {
@@ -497,7 +660,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("get-started", "click", () => void signIn(true));
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
-    if (!operation || operation === "install") {
+    if (!operation || operation === "install" || operation === "pair") {
       discardPendingServer();
       generation++;
       operation = null;
@@ -520,8 +683,15 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("setup", "submit", (event) => {
     event.preventDefault();
     if (input.reportValidity()) {
-      pendingServer = null;
-      void connect("connect_server", { rawUrl: input.value });
+      if (pendingInitialization && input.value === pendingServer) {
+        pendingServer = null;
+        pendingInitialization = false;
+        void connect("connect_server", { rawUrl: input.value });
+      } else {
+        pendingServer = null;
+        pendingInitialization = false;
+        void createPairing();
+      }
     }
   });
   async function logout() {
@@ -537,6 +707,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     input.value = "";
     element("account").textContent = "";
     servers.replaceChildren();
+    clearPairing();
     clearInstallation();
     show("welcome");
     await run(
@@ -550,8 +721,37 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("sign-out", "click", () => void logout());
   on("cancel-sign-in", "click", () => void logout());
   on("quit", "click", () => {
+    clearPairing();
     clearInstallation();
     void transport.invoke("quit_setup").catch(errorMessage);
+  });
+  on("server-url", "input", () => {
+    clearPairing();
+    if (input.value !== pendingServer) pendingInitialization = false;
+    controls();
+  });
+  on("copy-pairing", "click", () => {
+    const value = pairing;
+    const version = pairingVersion;
+    if (!value || pairingDeadline <= Date.now()) {
+      if (value) expirePairing();
+      return;
+    }
+    void Promise.resolve()
+      .then(() => {
+        if (disposed || pairing !== value || pairingVersion !== version) return;
+        return win?.navigator.clipboard?.writeText(value.code) ?? Promise.reject();
+      })
+      .then(() => {
+        if (!disposed && pairing === value && pairingVersion === version)
+          element("copy-pairing").textContent = t("Copied");
+      })
+      .catch(() => {
+        if (disposed || pairing !== value || pairingVersion !== version) return;
+        const input = element<HTMLInputElement>("pairing-code");
+        input.focus();
+        input.select();
+      });
   });
   on("create-installation", "click", () => void createInstallation());
   on("copy", "click", () => {
@@ -651,11 +851,16 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       }
       cleanups.push(stopLinks);
-      const state = await transport.invoke<{ startup?: Startup; pendingServer?: string } | null>(
-        "setup_state",
-      );
+      const state = await transport.invoke<{
+        startup?: Startup;
+        pendingServer?: string;
+        initializingServer?: string;
+      } | null>("setup_state");
       if (!current(version)) return;
-      receivePendingServer(state?.pendingServer);
+      receivePendingServer({
+        origin: state?.pendingServer,
+        initialize: state?.initializingServer === state?.pendingServer,
+      });
       startup = state?.startup ?? { phase: "idle" };
       show("welcome", false);
     },
@@ -666,6 +871,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (disposed) return;
     disposed = true;
     generation++;
+    clearPairing();
     clearInstallation();
     for (const cleanup of cleanups) cleanup();
     servers.replaceChildren();

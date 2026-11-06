@@ -9,6 +9,10 @@ const listeners = new Set<() => void>();
 
 export const pendingServerConnect = () => pending;
 
+/** Compatibility links disclose only their presence to the native picker. */
+export const hasPendingServerInitialization = (server: string) =>
+  pending === server && initialization?.server === server;
+
 export function subscribeServerConnect(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);

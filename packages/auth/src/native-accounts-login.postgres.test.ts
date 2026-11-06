@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { SERVER_PAIRING_PURPOSE } from "@orkbot/contracts";
 import { bootstrapUserSpace, createDb, runAsSystem } from "@orkbot/db";
-import { SignJWT } from "jose";
+import { decodeJwt, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
 import { nativeLoginStore } from "./native-accounts-login.js";
@@ -88,6 +89,28 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
         }),
       ).rejects.toThrow();
       expect(await a.bootstrapRequired()).toBe(false);
+    }));
+
+  it("atomically claims one first owner from concurrent verified pairing grants without a secret", async () =>
+    system(async () => {
+      const stores = [nativeLoginStore(prisma!, {}), nativeLoginStore(prisma!, {})];
+      const claims = await Promise.all(
+        stores.map(async (store, index) => ({
+          origin,
+          ...(await store.issue(origin)),
+          identity: { ...identity(`paired-${index}`), allowProvision: true },
+        })),
+      );
+      const results = await Promise.allSettled(
+        stores.map((store, index) => store.consume(claims[index]!)),
+      );
+      expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+      const winner = claims[results.findIndex((result) => result.status === "fulfilled")]!.identity;
+      expect(
+        (await prisma!.deploymentSettings.findUnique({ where: { id: "default" } }))
+          ?.nativeAccountsOwnerKey,
+      ).toBe(oidcAccountSubject(issuer, winner.subject));
+      expect(await prisma!.user.count()).toBe(0);
     }));
 
   it("does not consume a challenge or bind an owner after a wrong bootstrap secret", async () =>
@@ -204,6 +227,14 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
             bootstrapSecret: secret,
           }),
         ).rejects.toThrow();
+        const pairing = await store.issue(origin);
+        await expect(
+          store.consume({
+            origin,
+            challenge: pairing.challenge,
+            identity: { ...identity("owner-a"), allowProvision: true },
+          }),
+        ).rejects.toThrow();
       }
       expect(await prisma!.user.count()).toBe(1);
       expect(await prisma!.account.count()).toBe(1);
@@ -212,6 +243,146 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           ?.nativeAccountsOwnerKey,
       ).toBeNull();
     }));
+  it("initializes only a verified paired owner without a browser session, then admits ordinary native login", async () =>
+    system(async () => {
+      const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+      const jwk = {
+        ...publicKey.export({ format: "jwk" }),
+        kid: "pair-pg",
+        alg: "RS256",
+        use: "sig",
+      };
+      let subject = "paired-owner";
+      let purpose = "orkbot-server-login-v1";
+      let jwtId = randomUUID();
+      const reports: boolean[] = [];
+      const sign = async (nonce: string, grantPurpose = purpose) => {
+        const now = Math.floor(Date.now() / 1000);
+        return new SignJWT({
+          iss: issuer,
+          aud: origin,
+          sub: subject,
+          nonce,
+          jti: jwtId,
+          purpose: grantPurpose,
+          iat: now,
+          exp: now + 60,
+          email: `${subject}@example.test`,
+          email_verified: true,
+          name: "Paired Owner",
+          allowProvision: true,
+        })
+          .setProtectedHeader({ alg: "RS256", kid: "pair-pg" })
+          .sign(privateKey);
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+          if (String(input) === `${issuer}/api/auth/jwks`) return Response.json({ keys: [jwk] });
+          if (String(input) === `${issuer}/api/server-pairings/redeem`) {
+            const body = JSON.parse(init!.body as string);
+            expect(body.origin).toBe(origin);
+            expect(body.code).toBe("ABC234");
+            expect(init!.headers).toEqual({ "content-type": "application/json" });
+            const grant = await sign(body.challenge);
+            return Response.json({
+              id: "a".repeat(64),
+              receipt: "r".repeat(43),
+              grant,
+              expiresAt: decodeJwt(grant).exp,
+            });
+          }
+          if (String(input) === `${issuer}/api/server-pairings/report`) {
+            const body = JSON.parse(init!.body as string);
+            reports.push(body.success);
+            if (body.success) expect(await prisma!.spaceMember.count()).toBe(1);
+            return Response.json({ ok: true });
+          }
+          throw new Error("Unexpected offline request");
+        }),
+      );
+      const auth = createAuth(prisma!, {
+        secret: "offline-paired-server-session-secret-at-least-32-characters",
+        baseURL: origin,
+        webOrigin: origin,
+        passwordAuth: false,
+        signupsEnabled: "false",
+        signupAllowlist: "blocked.example.test",
+        singleAccount: true,
+        nativeAccounts: { issuer },
+      });
+      const request = (path: string, body: object) =>
+        auth.handler(
+          new Request(`${origin}/api/auth/native/${path}`, {
+            method: "POST",
+            headers: { origin, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+        );
+      const pair = () => request("pair", { code: "ABC234" });
+      try {
+        // A signed ordinary login proof cannot grant initialization rights through either endpoint.
+        expect((await pair()).status).toBe(403);
+        const initial = await request("challenge", {});
+        const { challenge } = (await initial.json()) as { challenge: string };
+        expect(
+          (await request("complete", { challenge, grant: await sign(challenge) })).status,
+        ).toBe(403);
+        expect(await prisma!.user.count()).toBe(0);
+        expect(
+          (await prisma!.deploymentSettings.findUnique({ where: { id: "default" } }))
+            ?.nativeAccountsOwnerKey,
+        ).toBeNull();
+        purpose = SERVER_PAIRING_PURPOSE;
+        jwtId = randomUUID();
+        const paired = await pair();
+        expect(paired.status, await paired.clone().text()).toBe(200);
+        expect(await paired.json()).toEqual({ paired: true });
+        expect(paired.headers.getSetCookie()).toEqual([]);
+        expect(await prisma!.session.count()).toBe(0);
+        expect(await prisma!.user.count()).toBe(1);
+        expect(await prisma!.account.count()).toBe(1);
+        expect(await prisma!.spaceMember.count()).toBe(1);
+        const ownerKey = oidcAccountSubject(issuer, subject);
+        expect(
+          (await prisma!.deploymentSettings.findUnique({ where: { id: "default" } }))
+            ?.nativeAccountsOwnerKey,
+        ).toBe(ownerKey);
+        // A new challenge cannot make an already consumed JWT identifier usable again.
+        expect((await pair()).status).toBe(403);
+        subject = "foreign-owner";
+        jwtId = randomUUID();
+        expect((await pair()).status).toBe(403);
+        expect(await prisma!.user.count()).toBe(1);
+        expect(await prisma!.account.count()).toBe(1);
+        expect(await prisma!.session.count()).toBe(0);
+        expect(
+          (await prisma!.deploymentSettings.findUnique({ where: { id: "default" } }))
+            ?.nativeAccountsOwnerKey,
+        ).toBe(ownerKey);
+        subject = "paired-owner";
+        jwtId = randomUUID();
+        const again = await pair();
+        expect(again.status, await again.clone().text()).toBe(200);
+        expect(await prisma!.session.count()).toBe(0);
+        const next = await request("challenge", {});
+        const fresh = (await next.json()) as { challenge: string; bootstrapRequired: boolean };
+        expect(fresh.bootstrapRequired).toBe(false);
+        jwtId = randomUUID();
+        const native = await request("complete", {
+          challenge: fresh.challenge,
+          grant: await sign(fresh.challenge, "orkbot-server-login-v1"),
+        });
+        expect(native.status, await native.clone().text()).toBe(200);
+        expect(native.headers.get("set-cookie")).toContain("session_token=");
+        expect(await prisma!.session.count()).toBe(1);
+        expect(reports).toEqual([false, true, false, false, true]);
+      } finally {
+        auth.disposeOidcDiscovery();
+        vi.unstubAllGlobals();
+      }
+    }));
+
   it("signs an unattended owner in and out with cookie and bearer sessions through production hooks", async () =>
     system(async () => {
       const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });

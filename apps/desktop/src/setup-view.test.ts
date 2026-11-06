@@ -18,6 +18,12 @@ const saved = [
   { id: "second-server", kind: "selfhosted", url: "https://two.example.com", isDefault: false },
 ];
 const cleanups: (() => void)[] = [];
+const pairingTicket = (origin = "https://new.example.com") => ({
+  id: "a".repeat(64),
+  code: "2A3B4C",
+  origin,
+  expiresAt: Math.floor(Date.now() / 1000) + 60,
+});
 const installCommand = () => ({
   id: "10000000-0000-4000-8000-000000000001",
   command: "bash install-images.sh --server --code one-time-test-code",
@@ -47,6 +53,7 @@ async function setup(
     session?: unknown;
     startup?: unknown;
     pendingServer?: string;
+    initializingServer?: string;
     invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
   } = {},
 ) {
@@ -60,12 +67,14 @@ async function setup(
       return {
         startup: options.startup ?? { phase: "idle" },
         pendingServer: options.pendingServer,
+        initializingServer: options.initializingServer,
       };
     if (options.invoke) return options.invoke(command, args);
     if (command === "setup_accounts_session") return options.session ?? null;
     if (command === "list_servers") return saved;
     if (command === "setup_accounts_sign_in") return account;
     if (command === "create_server_installation") return installCommand();
+    if (command === "create_server_pairing") return pairingTicket(args?.rawUrl as string);
     return undefined;
   });
   const transport: SetupTransport = {
@@ -186,7 +195,12 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_saved_server");
     node("setup").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     await flush();
-    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
+    expect(invoke).toHaveBeenCalledWith("create_server_pairing", {
+      rawUrl: "https://new.example.com",
+      requestId: expect.any(String),
+    });
+    expect(node<HTMLInputElement>("pairing-code").value).toBe("2A3B4C");
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
   it("proposes a warm link for confirmation and discards it on Back", async () => {
@@ -401,6 +415,212 @@ describe("bundled desktop setup", () => {
     expect(node("account").textContent).toBe("");
   });
 
+  it("shows a pairing key without opening the product, then opens only the paired bookmark after ready", async () => {
+    vi.useFakeTimers();
+    const ticket = pairingTicket();
+    let ready = false;
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "create_server_installation") return installCommand();
+        if (name === "create_server_pairing") return ticket;
+        if (name === "get_server_pairing")
+          return {
+            status: ready ? "ready" : "pending",
+            origin: ticket.origin,
+            expiresAt: ticket.expiresAt,
+          };
+        if (name === "list_servers")
+          return ready
+            ? [...saved, { id: "paired-server", url: ticket.origin, kind: "selfhosted" }]
+            : saved;
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    node<HTMLInputElement>("server-url").value = ticket.origin;
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    expect(node<HTMLInputElement>("pairing-code").value).toBe(ticket.code);
+    expect(node("pairing").hidden).toBe(false);
+    expect(node("pairing-expires").textContent).toContain("Valid until");
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    node("copy-pairing").click();
+    await flush();
+    expect(document.activeElement?.id).toBe("pairing-code");
+    expect(node<HTMLInputElement>("pairing-code").selectionEnd).toBe(6);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    ready = true;
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: "paired-server" });
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+    expect(node<HTMLInputElement>("pairing-code").value).toBe("");
+  });
+
+  it("does not open a completed pairing when a new link arrives during directory refresh", async () => {
+    vi.useFakeTimers();
+    const ticket = pairingTicket();
+    const refresh = deferred<unknown>();
+    let completed = false;
+    const { invoke, link } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return completed ? refresh.promise : saved;
+        if (name === "create_server_installation") return installCommand();
+        if (name === "create_server_pairing") return ticket;
+        if (name === "get_server_pairing") {
+          completed = true;
+          return { status: "ready", origin: ticket.origin, expiresAt: ticket.expiresAt };
+        }
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    node<HTMLInputElement>("server-url").value = ticket.origin;
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    await vi.advanceTimersByTimeAsync(2000);
+    link("https://replacement.example.com");
+    refresh.resolve([...saved, { id: "paired-server", kind: "selfhosted", url: ticket.origin }]);
+    await flush();
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    expect(screen()).toBe("selfhost");
+    expect(node<HTMLInputElement>("server-url").value).toBe("https://replacement.example.com");
+  });
+
+  it("rejects ready state for another origin without connecting any bookmark", async () => {
+    vi.useFakeTimers();
+    const ticket = pairingTicket();
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return saved;
+        if (name === "create_server_installation") return installCommand();
+        if (name === "create_server_pairing") return ticket;
+        if (name === "get_server_pairing")
+          return { status: "ready", origin: saved[0]!.url, expiresAt: ticket.expiresAt };
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    node<HTMLInputElement>("server-url").value = ticket.origin;
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+    expect(node("status").dataset.error).toBe("true");
+  });
+
+  it("cancels an in-flight key on Back and ignores its late result after returning", async () => {
+    const pending = deferred<unknown>();
+    let calls = 0;
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return saved;
+        if (name === "create_server_installation") return installCommand();
+        if (name === "create_server_pairing")
+          return ++calls === 1 ? pending.promise : { ...pairingTicket(), code: "5D6E7F" };
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    node<HTMLInputElement>("server-url").value = "https://new.example.com";
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    const first = invoke.mock.calls.find(([name]) => name === "create_server_pairing")![1] as {
+      requestId: string;
+    };
+    node("back").click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("cancel_server_pairing", { requestId: first.requestId });
+    node("selfhost").click();
+    await flush();
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    pending.resolve(pairingTicket());
+    await flush();
+    expect(node<HTMLInputElement>("pairing-code").value).toBe("5D6E7F");
+  });
+
+  it.each(["sign-out", "input", "dispose"])(
+    "ignores a late ready response after %s",
+    async (action) => {
+      vi.useFakeTimers();
+      const pending = deferred<unknown>();
+      const ticket = pairingTicket();
+      const fixture = await continueSetup({
+        invoke: async (name) => {
+          if (name === "setup_accounts_session") return account;
+          if (name === "list_servers") return saved;
+          if (name === "create_server_installation") return installCommand();
+          if (name === "create_server_pairing") return ticket;
+          if (name === "get_server_pairing") return pending.promise;
+          return undefined;
+        },
+      });
+      node("selfhost").click();
+      await flush();
+      node<HTMLInputElement>("server-url").value = ticket.origin;
+      node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+      await flush();
+      await vi.advanceTimersByTimeAsync(2000);
+      if (action === "dispose") fixture.dispose();
+      else if (action === "input") {
+        node<HTMLInputElement>("server-url").value = "https://another.example.com";
+        node("server-url").dispatchEvent(new Event("input"));
+      } else node(action).click();
+      await flush();
+      pending.resolve({ status: "ready", origin: ticket.origin, expiresAt: ticket.expiresAt });
+      await flush();
+      expect(fixture.invoke).toHaveBeenCalledWith("cancel_server_pairing", {
+        requestId: expect.any(String),
+      });
+      expect(fixture.invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+      expect(node<HTMLInputElement>("pairing-code").value).toBe("");
+      const polls = fixture.invoke.mock.calls.filter(
+        ([name]) => name === "get_server_pairing",
+      ).length;
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(
+        fixture.invoke.mock.calls.filter(([name]) => name === "get_server_pairing"),
+      ).toHaveLength(polls);
+    },
+  );
+
+  it("expires a key and stops polling without opening a product session", async () => {
+    vi.useFakeTimers();
+    const ticket = { ...pairingTicket(), expiresAt: Math.floor(Date.now() / 1000) + 3 };
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return saved;
+        if (name === "create_server_installation") return installCommand();
+        if (name === "create_server_pairing") return ticket;
+        if (name === "get_server_pairing")
+          return { status: "pending", origin: ticket.origin, expiresAt: ticket.expiresAt };
+        return undefined;
+      },
+    });
+    node("selfhost").click();
+    await flush();
+    node<HTMLInputElement>("server-url").value = ticket.origin;
+    node("setup").dispatchEvent(new Event("submit", { cancelable: true }));
+    await flush();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(node("pairing").hidden).toBe(true);
+    expect(node("status").textContent).toContain("expired");
+    expect(invoke.mock.calls.filter(([name]) => name === "get_server_pairing")).toHaveLength(1);
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+
   it("immediately creates a domain-free command and keeps it while entering an existing address", async () => {
     const { invoke } = await continueSetup({ session: account });
     node("selfhost").click();
@@ -419,9 +639,11 @@ describe("bundled desktop setup", () => {
     expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(value.length);
   });
 
-  it("connects an entered existing server without waiting for installation polling", async () => {
+  it("preserves the confirmed legacy initialization link without waiting for installation polling", async () => {
     const connection = deferred<unknown>();
     const { invoke } = await continueSetup({
+      pendingServer: "https://new.example.com",
+      initializingServer: "https://new.example.com",
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;

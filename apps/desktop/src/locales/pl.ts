@@ -115,6 +115,10 @@ export const PL_MESSAGES: Record<string, string> = {
   "Refresh servers": "Odśwież serwery",
   "Connect your server": "Połącz swój serwer",
   "Check server": "Sprawdź serwer",
+  "Pairing key": "Klucz parowania",
+  "Enter this key on your server's initialization page.":
+    "Wpisz ten klucz na stronie inicjalizacji swojego serwera.",
+  "The pairing key has expired. Create a new one.": "Klucz parowania wygasł. Utwórz nowy.",
   "Install a server": "Zainstaluj serwer",
   "Point this domain at your Linux server, then run the command there. Setup installs Docker and configures HTTPS on Debian or Ubuntu. Ports 80 and 443 must be free.":
     "Skieruj tę domenę na swój serwer z Linuxem i uruchom na nim polecenie. Instalator skonfiguruje Dockera i HTTPS na Debianie lub Ubuntu. Porty 80 i 443 muszą być wolne.",

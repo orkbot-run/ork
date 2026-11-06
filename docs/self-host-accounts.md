@@ -13,17 +13,22 @@ server creates its own session after verifying the central identity.
 Start [`docker-compose.selfhost.yml`](../infra/compose/docker-compose.selfhost.yml)
 with `PUBLIC_ORIGIN` set to the public HTTPS origin. Route that domain to `web:5173`.
 The bootstrap job saves generated secrets in private configuration volumes.
-Copy the initialization link from its logs and open it in Ork.
+Open the server's address in a browser.
 
-In Ork, sign in through Accounts and confirm the server address. The app then requests
-a proof for that server and its random challenge. It expires after one minute. After
-verifying the proof, the server creates a session and the app saves the server to your
-account. No server OIDC client registration or client secret is required.
+In the signed-in Tauri or mobile app, enter that same address and choose **Pairing key**.
+Enter the six-character code on the server's initialization page. It expires after five
+minutes. After verifying the account proof and creating the owner's workspace, the server
+reports completion to Accounts, which saves the server to that account's directory so the
+waiting app can connect automatically.
 
-Keep the initialization link private. Claiming the first owner requires both that
-secret and a verified Accounts identity. Once claimed, another identity cannot reuse
-the secret to become an owner. The browser's ordinary connection page exposes no
-bootstrap secret. Matching email addresses never link accounts.
+The browser receives no product session. Accounts access tokens stay in the native app,
+and the server receives a separate one-minute proof for its exact origin and random
+challenge. No server OIDC client registration or client secret is required.
+
+Pairing preserves the existing owner. Another account cannot claim an initialized server,
+and matching email addresses never link accounts. Codes can be used once, and cancellation
+invalidates only that app's pending code. Older private initialization links remain
+supported for installations that already use them.
 
 ## Earlier OIDC configuration
 

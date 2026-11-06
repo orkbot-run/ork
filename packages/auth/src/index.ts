@@ -156,6 +156,7 @@ export function authRateLimitOptions(nodeEnv = process.env.NODE_ENV) {
     storage: "database" as const,
     customRules: {
       ...Object.fromEntries(CREDENTIAL_PATHS.map((path) => [path, rule])),
+      "/native/pair": { window: 60, max: 10 },
       "/request-account-deletion": { window: 600, max: 3 },
       "/request-identity-code": { window: 600, max: 3 },
       "/confirm-identity": rule,
@@ -225,6 +226,43 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       await bootstrapUserSpace(prisma, { id: userId }, env);
       return true;
     });
+  const provisionUser = async (
+    user: { id: string; email: string; emailVerified: boolean } | null | undefined,
+    { provision, bypassAllowlist }: { provision: boolean; bypassAllowlist: boolean },
+  ) => {
+    const policy = signupPolicyFromEnv(env);
+    if (!user || isMessagingEmail(user.email)) {
+      throw new APIError("FORBIDDEN", {
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Email verification required",
+      });
+    }
+    if (!user.emailVerified && policy.allowlist.length > 0 && !bypassAllowlist) {
+      throw new APIError("FORBIDDEN", {
+        code: "EMAIL_VERIFICATION_REQUIRED",
+        message: "Email verification required",
+      });
+    }
+    // Only admitted identities provision a workspace; never assign administration.
+    const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
+    if (!membership) {
+      if (
+        (!policy.enabled && !provision) ||
+        (!bypassAllowlist && !emailAllowed(user.email, policy.allowlist))
+      ) {
+        throw new APIError("FORBIDDEN", {
+          code: "REGISTRATION_CLOSED",
+          message: "Registration is closed",
+        });
+      }
+      if (!env.singleAccount) await bootstrapUserSpace(prisma, user, env);
+      else if (!(await admitSoleAccount(user.id)))
+        throw new APIError("FORBIDDEN", {
+          code: "REGISTRATION_CLOSED",
+          message: "Registration is closed",
+        });
+    }
+  };
   // SSO-only deployments keep every email credential closed, codes included.
   const emailCodeSignIn = Boolean(env.email) && env.passwordAuth !== false;
   // SSO-only deployments keep the identity provider as the only way in.
@@ -422,6 +460,11 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
               issuer: env.nativeAccounts.issuer,
               bootstrapSecret: env.nativeAccounts.bootstrapSecret,
               expectedOwnerKey: env.singleAccountOwnerKey,
+              provisionUser: async (user) => {
+                const proof = nativeLoginProof();
+                if (!proof?.allowProvision) throw new APIError("FORBIDDEN");
+                await provisionUser(user, { provision: true, bypassAllowlist: true });
+              },
             }),
           ]
         : []),
@@ -692,7 +735,6 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
           before: async (session, ctx) => {
             // The auth adapter can still be inside the signup transaction.
             const user = await ctx?.context.internalAdapter.findUserById(session.userId);
-            const policy = signupPolicyFromEnv(env);
             const oidcSignIn = isOidcCallback(ctx);
             const native = nativeLoginProof();
             if (env.passwordAuth === false && !oidcSignIn && !native) {
@@ -721,37 +763,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 });
               }
             }
-            if (!user || isMessagingEmail(user.email)) {
-              throw new APIError("FORBIDDEN", {
-                code: "EMAIL_VERIFICATION_REQUIRED",
-                message: "Email verification required",
-              });
-            }
-            if (!user.emailVerified && policy.allowlist.length > 0 && !bypassAllowlist) {
-              throw new APIError("FORBIDDEN", {
-                code: "EMAIL_VERIFICATION_REQUIRED",
-                message: "Email verification required",
-              });
-            }
-            // Only admitted sessions provision a workspace; never assign administration.
-            const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });
-            if (!membership) {
-              if (
-                (!policy.enabled && !provision) ||
-                (!bypassAllowlist && !emailAllowed(user.email, policy.allowlist))
-              ) {
-                throw new APIError("FORBIDDEN", {
-                  code: "REGISTRATION_CLOSED",
-                  message: "Registration is closed",
-                });
-              }
-              if (!env.singleAccount) await bootstrapUserSpace(prisma, user, env);
-              else if (!(await admitSoleAccount(user.id)))
-                throw new APIError("FORBIDDEN", {
-                  code: "REGISTRATION_CLOSED",
-                  message: "Registration is closed",
-                });
-            }
+            await provisionUser(user, { provision, bypassAllowlist });
           },
           after: async (session, ctx) => {
             // A linked identity does not prove how an older session authenticated.

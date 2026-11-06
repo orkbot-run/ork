@@ -3,6 +3,7 @@
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { normalizeServerPairingCode, SERVER_PAIRING_PURPOSE } from "@orkbot/contracts";
 import { isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import type { BetterAuthPlugin } from "better-auth";
@@ -59,6 +60,7 @@ export function createNativeGrantVerifier(options: {
   issuer: string;
   origin: string;
   keys?: JWTVerifyGetKey;
+  purpose?: typeof PURPOSE | typeof SERVER_PAIRING_PURPOSE;
 }): NativeGrantVerifier {
   const keys =
     options.keys ??
@@ -89,7 +91,7 @@ export function createNativeGrantVerifier(options: {
     }
     if (
       payload.aud !== options.origin ||
-      payload.purpose !== PURPOSE ||
+      payload.purpose !== (options.purpose ?? PURPOSE) ||
       payload.nonce !== challenge ||
       typeof payload.sub !== "string" ||
       !payload.sub.trim() ||
@@ -111,6 +113,7 @@ export function createNativeGrantVerifier(options: {
     )
       throw denied();
     return {
+      ...(options.purpose === SERVER_PAIRING_PURPOSE ? { allowProvision: true } : {}),
       issuer: options.issuer,
       subject: payload.sub,
       email: payload.email.toLowerCase(),
@@ -189,18 +192,32 @@ export function nativeLoginStore(
             });
             if (admitted > 0) throw denied();
           }
-          if (!account && !options.expectedOwnerKey) {
+          if ((!account || input.identity.allowProvision === true) && !options.expectedOwnerKey) {
             const settings = await tx.deploymentSettings.upsert({
               where: { id: "default" },
               create: { id: "default" },
               update: {},
               select: { nativeAccountsOwnerKey: true },
             });
+            if (input.identity.allowProvision === true) {
+              const otherAdmitted = await tx.user.count({
+                where: {
+                  ...(account ? { id: { not: account.userId } } : {}),
+                  NOT: { email: { endsWith: "@messaging.invalid" } },
+                  members: { some: { spaceMemberships: { some: {} } } },
+                },
+              });
+              if (otherAdmitted > 0) throw denied();
+            }
             if (settings.nativeAccountsOwnerKey && settings.nativeAccountsOwnerKey !== accountKey)
               throw denied();
             allowProvision = true;
             if (!settings.nativeAccountsOwnerKey) {
-              if (!sameSecret(options.bootstrapSecret, input.bootstrapSecret)) throw denied();
+              if (
+                input.identity.allowProvision !== true &&
+                !sameSecret(options.bootstrapSecret, input.bootstrapSecret)
+              )
+                throw denied();
               const claimed = await tx.deploymentSettings.updateMany({
                 where: { id: "default", nativeAccountsOwnerKey: null },
                 data: { nativeAccountsOwnerKey: accountKey },
@@ -250,14 +267,148 @@ export function nativeAccountsLogin(
     bootstrapSecret?: string;
     expectedOwnerKey?: string;
     verifyGrant?: NativeGrantVerifier;
+    verifyPairingGrant?: NativeGrantVerifier;
+    provisionUser?: (user: { id: string; email: string; emailVerified: boolean }) => Promise<void>;
     store?: NativeLoginStore;
   },
 ): BetterAuthPlugin {
   const verify = options.verifyGrant ?? createNativeGrantVerifier(options);
+  const verifyPairing =
+    options.verifyPairingGrant ??
+    createNativeGrantVerifier({
+      ...options,
+      purpose: SERVER_PAIRING_PURPOSE,
+    });
   const store = options.store ?? nativeLoginStore(prisma, options);
+  const provisionIdentity = async (
+    ctx: Parameters<typeof setSessionCookie>[0],
+    identity: NativeLoginGrant,
+    grant: string,
+  ) => {
+    const accountKey = oidcAccountSubject(identity.issuer, identity.subject);
+    const adapter = ctx.context.internalAdapter;
+    const existing = await adapter.findAccountByKey({
+      providerId: "oidc",
+      accountId: accountKey,
+    });
+    let user: Awaited<ReturnType<typeof adapter.findUserById>>;
+    if (existing) {
+      user = await adapter.findUserById(existing.userId);
+      if (!user) throw denied();
+      const collision = await adapter.findUserByEmail(identity.email);
+      if (collision && collision.user.id !== user.id) throw denied();
+      user = await adapter.updateUser(user.id, {
+        email: identity.email,
+        emailVerified: true,
+        name: identity.name,
+        ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
+      });
+      await adapter.updateAccount(existing.id, { idToken: grant });
+    } else {
+      if (await adapter.findUserByEmail(identity.email)) throw denied();
+      user = await adapter.createUser(
+        {
+          name: identity.name,
+          email: identity.email,
+          emailVerified: true,
+          ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
+        },
+        {
+          method: "oauth",
+          oauth: {
+            providerId: "oidc",
+            profile: { sub: identity.subject, iss: identity.issuer },
+          },
+        },
+      );
+      await adapter.createAccount({
+        userId: user.id,
+        providerId: "oidc",
+        accountId: accountKey,
+        idToken: grant,
+      });
+    }
+    if (!user) throw denied();
+    return user;
+  };
+  const brokerPost = async (path: "redeem" | "report", body: object) => {
+    const response = await fetch(new URL(`/api/server-pairings/${path}`, options.issuer), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      credentials: "omit",
+      redirect: "error",
+      signal: AbortSignal.timeout(8_000),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw denied();
+    const result = await readBoundedJsonResponse(response, 24 * 1024);
+    if (
+      path === "report" &&
+      (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true)
+    )
+      throw denied();
+    return result;
+  };
   return {
     id: "native-accounts-login",
     endpoints: {
+      nativeAccountsPair: createAuthEndpoint("/native/pair", { method: "POST" }, async (ctx) => {
+        ctx.setHeader("Cache-Control", "no-store");
+        // This browser endpoint only accepts the configured server's own page.
+        if (ctx.headers?.get("origin") !== options.origin || !options.provisionUser) throw denied();
+        const code = normalizeServerPairingCode((ctx.body as { code?: unknown } | undefined)?.code);
+        if (!code) throw denied();
+        const { challenge } = await store.issue(options.origin);
+        let receipt: { id: string; receipt: string } | undefined;
+        try {
+          const redeemed = await brokerPost("redeem", { code, origin: options.origin, challenge });
+          if (
+            !redeemed ||
+            typeof redeemed !== "object" ||
+            !("id" in redeemed) ||
+            typeof redeemed.id !== "string" ||
+            !/^[a-f0-9]{64}$/.test(redeemed.id) ||
+            !("receipt" in redeemed) ||
+            typeof redeemed.receipt !== "string" ||
+            !/^[A-Za-z0-9_-]{43}$/.test(redeemed.receipt) ||
+            !("grant" in redeemed) ||
+            typeof redeemed.grant !== "string" ||
+            redeemed.grant.length > MAX_GRANT_BYTES ||
+            !("expiresAt" in redeemed) ||
+            typeof redeemed.expiresAt !== "number" ||
+            !Number.isSafeInteger(redeemed.expiresAt) ||
+            redeemed.expiresAt <= Math.floor(Date.now() / 1000) ||
+            redeemed.expiresAt > Math.floor(Date.now() / 1000) + 60
+          )
+            throw denied();
+          receipt = { id: redeemed.id, receipt: redeemed.receipt };
+          const grant = redeemed.grant;
+          const identity = await verifyPairing(grant, challenge);
+          if (identity.allowProvision !== true || identity.expiresAt !== redeemed.expiresAt)
+            throw denied();
+          if (
+            options.expectedOwnerKey &&
+            oidcAccountSubject(identity.issuer, identity.subject) !== options.expectedOwnerKey
+          )
+            throw denied();
+          const authorization = await store.consume({
+            origin: options.origin,
+            challenge,
+            identity,
+          });
+          await verifiedLogin.run({ ...identity, ...authorization }, async () => {
+            const user = await provisionIdentity(ctx, identity, grant);
+            await options.provisionUser!(user);
+          });
+          await brokerPost("report", { ...receipt, success: true });
+          return ctx.json({ paired: true });
+        } catch {
+          if (receipt) {
+            await brokerPost("report", { ...receipt, success: false }).catch(() => {});
+          }
+          throw denied();
+        }
+      }),
       nativeAccountsChallenge: createAuthEndpoint(
         "/native/challenge",
         { method: "POST" },
@@ -301,49 +452,8 @@ export function nativeAccountsLogin(
               : {}),
           });
           return verifiedLogin.run({ ...identity, ...authorization }, async () => {
+            const user = await provisionIdentity(ctx, identity, grant);
             const adapter = ctx.context.internalAdapter;
-            const existing = await adapter.findAccountByKey({
-              providerId: "oidc",
-              accountId: accountKey,
-            });
-            let user: Awaited<ReturnType<typeof adapter.findUserById>>;
-            if (existing) {
-              user = await adapter.findUserById(existing.userId);
-              if (!user) throw denied();
-              const collision = await adapter.findUserByEmail(identity.email);
-              if (collision && collision.user.id !== user.id) throw denied();
-              user = await adapter.updateUser(user.id, {
-                email: identity.email,
-                emailVerified: true,
-                name: identity.name,
-                ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
-              });
-              await adapter.updateAccount(existing.id, { idToken: grant });
-            } else {
-              if (await adapter.findUserByEmail(identity.email)) throw denied();
-              user = await adapter.createUser(
-                {
-                  name: identity.name,
-                  email: identity.email,
-                  emailVerified: true,
-                  ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
-                },
-                {
-                  method: "oauth",
-                  oauth: {
-                    providerId: "oidc",
-                    profile: { sub: identity.subject, iss: identity.issuer },
-                  },
-                },
-              );
-              await adapter.createAccount({
-                userId: user.id,
-                providerId: "oidc",
-                accountId: accountKey,
-                idToken: grant,
-              });
-            }
-            if (!user) throw denied();
             const session = await adapter.createSession(user.id);
             if (!session) throw denied();
             await setSessionCookie(ctx, { session, user });

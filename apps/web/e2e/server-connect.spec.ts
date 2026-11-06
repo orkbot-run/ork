@@ -6,7 +6,9 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot } from "./helpers";
 
 for (const path of ["/", "/sign-in", "/app", "/onboarding"]) {
-  test(`browser ${path} offers only the native server handoff`, async ({ page }, testInfo) => {
+  test(`browser ${path} offers pairing and the native server handoff`, async ({
+    page,
+  }, testInfo) => {
     const productRequests: string[] = [];
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
@@ -24,7 +26,8 @@ for (const path of ["/", "/sign-in", "/app", "/onboarding"]) {
       "href",
       createServerConnectLink(new URL(page.url()).origin),
     );
-    await expect(page.getByRole("textbox")).toHaveCount(0);
+    await expect(page.getByRole("textbox", { name: "Pairing code", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pair", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: /sign in|continue|get started/i })).toHaveCount(
       0,
     );

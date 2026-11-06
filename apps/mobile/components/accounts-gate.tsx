@@ -6,7 +6,15 @@ import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ActivityIndicator, AppState, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  AppState,
+  Linking,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { AccountServer } from "../lib/account-servers";
 import { accountServers, addAccountServer } from "../lib/account-servers";
@@ -35,10 +43,13 @@ import { useMobileTokens } from "../lib/native";
 import {
   clearServerConnect,
   confirmServerInitialization,
+  hasPendingServerInitialization,
   pendingServerConnect,
   subscribeServerConnect,
 } from "../lib/server-connect";
 import { serverHeaders } from "../lib/server-headers";
+import type { MobileServerPairing } from "../lib/server-pairing";
+import { beginServerPairing } from "../lib/server-pairing";
 import { currentSessionGeneration } from "../lib/session";
 import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
@@ -49,6 +60,14 @@ const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
 let ownershipChanges = Promise.resolve();
 const welcomeOrk = welcomeAccountsOrk();
+
+type PairingWait = {
+  session: MobileServerPairing;
+  account: string;
+  generation: number;
+  server: string;
+  sessionGeneration: number;
+};
 
 function serializeOwnership<T>(operation: () => Promise<T>): Promise<T> {
   const result = ownershipChanges.then(operation);
@@ -115,6 +134,7 @@ export function AccountsGate({
     pendingServerConnect,
   );
   const operationPending = useRef(false);
+  const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
     "loading",
   );
@@ -129,9 +149,29 @@ export function AccountsGate({
   const [readyAt, setReadyAt] = useState({ version: -1, attempt: -1 });
   const owner = useRef("");
   const generation = useRef(0);
+  const pairingRef = useRef<PairingWait | null>(null);
+  const creatingPairing = useRef<AbortController | null>(null);
+  const [pairing, setPairing] = useState<PairingWait | null>(null);
+  const [pairingForeground, setPairingForeground] = useState(true);
+
+  function discardPairing(update = true) {
+    const creating = creatingPairing.current;
+    creatingPairing.current = null;
+    creating?.abort();
+    if (creating) {
+      operationVersion.current += 1;
+      operationPending.current = false;
+      if (update) setPending(false);
+    }
+    const previous = pairingRef.current;
+    pairingRef.current = null;
+    if (previous) void previous.session.cancel().catch(() => undefined);
+    if (update) setPairing(null);
+  }
 
   useEffect(() => {
     const current = ++generation.current;
+    discardPairing();
     setPhase("loading");
     setError(null);
     setPending(false);
@@ -188,18 +228,22 @@ export function AccountsGate({
       });
     return () => {
       generation.current += 1;
+      discardPairing(false);
     };
   }, [version, attempt, productGate, linkedServer]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active" && !operationPending.current) setAttempt((value) => value + 1);
+      setPairingForeground(state === "active");
+      if (state === "active" && !operationPending.current && !pairingRef.current)
+        setAttempt((value) => value + 1);
     });
     return () => subscription.remove();
   }, []);
 
   async function action(operation: () => Promise<unknown>) {
     if (operationPending.current) return;
+    const operationId = ++operationVersion.current;
     operationPending.current = true;
     const current = generation.current;
     setPending(true);
@@ -209,8 +253,10 @@ export function AccountsGate({
     } catch (failure) {
       if (generation.current === current) setError(errorText(failure));
     } finally {
-      operationPending.current = false;
-      if (generation.current === current) setPending(false);
+      if (operationVersion.current === operationId) {
+        operationPending.current = false;
+        if (generation.current === current) setPending(false);
+      }
     }
   }
 
@@ -237,6 +283,127 @@ export function AccountsGate({
       setPhase("ready");
     }
     if (linkedServer) clearServerConnect(linkedServer);
+  }
+
+  async function connectPairedServer(wait: PairingWait) {
+    const current = () => generation.current === wait.generation && owner.current === wait.account;
+    const untouched = () =>
+      current() &&
+      currentApiBase() === wait.server &&
+      currentSessionGeneration() === wait.sessionGeneration;
+    const entries = await accountServers(wait.account);
+    if (!untouched()) return;
+    const entry = entries.find((value) => value.url === wait.session.ticket.origin);
+    if (!entry) throw new Error(t("Could not pair this server. Try again."));
+    const target = entry.url;
+    const probe = await probeApiBase(target);
+    if (!probe.ok) throw new Error(probe.error);
+    const capabilities = await requireAccountsSignIn(target, serverHeaders(target));
+    if (!capabilities.accountsLogin)
+      throw new Error(t("This server does not support pairing codes. Update it and try again."));
+    if (!untouched()) return;
+    await loadApiBase();
+    if (!untouched()) return;
+    const saved = await saveApiBase(target, serverHeaders(target));
+    if (!saved.ok) throw new Error(saved.error);
+    if (!current() || !(await continueWithAccountsServer())) return;
+    if (!current() || currentApiBase() !== target) return;
+    const sessionGeneration = currentSessionGeneration();
+    const me = await rpc("me");
+    if (
+      !me.userId ||
+      !current() ||
+      currentApiBase() !== target ||
+      currentSessionGeneration() !== sessionGeneration
+    )
+      return;
+    setServers(entries);
+    setDraft("");
+    await select(entry);
+  }
+
+  useEffect(() => {
+    if (!pairing || !pairingForeground) return;
+    const wait = pairing;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const current = () =>
+      !controller.signal.aborted &&
+      pairingRef.current === wait &&
+      generation.current === wait.generation &&
+      owner.current === wait.account &&
+      currentApiBase() === wait.server &&
+      currentSessionGeneration() === wait.sessionGeneration;
+    const stale = () => {
+      if (current()) return false;
+      if (!controller.signal.aborted && pairingRef.current === wait) discardPairing();
+      return true;
+    };
+    async function poll() {
+      try {
+        if (stale()) return;
+        const result = await wait.session.state(controller.signal);
+        if (stale()) return;
+        if (result.status === "ready") {
+          pairingRef.current = null;
+          setPairing(null);
+          void action(() => connectPairedServer(wait));
+        } else if (result.status === "pending") {
+          timer = setTimeout(() => void poll(), 2_000);
+        } else {
+          discardPairing();
+          setError(
+            t(
+              result.status === "expired"
+                ? "Pairing code expired. Generate a new code."
+                : "Could not pair this server. Try again.",
+            ),
+          );
+        }
+      } catch (failure) {
+        if (stale()) return;
+        discardPairing();
+        setError(errorText(failure));
+      }
+    }
+    void poll();
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [pairing, pairingForeground]);
+
+  async function createPairing() {
+    const controller = new AbortController();
+    creatingPairing.current = controller;
+    const current = generation.current;
+    const account = owner.current;
+    const server = currentApiBase();
+    const sessionGeneration = currentSessionGeneration();
+    try {
+      const session = await beginServerPairing(draft, account, controller.signal);
+      if (
+        controller.signal.aborted ||
+        generation.current !== current ||
+        owner.current !== account ||
+        currentApiBase() !== server ||
+        currentSessionGeneration() !== sessionGeneration
+      ) {
+        void session.cancel().catch(() => undefined);
+        return;
+      }
+      const wait: PairingWait = {
+        session,
+        account,
+        generation: current,
+        server,
+        sessionGeneration,
+      };
+      pairingRef.current = wait;
+      setPairing(wait);
+    } finally {
+      if (creatingPairing.current === controller) creatingPairing.current = null;
+    }
   }
 
   if (
@@ -308,6 +475,7 @@ export function AccountsGate({
                     key={entry.id}
                     label={displayApiHost(entry.url)}
                     busy={pending}
+                    disabled={Boolean(pairing)}
                     onPress={() => void action(() => select(entry))}
                   />
                 ))}
@@ -322,7 +490,7 @@ export function AccountsGate({
                       keyboardType="url"
                       value={draft}
                       onChangeText={setDraft}
-                      editable={!pending}
+                      editable={!pending && !pairing}
                       style={{
                         color: tokens.foreground,
                         backgroundColor: tokens.muted,
@@ -330,64 +498,122 @@ export function AccountsGate({
                         borderRadius: 12,
                       }}
                     />
-                    <NativeActionButton
-                      label={t("Add")}
-                      busy={pending}
-                      disabled={!draft.trim()}
-                      onPress={() =>
-                        void action(async () => {
-                          const current = generation.current;
-                          const account = owner.current;
-                          const parsed = normalizeApiBase(draft);
-                          if (!parsed.ok) throw new Error(parsed.error);
-                          const target = parsed.url;
-                          const currentOperation = () =>
-                            generation.current === current && owner.current === account;
-                          const probe = await probeApiBase(target);
-                          if (!probe.ok) throw new Error(probe.error);
-                          const capabilities = await requireAccountsSignIn(
-                            target,
-                            serverHeaders(target),
-                          );
-                          if (!currentOperation()) return;
-                          await loadApiBase();
-                          if (!currentOperation()) return;
-                          const saved = await saveApiBase(target, serverHeaders(target));
-                          if (!saved.ok) throw new Error(saved.error);
-                          if (!currentOperation()) return;
-                          if (account) confirmServerInitialization(target, account);
-                          if (
-                            !(await (capabilities.accountsLogin
-                              ? continueWithAccountsServer()
-                              : continueWithSso()))
+                    {pairing ? (
+                      <>
+                        <Text
+                          selectable
+                          accessibilityLabel={t("Pairing code")}
+                          style={{
+                            color: tokens.foreground,
+                            fontSize: 36,
+                            fontWeight: "600",
+                            letterSpacing: 4,
+                            textAlign: "center",
+                          }}
+                        >
+                          {pairing.session.ticket.code.slice(0, 3)}{" "}
+                          {pairing.session.ticket.code.slice(3)}
+                        </Text>
+                        <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
+                          {t("Enter this code on your server's initialization page.")}
+                        </Text>
+                        <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
+                          {t("Expires {date}", {
+                            date: new Date(
+                              pairing.session.ticket.expiresAt * 1000,
+                            ).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
+                          })}
+                        </Text>
+                        <NativeActionButton
+                          label={t("Copy code")}
+                          prominence="secondary"
+                          onPress={() =>
+                            void import("expo-clipboard")
+                              .then(({ setStringAsync }) =>
+                                setStringAsync(pairing.session.ticket.code),
+                              )
+                              .catch(() => setError(t("Could not copy the code.")))
+                          }
+                        />
+                        <NativeActionButton
+                          label={t("Open server")}
+                          prominence="secondary"
+                          onPress={() =>
+                            void Linking.openURL(pairing.session.ticket.origin).catch(() =>
+                              setError(t("Could not open the server.")),
+                            )
+                          }
+                        />
+                        <NativeActionButton
+                          label={t("Cancel")}
+                          prominence="plain"
+                          onPress={() => discardPairing()}
+                        />
+                      </>
+                    ) : (
+                      <NativeActionButton
+                        label={hasPendingServerInitialization(draft) ? t("Add") : t("Pairing code")}
+                        busy={pending}
+                        disabled={!draft.trim()}
+                        onPress={() =>
+                          void action(
+                            hasPendingServerInitialization(draft)
+                              ? async () => {
+                                  const current = generation.current;
+                                  const account = owner.current;
+                                  const parsed = normalizeApiBase(draft);
+                                  if (!parsed.ok) throw new Error(parsed.error);
+                                  const target = parsed.url;
+                                  const currentOperation = () =>
+                                    generation.current === current && owner.current === account;
+                                  const probe = await probeApiBase(target);
+                                  if (!probe.ok) throw new Error(probe.error);
+                                  const capabilities = await requireAccountsSignIn(
+                                    target,
+                                    serverHeaders(target),
+                                  );
+                                  if (!currentOperation()) return;
+                                  await loadApiBase();
+                                  if (!currentOperation()) return;
+                                  const saved = await saveApiBase(target, serverHeaders(target));
+                                  if (!saved.ok) throw new Error(saved.error);
+                                  if (!currentOperation()) return;
+                                  if (account) confirmServerInitialization(target, account);
+                                  if (
+                                    !(await (capabilities.accountsLogin
+                                      ? continueWithAccountsServer()
+                                      : continueWithSso()))
+                                  )
+                                    return;
+                                  if (!currentOperation() || currentApiBase() !== target) return;
+                                  const sessionGeneration = currentSessionGeneration();
+                                  const me = await rpc("me");
+                                  if (
+                                    !me.userId ||
+                                    !currentOperation() ||
+                                    currentApiBase() !== target ||
+                                    currentSessionGeneration() !== sessionGeneration
+                                  )
+                                    return;
+                                  const entry = await addAccountServer(target, account);
+                                  if (
+                                    !currentOperation() ||
+                                    currentApiBase() !== target ||
+                                    currentSessionGeneration() !== sessionGeneration
+                                  )
+                                    return;
+                                  setServers((previous) => [
+                                    ...previous.filter((item) => item.id !== entry.id),
+                                    entry,
+                                  ]);
+                                  setDraft("");
+                                  await select(entry);
+                                }
+                              : createPairing,
                           )
-                            return;
-                          if (!currentOperation() || currentApiBase() !== target) return;
-                          const sessionGeneration = currentSessionGeneration();
-                          const me = await rpc("me");
-                          if (
-                            !me.userId ||
-                            !currentOperation() ||
-                            currentApiBase() !== target ||
-                            currentSessionGeneration() !== sessionGeneration
-                          )
-                            return;
-                          const entry = await addAccountServer(target, account);
-                          if (
-                            !currentOperation() ||
-                            currentApiBase() !== target ||
-                            currentSessionGeneration() !== sessionGeneration
-                          )
-                            return;
-                          setServers((previous) => [
-                            ...previous.filter((item) => item.id !== entry.id),
-                            entry,
-                          ]);
-                          setDraft("");
-                          await select(entry);
-                        })
-                      }
-                    />
+                        }
+                      />
+                    )}
                   </>
                 ) : (
                   <NativeActionButton
@@ -407,7 +633,10 @@ export function AccountsGate({
             <NativeActionButton
               label={t("Sign out")}
               prominence="plain"
-              onPress={() => void action(signOutAccounts)}
+              onPress={() => {
+                discardPairing();
+                void action(signOutAccounts);
+              }}
             />
           </>
         )}

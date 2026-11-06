@@ -41,6 +41,7 @@ export * from "./search.js";
 export * from "./security-events.js";
 export * from "./server-connect.js";
 export * from "./server-headers.js";
+export * from "./server-pairing.js";
 export * from "./settings-scope.js";
 export * from "./terminal.js";
 export * from "./user-devices.js";

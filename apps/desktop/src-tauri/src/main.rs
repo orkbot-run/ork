@@ -24,6 +24,7 @@ mod server;
 mod server_directory;
 mod server_link;
 mod server_login;
+mod server_pairing;
 mod settings;
 mod speech;
 mod updates;
@@ -59,6 +60,7 @@ struct DesktopState {
     browser_auth: browser_auth::BrowserAuth,
     accounts: accounts::Accounts,
     accounts_started: Mutex<AccountsStarted>,
+    server_pairings: server_pairing::Attempts,
     restoring: std::sync::atomic::AtomicBool,
     restore_intent: AtomicU64,
     setup_ready: std::sync::atomic::AtomicBool,
@@ -838,7 +840,14 @@ fn retire_server_windows(app: &tauri::AppHandle, state: &DesktopState) {
     let _ = refresh_menu(app);
 }
 
+fn cancel_server_pairings(state: &DesktopState) {
+    if let Some(attempt) = state.server_pairings.take(None) {
+        attempt.cancel();
+    }
+}
+
 fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String> {
+    cancel_server_pairings(state);
     let generation = state.reset_accounts_started()?;
     cancel_restore(state);
     state.accounts.invalidate();
@@ -1023,6 +1032,7 @@ async fn setup_accounts_sign_in(
     state: State<'_, DesktopState>,
 ) -> Result<accounts::Account, String> {
     require_setup(&window)?;
+    cancel_server_pairings(&state);
     let generation = state.reset_accounts_started()?;
     cancel_restore(&state);
     update_startup(&app, Startup::idle());
@@ -1172,6 +1182,112 @@ async fn set_default_server<R: tauri::Runtime>(
         authorization.account.identity(),
         id.as_deref(),
     )
+}
+
+fn server_pairing_gate(state: &DesktopState) -> Result<u64, String> {
+    let gate = state
+        .accounts_started
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if !gate.started {
+        return Err("Sign in to Accounts first.".into());
+    }
+    Ok(gate.generation)
+}
+
+#[tauri::command]
+async fn create_server_pairing<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    raw_url: String,
+    request_id: String,
+) -> Result<server_pairing::Pairing, String> {
+    require_setup(&window)?;
+    let gate = server_pairing_gate(&state)?;
+    let origin = server::normalize_server_url(&raw_url)?
+        .origin()
+        .ascii_serialization();
+    state.server_pairings.begin(
+        request_id.clone(),
+        String::new(),
+        gate,
+        origin.clone(),
+        String::new(),
+    )?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let owner = settings::account_key(authorization.account.identity());
+    if server_pairing_gate(&state)? != gate
+        || !state.server_pairings.bind(
+            &request_id,
+            &owner,
+            gate,
+            authorization.directory_bearer()?,
+        )?
+    {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    let pairing = server_pairing::Broker::new()?
+        .create(authorization.directory_bearer()?, &origin)
+        .await?;
+    let current = require_setup(&window).is_ok()
+        && require_account(&state, &authorization).is_ok()
+        && server_pairing_gate(&state).ok() == Some(gate);
+    if !current
+        || !state
+            .server_pairings
+            .finish(&request_id, &owner, gate, pairing.clone())?
+    {
+        server_pairing::cancel_background(authorization.directory_bearer()?.into(), pairing.id);
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    Ok(pairing)
+}
+
+#[tauri::command]
+async fn get_server_pairing<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    request_id: String,
+) -> Result<server_pairing::PairingState, String> {
+    require_setup(&window)?;
+    let gate = server_pairing_gate(&state)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let owner = settings::account_key(authorization.account.identity());
+    let pairing = state.server_pairings.pairing(&request_id, &owner, gate)?;
+    let result = server_pairing::Broker::new()?
+        .status(authorization.directory_bearer()?, &pairing)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    if server_pairing_gate(&state)? != gate
+        || !state.server_pairings.matches(&request_id, &owner, gate)
+    {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn cancel_server_pairing<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    request_id: String,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    if let Some(attempt) = state.server_pairings.take(Some(&request_id)) {
+        attempt.cancel();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1340,6 +1456,8 @@ struct SetupState {
     mode: settings::InstanceMode,
     startup: Startup,
     pending_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    initializing_server: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -1404,6 +1522,12 @@ fn setup_state<R: tauri::Runtime>(
             .lock()
             .map_err(|_| "Desktop state unavailable.")?
             .clone(),
+        initializing_server: state
+            .initialization
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .as_ref()
+            .map(|initialization| initialization.origin.clone()),
         pending_server: state
             .pending_server
             .lock()
@@ -1833,6 +1957,7 @@ fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String
 
 fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     let initialization = server_link::parse_initialization(input);
+    let initializing = initialization.is_some();
     let Some(origin) = server_link::parse(input).or_else(|| {
         initialization
             .as_ref()
@@ -1843,6 +1968,7 @@ fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     let Some(state) = app.try_state::<DesktopState>() else {
         return;
     };
+    cancel_server_pairings(&state);
     cancel_restore(&state);
     if let Ok(mut pending) = state.initialization.lock() {
         *pending = initialization;
@@ -1852,7 +1978,10 @@ fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     }
     update_startup(app, Startup::idle());
     if let Ok(window) = setup_window(app, true) {
-        let _ = window.emit("desktop-server-link", origin);
+        let _ = window.emit(
+            "desktop-server-link",
+            serde_json::json!({"origin": origin, "initialize": initializing}),
+        );
     }
 }
 
@@ -2449,6 +2578,9 @@ fn main() {
             set_default_server,
             create_server_installation,
             get_server_installation,
+            create_server_pairing,
+            get_server_pairing,
+            cancel_server_pairing,
             remove_server,
             connect_saved_server,
             connect_server,
@@ -2508,6 +2640,7 @@ fn main() {
                 browser_auth,
                 accounts: accounts::Accounts::new(credential_store.clone()),
                 accounts_started: Mutex::new(AccountsStarted::default()),
+                server_pairings: server_pairing::Attempts::default(),
                 restoring: std::sync::atomic::AtomicBool::new(false),
                 restore_intent: AtomicU64::new(0),
                 setup_ready: std::sync::atomic::AtomicBool::new(false),
@@ -2639,6 +2772,7 @@ mod tests {
             browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
             accounts: accounts::Accounts::default(),
             accounts_started: Mutex::new(AccountsStarted::default()),
+            server_pairings: server_pairing::Attempts::default(),
             restoring: std::sync::atomic::AtomicBool::new(false),
             restore_intent: AtomicU64::new(0),
             setup_ready: std::sync::atomic::AtomicBool::new(false),
@@ -3145,6 +3279,9 @@ mod tests {
                 set_default_server,
                 create_server_installation,
                 get_server_installation,
+                create_server_pairing,
+                get_server_pairing,
+                cancel_server_pairing,
                 remove_server,
             ])
             .build(app_context())
@@ -3171,10 +3308,34 @@ mod tests {
             callback: tauri::ipc::CallbackFn(0),
             error: tauri::ipc::CallbackFn(1),
             url: origin.parse().unwrap(),
-            body: tauri::ipc::InvokeBody::default(),
+            body: if matches!(
+                command,
+                "create_server_pairing" | "get_server_pairing" | "cancel_server_pairing"
+            ) {
+                tauri::ipc::InvokeBody::Json(
+                    serde_json::json!({"requestId": "fixture-request", "rawUrl": "https://server.example.test"}),
+                )
+            } else {
+                tauri::ipc::InvokeBody::default()
+            },
             headers: Default::default(),
             invoke_key: tauri::test::INVOKE_KEY.into(),
         };
+        assert_eq!(
+            tauri::test::get_ipc_response(&setup, request("create_server_pairing", local))
+                .unwrap_err(),
+            serde_json::json!("Sign in to Accounts first.")
+        );
+        assert_eq!(
+            tauri::test::get_ipc_response(&setup, request("get_server_pairing", local))
+                .unwrap_err(),
+            serde_json::json!("Sign in to Accounts first.")
+        );
+        tauri::test::assert_ipc_response(
+            &setup,
+            request("cancel_server_pairing", local),
+            Ok(serde_json::Value::Null),
+        );
         tauri::test::assert_ipc_response(
             &setup,
             request("setup_state", local),
@@ -3193,6 +3354,9 @@ mod tests {
                 "set_default_server",
                 "create_server_installation",
                 "get_server_installation",
+                "create_server_pairing",
+                "get_server_pairing",
+                "cancel_server_pairing",
                 "remove_server",
                 "connect_saved_server",
                 "setup_accounts_sign_in",

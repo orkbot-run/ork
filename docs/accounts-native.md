@@ -43,9 +43,10 @@ verified subject.
 
 Desktop and mobile require a verified central Accounts session before opening the
 product. Desktop signs in before it starts Docker or connects to an existing
-server. A new self-hosted server is saved in the account directory only after its
-product session has been verified. Mobile loads that directory after sign-in and
-lets the user select or add an external server.
+server. For a new self-hosted server, generate a six-character pairing code in the app
+and enter it on that server's browser initialization page. Accounts saves the server after
+the server confirms ownership and workspace creation. The waiting app refreshes the
+directory and connects using its own server session. Mobile loads the same account directory.
 An empty directory leaves the server picker open.
 
 Remote entries follow the account. A Docker loopback entry belongs to the desktop
@@ -61,14 +62,14 @@ Desktop also keeps each account and server in a separate browser profile.
 
 ## Server connection links
 
-Opening a self-hosted server in a browser shows its address and an **Open in Ork**
-link. Product screens and product login are available only in the native apps.
+Opening a self-hosted server in a browser shows its address, a pairing-code field and an
+**Open in Ork** link. Product screens and product login are available only in the native apps.
 The browser still handles protocol callbacks, and Accounts can use the system
 authorization browser to verify identity.
 
 The link uses `orkbot://connect?server=<encoded-origin>`. Both apps validate the
-address, retain it through Accounts sign-in, and ask the user to confirm it before
-connecting. Only HTTPS and private-network HTTP origins are accepted. Paths,
+address and retain it through Accounts sign-in. Ordinary connection links prefill the
+pairing screen, where the signed-in user can request a code for that exact origin. Only HTTPS and private-network HTTP origins are accepted. Paths,
 credentials, fragments, and additional parameters are rejected. The link contains
 no login token and grants no access; it can be shared without creating a session.
 
@@ -137,10 +138,11 @@ remain active if the provider has no end-session endpoint.
 ## Server-side SSO
 
 New self-hosted stacks enable native Accounts proofs during automatic initialization.
-The initialization link carries an operator secret used to claim the first owner.
-The app releases it once after confirming the server and account. Ordinary connection
-links remain safe to share. Existing OIDC deployments keep their registered client
-configuration.
+Pairing codes expire after five minutes. The server redeems a code through Accounts,
+verifies a separate pairing-purpose proof and initializes the owner without signing the
+browser into the product. Only then does it report success for the waiting native app.
+Existing OIDC deployments keep their registered client configuration, and older private
+initialization links remain supported.
 See [Self-hosted accounts](self-host-accounts.md).
 
 ## Verification
