@@ -65,10 +65,15 @@ jobs:
           cache: pnpm
       - name: Install Linux WebView and packaging dependencies
         if: runner.os == 'Linux'
-        run: >-
-          sudo apt-get update && sudo apt-get install --no-install-recommends -y
-          libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
-          patchelf libssl-dev libxdo-dev
+        timeout-minutes: 10
+        run: |
+          # Keep the runner's signed Ubuntu sources while bypassing its slow Azure mirror.
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          apt_options=(-o Acquire::Retries=2 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+          sudo apt-get "${apt_options[@]}" update
+          sudo apt-get "${apt_options[@]}" install --no-install-recommends -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf libssl-dev libxdo-dev
       - name: Install Rust toolchain
         shell: bash
         run: |

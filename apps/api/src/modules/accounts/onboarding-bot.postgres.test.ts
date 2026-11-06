@@ -168,6 +168,47 @@ describePostgres("onboarding bots across Spaces (PostgreSQL)", () => {
     expect(await system.bot.count({ where: { spaceId: clients.spaceId } })).toBe(1);
   });
 
+  it("does not recreate an archived ordinary bot when its Space is revisited", async () => {
+    const { actor } = await signup();
+    const clients = await sibling(actor);
+    const bot = await ensure(clients);
+    await system.bot.update({ where: { id: bot!.id }, data: { archivedAt: new Date() } });
+    expect(await ensure(clients)).toBeNull();
+    expect(await ensure(clients, true, second.prisma)).toBeNull();
+    expect(await system.bot.count({ where: { spaceId: clients.spaceId } })).toBe(1);
+    expect(await system.bot.findUniqueOrThrow({ where: { id: bot!.id } })).toMatchObject({
+      archivedAt: expect.any(Date),
+      avatarSeed: null,
+    });
+  });
+
+  it("keeps permanently emptied Spaces empty, including another organization's default Space", async () => {
+    const { actor } = await signup();
+    const clients = await sibling(actor);
+    const work = await createOrganizationForUser(system, { userId: actor.userId, name: "Work" });
+    for (const target of [clients, { ...actor, spaceId: work.defaultSpaceId }]) {
+      const bot = await ensure(target);
+      // Match permanent deletion's final records without invoking external cleanup adapters.
+      await system.$transaction(async (tx) => {
+        await tx.botDeletion.create({
+          data: {
+            id: bot!.id,
+            spaceId: target.spaceId,
+            name: bot!.name,
+            deletedByUserId: actor.userId,
+            memoriesPreserved: false,
+          },
+        });
+        await tx.bot.delete({ where: { id: bot!.id } });
+      });
+      expect(await ensure(target)).toBeNull();
+      expect(await ensure(target, true, second.prisma)).toBeNull();
+      expect(await system.bot.count({ where: { spaceId: target.spaceId } })).toBe(0);
+      expect(await system.thread.count({ where: { spaceId: target.spaceId } })).toBe(0);
+      expect(await system.botDeletion.count({ where: { spaceId: target.spaceId } })).toBe(1);
+    }
+  });
+
   it("converges on one ordinary bot across independent database connections", async () => {
     const { actor } = await signup();
     const clients = await sibling(actor);

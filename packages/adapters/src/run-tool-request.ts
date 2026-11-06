@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors. Inherited Apache material and new PolyForm changes.
+
 import type { ConnectorCall, ConnectorTool } from "@orkbot/adapter-kit";
 import { BOT_INSTRUCTIONS_MAX_LENGTH, BotSecretAuth } from "@orkbot/contracts";
 import { redactSecrets } from "@orkbot/core";
@@ -22,6 +25,7 @@ import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { isFleetApprovalTool, prepareFleetRequest } from "./fleet-tools.js";
 import { assertConnectorToolArgs, CATALOG_EXECUTE } from "./lazy-tool-catalog.js";
+import { normalizeOwnBotUpdateArgs, OWN_BOT_SETTINGS_SELECT } from "./own-bot-settings.js";
 import { paidRequestEffect, restorePaidRequest } from "./paid-request.js";
 import type { PurchaseApproval } from "./purchase-gate.js";
 import {
@@ -48,7 +52,7 @@ import { scheduleCreateRefusal } from "./run-tools-tasks.js";
 import { USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
-import { argumentGiven } from "./update-bot-patch.js";
+import { argumentGiven, ownBotInstructionsOffset } from "./update-bot-patch.js";
 import type { VaultCardUse } from "./vault-card-use.js";
 import { cardUseSummary, requestedCardUse, vaultCardUseOf } from "./vault-card-use.js";
 
@@ -502,7 +506,17 @@ async function prepareOwnBotUpdate(
     request.heldForApproval = typeof request.args.previousInstructions === "string";
     return undefined;
   }
-  const { previousInstructions: _previous, reason: _reason, ...args } = request.args;
+  const { previousInstructions: _previous, reason: _reason, ...given } = request.args;
+  request.args = given;
+  const offset = ownBotInstructionsOffset(given);
+  if (typeof offset !== "number") return offset;
+  // Paging is always a read, even when the model fills in write-only or forbidden fields.
+  if (offset > 0) return undefined;
+  const live = await ctx.deps.prisma.bot.findUniqueOrThrow({
+    where: { id: ctx.bot.id },
+    select: OWN_BOT_SETTINGS_SELECT,
+  });
+  const args = await normalizeOwnBotUpdateArgs(await fleetPrepareDeps(ctx.deps, run), live, given);
   request.args = args;
   const settingsOnly = Object.keys(args).filter(
     (key) => !OWN_FIELDS.has(key) && argumentGiven(args[key]),

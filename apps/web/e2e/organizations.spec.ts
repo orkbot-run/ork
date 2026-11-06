@@ -4,14 +4,7 @@
 
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import {
-  captureScreenshot,
-  completeOnboarding,
-  createBotFromPicker,
-  openUserSettings,
-  rpc,
-  signup,
-} from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 
 type OrganizationList = {
   organizations: Array<{ id: string; name: string; defaultSpaceId: string }>;
@@ -34,11 +27,11 @@ async function openAvatarMenu(page: Page) {
   return menu;
 }
 
-/** Resolves once another app destination is open, outside settings. */
+/** Resolves once another chat is open, outside settings. */
 function appOpened(page: Page, leaving: string) {
   return page.waitForURL(
     (url) =>
-      /^\/app(?:\/[^/]+)?$/.test(url.pathname) &&
+      /^\/app\/[^/]+$/.test(url.pathname) &&
       url.pathname !== leaving &&
       !url.searchParams.has("settings"),
   );
@@ -135,21 +128,17 @@ test("create, switch, rename and delete an organization", async ({ page }, testI
   await captureScreenshot(page, testInfo, "org-menu-two-orgs");
   await page.keyboard.press("Escape");
 
-  // Another organization opens empty instead of creating another primary bot.
+  // Another organization receives an ordinary bot while the personal Ork stays in Personal.
   await switchFromAvatarMenu(page, "Work", work.defaultSpaceId);
-  await expect(page).toHaveURL(/\/app$/);
+  await expect(page).toHaveURL(/\/app\/[^/]+$/);
   await expect(
     page
       .locator("aside")
       .first()
       .getByRole("button", { name: /^Chief/ }),
-  ).toHaveCount(0);
-  await expect(
-    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
-  ).toBeVisible();
-  await captureScreenshot(page, testInfo, "org-empty-space");
-  await createBotFromPicker(page, { name: "Work bot" });
-  await expect(page.getByPlaceholder("Message Work bot")).toBeVisible();
+  ).toHaveCount(1);
+  await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
+  await captureScreenshot(page, testInfo, "org-space-after-onboarding");
   const workChat = new URL(page.url()).pathname;
   await switchFromAvatarMenu(page, "Personal", personal.defaultSpaceId);
 

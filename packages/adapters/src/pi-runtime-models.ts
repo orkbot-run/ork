@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// Modified by Ork contributors for coordinated OAuth refreshes and reasoning effort recovery. See LICENSE.md.
 
 import type {
   Api,
@@ -234,20 +234,28 @@ export function withOutputBudget(
 
 const REASONING_EFFORT_CHOICES =
   /\breasoning_effort\b[\s\S]{0,120}?\b(?:one of|supported values are)\b([^.}"]*)/i;
+const UNSUPPORTED_REASONING_EFFORT =
+  /\b(?:unsupported|invalid)\s+reasoning[_ ]effort\b|\breasoning[_ ]effort\b[^.;:,\r\n]{0,80}\b(?:not supported|unsupported|invalid)\b/i;
 
 /**
  * The thinking levels of a model whose endpoint rejected `reasoning_effort` and listed the values
  * it accepts, with the rest mapped out so the request clamps to an accepted one. Off sends no
- * effort when the endpoint refuses the off value. Undefined when the error lists nothing usable.
+ * effort when the endpoint refuses the off value, including refusals without listed values.
+ * Undefined when no mapping can be corrected.
  */
 export function acceptedReasoningEfforts(
   model: Model<Api>,
   errorMessage: string | undefined,
 ): ThinkingLevelMap | undefined {
   const listed = errorMessage?.match(REASONING_EFFORT_CHOICES)?.[1]?.toLowerCase().match(/\w+/g);
-  if (!listed) return undefined;
-  const accepted = new Set(listed);
   const current = model.thinkingLevelMap ?? {};
+  if (!listed) {
+    // Undefined omits the wire effort while keeping off selectable; null would clamp it upward.
+    return typeof current.off === "string" && UNSUPPORTED_REASONING_EFFORT.test(errorMessage ?? "")
+      ? { ...current, off: undefined }
+      : undefined;
+  }
+  const accepted = new Set(listed);
   const levels: ThinkingLevelMap = {};
   for (const level of ["minimal", "low", "medium", "high", "xhigh", "max"] as const) {
     const effort = current[level] ?? (level === "xhigh" || level === "max" ? null : level);

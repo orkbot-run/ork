@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for reasoning effort recovery. See LICENSE.md.
+
 import type { Api, Model } from "@earendil-works/pi-ai";
 import {
   clampThinkingLevel,
@@ -230,8 +233,36 @@ describe("reasoning efforts an endpoint refuses", () => {
   });
 
   it.each([
+    "400: Unsupported reasoning effort",
+    "400: Invalid reasoning effort",
+    "400: reasoning_effort is not supported for this model",
+    "400: reasoning effort 'none' is unsupported",
+    '400: "reasoning_effort" is invalid',
+    '400: {"message":"Invalid reasoning effort","type":"invalid_request_error"}',
+  ])("omits a mapped off effort after a refusal without choices: %s", (error) => {
+    const original = { off: "none", minimal: null, xhigh: "xhigh", max: "max" } as const;
+    const levels = acceptedReasoningEfforts(model(original), error);
+    expect(levels).toEqual({ ...original, off: undefined });
+    expect(original.off).toBe("none");
+    expect(getSupportedThinkingLevels(model(levels))).toEqual(
+      getSupportedThinkingLevels(model(original)),
+    );
+    expect(clampThinkingLevel(model(levels), "off")).toBe("off");
+  });
+
+  it.each([{}, { off: null }])("does not retry an off effort already omitted: %j", (levels) => {
+    expect(acceptedReasoningEfforts(model(levels), "Unsupported reasoning effort")).toBeUndefined();
+  });
+
+  it.each([
     '400: {"message":"Unexpected message role.","type":"invalid_request_error"}',
     '400: {"message":"reasoning_effort must be one of: turbo","type":"invalid_request_error"}',
+    "400: reasoning_effort was provided; tool schema is invalid",
+    "400: reasoning effort was provided. Invalid tool schema",
+    "400: reasoning_effort was provided\nTool schema is not supported",
+    '400: {"message":"reasoning_effort was provided","code":"invalid_request_error"}',
+    "400: reasoning_effort was provided: tool schema is invalid",
+    `400: reasoning_effort ${"x".repeat(100)} is invalid`,
   ])("ignores a rejection that names no usable effort: %s", (error) => {
     expect(acceptedReasoningEfforts(model({ off: "none" }), error)).toBeUndefined();
   });
