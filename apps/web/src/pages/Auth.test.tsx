@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 tests are preserved. Browser popup coverage is an Ork addition.
+import { isPersonalOrkId } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -352,9 +353,13 @@ it("introduces Accounts only after Get started without opening authorization as 
   await render("up", false);
   expect(host.textContent).toContain("Welcome to Ork");
   expect(host.textContent).not.toContain("Create your Ork");
-  expect(host.querySelector('[data-welcome-avatar="ork-welcome-10099"]')).not.toBeNull();
+  const preview = host.querySelector("[data-welcome-avatar]")?.getAttribute("data-welcome-avatar");
+  expect(isPersonalOrkId(preview)).toBe(true);
   expect(button("Continue with Example")).toBeUndefined();
   await act(async () => button("Get started").click());
   expect(button("Continue with Example")).toBeDefined();
+  expect(host.querySelector("[data-welcome-avatar]")?.getAttribute("data-welcome-avatar")).toBe(
+    preview,
+  );
   expect(authClient.signIn.social).not.toHaveBeenCalled();
 });

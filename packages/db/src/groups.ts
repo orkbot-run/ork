@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { Actor, Group, GroupMember, SpaceGroup } from "@orkbot/contracts";
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, resolveBotAvatarSet } from "@orkbot/contracts";
 import { displayName } from "@orkbot/core";
@@ -37,6 +41,7 @@ type GroupRecord = {
       id: string;
       name: string;
       color: string;
+      avatarSeed?: string | null;
       avatarSet?: string;
       runs: Array<{ status: string }>;
     };
@@ -59,6 +64,7 @@ function mapGroupMembers(members: GroupRecord["members"]): GroupMember[] {
     name: member.bot.name,
     color: member.bot.color,
     avatarSet: resolveBotAvatarSet(member.bot.avatarSet),
+    avatarSeed: member.bot.avatarSeed ?? null,
     status: primaryActiveRun(member.bot.runs)?.status ?? "idle",
   }));
 }
@@ -119,7 +125,7 @@ async function assertOwnedBots(
       userId: actor.userId,
       archivedAt: null,
     },
-    select: { id: true, name: true, color: true, avatarSet: true },
+    select: { id: true, name: true, color: true, avatarSet: true, avatarSeed: true },
   });
   if (bots.length !== unique.length) throw new IsolationError();
   const botsById = new Map(bots.map((bot) => [bot.id, bot]));
@@ -131,6 +137,7 @@ async function assertOwnedBots(
       name: bot.name,
       color: bot.color,
       avatarSet: resolveBotAvatarSet(bot.avatarSet),
+      avatarSeed: bot.avatarSeed ?? null,
     };
   });
 }
@@ -162,6 +169,7 @@ const groupInclude = {
           name: true,
           color: true,
           avatarSet: true,
+          avatarSeed: true,
           runs: activeRunSelection,
         },
       },
@@ -192,6 +200,7 @@ const groupTargetInclude = {
           name: true,
           color: true,
           avatarSet: true,
+          avatarSeed: true,
           runs: activeRunSelection,
         },
       },

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { accountDisplay } from "@orkbot/core";
 import { typeScale } from "@orkbot/ui-tokens";
 import { AudioModule } from "expo-audio";
@@ -150,6 +154,7 @@ export function CallCard() {
         <BotAvatar
           color={call.botColor}
           avatarSet={call.botAvatarSet}
+          avatarSeed={call.botAvatarSeed}
           identity={call.botId}
           size={28}
           motion="live"

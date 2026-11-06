@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { notificationAvatarSource } from "@orkbot/core";
 import { expect, it, vi } from "vitest";
 import { notificationIdentity } from "./notification-identity.js";
@@ -52,4 +56,18 @@ it("shares one render per avatar and does not retry a broken one", async () => {
   expect(second).toEqual(first);
   expect(render).toHaveBeenCalledTimes(1);
   render.mockRestore();
+});
+
+it("invalidates a cached portrait when an account Ork is assigned without changing the bot id", async () => {
+  const bot = { id: "saved-chief", name: "Ork", color: "#14b8a6" };
+  const first = await notificationIdentity({
+    ...bot,
+    avatarSeed: "64cf5621-3144-4810-97f5-148acdc29c35",
+  });
+  const second = await notificationIdentity({
+    ...bot,
+    avatarSeed: "f4c2f322-7b3b-4a53-a44c-47647614fdc0",
+  });
+  expect(first.botId).toBe(second.botId);
+  expect(first.avatar).not.toBe(second.avatar);
 });

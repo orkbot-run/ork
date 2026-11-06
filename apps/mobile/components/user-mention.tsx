@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { fontWeight, MAX_FONT_SCALE } from "@orkbot/ui-tokens";
 import { Text, useWindowDimensions, View } from "react-native";
 import type { UserMentionTarget } from "../lib/message-mentions";
@@ -43,7 +47,13 @@ export function UserMention({
         }}
       >
         {bot ? (
-          <BotAvatar color={bot.color} avatarSet={bot.avatarSet} identity={bot.id} size={size} />
+          <BotAvatar
+            color={bot.color}
+            avatarSet={bot.avatarSet}
+            identity={bot.id}
+            avatarSeed={bot.avatarSeed}
+            size={size}
+          />
         ) : (
           <NativeSymbol ios="person.3" android="people-outline" size={size} color={color} />
         )}

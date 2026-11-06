@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 contracts are preserved. Personal Ork additions follow LICENSE.md.
+
 import * as z from "zod";
 import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { BotAvatarSetSchema, BotAvatarValueSchema } from "./bot-avatar.js";
@@ -112,6 +116,7 @@ export const BotSchema = z.object({
   instructionHistory: z.array(InstructionVersionSchema).optional(),
   color: z.string(),
   avatarSet: BotAvatarSetSchema.optional(),
+  avatarSeed: z.uuidv4().nullable().optional(),
   notifyOnFinish: z.boolean(),
   pinned: z.boolean(),
   sectionId: Id.nullable(),
@@ -161,6 +166,7 @@ export const IncomingBotCallSchema = BotSchema.pick({
   name: true,
   color: true,
   avatarSet: true,
+  avatarSeed: true,
 }).extend({
   incomingCall: BotSchema.shape.incomingCall.unwrap().unwrap(),
 });
@@ -191,6 +197,7 @@ export const GroupMemberSchema = z.object({
   name: z.string(),
   color: z.string(),
   avatarSet: BotAvatarSetSchema.optional(),
+  avatarSeed: z.uuidv4().nullable().optional(),
   status: z.string().optional(),
 });
 export type GroupMember = z.infer<typeof GroupMemberSchema>;
@@ -283,6 +290,7 @@ export const SpaceBotSchema = BotSchema.pick({
   title: true,
   color: true,
   avatarSet: true,
+  avatarSeed: true,
   notifyOnFinish: true,
   pinned: true,
   sectionId: true,
@@ -1933,6 +1941,8 @@ export const MeSchema = z.object({
   userId: Id,
   email: z.string().email(),
   name: z.string(),
+  /** The account's saved Ork; absent on older installations. */
+  orkAvatar: z.uuidv4().nullable().optional(),
   spaceId: Id,
   /** Deprecated: app accounts never have server administrator privileges. Always false. */
   isDeploymentOwner: z.boolean(),
@@ -2227,6 +2237,7 @@ export const ExportManifestSchema = z.object({
   bot: BotSchema.pick({ name: true, description: true, instructions: true }).extend({
     color: z.string().optional(),
     avatarSet: BotAvatarSetSchema.optional(),
+    avatarSeed: z.uuidv4().nullable().optional(),
   }),
   memory: z.array(z.object({ path: z.string(), content: z.string() })),
   routines: z.array(RoutineSchema.pick({ name: true, prompt: true, crons: true, timezone: true })),

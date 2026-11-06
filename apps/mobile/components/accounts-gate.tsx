@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { WELCOME_AVATAR_COLOR, WELCOME_AVATAR_IDENTITY } from "@orkbot/core";
+import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
@@ -16,6 +16,7 @@ import {
   continueWithAccounts,
   signOutAccounts,
   subscribeAccounts,
+  welcomeAccountsOrk,
 } from "../lib/accounts";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import { clearProductAccountSession, loadApiBase, probeApiBase, saveApiBase } from "../lib/api";
@@ -31,6 +32,7 @@ import { NativeActionButton } from "./native-action-button";
 const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
 let ownershipChanges = Promise.resolve();
+const welcomeOrk = welcomeAccountsOrk();
 
 function serializeOwnership<T>(operation: () => Promise<T>): Promise<T> {
   const result = ownershipChanges.then(operation);
@@ -94,6 +96,7 @@ export function AccountsGate({
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
     "loading",
   );
+  const [orkAvatar, setOrkAvatar] = useState(welcomeOrk);
   const [servers, setServers] = useState<AccountServer[]>([]);
   const [started, setStarted] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -119,12 +122,14 @@ export function AccountsGate({
       if (!identity) {
         if (!(await adoptAccount(null, () => generation.current === current))) return;
         owner.current = "";
+        setOrkAvatar(welcomeOrk);
         setServers([]);
         setDraft("");
         setReadyAt({ version, attempt });
         setPhase("signed-out");
         return;
       }
+      setOrkAvatar(isPersonalOrkId(identity.orkAvatar) ? identity.orkAvatar : welcomeOrk);
       const account = JSON.stringify([identity.issuer, identity.subject]);
       if (!(await adoptAccount(account, () => generation.current === current))) return;
       owner.current = account;
@@ -227,8 +232,8 @@ export function AccountsGate({
       >
         <View style={{ alignItems: "center" }}>
           <LogoAvatar
-            identity={WELCOME_AVATAR_IDENTITY}
-            color={WELCOME_AVATAR_COLOR}
+            identity={orkAvatar}
+            color={seededLogoAvatarColor(orkAvatar)}
             size={visiblePhase === "servers" || visiblePhase === "recovery" ? 112 : 220}
             activity="idle"
             motion="live"
@@ -249,7 +254,9 @@ export function AccountsGate({
             <NativeActionButton
               label={started ? t("Continue with {name}", { name: "Accounts" }) : t("Get started")}
               busy={pending}
-              onPress={() => (started ? void action(continueWithAccounts) : setStarted(true))}
+              onPress={() =>
+                started ? void action(() => continueWithAccounts(welcomeOrk)) : setStarted(true)
+              }
             />
             {error ? (
               <NativeActionButton

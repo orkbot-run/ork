@@ -10,6 +10,7 @@ import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import SignIn from "../app/sign-in";
+import { accountsIdentity } from "./accounts";
 import {
   loadSessionToken,
   passwordResetCapabilities,
@@ -27,6 +28,10 @@ const route = vi.hoisted(() => ({ mode: "in", waiting: false, redirect: vi.fn() 
 const router = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn() }));
 const server = vi.hoisted(() => ({ base: "https://example.invalid", refocus: () => {} }));
 
+vi.mock("./accounts", () => ({
+  accountsIdentity: vi.fn().mockResolvedValue(null),
+  welcomeAccountsOrk: () => "64cf5621-3144-4810-97f5-148acdc29c35",
+}));
 vi.mock("expo-router", () => ({
   Redirect: ({ href }: { href: string }) => {
     route.redirect(href);
@@ -161,6 +166,8 @@ beforeEach(() => {
   server.base = "https://example.invalid";
   vi.clearAllMocks();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.mocked(accountsIdentity).mockReset().mockResolvedValue(null);
+  vi.mocked(loadSessionToken).mockReset().mockResolvedValue("");
   vi.mocked(passwordResetCapabilities).mockResolvedValue(capabilities);
   vi.mocked(passkeysAvailable).mockReset().mockResolvedValue(false);
   vi.mocked(signInWithPasskey).mockReset();
@@ -237,7 +244,9 @@ it.each(["in", "up"])(
     await render();
     expect(host.textContent).toContain("Welcome to Ork");
     expect(host.textContent).not.toContain("Sign up for Ork");
-    expect(host.querySelector('[data-welcome-avatar="ork-welcome-10099"]')).not.toBeNull();
+    expect(
+      host.querySelector('[data-welcome-avatar="64cf5621-3144-4810-97f5-148acdc29c35"]'),
+    ).not.toBeNull();
     expect(continueWithSso).not.toHaveBeenCalled();
     expect(ssoButtons()).toHaveLength(1);
     expect(ssoButtons()[0]!.dataset.prominence).toBe("primary");
@@ -528,4 +537,15 @@ it("returns an existing session to the pending share", async () => {
   vi.mocked(loadSessionToken).mockResolvedValue("fake-session");
   await render();
   expect(route.redirect).toHaveBeenCalledWith("/share");
+});
+
+it("restores the signed-in account Ork on the product login screen", async () => {
+  const seed = "f4c2f322-7b3b-4a53-a44c-47647614fdc0";
+  vi.mocked(accountsIdentity).mockResolvedValueOnce({
+    issuer: "https://accounts.example.test",
+    subject: "subject",
+    orkAvatar: seed,
+  });
+  await render();
+  expect(host.querySelector(`[data-welcome-avatar="${seed}"]`)).not.toBeNull();
 });

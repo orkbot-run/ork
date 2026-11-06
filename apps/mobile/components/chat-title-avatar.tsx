@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { SpaceBot } from "@orkbot/contracts";
 import { StyleSheet, View } from "react-native";
 import type { MobileBot } from "../lib/api";
@@ -48,6 +52,7 @@ export function ChatTitleAvatar({
       color={bot.color}
       avatarSet={bot.avatarSet}
       identity={bot.id}
+      avatarSeed={bot.avatarSeed}
       size={CHAT_TITLE_AVATAR_SIZE}
       status={status}
       composing={composing}

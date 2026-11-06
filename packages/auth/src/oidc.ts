@@ -4,6 +4,7 @@
 // Inherited Apache-2.0 OIDC handling is preserved. Public-client configuration is an Ork addition.
 
 import { createHash } from "node:crypto";
+import { isPersonalOrkId } from "@orkbot/core";
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, getOAuthState } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
@@ -43,7 +44,9 @@ export function oidcDiscovery(config: OidcConfig) {
           return oidcAccountSubject(config.issuer, profile.sub);
         },
         requireIdTokenVerification: true,
-        mapProfileToUser: (profile) => ({ emailVerified: profile.email_verified === true }),
+        mapProfileToUser: (profile) => ({
+          emailVerified: profile.email_verified === true,
+        }),
       },
     ],
   });
@@ -204,7 +207,14 @@ export function oidcDiscovery(config: OidcConfig) {
             // the reusable OAuth record. Skew must not extend the proof lifetime.
             context.reauthExpiresAt = (Math.min(authTime, now) + OIDC_FRESH_AGE) * 1_000;
           }
-          return info;
+          // The portable Ork follows the signed identity, never an OAuth request parameter.
+          return {
+            ...info,
+            user: {
+              ...info.user,
+              ...(isPersonalOrkId(claims.ork_avatar) ? { orkAvatar: claims.ork_avatar } : {}),
+            },
+          };
         },
         accountSubject: async (data) => {
           const resolved = await getProvider();

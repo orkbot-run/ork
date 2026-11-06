@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
 import { avatarPhotoDot } from "@orkbot/core";
 import { MAX_FONT_SCALE, typeScale } from "@orkbot/ui-tokens";
@@ -24,6 +28,7 @@ export type ActivityMarkBot = {
   id: string;
   color: string;
   avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
   status?: string;
   composing?: boolean;
 };
@@ -107,6 +112,7 @@ export function ActivityMark({
               color={bot.color}
               avatarSet={bot.avatarSet}
               identity={bot.id}
+              avatarSeed={bot.avatarSeed}
               size={MARK_SIZE}
               status={bot.status}
               motion="running"

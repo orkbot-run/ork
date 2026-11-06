@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import { PageIcon } from "@orkbot/chat-ui/web";
@@ -185,6 +189,7 @@ export function CommandPalette({
                     avatarSet={bot.avatarSet}
                     color={bot.color}
                     identity={bot.id}
+                    avatarSeed={bot.avatarSeed}
                     size={32}
                     status={bot.status}
                   />

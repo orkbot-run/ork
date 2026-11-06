@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { RunActivityRow } from "@orkbot/contracts";
 import { activitySections } from "@orkbot/core";
 import type { Href } from "expo-router";
@@ -109,6 +113,7 @@ export function ActivitySection({
               avatar={
                 <BotAvatar
                   identity={bot.id}
+                  avatarSeed={bot.avatarSeed}
                   color={bot.color}
                   avatarSet={bot.avatarSet}
                   motion="lazy"

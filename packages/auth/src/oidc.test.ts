@@ -1684,3 +1684,58 @@ it("counts only stored OIDC subjects bound to the current issuer", async () => {
     false,
   );
 });
+
+describe("personal Ork account claims", () => {
+  it("persists a verified profile's portable Ork and keeps it when later claims omit it", async () => {
+    setup();
+    const orkAvatar = "a0d0b468-5630-49c2-977e-79c19917c61b";
+    await signIn({
+      sub: "subject-1",
+      email: "sso@example.test",
+      email_verified: true,
+      ork_avatar: orkAvatar,
+    });
+    expect(rows("user")[0]).toMatchObject({ orkAvatar });
+    cookies = "";
+    await signIn();
+    expect(rows("user")[0]).toMatchObject({ orkAvatar });
+  });
+  it("does not persist malformed personal Ork claims", async () => {
+    setup();
+    await signIn({
+      sub: "subject-1",
+      email: "sso@example.test",
+      email_verified: true,
+      ork_avatar: "not-a-seed",
+    });
+    expect(rows("user")[0]?.orkAvatar).toBeFalsy();
+  });
+});
+
+describe("personal Ork claim updates", () => {
+  it("updates a linked account from a later signed profile while rejecting direct field writes", async () => {
+    setup();
+    await signIn();
+    const orkAvatar = "a0d0b468-5630-49c2-977e-79c19917c61b";
+    expect(rows("user")[0]?.orkAvatar).toBeFalsy();
+    cookies = "";
+    await signIn({
+      sub: "subject-1",
+      email: "sso@example.test",
+      email_verified: true,
+      ork_avatar: orkAvatar,
+    });
+    expect(rows("user")[0]).toMatchObject({ orkAvatar });
+    const direct = await request("/update-user", {
+      orkAvatar: "3971a1af-5ae7-4f24-bfb9-df3f283aa2ac",
+    });
+    expect(direct.status).toBe(400);
+    expect(rows("user")[0]).toMatchObject({ orkAvatar });
+  });
+  it("does not use an unsigned userinfo appearance when the signed token omits it", async () => {
+    setup();
+    userInfoClaims.ork_avatar = "a0d0b468-5630-49c2-977e-79c19917c61b";
+    await signIn();
+    expect(rows("user")[0]?.orkAvatar).toBeFalsy();
+  });
+});

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
 import { memo } from "react";
 import type { ViewStyle } from "react-native";
@@ -11,6 +15,7 @@ export interface GroupAvatarMember {
   name?: string;
   color: string;
   avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
   status?: string;
 }
 
@@ -53,6 +58,7 @@ export const GroupAvatar = memo(function GroupAvatar({
         color={firstMember.color}
         avatarSet={firstMember.avatarSet}
         identity={firstMember.botId ?? firstMember.name}
+        avatarSeed={firstMember.avatarSeed}
         size={size}
         status={firstMember.status}
       />
@@ -88,6 +94,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             color={member.color}
             avatarSet={member.avatarSet}
             identity={member.botId ?? member.name}
+            avatarSeed={member.avatarSeed}
             size={miniSize}
             status={member.status}
           />

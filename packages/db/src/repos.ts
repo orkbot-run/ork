@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 repositories are preserved. Personal Ork identities follow LICENSE.md.
+
 import type {
   Actor,
   Bot,
@@ -28,6 +32,7 @@ import type { ComputerMode } from "./computers.js";
 import { ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { withNewestThreadMessages } from "./preview-messages.js";
+import { runAsSystemInTransaction } from "./row-security.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
 import {
@@ -78,6 +83,9 @@ function rosterUpdatedAt(newestMessage: { createdAt: Date } | undefined, botUpda
   return newestMessage?.createdAt ?? botUpdatedAt;
 }
 
+/** An account with prior content does not receive another automatic primary bot. */
+export class FirstBotAlreadyExistsError extends Error {}
+
 function mapBot(
   bot: {
     id: string;
@@ -88,6 +96,7 @@ function mapBot(
     instructionHistory?: unknown;
     color: string;
     avatarSet?: string;
+    avatarSeed?: string | null;
     notifyOnFinish: boolean;
     pinned: boolean;
     sectionId: string | null;
@@ -131,6 +140,7 @@ function mapBot(
     instructionHistory: InstructionVersionSchema.array().parse(bot.instructionHistory ?? []),
     color: bot.color,
     avatarSet: resolveBotAvatarSet(bot.avatarSet),
+    avatarSeed: bot.avatarSeed ?? null,
     notifyOnFinish: bot.notifyOnFinish,
     pinned: bot.pinned,
     sectionId: bot.sectionId,
@@ -200,6 +210,7 @@ export function createRepos(
         name: true,
         color: true,
         avatarSet: true,
+        avatarSeed: true,
         notifyOnFinish: true,
         pinned: true,
         sectionId: true,
@@ -226,6 +237,7 @@ export function createRepos(
         title: "",
         color: bot.color,
         avatarSet: resolveBotAvatarSet(bot.avatarSet),
+        avatarSeed: bot.avatarSeed ?? null,
         notifyOnFinish: bot.notifyOnFinish,
         pinned: bot.pinned,
         sectionId: bot.sectionId,
@@ -529,6 +541,9 @@ export function createRepos(
         fleetManagement?: boolean;
         color?: string;
         avatarSet?: BotAvatarSet;
+        avatarSeed?: string;
+        /** Internal first-run creation, guarded by the owner lock and prior content. */
+        firstForAccount?: boolean;
         /** Copy a pin as is (duplicates); otherwise a set other than the default pins the bot. */
         avatarSetPinned?: boolean;
         avatarFamily?: number;
@@ -593,8 +608,27 @@ export function createRepos(
           });
           // A bot follows its owner's default set unless created with another, which pins it.
           // Held until this bot commits, so a concurrent default change restyles it afterwards.
-          const [owner] = await tx.$queryRaw<{ botAvatarSet: string }[]>`
-            SELECT "botAvatarSet" FROM "user" WHERE id = ${actor.userId} FOR SHARE`;
+          const [owner] = input.firstForAccount
+            ? await tx.$queryRaw<{ botAvatarSet: string }[]>`
+                SELECT "botAvatarSet" FROM "user" WHERE id = ${actor.userId} FOR UPDATE`
+            : await tx.$queryRaw<{ botAvatarSet: string }[]>`
+                SELECT "botAvatarSet" FROM "user" WHERE id = ${actor.userId} FOR SHARE`;
+          if (input.firstForAccount) {
+            const hasContent = await runAsSystemInTransaction(
+              tx,
+              "check only the primary bot owner's prior content across their Spaces",
+              async () => {
+                const where = { userId: actor.userId };
+                const [bots, groups, deleted] = await Promise.all([
+                  tx.bot.count({ where }),
+                  tx.chatGroup.count({ where }),
+                  tx.botDeletion.count({ where: { deletedByUserId: actor.userId } }),
+                ]);
+                return bots + groups + deleted > 0;
+              },
+            );
+            if (hasContent) throw new FirstBotAlreadyExistsError();
+          }
           const defaultSet = owner
             ? resolveBotAvatarSet(owner.botAvatarSet)
             : DEFAULT_NEW_BOT_AVATAR_SET;
@@ -629,6 +663,7 @@ export function createRepos(
               fleetManagement: input.fleetManagement,
               color: avatar.color,
               avatarSet,
+              avatarSeed: input.avatarSeed,
               avatarSetPinned: input.avatarSetPinned ?? avatarSet !== defaultSet,
               position: (positions._max.position ?? -1) + 1,
               parentBotId: input.parentBotId ?? null,

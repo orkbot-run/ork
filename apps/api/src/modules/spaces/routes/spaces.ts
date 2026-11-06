@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import type { Actor, SpaceNavigation } from "@orkbot/contracts";
 import type { createGroupRepos, createRepos, PrismaClient } from "@orkbot/db";
@@ -189,8 +190,9 @@ export function spacesRoutes(ctx: RouterContext) {
     },
     bootstrap: authed.bootstrap.handler(async ({ context, input }) => {
       const actor = context.actor;
-      const [me, navigation, archivedBots, archivedGroups] = await Promise.all([
-        meDto(deps, actor),
+      // Profile synchronization assigns the saved account Ork before the roster is read.
+      const me = await meDto(deps, actor);
+      const [navigation, archivedBots, archivedGroups] = await Promise.all([
         spaceNavigationDto(deps, actor, repos, groupRepos),
         repos.listBots(actor, { archived: true }),
         groupRepos.listGroups(actor, { archived: true }),
@@ -340,6 +342,7 @@ async function memberSpaceNavigation(
           title: "",
           color: bot.color,
           avatarSet: bot.avatarSet,
+          avatarSeed: bot.avatarSeed ?? null,
           notifyOnFinish: bot.notifyOnFinish,
           pinned: bot.pinned,
           sectionId: bot.sectionId,

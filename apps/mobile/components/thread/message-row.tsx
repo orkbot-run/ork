@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { markdownCodeBlocks } from "@orkbot/chat-ui/native";
 import type { BotAvatarSet, LoginFieldInput, MessageReaction } from "@orkbot/contracts";
 import { canReactToThreadMessage, MESSAGE_REACTIONS } from "@orkbot/contracts";
@@ -89,6 +93,7 @@ type MessageRowProps = {
   activityBotId?: string;
   activityColor?: string;
   activityAvatarSet?: BotAvatarSet;
+  activityAvatarSeed?: string | null;
   activityStatus?: MobileBot["status"];
   userBubble?: UserBubble;
   inGroup: boolean;
@@ -125,6 +130,7 @@ export const MessageRow = memo(function MessageRow({
   activityBotId,
   activityColor,
   activityAvatarSet,
+  activityAvatarSeed,
   activityStatus,
   userBubble,
   inGroup,
@@ -390,6 +396,7 @@ export const MessageRow = memo(function MessageRow({
             <BotAvatar
               color={activityColor ?? tokens.mutedForeground}
               avatarSet={activityAvatarSet}
+              avatarSeed={activityAvatarSeed}
               identity={activityBotId}
               size={inGroup ? 20 : 28}
               status={activityStatus}

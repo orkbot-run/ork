@@ -98,6 +98,7 @@ export function BotLookPicker({
 export interface AvatarStudioPopoverProps {
   value: string;
   identity?: string;
+  avatarSeed?: string | null;
   status?: string;
   avatarSet?: BotAvatarSet;
   size?: number;
@@ -108,6 +109,7 @@ export interface AvatarStudioPopoverProps {
 export function AvatarStudioPopover({
   value,
   identity,
+  avatarSeed,
   status,
   avatarSet = "orkbot",
   size = 72,
@@ -190,6 +192,7 @@ export function AvatarStudioPopover({
         <BotAvatar
           color={value}
           identity={identity}
+          avatarSeed={avatarSeed}
           size={size}
           status={status}
           avatarSet={avatarSet}
@@ -228,6 +231,7 @@ export function AvatarStudioPopover({
             <BotAvatar
               color={value}
               identity={identity}
+              avatarSeed={avatarSeed}
               size={78}
               status={status}
               avatarSet={avatarSet}
@@ -263,7 +267,7 @@ export function AvatarStudioPopover({
             <TabsContent value="bot" className="pt-1" data-testid="avatar-studio-bot-tab">
               <BotLookPicker
                 value={value}
-                identity={identity}
+                identity={value.includes("::shape_") ? identity : (avatarSeed ?? identity)}
                 onChange={(next) => onChange(next)}
               />
             </TabsContent>

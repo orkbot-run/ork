@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type { JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
 import { callExpireJob } from "@orkbot/adapter-kit";
@@ -308,7 +313,16 @@ export async function loadUserIncomingCalls(
         blocks: true,
         thread: {
           select: {
-            bot: { select: { id: true, spaceId: true, name: true, color: true, avatarSet: true } },
+            bot: {
+              select: {
+                id: true,
+                spaceId: true,
+                name: true,
+                color: true,
+                avatarSet: true,
+                avatarSeed: true,
+              },
+            },
           },
         },
       },

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { artifactTypeLabel } from "@orkbot/core";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
 import type { ReactNode } from "react";
@@ -263,6 +267,7 @@ export default function ArtifactsScreen() {
                     color={bot.color}
                     avatarSet={bot.avatarSet}
                     identity={bot.id}
+                    avatarSeed={bot.avatarSeed}
                     size={16}
                   />
                 }
@@ -415,7 +420,13 @@ function ArtifactRow({
         <View style={styles.rowFooter}>
           {bot ? (
             <>
-              <BotAvatar color={bot.color} avatarSet={bot.avatarSet} identity={bot.id} size={14} />
+              <BotAvatar
+                color={bot.color}
+                avatarSet={bot.avatarSet}
+                identity={bot.id}
+                avatarSeed={bot.avatarSeed}
+                size={14}
+              />
               <Text style={styles.rowBotName} numberOfLines={1}>
                 {bot.name}
               </Text>

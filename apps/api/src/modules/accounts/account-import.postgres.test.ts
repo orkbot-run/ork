@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -67,6 +68,7 @@ function sourceRecords(): AccountExportRecord[] {
       instructions: "",
       color: "#F5A03C",
       avatarSet: "orkbot",
+      avatarSeed: "a0d0b468-5630-49c2-977e-79c19917c61b",
       notifyOnFinish: true,
       pinned: false,
       position: 0,
@@ -421,6 +423,7 @@ describePostgres("account import (PostgreSQL)", () => {
     const child = bots.find((bot) => bot.name === "Scout")!;
     const parent = bots.find((bot) => bot.name === "Chief")!;
     expect(bots).toHaveLength(2);
+    expect(parent.avatarSeed).toBe("a0d0b468-5630-49c2-977e-79c19917c61b");
     expect(bots.every((bot) => bot.userId === userId && !bot.id.startsWith("src-"))).toBe(true);
     expect(child.parentBotId).toBe(parent.id);
     expect(child.pinned).toBe(true);

@@ -4,11 +4,11 @@
 
 import {
   credentialIssue,
+  isPersonalOrkId,
   MAX_PASSWORD_LENGTH,
   PASSWORD_RULES,
+  seededLogoAvatarColor,
   suggestEmailCorrection,
-  WELCOME_AVATAR_COLOR,
-  WELCOME_AVATAR_IDENTITY,
 } from "@orkbot/core";
 import { Redirect, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -28,6 +28,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LogoAvatar } from "../components/logo-avatar";
 import { NativeActionButton } from "../components/native-action-button";
+import { accountsIdentity, welcomeAccountsOrk } from "../lib/accounts";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import type { PasswordResetCapabilities } from "../lib/api";
 import {
@@ -59,6 +60,18 @@ export default function SignIn() {
   const tokens = useMobileTokens();
   const router = useRouter();
   const { mode: requestedMode } = useLocalSearchParams<{ mode?: string | string[] }>();
+  const [orkAvatar, setOrkAvatar] = useState(welcomeAccountsOrk);
+  useEffect(() => {
+    let current = true;
+    void accountsIdentity()
+      .then((identity) => {
+        if (current && isPersonalOrkId(identity?.orkAvatar)) setOrkAvatar(identity.orkAvatar);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, []);
   const [mode, setMode] = useState<AuthMode>(() => initialAuthMode(requestedMode));
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -265,8 +278,8 @@ export default function SignIn() {
             >
               <View style={{ alignItems: "center", marginBottom: 24 }}>
                 <LogoAvatar
-                  identity={WELCOME_AVATAR_IDENTITY}
-                  color={WELCOME_AVATAR_COLOR}
+                  identity={orkAvatar}
+                  color={seededLogoAvatarColor(orkAvatar)}
                   size={200}
                   activity="idle"
                   motion="live"

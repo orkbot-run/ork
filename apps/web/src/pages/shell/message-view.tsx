@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown, LinkifiedText, withBlockMentions } from "@orkbot/chat-ui/web";
@@ -105,9 +109,15 @@ export const MessageView = memo(function MessageView({
   peerExchange?: PeerExchange;
   speakerName?: string;
   memberName?: (botId: string | undefined) => string | undefined;
-  peerBot: (
-    botId: string,
-  ) => { name?: string; color: string; status?: string; avatarSet?: BotAvatarSet } | undefined;
+  peerBot: (botId: string) =>
+    | {
+        name?: string;
+        color: string;
+        status?: string;
+        avatarSet?: BotAvatarSet;
+        avatarSeed?: string | null;
+      }
+    | undefined;
   replyParent?: ThreadMessage;
   onJumpToMessage?: (messageId: string) => void;
   onRefresh: () => Promise<void>;
@@ -193,6 +203,7 @@ export const MessageView = memo(function MessageView({
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
             avatarSet={speakerBot?.avatarSet}
             identity={message.botId}
+            avatarSeed={speakerBot?.avatarSeed}
             size={22}
           />
           {speakerName}
@@ -680,6 +691,7 @@ function BotMention({
   block: ChildBotBlock;
   color: string | undefined;
   avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
   onOpenBot: (botId: string) => void;
 }) {
   const live = block.status === "created" && color;

@@ -21,23 +21,27 @@ import {
   orkAvatarMouthParts,
 } from "./logo-avatar-art.js";
 import { logoAvatarTraits } from "./logo-avatar-traits.js";
+import { isPersonalOrkId } from "./personal-ork.js";
 
 /** A static notification portrait, with the same identity, saved photo and silhouette as chat. */
 export function notificationAvatarSource(bot: {
   id: string;
   color: string;
   avatarSet?: string | null;
+  avatarSeed?: string | null;
 }): string {
   const parsed = BotAvatarValueSchema.safeParse(bot.color).success
     ? parseBotAvatarValue(bot.color)
     : null;
   if (parsed?.kind === "image") return parsed.imageUrl;
+  const identity =
+    isPersonalOrkId(bot.avatarSeed) && parsed?.kind !== "shape" ? bot.avatarSeed : bot.id;
   const color = resolvePersonaColorDef(
-    bot.id,
+    identity,
     parsed && "color" in parsed ? parsed.color : bot.color,
   ).hex;
   // The push is flattened onto white, so the face uses ink for a light page.
-  const { color: fill, appearance } = logoAvatarTraits(bot.id, color);
+  const { color: fill, appearance } = logoAvatarTraits(identity, color);
   const viewBox = LOGO_AVATAR_VIEWBOX;
   const ink = logoAvatarEyeInk(fill, lightTokens);
   const parts = [

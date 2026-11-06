@@ -33,6 +33,8 @@ model User {
   email                       String
   emailVerified               Boolean                      @default(false)
   image                       String?
+  /// The personal Ork identity issued by the verified account service.
+  orkAvatar                   String?
   createdAt                   DateTime                     @default(now())
   updatedAt                   DateTime                     @updatedAt
   avatarStyle                 String                       @default("organic")
@@ -749,6 +751,8 @@ model Bot {
   instructionHistory Json @default("[]")
   color             String
   avatarSet         String            @default("orkbot")
+  /// Overrides the generated appearance identity for the account's primary Ork.
+  avatarSeed        String?
   /// True once the owner picks this bot a set other than their default; the default no longer moves it.
   avatarSetPinned   Boolean           @default(false)
   notifyOnFinish    Boolean           @default(true)

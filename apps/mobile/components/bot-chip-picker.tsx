@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@orkbot/contracts";
 import { useState } from "react";
 import { AccessibilityInfo, Pressable, Text, TextInput, View } from "react-native";
@@ -121,6 +125,7 @@ export function BotChipPicker({
               color={bot.color}
               avatarSet={bot.avatarSet}
               identity={bot.id}
+              avatarSeed={bot.avatarSeed}
               size={36}
               status={bot.status}
             />

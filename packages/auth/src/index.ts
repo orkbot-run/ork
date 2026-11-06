@@ -10,6 +10,7 @@ import {
   displayName,
   emailAllowed,
   isMessagingEmail,
+  isPersonalOrkId,
   MAX_PASSWORD_LENGTH,
   MESSAGING_EMAIL_SUFFIX,
   MIN_PASSWORD_LENGTH,
@@ -294,6 +295,9 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         : undefined,
     },
     user: {
+      additionalFields: {
+        orkAvatar: { type: "string", required: false, input: true },
+      },
       validateUserInfo: async ({ user, source }, ctx) => {
         if (source.method !== "oauth" || source.oauth?.providerId !== "oidc") return;
         const expectedUser = (await getOAuthState())?.serverContext?.reauthUserId;
@@ -334,12 +338,12 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             return { error: "email_does_not_match" };
           // A previous verified claim must not mask a later false/missing claim, and an
           // unverified claim must not move the account onto an address nobody proved.
-          await ctx.context.internalAdapter.updateUser(
-            user.id,
-            verified || stored?.email.toLowerCase() === email
+          await ctx.context.internalAdapter.updateUser(user.id, {
+            ...(verified || stored?.email.toLowerCase() === email
               ? { email, emailVerified: verified }
-              : { emailVerified: false },
-          );
+              : { emailVerified: false }),
+            ...(isPersonalOrkId(user.orkAvatar) ? { orkAvatar: user.orkAvatar } : {}),
+          });
         }
       },
       deleteUser: {
@@ -416,6 +420,13 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
     ],
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        // The provider callback supplies this field internally after ID token verification.
+        if (ctx.body && Object.hasOwn(ctx.body, "orkAvatar")) {
+          throw new APIError("BAD_REQUEST", {
+            code: "INVALID_PROFILE_FIELD",
+            message: "Invalid profile field",
+          });
+        }
         if (
           ctx.path === "/sign-in/social" &&
           ctx.body?.provider === "oidc" &&

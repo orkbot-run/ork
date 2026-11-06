@@ -379,3 +379,50 @@ it("does not send a refresh token if the predecessor cannot be retired", async (
   await expect(accountsAccessToken()).rejects.toThrow("overwrite failed");
   expect(fetched.mock.calls.some(([url]) => url.endsWith("/token"))).toBe(false);
 });
+
+it("passes a welcome seed only as a cosmetic hint and restores the account's own seed", async () => {
+  const preview = "64cf5621-3144-4810-97f5-148acdc29c35";
+  const saved = "f4c2f322-7b3b-4a53-a44c-47647614fdc0";
+  const original = fetched.getMockImplementation() as (
+    url: string,
+    ...rest: unknown[]
+  ) => Promise<Response>;
+  fetched.mockImplementation(async (url: string, ...rest: unknown[]) =>
+    url.endsWith("/userinfo")
+      ? Response.json({ sub: userSub, ork_avatar: saved })
+      : original(url, ...rest),
+  );
+  const { continueWithAccounts, accountsIdentity } = await import("./accounts");
+  await expect(continueWithAccounts(preview)).resolves.toBe(true);
+  expect(mocks.options).toHaveBeenCalledWith(
+    expect.objectContaining({
+      extraParams: { nonce: "nonce-value", ork_avatar: preview },
+    }),
+  );
+  expect(await accountsIdentity()).toEqual({ issuer, subject: userSub, orkAvatar: saved });
+  expect(JSON.parse(mocks.storage.get(storageKey)!)).toMatchObject({ orkAvatar: saved });
+});
+
+it("does not pass malformed welcome data to Accounts", async () => {
+  const { continueWithAccounts } = await import("./accounts");
+  await continueWithAccounts("https://untrusted.example.test/seed");
+  expect(mocks.options).toHaveBeenCalledWith(
+    expect.objectContaining({ extraParams: { nonce: "nonce-value" } }),
+  );
+});
+
+it("ignores malformed account avatar metadata without exposing it to the renderer", async () => {
+  const original = fetched.getMockImplementation() as (
+    url: string,
+    ...rest: unknown[]
+  ) => Promise<Response>;
+  fetched.mockImplementation(async (url: string, ...rest: unknown[]) =>
+    url.endsWith("/userinfo")
+      ? Response.json({ sub: userSub, ork_avatar: "https://untrusted.example.test/avatar.svg" })
+      : original(url, ...rest),
+  );
+  const { continueWithAccounts, accountsIdentity } = await import("./accounts");
+  await continueWithAccounts("64cf5621-3144-4810-97f5-148acdc29c35");
+  expect(await accountsIdentity()).toEqual({ issuer, subject: userSub });
+  expect(JSON.parse(mocks.storage.get(storageKey)!)).not.toHaveProperty("orkAvatar");
+});

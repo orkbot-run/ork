@@ -11,6 +11,7 @@ import {
   BOT_AVATAR_COLORS,
   BOT_COLOR_LIST,
   DEFAULT_BOT_AVATAR_COLOR,
+  isPersonalOrkId,
   resolvePersonaColorDef,
 } from "@orkbot/core";
 import type { ComponentProps } from "react";
@@ -67,6 +68,7 @@ export interface BotAvatarProps {
   size?: number;
   status?: string;
   identity?: string;
+  avatarSeed?: string | null;
   className?: string;
 }
 
@@ -76,12 +78,16 @@ export const BotAvatar = memo(function BotAvatar({
   size = 36,
   status,
   identity = "",
+  avatarSeed,
   className,
 }: BotAvatarProps) {
   const isWorking = ACTIVE_RUN_STATUSES.some((s) => s === status);
 
   const parsed = useMemo(() => parseBotAvatar(color, identity), [color, identity]);
-  const effectiveId = identity || parsed.color || "agent";
+  const effectiveId =
+    (isPersonalOrkId(avatarSeed) && parsed.shapeIndex === undefined ? avatarSeed : identity) ||
+    parsed.color ||
+    "agent";
 
   const colorDef = useMemo(
     () => resolvePersonaColorDef(effectiveId, parsed.color),
@@ -125,25 +131,28 @@ export const BotAvatar = memo(function BotAvatar({
     );
   }
 
-  const Avatar = activity === undefined ? LiveLogoAvatar : LogoAvatar;
-  return (
-    <Avatar
-      avatarValue={color ? colorDef.hex : undefined}
-      identity={effectiveId}
-      size={size}
-      activity={activity}
-      status={status}
-      className={className}
-    />
+  const avatarProps = {
+    avatarValue: color ? colorDef.hex : undefined,
+    identity: effectiveId,
+    size,
+    activity,
+    status,
+    className,
+  };
+  return activity === undefined ? (
+    <LiveLogoAvatar {...avatarProps} activityIdentity={identity} />
+  ) : (
+    <LogoAvatar {...avatarProps} />
   );
 });
 
 /** Only live Ork consumers subscribe to public activity updates. */
 function LiveLogoAvatar({
   status,
+  activityIdentity,
   ...props
-}: ComponentProps<typeof LogoAvatar> & { status?: string }) {
-  const activity = useBotAvatarActivity(props.identity ?? "", status);
+}: ComponentProps<typeof LogoAvatar> & { status?: string; activityIdentity: string }) {
+  const activity = useBotAvatarActivity(activityIdentity || props.identity || "", status);
   return <LogoAvatar {...props} activity={activity} />;
 }
 

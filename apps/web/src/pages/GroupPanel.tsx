@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, Group } from "@orkbot/contracts";
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, GROUP_NAME_MAX_LENGTH } from "@orkbot/contracts";
@@ -112,6 +116,7 @@ function MemberPicker({
                   avatarSet={bot.avatarSet}
                   color={bot.color}
                   identity={bot.id}
+                  avatarSeed={bot.avatarSeed}
                   size={32}
                   status={bot.status}
                 />

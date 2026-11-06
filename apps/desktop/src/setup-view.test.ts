@@ -4,6 +4,9 @@
 
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { createAvatar } from "@orkbot/avatar";
+import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
+import { isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SetupTransport } from "./setup-view.js";
 import { mountSetup } from "./setup-view.js";
@@ -303,4 +306,37 @@ describe("bundled desktop setup", () => {
     dispose();
     expect(stop).toHaveBeenCalledOnce();
   });
+});
+
+it("carries exactly the visible welcome Ork into sign-up and restores an existing account Ork", async () => {
+  const savedSeed = "f4c2f322-7b3b-4a53-a44c-47647614fdc0";
+  const { invoke } = await setup({
+    invoke: async (command) => {
+      if (command === "setup_accounts_sign_in") return { userinfo: { ork_avatar: savedSeed } };
+      return command === "list_servers" ? [] : null;
+    },
+  });
+  const visible = node("hero").querySelector("svg")?.id;
+  node("get-started").click();
+  node("sign-in").click();
+  await flush();
+  const args = invoke.mock.calls.find(([command]) => command === "setup_accounts_sign_in")?.[1];
+  expect(isPersonalOrkId(args?.orkAvatar)).toBe(true);
+  const seed = args!.orkAvatar as string;
+  const portrait = (id: string) =>
+    createAvatar({
+      ...logoAvatarTraits(id, seededLogoAvatarColor(id)).appearance,
+      color: seededLogoAvatarColor(id),
+      background: "transparent",
+      animate: false,
+    }).id;
+  expect(visible).toBe(portrait(seed));
+  expect(node("hero").querySelector("svg")?.id).toBe(portrait(savedSeed));
+});
+
+it("ignores malformed avatar metadata and never inserts account HTML into the welcome artwork", async () => {
+  await setup({ session: { userinfo: { ork_avatar: '<svg onload="attacker()">' } } });
+  expect(node("hero").querySelector("svg")).not.toBeNull();
+  expect(node("hero").innerHTML).not.toContain("attacker");
+  expect(node("hero").querySelector("[onload]")).toBeNull();
 });

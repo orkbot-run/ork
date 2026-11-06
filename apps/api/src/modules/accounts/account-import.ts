@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { createHash, randomUUID } from "node:crypto";
 import type { WriteStream } from "node:fs";
@@ -818,6 +819,7 @@ class AccountImporter implements ArchiveSink {
       fleetManagement: record.fleetManagement,
       color: record.color,
       avatarSet: resolveBotAvatarSet(record.avatarSet),
+      ...(record.avatarSeed ? { avatarSeed: record.avatarSeed } : {}),
       // Bot ids pick the avatar shape; keep the look the bot had.
       avatarFamily: organicAvatarFamily(record.id),
       modelProvider: record.modelProvider,

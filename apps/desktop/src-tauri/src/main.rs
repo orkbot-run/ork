@@ -172,6 +172,7 @@ async fn native_command(
                     &document.origin,
                     &state.browser_auth,
                     &owner,
+                    None,
                     move |url| async move {
                         if active_document(&opener_app)
                             .is_none_or(|current| current.owner() != opener_owner)
@@ -543,6 +544,7 @@ async fn setup_accounts_session<R: tauri::Runtime>(
 #[tauri::command]
 async fn setup_accounts_sign_in(
     window: WebviewWindow,
+    ork_avatar: Option<String>,
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
 ) -> Result<accounts::Account, String> {
@@ -558,6 +560,7 @@ async fn setup_accounts_sign_in(
             &server_directory::origin(),
             &state.browser_auth,
             SETUP_ACCOUNTS_OWNER,
+            ork_avatar.as_deref(),
             move |url| async move {
                 let setup = opener
                     .get_webview_window("setup")

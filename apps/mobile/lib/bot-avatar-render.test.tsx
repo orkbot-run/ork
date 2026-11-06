@@ -209,6 +209,35 @@ describe("BotAvatar", () => {
     expect(latestEye()).toEqual([1, 0, 0, 1, 0, 0]);
   });
 
+  it("uses the saved account seed with the local bot's activity subscription", () => {
+    const seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+    mobileLogoAvatarActivity.hydrate("native-account-ork", {
+      threadId: "native-thread",
+      cursor: 0,
+      botId: "bot-1",
+      run: { id: "native-run", botId: "bot-1", status: "running", trigger: "user" },
+    });
+    const view = render("#10B981", "orkbot", { avatarSeed: seed });
+    expect(bodies(view)).toContain(
+      ORK_AVATAR_BODY_PATHS[logoAvatarTraits(seed, "#10B981").appearance.shape],
+    );
+    act(() =>
+      mobileLogoAvatarActivity.apply("native-account-ork", {
+        threadId: "native-thread",
+        seq: 1,
+        botId: "bot-1",
+        runId: "native-run",
+        type: "thread.meta",
+        payload: { activity: { thinking: true } },
+      }),
+    );
+    const frame = logoAvatarFrame("thinking", logoAvatarTraits(seed, "#10B981"), 0, true);
+    const matrix = JSON.parse(
+      view.querySelector('g[data-id^="eyes-"]')!.getAttribute("data-matrix")!,
+    );
+    expect(matrix[3]).toBe(frame.lid * frame.blink);
+  });
+
   it("uses the same shared seed colour as SSR for a bot without a saved colour", () => {
     const node = render("", "orkbot");
     expect(

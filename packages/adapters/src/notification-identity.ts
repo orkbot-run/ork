@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { createHash } from "node:crypto";
 import { notificationAvatarSource } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
@@ -10,7 +14,12 @@ const MAX_CACHED_AVATARS = 1000;
  */
 const avatars = new Map<string, { key: string; avatar: Promise<string | undefined> }>();
 
-async function renderAvatar(bot: { id: string; color: string; avatarSet?: string | null }) {
+async function renderAvatar(bot: {
+  id: string;
+  color: string;
+  avatarSet?: string | null;
+  avatarSeed?: string | null;
+}) {
   const source = notificationAvatarSource(bot);
   const comma = source.indexOf(",");
   const bytes = source.startsWith("data:image/svg+xml,")
@@ -32,9 +41,10 @@ export async function notificationIdentity(bot: {
   name: string;
   color: string;
   avatarSet?: string | null;
+  avatarSeed?: string | null;
 }) {
   const key = createHash("sha256")
-    .update(`${bot.avatarSet ?? ""}\n${bot.color}`)
+    .update(`${bot.avatarSet ?? ""}\n${bot.color}\n${bot.avatarSeed ?? ""}`)
     .digest("base64url");
   let cached = avatars.get(bot.id);
   if (cached?.key !== key) {

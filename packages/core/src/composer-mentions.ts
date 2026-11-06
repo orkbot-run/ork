@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { BotAvatarSet, Connection, ConnectionCatalogItem } from "@orkbot/contracts";
 import type { CronLabels } from "./cron.js";
 import { ENGLISH_CRON_LABELS, formatCron } from "./cron.js";
@@ -19,6 +23,7 @@ export type ComposerMention = {
   subtitle?: string;
   color?: string;
   avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
   /** Owning bot for routine chips (test-run lands on that bot). */
   botId?: string;
   /** Connected connection row id when kind is connector + connected. */
@@ -31,6 +36,7 @@ export type MentionPickerBot = {
   name: string;
   color?: string;
   avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
 };
 export type MentionPickerGroup = { id: string; name: string };
 export type MentionPickerRoutine = {
@@ -392,6 +398,7 @@ export function buildComposerMentionOptions(input: {
       subtitle: "Bot",
       color: bot.color,
       avatarSet: bot.avatarSet,
+      avatarSeed: bot.avatarSeed,
     });
   }
 

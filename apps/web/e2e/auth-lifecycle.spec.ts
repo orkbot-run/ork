@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 tests are preserved. Separate-window SSO coverage is an Ork addition.
 
+import { isPersonalOrkId, logoAvatarTraits } from "@orkbot/core";
 import type { Request } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup, signupThroughForm } from "./helpers";
@@ -31,18 +32,36 @@ test("SSO keeps the product open and completes in a separate window", async ({
       json: { url: "https://identity.example.test/authorize", redirect: false },
     });
   });
-  await context.route("https://identity.example.test/authorize", (route) =>
+  await context.route("https://identity.example.test/authorize*", (route) =>
     route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
   );
   await page.goto("/sign-in");
   await expect(page.getByRole("heading", { name: "Welcome to Ork" })).toBeVisible();
-  await expect(page.locator("svg[data-shape=ork][data-eyes=pill][data-mouth=happy]")).toBeVisible();
+  const avatar = page.locator("svg.orkbot-logo-avatar");
+  await expect(avatar).toBeVisible();
+  const preview = await avatar.evaluate((node) => ({
+    shape: node.getAttribute("data-shape"),
+    eyes: node.getAttribute("data-eyes"),
+    mouth: node.getAttribute("data-mouth"),
+    accessory: node.getAttribute("data-accessory"),
+    color: node.getAttribute("data-color"),
+  }));
   await captureScreenshot(page, testInfo, "accounts-welcome");
   await page.getByRole("button", { name: "Get started" }).click();
   const opened = page.waitForEvent("popup");
   await page.getByRole("button", { name: "Continue with Accounts" }).click();
   const popup = await opened;
   await expect(popup.getByRole("heading", { name: "Account sign-in" })).toBeVisible();
+  const seed = new URL(popup.url()).searchParams.get("ork_avatar");
+  expect(isPersonalOrkId(seed)).toBe(true);
+  const { appearance, color } = logoAvatarTraits(seed!);
+  expect(preview).toEqual({
+    shape: appearance.shape,
+    eyes: appearance.eyes,
+    mouth: appearance.mouth,
+    accessory: appearance.accessory,
+    color,
+  });
   await expect(page).toHaveURL(/\/sign-in$/);
   expect(await popup.evaluate(() => window.opener === null)).toBe(true);
   await captureScreenshot(page, testInfo, "sso-product-stays-open");
@@ -84,7 +103,7 @@ test("SSO reports a failed popup callback in the original product window", async
       json: { url: "https://identity.example.test/authorize", redirect: false },
     });
   });
-  await context.route("https://identity.example.test/authorize", (route) =>
+  await context.route("https://identity.example.test/authorize*", (route) =>
     route.fulfill({ contentType: "text/html", body: "<h1>Account sign-in</h1>" }),
   );
   await page.goto("/sign-in");

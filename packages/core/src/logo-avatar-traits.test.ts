@@ -6,11 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { BOT_AVATAR_COLORS } from "./bot-avatar-colors.js";
-import {
-  seededLogoAvatarColor,
-  WELCOME_AVATAR_COLOR,
-  WELCOME_AVATAR_IDENTITY,
-} from "./logo-avatar-traits.js";
+import { seededLogoAvatarColor } from "./logo-avatar-traits.js";
 
 describe("seeded logo colours", () => {
   it("reproduces a valid colour from a persisted identity across calls and reload data", () => {
@@ -101,19 +97,5 @@ describe("stable logo avatar traits", () => {
     expect(first).toEqual(second);
     expect(logoAvatarTraits("bot-1", "blue").color).toBe("#2A92FE");
     expect(logoAvatarTraits("bot-1", "#abc").color).toBe("#abc");
-  });
-});
-
-it("shares one friendly generated welcome identity across surfaces", () => {
-  expect(WELCOME_AVATAR_COLOR).toBe(seededLogoAvatarColor(WELCOME_AVATAR_IDENTITY));
-  expect(logoAvatarTraits(WELCOME_AVATAR_IDENTITY).appearance).toEqual({
-    shape: "ork",
-    eyes: "pill",
-    mouth: "happy",
-    accessory: "none",
-    satellites: 0,
-    eyeSize: 99,
-    shine: true,
-    cheeks: true,
   });
 });

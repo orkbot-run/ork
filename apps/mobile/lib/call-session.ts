@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { BotAvatarSet } from "@orkbot/contracts";
 import type { CallExchange } from "@orkbot/core";
 import {
@@ -55,6 +59,7 @@ export type CallState = {
   botName: string;
   botColor: string;
   botAvatarSet?: BotAvatarSet;
+  botAvatarSeed?: string | null;
   phase: CallPhase;
   muted: boolean;
   transcriptOpen: boolean;
@@ -213,6 +218,7 @@ export function startCall(
     botName: string;
     botColor?: string;
     botAvatarSet?: BotAvatarSet;
+    botAvatarSeed?: string | null;
     transcribe?: boolean;
     /** Spoken as the call connects, before the caller's first turn. */
     greeting?: string;
@@ -242,6 +248,7 @@ export function startCall(
     botName: call.botName,
     botColor: call.botColor ?? "",
     botAvatarSet: call.botAvatarSet,
+    botAvatarSeed: call.botAvatarSeed,
     phase: "listening",
     muted: false,
     transcriptOpen: false,

@@ -29,7 +29,7 @@ import {
 import { native, useResolvedAppearance } from "../lib/native";
 import { LogoAvatar } from "./logo-avatar";
 
-type SeatMember = { botId?: string; name?: string; color: string };
+type SeatMember = { botId?: string; name?: string; color: string; avatarSeed?: string | null };
 
 type Paint = { fill: ColorValue; stroke?: string; strokeWidth?: number };
 
@@ -177,7 +177,12 @@ function seatArt(member: SeatMember, size: number, key: string): SeatArt {
     face: (
       <LogoAvatar
         color={color}
-        identity={member.botId ?? member.name ?? color}
+        identity={
+          (member.color.includes("::shape_") ? undefined : member.avatarSeed) ??
+          member.botId ??
+          member.name ??
+          color
+        }
         size={100}
         activity="idle"
         motion="static"

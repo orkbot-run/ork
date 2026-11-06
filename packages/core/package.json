@@ -73,6 +73,11 @@
       "types": "./src/query.ts",
       "development": "./src/query.ts",
       "default": "./src/query.ts"
+    },
+    "./personal-ork": {
+      "types": "./src/personal-ork.ts",
+      "development": "./src/personal-ork.ts",
+      "default": "./src/personal-ork.ts"
     }
   },
   "scripts": {

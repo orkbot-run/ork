@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import type { Bot, Group, ThreadSnapshot } from "@orkbot/contracts";
 import { BotAvatar, Button, GroupAvatar } from "@orkbot/ui-web";
@@ -64,6 +68,7 @@ export function ChatHeader({
             avatarSet={active.avatarSet}
             color={active.color}
             identity={active.id}
+            avatarSeed={active.avatarSeed}
             size={26}
             status={active.status}
           />

@@ -626,6 +626,7 @@ function BotFilterChip({
         avatarSet={bot.avatarSet}
         color={bot.color}
         identity={bot.id}
+        avatarSeed={bot.avatarSeed}
         size={16}
         status={bot.status}
       />
@@ -680,6 +681,7 @@ function ArtifactCard({
                 avatarSet={bot.avatarSet}
                 color={bot.color}
                 identity={bot.id}
+                avatarSeed={bot.avatarSeed}
                 size={20}
                 status={bot.status}
               />
@@ -748,6 +750,7 @@ function ArtifactRow({
                 avatarSet={bot.avatarSet}
                 color={bot.color}
                 identity={bot.id}
+                avatarSeed={bot.avatarSeed}
                 size={14}
                 status={bot.status}
               />

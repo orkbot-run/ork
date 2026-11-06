@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { plainTextLinkParts } from "@orkbot/chat-ui/native";
 import type { BotAvatarSet } from "@orkbot/contracts";
 import type { MentionTextPart } from "@orkbot/core";
@@ -12,7 +16,14 @@ export const MessageMentionsContext = createContext<((id: string) => ReactNode) 
 
 /** A group member a sent message can name with `@Name`, or everyone in the group. */
 export type UserMentionTarget =
-  | { kind: "bot"; id: string; name: string; color: string; avatarSet?: BotAvatarSet }
+  | {
+      kind: "bot";
+      id: string;
+      name: string;
+      color: string;
+      avatarSeed?: string | null;
+      avatarSet?: BotAvatarSet;
+    }
   | { kind: "everyone"; id: "everyone"; name: "everyone" };
 
 /** Who a sent message's `@Name` can refer to; absent outside groups. */
@@ -30,7 +41,13 @@ export const UserMentionsContext = createContext<
  * one was meant.
  */
 export function userMentionTargets(
-  members: readonly { botId: string; name: string; color: string; avatarSet?: BotAvatarSet }[],
+  members: readonly {
+    botId: string;
+    name: string;
+    color: string;
+    avatarSeed?: string | null;
+    avatarSet?: BotAvatarSet;
+  }[],
 ): UserMentionTarget[] {
   const named = members.map((member) => ({ member, name: displayName(member.name, "Bot") }));
   const everyone = members.length >= 2;
@@ -45,6 +62,7 @@ export function userMentionTargets(
       name,
       color: member.color,
       avatarSet: member.avatarSet,
+      avatarSeed: member.avatarSeed,
     }));
   if (everyone) targets.unshift({ kind: "everyone", id: "everyone", name: "everyone" });
   return targets;

@@ -6,6 +6,7 @@
 
 // @vitest-environment jsdom
 import type { ProductEvent } from "@orkbot/contracts";
+import { logoAvatarTraits } from "@orkbot/core";
 import { BotAvatar, BotAvatarActivityProvider } from "@orkbot/ui-web";
 import { act } from "react";
 import type { Root } from "react-dom/client";
@@ -57,12 +58,18 @@ const event = (
   payload,
   createdAt: "2026-10-01T00:00:00Z",
 });
-async function mount(status?: string) {
+async function mount(status?: string, avatarSeed?: string) {
   await act(async () =>
     root.render(
       <BotAvatarActivityProvider source={webLogoAvatarActivity}>
         <div data-testid="live">
-          <BotAvatar identity="bot-a" color="#10B981" avatarSet="orkbot" status={status} />
+          <BotAvatar
+            identity="bot-a"
+            avatarSeed={avatarSeed}
+            color="#10B981"
+            avatarSet="orkbot"
+            status={status}
+          />
         </div>
         <BotAvatar identity="old-bot" color="#8B5CF6" />
         <BotAvatar identity="photo" color="data:image/png;base64,YQ==" avatarSet="orkbot" />
@@ -191,4 +198,15 @@ it("renders generic work elsewhere when the open chat is idle, preserving live d
   await mount("idle");
   expect(live().dataset.activity).toBe("idle");
   expect(live().dataset.working).toBe("false");
+});
+
+it("keeps activity bound to the local agent while drawing the saved account Ork", async () => {
+  const seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+  await mount(undefined, seed);
+  expect(live().dataset.shape).toBe(logoAvatarTraits(seed, "#10B981").appearance.shape);
+  await act(async () => webLogoAvatarActivity.hydrate("chat", snapshot));
+  await act(async () =>
+    webLogoAvatarActivity.apply("chat", event(1, "thread.meta", { activity: { thinking: true } })),
+  );
+  expect(live().dataset.activity).toBe("thinking");
 });

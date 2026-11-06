@@ -249,6 +249,7 @@ export async function respondToMobileCall(call: IncomingBotCall, action: "answer
         botName: call.name,
         botColor: call.color,
         botAvatarSet: call.avatarSet,
+        botAvatarSeed: call.avatarSeed,
         transcribe: voice.transcribe,
         greeting: result.opening,
         answered: { callId: target.callId },

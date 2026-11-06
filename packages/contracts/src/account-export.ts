@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+
 import * as z from "zod";
 import { Id, IsoDate } from "./ids.js";
 import { PageSourceSchema, PageTitleSchema } from "./pages.js";
@@ -68,6 +72,7 @@ export const AccountExportRecordSchema = z.discriminatedUnion("type", [
     instructions: z.string(),
     color: z.string(),
     avatarSet: z.string(),
+    avatarSeed: z.uuidv4().nullable().optional(),
     notifyOnFinish: z.boolean(),
     pinned: z.boolean(),
     position: z.number().int(),

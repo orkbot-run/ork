@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { MenuAction } from "@expo/ui/community/menu";
 import { MenuView } from "@expo/ui/community/menu";
 import type { AgentSkillCatalogEntry } from "@orkbot/contracts";
@@ -808,6 +812,7 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
         color={mention.color ?? tokens.mutedForeground}
         avatarSet={mention.avatarSet}
         identity={mention.id}
+        avatarSeed={mention.avatarSeed}
         size={MENTION_AVATAR_SIZE}
       />
     );

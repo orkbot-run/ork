@@ -309,3 +309,16 @@ it("includes authorization time in the callback deadline", async () => {
   expect(popup.close).toHaveBeenCalledOnce();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it("passes the displayed Ork to Accounts without changing the OAuth callback or nonce", async () => {
+  const browser = desktopWindow();
+  const seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+  const flow = runSsoFlow(browser.begin, ["/app"], seed);
+  await vi.waitFor(() =>
+    expect(new URL(browser.popup.location.href).searchParams.get("ork_avatar")).toBe(seed),
+  );
+  expect(new URL(browser.callback()).searchParams.get("nonce")).toBeTruthy();
+  browser.land();
+  await expect(flow).resolves.toBe(result);
+  expect(browser.location.assign).toHaveBeenCalledWith("https://orkbot.example.test/app");
+});

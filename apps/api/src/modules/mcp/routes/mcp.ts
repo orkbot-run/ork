@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { createHash } from "node:crypto";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -31,6 +32,7 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { requireAdmin } from "#modules/accounts/admins";
+import { ensureFirstOrk } from "#modules/accounts/first-ork";
 import {
   chooseFocus,
   dismissFocus,
@@ -38,6 +40,7 @@ import {
   promptFocus,
   startOnboarding,
 } from "#modules/accounts/onboarding";
+import { enqueueBotIntroRun } from "#modules/bots/routes/bots";
 import { searchIntegrationCatalog } from "#modules/integrations/integration-catalog";
 import {
   installPlugin,
@@ -50,7 +53,7 @@ import {
   reviewPluginSubmission,
 } from "#modules/integrations/plugin-submissions";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { computerContext, isUniqueViolation } from "#modules/platform/routes/shared";
+import { computerContext, isUniqueViolation, meDto } from "#modules/platform/routes/shared";
 import {
   assertNameFreeWhereAvailable,
   lockOwner,
@@ -1007,6 +1010,21 @@ export function mcpRoutes(ctx: RouterContext) {
       },
     },
     onboarding: {
+      ensureFirstBot: authed.onboarding.ensureFirstBot.handler(async ({ context }) => {
+        const me = await meDto(deps, context.actor);
+        const bot = await ensureFirstOrk(
+          deps.prisma,
+          ctx.repos,
+          context.actor,
+          !me.needsModel && !me.needsSignupSurvey,
+        );
+        if (bot) {
+          await enqueueBotIntroRun(deps, context.actor, bot).catch((error) => {
+            getLogger().error("primary Ork intro enqueue", error);
+          });
+        }
+        return bot;
+      }),
       signupSurvey: authed.onboarding.signupSurvey.handler(async ({ context, input }) => {
         const answers = {
           reason: input.reason || null,

@@ -91,6 +91,7 @@ vi.mock("./endpoint", async (original) => ({
   requireAccountsSignIn: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("./accounts", () => ({
+  welcomeAccountsOrk: () => "64cf5621-3144-4810-97f5-148acdc29c35",
   accountsIdentity: vi.fn(),
   continueWithAccounts: vi.fn(),
   signOutAccounts: vi.fn(),
@@ -307,4 +308,27 @@ it("offers other servers after the remembered server fails verification without 
   expect(host.textContent).not.toContain("Get started");
   expect(host.textContent).not.toContain("Product screen");
   expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("keeps the welcome Ork through signup and restores the account Ork for an existing user", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(null);
+  await render();
+  const preview = host.querySelector("[data-welcome-avatar]")?.getAttribute("data-welcome-avatar");
+  expect(preview).toBe("64cf5621-3144-4810-97f5-148acdc29c35");
+  await act(async () => {
+    (host.querySelector("button") as HTMLButtonElement).click();
+  });
+  await act(async () => {
+    (host.querySelector("button") as HTMLButtonElement).click();
+  });
+  expect(continueWithAccounts).toHaveBeenCalledWith(preview);
+  const saved = "f4c2f322-7b3b-4a53-a44c-47647614fdc0";
+  vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, orkAvatar: saved });
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  expect(host.querySelector("[data-welcome-avatar]")?.getAttribute("data-welcome-avatar")).toBe(
+    saved,
+  );
 });

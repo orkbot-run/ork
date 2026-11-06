@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { ComputerStatus } from "@orkbot/contracts";
 import { displayName } from "@orkbot/core";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -122,6 +126,7 @@ export default function BotProfile() {
             color={bot.color}
             avatarSet={bot.avatarSet}
             identity={bot.id}
+            avatarSeed={bot.avatarSeed}
             size={96}
             status={bot.status}
           />

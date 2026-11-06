@@ -154,3 +154,28 @@ describe("BotAvatar", () => {
     expect(html).not.toContain("orkbot-organic-avatar");
   });
 });
+
+it("renders the account Ork independently of the main agent's database id", () => {
+  const seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+  const appearance = logoAvatarTraits(seed, "#123456").appearance;
+  const html = renderToString(
+    <BotAvatar identity="local-agent-id" avatarSeed={seed} color="#123456" activity="idle" />,
+  );
+  expect(html).toContain(`d="${ORK_AVATAR_BODY_PATHS[appearance.shape]}"`);
+  expect(html).toContain(`data-shape="${appearance.shape}"`);
+  expect(html).toContain(`data-eyes="${appearance.eyes}"`);
+  expect(html).toContain(`data-accessory="${appearance.accessory}"`);
+});
+
+it.each(["#123456::shape_3", "data:image/png;base64,YQ=="])(
+  "keeps an explicit saved avatar when adopting a main agent (%s)",
+  (color) => {
+    const identity = "existing-chief";
+    const seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+    expect(
+      renderToString(
+        <BotAvatar identity={identity} avatarSeed={seed} color={color} activity="idle" />,
+      ),
+    ).toBe(renderToString(<BotAvatar identity={identity} color={color} activity="idle" />));
+  },
+);

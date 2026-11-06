@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Native auth hint support is an Ork addition.
 
 import { t } from "@lingui/core/macro";
-import { newClientId } from "@orkbot/core";
+import { isPersonalOrkId, newClientId } from "@orkbot/core";
 
 type SsoResult = {
   data: { url?: string } | null;
@@ -47,6 +47,7 @@ export function completeSsoCallback(): boolean {
 export async function runSsoFlow(
   begin: (disableRedirect: boolean, callbackURL: (url: string) => string) => Promise<SsoResult>,
   callbackURLs: readonly string[],
+  welcomeOrk?: string,
 ): Promise<SsoResult> {
   const nonce = newClientId();
   const callbacks = callbackURLs.map((url) => new URL(url, window.location.href));
@@ -97,6 +98,7 @@ export async function runSsoFlow(
       (target.protocol !== "https:" && target.origin !== window.location.origin)
     )
       throw new Error(t`Could not continue`);
+    if (isPersonalOrkId(welcomeOrk)) target.searchParams.set("ork_avatar", welcomeOrk);
     popup.location.href = target.href;
     // COOP can sever the handle while authentication continues. Retrying
     // cancels this wait; a closed handle is never a success signal.

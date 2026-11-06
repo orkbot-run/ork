@@ -1,8 +1,18 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type { BackgroundJob } from "@orkbot/adapter-kit";
 import { createDb, createThreadEvents, runAsSystem, runAsTenant } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
-import { reconcileCallRequests, requestUserCall, settleCallRequest } from "./call-request.js";
+import {
+  loadUserIncomingCalls,
+  reconcileCallRequests,
+  requestUserCall,
+  settleCallRequest,
+} from "./call-request.js";
 
 const postgres =
   process.env.VERIFY_DATABASE === "1" && process.env.DATABASE_URL ? describe : describe.skip;
@@ -14,6 +24,7 @@ postgres("call isolation and cooldown (PostgreSQL)", () => {
     const userId = `${id}-user`;
     const spaceId = `${id}-space`;
     const organizationId = `${id}-org`;
+    const avatarSeed = "a0d0b468-5630-49c2-977e-79c19917c61b";
     const fixture = <T>(fn: () => Promise<T>) => runAsSystem("test fixture", fn);
     try {
       const runs = await fixture(async () => {
@@ -35,6 +46,7 @@ postgres("call isolation and cooldown (PostgreSQL)", () => {
               userId,
               name: suffix,
               color: "ink",
+              avatarSeed,
               thread: { create: { spaceId, userId } },
             },
             include: { thread: true },
@@ -82,6 +94,10 @@ postgres("call isolation and cooldown (PostgreSQL)", () => {
       const results = await Promise.all(runs.map(ring));
       expect(results.filter((result) => "ok" in result)).toHaveLength(1);
       expect(await fixture(() => prisma.message.count({ where: { thread: { userId } } }))).toBe(1);
+      const incoming = await loadUserIncomingCalls(prisma, userId);
+      expect(incoming).toHaveLength(1);
+      expect(incoming[0]).toMatchObject({ avatarSeed });
+      expect(await loadUserIncomingCalls(prisma, `${userId}-other`)).toEqual([]);
       jobs.enqueue.mockClear();
       await runAsSystem("job reconciler", () => reconcileCallRequests(deps));
       const plan = await fixture(() =>

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 contracts are preserved. Personal Ork additions follow LICENSE.md.
+
 import type {
   AnyContractProcedure,
   InferContractRouterInputs,
@@ -1126,6 +1130,8 @@ export const appContract = {
     },
   },
   onboarding: {
+    /** Create or retrieve the account's primary Ork after setup is complete. */
+    ensureFirstBot: oc.output(BotSchema.nullable()),
     /** Record the optional signup survey; an empty submission marks it skipped. */
     signupSurvey: oc.input(SignupSurveySchema).output(z.object({ ok: z.literal(true) })),
     /** Seed the first-run greeting into the bot's thread (focus card is separate). */

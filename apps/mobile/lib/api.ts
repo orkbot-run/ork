@@ -1248,6 +1248,7 @@ export type MobileBot = Pick<
   | "preview"
   | "color"
   | "avatarSet"
+  | "avatarSeed"
   | "instructionHistory"
   | "notifyOnFinish"
   | "threadId"

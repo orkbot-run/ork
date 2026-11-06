@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { AgentSkillCatalogEntry } from "@orkbot/contracts";
 import {
   buildComposerMentionOptions,
@@ -223,6 +227,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
           name: bot.name,
           color: bot.color,
           avatarSet: bot.avatarSet,
+          avatarSeed: bot.avatarSeed,
         })),
         groups: mentionGroups.map((group) => ({ id: group.id, name: group.name })),
         routines: mentionRoutines.map((routine) => ({
@@ -464,6 +469,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
           botId,
           botName: displayName,
           botColor: currentBot?.color,
+          botAvatarSeed: currentBot?.avatarSeed,
           peerBotColor: mentionBots.find((bot) => bot.id === peer.peerBotId)?.color,
           ...peer,
         },
@@ -501,6 +507,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
             name: titleBot.name,
             color: titleBot.color,
             avatarSet: titleBot.avatarSet,
+            avatarSeed: titleBot.avatarSeed,
             status: currentBotStatus,
           },
         ]
@@ -510,6 +517,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
             name: bot.name,
             color: bot.color,
             avatarSet: bot.avatarSet,
+            avatarSeed: bot.avatarSeed,
             status: bot.status,
           }))
         : [];

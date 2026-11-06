@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -512,6 +517,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["mcp/oauth/begin"],
       ["mcp/oauth/complete"],
       ["mcp/oauth/disconnect"],
+      ["onboarding/ensureFirstBot"],
       ["onboarding/signupSurvey"],
       ["onboarding/start"],
       ["onboarding/promptFocus"],

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { Trans } from "@lingui/react/macro";
 import type { BotAvatarSet } from "@orkbot/contracts";
 import {
@@ -13,7 +17,13 @@ import { ChevronDown } from "lucide-react";
 
 export type AgentAccess = { allBots: boolean; botIds: string[] };
 
-type AccessBot = { id: string; name: string; color: string; avatarSet?: BotAvatarSet };
+type AccessBot = {
+  id: string;
+  name: string;
+  color: string;
+  avatarSet?: BotAvatarSet;
+  avatarSeed?: string | null;
+};
 
 const SHOWN_AVATARS = 4;
 
@@ -48,6 +58,7 @@ export function AgentAccessControl({
             color={bot.color}
             avatarSet={bot.avatarSet}
             identity={bot.id}
+            avatarSeed={bot.avatarSeed}
             size={18}
           />
         ))}
@@ -94,7 +105,13 @@ export function AgentAccessControl({
               checked={chosen.includes(bot.id)}
               onCheckedChange={() => toggle(bot.id)}
             >
-              <BotAvatar color={bot.color} avatarSet={bot.avatarSet} identity={bot.id} size={18} />
+              <BotAvatar
+                color={bot.color}
+                avatarSet={bot.avatarSet}
+                identity={bot.id}
+                avatarSeed={bot.avatarSeed}
+                size={18}
+              />
               {bot.name}
             </DropdownMenuCheckboxItem>
           ))}

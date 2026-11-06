@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import type { Bot } from "@orkbot/contracts";
 import { nextIncomingCall, respondToIncomingCall } from "@orkbot/core";
@@ -204,10 +208,22 @@ export function IncomingCall({
             style={{ borderColor: defaultBotAvatarValue(bot.color) }}
           />
           <span className="md:hidden">
-            <BotAvatar avatarSet={bot.avatarSet} color={bot.color} identity={bot.id} size={120} />
+            <BotAvatar
+              avatarSet={bot.avatarSet}
+              color={bot.color}
+              identity={bot.id}
+              avatarSeed={bot.avatarSeed}
+              size={120}
+            />
           </span>
           <span className="hidden md:block">
-            <BotAvatar avatarSet={bot.avatarSet} color={bot.color} identity={bot.id} size={52} />
+            <BotAvatar
+              avatarSet={bot.avatarSet}
+              color={bot.color}
+              identity={bot.id}
+              avatarSeed={bot.avatarSeed}
+              size={52}
+            />
           </span>
         </span>
         <span className="flex flex-col items-center gap-1 md:items-start">

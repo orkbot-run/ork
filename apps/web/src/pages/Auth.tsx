@@ -4,13 +4,14 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
+  createPersonalOrkId,
   credentialIssue,
+  isPersonalOrkId,
   MAX_PASSWORD_LENGTH,
   MIN_PASSWORD_LENGTH,
+  seededLogoAvatarColor,
   signupRequiresEmailVerification,
   suggestEmailCorrection,
-  WELCOME_AVATAR_COLOR,
-  WELCOME_AVATAR_IDENTITY,
 } from "@orkbot/core";
 import {
   Button,
@@ -44,6 +45,7 @@ export const submitClass = "mt-3 h-12 w-full rounded-xl text-base";
 export function AuthPage({ mode }: { mode: AuthMode }) {
   const { t } = useLingui();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [welcomeOrk] = useState(welcomeOrkId);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -238,6 +240,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             errorCallbackURL: callbackURL("/sign-in"),
           }),
         ["/app", "/onboarding", "/integrations/setup", "/sign-in"],
+        welcomeOrk,
       );
       if (result.error) setError(authErrorText(result.error, t`Could not continue`));
     } catch {
@@ -247,7 +250,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
   if (!sent && !reset && !capabilityError) {
     return (
-      <AuthFrame onSubmit={submit} title={<Trans>Welcome to Ork</Trans>}>
+      <AuthFrame orkAvatar={welcomeOrk} onSubmit={submit} title={<Trans>Welcome to Ork</Trans>}>
         <span
           role="status"
           className="size-5 animate-spin rounded-full border-2 border-muted border-t-foreground motion-reduce:animate-none"
@@ -258,7 +261,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   }
 
   return (
-    <AuthFrame onSubmit={submit} title={title}>
+    <AuthFrame orkAvatar={welcomeOrk} onSubmit={submit} title={title}>
       {sent ? (
         <div className="w-full text-center">
           <Link to="/sign-in" className="font-medium text-foreground">
@@ -490,6 +493,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
 
 export function PasswordResetPage() {
   const { t } = useLingui();
+  const [welcomeOrk] = useState(welcomeOrkId);
   const [params] = useSearchParams();
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -524,7 +528,11 @@ export function PasswordResetPage() {
   }
 
   return (
-    <AuthFrame onSubmit={submit} title={<Trans>Choose a new password</Trans>}>
+    <AuthFrame
+      orkAvatar={welcomeOrk}
+      onSubmit={submit}
+      title={<Trans>Choose a new password</Trans>}
+    >
       {complete ? (
         <div role="status" className="w-full text-center">
           <p className="text-lg">
@@ -571,16 +579,32 @@ export function PasswordResetPage() {
   );
 }
 
+function welcomeOrkId(): string {
+  try {
+    const saved = sessionStorage.getItem("orkbot.welcome-ork");
+    if (isPersonalOrkId(saved)) return saved;
+    const id = createPersonalOrkId();
+    sessionStorage.setItem("orkbot.welcome-ork", id);
+    return id;
+  } catch {
+    return createPersonalOrkId();
+  }
+}
+
 export function AuthFrame({
+  orkAvatar,
   title,
   onSubmit,
   children,
 }: {
+  orkAvatar?: string;
   title: React.ReactNode;
   onSubmit: (event: React.FormEvent) => void;
   children: React.ReactNode;
 }) {
   const { t } = useLingui();
+  const [preview] = useState(welcomeOrkId);
+  const identity = isPersonalOrkId(orkAvatar) ? orkAvatar : preview;
   const server = desktopBridge()?.server;
   return (
     <div
@@ -607,8 +631,8 @@ export function AuthFrame({
       <div className="flex flex-1 items-center justify-center px-6 pb-16">
         <form onSubmit={onSubmit} className="flex w-full max-w-[460px] flex-col items-center">
           <LogoAvatar
-            identity={WELCOME_AVATAR_IDENTITY}
-            avatarValue={WELCOME_AVATAR_COLOR}
+            identity={identity}
+            avatarValue={seededLogoAvatarColor(identity)}
             size={220}
             motion
           />

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   AgentSkillCatalogEntry,
@@ -526,6 +530,7 @@ export function BotSettings({
           <AvatarStudioPopover
             value={color}
             identity={bot.id}
+            avatarSeed={bot.avatarSeed}
             status={bot.status}
             size={76}
             avatarSet={avatarSet}

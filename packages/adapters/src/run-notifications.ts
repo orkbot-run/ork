@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { NotificationMessage } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import {
@@ -29,7 +33,7 @@ async function runNotice(
 ): Promise<{
   enabled: boolean;
   groupId: string | null;
-  bot?: { id: string; name: string; color: string; avatarSet: string };
+  bot?: { id: string; name: string; color: string; avatarSet: string; avatarSeed?: string | null };
 }> {
   // A routine carries its own notify setting, which decides on its failures.
   const routine = routineId
@@ -43,7 +47,16 @@ async function runNotice(
       userId: run.userId,
     },
     select: {
-      bot: { select: { id: true, name: true, color: true, avatarSet: true, notifyOnFinish: true } },
+      bot: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          avatarSet: true,
+          avatarSeed: true,
+          notifyOnFinish: true,
+        },
+      },
       thread: { select: { groupId: true } },
     },
   });

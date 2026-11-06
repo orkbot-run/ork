@@ -2,14 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createAvatar } from "@orkbot/avatar";
-import {
-  logoAvatarTraits,
-  WELCOME_AVATAR_COLOR,
-  WELCOME_AVATAR_IDENTITY,
-} from "@orkbot/core/logo-avatar-traits";
+import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
+import { createPersonalOrkId, isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { PL_MESSAGES } from "./locales/pl.js";
 
-type Account = { userinfo: { name?: string; email?: string } };
+type Account = { userinfo: { name?: string; email?: string; ork_avatar?: string } };
 type Server = { id: string; url: string; kind: "local" | "selfhosted" };
 type StackState = { phase: string; message: string | null; output: string[] };
 type Installation = { command: string; expiresAt: string; url: string };
@@ -61,13 +58,19 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   for (const node of doc.querySelectorAll<HTMLElement>("[aria-label]")) {
     node.setAttribute("aria-label", t(node.getAttribute("aria-label") ?? ""));
   }
-  // This markup is produced locally from fixed first-party parameters, never from IPC or input.
-  element("hero").innerHTML = createAvatar({
-    ...logoAvatarTraits(WELCOME_AVATAR_IDENTITY, WELCOME_AVATAR_COLOR).appearance,
-    color: WELCOME_AVATAR_COLOR,
-    background: "transparent",
-    animate: false,
-  }).svg;
+  const welcomeOrk = createPersonalOrkId();
+  function renderOrk(seed: string) {
+    const identity = isPersonalOrkId(seed) ? seed : welcomeOrk;
+    const color = seededLogoAvatarColor(identity);
+    // Only generator output reaches this sink; account strings are validated cosmetic seeds.
+    element("hero").innerHTML = createAvatar({
+      ...logoAvatarTraits(identity, color).appearance,
+      color,
+      background: "transparent",
+      animate: false,
+    }).svg;
+  }
+  renderOrk(welcomeOrk);
 
   function clearInstallation() {
     win?.clearTimeout(expiryTimer);
@@ -231,9 +234,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     void run(
       "signin",
       async (version) => {
-        const value = await transport.invoke<Account>("setup_accounts_sign_in");
+        const value = await transport.invoke<Account>("setup_accounts_sign_in", {
+          orkAvatar: welcomeOrk,
+        });
         if (!current(version)) return;
         account = value;
+        renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
         show("servers");
         await loadServers(version);
       },
@@ -244,6 +250,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (operation === "logout" || disposed) return;
     generation++;
     account = null;
+    renderOrk(welcomeOrk);
     operation = null;
     input.value = "";
     element("account").textContent = "";
@@ -357,6 +364,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       const value = await transport.invoke<Account | null>("setup_accounts_session");
       if (!current(version)) return;
       account = value;
+      renderOrk(value?.userinfo.ork_avatar ?? welcomeOrk);
       show(value ? "servers" : "welcome", false);
       if (value) await loadServers(version);
     },

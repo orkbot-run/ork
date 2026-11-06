@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { JobPublisher, NotificationMessage, NotificationProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
 import type { StuckWorkStatus } from "@orkbot/core";
@@ -34,7 +38,13 @@ type StuckCandidate = {
   botId: string;
   userId: string;
   taskId: string;
-  bot: { name: string; color: string; avatarSet: string; notifyOnFinish: boolean };
+  bot: {
+    name: string;
+    color: string;
+    avatarSet: string;
+    avatarSeed?: string | null;
+    notifyOnFinish: boolean;
+  };
   thread: { groupId: string | null };
 };
 
@@ -91,7 +101,15 @@ export async function reconcileStuckWork(deps: {
       botId: true,
       userId: true,
       taskId: true,
-      bot: { select: { name: true, color: true, avatarSet: true, notifyOnFinish: true } },
+      bot: {
+        select: {
+          name: true,
+          color: true,
+          avatarSet: true,
+          avatarSeed: true,
+          notifyOnFinish: true,
+        },
+      },
       thread: { select: { groupId: true } },
     },
   });

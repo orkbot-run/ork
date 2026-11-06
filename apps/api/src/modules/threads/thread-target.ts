@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -306,7 +307,9 @@ async function lockAndLoadGroupMembers(
     include: {
       members: {
         where: { bot: { archivedAt: null } },
-        include: { bot: { select: { id: true, name: true, color: true, avatarSet: true } } },
+        include: {
+          bot: { select: { id: true, name: true, color: true, avatarSet: true, avatarSeed: true } },
+        },
         orderBy: [{ createdAt: "asc" }, { botId: "asc" }],
       },
     },
@@ -317,6 +320,7 @@ async function lockAndLoadGroupMembers(
     name: member.bot.name,
     color: member.bot.color,
     avatarSet: resolveBotAvatarSet(member.bot.avatarSet),
+    avatarSeed: member.bot.avatarSeed ?? null,
   }));
 }
 
@@ -407,6 +411,7 @@ export async function resolveThreadTarget(
       name: member.bot.name,
       color: member.bot.color,
       avatarSet: resolveBotAvatarSet(member.bot.avatarSet),
+      avatarSeed: member.bot.avatarSeed ?? null,
       status: primaryActiveRun(member.bot.runs)?.status ?? "idle",
     }));
     return {

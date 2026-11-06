@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -110,7 +111,14 @@ describePostgres("account export (PostgreSQL)", () => {
 
       const bot = (id: string, spaceId: string, userId: string) =>
         prisma.bot.create({
-          data: { id, spaceId, userId, name: id, color: "blue" },
+          data: {
+            id,
+            spaceId,
+            userId,
+            name: id,
+            color: "blue",
+            avatarSeed: "a0d0b468-5630-49c2-977e-79c19917c61b",
+          },
         });
       await bot(`mine-${suffix}`, ownedSpace, exporter);
       await bot(`mine-shared-${suffix}`, sharedSpace, exporter);
@@ -298,6 +306,9 @@ describePostgres("account export (PostgreSQL)", () => {
         .map((line) => AccountExportRecordSchema.parse(JSON.parse(line)));
 
     const owned = records(ownedSpace);
+    expect(owned.find((record) => record.type === "bot")).toMatchObject({
+      avatarSeed: "a0d0b468-5630-49c2-977e-79c19917c61b",
+    });
     expect(owned.map((record) => record.type)).toEqual([
       "bot",
       "page",

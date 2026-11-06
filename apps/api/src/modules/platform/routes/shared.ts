@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import {
   deploymentModelRole,
@@ -19,6 +20,7 @@ import {
   resolveBotAvatarSet,
 } from "@orkbot/contracts";
 import { isAdmin } from "#modules/accounts/admins";
+import { syncPrimaryOrk } from "#modules/accounts/first-ork";
 import { effectiveSandboxProvider } from "#modules/computers/computer-provider-config";
 import type { RouterDeps } from "../router.js";
 
@@ -37,6 +39,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
       select: {
         email: true,
         name: true,
+        orkAvatar: true,
         timezone: true,
         locale: true,
         botAvatarSet: true,
@@ -46,6 +49,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     modelSetup(deps, actor),
     isAdmin(deps, actor.userId),
   ]);
+  await syncPrimaryOrk(deps.prisma, actor, user.orkAvatar);
   // Where the deployment runs computers once an admin's choice in Settings applies.
   const sandboxProvider = effectiveSandboxProvider(setup.settings, deps.env.sandboxProvider);
   return {
@@ -57,6 +61,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     userId: actor.userId,
     email: user.email,
     name: user.name,
+    orkAvatar: user.orkAvatar ?? null,
     spaceId: actor.spaceId,
     isDeploymentOwner: false,
     isAdmin: admin,

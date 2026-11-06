@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { botColors, typeScale } from "@orkbot/ui-tokens";
 import { useFocusEffect, useNavigation, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -248,6 +252,7 @@ export default function SearchSheet() {
             ) : item.bot ? (
               <BotAvatar
                 identity={item.bot.id}
+                avatarSeed={item.bot.avatarSeed}
                 color={item.bot.color || botColors[3]}
                 avatarSet={item.bot.avatarSet}
                 status={item.bot.status}

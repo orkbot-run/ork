@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { ThreadItem } from "@orkbot/core";
 import {
   answerableAskMessageIds,
@@ -175,6 +179,7 @@ export function useThreadRows({
           activityBotId={activityBotId}
           activityColor={activityBot?.color}
           activityAvatarSet={activityBot?.avatarSet}
+          activityAvatarSeed={activityBot?.avatarSeed}
           activityStatus={activityStatus}
           userBubble={userBubble}
           inGroup={inGroup}

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { RunActivityRow, SpaceBot, SpaceGroup } from "@orkbot/contracts";
 import { accountDisplay, isRetryableError, reportUiLocale } from "@orkbot/core";
 import type { Href } from "expo-router";
@@ -246,7 +250,9 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
     setError(null);
     setInboxLoading(true);
     try {
-      const [navigation, nextMe] = await Promise.all([rpc("spaces/list"), rpc("me")]);
+      // The profile synchronizes the account's primary Ork before the roster snapshot.
+      const nextMe = await rpc("me");
+      let navigation = await rpc("spaces/list");
       if (
         requestId !== inboxRequestId.current ||
         generation !== currentSessionGeneration() ||
@@ -262,6 +268,20 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
         apiBase !== currentApiBase()
       )
         return;
+      if (
+        !nextMe.needsModel &&
+        !nextMe.needsSignupSurvey &&
+        navigation.spaces.every((space) => !space.hasContent)
+      ) {
+        const primary = await rpc("onboarding/ensureFirstBot");
+        if (primary) navigation = await rpc("spaces/list");
+        if (
+          requestId !== inboxRequestId.current ||
+          generation !== currentSessionGeneration() ||
+          apiBase !== currentApiBase()
+        )
+          return;
+      }
       if (!nextMe.billingEnabled) forgetReferrals();
       else {
         // Filed under the Space it was fetched for, so a late answer never shows in another.

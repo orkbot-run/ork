@@ -3,8 +3,9 @@
 // Inherited Apache-2.0 badges and photo rendering are preserved. Ork-only avatars follow LICENSE.md.
 
 import type { BotAvatarSet } from "@orkbot/contracts";
+import { parseBotAvatarValue } from "@orkbot/contracts";
 import type { AvatarMotionMode, LogoAvatarActivity } from "@orkbot/core";
-import { avatarWorkingDot, botAvatarActivity, isRunWorking } from "@orkbot/core";
+import { avatarWorkingDot, botAvatarActivity, isPersonalOrkId, isRunWorking } from "@orkbot/core";
 import { memo, useSyncExternalStore } from "react";
 import { Image, View } from "react-native";
 import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
@@ -19,6 +20,7 @@ export interface BotAvatarProps {
   size?: number;
   status?: string;
   identity?: string;
+  avatarSeed?: string | null;
   avatarSet?: BotAvatarSet;
   activity?: LogoAvatarActivity;
   muted?: boolean;
@@ -30,12 +32,19 @@ export interface BotAvatarProps {
 export const BotAvatar = memo(function BotAvatar(props: BotAvatarProps) {
   const parsed = mobileBotAvatarPresentation(props.color);
   if (parsed.kind === "image") return <PhotoBotAvatar {...props} imageUrl={parsed.imageUrl} />;
-  return <OrkBotAvatar {...props} color={parsed.kind === "color" ? parsed.color : props.color} />;
+  return (
+    <OrkBotAvatar
+      {...props}
+      avatarSeed={parseBotAvatarValue(props.color).kind === "shape" ? undefined : props.avatarSeed}
+      color={parsed.kind === "color" ? parsed.color : props.color}
+    />
+  );
 });
 
 function OrkBotAvatar({
   color,
   identity,
+  avatarSeed,
   size = 54,
   status,
   activity,
@@ -61,7 +70,7 @@ function OrkBotAvatar({
     <View style={{ width: size, height: size }}>
       <LogoAvatar
         color={color}
-        identity={identity}
+        identity={isPersonalOrkId(avatarSeed) ? avatarSeed : identity}
         size={size}
         activity={resolved}
         motion={motion}

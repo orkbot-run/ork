@@ -7,12 +7,16 @@ import {
   createAccountsDiscovery,
   validateAccountsCallback,
 } from "@orkbot/contracts/accounts";
-import { readBoundedJsonResponse } from "@orkbot/core";
+import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import Constants from "expo-constants";
 import * as SecureStore from "expo-secure-store";
 
 export const ACCOUNTS_REDIRECT_URI = "run.orkbot.app:/oauth2/callback";
 const STORAGE_KEY = "orkbot.accounts.tokens";
+const welcomeOrk = createPersonalOrkId();
+
+/** Retained through native auth screen remounts for this application launch. */
+export const welcomeAccountsOrk = () => welcomeOrk;
 const discover = createAccountsDiscovery();
 
 type Config = ReturnType<typeof accountsConfig>;
@@ -24,6 +28,7 @@ type Tokens = {
   accessToken: string;
   refreshToken?: string;
   expiresAt: number;
+  orkAvatar?: string;
 };
 
 let generation = 0;
@@ -303,11 +308,12 @@ async function exchange(
     refreshToken:
       typeof body.refresh_token === "string" ? body.refresh_token : previous?.refreshToken,
     expiresAt: Date.now() + body.expires_in * 1000,
+    ...(isPersonalOrkId(user.ork_avatar) ? { orkAvatar: user.ork_avatar } : {}),
   };
 }
 
 /** Connects the device to Accounts. The selected server's Better Auth session stays separate. */
-export async function continueWithAccounts(): Promise<boolean> {
+export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean> {
   if (signingIn) return false;
   signingIn = true;
   const owner = ++generation;
@@ -324,7 +330,7 @@ export async function continueWithAccounts(): Promise<boolean> {
       responseType: ResponseType.Code,
       usePKCE: true,
       codeChallengeMethod: CodeChallengeMethod.S256,
-      extraParams: { nonce },
+      extraParams: { nonce, ...(isPersonalOrkId(welcomeOrk) ? { ork_avatar: welcomeOrk } : {}) },
     });
     const discovery = { authorizationEndpoint: metadata.authorization_endpoint };
     await request.makeAuthUrlAsync(discovery);
@@ -387,9 +393,22 @@ export async function accountsAuthorization(): Promise<{
     : null;
 }
 
-export async function accountsIdentity(): Promise<{ issuer: string; subject: string } | null> {
+export async function accountsIdentity(): Promise<{
+  issuer: string;
+  subject: string;
+  orkAvatar?: string;
+} | null> {
+  const owner = generation;
   const authorization = await accountsAuthorization();
-  return authorization ? { issuer: authorization.issuer, subject: authorization.subject } : null;
+  if (!authorization || owner !== generation) return null;
+  const tokens = await load(config());
+  if (owner !== generation || !tokens || tokens.accessToken !== authorization.accessToken)
+    return null;
+  return {
+    issuer: authorization.issuer,
+    subject: authorization.subject,
+    ...(isPersonalOrkId(tokens.orkAvatar) ? { orkAvatar: tokens.orkAvatar } : {}),
+  };
 }
 
 async function validAccessToken(): Promise<string | null> {

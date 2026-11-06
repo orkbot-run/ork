@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
 import { isRunWorking } from "@orkbot/core";
 import { botColors } from "@orkbot/ui-tokens";
@@ -262,6 +266,7 @@ export const PinnedTiles = memo(function PinnedTiles({
                 color={chat.bot.color || FALLBACK_COLOR}
                 avatarSet={chat.bot.avatarSet}
                 identity={chat.bot.id}
+                avatarSeed={chat.bot.avatarSeed}
                 size={avatarSize}
                 status={chat.bot.status}
                 muted={chat.bot.notifyOnFinish === false}
@@ -347,6 +352,7 @@ export const BotRow = memo(function BotRow({
             color={bot.color || FALLBACK_COLOR}
             avatarSet={bot.avatarSet}
             identity={bot.id}
+            avatarSeed={bot.avatarSeed}
             size={INBOX_ROW.avatarSize}
             status={bot.status}
             muted={bot.notifyOnFinish === false}
@@ -372,6 +378,7 @@ export const BotRow = memo(function BotRow({
             color={bot.color || FALLBACK_COLOR}
             avatarSet={bot.avatarSet}
             identity={bot.id}
+            avatarSeed={bot.avatarSeed}
             size={32}
           />
         ),

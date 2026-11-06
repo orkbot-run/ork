@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+
 import type { AccountExportManifest, AccountExportRecord } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
 import { runAsTenant } from "./row-security.js";
@@ -149,6 +153,7 @@ async function* spaceRecords(
       instructions: bot.instructions,
       color: bot.color,
       avatarSet: bot.avatarSet,
+      avatarSeed: bot.avatarSeed,
       notifyOnFinish: bot.notifyOnFinish,
       pinned: bot.pinned,
       position: bot.position,

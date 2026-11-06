@@ -20,6 +20,21 @@ use crate::{
     credentials::Store,
 };
 
+/// The seed is cosmetic and carries no authority or token material.
+fn valid_personal_ork(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && bytes.iter().enumerate().all(|(index, byte)| {
+            if [8, 13, 18, 23].contains(&index) {
+                *byte == b'-'
+            } else {
+                byte.is_ascii_digit() || (b'a'..=b'f').contains(byte)
+            }
+        })
+        && bytes[14] == b'4'
+        && b"89ab".contains(&bytes[19])
+}
+
 const ERROR: &str = "Could not verify Accounts sign-in.";
 const MAX_BODY: usize = 1024 * 1024;
 const SCOPES: &str = "openid email profile offline_access";
@@ -104,6 +119,66 @@ mod tests {
     }
 
     #[test]
+    fn welcome_ork_is_only_a_bounded_cosmetic_uuid() {
+        assert!(valid_personal_ork("64cf5621-3144-4810-97f5-148acdc29c35"));
+        for invalid in [
+            "",
+            "<svg>",
+            "../../account",
+            "64cf5621-3144-1810-97f5-148acdc29c35",
+            "64CF5621-3144-4810-97F5-148ACDC29C35",
+        ] {
+            assert!(!valid_personal_ork(invalid));
+        }
+    }
+
+    #[test]
+    fn welcome_ork_does_not_change_pkce_state_or_nonce() {
+        let seed = "64cf5621-3144-4810-97f5-148acdc29c35";
+        let proof = Proof::new().unwrap();
+        let authorize = |hint| {
+            Url::parse(
+                &proof
+                    .authorize(
+                        &config(),
+                        &discovery(),
+                        "http://127.0.0.1:43210/callback",
+                        hint,
+                    )
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let plain = authorize(None);
+        let with_avatar = authorize(Some(seed));
+        let values = |url: &Url, key: &str| {
+            url.query_pairs()
+                .filter(|(name, _)| name == key)
+                .map(|(_, value)| value.into_owned())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(values(&with_avatar, "ork_avatar"), vec![seed]);
+        for key in [
+            "state",
+            "nonce",
+            "code_challenge",
+            "redirect_uri",
+            "client_id",
+            "scope",
+        ] {
+            assert_eq!(values(&plain, key), values(&with_avatar, key));
+        }
+        assert!(proof
+            .authorize(
+                &config(),
+                &discovery(),
+                "http://127.0.0.1:43210/callback",
+                Some("../invalid")
+            )
+            .is_err());
+    }
+
+    #[test]
     fn configuration_discovery_and_storage_scopes_are_strict() {
         assert!(Config::new(None, Some("client"))
             .unwrap_err()
@@ -158,7 +233,12 @@ mod tests {
         );
         let url = Url::parse(
             &proof
-                .authorize(&config(), &discovery(), "http://127.0.0.1:43210/callback")
+                .authorize(
+                    &config(),
+                    &discovery(),
+                    "http://127.0.0.1:43210/callback",
+                    None,
+                )
                 .unwrap(),
         )
         .unwrap();
@@ -174,7 +254,9 @@ mod tests {
             "https://127.0.0.1:43210/callback",
             "http://127.0.0.1:43210/callback?other=1",
         ] {
-            assert!(proof.authorize(&config(), &discovery(), redirect).is_err());
+            assert!(proof
+                .authorize(&config(), &discovery(), redirect, None)
+                .is_err());
         }
         let mut callback = OAuthCallback {
             code: "test-code".into(),
@@ -793,7 +875,11 @@ impl Proof {
         config: &Config,
         discovery: &Discovery,
         redirect: &str,
+        welcome_ork: Option<&str>,
     ) -> Result<String, String> {
+        if welcome_ork.is_some_and(|value| !valid_personal_ork(value)) {
+            return Err("Invalid welcome Ork.".into());
+        }
         crate::browser_auth::validate_public_redirect(&Url::parse(redirect).map_err(|_| ERROR)?)?;
         let mut url = secure_url(&discovery.authorization_endpoint)?;
         url.query_pairs_mut().extend_pairs([
@@ -806,6 +892,9 @@ impl Proof {
             ("code_challenge", &self.challenge()),
             ("code_challenge_method", "S256"),
         ]);
+        if let Some(seed) = welcome_ork {
+            url.query_pairs_mut().append_pair("ork_avatar", seed);
+        }
         Ok(url.into())
     }
     fn callback(
@@ -1042,6 +1131,7 @@ impl Accounts {
         origin: &Url,
         browser: &BrowserAuth,
         owner: &str,
+        welcome_ork: Option<&str>,
         open: F,
         current: C,
     ) -> Result<Account, String>
@@ -1050,6 +1140,9 @@ impl Accounts {
         Fut: Future<Output = Result<(), String>> + Send,
         C: Fn() -> bool,
     {
+        if welcome_ork.is_some_and(|value| !valid_personal_ork(value)) {
+            return Err("Invalid welcome Ork.".into());
+        }
         if self.signing_in.swap(true, Ordering::SeqCst) {
             return Err("Accounts sign-in is already in progress.".into());
         }
@@ -1062,7 +1155,7 @@ impl Accounts {
         let (callback, redirect) = browser
             .authorize_public(
                 owner,
-                |redirect| proof.authorize(&config, &discovery, redirect),
+                |redirect| proof.authorize(&config, &discovery, redirect, welcome_ork),
                 open,
             )
             .await?;

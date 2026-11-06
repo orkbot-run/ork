@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+
 import { createAudioPlayer } from "expo-audio";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { AppState, Modal, StyleSheet, Text, Vibration, View } from "react-native";
@@ -69,6 +73,7 @@ export function IncomingCall() {
       >
         <BotAvatar
           identity={incoming.id}
+          avatarSeed={incoming.avatarSeed}
           color={incoming.color}
           avatarSet={incoming.avatarSet}
           size={120}
