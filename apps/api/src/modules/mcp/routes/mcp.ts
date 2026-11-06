@@ -32,7 +32,6 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { requireAdmin } from "#modules/accounts/admins";
-import { ensureFirstOrk } from "#modules/accounts/first-ork";
 import {
   chooseFocus,
   dismissFocus,
@@ -40,6 +39,7 @@ import {
   promptFocus,
   startOnboarding,
 } from "#modules/accounts/onboarding";
+import { ensureOnboardingBot } from "#modules/accounts/onboarding-bot";
 import { enqueueBotIntroRun } from "#modules/bots/routes/bots";
 import { searchIntegrationCatalog } from "#modules/integrations/integration-catalog";
 import {
@@ -1012,7 +1012,7 @@ export function mcpRoutes(ctx: RouterContext) {
     onboarding: {
       ensureFirstBot: authed.onboarding.ensureFirstBot.handler(async ({ context }) => {
         const me = await meDto(deps, context.actor);
-        const bot = await ensureFirstOrk(
+        const bot = await ensureOnboardingBot(
           deps.prisma,
           ctx.repos,
           context.actor,
