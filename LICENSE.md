@@ -3,10 +3,10 @@
 
 # Ork licensing
 
-Ork combines Apache-licensed material with new source-available work. New Ork
-work is offered under [PolyForm Noncommercial 1.0.0](LICENSE-POLYFORM), with a
-proposed monthly commercial license priced per named user. PolyForm Noncommercial
-is not an OSI-approved open source license.
+Ork is source-available. New Ork work uses
+[PolyForm Noncommercial 1.0.0](LICENSE-POLYFORM), with a separate commercial
+license billed monthly per named user. Inherited Apache-licensed material keeps
+its terms. PolyForm Noncommercial is not an OSI-approved open source license.
 
 ## Which terms apply
 
@@ -17,18 +17,14 @@ is not an OSI-approved open source license.
 | New Ork changes in an inherited file marked `Apache-2.0 AND PolyForm-Noncommercial-1.0.0` | Apache for the inherited material, PolyForm Noncommercial for the new Ork changes, or a separate commercial agreement covering those changes |
 | Imported libraries, fonts, generated material, and other third-party assets | Their own licenses and notices, which this document does not replace |
 
-The original import is commit `dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`.
-The Apache baseline for this transition is Ork commit
-`7efb3c5e202ddb4a4da3cd07904cba7da4613d18`. Its existing material, including the
-Ork changes already distributed there, keeps its existing terms. Unmarked
-inherited files remain on those terms. A new name or location does not change
-a file's provenance.
-
-Existing Apache grants remain valid. Anyone can continue to use the Apache
-baseline, including commercially, under Apache's conditions. PolyForm applies
-only to new Ork work after that baseline.
-Do not infer copyright ownership from a Git author, a rename, or an automated
-comparison. Rights to imported assets need separate verification.
+The Apache-2.0 baseline is commit
+`7efb3c5e202ddb4a4da3cd07904cba7da4613d18`. Apache-licensed material in that
+revision remains available under Apache, including for commercial use.
+Third-party material keeps its own terms. PolyForm covers only new
+Ork work after that baseline. Unmarked inherited files keep their existing
+terms. The original import is commit
+`dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a`. See [NOTICE](NOTICE) for provenance
+and attribution.
 
 Each new original file carries an SPDX header. A file format that cannot carry
 comments uses an adjacent `<filename>.license` file instead. A mixed header
@@ -47,7 +43,7 @@ applicable law allows it.
 The license text controls, including its express permission for listed
 noncommercial organizations regardless of their funding.
 
-The proposed commercial subscription charges monthly for each named person
+The commercial agreement sets monthly billing for each named person
 (a seat), across the web, desktop, and mobile clients on deployments covered by
 the order. Bots do not count as seats. Hosting and model services are separate
 costs. Commercial use on your own server still requires seats for the people
@@ -77,6 +73,5 @@ The dependency report inventories installed JavaScript packages. It does not
 certify a release's compliance or cover system packages and all native assets.
 
 The commercial agreement and contributor agreement remain drafts pending legal
-review. Their publication and activation require the review described in
-[the rollout instructions](docs/licensing-rollout.md). This explanation is not
-legal advice.
+review. See the [licensing release requirements](docs/licensing-rollout.md)
+before publishing or activating them. This explanation is not legal advice.

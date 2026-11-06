@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
-<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+<!-- Modified by Ork contributors to document licensing scope. Inherited material remains Apache-2.0. See LICENSE.md. -->
 
 # Ork
 
@@ -59,11 +59,10 @@ license. The combined product is source-available.
 Self-hosting is free for purposes permitted by PolyForm. Internal work for a
 for-profit business requires a commercial license for the PolyForm-covered work
 unless PolyForm expressly permits the use or applicable law allows it.
-Earlier Apache grants remain valid.
 
 Read the [license map](./LICENSE.md), [attribution](./NOTICE), and
-[FAQ](./docs/licensing-faq.md). The proposed commercial subscription is billed
-monthly per named user, across web, desktop, and mobile. Bots do not require
+[FAQ](./docs/licensing-faq.md). The commercial agreement sets monthly billing
+per named user, across web, desktop, and mobile. Bots do not require
 seats, and hosting is separate. The per-user price has not been set. The
 [commercial agreement](./docs/commercial-license.md) and [CLA](./docs/cla/v1.md)
 remain drafts pending legal review and activation. Subscriptions are not yet

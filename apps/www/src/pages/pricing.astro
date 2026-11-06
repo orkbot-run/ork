@@ -1,12 +1,12 @@
 ---
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
+// Modified by Ork contributors to document licensing scope. Existing material remains Apache-2.0.
 import Footer from "../components/Footer.astro";
 import Header from "../components/Header.astro";
 import PlanCard from "../components/PlanCard.astro";
 import { githubStarsLabel } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
-import { COMMERCIAL_DESCRIPTION, LICENSE_DESCRIPTION } from "../licensing";
+import { COMMERCIAL_DESCRIPTION, COMMERCIAL_STATUS, LICENSE_DESCRIPTION } from "../licensing";
 import { PRICING_PLANS } from "../pricing";
 
 const starsLabel = await githubStarsLabel();
@@ -30,6 +30,7 @@ const starsLabel = await githubStarsLabel();
       </div>
       <h2>Commercial self-hosting</h2>
       <p>{COMMERCIAL_DESCRIPTION}</p>
+      <p>{COMMERCIAL_STATUS}</p>
       <p><a href="/license/#commercial">Review commercial terms</a>.</p>
     </main>
     <Footer />

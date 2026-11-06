@@ -8,7 +8,7 @@ import { githubStarsLabel } from "../github";
 import BaseLayout from "../layouts/BaseLayout.astro";
 import {
   COMMERCIAL_DESCRIPTION,
-  LEGAL_REVIEW_STATUS,
+  COMMERCIAL_STATUS,
   LICENSE_DESCRIPTION,
   LICENSE_FAQS,
   LICENSE_INTRO,
@@ -24,9 +24,9 @@ const starsLabel = await githubStarsLabel();
     <main id="main" class="privacy-copy">
       <h1>Ork licensing</h1>
       <p>{LICENSE_INTRO}</p>
-      <p>{LEGAL_REVIEW_STATUS}</p>
       <h2 id="commercial">Commercial licensing</h2>
       <p>{COMMERCIAL_DESCRIPTION}</p>
+      <p>{COMMERCIAL_STATUS}</p>
       <p>
         <a href={`${GITHUB_URL}/blob/main/docs/commercial-license.md`}>Review the commercial agreement draft</a>.
       </p>

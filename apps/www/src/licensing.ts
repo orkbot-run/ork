@@ -3,7 +3,7 @@
 import { GITHUB_URL, SITE_URL } from "./site";
 
 export const LICENSE_DESCRIPTION =
-  "Ork licensing: PolyForm Noncommercial for new work, the preserved Apache-2.0 baseline, and proposed monthly commercial subscriptions per user.";
+  "Ork licensing: PolyForm Noncommercial for new work, monthly commercial terms per user, and Apache-2.0 for inherited material.";
 
 export const LICENSE_INTRO =
   "New Ork work uses PolyForm Noncommercial 1.0.0 or a separate paid commercial license. Existing Apache-2.0 material keeps its license. Ork is source-available.";
@@ -22,22 +22,22 @@ export const LICENSE_FAQS = [
   {
     question: "Can I use one seat on several servers?",
     answer:
-      "Under the proposed terms, the same person can use one seat across the deployments covered by the order. Seats cannot be shared. To reassign one, remove the previous person's access from every covered deployment first.",
+      "The commercial agreement covers the same person across the deployments included in the order. Seats cannot be shared. To reassign one, remove the previous person's access from every covered deployment first.",
   },
   {
     question: "What happens when I cancel?",
     answer:
-      "The proposed agreement keeps a cancelled seat active until the paid month ends. Commercial rights under that subscription then end, while rights held independently under Apache, PolyForm, or third-party licenses remain in place.",
+      "The commercial agreement keeps a cancelled seat active until the paid month ends. Commercial rights under that subscription then end, while rights held independently under Apache, PolyForm, or third-party licenses remain in place.",
   },
   {
     question: "What about a hosted service or a product built on Ork?",
     answer:
-      "Hosting is a separate service. The proposed subscription permits customer hosting when the order covers it and every person using Ork commercially has a seat. Embedding, software resale, and competing products need a separate agreement under the commercial grant. Independent rights under Apache, PolyForm, and third-party licenses remain unchanged.",
+      "Hosting is a separate service. The commercial agreement permits customer hosting when the order covers it and every person using Ork commercially has a seat. Embedding, software resale, and competing products need a separate agreement under the commercial grant. Independent rights under Apache, PolyForm, and third-party licenses remain unchanged.",
   },
   {
-    question: "Does this restrict earlier Apache releases?",
+    question: "What does Apache-2.0 cover?",
     answer:
-      "Earlier Apache grants remain valid, including for commercial use. LICENSE.md records the Apache baseline. The subscription covers only the Ork work that needs a separate commercial grant, and third-party notices still apply.",
+      "Apache-licensed material in the baseline remains available under Apache-2.0, including for commercial use. LICENSE.md identifies that baseline. PolyForm and commercial terms cover only the Ork work outside it, and third-party material keeps its own terms.",
   },
   {
     question: "Is Ork open source?",
@@ -52,20 +52,20 @@ export const LICENSE_FAQS = [
 ] as const;
 
 export const COMMERCIAL_DESCRIPTION =
-  "The proposed commercial subscription is billed monthly per named user. One seat covers that person's web, desktop, and mobile use on deployments included in the same order. Bots do not require seats. Hosting and model services are separate. The price has not been set, and subscriptions are not available for purchase yet.";
+  "The commercial agreement sets monthly billing per named user. One seat covers that person's web, desktop, and mobile use on deployments included in the same order. Bots do not require seats. Hosting and model services are separate.";
 
-export const LEGAL_REVIEW_STATUS =
-  "This licensing update and the commercial agreement draft are pending legal review. This page does not grant commercial rights or confirm legal approval.";
+export const COMMERCIAL_STATUS =
+  "The commercial agreement is a draft for legal review. Pricing is not set, and subscriptions are not available for purchase yet.";
 
 export const LICENSE_MARKDOWN = `# Ork licensing
 
 ${LICENSE_INTRO}
 
-${LEGAL_REVIEW_STATUS}
-
 ## Commercial licensing
 
 ${COMMERCIAL_DESCRIPTION}
+
+${COMMERCIAL_STATUS}
 
 [Review the commercial agreement draft](${GITHUB_URL}/blob/main/docs/commercial-license.md).
 

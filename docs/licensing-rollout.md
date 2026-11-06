@@ -1,12 +1,12 @@
 <!-- SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
 
-# Licensing rollout
+# Licensing release requirements
 
-This checkout contains a prospective license transition and draft agreements.
-It does not establish legal approval, activate a GitHub integration, or deploy
-the website. Do not publish the transition or accept CLA signatures until the
-steps below are complete.
+Complete the requirements below before publishing the licensing materials or
+accepting CLA signatures. The commercial agreement and CLA remain drafts.
+Legal approval, the signing integration, and website deployment must each be
+verified separately.
 
 ## Legal review and ownership
 
@@ -29,7 +29,7 @@ permits the use or applicable law allows it. Do not advertise a general free
 business-use exception. Preserve PolyForm's actual permissions for noncommercial
 purposes and its listed noncommercial organizations regardless of their funding.
 
-The proposed commercial model is a monthly subscription per named user, shared
+The commercial model is a monthly subscription per named user, shared
 across that person's web, desktop, and mobile clients on deployments covered by
 the order. Bots are not seats. Counsel must review billing, cancellation, seat
 changes, customer hosting, and the scope of separately negotiated distribution
@@ -60,7 +60,7 @@ After counsel approves the licensor, agreement, and privacy process:
    accepting a revised agreement. Keep each accepted version available.
 
 The similarly named `contributor-assistant/github-action` was archived by its
-maintainer in March 2026. This transition does not introduce that unmaintained
+maintainer in March 2026. Ork does not use that unmaintained
 action or treat its presence as a working CLA integration. GitHub administration
 and the signing flow must be verified on the hosted service.
 

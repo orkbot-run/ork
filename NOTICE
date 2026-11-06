@@ -9,13 +9,14 @@ Copyright 2026 Rakazo contributors.
 Rakazo is distributed under the Apache License, Version 2.0. See LICENSE.
 The original import is commit dbbc5fc7f35f548ef0477b0ac0fedb586788fb5a.
 
-Ork changes the product identity, local setup, and automation. Its Apache
-baseline is commit 7efb3c5e202ddb4a4da3cd07904cba7da4613d18. Material already
-distributed in that baseline retains its existing license. The transition
-does not revoke any license granted for earlier releases.
+Ork modifications include product identity, local setup, and automation.
+The Apache baseline is commit 7efb3c5e202ddb4a4da3cd07904cba7da4613d18.
+Apache-licensed material in that baseline remains under Apache 2.0, including
+for commercial use. Third-party material keeps its own terms. Existing license
+grants remain valid.
 
 New original Ork files and changes after that baseline carry SPDX notices.
-Inherited files modified for the transition carry a modification notice;
+Modified inherited files carry a modification notice;
 their inherited material remains under its existing terms. See LICENSE.md
 for the distinction between Apache material and new PolyForm-covered work.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for prospective licensing. Existing material remains Apache-2.0.
+// Modified by Ork contributors to document licensing scope. Existing material remains Apache-2.0.
 import type { ByokTier, ComputerSize, SandboxKind } from "@orkbot/contracts";
 import {
   BYOK_TIERS,
@@ -13,7 +13,7 @@ import {
   TRIAL_SANDBOX_ALLOWANCE_CENTS,
 } from "@orkbot/contracts";
 import { APP_URL, SELF_HOST_GUIDE_PATH } from "./site";
-import { COMMERCIAL_DESCRIPTION } from "./licensing";
+import { COMMERCIAL_DESCRIPTION, COMMERCIAL_STATUS } from "./licensing";
 
 /** Whole dollars when the amount is round ("$15"), otherwise cents ("$12.50"). */
 function dollars(cents: number) {
@@ -221,6 +221,8 @@ ${PRICING_PLANS.slice(0, 1).map(planMarkdown).join("\n\n")}
 ## Commercial self-hosting
 
 ${COMMERCIAL_DESCRIPTION}
+
+${COMMERCIAL_STATUS}
 
 [Licensing and contact](https://ork.run/license/).
 

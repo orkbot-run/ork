@@ -29,7 +29,7 @@ Prepared for release. Publication is pending the licensing rollout review.
 
 ### Changed
 
-- Draft commercial terms propose monthly billing for each named person across web, desktop and mobile on deployments covered by the order, with bots requiring no seats. The agreement remains a draft pending legal review, with no price set or subscriptions available for purchase. Existing Apache and third-party rights remain unchanged.
+- New Ork work uses PolyForm Noncommercial 1.0.0, with a separate commercial license. The commercial agreement sets monthly billing per named user across web, desktop and mobile. Bots do not require seats. Existing Apache and third-party rights remain unchanged. See [licensing](LICENSE.md) for scope and commercial agreement status.
 - Model OAuth refreshes are coordinated across server instances, preventing simultaneous use of the same rotating refresh token.
 - Interrupted organization deletions can resume, and stalled housekeeping no longer holds up recovery of queued work, routines or message deliveries.
 

@@ -4,7 +4,7 @@
 # Licensing FAQ
 
 The [license map](../LICENSE.md) identifies which material each license covers.
-These examples explain the intended policy for PolyForm-covered Ork work.
+These examples explain the terms for PolyForm-covered Ork work.
 The actual license and applicable law govern your use.
 
 ## Can I self-host for free?
@@ -52,9 +52,8 @@ zero for an offering does not establish that its purpose is noncommercial.
 ## Can I use the Apache baseline commercially?
 
 Yes, under [Apache 2.0](../LICENSE). That includes the Apache material in the
-baseline identified in [LICENSE.md](../LICENSE.md). The new policy does not
-withdraw earlier Apache grants, and a commercial Ork agreement does not replace
-your rights to that material.
+baseline identified in [LICENSE.md](../LICENSE.md). A commercial Ork agreement
+does not replace your rights to that material.
 
 ## Can I modify and redistribute Ork?
 
@@ -73,7 +72,7 @@ license map.
 
 ## How does the commercial subscription work?
 
-The proposed subscription is billed monthly for each named person, called a
+The commercial agreement sets monthly billing for each named person, called a
 seat. That person can use the web, desktop, and mobile clients on the
 deployments covered by the order. Bots do not count as seats. A seat cannot be
 shared, and the same person does not need another seat for each device or
@@ -86,7 +85,7 @@ the agreement is finalized, accepted, and paid as agreed.
 
 ## What happens when I cancel or change seats?
 
-Under the proposed terms, cancellation takes effect at the end of the paid
+The commercial agreement provides for cancellation at the end of the paid
 month. Additional seats are charged for the remainder of that month, and seat
 reductions take effect at renewal. Before assigning a seat to another person,
 remove the previous person's access from every deployment covered by the order.
@@ -99,7 +98,7 @@ commercial use of PolyForm-covered work.
 
 ## Can I host Ork for customers or include it in my product?
 
-The proposed standard subscription permits hosted access for named users when
+The standard commercial agreement permits hosted access for named users when
 the order covers the service and every person using Ork commercially has a
 seat. Embedding, software resale, and competing products need a separate written
 agreement. These commercial terms do not reduce rights independently granted
@@ -113,7 +112,7 @@ customer, and contract details out of the public issue.
 
 ## Do contributors keep their copyright?
 
-Yes. The proposed [CLA](cla/v1.md) grants the named Ork licensor rights needed
+Yes. The [CLA draft](cla/v1.md) grants the named Ork licensor rights needed
 for public and commercial licensing. It does not transfer copyright ownership
 or replace the license on code imported from elsewhere. The CLA is pending
 legal review and activation.
