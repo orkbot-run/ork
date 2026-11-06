@@ -1,11 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 UI is preserved. Space onboarding follows LICENSE.md.
+
 import { Stack, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, ScrollView, Text, TextInput } from "react-native";
 import { NativeActionButton } from "../components/native-action-button";
 import { cancelHeaderOptions } from "../components/sheet-header";
-import { rpc, selectSpace } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { native, useMobileTokens } from "../lib/native";
+import { newSpaceCreation } from "../lib/new-space";
 import { refreshOrganizations } from "../lib/organizations";
 import { useSideInsets } from "../lib/side-insets";
 import { errorText } from "../lib/user-error";
@@ -18,16 +22,28 @@ export default function NewSpace() {
   const [name, setName] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createSpace] = useState(newSpaceCreation);
+  const creating = useRef(false);
+  const active = useRef(true);
+
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
 
   async function create() {
     const trimmed = name.trim();
-    if (!trimmed || pending) return;
+    if (!trimmed || creating.current) return;
+    creating.current = true;
     setPending(true);
     setError(null);
     try {
-      const space = await rpc("spaces/create", { name: trimmed });
+      const result = await createSpace(trimmed, () => active.current);
+      if (result === "stale") return;
       void refreshOrganizations();
-      if (!(await selectSpace(space.id))) {
+      if (result === "selection_failed") {
         Alert.alert(t("Space created"), t("It could not be opened. Try again from the sidebar."));
         router.dismissAll();
         router.replace("/");
@@ -36,7 +52,9 @@ export default function NewSpace() {
       router.dismissAll();
       router.replace("/");
     } catch (reason) {
+      if (!active.current) return;
       setError(errorText(reason, t("Could not create space")));
+      creating.current = false;
       setPending(false);
     }
   }

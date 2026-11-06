@@ -37,18 +37,22 @@ test("a new space chooses what it can use, and a skill can be limited to some sp
   await chooser.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(chooser).toHaveCount(0);
 
-  // Continue opens an empty space; the account's primary bot stays in Personal.
-  await expect(page).toHaveURL(/\/app$/);
+  // Wait for the new Space's bot before leaving, so its late navigation cannot undo the switch.
   const sidebar = page.locator("aside").first();
-  await expect(sidebar.getByText("Clients", { exact: true })).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
     .not.toBe(personalSpaceId);
-  await expect(
-    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
-  ).toBeVisible();
-  const personalChief = sidebar.getByRole("button", { name: /^Chief/ });
-  await expect(personalChief).toHaveCount(1);
+  await completeOnboarding(page);
+  await expect(page).toHaveURL(/\/app\/[^/]+$/);
+  await expect(sidebar.getByText("Clients", { exact: true })).toBeVisible();
+  const clients = sidebar.locator('[data-sidebar-group^="space:"]').filter({ hasText: "Clients" });
+  await expect(clients.getByRole("button", { name: /^Chief/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  const chiefs = sidebar.getByRole("button", { name: /^Chief/ });
+  await expect(chiefs).toHaveCount(2);
+  const personalChief = chiefs.first();
   await personalChief.click();
   await expect(personalChief).toHaveAttribute("aria-current", "page");
   await expect

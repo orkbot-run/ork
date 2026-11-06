@@ -3,16 +3,9 @@
 // Modified by Ork contributors for empty-space onboarding recovery. See LICENSE.md.
 
 import { expect, test } from "@playwright/test";
-import {
-  captureScreenshot,
-  completeOnboarding,
-  createBotFromPicker,
-  openNewSpace,
-  rpc,
-  signup,
-} from "./helpers";
+import { captureScreenshot, completeOnboarding, openNewSpace, rpc, signup } from "./helpers";
 
-test("a new space opens empty, accepts a bot, is renamed, and is deleted with its bots", async ({
+test("a new space creates its own bot, is renamed, and is deleted with its bots", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
@@ -39,24 +32,22 @@ test("a new space opens empty, accepts a bot, is renamed, and is deleted with it
   }
   await name.press("Enter");
 
-  // The account keeps one primary bot; another space opens without creating one.
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(sidebar.getByText("Typo space", { exact: true })).toBeVisible();
+  // A new Space creates an ordinary bot while the personal Ork stays in Personal.
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
     .not.toBe(personalSpaceId);
-  await expect(
-    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
-  ).toBeVisible();
-  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(1);
-  await captureScreenshot(page, testInfo, "new-space-empty");
-
-  await createBotFromPicker(page, { name: "Space bot" });
+  await completeOnboarding(page);
+  await expect(page).toHaveURL(/\/app\/[^/]+$/);
+  await expect(sidebar.getByText("Typo space", { exact: true })).toBeVisible();
   const occupied = sidebar
     .locator('[data-sidebar-group^="space:"]')
     .filter({ hasText: "Typo space" });
-  await expect(occupied.getByRole("button", { name: /^Space bot/ })).toBeVisible();
-  await captureScreenshot(page, testInfo, "new-space-with-bot");
+  await expect(occupied.getByRole("button", { name: /^Chief/ })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(2);
+  await captureScreenshot(page, testInfo, "new-space-after-onboarding");
 
   // The space menu's Settings opens the Space section, where it is renamed in place.
   await sidebar.getByRole("button", { name: "Actions for Typo space" }).click();
@@ -112,25 +103,23 @@ test("deleting the last bot in a space stays in the app after first use", {
   const dialog = page.getByRole("dialog", { name: "New space" });
   await dialog.getByLabel("Name").fill("Side");
   await dialog.getByRole("button", { name: "Create space", exact: true }).click();
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(sidebar.getByText("Side", { exact: true })).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("orkbot:space-id")))
     .not.toBe(personalSpaceId);
-  await expect(
-    page.locator("main").getByRole("button", { name: "New bot", exact: true }),
-  ).toBeVisible();
-  await createBotFromPicker(page, { name: "Side bot" });
+  await completeOnboarding(page);
+  await expect(page).toHaveURL(/\/app\/[^/]+$/);
+  await expect(sidebar.getByText("Side", { exact: true })).toBeVisible();
 
   // Delete the only bot in the new space: the app must stay put instead of
   // forcing onboarding again.
   const sideBot = sidebar
     .locator('[data-sidebar-group^="space:"]')
     .filter({ hasText: "Side" })
-    .getByRole("button", { name: /^Side bot/ });
+    .getByRole("button", { name: /^Chief/ });
+  await expect(sideBot).toHaveAttribute("aria-current", "page");
   await sideBot.click({ button: "right" });
   await page.getByRole("menuitem", { name: "Delete" }).click();
-  const deleteDialog = page.getByRole("alertdialog", { name: /Delete Side bot/ });
+  const deleteDialog = page.getByRole("alertdialog", { name: /Delete Chief/ });
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
   await expect(sideBot).toHaveCount(0);

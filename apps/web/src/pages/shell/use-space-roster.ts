@@ -397,8 +397,7 @@ export function useSpaceBootstrap({
             navigate("/onboarding", { replace: true });
             return;
           }
-          // The server provisions only the account's original workspace. Other empty Spaces
-          // stay usable without creating another personal Ork.
+          // The server decides whether this Space can receive an onboarding bot.
           const stillCurrent = () =>
             !cancelled && routeBotId.current === botId && routeGroupId.current === groupId;
           let primary: Bot | null;
