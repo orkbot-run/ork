@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Modified by Ork contributors to preserve generated Ork identities and retire legacy icon rendering.
 // Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
 
 import type { Actor } from "@orkbot/contracts";
@@ -439,84 +439,92 @@ describe("createRepos.listBots", () => {
 });
 
 describe("createRepos.listSpaceBotsForSpaces", () => {
-  it("loads and maps only the compact cross-space sidebar fields", async () => {
-    const findMany = vi.fn(async (_query: { where: unknown; select: Record<string, unknown> }) => [
-      {
-        id: "bot-2",
-        spaceId: "ws-2",
-        name: "Support",
-        color: "#123456",
-        avatarSet: "organic",
-        notifyOnFinish: false,
-        pinned: true,
-        sectionId: null,
-        updatedAt: new Date("2026-08-20T00:00:00.000Z"),
-        parentBotId: null,
-        thread: {
-          id: "thread-2",
-          unread: true,
-          runs: [{ id: "run-failed", status: "failed" }],
-        },
-        runs: [{ status: "running", threadId: "group-thread" }],
-      },
-    ]);
-    const repos = createRepos({
-      bot: { findMany },
-      $queryRaw: vi
-        .fn()
-        .mockResolvedValueOnce([{ id: "run-failed", threadId: "thread-2", status: "failed" }])
-        .mockResolvedValueOnce([
+  it.each(["a0d0b468-5630-49c2-977e-79c19917c61b", null, undefined])(
+    "loads the compact cross-space sidebar fields with avatar seed %s",
+    async (avatarSeed) => {
+      const findMany = vi.fn(
+        async (_query: { where: unknown; select: Record<string, unknown> }) => [
           {
-            id: "message-2",
-            threadId: "thread-2",
-            seq: 4,
-            role: "user",
-            blocks: [{ kind: "text", text: "Waiting for a reply" }],
-            botId: null,
-            replyToMessageId: null,
-            replyQuote: null,
-            runId: null,
-            clientNonce: null,
-            createdAt: new Date("2026-08-19T12:00:00.000Z"),
+            id: "bot-2",
+            spaceId: "ws-2",
+            name: "Support",
+            color: "#123456",
+            avatarSet: "organic",
+            avatarSeed,
+            notifyOnFinish: false,
+            pinned: true,
+            sectionId: null,
+            updatedAt: new Date("2026-08-20T00:00:00.000Z"),
+            parentBotId: null,
+            thread: {
+              id: "thread-2",
+              unread: true,
+              runs: [{ id: "run-failed", status: "failed" }],
+            },
+            runs: [{ status: "running", threadId: "group-thread" }],
           },
-        ]),
-    } as unknown as PrismaClient);
+        ],
+      );
+      const repos = createRepos({
+        bot: { findMany },
+        $queryRaw: vi
+          .fn()
+          .mockResolvedValueOnce([{ id: "run-failed", threadId: "thread-2", status: "failed" }])
+          .mockResolvedValueOnce([
+            {
+              id: "message-2",
+              threadId: "thread-2",
+              seq: 4,
+              role: "user",
+              blocks: [{ kind: "text", text: "Waiting for a reply" }],
+              botId: null,
+              replyToMessageId: null,
+              replyQuote: null,
+              runId: null,
+              clientNonce: null,
+              createdAt: new Date("2026-08-19T12:00:00.000Z"),
+            },
+          ]),
+      } as unknown as PrismaClient);
 
-    await expect(repos.listSpaceBotsForSpaces(actor, ["ws-2"])).resolves.toEqual([
-      {
-        id: "bot-2",
-        spaceId: "ws-2",
-        name: "Support",
-        title: "",
-        color: "#123456",
-        avatarSet: "orkbot",
-        notifyOnFinish: false,
-        pinned: true,
-        sectionId: null,
-        unread: true,
-        parentBotId: null,
-        preview: "Waiting for a reply",
-        status: "running",
-        threadStatus: "idle",
-        runErrorId: "run-failed",
-        updatedAt: "2026-08-19T12:00:00.000Z",
-      },
-    ]);
-    const query = findMany.mock.calls[0]![0];
-    expect(query.select.thread).toEqual(
-      expect.objectContaining({
-        select: expect.not.objectContaining({
-          messages: expect.anything(),
+      await expect(repos.listSpaceBotsForSpaces(actor, ["ws-2"])).resolves.toEqual([
+        {
+          id: "bot-2",
+          spaceId: "ws-2",
+          name: "Support",
+          title: "",
+          color: "#123456",
+          avatarSet: "orkbot",
+          avatarSeed: avatarSeed ?? null,
+          notifyOnFinish: false,
+          pinned: true,
+          sectionId: null,
+          unread: true,
+          parentBotId: null,
+          preview: "Waiting for a reply",
+          status: "running",
+          threadStatus: "idle",
+          runErrorId: "run-failed",
+          updatedAt: "2026-08-19T12:00:00.000Z",
+        },
+      ]);
+      const query = findMany.mock.calls[0]![0];
+      expect(query.select.thread).toEqual(
+        expect.objectContaining({
+          select: expect.not.objectContaining({
+            messages: expect.anything(),
+          }),
         }),
-      }),
-    );
-    expect(query.where).toEqual(
-      expect.objectContaining({ spaceId: { in: ["ws-2"] }, userId: actor.userId }),
-    );
-    expect(query.select).not.toHaveProperty("description");
-    expect(query.select).not.toHaveProperty("instructions");
-    expect(query.select).not.toHaveProperty("computer");
-  });
+      );
+      expect(query.where).toEqual(
+        expect.objectContaining({ spaceId: { in: ["ws-2"] }, userId: actor.userId }),
+      );
+      expect(query.select.avatarSeed).toBe(true);
+      expect(query.select).not.toHaveProperty("description");
+      expect(query.select).not.toHaveProperty("instructions");
+      expect(query.select).not.toHaveProperty("computer");
+    },
+  );
 });
 
 describe("createRepos.reorderBots", () => {

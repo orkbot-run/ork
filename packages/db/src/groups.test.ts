@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
+// Modified by Ork contributors to preserve generated Ork identities and retire legacy icon rendering.
 // Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +24,15 @@ describe("listSpaceGroupsForSpaces", () => {
           unread: true,
         },
         members: [
-          { bot: { id: "bot-1", name: "Triage", color: "#111", runs: [] } },
+          {
+            bot: {
+              id: "bot-1",
+              name: "Triage",
+              color: "#111",
+              avatarSeed: "a0d0b468-5630-49c2-977e-79c19917c61b",
+              runs: [],
+            },
+          },
           {
             bot: {
               id: "bot-2",
@@ -69,12 +77,20 @@ describe("listSpaceGroupsForSpaces", () => {
         pinned: true,
         sectionId: null,
         members: [
-          { botId: "bot-1", name: "Triage", color: "#111", avatarSet: "orkbot", status: "idle" },
+          {
+            botId: "bot-1",
+            name: "Triage",
+            color: "#111",
+            avatarSet: "orkbot",
+            avatarSeed: "a0d0b468-5630-49c2-977e-79c19917c61b",
+            status: "idle",
+          },
           {
             botId: "bot-2",
             name: "Responder",
             color: "#222",
             avatarSet: "orkbot",
+            avatarSeed: null,
             status: "running",
           },
         ],
@@ -84,6 +100,13 @@ describe("listSpaceGroupsForSpaces", () => {
       },
     ]);
     const query = findMany.mock.calls[0]![0];
+    expect(query.select.members).toEqual(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          bot: expect.objectContaining({ select: expect.objectContaining({ avatarSeed: true }) }),
+        }),
+      }),
+    );
     expect(query.select).not.toHaveProperty("userId");
     expect(query.select).not.toHaveProperty("archivedAt");
     expect(query.select).not.toHaveProperty("createdAt");

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved. Personal Ork notification coverage follows LICENSE.md.
+
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
@@ -1417,7 +1421,14 @@ describe("run notification preference", () => {
       },
       select: {
         bot: {
-          select: { id: true, name: true, color: true, avatarSet: true, notifyOnFinish: true },
+          select: {
+            id: true,
+            name: true,
+            color: true,
+            avatarSet: true,
+            avatarSeed: true,
+            notifyOnFinish: true,
+          },
         },
         thread: { select: { groupId: true } },
       },
