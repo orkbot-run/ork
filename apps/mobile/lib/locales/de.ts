@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "The computer service cannot start computers for this account.":
+    "Der Computerdienst kann für dieses Konto keine Computer starten.",
   Rule: "Regel",
   Inactive: "Inaktiv",
   "Other tool": "Anderes Tool",

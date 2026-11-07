@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved; decision-card and producer-stop changes are Ork additions.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import {
@@ -9,6 +10,7 @@ import {
   ModelAccountError,
   ModelOutputError,
   runContinueJob,
+  SandboxAccountError,
   SandboxAllowanceUsedError,
   SandboxRateLimitError,
   TransientModelError,
@@ -1011,6 +1013,7 @@ export async function failRun(
   } catch (computerError) {
     if (
       !(computerError instanceof SandboxRateLimitError) &&
+      !(computerError instanceof SandboxAccountError) &&
       !(computerError instanceof SandboxAllowanceUsedError)
     )
       throw computerError;
@@ -1057,6 +1060,7 @@ export async function failRun(
     error instanceof ModelAccountError ||
     error instanceof ModelOutputError ||
     error instanceof SandboxRateLimitError ||
+    error instanceof SandboxAccountError ||
     error instanceof SandboxAllowanceUsedError
   ) {
     // Provider outages that outlasted retries, provider accounts, plans and model
@@ -1066,6 +1070,9 @@ export async function failRun(
       "run.outcome": "failed",
       "run.failure": error.name,
       reason: message,
+      ...(error instanceof SandboxAccountError
+        ? { error: sanitizedError(error, (text) => redactSecrets(text, ctx.secrets)) }
+        : {}),
       ...model.active,
     });
   } else {
@@ -1100,7 +1107,7 @@ export async function failRun(
   if (
     run.trigger === "routine" &&
     run.routineId &&
-    (refusal || error instanceof SandboxAllowanceUsedError)
+    (refusal || error instanceof SandboxAllowanceUsedError || error instanceof SandboxAccountError)
   ) {
     await backOffRoutineAfterAccountError(deps, run.routineId, new Date(), refusal?.resetAt);
   }

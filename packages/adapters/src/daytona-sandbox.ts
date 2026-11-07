@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -20,6 +21,7 @@ import type {
   ScreenSession,
   TerminalRequest,
 } from "@orkbot/adapter-kit";
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { abortableDelay, boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { screenSessionKey } from "./computer-screens.js";
@@ -201,7 +203,8 @@ export class DaytonaSandboxProvider implements SandboxProvider {
         );
         return this.ref(sandbox, request.botId, false, started);
       } catch (error) {
-        if (!isSandboxGoneError(error)) throw error;
+        const failure = daytonaStartupError(error);
+        if (!isSandboxGoneError(failure)) throw failure;
       }
     }
 
@@ -223,7 +226,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       );
     } catch (error) {
       await this.deleteAbandoned(name);
-      throw error;
+      throw daytonaStartupError(error);
     }
     this.boxes.set(sandbox.id, sandbox);
     this.checkedAt.set(sandbox.id, Date.now());
@@ -920,4 +923,15 @@ function daytonaExportBatches<T extends { entry: { size: number } }>(files: read
   }
   if (batch.length) batches.push(batch);
   return batches;
+}
+
+function daytonaStartupError(error: unknown): unknown {
+  return error instanceof DaytonaError &&
+    error.source !== "DAYTONA_DAEMON" &&
+    error.source !== "DAYTONA_PROXY" &&
+    [401, 402].includes(error.statusCode ?? 0)
+    ? new SandboxAccountError({
+        cause: new Error(`Daytona startup request refused (HTTP ${error.statusCode})`),
+      })
+    : error;
 }

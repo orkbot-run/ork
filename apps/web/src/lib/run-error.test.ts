@@ -1,7 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import { i18n } from "@lingui/core";
+import { COMPUTER_ACCOUNT_REFUSED_ERROR } from "@orkbot/contracts";
 import { MODEL_OUTPUT_CUT_ERROR, MODEL_REQUEST_LIMIT_ERROR, normalizeRunError } from "@orkbot/core";
 import { afterEach, expect, it } from "vitest";
 import { translateRunError } from "./run-error";
+import { errorText } from "./user-error";
 
 afterEach(() => {
   i18n.activate("en");
@@ -46,4 +52,14 @@ it("translates the summary of a reply cut off at the output limit", () => {
       "Das Modell hat sein Ausgabelimit erreicht, bevor es die Antwort fertig geschrieben hat.",
     recovery: "model",
   });
+});
+
+it("translates the neutral computer account refusal for run and direct boot errors", () => {
+  const translated = "Ten serwis nie może uruchamiać komputerów dla tego konta.";
+  i18n.load("pl", { [COMPUTER_ACCOUNT_REFUSED_ERROR]: translated });
+  i18n.activate("pl");
+  expect(normalizeRunError(COMPUTER_ACCOUNT_REFUSED_ERROR, translateRunError).summary).toBe(
+    translated,
+  );
+  expect(errorText(new Error(COMPUTER_ACCOUNT_REFUSED_ERROR))).toBe(translated);
 });

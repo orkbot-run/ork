@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import {
-  AuthenticationError,
   CommandExitError,
   FileNotFoundError,
   RateLimitError,
@@ -117,18 +118,17 @@ describe("Novita computer backend", () => {
     expect(sdk.create).toHaveBeenCalledOnce();
   });
 
-  it.each([
-    new AuthenticationError("Invalid API key"),
-    new RateLimitError("429: quota exceeded"),
-    new Error("fetch failed"),
-  ])("preserves an existing computer on $name", async (error) => {
-    const { provider, sdk } = fakeNovita();
-    vi.mocked(sdk.connect).mockRejectedValue(error);
-    await expect(
-      provider.provision({ ...request, providerRef: "existing", providerKind: "novita" }, ctx),
-    ).rejects.toBe(error);
-    expect(sdk.create).not.toHaveBeenCalled();
-  });
+  it.each([new RateLimitError("429: quota exceeded"), new Error("fetch failed")])(
+    "preserves an existing computer on $name",
+    async (error) => {
+      const { provider, sdk } = fakeNovita();
+      vi.mocked(sdk.connect).mockRejectedValue(error);
+      await expect(
+        provider.provision({ ...request, providerRef: "existing", providerKind: "novita" }, ctx),
+      ).rejects.toBe(error);
+      expect(sdk.create).not.toHaveBeenCalled();
+    },
+  );
 
   it("replaces a computer only after a native sandbox-not-found response", async () => {
     const { provider, sdk } = fakeNovita();
@@ -272,7 +272,7 @@ describe("Novita adapter over the SDK emulator", () => {
     });
     emulator.apiKey = "rotated-key";
     await expect(provider.provision({ ...request, botId: "other" }, ctx)).rejects.toBeInstanceOf(
-      AuthenticationError,
+      SandboxAccountError,
     );
     expect(emulator.computers.size).toBe(1);
   });

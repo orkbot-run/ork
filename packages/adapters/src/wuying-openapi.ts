@@ -1,4 +1,12 @@
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
+import {
+  SandboxAccountError,
+  SandboxRateLimitError,
+  SandboxUnresponsiveError,
+} from "@orkbot/adapter-kit";
 
 /** Desktop states the ECD API reports; anything else is treated as in transition. */
 export type WuyingDesktopStatus = string;
@@ -148,6 +156,21 @@ export class WuyingOpenApi implements WuyingControlPlane {
         missing.name = "SandboxNotFoundError";
         throw missing;
       }
+      const starting = action === "StartDesktops" || action === "DescribeDesktops";
+      if (
+        starting &&
+        typeof code === "string" &&
+        /^(InvalidAccessKey|SignatureDoesNotMatch)/.test(code)
+      )
+        throw new SandboxAccountError({
+          cause: new Error(`Wuying ${action}: credentials were refused`),
+        });
+      // Only the documented permission refusal for starting a desktop is account-terminal.
+      // A bare 403 or a screen/stop permission says nothing about the ability to start.
+      if (action === "StartDesktops" && (code === "Forbidden.RAM" || code === "NoPermission"))
+        throw new SandboxAccountError({
+          cause: new Error("Wuying StartDesktops: permission was refused"),
+        });
       // A refused AccessKey stays refused, so it is reported as such rather than as a retry.
       if (typeof code === "string" && /^(InvalidAccessKey|SignatureDoesNotMatch)/.test(code))
         throw new Error(`Wuying ${action}: the AccessKey was refused`);

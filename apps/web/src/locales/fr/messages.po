@@ -6374,6 +6374,11 @@ msgstr "Le bot peut utiliser le fichier, mais ne verra pas l'image."
 msgid "The browser keeps dropping the microphone. Start dictation again to retry."
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/run-error.ts
+msgid "The computer service cannot start computers for this account."
+msgstr "Le service informatique ne peut pas démarrer d’ordinateurs pour ce compte."
+
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "La connexion a expiré."

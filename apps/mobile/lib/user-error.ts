@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
   CONNECTOR_AUTH_UNAVAILABLE,
   isVoiceAccountErrorCode,
   MCP_OAUTH_CLIENT_REQUIRED,
@@ -27,6 +32,8 @@ export function errorText(
       : error && typeof error === "object" && "message" in error
         ? error.message
         : undefined;
+  if (typeof message === "string" && message.trim() === COMPUTER_ACCOUNT_REFUSED_ERROR)
+    return t(COMPUTER_ACCOUNT_REFUSED_ERROR);
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_ERROR)
     return t("This model cannot read images. Choose a model that supports images.");
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_UNKNOWN)

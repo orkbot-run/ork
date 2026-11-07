@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "The computer service cannot start computers for this account.": "電腦服務無法為此帳戶啟動電腦。",
   Rule: "規則",
   Inactive: "未生效",
   "Other tool": "其他工具",

@@ -1,4 +1,12 @@
-import { CONNECTOR_AUTH_UNAVAILABLE, MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
+import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
+  CONNECTOR_AUTH_UNAVAILABLE,
+  MCP_OAUTH_CLIENT_REQUIRED,
+} from "@orkbot/contracts";
 import { MODEL_IMAGE_INPUT_ERROR } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import { errorText, loadFailureKind } from "./user-error";
@@ -39,4 +47,8 @@ it("asks for an OAuth client ID when the server cannot register one", () => {
     code: MCP_OAUTH_CLIENT_REQUIRED,
   });
   expect(errorText(error, "Could not sign in")).toBe("Needs an OAuth client ID");
+});
+
+it("recognizes the canonical computer account refusal in the existing translation path", () => {
+  expect(errorText(new Error(COMPUTER_ACCOUNT_REFUSED_ERROR))).toBe(COMPUTER_ACCOUNT_REFUSED_ERROR);
 });

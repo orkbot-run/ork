@@ -1,9 +1,19 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import { i18n } from "@lingui/core";
 import type { RunErrorTranslator } from "@orkbot/core";
 
 /** Static descriptors keep shared run-error messages in Lingui extraction. */
 export const translateRunError: RunErrorTranslator = (message, values) => {
   switch (message) {
+    case "The computer service cannot start computers for this account.":
+      return i18n._({
+        id: "The computer service cannot start computers for this account.",
+        message: "The computer service cannot start computers for this account.",
+        values,
+      });
     case "This connection's request limit is too small. Choose another model.":
       return i18n._({
         id: "This connection's request limit is too small. Choose another model.",

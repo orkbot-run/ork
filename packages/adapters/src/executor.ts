@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for coordinated OAuth refreshes, Space work admission and producer lifetimes. See LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import type { AgentRunRequest, ComputerRef, SemanticMemoryProvider } from "@orkbot/adapter-kit";
 import {
   DEFAULT_CONTEXT_STRATEGY,
   isModelCredentialRejected,
   runContinueJob,
+  SandboxAccountError,
   SandboxUnavailableError,
   SandboxUnresponsiveError,
 } from "@orkbot/adapter-kit";
@@ -2053,6 +2055,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // An abort while stopping is not a setup failure, and must not spend the
         // retry budget that eventually fails the run.
         if (deps.shutdownSignal?.aborted) return;
+        const computerAccountRefused = setupError instanceof SandboxAccountError;
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         const setupMessage = redactSecrets(userRunError(setupError), runSecrets);
@@ -2065,26 +2068,34 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           setupError instanceof SandboxUnavailableError ||
           setupError instanceof SandboxUnresponsiveError;
         // A lost lease aborted setup on purpose; whatever that interrupted is not a failure.
-        if (providerOutage || !lease.valid) {
+        if (providerOutage || computerAccountRefused || !lease.valid) {
           getLogger().warn("run setup failed", { error: reportedSetupError });
         } else if (!computerBusy) {
           getLogger().error("run setup failed", reportedSetupError);
         }
-        const priorFailures = retryForever ? 0 : await setupFailureStreak(deps.prisma, runId);
+        if (computerAccountRefused && !lease.valid) return;
+        const priorFailures =
+          retryForever || computerAccountRefused ? 0 : await setupFailureStreak(deps.prisma, runId);
         // The job reconciler re-enqueues a queued run whose job ran out of attempts, so a
         // setup that fails every time would retry forever. End the run instead.
-        if (!retryForever && priorFailures >= RUN_SETUP_FAILURE_LIMIT - 1) {
+        if (
+          computerAccountRefused ||
+          (!retryForever && priorFailures >= RUN_SETUP_FAILURE_LIMIT - 1)
+        ) {
           const bot = await deps.prisma.bot.findUnique({
             where: { id: run.botId },
             select: { name: true },
           });
-          await failRunBeforeTurn(
+          const failed = await failRunBeforeTurn(
             deps,
             run,
             bot?.name ?? "",
             { attemptId: attempt.id, workerId, fence },
             setupMessage,
           );
+          if (failed && computerAccountRefused && run.trigger === "routine" && run.routineId) {
+            await backOffRoutineAfterAccountError(deps, run.routineId);
+          }
           return;
         }
         const retryDelay = providerOutage

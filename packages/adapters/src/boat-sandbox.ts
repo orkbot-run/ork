@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -35,6 +36,7 @@ import type {
   WorkspaceExportLimits,
 } from "@orkbot/adapter-kit";
 import {
+  SandboxAccountError,
   SandboxDamagedError,
   SandboxRateLimitError,
   SandboxSizeUnavailableError,
@@ -282,9 +284,13 @@ export class BoatSandboxProvider implements SandboxProvider {
     const pending = this.pendingProvisions.get(key);
     if (pending) return pending;
     let provision!: Promise<ComputerRef>;
-    provision = this.provisionOnce(request, context).finally(() => {
-      if (this.pendingProvisions.get(key) === provision) this.pendingProvisions.delete(key);
-    });
+    provision = this.provisionOnce(request, context)
+      .catch((error: unknown) => {
+        throw boatStartupError(error);
+      })
+      .finally(() => {
+        if (this.pendingProvisions.get(key) === provision) this.pendingProvisions.delete(key);
+      });
     this.pendingProvisions.set(key, provision);
     return provision;
   }
@@ -308,7 +314,8 @@ export class BoatSandboxProvider implements SandboxProvider {
         });
         return { ...this.ref(request.providerRef, request.botId, false), started };
       } catch (error) {
-        if (!isSandboxGoneError(error)) throw error;
+        const failure = boatStartupError(error);
+        if (!isSandboxGoneError(failure)) throw failure;
         this.forget(request.providerRef);
       }
     }
@@ -1941,4 +1948,14 @@ function isArtifactTooLarge(error: unknown): boolean {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message));
+}
+
+function boatStartupError(error: unknown): unknown {
+  // The existing call boundary wraps payment refusals as unresponsive outside startup.
+  const responseError = error instanceof SandboxUnresponsiveError ? error.cause : error;
+  return responseError instanceof BoatApiError && [401, 402].includes(responseError.response.status)
+    ? new SandboxAccountError({
+        cause: new Error(`Boat startup request refused (HTTP ${responseError.response.status})`),
+      })
+    : error;
 }

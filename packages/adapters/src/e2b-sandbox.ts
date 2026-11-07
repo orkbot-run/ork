@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import { E2B_COMPUTER_TEMPLATE, E2B_DESKTOP_TEMPLATE } from "./e2b-template.js";
 import type { RemoteDesktop, RemoteDesktopSdk } from "./remote-desktop-sandbox.js";
 import { RemoteDesktopSandboxProvider } from "./remote-desktop-sandbox.js";
@@ -48,6 +52,11 @@ export class E2BSandboxProvider extends RemoteDesktopSandboxProvider {
       template: E2B_COMPUTER_TEMPLATE,
       fallbackTemplate: E2B_DESKTOP_TEMPLATE,
       isTimeoutError: (error) => error instanceof Error && error.name === "TimeoutError",
+      isAccountError: (error) =>
+        error instanceof Error &&
+        (error.name === "AuthenticationError" ||
+          (error.name === "SandboxError" &&
+            [401, 402].includes((error as Error & { statusCode?: number }).statusCode ?? 0))),
     });
   }
 }

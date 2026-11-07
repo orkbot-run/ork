@@ -1,4 +1,21 @@
-import { COMPUTER_ALLOWANCE_USED_ERROR, COMPUTER_RATE_LIMIT_ERROR } from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
+import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
+  COMPUTER_ALLOWANCE_USED_ERROR,
+  COMPUTER_RATE_LIMIT_ERROR,
+} from "@orkbot/contracts";
+
+/** Account authentication, access or payment prevents the provider from starting computers. */
+export class SandboxAccountError extends Error {
+  readonly code = "SANDBOX_ACCOUNT_REFUSED";
+  constructor(options?: { cause?: unknown }) {
+    super(COMPUTER_ACCOUNT_REFUSED_ERROR, options);
+    this.name = "SandboxAccountError";
+  }
+}
 
 /** The sandbox provider refused the request because an account rate limit or quota was hit. */
 export class SandboxRateLimitError extends Error {

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import * as z from "zod";
 import { Id, IsoDate, RunStatus } from "./ids.js";
 
@@ -6,6 +10,10 @@ export const COMPUTER_RATE_LIMIT_ERROR = "Too many computer requests. Try again 
 
 /** The organization spent this period's computer allowance; computers start again at renewal. */
 export const COMPUTER_ALLOWANCE_USED_ERROR = "No computer hours left.";
+
+/** The configured computer account cannot start computers until its access or balance changes. */
+export const COMPUTER_ACCOUNT_REFUSED_ERROR =
+  "The computer service cannot start computers for this account.";
 
 export const RUN_TRIGGERS = [
   "user",

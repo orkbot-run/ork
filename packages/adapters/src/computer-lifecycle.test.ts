@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited lifecycle tests remain Apache-2.0; Space admission transaction fixtures are Ork additions.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -15,6 +16,7 @@ import type {
   SandboxProvider,
 } from "@orkbot/adapter-kit";
 import {
+  SandboxAccountError,
   SandboxAllowanceUsedError,
   SandboxDamagedError,
   SandboxSizeUnavailableError,
@@ -1585,72 +1587,80 @@ describe("computer provisioning", () => {
   });
 
   it.each([
-    { fresh: true, cleanup: "destroy" as const },
-    { fresh: false, cleanup: "stop" as const },
-  ])("rolls back $cleanup when shared preparation fails", async ({ fresh, cleanup }) => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-prepare-rollback-"));
-    const ref = {
-      id: "provider-1",
-      botId: "bot-1",
-      kind: "fake" as const,
-      providerRef: "provider-1",
-      fresh,
-    };
-    const stop = vi.fn().mockResolvedValue(undefined);
-    const destroy = vi.fn().mockResolvedValue(undefined);
-    const releaseScreen = vi.fn().mockResolvedValue(undefined);
-    const prepare = vi.fn().mockRejectedValue(new Error("provider preparation failed"));
-    const prisma = {
-      $queryRaw: vi.fn().mockResolvedValue([]),
-      $transaction: vi.fn(
-        async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> =>
-          work(prisma as unknown as PrismaClient),
-      ),
-      computer: {
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          id: "computer-1",
-          homeKey: "bot-1",
-          providerRef: fresh ? null : "provider-1",
-          kind: "fake",
-          scope: "dedicated",
-          state: "stopped",
-          controlLeaseId: null,
-          updatedAt: new Date("2024-01-01T00:00:00.000Z"),
-        }),
-        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      },
-    } as unknown as PrismaClient;
-    const sandbox = {
-      provision: vi.fn().mockResolvedValue(ref),
-      prepare,
-      stop,
-      destroy,
-      releaseScreen,
-    } as unknown as SandboxProvider;
-
-    try {
-      await expect(
-        provisionComputer(
-          {
-            prisma,
-            sandbox,
-            home: {} as AgentHomeStore,
-            jobs: {} as JobPublisher,
-            events: {} as ThreadEvents,
-            dataDir,
-          },
-          "computer-1",
-          context,
+    { fresh: true, cleanup: "destroy" as const, account: false },
+    { fresh: false, cleanup: "stop" as const, account: false },
+    { fresh: true, cleanup: "destroy" as const, account: true },
+    { fresh: false, cleanup: "stop" as const, account: true },
+  ])(
+    "rolls back $cleanup when shared preparation fails (account=$account)",
+    async ({ fresh, cleanup, account }) => {
+      const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-prepare-rollback-"));
+      const ref = {
+        id: "provider-1",
+        botId: "bot-1",
+        kind: "fake" as const,
+        providerRef: "provider-1",
+        fresh,
+      };
+      const stop = vi.fn().mockResolvedValue(undefined);
+      const destroy = vi.fn().mockResolvedValue(undefined);
+      const releaseScreen = vi.fn().mockResolvedValue(undefined);
+      const failure = account
+        ? new SandboxAccountError()
+        : new Error("provider preparation failed");
+      const prepare = vi.fn().mockRejectedValue(failure);
+      const prisma = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $transaction: vi.fn(
+          async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> =>
+            work(prisma as unknown as PrismaClient),
         ),
-      ).rejects.toThrow("provider preparation failed");
-      expect(prepare).toHaveBeenCalledWith(ref, context);
-      expect(releaseScreen).toHaveBeenCalledWith(ref, context);
-      expect(cleanup === "destroy" ? destroy : stop).toHaveBeenCalledWith(ref, context);
-      expect(cleanup === "destroy" ? stop : destroy).not.toHaveBeenCalled();
-    } finally {
-      await rm(dataDir, { recursive: true, force: true });
-    }
-  });
+        computer: {
+          findUniqueOrThrow: vi.fn().mockResolvedValue({
+            id: "computer-1",
+            homeKey: "bot-1",
+            providerRef: fresh ? null : "provider-1",
+            kind: "fake",
+            scope: "dedicated",
+            state: "stopped",
+            controlLeaseId: null,
+            updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+          }),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        },
+      } as unknown as PrismaClient;
+      const sandbox = {
+        provision: vi.fn().mockResolvedValue(ref),
+        prepare,
+        stop,
+        destroy,
+        releaseScreen,
+      } as unknown as SandboxProvider;
+
+      try {
+        await expect(
+          provisionComputer(
+            {
+              prisma,
+              sandbox,
+              home: {} as AgentHomeStore,
+              jobs: {} as JobPublisher,
+              events: {} as ThreadEvents,
+              dataDir,
+            },
+            "computer-1",
+            context,
+          ),
+        ).rejects.toBe(failure);
+        expect(prepare).toHaveBeenCalledWith(ref, context);
+        expect(releaseScreen).toHaveBeenCalledWith(ref, context);
+        expect(cleanup === "destroy" ? destroy : stop).toHaveBeenCalledWith(ref, context);
+        expect(cleanup === "destroy" ? stop : destroy).not.toHaveBeenCalled();
+      } finally {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("releases the screen when activation fails on a resumed Team computer", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "orkbot-team-activation-rollback-"));

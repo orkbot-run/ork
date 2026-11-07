@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
@@ -21,6 +22,7 @@ import type {
   WorkspaceExportLimits,
 } from "@orkbot/adapter-kit";
 import {
+  SandboxAccountError,
   SandboxRateLimitError,
   SandboxUnavailableError,
   WorkspaceTooLargeError,
@@ -48,9 +50,15 @@ import {
   workspaceSaveFindCommand,
 } from "./workspace-save-policy.js";
 
-const { Boxd, ConflictError, FilesystemError, NotFoundError, RateLimitError } = await import(
-  "@boxd-sh/sdk"
-);
+const {
+  Boxd,
+  AuthenticationError,
+  APIStatusError,
+  ConflictError,
+  FilesystemError,
+  NotFoundError,
+  RateLimitError,
+} = await import("@boxd-sh/sdk");
 
 const DISPLAY_START = 20;
 const HOME = "/home/boxd";
@@ -177,11 +185,13 @@ export class BoxdSandboxProvider implements SandboxProvider {
         const started = await this.ensureRunning(request.providerRef, context.signal);
         return { ...this.ref(request.providerRef, request.botId, false), started };
       } catch (error) {
-        if (!isMachineGone(error)) throw error;
+        if (!isMachineGone(error)) throw boxdStartupError(error);
         this.forget(request.providerRef);
       }
     }
-    const fromSnapshot = await this.computerSnapshot(context.signal);
+    const fromSnapshot = await this.computerSnapshot(context.signal).catch((error: unknown) => {
+      throw boxdStartupError(error);
+    });
     const name = `orkbot-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     const params = {
       name,
@@ -200,7 +210,7 @@ export class BoxdSandboxProvider implements SandboxProvider {
     } catch (error) {
       // A lost reply can hide a machine created under this name.
       await this.client.machines.delete(name).catch(() => undefined);
-      throw providerError(error);
+      throw boxdStartupError(providerError(error));
     }
     if (context.signal.aborted) {
       await this.destroy(this.ref(machine.id, request.botId, true), context);
@@ -871,3 +881,12 @@ export const BOXD_COMPUTER_SNAPSHOT = `orkbot-computer-${createHash("sha256")
   .update(BOXD_COMPUTER_SETUP.join("\0"))
   .digest("hex")
   .slice(0, 12)}`;
+
+function boxdStartupError(error: unknown): unknown {
+  return error instanceof AuthenticationError ||
+    (error instanceof APIStatusError && error.httpStatus === 402)
+    ? new SandboxAccountError({
+        cause: new Error("boxd startup credentials or payment were refused"),
+      })
+    : error;
+}

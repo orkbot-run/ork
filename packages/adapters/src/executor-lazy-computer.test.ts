@@ -1,9 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import type { AgentRunRequest, ComputerRef } from "@orkbot/adapter-kit";
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
+import {
+  SandboxAccountError,
+  SandboxRateLimitError,
+  SandboxUnresponsiveError,
+} from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,8 +49,11 @@ async function runRoutine(
     copyFailureOnce?: boolean;
     parallel?: boolean;
     priorSetupFailures?: number;
+    routineNextRunAt?: Date;
+    finalizationRejected?: boolean;
     exportError?: Error;
     setupError?: Error;
+    secrets?: string[];
     shutdownSignal?: AbortSignal;
     /** User stop already flipped the run to cancelled before the turn ends. */
     cancelRun?: boolean;
@@ -145,7 +153,18 @@ async function runRoutine(
         },
       ),
     },
-    routine: { findUnique: vi.fn(async () => ({ notify: false, nextRunAt: null })) },
+    routine: {
+      findUnique: vi.fn(async () => ({
+        notify: false,
+        active: true,
+        nextRunAt: options.routineNextRunAt ?? null,
+        watch: {},
+        crons: [],
+        timezone: "UTC",
+        accountFailures: 0,
+      })),
+      update: vi.fn(async () => ({})),
+    },
     event: { count: vi.fn(async () => 0) },
     bot: {
       findUniqueOrThrow: vi.fn(async () => ({
@@ -266,7 +285,9 @@ async function runRoutine(
   };
   if (options.copyFailureOnce)
     sandbox.writeFile.mockRejectedValueOnce(new Error("temporary copy failure"));
-  const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
+  const finalizeRun = vi.fn(async () =>
+    options.finalizationRejected || run.status === "cancelled" ? null : { continuationRunId: null },
+  );
   const enqueue = vi.fn(async () => undefined);
   const events = {
     append: vi.fn(async () => undefined),
@@ -295,7 +316,7 @@ async function runRoutine(
     events,
     jobs: { enqueue },
     notifications: { send: vi.fn(async () => undefined) },
-    secrets: [],
+    secrets: options.secrets ?? [],
     shutdownSignal: options.shutdownSignal
       ? AbortSignal.any([options.shutdownSignal, shutdownRelay.signal])
       : undefined,
@@ -359,6 +380,106 @@ afterEach(() => {
 });
 
 describe("run computer provisioning", () => {
+  it.each([undefined, "abort", "recover"] as const)(
+    "finishes an account-refused lazy computer once even when tool failure is handled as %s",
+    async (toolFailure) => {
+      const error = new SandboxAccountError({ cause: new Error("provider auth refused") });
+      provisionComputer.mockRejectedValue(error);
+      const { finalizeRun, enqueue, prisma } = await runRoutine(
+        [{ name: "list_files", args: { path: "" } }],
+        { toolFailure },
+      );
+      expect(finalizeRun).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ outcome: "failed", error: error.message }),
+      );
+      expect(prisma.attempt.findMany).not.toHaveBeenCalled();
+      expect(prisma.attempt.update).not.toHaveBeenCalled();
+      expect(prisma.routine.update).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ data: { accountFailures: 1 } }),
+      );
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it("ends pre-model account refusals immediately and uses the existing routine schedule backoff", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const now = new Date("2026-01-01T00:00:00Z");
+    vi.setSystemTime(now);
+    try {
+      const error = new SandboxAccountError({ cause: new Error("provider account refused") });
+      const { finalizeRun, enqueue, runtimeRun, prisma } = await runRoutine([], {
+        setupError: error,
+        routineNextRunAt: new Date(now.getTime() + 60_000),
+      });
+      expect(runtimeRun).not.toHaveBeenCalled();
+      expect(finalizeRun).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ outcome: "failed", error: error.message }),
+      );
+      expect(prisma.attempt.findMany).not.toHaveBeenCalled();
+      expect(prisma.attempt.update).not.toHaveBeenCalled();
+      const nextRunAt = new Date(now.getTime() + 5 * 60_000);
+      expect(prisma.routine.update).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ data: { accountFailures: 1, nextRunAt } }),
+      );
+      expect(enqueue).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ name: "routine.wakeup", availableAt: nextRunAt }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each(["setup", "lazy"] as const)(
+    "does not back off or requeue an account refusal after a lost finalization fence (%s)",
+    async (phase) => {
+      const error = new SandboxAccountError();
+      if (phase === "lazy") provisionComputer.mockRejectedValue(error);
+      const { finalizeRun, enqueue, prisma } = await runRoutine(
+        phase === "lazy" ? [{ name: "list_files", args: { path: "" } }] : [],
+        { setupError: phase === "setup" ? error : undefined, finalizationRejected: true },
+      );
+      expect(finalizeRun).toHaveBeenCalledOnce();
+      expect(prisma.routine.update).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["setup", "lazy"] as const)(
+    "keeps account refusal causes in redacted diagnostics only (%s)",
+    async (phase) => {
+      const error = new SandboxAccountError({
+        cause: new Error("provider authentication refused: fake-deployment-key"),
+      });
+      if (phase === "lazy") provisionComputer.mockRejectedValue(error);
+      const { finalizeRun, enqueue } = await runRoutine(
+        phase === "lazy" ? [{ name: "list_files", args: { path: "" } }] : [],
+        { setupError: phase === "setup" ? error : undefined, secrets: ["fake-deployment-key"] },
+      );
+      expect(finalizeRun).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ outcome: "failed", error: error.message }),
+      );
+      const diagnostics = JSON.stringify(sink.events);
+      expect(diagnostics).toContain("provider authentication refused");
+      expect(diagnostics).not.toContain("fake-deployment-key");
+      expect(JSON.stringify(finalizeRun.mock.calls)).not.toContain(
+        "provider authentication refused",
+      );
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+  it("does not overwrite cancellation or back off when fenced finalization rejects the computer refusal", async () => {
+    provisionComputer.mockRejectedValue(new SandboxAccountError());
+    const { finalizeRun, run, enqueue, prisma } = await runRoutine(
+      [{ name: "list_files", args: { path: "" } }],
+      { cancelRun: true },
+    );
+    expect(run.status).toBe("cancelled");
+    expect(finalizeRun).toHaveBeenCalledOnce();
+    expect(await finalizeRun.mock.results[0]?.value).toBeNull();
+    expect(prisma.routine.update).not.toHaveBeenCalled();
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
   it("retries handed-off setup failures with durable attempt accounting and backoff", async () => {
     const onRunStarted = vi.fn();
     const { run, enqueue, runtimeRun, prisma } = await runRoutine([], {

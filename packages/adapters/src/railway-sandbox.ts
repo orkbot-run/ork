@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import path from "node:path";
 import type {
@@ -17,6 +18,7 @@ import type {
   ScreenRequest,
   TerminalRequest,
 } from "@orkbot/adapter-kit";
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { COMPUTER_CACHE_ENV } from "@orkbot/core/node/desktop-runtime";
 import type * as Railway from "railway";
@@ -160,7 +162,8 @@ export class RailwaySandboxProvider implements SandboxProvider {
         // Replace stuck, ended, and non-PRIVATE sandboxes; the portable home restores the workspace.
         await remove(railway, sandbox);
       } catch (error) {
-        if (!(error instanceof railway.SandboxNotFoundError)) throw error;
+        if (!(error instanceof railway.SandboxNotFoundError))
+          throw railwayStartupError(railway, error);
       }
     }
     let sandbox: Sandbox;
@@ -206,7 +209,7 @@ export class RailwaySandboxProvider implements SandboxProvider {
         createdId = error.id;
       }
       if (createdId) await this.destroy(this.ref(createdId, request.botId, true), context);
-      throw error;
+      throw railwayStartupError(railway, error);
     }
     if (context.signal.aborted) {
       await this.destroy(this.ref(sandbox.id, request.botId, true), context);
@@ -631,6 +634,7 @@ function retriesWithoutIdleTimeout(railway: typeof Railway, error: unknown) {
     error instanceof railway.RailwayGraphQLError &&
     error.status < 500 &&
     error.status !== 401 &&
+    error.status !== 402 &&
     error.status !== 403 &&
     !hasRailwayErrorCode(railway, error, "LIMIT_EXCEEDED") &&
     !hasRailwayErrorCode(railway, error, "UNAUTHORIZED")
@@ -732,3 +736,11 @@ const PREPARE_RAILWAY_DESKTOP = [
   INSTALL_LINUX_BROWSER,
   `mkdir -p ${WORKSPACE}/.browser-profiles`,
 ].join("\n");
+
+function railwayStartupError(railway: typeof Railway, error: unknown): unknown {
+  return error instanceof railway.RailwayGraphQLError && [401, 402].includes(error.status)
+    ? new SandboxAccountError({
+        cause: new Error(`Railway startup request refused (HTTP ${error.status})`),
+      })
+    : error;
+}

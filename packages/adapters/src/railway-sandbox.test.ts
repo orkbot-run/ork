@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -9,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { ComputerRef, ProcessEvent } from "@orkbot/adapter-kit";
+import { COMPUTER_ACCOUNT_REFUSED_ERROR } from "@orkbot/contracts";
 import { screenDisplayArgv, shellQuote } from "@orkbot/core/node/desktop-runtime";
 import type { RailwayGraphQLErrorItem, SandboxInfo } from "railway";
 import {
@@ -413,7 +415,7 @@ describe("Railway sandbox lifecycle", () => {
     if (status) api.failureStatus.set("RailwaySandboxCreate", status);
     try {
       await expect(provider.provision({ botId: "bot", homePath: "/unused" }, ctx)).rejects.toThrow(
-        `Railway API request failed (${code})`,
+        status === 401 ? COMPUTER_ACCOUNT_REFUSED_ERROR : `Railway API request failed (${code})`,
       );
       expect(api.operations.filter((name) => name === "RailwaySandboxCreate")).toHaveLength(1);
       expect(warn).not.toHaveBeenCalled();

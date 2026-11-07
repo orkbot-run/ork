@@ -1,6 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import * as Appstream from "@alicloud/appstream-center20210218";
 import * as Ecd from "@alicloud/ecd20200930";
-import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
+import {
+  SandboxAccountError,
+  SandboxRateLimitError,
+  SandboxUnresponsiveError,
+} from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WuyingOpenApi } from "./wuying-openapi.js";
 
@@ -82,12 +90,12 @@ describe("Wuying official SDK control plane", () => {
       SandboxRateLimitError,
     );
     call.mockRejectedValue({ code: "InvalidAccessKeyId.NotFound", data: "fake-secret" });
-    await expect(api().desktopStatus("ecd-fake", signal())).rejects.toThrow(
-      /^Wuying DescribeDesktops: the AccessKey was refused$/,
+    await expect(api().desktopStatus("ecd-fake", signal())).rejects.toBeInstanceOf(
+      SandboxAccountError,
     );
     call.mockRejectedValue({ code: "Forbidden.RAM", statusCode: 403 });
-    await expect(api().startDesktop("ecd-fake", signal())).rejects.toThrow(
-      "Wuying StartDesktops: the AccessKey is not allowed this action",
+    await expect(api().startDesktop("ecd-fake", signal())).rejects.toBeInstanceOf(
+      SandboxAccountError,
     );
     call.mockRejectedValue({ code: "InvalidDesktop.NotFound" });
     await expect(api().desktopStatus("ecd-fake", signal())).rejects.toMatchObject({
@@ -111,5 +119,55 @@ describe("Wuying official SDK control plane", () => {
     await vi.waitFor(() => expect(call).toHaveBeenCalledOnce());
     pending.abort(new Error("cancelled"));
     await expect(request).rejects.toThrow("cancelled");
+  });
+});
+
+describe("Wuying startup account refusal scope", () => {
+  it("drops signed URLs and raw SDK fields from terminal refusal diagnostics", async () => {
+    vi.spyOn(EcdClient.prototype, "callApi").mockRejectedValue({
+      code: "InvalidAccessKeyId.NotFound",
+      message: "fake-secret",
+      data: { signedUrl: "https://example.test/?token=fake-secret" },
+      request: { key: "fake-secret" },
+    });
+    const error = await api()
+      .startDesktop("ecd-fake", signal())
+      .catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(SandboxAccountError);
+    expect(error).toMatchObject({
+      cause: { message: "Wuying StartDesktops: credentials were refused" },
+    });
+    expect(JSON.stringify(error)).not.toContain("fake-secret");
+    expect(String((error as Error).cause)).not.toContain("fake-secret");
+  });
+  it.each(["StopDesktops", "DescribeDesktops"])(
+    "does not relabel %s permission denial as startup account refusal",
+    async (action) => {
+      vi.spyOn(EcdClient.prototype, "callApi").mockRejectedValue({
+        code: "Forbidden.RAM",
+        statusCode: 403,
+      });
+      const client = api();
+      const pending =
+        action === "StopDesktops"
+          ? client.stopDesktop("ecd-fake", signal())
+          : client.desktopStatus("ecd-fake", signal());
+      const error = await pending.catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(SandboxAccountError);
+    },
+  );
+  it.each([
+    { statusCode: 403 },
+    { code: "Forbidden.Resource", statusCode: 403 },
+    { code: "DesktopNotFound", statusCode: 403 },
+    { code: "Throttling.User", statusCode: 403 },
+  ])("does not infer account refusal from opaque or unrelated 403: %j", async (failure) => {
+    vi.spyOn(EcdClient.prototype, "callApi").mockRejectedValue(failure);
+    const error = await api()
+      .startDesktop("ecd-fake", signal())
+      .catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(SandboxAccountError);
   });
 });

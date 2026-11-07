@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -19,6 +20,7 @@ import type {
   ScreenRequest,
   ScreenSession,
 } from "@orkbot/adapter-kit";
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import {
   browserProfilePathForScreen,
@@ -434,7 +436,7 @@ export class CreateOSSandboxProvider implements SandboxProvider {
         });
         return this.ref(id, request.botId, false);
       } catch (error) {
-        if (!isCreateOSSandboxGone(error)) throw error;
+        if (!isCreateOSSandboxGone(error)) throw createosStartupError(error);
       }
     }
 
@@ -447,14 +449,16 @@ export class CreateOSSandboxProvider implements SandboxProvider {
         ...(autoPause === undefined ? {} : { auto_pause_after_seconds: autoPause }),
       },
       context,
-    );
+    ).catch((error: unknown) => {
+      throw createosStartupError(error);
+    });
     if (!created?.id) throw new Error("CreateOS did not return a sandbox id");
     try {
       const settled = await this.waitUntilSettled(created.id, context);
       if (settled.status !== "running") throw new Error(`CreateOS sandbox is ${settled.status}`);
     } catch (error) {
       await this.abandonSandbox(created.id);
-      throw error;
+      throw createosStartupError(error);
     }
     return this.ref(created.id, request.botId, true);
   }
@@ -1853,4 +1857,12 @@ function isBrowserApplication(application: string): boolean {
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
+function createosStartupError(error: unknown): unknown {
+  return error instanceof CreateOSHttpError && [401, 402].includes(error.status)
+    ? new SandboxAccountError({
+        cause: new Error(`CreateOS startup request refused (HTTP ${error.status})`),
+      })
+    : error;
 }

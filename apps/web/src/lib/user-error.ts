@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; SSO and recipient-consent messages follow LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { t } from "@lingui/core/macro";
 import {
   AI_CONSENT_REQUIRED,
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
   CONNECTOR_AUTH_UNAVAILABLE,
   isVoiceAccountErrorCode,
   MCP_OAUTH_CLIENT_REQUIRED,
@@ -19,6 +21,7 @@ import {
   MODEL_IMAGE_INPUT_UNKNOWN,
   userErrorMessage,
 } from "@orkbot/core";
+import { translateRunError } from "./run-error";
 
 /** Text for a failure: human messages pass through; network and implementation detail become copy. */
 export function errorText(error: unknown, fallback = t`Something went wrong. Try again.`): string {
@@ -30,6 +33,8 @@ export function errorText(error: unknown, fallback = t`Something went wrong. Try
         : undefined;
   if (typeof message === "string" && message.trim() === AI_CONSENT_REQUIRED)
     return t`Review data sharing before continuing.`;
+  if (typeof message === "string" && message.trim() === COMPUTER_ACCOUNT_REFUSED_ERROR)
+    return translateRunError(COMPUTER_ACCOUNT_REFUSED_ERROR);
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_ERROR)
     return t`This model cannot read images. Choose a model that supports images.`;
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_UNKNOWN)

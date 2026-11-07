@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import { createHash } from "node:crypto";
 import type * as TimersPromises from "node:timers/promises";
@@ -8,6 +9,7 @@ import type { FileUrlResponse, SandboxStateEnum } from "@boatdev/sdk";
 import { FetchError, ResponseError } from "@boatdev/sdk";
 import type { ComputerRef, PortableFile, StreamedPortableFile } from "@orkbot/adapter-kit";
 import {
+  SandboxAccountError,
   SandboxDamagedError,
   SandboxRateLimitError,
   SandboxSizeUnavailableError,
@@ -1416,7 +1418,10 @@ describe("BoatSandboxProvider", () => {
     api.unauthorized();
 
     const error = await reconnect(provider, computer).catch((failure: unknown) => failure);
-    expect((error as Error).message).toContain("HTTP 401, unauthorized");
+    expect(error).toBeInstanceOf(SandboxAccountError);
+    expect((error as Error).cause).toMatchObject({
+      message: "Boat startup request refused (HTTP 401)",
+    });
     expect(isSandboxGoneError(error)).toBe(false);
     expect(error).not.toBeInstanceOf(SandboxRateLimitError);
   });

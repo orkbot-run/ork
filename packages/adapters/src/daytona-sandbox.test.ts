@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import type { CreateSandboxFromSnapshotParams, FileInfo, SandboxState } from "@daytona/sdk";
 import {
@@ -13,6 +14,7 @@ import {
   DaytonaTimeoutError,
   DaytonaValidationError,
 } from "@daytona/sdk";
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DaytonaSandbox, DaytonaSandboxSdk } from "./daytona-sandbox.js";
 import { DaytonaSandboxProvider } from "./daytona-sandbox.js";
@@ -468,7 +470,7 @@ describe("DaytonaSandboxProvider", () => {
       {
         name: "401 is surfaced",
         arrange: (fixture) => fixture.get.mockRejectedValueOnce(unauthorized),
-        expected: unauthorized,
+        expected: new SandboxAccountError(),
       },
       {
         name: "429 is surfaced",

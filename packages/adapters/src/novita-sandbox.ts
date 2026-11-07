@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import { setTimeout as delay } from "node:timers/promises";
 import { sandboxIdleMs } from "./computer-idle.js";
 import { NOVITA_COMPUTER_TEMPLATE } from "./novita-template.js";
@@ -112,6 +116,8 @@ export class NovitaSandboxProvider extends RemoteDesktopSandboxProvider {
       template: options.template?.trim() || NOVITA_COMPUTER_TEMPLATE,
       sdk: sdk ?? novitaSdk(options.apiKey, options.onUnsafeStop),
       isTimeoutError: (error) => isNamed(error, "TimeoutError"),
+      // Other statuses are only prose in this SDK; do not guess account failures from it.
+      isAccountError: (error) => isNamed(error, "AuthenticationError"),
     });
   }
 }

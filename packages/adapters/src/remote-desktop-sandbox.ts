@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
 import type {
   AdapterContext,
@@ -18,6 +19,7 @@ import type {
   ScreenSession,
   TerminalRequest,
 } from "@orkbot/adapter-kit";
+import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { sandboxIdleMs } from "./computer-idle.js";
@@ -169,6 +171,7 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
       template: string;
       fallbackTemplate?: string;
       isTimeoutError: (error: unknown) => boolean;
+      isAccountError: (error: unknown) => boolean;
     },
   ) {}
 
@@ -299,12 +302,15 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
       } catch (error) {
         this.boxes.delete(request.providerRef);
         // A transport failure says nothing about the workspace still on the server.
-        if (!isSandboxGoneError(error)) throw error;
+        const failure = this.startupError(error);
+        if (!isSandboxGoneError(failure)) throw failure;
       }
     }
     const desktop = await this.createDesktop(
       remoteDesktopCreateOptions(request.botId, this.config.apiKey),
-    );
+    ).catch((error: unknown) => {
+      throw this.startupError(error);
+    });
     this.boxes.set(desktop.sandboxId, desktop);
     this.lastTouchedAt.set(desktop.sandboxId, Date.now());
     return {
@@ -314,6 +320,14 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
       providerRef: desktop.sandboxId,
       fresh: true,
     };
+  }
+
+  private startupError(error: unknown): unknown {
+    return this.config.isAccountError(error)
+      ? new SandboxAccountError({
+          cause: new Error(`${this.config.label} startup credentials or payment were refused`),
+        })
+      : error;
   }
 
   async isRunning(computer: ComputerRef, context: AdapterContext): Promise<boolean> {

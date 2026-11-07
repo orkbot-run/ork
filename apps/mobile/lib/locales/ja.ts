@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "The computer service cannot start computers for this account.":
+    "このアカウントではコンピューターサービスがコンピューターを起動できません。",
   Rule: "ルール",
   Inactive: "無効",
   "Other tool": "その他のツール",

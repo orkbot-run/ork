@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; startup account refusal changes follow LICENSE.md.
+
 import type { RunErrorKind } from "@orkbot/contracts";
 import {
+  COMPUTER_ACCOUNT_REFUSED_ERROR,
   COMPUTER_ALLOWANCE_USED_ERROR,
   COMPUTER_RATE_LIMIT_ERROR,
   providerQuotaResetAt,
@@ -229,6 +234,9 @@ export function normalizeRunError(
   period?: "none" | "daily" | "weekly" | "monthly";
 } {
   const trimmed = details.trim();
+  if (trimmed === COMPUTER_ACCOUNT_REFUSED_ERROR) {
+    return { summary: translate(COMPUTER_ACCOUNT_REFUSED_ERROR), details };
+  }
   if ([MODEL_IMAGE_INPUT_ERROR, MODEL_IMAGE_INPUT_UNKNOWN].includes(trimmed)) {
     return {
       summary: translate(trimmed),
