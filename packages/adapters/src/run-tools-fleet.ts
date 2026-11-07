@@ -264,6 +264,12 @@ export const fleetTools: ToolHandlers = {
         await updateChildBot({ ...deps, runSecrets: ctx.secrets }, ctx.fleetRun, args),
       );
     }
+    if (
+      call.nextApprovedTool === call.name &&
+      argumentGiven(args.instructions) &&
+      typeof args.previousInstructions !== "string"
+    )
+      return call.finish({ error: OWN_INSTRUCTIONS_BASELINE_UNKNOWN_ERROR });
     // A held change (see prepareOwnBotUpdate) runs only once the owner or Auto Review approves it.
     if (typeof args.previousInstructions === "string") {
       if ((call.nextApprovedTool !== call.name && !call.bypassApproval) || !call.claimedEffect)

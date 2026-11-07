@@ -85,6 +85,37 @@ beforeEach(() => {
 });
 
 describe("dispatchTool audit outcomes", () => {
+  it.each([undefined, "bot-1"])(
+    "taints a restored foreign target regardless of reconstructed target %s",
+    async (bot_id) => {
+      const base = dispatchContext(false);
+      const ctx = {
+        ...base,
+        deps: {
+          ...base.deps,
+          prisma: {
+            ...base.deps.prisma,
+            bot: {
+              ...base.deps.prisma.bot,
+              findUnique: async () => ({ fleetManagement: false }),
+            },
+          },
+        },
+      };
+      ctx.tools.approvedReplays = createApprovedEffectReplayQueue([
+        {
+          kind: "update_bot",
+          request: { bot_id: "peer-1", name: "Approved peer" },
+          idempotencyKey: "saved-key",
+        },
+      ]);
+      expect(await applyTool(ctx as never, "update_bot", { bot_id }, "call-1")).toEqual({
+        error: "This tool is disabled for this bot.",
+      });
+      expect(ctx.state.tainted).toBe(true);
+    },
+  );
+
   it("dispatches a connector named delete_bot to its connector instead of local archival", async () => {
     const execute = vi.fn(async function* () {
       yield { type: "result", data: { deleted: "remote-object" } };

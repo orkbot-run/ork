@@ -29,6 +29,7 @@ import {
   lazyCatalogTools,
   resolveCatalogCall,
 } from "./lazy-tool-catalog.js";
+import { OWN_INSTRUCTIONS_BASELINE_UNKNOWN_ERROR } from "./run-context.js";
 import type { TurnCheckpoint } from "./turn-checkpoint.js";
 import { serializeTurnCheckpoint } from "./turn-checkpoint.js";
 import type { UserDeviceGateway } from "./user-device-protocol.js";
@@ -71,6 +72,7 @@ type Effect = {
   result?: unknown;
   reviewDecision?: string;
   runId?: string;
+  spaceId?: string;
 };
 
 function fixture({
@@ -1507,6 +1509,77 @@ describe("own instructions through update_bot", () => {
   beforeEach(() => {
     reviewMock.mockReset();
     reviewMock.mockResolvedValue({ decision: "pass", reason: "Asked for", model: "mock" });
+  });
+  it("uses the same own instruction approval for an explicit self id with management disabled", async () => {
+    const f = fixture({ name: "update_bot", builtin: true, fleetManagement: false });
+    f.setCalls([{ args: { bot_id: "bot-1", instructions: first }, executionId: "self-call" }]);
+    await f.run();
+    expect(f.effects).toHaveLength(1);
+    expect(f.effects[0]).toMatchObject({ kind: "update_bot", status: "intended", request: held });
+    expect(f.effects[0]!.request).not.toHaveProperty("bot_id");
+    const key = f.effects[0]!.idempotencyKey;
+    f.effects[0]!.status = "approved";
+    f.setCalls([
+      {
+        args: { bot_id: "foreign-id", instructions: "Forged replacement" },
+        executionId: "replay-call",
+      },
+    ]);
+    await f.run();
+    expect(f.instructionState.instructions).toBe(first);
+    expect(f.instructionState.instructionHistory).toHaveLength(1);
+    expect(f.effects).toHaveLength(1);
+    expect(f.effects[0]).toMatchObject({ idempotencyKey: key, status: "completed" });
+  });
+
+  it("restores a legacy explicit self target without changing its saved key or tainting the next own change", async () => {
+    const f = fixture({ name: "update_bot", builtin: true, fleetManagement: false });
+    const request = { ...held, bot_id: "bot-1", previousInstructionsFromBaseline: true };
+    const idempotencyKey = approvalEffectKey("run-1", "update_bot", request);
+    f.effects.push({
+      id: "legacy-self",
+      runId: "run-1",
+      spaceId: "space-1",
+      kind: "update_bot",
+      status: "approved",
+      idempotencyKey,
+      request,
+    });
+    f.setCalls([
+      {
+        args: { bot_id: "foreign-id", instructions: "Forged replacement" },
+        executionId: "replay-call",
+      },
+      { args: { bot_id: "bot-1", readAloud: true }, executionId: "next-own-call" },
+    ]);
+    await f.run();
+    expect(f.instructionState.instructions).toBe(first);
+    expect(f.instructionState.instructionHistory).toHaveLength(1);
+    expect(f.results.at(-1)).toMatchObject({ ok: true, readAloud: true });
+    expect(f.effects.find((effect) => effect.id === "legacy-self")).toMatchObject({
+      idempotencyKey,
+      request,
+      status: "completed",
+    });
+  });
+  it("refuses a legacy self approval without the held instruction baseline", async () => {
+    const f = fixture({ name: "update_bot", builtin: true, fleetManagement: false });
+    const request = { bot_id: "bot-1", instructions: first };
+    f.effects.push({
+      id: "legacy-self-without-baseline",
+      runId: "run-1",
+      spaceId: "space-1",
+      kind: "update_bot",
+      status: "approved",
+      request,
+      idempotencyKey: approvalEffectKey("run-1", "update_bot", request),
+    });
+    f.setCalls([{ args: {}, executionId: "replay-call" }]);
+    await f.run();
+    expect(f.results.at(-1)).toMatchObject({ error: OWN_INSTRUCTIONS_BASELINE_UNKNOWN_ERROR });
+    expect(f.instructionState.instructions).toBe("Draft only");
+    expect(f.instructionState.instructionHistory).toHaveLength(0);
+    expect(f.effects[0]).toMatchObject({ status: "completed", request });
   });
   it.each(["user", "created", "routine"])(
     "sets instructions without a card once Auto Review passes them in a %s run",

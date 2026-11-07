@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited dispatch remains Apache-2.0; Ork self-target and replay taint guards are PolyForm-covered.
+
 import type { AgentToolExecutionObserver } from "@orkbot/adapter-kit";
 import { toolResultTaintsRun } from "@orkbot/core";
 import { isTerminatingReplyResult } from "./approval-effect.js";
@@ -29,7 +34,7 @@ import {
   userComputerShell,
 } from "./run-tools-user-computer.js";
 import { strategicInitiativeToolAllowed } from "./strategic-initiative.js";
-import { argumentGiven } from "./update-bot-patch.js";
+import { argumentGiven, normalizeOwnBotTarget } from "./update-bot-patch.js";
 
 const TOOL_HANDLERS = new Map<string, ToolHandler>([
   ...Object.entries(computerTools),
@@ -65,58 +70,52 @@ export async function applyTool(
   _route?: unknown,
   observer?: AgentToolExecutionObserver,
 ) {
+  if (name === "update_bot") args = normalizeOwnBotTarget(args, ctx.bot.id);
+  let resolvedArgs = args;
   try {
-    return await dispatchTool(ctx, name, args, executionId, observer);
+    ctx.context.signal.throwIfAborted();
+    if (!strategicInitiativeToolAllowed(name, ctx.run)) {
+      return { error: "Daily check-ins can only ask or message the user." };
+    }
+    if (ctx.state.handedOff) {
+      return {
+        error: "This stage was handed off. End the turn without more tool calls.",
+      };
+    }
+    if (ctx.tools.disabled.has(name)) {
+      return { error: "This tool is disabled for this bot." };
+    }
+    if (PAGE_BROWSER_TOOL_NAMES.has(name) && !ctx.computer.pageBrowserAllowed) {
+      return { error: "Page browser is unavailable on this computer." };
+    }
+    if (IMAGE_RETURNING_COMPUTER_TOOLS.has(name) && !ctx.computer.acceptsImages) {
+      return { error: MODEL_CANNOT_SEE_MESSAGE };
+    }
+    const request = await resolveToolRequest(ctx, name, args, executionId);
+    if ("error" in request) return request;
+    resolvedArgs = request.args;
+    const refused = await prepareToolRequest(ctx, request);
+    resolvedArgs = request.args;
+    if (refused) return refused;
+    noteComputerTaskStep(ctx.state.reply, request.name);
+    const gate = await gateToolCall(ctx, request, observer);
+    if ("result" in gate) return gate.result;
+    if (!gate.call.applied) return await toolHandler(gate.call.name)(ctx, gate.call);
+    let outcome: "success" | "failure" = "failure";
+    try {
+      const result = await toolHandler(gate.call.name)(ctx, gate.call);
+      if (!isToolError(result)) outcome = "success";
+      return result;
+    } finally {
+      await auditToolCall(ctx, gate.call.name, outcome, {
+        effectId: gate.call.applied.effect.id,
+        autoApproved: gate.call.bypassApproval,
+      });
+    }
   } finally {
-    // Editing its own profile returns only what this run wrote; a child's profile is another bot's.
-    const ownProfile = name === "update_bot" && !argumentGiven(args.bot_id);
+    // A replay's stored target decides whether the result came from this bot or another one.
+    const ownProfile = name === "update_bot" && !argumentGiven(resolvedArgs.bot_id);
     if (toolResultTaintsRun(name) && !ownProfile) ctx.state.tainted = true;
-  }
-}
-
-async function dispatchTool(
-  ctx: RunContext,
-  name: string,
-  args: Record<string, unknown>,
-  executionId: string,
-  observer: AgentToolExecutionObserver | undefined,
-) {
-  ctx.context.signal.throwIfAborted();
-  if (!strategicInitiativeToolAllowed(name, ctx.run)) {
-    return { error: "Daily check-ins can only ask or message the user." };
-  }
-  if (ctx.state.handedOff) {
-    return {
-      error: "This stage was handed off. End the turn without more tool calls.",
-    };
-  }
-  if (ctx.tools.disabled.has(name)) {
-    return { error: "This tool is disabled for this bot." };
-  }
-  if (PAGE_BROWSER_TOOL_NAMES.has(name) && !ctx.computer.pageBrowserAllowed) {
-    return { error: "Page browser is unavailable on this computer." };
-  }
-  if (IMAGE_RETURNING_COMPUTER_TOOLS.has(name) && !ctx.computer.acceptsImages) {
-    return { error: MODEL_CANNOT_SEE_MESSAGE };
-  }
-  const request = await resolveToolRequest(ctx, name, args, executionId);
-  if ("error" in request) return request;
-  const refused = await prepareToolRequest(ctx, request);
-  if (refused) return refused;
-  noteComputerTaskStep(ctx.state.reply, request.name);
-  const gate = await gateToolCall(ctx, request, observer);
-  if ("result" in gate) return gate.result;
-  if (!gate.call.applied) return toolHandler(gate.call.name)(ctx, gate.call);
-  let outcome: "success" | "failure" = "failure";
-  try {
-    const result = await toolHandler(gate.call.name)(ctx, gate.call);
-    if (!isToolError(result)) outcome = "success";
-    return result;
-  } finally {
-    await auditToolCall(ctx, gate.call.name, outcome, {
-      effectId: gate.call.applied.effect.id,
-      autoApproved: gate.call.bypassApproval,
-    });
   }
 }
 

@@ -53,7 +53,11 @@ import { scheduleCreateRefusal } from "./run-tools-tasks.js";
 import { USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
-import { argumentGiven, ownBotInstructionsOffset } from "./update-bot-patch.js";
+import {
+  argumentGiven,
+  normalizeOwnBotTarget,
+  ownBotInstructionsOffset,
+} from "./update-bot-patch.js";
 import type { VaultCardUse } from "./vault-card-use.js";
 import { cardUseSummary, requestedCardUse, vaultCardUseOf } from "./vault-card-use.js";
 
@@ -99,6 +103,7 @@ export async function resolveToolRequest(
   executionId: string,
 ): Promise<ToolRequest | ToolError> {
   const { deps, context } = ctx;
+  if (name === "update_bot") args = normalizeOwnBotTarget(args, ctx.bot.id);
   const approvedReplays = ctx.tools.approvedReplays;
   let connectorCall: ConnectorCall = {
     tool: name,
@@ -283,6 +288,10 @@ export async function resolveToolRequest(
       }
     }
   }
+  if (name === "update_bot") {
+    args = normalizeOwnBotTarget(args, ctx.bot.id);
+    connectorCall = { ...connectorCall, args };
+  }
   return {
     name,
     args,
@@ -311,6 +320,7 @@ export async function prepareToolRequest(
 ): Promise<PrepareRefusal | undefined> {
   const { deps, run, bot } = ctx;
   const { name, executionId, nextApprovedTool } = request;
+  if (name === "update_bot") request.args = normalizeOwnBotTarget(request.args, bot.id);
   let { args } = request;
   if (name === "save_page") {
     const prepared = await preparePageSaveRequest(ctx, args, nextApprovedTool === name);

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited product journeys remain Apache-2.0; Ork explicit self-target coverage is PolyForm-covered.
+
 import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -4140,6 +4145,38 @@ describeJourneys("required product journeys", () => {
         expect((await childState(bot.id)).name).toBe(name);
       }
     });
+
+    it.each([false, true])(
+      "update_bot with its exact own id commits once with management %s",
+      async (fleetManagement) => {
+        const { cookie, chief } = await fleetOwner(`self-target-${fleetManagement}`);
+        await rpc(app, cookie, "bots/update", { botId: chief.id, fleetManagement });
+        const { id: threadId } = await prisma.thread.findFirstOrThrow({
+          where: { botId: chief.id },
+        });
+        const ownState = () =>
+          prisma.bot.findUniqueOrThrow({
+            where: { id: chief.id },
+            select: { name: true, fleetManagement: true },
+          });
+        const before = await prisma.event.count({
+          where: { threadId, type: "bot.updated" },
+        });
+        const name = "Own profile";
+        const done = await sendAndWait(app, cookie, chief.id, `rename bot ${chief.id} to ${name}`);
+        expect(await toolOutcomes(done.run.id, "update_bot")).toEqual([
+          expect.objectContaining({ outcome: "succeeded" }),
+        ]);
+        expect(await ownState()).toEqual({ name, fleetManagement });
+        await runAsSystem("fixture completed-run replay", () =>
+          executor.continueRun(done.run.id, "fixture-retry"),
+        );
+        expect(await prisma.event.count({ where: { threadId, type: "bot.updated" } })).toBe(
+          before + 1,
+        );
+        expect(await ownState()).toEqual({ name, fleetManagement });
+      },
+    );
 
     it("turning the switch off during the pause refuses the approved child change", async () => {
       const { cookie, chief } = await fleetOwner("switch-pause");

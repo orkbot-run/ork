@@ -105,6 +105,31 @@ describe("prepareToolRequest: update_bot owner settings after outside content", 
 });
 
 describe("prepareToolRequest: unchanged own settings and paging", () => {
+  it("treats the exact caller id as its own paging target with management disabled", async () => {
+    const { ctx, request } = ownBotUpdateCall();
+    ctx.deps.prisma.bot.findUnique = async () => ({ fleetManagement: false });
+    ctx.source.ownerStartedRun = false;
+    const call = request();
+    call.args = { bot_id: ctx.bot.id, instructions_offset: 8000, model: "other/model" };
+    await expect(prepareToolRequest(ctx as never, call)).resolves.toBeUndefined();
+    expect(call.args).toEqual({ instructions_offset: 8000, model: "other/model" });
+    expect(call.effectRequest).toEqual(call.args);
+    expect(ctx.deps.prisma.bot.findUniqueOrThrow).not.toHaveBeenCalled();
+  });
+
+  it.each(["other-bot", " bot-1 ", 1])(
+    "keeps non-exact target %s behind fleet permissions",
+    async (bot_id) => {
+      const { ctx, request } = ownBotUpdateCall();
+      ctx.deps.prisma.bot.findUnique = async () => ({ fleetManagement: false });
+      const call = request();
+      call.args = { bot_id, instructions_offset: 8000 };
+      await expect(prepareToolRequest(ctx as never, call)).resolves.toEqual({
+        error: "This tool is disabled for this bot.",
+      });
+    },
+  );
+
   it("allows an echoed settings read after outside content without requiring approval", async () => {
     const { ctx, live, request } = ownBotUpdateCall();
     ctx.source.ownerStartedRun = false;

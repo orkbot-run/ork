@@ -66,6 +66,16 @@ export function argumentGiven(value: unknown): boolean {
   return typeof value !== "string" || value.trim().length > 0;
 }
 
+/** Only the caller's exact id is interchangeable with an omitted own-profile target. */
+export function normalizeOwnBotTarget(
+  args: Record<string, unknown>,
+  botId: string,
+): Record<string, unknown> {
+  if (args.bot_id !== botId) return args;
+  const { bot_id: _self, ...own } = args;
+  return own;
+}
+
 /** Zero is the ordinary call; a positive offset always requests an instructions page. */
 export function ownBotInstructionsOffset(
   args: Record<string, unknown>,
