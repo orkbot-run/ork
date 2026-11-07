@@ -10,6 +10,7 @@ import { StrictMode, useEffect, useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, useLocation } from "react-router-dom";
 import { App } from "./App";
+import { AiConsentDialog } from "./components/AiConsentDialog";
 import { DesktopUpdatesProvider } from "./components/DesktopUpdates";
 import { I18nBootstrap } from "./components/I18nBootstrap";
 import { applyUiDirection } from "./lib/apply-ui-direction";
@@ -75,6 +76,7 @@ createRoot(document.getElementById("root")!, { onCaughtError: reportCaughtReactE
             <TooltipProvider>
               <BotAvatarActivityProvider source={webLogoAvatarActivity}>
                 <App />
+                <AiConsentDialog />
               </BotAvatarActivityProvider>
             </TooltipProvider>
             <Toaster />

@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; explicit fixture consent follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioConnector, FakeComposioClient, FakeSandboxProvider } from "@orkbot/adapters";
+import type { AiConsentStatus } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
 import { sessionCookieHeader } from "./index.js";
@@ -127,6 +132,19 @@ describe.skipIf(!databaseAvailable)("offline Pi computer approval", () => {
           botId: bot.id,
           modelProvider: model.model.provider,
           modelId: model.model.id,
+        });
+        const consentTarget = { botId: bot.id, uses: ["model", "memory"] };
+        const consent = await rpc<AiConsentStatus>(
+          handles.app,
+          cookie,
+          "aiConsent/status",
+          consentTarget,
+        );
+        await rpc(handles.app, cookie, "aiConsent/allow", {
+          ...consentTarget,
+          scope: consent.scope,
+          version: consent.version,
+          keys: consent.recipients.filter((recipient) => !recipient.allowed).map(({ key }) => key),
         });
         const storedBot = await db.bot.findUniqueOrThrow({ where: { id: bot.id } });
         await db.userActionApprovalRule.create({

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is retained; send target consent additions follow LICENSE.md.
 // Modified by Ork contributors: canonical domain links now use ork.run.
 import * as z from "zod";
 import { SettingsScopeSchema } from "./settings-scope.js";
@@ -14,14 +18,19 @@ export const AI_DATA_DISCLOSURES: Record<AiDataUse, string> = {
   memory:
     "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context.",
 };
+export const SEND_ROUTINE_LIMIT = 64;
+export const AiConsentTargetSchema = z.object({
+  botId: z.string().optional(),
+  groupId: z.string().optional(),
+  routineId: z.string().optional(),
+  routineIds: z.array(z.string()).max(SEND_ROUTINE_LIMIT).optional(),
+  /** Which copy of the member's settings names the recipients. */
+  settingsScope: SettingsScopeSchema.optional(),
+});
 export const AiConsentQuerySchema = z
   .object({
-    botId: z.string().optional(),
-    groupId: z.string().optional(),
-    routineId: z.string().optional(),
+    ...AiConsentTargetSchema.shape,
     uses: z.array(AiDataUseSchema).optional(),
-    /** Which copy of the member's settings names the recipients; omitted means the one that applies. */
-    settingsScope: SettingsScopeSchema.optional(),
   })
   .default({});
 export type AiConsentQuery = z.infer<typeof AiConsentQuerySchema>;

@@ -1911,6 +1911,53 @@ describe("mobile API authentication", () => {
     expect(promptAiConsent).toHaveBeenLastCalledWith(recipient, "https://example.com/privacy");
   });
 
+  it("asks about and grants all routine mentions with the active chat before a mobile send", async () => {
+    vi.mocked(promptAiConsent).mockResolvedValue(true);
+    const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url, options) => {
+        const path = new URL(String(url)).pathname;
+        calls.push({ path, body: options?.body ? JSON.parse(String(options.body)).json : {} });
+        return jsonResponse({
+          json: path.endsWith("/status")
+            ? {
+                scope: "account-space",
+                version: "2026-09-14",
+                recipients: [
+                  { key: "chat", name: "Chat model", use: "model", detail: "", allowed: false },
+                  {
+                    key: "routine",
+                    name: "Routine model",
+                    use: "model",
+                    detail: "",
+                    allowed: false,
+                  },
+                ],
+              }
+            : { ok: true },
+        });
+      }),
+    );
+    await rpc("threads/sendWithRoutines", {
+      botId: "active-bot",
+      routineIds: ["paused-a", "paused-b"],
+      clientNonce: "fixture",
+      text: "Draft",
+    });
+    const consent = calls.filter((call) => call.path.includes("/aiConsent/"));
+    expect(consent.map((call) => call.path)).toEqual([
+      "/rpc/aiConsent/status",
+      "/rpc/aiConsent/allow",
+      "/rpc/aiConsent/allow",
+    ]);
+    for (const call of consent)
+      expect(call.body).toMatchObject({
+        botId: "active-bot",
+        routineIds: ["paused-a", "paused-b"],
+      });
+    expect(calls.at(-1)?.path).toBe("/rpc/threads/sendWithRoutines");
+  });
   it("coalesces concurrent mobile consent checks before sending each request once", async () => {
     vi.mocked(promptAiConsent).mockClear();
     vi.mocked(promptAiConsent).mockResolvedValue(true);

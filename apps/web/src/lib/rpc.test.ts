@@ -4,6 +4,7 @@
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { answerAiConsent, currentAiConsentPrompt, subscribeAiConsent } from "./ai-consent";
 import {
   clearSpaceSelection,
   createSpaceRpc,
@@ -17,11 +18,20 @@ import {
 } from "./rpc.js";
 
 const notify = vi.hoisted(() => vi.fn());
-vi.mock("./auth", () => ({ authClient: { $store: { notify } } }));
+const authState = vi.hoisted(() => ({ sessionId: "fixture-session" }));
+vi.mock("./auth", () => ({
+  authClient: {
+    $store: {
+      notify,
+      atoms: { session: { get: () => ({ data: { session: { id: authState.sessionId } } }) } },
+    },
+  },
+}));
 
 afterEach(() => {
   vi.unstubAllGlobals();
   notify.mockClear();
+  authState.sessionId = "fixture-session";
 });
 
 describe("signed-out responses", () => {
@@ -308,7 +318,11 @@ describe("shell RPC space isolation", () => {
         localStorage: { getItem: () => selected },
       });
       const fetch = vi.fn(async (_input: Request, _init: RequestInit) =>
-        Response.json({ json: {} }),
+        Response.json({
+          json: new URL(_input.url).pathname.endsWith("/status")
+            ? { scope: "fixture", version: "fixture", recipients: [] }
+            : {},
+        }),
       );
       vi.stubGlobal("fetch", fetch);
       const shellRpc = createSpaceRpc(selectedSpaceId());
@@ -326,7 +340,7 @@ describe("shell RPC space isolation", () => {
         const init = call[1];
         return new Headers(init.headers).get("x-orkbot-space-id");
       });
-      expect(headers).toEqual([originalSpace, originalSpace, "space-b"]);
+      expect(headers).toEqual([originalSpace, originalSpace, originalSpace, "space-b"]);
     },
   );
 
@@ -387,4 +401,117 @@ describe("space-bound clients", () => {
     expect(rpcForSpace("space-a")).toBe(rpcForSpace("space-a"));
     expect(rpcForSpace("space-a")).not.toBe(rpcForSpace("space-b"));
   });
+});
+
+describe("send disclosure boundaries", () => {
+  function setup() {
+    const values = new Map([["orkbot:space-id", "space-a"]]);
+    vi.stubGlobal("window", {
+      location: { origin: "https://app.example.test" },
+      localStorage: {
+        getItem: (key: string) => values.get(key) ?? null,
+        setItem: (key: string, value: string) => values.set(key, value),
+      },
+      dispatchEvent: vi.fn(),
+    });
+    const calls: Array<{ path: string; body: Record<string, unknown>; space: string | null }> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (request: Request, init: RequestInit) => {
+        const path = new URL(request.url).pathname;
+        calls.push({
+          path,
+          body: JSON.parse(String(init.body)).json,
+          space: new Headers(init.headers).get("x-orkbot-space-id"),
+        });
+        return Response.json({
+          json: path.endsWith("/status")
+            ? {
+                scope: "account-space",
+                version: "fixture-version",
+                recipients: [
+                  { key: "first", name: "First", use: "model", detail: "", allowed: false },
+                  { key: "second", name: "Second", use: "model", detail: "", allowed: false },
+                ],
+              }
+            : {},
+        });
+      }),
+    );
+    return calls;
+  }
+  const input = {
+    botId: "active",
+    routineIds: ["paused-a", "paused-b"],
+    text: "Draft",
+    clientNonce: "nonce",
+  };
+  it("does not send or grant when the first recipient is declined", async () => {
+    const calls = setup();
+    const stop = subscribeAiConsent(() => undefined);
+    try {
+      const failed = rpc.threads.sendWithRoutines(input).catch((error: unknown) => error);
+      await vi.waitFor(() => expect(currentAiConsentPrompt()).not.toBeNull());
+      answerAiConsent(currentAiConsentPrompt()!, false);
+      expect(await failed).toBeInstanceOf(Error);
+      expect(calls.map((call) => call.path)).toEqual(["/rpc/aiConsent/status"]);
+      expect(calls[0]?.body).toMatchObject({
+        botId: "active",
+        routineIds: ["paused-a", "paused-b"],
+      });
+    } finally {
+      stop();
+    }
+  });
+  it("grants every disclosed recipient against the same target before dispatching once", async () => {
+    const calls = setup();
+    const stop = subscribeAiConsent(() => undefined);
+    try {
+      const request = rpc.threads.sendWithRoutines(input);
+      await vi.waitFor(() => expect(currentAiConsentPrompt()?.recipient.key).toBe("first"));
+      answerAiConsent(currentAiConsentPrompt()!, true);
+      await vi.waitFor(() => expect(currentAiConsentPrompt()?.recipient.key).toBe("second"));
+      answerAiConsent(currentAiConsentPrompt()!, true);
+      await request;
+      expect(calls.map((call) => call.path)).toEqual([
+        "/rpc/aiConsent/status",
+        "/rpc/aiConsent/allow",
+        "/rpc/aiConsent/allow",
+        "/rpc/threads/sendWithRoutines",
+      ]);
+      for (const call of calls) {
+        expect(call.space).toBe("space-a");
+        expect(call.body).toMatchObject({ botId: "active", routineIds: ["paused-a", "paused-b"] });
+      }
+      expect(calls.slice(1, 3).map((call) => call.body.keys)).toEqual([["first"], ["second"]]);
+    } finally {
+      stop();
+    }
+  });
+  it.each(["session", "space", "server"])(
+    "prevents a pending old-context grant and send after a %s change",
+    async (boundary) => {
+      const calls = setup();
+      const stop = subscribeAiConsent(() => undefined);
+      try {
+        const failed = rpc.threads.sendWithRoutines(input).catch((error: unknown) => error);
+        await vi.waitFor(() => expect(currentAiConsentPrompt()).not.toBeNull());
+        const prompt = currentAiConsentPrompt()!;
+        if (boundary === "session") authState.sessionId = "other-session";
+        else if (boundary === "space") {
+          selectSpace("space-b");
+          selectSpace("space-a");
+        } else
+          vi.stubGlobal("window", {
+            ...window,
+            location: { origin: "https://other.example.test" },
+          });
+        answerAiConsent(prompt, true);
+        expect(await failed).toBeInstanceOf(Error);
+        expect(calls.map((call) => call.path)).toEqual(["/rpc/aiConsent/status"]);
+      } finally {
+        stop();
+      }
+    },
+  );
 });

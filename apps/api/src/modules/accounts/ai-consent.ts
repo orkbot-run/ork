@@ -1,31 +1,28 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is retained; send preflight additions follow LICENSE.md.
 
 import { createHash } from "node:crypto";
 import {
   aiRecipient,
   cloudAgentsEnabled,
+  findConnectedModelCredential,
   parseModelSecret,
   resolveMemberMainModel,
   selectConfiguredModel,
   toStringRecord,
 } from "@orkbot/adapters";
-import type {
-  Actor,
-  AiConsentQuery,
-  AiConsentStatus,
-  AiRecipient,
-  SettingsScope,
-} from "@orkbot/contracts";
-import { AI_DISCLOSURE_VERSION, AI_PRIVACY_URL } from "@orkbot/contracts";
+import type { Actor, AiConsentQuery, AiConsentStatus, AiRecipient } from "@orkbot/contracts";
+import { AI_CONSENT_REQUIRED, AI_DISCLOSURE_VERSION, AI_PRIVACY_URL } from "@orkbot/contracts";
 import {
   findDefaultVoiceCredential,
   findModelCredential,
-  findModelCredentialById,
+  IsolationError,
   listModelRoleChoices,
   listVoicePreferences,
   modelRoleTarget,
+  Prisma,
   voicePreferenceTarget,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
@@ -42,11 +39,36 @@ export async function aiConsentStatus(
   const modelsEnabled = uses.includes("model") && deps.env.agentRuntime !== "scripted";
   const target =
     query.botId || query.groupId ? await resolveThreadTarget(deps.prisma, actor, query) : null;
-  const botIds = target
+  const routineIds = [
+    ...new Set([...(query.routineIds ?? []), ...(query.routineId ? [query.routineId] : [])]),
+  ];
+  // Explicit routines are authorized independently of the active chat, including paused ones.
+  const requestedRoutines = routineIds.length
+    ? await deps.prisma.routine.findMany({
+        where: {
+          id: { in: routineIds },
+          userId: actor.userId,
+          spaceId: actor.spaceId,
+          bot: { userId: actor.userId, spaceId: actor.spaceId, archivedAt: null },
+        },
+        select: { id: true, botId: true, modelProvider: true, modelId: true, thinkingLevel: true },
+      })
+    : [];
+  if (requestedRoutines.length !== routineIds.length) throw new IsolationError();
+  const threadBotIds = target
     ? target.kind === "bot"
       ? [target.botId]
       : target.memberBotIds
     : undefined;
+  const botIds =
+    target || routineIds.length
+      ? [
+          ...new Set([
+            ...(threadBotIds ?? []),
+            ...requestedRoutines.map((routine) => routine.botId),
+          ]),
+        ]
+      : undefined;
   const [preferences, roleChoices, main, bots, routines, voices, memory, settings, consents] =
     await Promise.all([
       modelsEnabled
@@ -74,9 +96,7 @@ export async function aiConsentStatus(
             select: { modelProvider: true, modelId: true, thinkingLevel: true },
           })
         : [],
-      // An active routine with its own model is another recipient for this bot.
-      // A paused routine is included only when this check is for that routine,
-      // so it does not block an ordinary chat message.
+      // Active chat routines can receive the message; explicit routines are added separately.
       modelsEnabled
         ? deps.prisma.routine.findMany({
             where: {
@@ -85,10 +105,12 @@ export async function aiConsentStatus(
               modelProvider: { not: null },
               modelId: { not: null },
               bot: { archivedAt: null },
-              ...(botIds ? { botId: { in: botIds } } : {}),
-              OR: query.routineId
-                ? [{ active: true }, { id: query.routineId }]
-                : [{ active: true }],
+              ...(threadBotIds
+                ? { botId: { in: threadBotIds } }
+                : routineIds.length
+                  ? { id: { in: [] } }
+                  : {}),
+              active: true,
             },
             select: { modelProvider: true, modelId: true, thinkingLevel: true },
           })
@@ -123,24 +145,29 @@ export async function aiConsentStatus(
       ? { provider: deps.env.defaultProvider, model: deps.env.defaultModel }
       : null;
     const selected = await Promise.all(
-      (target ? [...bots, ...routines] : [null, ...bots, ...routines]).map(async (override) => {
-        const overrideCredential =
-          override?.modelProvider && override.modelId
-            ? await findModelCredential(
-                deps.prisma,
-                actor,
-                override.modelProvider,
-                override.modelId,
-              )
-            : null;
-        return selectConfiguredModel({
-          override,
-          overrideCredential,
-          main,
-          hostedProvider: deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
-          defaults: { settings, deployment },
-        });
-      }),
+      (botIds ? [...bots, ...routines, ...requestedRoutines] : [null, ...bots, ...routines]).map(
+        async (override) => {
+          const overrideCredential =
+            override?.modelProvider && override.modelId
+              ? await findConnectedModelCredential(
+                  deps.prisma,
+                  deps.secrets,
+                  actor,
+                  override.modelProvider,
+                  override.modelId,
+                )
+              : null;
+          return selectConfiguredModel({
+            override,
+            overrideCredential,
+            main,
+            hostedProvider: deps.billing?.modelCreditsEnabled
+              ? deps.env.defaultProvider
+              : undefined,
+            defaults: { settings, deployment },
+          });
+        },
+      ),
     );
     // Connected models remain reachable by helpers during a targeted bot run.
     for (const preference of preferences)
@@ -157,9 +184,14 @@ export async function aiConsentStatus(
     // Every purpose's models, fallbacks included, can receive a run's content.
     const roleModels = await Promise.all(
       roleChoices.map(async (choice) => {
-        const credential = choice.credentialId
-          ? await findModelCredentialById(deps.prisma, actor, choice.credentialId)
-          : await findModelCredential(deps.prisma, actor, choice.provider, choice.modelId);
+        const credential = await findConnectedModelCredential(
+          deps.prisma,
+          deps.secrets,
+          actor,
+          choice.provider,
+          choice.modelId,
+          { credentialId: choice.credentialId },
+        );
         return credential
           ? { provider: choice.provider, id: choice.modelId, credential, thinkingLevel: null }
           : null;
@@ -170,14 +202,22 @@ export async function aiConsentStatus(
       selected.push({
         provider: deps.env.teamChatJudgeProvider,
         id: deps.env.teamChatJudgeModel,
-        credential: await findModelCredential(
-          deps.prisma,
-          actor,
-          deps.env.teamChatJudgeProvider,
-          deps.env.teamChatJudgeModel,
-        ),
+        credential: await findModelCredential(deps.prisma, actor, deps.env.teamChatJudgeProvider),
         thinkingLevel: null,
       });
+    } else {
+      // The engagement judge still resolves bot overrides by provider alone. Its connection
+      // can differ from the allowlist-aware run model, so disclose both reachable endpoints.
+      const judgeModels = await Promise.all(
+        bots.map(async (bot) => {
+          if (!bot.modelProvider || !bot.modelId) return null;
+          const credential = await findModelCredential(deps.prisma, actor, bot.modelProvider);
+          return credential
+            ? { provider: bot.modelProvider, id: bot.modelId, credential, thinkingLevel: null }
+            : null;
+        }),
+      );
+      selected.push(...judgeModels.filter((model) => model !== null));
     }
     const models = [
       ...new Map(
@@ -264,14 +304,10 @@ export async function aiConsentStatus(
 export async function allowAiConsent(
   deps: RouterDeps,
   actor: Actor,
-  input: { scope: string; version: string; keys: string[]; settingsScope?: SettingsScope },
+  input: { scope: string; version: string; keys: string[] } & AiConsentQuery,
 ) {
   // Checked against the same settings copy the member reviewed.
-  const current = await aiConsentStatus(
-    deps,
-    actor,
-    input.settingsScope ? { settingsScope: input.settingsScope } : {},
-  );
+  const current = await aiConsentStatus(deps, actor, input);
   const known = new Set(current.recipients.map((recipient) => recipient.key));
   if (
     input.scope !== current.scope ||
@@ -305,5 +341,71 @@ export async function allowAiConsent(
     recipients: current.recipients.map((recipient) =>
       input.keys.includes(recipient.key) ? { ...recipient, allowed: true } : recipient,
     ),
+  };
+}
+
+/** Resolve remote credential material before admission, then recheck the accepted DB snapshot. */
+export async function prepareSendAiConsent(deps: RouterDeps, actor: Actor, query: AiConsentQuery) {
+  // This cache belongs only to this request, including its transaction retries.
+  const secrets = new Map<string, Promise<string>>();
+  const keyOf = (ref: string, context: Parameters<RouterDeps["secrets"]["load"]>[1]) =>
+    JSON.stringify([ref, context]);
+  const prepared = {
+    ...deps,
+    secrets: {
+      ...deps.secrets,
+      load: (ref: string, context: Parameters<RouterDeps["secrets"]["load"]>[1]) => {
+        const key = keyOf(ref, context);
+        let value = secrets.get(key);
+        if (!value) {
+          value = deps.secrets.load(ref, context);
+          secrets.set(key, value);
+        }
+        return value;
+      },
+    },
+  };
+  const target = { ...query, uses: ["model", "memory"] as const };
+  const assertAllowed = (status: AiConsentStatus) => {
+    if (status.recipients.some((recipient) => !recipient.allowed)) {
+      throw new ORPCError("FORBIDDEN", { message: AI_CONSENT_REQUIRED });
+    }
+  };
+  await aiConsentStatus(prepared, actor, { ...target, uses: [...target.uses] });
+  return async (tx: Prisma.TransactionClient) => {
+    let changed = false;
+    const status = await aiConsentStatus(
+      {
+        ...prepared,
+        prisma: tx as RouterDeps["prisma"],
+        secrets: {
+          ...prepared.secrets,
+          load: (ref, context) => {
+            const value = secrets.get(keyOf(ref, context));
+            if (value) return value;
+            changed = true;
+            return Promise.reject(new Error("AI connection changed during send admission"));
+          },
+        },
+      },
+      actor,
+      { ...target, uses: [...target.uses] },
+    );
+    if (changed)
+      throw new ORPCError("CONFLICT", { message: "AI data sharing changed. Review it again." });
+    assertAllowed(status);
+    if (status.recipients.length) {
+      // A grant revoked while admission waited cannot survive a stale Serializable snapshot.
+      // SHARE also keeps the exact reviewed grants valid until this acceptance commits.
+      const grants = await tx.$queryRaw<Array<{ recipientKey: string }>>(Prisma.sql`
+        SELECT "recipientKey" FROM "ai_data_consents"
+        WHERE "userId" = ${actor.userId} AND "spaceId" = ${actor.spaceId}
+          AND "version" = ${status.version}
+          AND "recipientKey" IN (${Prisma.join(status.recipients.map((recipient) => recipient.key))})
+        ORDER BY "recipientKey" FOR SHARE
+      `);
+      if (grants.length !== status.recipients.length)
+        throw new ORPCError("FORBIDDEN", { message: AI_CONSENT_REQUIRED });
+    }
   };
 }

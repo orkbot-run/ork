@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors: explain failed SSO code exchanges. See LICENSE.md.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; SSO and recipient-consent messages follow LICENSE.md.
 
 import { t } from "@lingui/core/macro";
 import {
+  AI_CONSENT_REQUIRED,
   CONNECTOR_AUTH_UNAVAILABLE,
   isVoiceAccountErrorCode,
   MCP_OAUTH_CLIENT_REQUIRED,
@@ -26,6 +28,8 @@ export function errorText(error: unknown, fallback = t`Something went wrong. Try
       : error && typeof error === "object" && "message" in error
         ? error.message
         : undefined;
+  if (typeof message === "string" && message.trim() === AI_CONSENT_REQUIRED)
+    return t`Review data sharing before continuing.`;
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_ERROR)
     return t`This model cannot read images. Choose a model that supports images.`;
   if (typeof message === "string" && message.trim() === MODEL_IMAGE_INPUT_UNKNOWN)

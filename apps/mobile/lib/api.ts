@@ -1104,13 +1104,7 @@ async function request(
       rpc("aiConsent/status", { uses, ...consentTarget }, { requestContext: consentContext }),
     prompt: promptAiConsent,
     allow: (input) =>
-      rpc(
-        "aiConsent/allow",
-        consentTarget.settingsScope
-          ? { ...input, settingsScope: consentTarget.settingsScope }
-          : input,
-        { requestContext: consentContext },
-      ),
+      rpc("aiConsent/allow", { ...input, ...consentTarget }, { requestContext: consentContext }),
     coalesceKey: consentContext ? aiConsentCoalesceKey(consentContext) : undefined,
   });
   const deadline = requestSignal(

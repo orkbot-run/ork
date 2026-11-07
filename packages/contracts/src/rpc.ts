@@ -15,7 +15,12 @@ import {
   AgentImportPreviewInput,
 } from "./agent-import.js";
 import { AgentImportSetupStateInput, AgentImportSetupStateSchema } from "./agent-import-setup.js";
-import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
+import {
+  AiConsentQuerySchema,
+  AiConsentStatusSchema,
+  AiConsentTargetSchema,
+  SEND_ROUTINE_LIMIT,
+} from "./ai-consent.js";
 import { AnalyticsScreenInput } from "./analytics.js";
 import {
   ARTIFACT_DESCRIPTION_MAX_LENGTH,
@@ -263,7 +268,7 @@ const threadSendOutput = z.object({
 /** Without text or attachments, only the routines run and no message is saved. */
 const threadSendWithRoutinesInput = threadSendFields.safeExtend({
   clientNonce: z.string().min(1).max(200),
-  routineIds: z.array(Id).min(1).max(64),
+  routineIds: z.array(Id).min(1).max(SEND_ROUTINE_LIMIT),
 });
 
 const spaceName = z.string().trim().min(1).max(60);
@@ -294,8 +299,7 @@ export const appContract = {
           scope: z.string(),
           version: z.string(),
           keys: z.array(z.string()).min(1).max(200),
-          /** The settings copy the reviewed recipients came from, as in `status`. */
-          settingsScope: SettingsScopeSchema.optional(),
+          ...AiConsentTargetSchema.shape,
         }),
       )
       .output(AiConsentStatusSchema),

@@ -27,6 +27,7 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
+import { prepareSendAiConsent } from "#modules/accounts/ai-consent";
 import { assertTeachingSendAllowed } from "#modules/agents/taught-skills";
 import { mapBotSecretInputError } from "#modules/bots/routes/bots";
 import { releaseComputerControl } from "#modules/computers/routes/computer";
@@ -114,7 +115,11 @@ export function threadsRoutes(ctx: RouterContext) {
         )?.botId ?? target.memberBotIds[0]!);
   const send = async (
     actor: Actor,
-    input: Parameters<typeof sendThreadMessage>[3] & { botId?: string; groupId?: string },
+    input: Parameters<typeof sendThreadMessage>[3] & {
+      botId?: string;
+      groupId?: string;
+      routineIds?: string[];
+    },
     startRoutines?: Parameters<typeof sendThreadMessage>[5],
   ) => {
     const setup = await modelSetup(deps, actor);
@@ -140,6 +145,7 @@ export function threadsRoutes(ctx: RouterContext) {
     return sendThreadMessage(
       {
         ...deps,
+        consentPreflight: await prepareSendAiConsent(deps, actor, input),
         maxAttachmentsPerMessage: deps.env.maxAttachmentsPerMessage,
         imageAdmission: confirmingImages
           ? {
@@ -291,8 +297,16 @@ export function threadsRoutes(ctx: RouterContext) {
             sent = await send(actor, input, startRoutines);
           } else {
             // Only the routines: they all commit or none does.
+            const consentPreflight = await prepareSendAiConsent(deps, actor, input);
             const started = await withSerializableRetry(() =>
-              deps.prisma.$transaction(startRoutines),
+              deps.prisma.$transaction(
+                async (tx) => {
+                  await lockSpaceForWork(tx, actor.spaceId);
+                  await consentPreflight(tx);
+                  return startRoutines(tx);
+                },
+                { isolationLevel: "Serializable" },
+              ),
             );
             for (const run of started) {
               await deps.jobs.enqueue(runContinueJob(run.id)).catch((error) => {

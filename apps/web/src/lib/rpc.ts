@@ -2,18 +2,27 @@
 // Inherited Apache material; native revocation retry integration is PolyForm-covered. See LICENSE.md.
 
 import { createRpcLink } from "@orkbot/client-transport";
-import type { AppContract, ProductEvent } from "@orkbot/contracts";
+import type { AiConsentStatus, AppContract, ProductEvent } from "@orkbot/contracts";
 import {
   CLIENT_BUILD_HEADER,
   CLIENT_PROTOCOL_HEADER,
   CLIENT_PROTOCOL_VERSION,
   formatClientBuild,
 } from "@orkbot/contracts";
-import { displayIdentityEvent, displayIdentityResult } from "@orkbot/core";
+import {
+  AiConsentBlocked,
+  aiConsentTarget,
+  aiDataUsesForProcedure,
+  displayIdentityEvent,
+  displayIdentityResult,
+  ensureAiDataConsent,
+} from "@orkbot/core";
 import { clientCorrelationHeaders, responseCorrelation } from "@orkbot/logging/monitoring";
 import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
+import { cancelAiConsentPrompts, promptAiConsent } from "./ai-consent";
 import { authClient } from "./auth";
+import { isLeavingSession, sessionChangedUnderPage } from "./call-session";
 import { CLIENT_BUILD } from "./client-build";
 import { desktopBridge } from "./desktop";
 import { i18n } from "./i18n";
@@ -22,6 +31,8 @@ import { reportClientError } from "./monitoring";
 
 const SPACE_STORAGE_KEY = "orkbot:space-id";
 export const ORGANIZATION_SPACES_STORAGE_KEY = "orkbot:org-spaces";
+
+let spaceSelectionGeneration = 0;
 
 type RpcClientContext = { spaceId?: string | null };
 
@@ -50,11 +61,17 @@ export function selectSpace(id: string): boolean {
       selected = false;
     }
   }
-  if (selected) window.dispatchEvent(new Event(SPACE_SELECTED_EVENT));
+  if (selected) {
+    spaceSelectionGeneration += 1;
+    cancelAiConsentPrompts();
+    window.dispatchEvent(new Event(SPACE_SELECTED_EVENT));
+  }
   return selected;
 }
 
 export function clearSpaceSelection(): void {
+  spaceSelectionGeneration += 1;
+  cancelAiConsentPrompts();
   try {
     window.localStorage.removeItem(SPACE_STORAGE_KEY);
     window.localStorage.removeItem(ORGANIZATION_SPACES_STORAGE_KEY);
@@ -176,7 +193,55 @@ export type RpcClient = ContractRouterClient<AppContract, RpcClientContext>;
 const displayLink = {
   call: async (...args: Parameters<typeof link.call>) => {
     const [path, input, options] = args;
-    const result = await link.call(path, input, options);
+    const uses = aiDataUsesForProcedure(path.join("/"), input);
+    const target = aiConsentTarget(input);
+    const spaceId =
+      options.context.spaceId === undefined ? selectedSpaceId() : options.context.spaceId;
+    const generation = spaceSelectionGeneration;
+    const session = () =>
+      authClient.$store.atoms.session?.get().data?.session?.id as string | undefined;
+    const identity = uses.length ? session() : undefined;
+    const origin = typeof window === "undefined" ? "" : window.location.origin;
+    const assertContext = () => {
+      if (
+        !identity ||
+        session() !== identity ||
+        generation !== spaceSelectionGeneration ||
+        origin !== window.location.origin ||
+        isLeavingSession() ||
+        sessionChangedUnderPage()
+      )
+        throw new AiConsentBlocked();
+    };
+    const boundOptions = { ...options, context: { ...options.context, spaceId } };
+    if (uses.length) {
+      assertContext();
+      await ensureAiDataConsent({
+        uses,
+        coalesceKey: JSON.stringify([origin, identity, generation, spaceId]),
+        status: async () => {
+          const status = (await link.call(
+            ["aiConsent", "status"],
+            { ...target, uses },
+            boundOptions,
+          )) as AiConsentStatus;
+          assertContext();
+          return status;
+        },
+        prompt: async (recipient, privacyUrl) => {
+          assertContext();
+          const answer = await promptAiConsent(recipient, privacyUrl);
+          assertContext();
+          return answer;
+        },
+        allow: (grant) => {
+          assertContext();
+          return link.call(["aiConsent", "allow"], { ...target, ...grant }, boundOptions);
+        },
+      });
+      assertContext();
+    }
+    const result = await link.call(path, input, uses.length ? boundOptions : options);
     if (path.join("/") === "threads/subscribe") {
       return (async function* () {
         for await (const event of result as AsyncIterable<ProductEvent>) {

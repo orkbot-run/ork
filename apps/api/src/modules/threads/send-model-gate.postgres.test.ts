@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache tests are retained; authorized send fixtures follow LICENSE.md.
 
 import { randomUUID } from "node:crypto";
+import { aiRecipient } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
+import { AI_DISCLOSURE_VERSION } from "@orkbot/contracts";
 import { MODEL_REQUIRED_SEND_ERROR } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import {
@@ -13,6 +16,7 @@ import {
   createThreadMessage,
   provisionMessagingIdentity,
   runAsSystem,
+  runAsTenant,
 } from "@orkbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +59,20 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
     await system.userModelCredential.create({
       data: { userId: actor.userId, provider: "openrouter", label: "Key", secretId: "fixture" },
     });
+    // These scenarios assume permission to share with the fixture's connected model.
+    const recipient = aiRecipient({
+      provider: "openrouter",
+      modelId: "openai/gpt-4o",
+      use: "model",
+    })!;
+    await system.aiDataConsent.create({
+      data: {
+        userId: actor.userId,
+        spaceId: actor.spaceId,
+        recipientKey: recipient.key,
+        version: AI_DISCLOSURE_VERSION,
+      },
+    });
     const deps = {
       prisma,
       events: createThreadEvents(prisma),
@@ -65,13 +83,15 @@ describe.skipIf(!enabled)("send model gate with a bot's own model (PostgreSQL)",
     } as unknown as RouterDeps;
     const handler = new RPCHandler(createRouter(deps));
     call = async (path, input) => {
-      const { response } = await handler.handle(
-        new Request(`http://127.0.0.1/rpc/threads/${path}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ json: input }),
-        }),
-        { prefix: "/rpc", context: { actor } },
+      const { response } = await runAsTenant(actor, () =>
+        handler.handle(
+          new Request(`http://127.0.0.1/rpc/threads/${path}`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ json: input }),
+          }),
+          { prefix: "/rpc", context: { actor } },
+        ),
       );
       return response!;
     };

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache tests are retained; send consent coverage follows LICENSE.md.
 import type { AiConsentStatus } from "@orkbot/contracts";
 import { AI_DISCLOSURE_VERSION } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -102,6 +106,19 @@ describe("foreground AI consent", () => {
     expect(prompt).not.toHaveBeenCalled();
     expect(aiDataUsesForProcedure("threads/get")).toEqual([]);
     expect(aiDataUsesForProcedure("threads/send")).toEqual(["model", "memory"]);
+    expect(aiDataUsesForProcedure("threads/sendWithRoutines")).toEqual(["model", "memory"]);
+    expect(aiDataUsesForProcedure("threads.sendWithRoutines")).toEqual(["model", "memory"]);
+    expect(aiConsentTarget({ botId: "active", routineIds: ["first", "second", "first"] })).toEqual({
+      botId: "active",
+      routineIds: ["first", "second"],
+    });
+    expect(
+      aiConsentTarget({
+        groupId: "active-group",
+        routineId: "single",
+        routineIds: ["first", "second"],
+      }),
+    ).toEqual({ groupId: "active-group", routineId: "single", routineIds: ["first", "second"] });
     expect(aiDataUsesForProcedure("voice/prepare")).toEqual(["voice"]);
     expect(
       aiDataUsesForProcedure("routines/update", { routineId: "routine", active: false }),

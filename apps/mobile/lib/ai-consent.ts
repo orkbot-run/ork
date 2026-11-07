@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is retained; safe policy links follow LICENSE.md.
 import type { AiRecipient } from "@orkbot/contracts";
 import { AI_DATA_DISCLOSURES, AI_PRIVACY_URL } from "@orkbot/contracts";
+import { aiConsentPrivacyUrl } from "@orkbot/core";
 import { Alert, AppState, Linking } from "react-native";
 import { t } from "./i18n";
 
@@ -101,7 +106,7 @@ export function promptAiConsent(
                 waitingForPrivacyReturn = false;
                 show();
               }, FOREGROUND_FALLBACK_MS);
-              void Linking.openURL(privacyUrl).then(
+              void Linking.openURL(aiConsentPrivacyUrl(privacyUrl)).then(
                 () => {
                   if (attempt !== privacyAttempt || settled) return;
                 },

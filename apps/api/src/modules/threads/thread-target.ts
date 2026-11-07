@@ -788,6 +788,7 @@ export async function sendThreadMessage(
     events: ThreadEvents;
     jobs: JobPublisher;
     imageAdmission?: Parameters<typeof assertThreadImageInput>[5];
+    consentPreflight?: (tx: Prisma.TransactionClient) => Promise<void>;
     maxAttachmentsPerMessage?: number;
     analytics?: ProductAnalytics;
     sandbox: SandboxProvider;
@@ -825,9 +826,14 @@ export async function sendThreadMessage(
     throw new ORPCError("BAD_REQUEST", { message: "replyQuote requires replyToMessageId." });
   }
 
+  const transactionOptions = {
+    ...THREAD_LOCK_TRANSACTION_OPTIONS,
+    ...(deps.consentPreflight ? { isolationLevel: "Serializable" as const } : {}),
+  };
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
       await lockSpaceForWork(tx, actor.spaceId);
+      await deps.consentPreflight?.(tx);
       let routineRuns: Array<{ id: string; status: string }> = [];
       let replyToMessageId: string | undefined;
       let replyQuote: string | undefined;
@@ -1211,7 +1217,10 @@ export async function sendThreadMessage(
         if (active) {
           // Naming a member that is still working on an unnamed message makes its reply required.
           if (!namesNobody && steersUserMessage(active)) {
-            await tx.run.update({ where: { id: active.id }, data: { groupReplyOptional: false } });
+            await tx.run.update({
+              where: { id: active.id },
+              data: { groupReplyOptional: false },
+            });
           }
           await tx.steeringMessage.create({
             data: {
@@ -1286,7 +1295,7 @@ export async function sendThreadMessage(
         },
       });
       return { message, runs, routineRuns, eventSeq: event.seq };
-    }, THREAD_LOCK_TRANSACTION_OPTIONS);
+    }, transactionOptions);
 
   const committed = await withSerializableRetry(commit).catch(async (error) => {
     const winner = await replayExistingSend(
