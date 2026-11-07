@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 key wrapping is preserved. Whole-operation deadlines follow LICENSE.md.
+
 import type * as KmsSdk from "@aws-sdk/client-kms";
 import type { KeyProvider, KeyWrapContext, WrappedDataKey } from "@orkbot/adapter-kit";
+import { withAbort } from "./web-ssrf.js";
 
 export type AwsKmsKeyProviderConfig = {
   /** Key ARN, not an alias, which can be repointed without stored keys noticing. */
@@ -8,6 +13,22 @@ export type AwsKmsKeyProviderConfig = {
 
 const MASTER_KEY_PREFIX = "aws-kms:";
 const KEY_ARN = /^arn:aws[a-z-]*:kms:([a-z0-9-]+):\d{12}:key\/([A-Za-z0-9-]+)$/;
+const OPERATION_TIMEOUT_MS = 10_000;
+
+/** The same deadline bounds SDK setup, every retry, backoff and response-body decoding. */
+async function withinDeadline<T>(work: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(new Error("Key manager request timed out")),
+    OPERATION_TIMEOUT_MS,
+  );
+  timeout.unref();
+  try {
+    return await withAbort(work(controller.signal), controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 /**
  * Credentials are named explicitly rather than taken from the SDK's default chain, so the
@@ -89,14 +110,18 @@ export class AwsKmsKeyProvider implements KeyProvider {
   }
 
   async wrap(dataKey: Uint8Array, context: KeyWrapContext): Promise<WrappedDataKey> {
-    const { sdk, client } = await this.connect();
-    const { CiphertextBlob } = await client.send(
-      new sdk.EncryptCommand({
-        KeyId: this.config.keyArn,
-        Plaintext: dataKey,
-        EncryptionContext: encryptionContext(context),
-      }),
-    );
+    const { CiphertextBlob } = await withinDeadline(async (signal) => {
+      const { sdk, client } = await this.connect();
+      signal.throwIfAborted();
+      return client.send(
+        new sdk.EncryptCommand({
+          KeyId: this.config.keyArn,
+          Plaintext: dataKey,
+          EncryptionContext: encryptionContext(context),
+        }),
+        { abortSignal: signal },
+      );
+    });
     if (!CiphertextBlob) throw new Error("AWS KMS returned no ciphertext");
     return {
       masterKeyId: this.masterKeyId,
@@ -113,20 +138,22 @@ export class AwsKmsKeyProvider implements KeyProvider {
     if (!wrapped.masterKeyId.startsWith(MASTER_KEY_PREFIX))
       throw new Error(`Master key ${wrapped.masterKeyId} is not configured`);
     const keyId = wrapped.masterKeyId.slice(MASTER_KEY_PREFIX.length);
-    const { sdk, client } = await this.connect();
-    const { KeyId, Plaintext } = await client
-      .send(
+    const { KeyId, Plaintext } = await withinDeadline(async (signal) => {
+      const { sdk, client } = await this.connect();
+      signal.throwIfAborted();
+      return client.send(
         new sdk.DecryptCommand({
           KeyId: wrapped.masterKeyId === this.masterKeyId ? this.config.keyArn : undefined,
           CiphertextBlob: Buffer.from(wrapped.wrappedKey, "base64url"),
           EncryptionContext: encryptionContext(context),
         }),
-      )
-      .catch((error: unknown) => {
-        throw new Error(`Space key could not be unwrapped with master key ${wrapped.masterKeyId}`, {
-          cause: error,
-        });
+        { abortSignal: signal },
+      );
+    }).catch((error: unknown) => {
+      throw new Error(`Space key could not be unwrapped with master key ${wrapped.masterKeyId}`, {
+        cause: error,
       });
+    });
     if (!KeyId?.endsWith(`:key/${keyId}`))
       throw new Error(`AWS KMS unwrapped a space key with a key other than ${wrapped.masterKeyId}`);
     if (Plaintext?.length !== 32) throw new Error("AWS KMS returned a malformed space key");
