@@ -3992,3 +3992,70 @@ describe("a click that completes a purchase on a website", () => {
     expect(f.pauseRunForInput).toHaveBeenCalledOnce();
   });
 });
+
+describe("automatic built-in rule restrictions", () => {
+  it.each([false, true])(
+    "keeps an older Ask rule for web_search automatic (Never ask: %s)",
+    async (skipApprovals) => {
+      const f = fixture({
+        builtin: true,
+        skipApprovals,
+        rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "web_search" }],
+      });
+      f.setCalls([{ name: "web_search", args: { query: "guide" }, executionId: "call-1" }]);
+      await f.run();
+      expect(f.web.lastSearch).toMatchObject({ query: "guide" });
+      expect(f.effects).toEqual([]);
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([false, true])(
+    "honors Block for an automatic read (Never ask: %s)",
+    async (skipApprovals) => {
+      const f = fixture({
+        builtin: true,
+        skipApprovals,
+        rules: [{ effect: "deny", matchKind: "tool", matchValue: "web_search" }],
+      });
+      f.setCalls([{ name: "web_search", args: { query: "guide" }, executionId: "call-1" }]);
+      await f.run();
+      expect(f.web.lastSearch).toBeUndefined();
+      expect(f.effects).toEqual([]);
+      expect(f.results[0]).toMatchObject({ error: expect.stringContaining("is blocked") });
+      expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    },
+  );
+
+  it("keeps a trusted-site fetch automatic even with an older Ask tool rule", async () => {
+    const f = fixture({
+      builtin: true,
+      sourceRole: "user",
+      prompt: "Read https://docs.example.com/guide",
+      rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "web_fetch" }],
+    });
+    f.setCalls([
+      { name: "web_fetch", args: { url: "https://docs.example.com/guide" }, executionId: "call-1" },
+    ]);
+    await f.run();
+    expect(f.fetchedUrls).toEqual(["https://docs.example.com/guide"]);
+    expect(f.effects).toEqual([]);
+    expect(f.pauseRunForInput).not.toHaveBeenCalled();
+  });
+
+  it("still gates a new-site fetch despite the generic automatic-tool restriction", async () => {
+    const f = fixture({
+      builtin: true,
+      sourceRole: "user",
+      prompt: "Read https://docs.example.com/guide",
+      rules: [{ effect: "require_approval", matchKind: "tool", matchValue: "web_fetch" }],
+    });
+    f.setCalls([
+      { name: "web_fetch", args: { url: "https://unknown.test/guide" }, executionId: "call-1" },
+    ]);
+    await f.run();
+    expect(f.fetchedUrls).toEqual([]);
+    expect(f.effects.map((effect) => effect.status)).toEqual(["intended"]);
+    expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+  });
+});

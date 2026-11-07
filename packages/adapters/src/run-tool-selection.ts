@@ -1,8 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved. Shared tool-policy imports follow LICENSE.md.
+
 import {
   disabledBuiltinToolSet,
   FLEET_TOOL_NAMES,
   FLEET_WRITE_TOOL_NAMES,
 } from "@orkbot/contracts";
+
 import { isBackgroundRunTrigger, isOwnerStartedRun } from "@orkbot/core";
 import { builtinAgentTools } from "./builtin-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
@@ -15,30 +20,6 @@ import {
   SCHEDULE_TOOL_NAMES,
 } from "./schedule-tools.js";
 import { SKILL_TOOL_NAMES } from "./skill-tools.js";
-
-export const READ_ONLY_AGENT_TOOLS = new Set([
-  "computer_observe",
-  "list_files",
-  "list_fleet",
-  "read_file",
-  "read_history",
-  "search_history",
-  "request_takeover",
-  "run_subagent",
-  "task_catalog",
-  "recall_memory",
-  "schedule_list",
-  "scratchpad_list",
-  "board_tickets",
-  "ticket_get",
-  "skill_read",
-  "web_search",
-  "web_fetch",
-  "browser_snapshot",
-  "list_secrets",
-  "cloud_agent_status",
-  "purchase_status",
-]);
 
 /** Offered only to a user who connected a wallet. */
 const PURCHASE_TOOL_NAMES = new Set(["request_purchase", "purchase_status", "paid_request"]);

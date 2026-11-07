@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Searchable catalog selection and effective choices are Ork additions.
 
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
@@ -11,8 +11,15 @@ test("adds a tool rule and switches it between Ask and Block", async ({ page }, 
   const settings = await openUserSettings(page);
   await settings.getByTestId("settings-nav-confirmations").click();
   await settings.getByRole("button", { name: "Add rule", exact: true }).click();
-  const toolName = settings.getByRole("textbox", { name: "Tool name" });
-  await toolName.fill("write_file");
+  await settings.getByRole("button", { name: "Tool", exact: true }).click();
+  const search = page.getByRole("combobox", { name: "Tools", exact: true });
+  await search.fill("missing-tool-example");
+  await expect(page.getByText("No tools found.", { exact: true })).toBeVisible();
+  await search.fill("");
+  await expect(page.getByRole("option", { name: "Write file", exact: true })).toBeVisible();
+  await search.fill("write_file");
+  await captureScreenshot(page, testInfo, "approval-rule-catalog");
+  await page.getByRole("option", { name: "Write file", exact: true }).click();
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   const rule = settings.getByRole("group", { name: "Write file", exact: true });
   await expect(rule.getByRole("button", { name: "Ask", exact: true })).toHaveAttribute(

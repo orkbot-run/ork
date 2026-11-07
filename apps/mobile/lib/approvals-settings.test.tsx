@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Catalog and scoped-editor regressions follow LICENSE.md.
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -20,7 +23,15 @@ const state = vi.hoisted(() => ({
   settings: { mode: "ask", enabled: false, skipApprovals: false, checkerAvailable: false },
   rules: [] as Rule[],
   headerItems: [] as { label: string; onPress: () => void }[],
-  prompt: vi.fn(),
+  tool: undefined as string | undefined,
+  setParams: vi.fn(),
+  leftItems: [] as { label: string; onPress: () => void }[],
+  search: undefined as
+    | undefined
+    | {
+        onChangeText: (event: { nativeEvent: { text: string } }) => void;
+        onCancelButtonPress: () => void;
+      },
 }));
 const { element } = vi.hoisted(() => ({
   element:
@@ -47,17 +58,26 @@ vi.mock("./api", () => ({
 }));
 vi.mock("expo-router", () => ({
   useFocusEffect: (effect: () => undefined | (() => void)) => useEffect(effect, [effect]),
-  useLocalSearchParams: () => ({ spaceId: state.spaceId }),
+  useLocalSearchParams: () => ({ spaceId: state.spaceId, tool: state.tool }),
+  useRouter: () => ({ setParams: state.setParams }),
   useNavigation: () => ({
-    setOptions: (options: { unstable_headerRightItems: () => typeof state.headerItems }) => {
-      state.headerItems = options.unstable_headerRightItems();
+    setOptions: (options: {
+      unstable_headerRightItems?: () => typeof state.headerItems;
+      unstable_headerLeftItems?: () => typeof state.leftItems;
+      headerSearchBarOptions?: typeof state.search;
+    }) => {
+      if ("unstable_headerRightItems" in options)
+        state.headerItems = options.unstable_headerRightItems?.() ?? [];
+      if ("unstable_headerLeftItems" in options)
+        state.leftItems = options.unstable_headerLeftItems?.() ?? [];
+      if ("headerSearchBarOptions" in options) state.search = options.headerSearchBarOptions;
     },
   }),
 }));
 vi.mock("./native-controls", () => ({ iosAtLeast: () => true }));
 vi.mock("../components/name-dialog", () => ({ TextFieldDialog: () => null }));
 vi.mock("react-native", () => ({
-  Alert: { prompt: state.prompt },
+  Alert: {},
   Platform: { OS: "ios" },
   ScrollView: element("div"),
   StyleSheet: { create: <T,>(styles: T) => styles },
@@ -130,8 +150,61 @@ vi.mock("../components/native-segmented-control", () => ({
 vi.mock("../components/settings-group", () => ({
   SettingsFooter: element("small"),
   SettingsGroup: element("section"),
-  SettingsRow: ({ title, value }: { title: string; value?: string }) =>
-    createElement("span", null, `${title}: ${value}`),
+  SettingsRow: ({
+    title,
+    value,
+    detail,
+    onPress,
+  }: {
+    title: string;
+    value?: string;
+    detail?: string;
+    onPress?: () => void;
+  }) =>
+    onPress
+      ? createElement("button", { type: "button", onClick: onPress }, title)
+      : createElement("span", null, `${title}: ${value}${detail ? ` (${detail})` : ""}`),
+  SettingsInputRow: ({
+    accessibilityLabel,
+    value,
+    onChangeText,
+  }: {
+    accessibilityLabel: string;
+    value: string;
+    onChangeText: (value: string) => void;
+  }) =>
+    createElement("input", {
+      "aria-label": accessibilityLabel,
+      value,
+      onChange: (event: { target: { value: string } }) => onChangeText(event.target.value),
+    }),
+}));
+
+vi.mock("../components/row-accessories", () => ({ Checkmark: () => null }));
+vi.mock("../components/list-search-input", () => ({ ListSearchInput: () => null }));
+vi.mock("../components/menu-picker", () => ({
+  MenuPicker: ({
+    label,
+    value,
+    choices,
+    onChange,
+  }: {
+    label: string;
+    value: string;
+    choices: { key: string; label: string }[];
+    onChange: (key: string) => void;
+  }) =>
+    createElement(
+      "select",
+      {
+        "aria-label": label,
+        value,
+        onChange: (event: { target: { value: string } }) => onChange(event.target.value),
+      },
+      choices.map((choice) =>
+        createElement("option", { key: choice.key, value: choice.key }, choice.label),
+      ),
+    ),
 }));
 
 let root: Root;
@@ -158,7 +231,10 @@ beforeEach(() => {
   state.settings = { mode: "ask", enabled: false, skipApprovals: false, checkerAvailable: false };
   state.rules = [];
   state.headerItems = [];
-  state.prompt.mockReset();
+  state.tool = undefined;
+  state.setParams.mockReset();
+  state.search = undefined;
+  state.leftItems = [];
   state.rpc
     .mockReset()
     .mockImplementation(async (proc: string, input?: Record<string, unknown>) => {
@@ -189,7 +265,10 @@ it("lists only the rules; the mode is a row in settings", async () => {
   expect(rows()).toEqual(["Send email: Allow"]);
   expect(container.querySelector('[role="radiogroup"]')).toBeNull();
   expect(container.querySelector("small")).toBeNull();
-  expect(state.rpc.mock.calls.map(([proc]) => proc)).toEqual(["approvalRules/list"]);
+  expect(state.rpc.mock.calls.map(([proc]) => proc)).toEqual([
+    "approvalRules/list",
+    "autoReview/get",
+  ]);
 });
 
 it("switches and removes rules, keeping legacy category rules removable only", async () => {
@@ -226,7 +305,10 @@ it("edits a Space's own copy when opened with one", async () => {
   state.spaceId = "space-1";
   await render();
   const spaceContext = { requestContext: { headers: { space: "space-1" } } };
-  expect(state.rpc.mock.calls).toEqual([["approvalRules/list", { scope: "space" }, spaceContext]]);
+  expect(state.rpc.mock.calls).toEqual([
+    ["approvalRules/list", { scope: "space" }, spaceContext],
+    ["autoReview/get", { scope: "space" }, spaceContext],
+  ]);
 });
 
 function retry() {
@@ -269,15 +351,12 @@ it("switches a tool rule back to Ask", async () => {
   expect(menuButton("Write file", "Ask")!.getAttribute("aria-pressed")).toBe("true");
 });
 
-it("adds a tool rule from the header prompt", async () => {
+it("selects a stable tool from the catalog and saves from the native header", async () => {
   await render();
-  await act(async () => state.headerItems.find((item) => item.label === "Add rule")!.onPress());
-  const [, , buttons] = state.prompt.mock.calls[0] as [
-    string,
-    undefined,
-    { text: string; onPress?: (value?: string) => void }[],
-  ];
-  await act(async () => buttons.find((button) => button.text === "Save")!.onPress!(" write_file "));
+  await header("Add rule");
+  await click("Write file");
+  expect(effects()).toEqual(["Allow", "Ask", "Block"]);
+  await header("Save");
   expect(state.rpc).toHaveBeenCalledWith("approvalRules/set", {
     scope: "account",
     effect: "require_approval",
@@ -285,4 +364,124 @@ it("adds a tool rule from the header prompt", async () => {
     matchValue: "write_file",
   });
   expect(rows()).toEqual(["Write file: Ask"]);
+});
+
+async function header(label: string) {
+  await act(async () => state.headerItems.find((item) => item.label === label)!.onPress());
+}
+async function click(label: string) {
+  await act(async () =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === label)!.click(),
+  );
+}
+const effects = () => [...container.querySelectorAll("option")].map((node) => node.textContent);
+
+it("uses native search, displays an empty result and clears it", async () => {
+  await render();
+  await header("Add rule");
+  await act(async () =>
+    state.search!.onChangeText({ nativeEvent: { text: "nonexistent-tool-example" } }),
+  );
+  expect(container.textContent).toContain("No tools found.");
+  expect(container.textContent).not.toContain("Write file");
+  await act(async () => state.search!.onCancelButtonPress());
+  expect(container.textContent).toContain("Write file");
+  expect(container.textContent).not.toContain("No tools found.");
+});
+
+it("does not offer ineffective automatic, mandatory or host choices", async () => {
+  state.rules = [rule({ id: "old", matchValue: "read_file", effect: "require_approval" })];
+  await render();
+  expect(rows()).toEqual(["Read file: Ask (Inactive)"]);
+  expect(menuButton("Read file", "Ask")).toBeUndefined();
+  await header("Add rule");
+  await click("Read file");
+  expect(effects()).toEqual(["Allow", "Block"]);
+  await click("Create space");
+  expect(effects()).toEqual(["Ask", "Block"]);
+  await click("User computer shell");
+  expect(effects()).toEqual(["Block"]);
+  expect(container.textContent).toContain("Computer access is approved separately.");
+});
+
+it("opens a known tool deep link and returns to the list after saving", async () => {
+  state.tool = "write_file";
+  await render();
+  expect(effects()).toEqual(["Allow", "Ask", "Block"]);
+  await header("Save");
+  expect(rows()).toEqual(["Write file: Ask"]);
+  expect(state.setParams).toHaveBeenCalledWith({ tool: undefined });
+});
+
+it("ignores unknown deep links, and removes Ask in Never ask", async () => {
+  state.tool = "write_fiel";
+  state.settings = { ...state.settings, mode: "never", skipApprovals: true };
+  await render();
+  expect(state.headerItems.map((item) => item.label)).toEqual(["Add rule"]);
+  await header("Add rule");
+  await click("Write file");
+  expect(effects()).toEqual(["Allow", "Block"]);
+  expect(container.textContent).toContain("Ask rules are inactive in Never ask.");
+});
+
+it("does not close a new tool editor when an older save returns", async () => {
+  state.tool = "write_file";
+  await render();
+  let resolveSave!: (value: Rule) => void;
+  state.rpc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+  );
+  await header("Save");
+  state.tool = "shell";
+  await render();
+  await act(async () => resolveSave(rule({ id: "old", matchValue: "write_file" })));
+  expect(container.querySelector("select")).not.toBeNull();
+  expect(state.setParams).not.toHaveBeenCalled();
+});
+
+it("resets scope and ignores a saved response from the previous Space", async () => {
+  state.spaceId = "space-old";
+  state.tool = "write_file";
+  await render();
+  let resolveSave!: (value: Rule) => void;
+  state.rpc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+  );
+  await header("Save");
+  state.spaceId = "space-new";
+  state.tool = "shell";
+  await render();
+  await act(async () => resolveSave(rule({ id: "old", matchValue: "write_file" })));
+  expect(rows()).toEqual([]);
+  expect(container.querySelector("select")).not.toBeNull();
+  expect(state.setParams).not.toHaveBeenCalled();
+  expect(state.rpc).toHaveBeenCalledWith(
+    "approvalRules/list",
+    { scope: "space" },
+    { requestContext: { headers: { space: "space-new" } } },
+  );
+});
+
+it("ignores a stale rules read after switching Space", async () => {
+  state.spaceId = "space-old";
+  let resolveRead!: (value: Rule[]) => void;
+  state.rpc.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveRead = resolve;
+      }),
+  );
+  await render();
+  state.spaceId = "space-new";
+  state.rules = [rule({ id: "new", matchValue: "write_file", effect: "deny" })];
+  await render();
+  expect(rows()).toEqual(["Write file: Block"]);
+  await act(async () => resolveRead([rule({ id: "old", matchValue: "send_email" })]));
+  expect(rows()).toEqual(["Write file: Block"]);
 });

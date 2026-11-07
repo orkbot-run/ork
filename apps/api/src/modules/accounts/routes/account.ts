@@ -14,9 +14,11 @@ import {
   settleCallRequest,
 } from "@orkbot/adapters";
 import type { ActionApprovalRule, Actor, ChatAlert, Me, SettingsScope } from "@orkbot/contracts";
+import { isBuiltinToolName } from "@orkbot/contracts";
 import {
   approvalModeFromPreference,
   approvalPreferenceFromMode,
+  approvalRuleEffects,
   callRequestClientNonce,
 } from "@orkbot/core";
 import { urlSite } from "@orkbot/core/egress";
@@ -281,7 +283,22 @@ export function accountRoutes(ctx: RouterContext) {
       set: authed.approvalRules.set.handler(async ({ context, input }) => {
         const { scope, ...rule } = input;
         return approvalRuleDto(
-          await deps.prisma.$transaction((tx) => saveApprovalRule(tx, context.actor, rule, scope)),
+          await deps.prisma.$transaction(async (tx) => {
+            await lockSpaceSettings(tx, context.actor);
+            const name = rule.matchValue.toLowerCase();
+            if (rule.matchKind === "tool" && isBuiltinToolName(name)) {
+              const preference = await findAutoReviewPreference(tx, context.actor, scope);
+              const mode = approvalModeFromPreference({
+                enabled: preference?.enabled ?? true,
+                skipApprovals: preference?.skipApprovals ?? false,
+              });
+              if (!approvalRuleEffects(name, mode).includes(rule.effect))
+                throw new ORPCError("BAD_REQUEST", {
+                  message: "This rule is not available for this tool in the current approval mode.",
+                });
+            }
+            return saveApprovalRule(tx, context.actor, rule, scope);
+          }),
         );
       }),
       remove: authed.approvalRules.remove.handler(async ({ context, input }) => {

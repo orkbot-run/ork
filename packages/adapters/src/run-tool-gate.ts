@@ -10,6 +10,7 @@ import type {
   ToolBatch,
 } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
+import { READ_ONLY_AGENT_TOOLS } from "@orkbot/contracts";
 import {
   applyJudgeDecision,
   approvalModeFromPreference,
@@ -78,7 +79,7 @@ import { renewRunLease } from "./run-lifecycle.js";
 import { notifyRun } from "./run-notifications.js";
 import { resolveCompletedSecretLeftover } from "./run-secret.js";
 import type { ToolRequest } from "./run-tool-request.js";
-import { BUILTIN_AGENT_TOOL_NAMES, READ_ONLY_AGENT_TOOLS } from "./run-tool-selection.js";
+import { BUILTIN_AGENT_TOOL_NAMES } from "./run-tool-selection.js";
 import { callMediaTool } from "./run-tools-files.js";
 import { USER_COMPUTER_TOOLS, userComputerGate } from "./run-tools-user-computer.js";
 import { connectorTrustKeys } from "./run-trust.js";

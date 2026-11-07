@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Catalog and effective-mode regressions follow LICENSE.md.
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -61,6 +64,30 @@ vi.mock("@orkbot/ui-web", async () => {
         </button>
       );
     },
+  };
+});
+
+vi.mock("./ApprovalRuleToolPicker", async () => {
+  const { APPROVAL_RULE_TOOLS } = await import("@orkbot/core");
+  return {
+    OTHER_APPROVAL_TOOL: "__other__",
+    ApprovalRuleToolPicker: ({
+      value,
+      onChange,
+    }: {
+      value: string;
+      onChange: (name: string) => void;
+    }) => (
+      <select aria-label="Tool" value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Choose a tool</option>
+        {APPROVAL_RULE_TOOLS.map((tool) => (
+          <option key={tool.name} value={tool.name}>
+            {tool.label}
+          </option>
+        ))}
+        <option value="__other__">Other tool</option>
+      </select>
+    ),
   };
 });
 
@@ -337,14 +364,7 @@ it("adds an explicit tool rule without waiting for an approval card", async () =
   try {
     await vi.waitFor(() => expect(button(container, "Add rule")!.disabled).toBe(false));
     await act(async () => button(container, "Add rule")!.click());
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Tool name"]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        input,
-        " write_file ",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await selectTool(container, "write_file");
     await act(async () =>
       container
         .querySelector("form")!
@@ -374,14 +394,7 @@ it("keeps the form and shows why a save failed", async () => {
   try {
     await vi.waitFor(() => expect(button(container, "Add rule")!.disabled).toBe(false));
     await act(async () => button(container, "Add rule")!.click());
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Tool name"]')!;
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
-        input,
-        "Write file",
-      );
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+    await selectTool(container, "write_file");
     await act(async () =>
       container
         .querySelector("form")!
@@ -396,7 +409,7 @@ it("keeps the form and shows why a save failed", async () => {
   }
 });
 
-it("leaves a tool's existing rule alone when it is typed again by its displayed name", async () => {
+it("leaves a tool's existing rule alone when selected again", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   rpcMock.approvalRules.list.mockResolvedValue([
     { id: "blocked", effect: "deny", matchKind: "tool", matchValue: "write_file" },
@@ -406,11 +419,98 @@ it("leaves a tool's existing rule alone when it is typed again by its displayed 
   try {
     await vi.waitFor(() => expect(button(container, "Add rule")!.disabled).toBe(false));
     await act(async () => button(container, "Add rule")!.click());
-    const input = container.querySelector<HTMLInputElement>('input[aria-label="Tool name"]')!;
+    await selectTool(container, "write_file");
+    await act(async () =>
+      container
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(rpcMock.approvalRules.set).not.toHaveBeenCalled();
+    expect(container.querySelector("form")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+async function selectTool(container: HTMLElement, value: string) {
+  await act(async () => {
+    const select = container.querySelector<HTMLSelectElement>('select[aria-label="Tool"]')!;
+    select.value = value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+it("offers only effective choices for built-ins and preserves inactive older Ask rules", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  rpcMock.approvalRules.list.mockResolvedValue([
+    { id: "old", effect: "require_approval", matchKind: "tool", matchValue: "read_file" },
+  ]);
+  rpcMock.autoReview.get.mockResolvedValue(settings);
+  const { container, root } = await render();
+  try {
+    await vi.waitFor(() => expect(container.textContent).toContain("Inactive"));
+    expect(button(container, "Ask", '[data-testid="approval-rules"]')).toBeUndefined();
+    await act(async () => button(container, "Add rule")!.click());
+    await selectTool(container, "read_file");
+    expect(button(container, "Ask", "form")).toBeUndefined();
+    expect(button(container, "Allow", "form")).toBeDefined();
+    await selectTool(container, "create_space");
+    expect(button(container, "Allow", "form")).toBeUndefined();
+    expect(button(container, "Ask", "form")).toBeDefined();
+    await selectTool(container, "user_computer_shell");
+    expect(button(container, "Allow", "form")).toBeUndefined();
+    expect(button(container, "Ask", "form")).toBeUndefined();
+    expect(button(container, "Block", "form")?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("Computer access is approved separately.");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("removes Ask from an open form when the mode changes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  rpcMock.approvalRules.list.mockResolvedValue([]);
+  rpcMock.autoReview.get.mockResolvedValue(settings);
+  rpcMock.autoReview.set.mockResolvedValue({ ...settings, mode: "never", skipApprovals: true });
+  const { container, root } = await render();
+  try {
+    await vi.waitFor(() => expect(button(container, "Add rule")!.disabled).toBe(false));
+    await act(async () => button(container, "Add rule")!.click());
+    await selectTool(container, "write_file");
+    expect(button(container, "Ask", "form")?.getAttribute("aria-pressed")).toBe("true");
+    await act(async () => button(container, "Never ask")!.click());
+    await vi.waitFor(() => expect(button(container, "Ask", "form")).toBeUndefined());
+    expect(button(container, "Block", "form")?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.textContent).toContain("Ask rules are inactive in Never ask.");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+  }
+});
+
+it("keeps integration rule entry available without free-text built-in identities", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  rpcMock.approvalRules.list.mockResolvedValue([]);
+  rpcMock.autoReview.get.mockResolvedValue(settings);
+  rpcMock.approvalRules.set.mockImplementation(async (input) => ({ id: "integration", ...input }));
+  const { container, root } = await render();
+  try {
+    await vi.waitFor(() => expect(button(container, "Add rule")!.disabled).toBe(false));
+    await act(async () => button(container, "Add rule")!.click());
+    expect(container.querySelector("input")).toBeNull();
+    await selectTool(container, "__other__");
     await act(async () => {
+      const input = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Integration tool"]',
+      )!;
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
         input,
-        "Write file",
+        "mcp__notes__write",
       );
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -419,8 +519,12 @@ it("leaves a tool's existing rule alone when it is typed again by its displayed 
         .querySelector("form")!
         .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
-    expect(rpcMock.approvalRules.set).not.toHaveBeenCalled();
-    expect(container.querySelector("form")).toBeNull();
+    expect(rpcMock.approvalRules.set).toHaveBeenCalledWith({
+      scope: "account",
+      effect: "require_approval",
+      matchKind: "tool",
+      matchValue: "mcp__notes__write",
+    });
   } finally {
     await act(async () => root.unmount());
     container.remove();

@@ -1,4 +1,33 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tool identities are preserved. Shared policy placement follows LICENSE.md.
+
 import * as z from "zod";
+
+/** Tools whose ordinary execution does not create an approval effect. */
+export const READ_ONLY_AGENT_TOOLS: ReadonlySet<string> = new Set([
+  "computer_observe",
+  "list_files",
+  "list_fleet",
+  "read_file",
+  "read_history",
+  "search_history",
+  "request_takeover",
+  "run_subagent",
+  "task_catalog",
+  "recall_memory",
+  "schedule_list",
+  "scratchpad_list",
+  "board_tickets",
+  "ticket_get",
+  "skill_read",
+  "web_search",
+  "web_fetch",
+  "browser_snapshot",
+  "list_secrets",
+  "cloud_agent_status",
+  "purchase_status",
+]);
 
 /** Fleet management tools. Only list_fleet is read-only. */
 export const FLEET_TOOL_NAMES = [

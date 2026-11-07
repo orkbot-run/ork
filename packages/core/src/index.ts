@@ -11,6 +11,7 @@ export * from "./agent-skill.js";
 export * from "./ai-consent.js";
 export * from "./answerable-ask.js";
 export * from "./app-connect.js";
+export * from "./approval-rule-catalog.js";
 export * from "./artifact-sandbox.js";
 export * from "./async.js";
 export * from "./attachments.js";

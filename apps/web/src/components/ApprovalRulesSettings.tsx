@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; shared rule selection and effective choices are Ork changes.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   ActionApprovalRule,
@@ -5,15 +9,23 @@ import type {
   ApprovalMode,
   SettingsScope,
 } from "@orkbot/contracts";
-import { humanizeToolName, toolNameFromLabel } from "@orkbot/core";
+import {
+  approvalRuleEffects,
+  approvalRuleTool,
+  hasSeparateComputerApproval,
+  humanizeToolName,
+  initialApprovalRuleEffect,
+  toolNameFromLabel,
+} from "@orkbot/core";
 import { writeSaved } from "@orkbot/core/query";
 import { Button, Input, ToggleGroup, ToggleGroupItem } from "@orkbot/ui-web";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useSpaceQueries } from "../lib/query";
-import { useSpaceRpc } from "../lib/space-rpc";
+import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
 import { errorText } from "../lib/user-error";
+import { ApprovalRuleToolPicker, OTHER_APPROVAL_TOOL } from "./ApprovalRuleToolPicker";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
 
 const segmented = "rounded-lg bg-muted p-1";
@@ -21,6 +33,11 @@ const segment = "h-7 px-3 text-[13px] aria-pressed:bg-background aria-pressed:sh
 
 /** Approvals for the account, or for the bound Space when it customizes them. */
 export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
+  const spaceId = useBoundSpaceId();
+  return <ApprovalRulesEditor key={`${scope}:${spaceId ?? ""}`} scope={scope} />;
+}
+
+function ApprovalRulesEditor({ scope }: { scope: SettingsScope }) {
   const rpc = useSpaceRpc();
   const { t } = useLingui();
   const queries = useSpaceQueries();
@@ -34,6 +51,15 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
   const loadFailed = rulesQuery.error ?? autoReviewQuery.error;
   const [adding, setAdding] = useState(false);
   const [tool, setTool] = useState("");
+  const [otherTool, setOtherTool] = useState("");
+  const [effect, setDraftEffect] = useState<ActionApprovalRule["effect"]>("require_approval");
+  const name =
+    tool === OTHER_APPROVAL_TOOL
+      ? (approvalRuleTool(otherTool)?.name ?? toolNameFromLabel(otherTool))
+      : tool;
+  const mode = autoReview?.mode ?? "ask";
+  const effects = approvalRuleEffects(name, mode);
+  const chosenEffect = effects.includes(effect) ? effect : initialApprovalRuleEffect(name, mode);
   const [saving, setSaving] = useState(false);
   const [actionError, setError] = useState<string | null>(null);
   const error =
@@ -100,14 +126,13 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
 
   const addTool = () =>
     save(async () => {
-      const name = toolNameFromLabel(tool);
       // An existing rule keeps its effect; changing it stays an explicit choice in the list.
       const exists = rules.some(
         (rule) => rule.matchKind === "tool" && rule.matchValue.toLowerCase() === name.toLowerCase(),
       );
-      if (!exists)
-        await putRule({ effect: "require_approval", matchKind: "tool", matchValue: name });
+      if (!exists) await putRule({ effect: chosenEffect, matchKind: "tool", matchValue: name });
       setTool("");
+      setOtherTool("");
       setAdding(false);
     }, t`Could not save rule`);
 
@@ -153,31 +178,75 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
         variant="outline"
         size="sm"
         disabled={loading || Boolean(loadFailed) || saving}
-        onClick={() => setAdding(!adding)}
+        onClick={() => {
+          setAdding(!adding);
+          setTool("");
+          setOtherTool("");
+          setError(null);
+        }}
         aria-expanded={adding}
       >
         <Trans>Add rule</Trans>
       </Button>
       {adding ? (
         <form
-          className="flex items-center gap-2"
+          className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (tool.trim()) void addTool();
+            if (name.trim()) void addTool();
           }}
         >
-          <Input
-            aria-label={t`Tool name`}
-            placeholder={t`Tool name`}
+          <ApprovalRuleToolPicker
             value={tool}
-            maxLength={253}
             disabled={saving}
-            onChange={(event) => setTool(event.target.value)}
+            onChange={(value) => {
+              setTool(value);
+              setDraftEffect(initialApprovalRuleEffect(value, mode));
+            }}
           />
-          <Button type="submit" size="sm" disabled={saving || !tool.trim()}>
+          {tool === OTHER_APPROVAL_TOOL ? (
+            <Input
+              aria-label={t`Integration tool`}
+              placeholder={t`Integration tool`}
+              value={otherTool}
+              maxLength={253}
+              disabled={saving}
+              onChange={(event) => setOtherTool(event.target.value)}
+            />
+          ) : null}
+          {name ? (
+            <ToggleGroup
+              aria-label={t`Rule`}
+              value={[chosenEffect]}
+              onValueChange={([next]) => {
+                if (effects.includes(next as ActionApprovalRule["effect"]))
+                  setDraftEffect(next as ActionApprovalRule["effect"]);
+              }}
+              disabled={saving}
+              spacing={1}
+              className={segmented}
+            >
+              {effects.map((choice) => (
+                <ToggleGroupItem key={choice} value={choice} className={segment}>
+                  {choice === "always_allow" ? t`Allow` : choice === "deny" ? t`Block` : t`Ask`}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          ) : null}
+          <Button type="submit" size="sm" disabled={saving || !name.trim()}>
             <Trans>Save</Trans>
           </Button>
         </form>
+      ) : null}
+      {adding && hasSeparateComputerApproval(name) ? (
+        <p className="text-[13px] text-muted-foreground">
+          <Trans>Computer access is approved separately.</Trans>
+        </p>
+      ) : null}
+      {mode === "never" && (adding || rules.some((rule) => rule.effect === "require_approval")) ? (
+        <p className="text-[13px] text-muted-foreground">
+          <Trans>Ask rules are inactive in Never ask.</Trans>
+        </p>
       ) : null}
       {rules.length > 0 ? (
         <SettingsGroup title={<Trans>Rules</Trans>} data-testid="approval-rules">
@@ -187,6 +256,12 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
               label={ruleLabel(rule)}
               control={
                 <>
+                  {rule.matchKind !== "category" &&
+                  !approvalRuleEffects(rule.matchValue, mode).includes(rule.effect) ? (
+                    <span className="text-[13px] text-muted-foreground">
+                      <Trans>Inactive</Trans>
+                    </span>
+                  ) : null}
                   {rule.matchKind === "category" ? (
                     <span className="text-[13px] text-muted-foreground">
                       {rule.effect === "always_allow" ? (
@@ -200,29 +275,34 @@ export function ApprovalRulesSettings({ scope }: { scope: SettingsScope }) {
                   ) : (
                     <ToggleGroup
                       aria-label={ruleLabel(rule)}
-                      value={[rule.effect]}
+                      value={
+                        approvalRuleEffects(rule.matchValue, mode).includes(rule.effect)
+                          ? [rule.effect]
+                          : []
+                      }
                       onValueChange={([next]) => {
                         if (
                           next === "always_allow" ||
                           next === "require_approval" ||
                           next === "deny"
                         ) {
-                          void setEffect(rule, next);
+                          if (approvalRuleEffects(rule.matchValue, mode).includes(next))
+                            void setEffect(rule, next);
                         }
                       }}
                       disabled={saving}
                       spacing={1}
                       className={segmented}
                     >
-                      <ToggleGroupItem value="always_allow" className={segment}>
-                        <Trans>Allow</Trans>
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="require_approval" className={segment}>
-                        <Trans>Ask</Trans>
-                      </ToggleGroupItem>
-                      <ToggleGroupItem value="deny" className={segment}>
-                        <Trans>Block</Trans>
-                      </ToggleGroupItem>
+                      {approvalRuleEffects(rule.matchValue, mode).map((choice) => (
+                        <ToggleGroupItem key={choice} value={choice} className={segment}>
+                          {choice === "always_allow"
+                            ? t`Allow`
+                            : choice === "deny"
+                              ? t`Block`
+                              : t`Ask`}
+                        </ToggleGroupItem>
+                      ))}
                     </ToggleGroup>
                   )}
                   <Button
