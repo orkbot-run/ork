@@ -7,7 +7,7 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import type { ManagedConnectorProvider } from "@orkbot/adapter-kit";
+import type { ManagedConnectorProvider, SandboxProvider } from "@orkbot/adapter-kit";
 import {
   ConnectorAuthUnavailableError,
   routineWakeupJob,
@@ -4121,6 +4121,7 @@ describe("computer screen url", () => {
   const callScreenUrl = async (
     connectScreen: () => Promise<unknown>,
     updateMany = vi.fn().mockResolvedValue({ count: 1 }),
+    describe: SandboxProvider["describe"] = () => new adapters.FakeSandboxProvider().describe(),
   ) => {
     const endRun = vi.fn().mockResolvedValue(1);
     const prisma = {
@@ -4138,7 +4139,7 @@ describe("computer screen url", () => {
     } as unknown as PrismaClient;
     const deps = {
       prisma,
-      sandbox: { connectScreen },
+      sandbox: { connectScreen, describe },
       jobs: { enqueue: vi.fn().mockResolvedValue(undefined) },
       env: {
         defaultProvider: "fake",
@@ -4161,6 +4162,30 @@ describe("computer screen url", () => {
     );
     return { response, updateMany, endRun };
   };
+
+  it("keeps an unreadable capability projection closed without opening a screen or clearing its computer", async () => {
+    const connectScreen = vi.fn();
+    const { response, updateMany, endRun } = await callScreenUrl(connectScreen, undefined, () => {
+      throw new Error("metadata unavailable");
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ json: { url: null } });
+    expect(connectScreen).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+    expect(endRun).not.toHaveBeenCalled();
+  });
+
+  it("does not connect a graphical screen for an explicitly headless target", async () => {
+    const descriptor = new adapters.FakeSandboxProvider().describe();
+    const connectScreen = vi.fn();
+    const { response } = await callScreenUrl(connectScreen, undefined, () => ({
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, graphical: false },
+    }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ json: { url: null } });
+    expect(connectScreen).not.toHaveBeenCalled();
+  });
 
   it("issues lifecycle-bound capabilities for managed-provider screens too", async () => {
     const { response } = await callScreenUrl(async () => ({
@@ -4253,6 +4278,9 @@ describe("computer terminal and file transfer", () => {
 
   function setup(computer: Record<string, unknown> = {}, maxUploadSizeBytes?: number) {
     const sandbox = {
+      describe: vi.fn<SandboxProvider["describe"]>(() =>
+        new adapters.FakeSandboxProvider().describe(),
+      ),
       execute: vi.fn(async function* () {
         yield { type: "exit" as const, code: 0 };
       }),
@@ -4403,6 +4431,36 @@ describe("computer terminal and file transfer", () => {
       scope: { botId: "bot-1", controlLeaseId: "lease-1" },
       target: { hostname: "screen.example", interactive: true },
     });
+  });
+
+  it("does not open an unsupported terminal even with an otherwise valid control lease", async () => {
+    const { sandbox, prisma, call } = setup(controlled);
+    const descriptor = sandbox.describe();
+    sandbox.describe.mockReturnValue({
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, pty: false },
+    });
+    await expect(call("terminalUrl", {})).resolves.toEqual({
+      status: 200,
+      body: { json: { url: null } },
+    });
+    expect(sandbox.connectTerminal).not.toHaveBeenCalled();
+    expect(prisma.computer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses a disabled start before running commands or acquiring a computer lease", async () => {
+    const { sandbox, prisma, call } = setup({ state: "stopped" });
+    const descriptor = sandbox.describe();
+    sandbox.describe.mockReturnValue({
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, provisioning: false },
+    });
+    const leaseRead = vi.fn();
+    prisma.computer.findUniqueOrThrow = leaseRead;
+    await expect(call("boot", {})).resolves.toMatchObject({ status: 400 });
+    expect(leaseRead).not.toHaveBeenCalled();
+    expect(sandbox.execute).not.toHaveBeenCalled();
+    expect(prisma.computer.updateMany).not.toHaveBeenCalled();
   });
 
   it("clears the row when the provider reclaimed the sandbox before the terminal opened", async () => {
