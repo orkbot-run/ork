@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors to remove an unused card-summary helper. Inherited material remains Apache-2.0.
+
 import type {
   BotSecretMetadata,
-  CardSummary,
   ContactFields,
   LoginFieldInput,
   VaultKind,
@@ -322,9 +325,4 @@ export function billingChoices(items: readonly BotSecretMetadata[]) {
   return items
     .filter((item) => item.auth?.type === "contact")
     .map((item) => ({ key: item.name, label: item.title }));
-}
-
-/** The rows a saved card's detail shows from its summary. */
-export function cardRows(card: CardSummary) {
-  return { number: `•••• ${card.last4}`, expires: cardExpiry(card) };
 }

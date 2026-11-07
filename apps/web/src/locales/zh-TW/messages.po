@@ -448,10 +448,6 @@ msgstr "訂閱憑證已安全儲存。"
 msgid "About {kb} KB of memory no longer reaches the bot."
 msgstr ""
 
-#: src/components/InfoTooltip.tsx
-msgid "About {label}"
-msgstr "關於 {label}"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Access key ID"
 msgstr ""

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 import type { SourceLink } from "../alternatives";
 import { GITHUB_URL, SITE_URL } from "../site";
 import type { SandboxImage } from "./types";
@@ -5,8 +9,6 @@ import type { SandboxImage } from "./types";
 export const SANDBOXES_PATH = "/sandboxes/";
 export const SANDBOXES_UPDATED = "November 4, 2026";
 export const COMPUTER_PROVIDERS_DOCS_PATH = "/docs/self-host-sandbox-providers/";
-export const COMPUTER_DOCS_PATH = "/docs/computer/";
-export const SELF_HOST_PATH = "/self-hosted-ai-agent/";
 
 export function sandboxPath(slug: string): string {
   return `${SANDBOXES_PATH}${slug}/`;

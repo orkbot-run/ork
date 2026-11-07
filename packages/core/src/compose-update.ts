@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 import {
   DEFAULT_UPDATE_REMOTE,
   isOfficialRepoUrl,
@@ -17,8 +21,6 @@ export const PUBLISHED_IMAGE_REPO = "orkbot-run/ork";
 
 /** The published server image. One image runs api, worker, and web. */
 export const OFFICIAL_SERVER_IMAGE = `ghcr.io/${PUBLISHED_IMAGE_REPO}/app`;
-/** The updater sidecar's image, published alongside the server image but tagged independently. */
-export const OFFICIAL_UPDATER_IMAGE = `ghcr.io/${PUBLISHED_IMAGE_REPO}/updater`;
 
 /**
  * The tag a deployment that has never run an update is on. It is deliberately *not* `latest`: no

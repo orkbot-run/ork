@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 import { z } from "zod";
 import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { Id } from "./ids.js";
@@ -566,7 +570,6 @@ export type GenerateSecretInput = z.infer<typeof GenerateSecretInput>;
 export function botSecretSubmissionSchema(options?: { allowPrivateHttpOrigin?: boolean }) {
   return z.object({ credentialSaved: botSecretDestinationSchema(options) });
 }
-export const BotSecretSubmission = botSecretSubmissionSchema();
 
 const destinationInputShape = {
   name: BotSecretName,

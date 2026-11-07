@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 import { providerQuotaResetAt } from "@orkbot/contracts";
 
 /** A model call failed for a reason that should clear on its own, such as an overloaded provider. */
@@ -63,11 +67,6 @@ function errorFacts(value: unknown) {
     }
   }
   return { text: text.join(" ").toLowerCase(), statuses };
-}
-
-/** Transport timeouts may expire before the model request's overall budget. */
-export function isProviderTimeout(error: unknown): boolean {
-  return /timed? out|timeout/.test(errorFacts(error).text);
 }
 
 /** An explicit statement that the account is out of credits, balance, quota or a usage window. */

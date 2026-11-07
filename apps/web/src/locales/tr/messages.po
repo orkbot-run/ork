@@ -447,10 +447,6 @@ msgstr "Bir abonelik kimlik bilgisi güvenli şekilde saklanıyor."
 msgid "About {kb} KB of memory no longer reaches the bot."
 msgstr "Yaklaşık {kb} KB hafıza artık bota ulaşmıyor."
 
-#: src/components/InfoTooltip.tsx
-msgid "About {label}"
-msgstr "{label} hakkında"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Access key ID"
 msgstr "Erişim anahtarı kimliği"

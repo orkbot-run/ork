@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors to remove an unused push-token helper. Inherited material remains Apache-2.0.
+
 import { newClientId } from "@orkbot/core";
 import Constants from "expo-constants";
 import { requireOptionalNativeModule } from "expo-modules-core";
@@ -36,10 +40,6 @@ export async function registerPushToken() {
     // Expo Go without an EAS project id and Android builds without a Firebase config
     // cannot mint an Expo push token.
   }
-}
-
-export async function unregisterPushToken() {
-  await rpc("notifications/unregisterPush").catch(() => undefined);
 }
 
 let callTokens: { expoToken?: string; voipToken?: string } = {};

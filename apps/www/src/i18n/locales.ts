@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 export const LOCALES = [
   "en",
   "de",
@@ -101,10 +105,4 @@ export function isLocale(value: string | undefined): value is Locale {
 
 export function localeHomePath(locale: Locale): string {
   return locale === DEFAULT_LOCALE ? "/" : `/${locale}/`;
-}
-
-export function localeHashPath(locale: Locale, hash: string): string {
-  const base = localeHomePath(locale);
-  const id = hash.replace(/^#/, "");
-  return base === "/" ? `/#${id}` : `${base}#${id}`;
 }

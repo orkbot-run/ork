@@ -134,31 +134,6 @@ export async function openBotPanelTab(page: Page, name: string) {
   await expect(tab).toHaveAttribute("aria-selected", "true");
 }
 
-/** Waits for fold-outs to settle before clicking or dragging their contents. */
-async function waitForTransitions(element: Locator) {
-  // Base UI starts a fold a frame after the toggle.
-  await element.evaluate(
-    () =>
-      new Promise((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined))),
-      ),
-  );
-  await expect
-    .poll(() =>
-      element.evaluate(
-        (node) =>
-          node
-            .getAnimations({ subtree: true })
-            .filter((animation) => animation instanceof CSSTransition).length,
-      ),
-    )
-    .toBe(0);
-}
-
-export async function waitForSidebarTransitions(page: Page) {
-  await waitForTransitions(page.locator("aside").first());
-}
-
 /**
  * A card inside the fit-content bubble frame fills its fixed width and shrinks only to the
  * frame's cap. A percentage width would resolve against the card's own content instead.
@@ -361,18 +336,6 @@ export async function clickAndWaitForRpc(page: Page, button: Locator, path: stri
   // The whole reply has arrived, not just its headers.
   const failure = await reply.finished();
   if (failure) throw new Error(`/rpc/${path} reply did not finish: ${failure.message}`);
-}
-
-/** Presents a deployment default the offline E2E server cannot run, as host credentials would. */
-export async function presentMainDeploymentDefault(page: Page, provider: string, modelId: string) {
-  await page.route("**/rpc/models/role", async (route) => {
-    const { json } = route.request().postDataJSON() as { json: { role: string } };
-    if (json.role !== "main") return route.continue();
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Record<string, unknown> };
-    body.json.deploymentPrimary = { provider, modelId };
-    await route.fulfill({ response, json: body });
-  });
 }
 
 export async function makeAdmin(route: Route, path: "me" | "bootstrap") {

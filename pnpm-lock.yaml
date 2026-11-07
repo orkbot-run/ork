@@ -744,9 +744,6 @@ importers:
       '@mozilla/readability':
         specifier: 0.6.0
         version: 0.6.0
-      '@observablehq/plot':
-        specifier: 0.6.17
-        version: 0.6.17
       '@opentelemetry/api':
         specifier: 1.9.1
         version: 1.9.1
@@ -792,9 +789,6 @@ importers:
       chat-adapter-sendblue:
         specifier: 0.2.0
         version: 0.2.0(chat@4.44.0(zod@4.6.7))
-      d3-dsv:
-        specifier: 3.0.2
-        version: 3.0.2
       graphile-worker:
         specifier: 0.17.3
         version: 0.17.3(typescript@7.0.2)
@@ -847,9 +841,6 @@ importers:
       '@chat-adapter/tests':
         specifier: 4.41.1
         version: 4.41.1(chat@4.44.0(zod@4.6.7))(vitest@4.1.12(@opentelemetry/api@1.9.1)(@types/node@26.5.0)(jsdom@30.1.3(@noble/hashes@2.3.0))(vite@8.3.5(@types/node@26.5.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
-      '@types/d3-dsv':
-        specifier: 3.0.7
-        version: 3.0.7
       '@types/jsdom':
         specifier: 30.0.0
         version: 30.0.0

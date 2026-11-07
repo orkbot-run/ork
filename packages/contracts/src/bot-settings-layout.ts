@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 /** Shared section membership and order; surfaces omit unavailable capabilities. */
 export const BOT_SETTINGS_SECTIONS = {
   openWork: ["scratchpad"],
@@ -21,8 +25,6 @@ export const BOT_SETTINGS_SECTIONS = {
     "clear",
   ],
 } as const;
-
-export const BOT_SETTINGS_ADVANCED_ORDER = BOT_SETTINGS_SECTIONS.advanced;
 
 /** Labels stay literal in each platform's translation calls. */
 export const BOT_COMPUTER_MODES = ["team", "dedicated"] as const;

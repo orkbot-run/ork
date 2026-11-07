@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Removed unused exports. Inherited material remains Apache-2.0.
+
 export type GroupMemberRef = {
   id: string;
   name: string;
@@ -11,8 +15,6 @@ export function memberName(
   return members.find((member) => member.botId === botId)?.name;
 }
 
-const MENTION_PATTERN = /@([A-Za-z0-9][A-Za-z0-9_-]{0,39})/g;
-
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -24,15 +26,6 @@ export function hasMentionToken(text: string, name: string): boolean {
     `(?:^|[^\\p{L}\\p{N}_-])@${escapeRegExp(normalized)}(?![\\p{L}\\p{N}_-])`,
     "iu",
   ).test(text);
-}
-
-export function parseMentionNames(text: string): string[] {
-  const names = new Set<string>();
-  for (const match of text.matchAll(MENTION_PATTERN)) {
-    const name = match[1];
-    if (name) names.add(name.toLowerCase());
-  }
-  return [...names];
 }
 
 type GroupTargetInput = {

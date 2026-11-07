@@ -447,10 +447,6 @@ msgstr "구독 인증 정보가 안전하게 저장되어 있습니다."
 msgid "About {kb} KB of memory no longer reaches the bot."
 msgstr ""
 
-#: src/components/InfoTooltip.tsx
-msgid "About {label}"
-msgstr "{label} 정보"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Access key ID"
 msgstr ""
@@ -903,7 +899,7 @@ msgstr ""
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Apps"
-msgstr ""
+msgstr "앱"
 
 #: src/pages/BotContextMenu.tsx
 msgid "Archive"
@@ -1174,7 +1170,7 @@ msgstr "기본 제공"
 
 #: src/pages/shell/chat-header.tsx
 msgid "Call"
-msgstr ""
+msgstr "통화"
 
 #: src/components/call/VoiceChatCard.tsx
 msgid "Call back"
@@ -3451,7 +3447,7 @@ msgstr "높음"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk"
-msgstr ""
+msgstr "누르고 말하기"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Hold to talk, release to send"
@@ -3772,7 +3768,7 @@ msgstr ""
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Listening…"
-msgstr ""
+msgstr "듣는 중…"
 
 #: src/pages/shell/transcript.tsx
 msgid "Load earlier messages"
