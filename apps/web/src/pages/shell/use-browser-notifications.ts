@@ -1,19 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; notification ownership changes follow LICENSE.md.
+
 import type { Bot, ChatAlert, ProductEvent } from "@orkbot/contracts";
 import { isRetryableError, retryDelayMs } from "@orkbot/core";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import {
   deliverBrowserNotification as deliverNativeBrowserNotification,
   shouldNotifyBrowser,
 } from "../../lib/browser-notifications";
 import { notificationIcon, prepareNotificationIcons } from "../../lib/notification-icon";
 import type { RpcClient } from "../../lib/rpc";
+import { captureRpcContext } from "../../lib/rpc";
 
 type PendingBrowserNotification = {
-  event: Pick<ProductEvent, "id" | "type" | "threadId" | "botId" | "payload">;
+  event: Pick<ProductEvent, "id" | "type" | "threadId" | "spaceId" | "botId" | "payload">;
   botId: string;
   botName: string;
-  groupNotification: boolean;
+  groupId?: string;
 };
 
 type ChatAlertOptions = {
@@ -35,12 +40,77 @@ export function useBrowserNotifications(
   useEffect(() => prepareNotificationIcons(bots), [bots]);
   const openChatRef = useRef(openChat);
   openChatRef.current = openChat;
+  const source = useMemo(() => ({ ...captureRpcContext(), rpc }), [rpc]);
+  type Lifetime = {
+    source: typeof source;
+    active: boolean;
+    shown: Set<Notification>;
+    notified: Set<string>;
+    pending: Map<string, PendingBrowserNotification>;
+  };
+  const lifetime = useRef<Lifetime | null>(null);
+  const currentLifetime = useCallback(() => {
+    const owner = lifetime.current;
+    return owner?.active && owner.source === source && source.isCurrent() ? owner : null;
+  }, [source]);
+  useLayoutEffect(() => {
+    const owner: Lifetime = {
+      source,
+      active: true,
+      shown: new Set(),
+      notified: new Set(),
+      pending: new Map(),
+    };
+    lifetime.current = owner;
+    return () => {
+      owner.active = false;
+      owner.pending.clear();
+      owner.notified.clear();
+      for (const notification of owner.shown) {
+        notification.onclick = null;
+        notification.onclose = null;
+        notification.close();
+      }
+      owner.shown.clear();
+      if (lifetime.current === owner) lifetime.current = null;
+    };
+  }, [source]);
+  const showNotification = useCallback(
+    (owner: Lifetime, alert: ChatAlert, tag: string, icon?: string) => {
+      if (currentLifetime() !== owner) return;
+      const target = { ...alert };
+      const notification = new Notification(target.title, {
+        body: target.body,
+        tag,
+        ...(icon ? { icon } : {}),
+      });
+      owner.shown.add(notification);
+      const release = () => {
+        owner.shown.delete(notification);
+        notification.onclick = null;
+        notification.onclose = null;
+      };
+      notification.onclose = release;
+      notification.onclick = () => {
+        if (currentLifetime() !== owner || !owner.shown.has(notification)) return;
+        release();
+        try {
+          window.focus();
+          if (currentLifetime() === owner) openChatRef.current(target);
+        } finally {
+          notification.close();
+        }
+      };
+    },
+    [currentLifetime],
+  );
   useEffect(() => {
+    const owner = currentLifetime();
+    if (!owner) return;
     let active = true;
     let controller: AbortController | undefined;
     let cancelRetry: (() => void) | undefined;
-    // A click must not reach a shell that has gone, so its alerts go with it.
-    const shown = new Set<Notification>();
+    const current = () => active && currentLifetime() === owner;
     const show = (alert: ChatAlert) => {
       if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
       const isOpen = alert.groupId
@@ -56,33 +126,23 @@ export function useBrowserNotifications(
       try {
         const bot = botsRef.current.find((candidate) => candidate.id === alert.botId);
         const icon = bot ? notificationIcon(bot) : undefined;
-        const notification = new Notification(alert.title, {
-          body: alert.body,
-          ...(icon ? { icon } : {}),
-          // Per chat and kind: a repeat replaces its copy, but a question after a reply still pops up.
-          tag: `${alert.threadId}:${alert.kind}`,
-        });
-        shown.add(notification);
-        notification.onclose = () => shown.delete(notification);
-        notification.onclick = () => {
-          window.focus();
-          openChatRef.current(alert);
-          notification.close();
-        };
+        // Per chat and kind: replace repeats without hiding a different kind of alert.
+        showNotification(owner, alert, `${alert.threadId}:${alert.kind}`, icon);
       } catch {
         // Some browsers only allow notifications from a service worker.
       }
     };
     void (async () => {
-      while (active) {
+      while (current()) {
         controller = new AbortController();
         let failure: unknown;
         try {
           const stream = await rpc.notifications.subscribe(undefined, {
             signal: controller.signal,
+            context: { isCurrent: current },
           });
           for await (const frame of stream) {
-            if (!active) return;
+            if (!current()) return;
             if (frame.alert) show(frame.alert);
           }
         } catch (cause) {
@@ -90,7 +150,7 @@ export function useBrowserNotifications(
         } finally {
           controller.abort();
         }
-        if (!active || (failure !== undefined && !isRetryableError(failure))) return;
+        if (!current() || (failure !== undefined && !isRetryableError(failure))) return;
         await new Promise<void>((resolve) => {
           const timer = setTimeout(resolve, retryDelayMs(failure, 1_000));
           cancelRetry = () => {
@@ -105,48 +165,72 @@ export function useBrowserNotifications(
       active = false;
       controller?.abort();
       cancelRetry?.();
-      for (const notification of shown) notification.close();
     };
-  }, [rpc]);
-  const notifiedBrowserEvents = useRef(new Set<string>());
-  const pendingBrowserNotifications = useRef(new Map<string, PendingBrowserNotification>());
-  const deliverBrowserNotification = useCallback((pending: PendingBrowserNotification): boolean => {
-    const currentBot = botsRef.current.find((bot) => bot.id === pending.botId);
-    if (!currentBot || typeof Notification === "undefined") return true;
-    const result = deliverNativeBrowserNotification(
-      pending.event,
-      currentBot.name || pending.botName,
-      {
-        enabled: pending.groupNotification || currentBot.notifyOnFinish,
-        pageVisible: document.visibilityState === "visible",
-        windowFocused: document.hasFocus(),
-        permission: Notification.permission,
-        notifiedEventIds: notifiedBrowserEvents.current,
-        show: (title, body, tag) => {
-          const icon = notificationIcon(currentBot);
-          new Notification(title, { body, tag, ...(icon ? { icon } : {}) });
+  }, [source, currentLifetime, showNotification]);
+  const deliverBrowserNotification = useCallback(
+    (pending: PendingBrowserNotification): boolean => {
+      const owner = currentLifetime();
+      if (!owner) return true;
+      const currentBot = botsRef.current.find((bot) => bot.id === pending.botId);
+      if (!currentBot || typeof Notification === "undefined") return true;
+      const result = deliverNativeBrowserNotification(
+        pending.event,
+        currentBot.name || pending.botName,
+        {
+          enabled: Boolean(pending.groupId) || currentBot.notifyOnFinish,
+          pageVisible: document.visibilityState === "visible",
+          windowFocused: document.hasFocus(),
+          permission: Notification.permission,
+          notifiedEventIds: owner.notified,
+          show: (title, body, tag) => {
+            showNotification(
+              owner,
+              {
+                kind:
+                  pending.event.type === "run.failed" || pending.event.type === "run.cancelled"
+                    ? "failure"
+                    : "completion",
+                title,
+                body,
+                spaceId: pending.event.spaceId,
+                botId: pending.botId,
+                threadId: pending.event.threadId,
+                ...(pending.groupId ? { groupId: pending.groupId } : {}),
+              },
+              tag,
+              notificationIcon(currentBot),
+            );
+          },
         },
-      },
-    );
-    return result !== "pending";
-  }, []);
+      );
+      return result !== "pending";
+    },
+    [currentLifetime, showNotification],
+  );
   const flushPendingBrowserNotifications = useCallback(() => {
-    for (const [threadId, pending] of pendingBrowserNotifications.current) {
+    const owner = currentLifetime();
+    if (!owner) return;
+    for (const [threadId, pending] of owner.pending) {
       if (deliverBrowserNotification(pending)) {
-        pendingBrowserNotifications.current.delete(threadId);
+        owner.pending.delete(threadId);
       }
     }
-  }, [deliverBrowserNotification]);
+  }, [currentLifetime, deliverBrowserNotification]);
   const notifyBrowserForEvent = useCallback(
     (
-      event: Pick<ProductEvent, "id" | "type" | "threadId" | "seq" | "botId" | "payload">,
+      event: Pick<
+        ProductEvent,
+        "id" | "type" | "threadId" | "spaceId" | "seq" | "botId" | "payload"
+      >,
       subscribedThreadId: string | undefined,
       initialCursor: number,
       streamReady: boolean,
       botName: string,
       enabled: boolean,
-      groupNotification: boolean,
+      groupId: string | undefined,
     ) => {
+      const owner = currentLifetime();
+      if (!owner) return;
       const botId = event.botId;
       if (typeof botId !== "string") return;
       const eligible = shouldNotifyBrowser(event, {
@@ -156,27 +240,27 @@ export function useBrowserNotifications(
         pageVisible: document.visibilityState === "visible",
         windowFocused: document.hasFocus(),
         permission: "granted",
-        notifiedEventIds: notifiedBrowserEvents.current,
+        notifiedEventIds: owner.notified,
       });
       if (!eligible || !enabled) return;
       const pending = {
         event,
         botId,
         botName,
-        groupNotification,
+        groupId,
       } satisfies PendingBrowserNotification;
       if (typeof Notification === "undefined" || Notification.permission === "denied") return;
       if (Notification.permission === "default") {
-        pendingBrowserNotifications.current.set(event.threadId, pending);
+        owner.pending.set(event.threadId, pending);
         return;
       }
       if (deliverBrowserNotification(pending)) {
-        pendingBrowserNotifications.current.delete(event.threadId);
+        owner.pending.delete(event.threadId);
       } else {
-        pendingBrowserNotifications.current.set(event.threadId, pending);
+        owner.pending.set(event.threadId, pending);
       }
     },
-    [deliverBrowserNotification],
+    [currentLifetime, deliverBrowserNotification],
   );
   return { notifyBrowserForEvent, flushPendingBrowserNotifications };
 }

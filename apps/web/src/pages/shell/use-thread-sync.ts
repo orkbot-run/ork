@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; notification target changes follow LICENSE.md.
+
 import type {
   AppBootstrap,
   Bot,
@@ -379,7 +383,7 @@ export function useThreadSync({
           true,
           currentBot?.name ?? active.name,
           currentBot?.notifyOnFinish ?? false,
-          false,
+          undefined,
         );
         if (event.type === "thread.cleared") resetHistory();
         if (event.type === "bot.archived") {
@@ -475,7 +479,7 @@ export function useThreadSync({
           true,
           eventBot?.name ?? activeGroup.name,
           true,
-          true,
+          groupId,
         );
         if (event.type === "thread.message.created" && event.payload.role === "bot") {
           markGroupReadOnReply(groupId);

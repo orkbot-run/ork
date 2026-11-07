@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; notification target changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ProductEvent, ThreadSnapshot } from "@orkbot/contracts";
@@ -122,6 +126,15 @@ it.each([false, true])(
     const event = { type: "run.completed", payload: {}, runId: "run-1" } as ProductEvent;
     const deliver = () => subscription.onEvent(event, snapshot);
     deliver();
+    expect(input.notifyBrowserForEvent).toHaveBeenCalledWith(
+      event,
+      snapshot.threadId,
+      snapshot.cursor,
+      true,
+      inGroup ? "Group" : "Bot",
+      inGroup,
+      inGroup ? "group-1" : undefined,
+    );
     await flush();
     for (let i = 0; i < 100; i++) deliver();
     await flush();
