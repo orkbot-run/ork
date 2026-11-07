@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Rakazo material remains Apache-2.0; Ork shortcut verification changes are PolyForm-covered.
+
 import AppIntents
 import Foundation
 import Security
@@ -114,7 +118,9 @@ struct StartVoiceChatIntent: AppIntent {
 
   @MainActor
   func perform() async throws -> some IntentResult {
-    guard let target = await target(bot) else { throw MessageBotError.noBot }
+    let session = try OrkSession.load()
+    guard let target = try await target(bot, with: session) else { throw MessageBotError.noBot }
+    try session.requireCurrent()
     let botId = target.botId
     UserDefaults.standard.set(
       ["botId": botId, "at": String(Date().timeIntervalSince1970)],
@@ -125,29 +131,19 @@ struct StartVoiceChatIntent: AppIntent {
   }
 }
 
-/// The single record written by lib/last-bot.ts; legacy ids have no verified owner.
-private struct SavedLastBot: Decodable {
-  let botId: String
-  let spaceId: String?
-  let apiBase: String
-  let userId: String
-}
-
-/// The chosen bot, or a saved bot owned by this authenticated account and server.
+/// Resolve on one captured session before sending or handing a call to the app.
 private func target(
-  _ bot: BotEntity?, with snapshot: OrkSession? = nil
-) async -> (botId: String, spaceId: String?)? {
-  if let bot { return (bot.botId, bot.spaceId) }
-  guard let session = snapshot ?? (try? OrkSession.load()),
-    let data = secureStoreItem("orkbot.last_bot_id")?.data(using: .utf8),
-    let last = try? JSONDecoder().decode(SavedLastBot.self, from: data),
-    !last.botId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-    !last.userId.isEmpty, last.apiBase == session.apiBase,
-    let userId = try? await session.currentUserId(), userId == last.userId,
-    let current = try? OrkSession.load(),
-    current.token == session.token, current.apiBase == session.apiBase
-  else { return nil }
-  return (last.botId, last.spaceId)
+  _ bot: BotEntity?, with session: OrkSession
+) async throws -> ShortcutBotTarget? {
+  try await resolveShortcutBot(
+    bot.map { ShortcutBotTarget(botId: $0.botId, spaceId: $0.spaceId) },
+    apiBase: session.apiBase,
+    readSaved: { try secureStoreItem("orkbot.last_bot_id") },
+    currentUserId: { try await session.currentUserId() },
+    requireCurrentSession: { try session.requireCurrent() },
+    authorize: { candidate in
+      try await session.containsBot(candidate)
+    })
 }
 
 @MainActor
@@ -169,17 +165,19 @@ private struct Delivery {
 /// as a message the user sent. Without a chosen bot it goes to the one whose chat was opened last.
 private func send(_ message: String, file: IntentFile?, to bot: BotEntity?) async throws -> Delivery {
   let session = try OrkSession.load()
-  guard let target = await target(bot, with: session) else { throw MessageBotError.noBot }
+  guard let target = try await target(bot, with: session) else { throw MessageBotError.noBot }
   return try await send(message, file: file, to: target, with: session, timeout: 60)
 }
 
 private func send(
-  _ message: String, file: IntentFile?, to target: (botId: String, spaceId: String?),
+  _ message: String, file: IntentFile?, to target: ShortcutBotTarget,
   with session: OrkSession, timeout: TimeInterval
 ) async throws -> Delivery {
+  try session.requireCurrent()
   let botId = target.botId
   let spaceId = target.spaceId ?? session.selectedSpaceId
   try await session.requireConsent(["botId": botId], spaceId: spaceId, timeout: timeout)
+  try session.requireCurrent()
   var input: [String: Any] = [
     "botId": botId,
     "text": message.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -195,11 +193,13 @@ private func send(
         "contentBase64": file.data.base64EncodedString(),
       ],
       spaceId: spaceId)
+    try session.requireCurrent()
     input["artifactIds"] = [artifact.id]
     input["imageHandling"] = "confirm"
   }
   let sent: Sent = try await session.rpc(
     "threads/send", input, spaceId: spaceId, timeout: timeout)
+  try session.requireCurrent()
   return Delivery(session: session, botId: botId, spaceId: spaceId, runId: sent.runId)
 }
 
@@ -208,7 +208,7 @@ private func send(
 /// connection gives up sooner than a typed message would.
 func lastBotSender() async throws -> (String) async throws -> Void {
   let session = try OrkSession.load()
-  guard let target = await target(nil, with: session) else { throw MessageBotError.noBot }
+  guard let target = try await target(nil, with: session) else { throw MessageBotError.noBot }
   return { message in
     _ = try await send(message, file: nil, to: target, with: session, timeout: 15)
   }
@@ -378,34 +378,40 @@ private struct OrkSession {
 
   // The keys lib/session.ts, lib/server-config.ts and lib/api.ts keep in expo-secure-store.
   static func load() throws -> OrkSession {
-    guard let token = secureStoreItem("orkbot.session_token"), !token.isEmpty else {
+    guard let token = try secureStoreItem("orkbot.session_token"), !token.isEmpty else {
       throw MessageBotError.signedOut
     }
     let fallback = Bundle.main.object(forInfoDictionaryKey: "OrkDefaultApiBase") as? String
-    guard let apiBase = secureStoreItem("orkbot.api_base") ?? fallback else {
+    guard let apiBase = try secureStoreItem("orkbot.api_base") ?? fallback else {
       throw MessageBotError.signedOut
     }
-    let space = secureStoreItem("orkbot.space_id")
+    let space = try secureStoreItem("orkbot.space_id")
     return OrkSession(
       apiBase: apiBase.hasSuffix("/") ? String(apiBase.dropLast()) : apiBase,
       token: token,
       selectedSpaceId: space?.isEmpty == false ? space : nil,
-      headers: serverHeaders(for: apiBase))
+      headers: try serverHeaders(for: apiBase))
+  }
+
+  /// A changed bearer, server, Space or proxy credential retires this shortcut attempt.
+  func requireCurrent() throws {
+    let current = try Self.load()
+    guard current.token == token, current.apiBase == apiBase,
+      current.selectedSpaceId == selectedSpaceId, current.headers == headers
+    else { throw ShortcutTargetError.sessionChanged }
   }
 
   /// The headers lib/server-headers.ts saved for this server, such as an access proxy's.
-  private static func serverHeaders(for apiBase: String) -> [String: String] {
-    guard let stored = secureStoreItem("orkbot.server_headers")?.data(using: .utf8),
-      let saved = try? JSONDecoder().decode(SavedHeaders.self, from: stored),
-      saved.apiBase == apiBase
-    else { return [:] }
-    return saved.headers
+  private static func serverHeaders(for apiBase: String) throws -> [String: String] {
+    guard let stored = try secureStoreItem("orkbot.server_headers") else { return [:] }
+    let saved = try JSONDecoder().decode(SavedHeaders.self, from: Data(stored.utf8))
+    return saved.apiBase == apiBase ? saved.headers : [:]
   }
 
   /// Verify the account using this exact server and bearer before using a saved shortcut.
   func currentUserId() async throws -> String {
     guard let url = URL(string: "\(apiBase)/api/auth/get-session") else {
-      throw MessageBotError.signedOut
+      throw MessageBotError.server(nil)
     }
     var request = URLRequest(url: url, timeoutInterval: 5)
     for (name, value) in headers { request.setValue(value, forHTTPHeaderField: name) }
@@ -413,7 +419,23 @@ private struct OrkSession {
     request.setValue("Bearer \(token)", forHTTPHeaderField: "authorization")
     let (data, response) = try await Self.transport.data(for: request)
     try checkResponse(response)
-    return try JSONDecoder().decode(SessionIdentity.self, from: data).user.id
+    guard let identity = try JSONDecoder().decode(SessionIdentity?.self, from: data) else {
+      throw MessageBotError.signedOut
+    }
+    return identity.user.id
+  }
+
+  /// Only this endpoint's not-found response means an unavailable shortcut target.
+  func containsBot(_ target: ShortcutBotTarget) async throws -> Bool {
+    let request = try request(
+      "bots/get", ["botId": target.botId],
+      spaceId: target.spaceId ?? selectedSpaceId, timeout: 5)
+    let (data, response) = try await Self.transport.data(for: request)
+    if (response as? HTTPURLResponse)?.statusCode == 404 { return false }
+    try checkResponse(response)
+    let found = try JSONDecoder().decode(Envelope<AuthorizedBot>.self, from: data).json
+    guard found.id == target.botId else { throw ShortcutTargetError.invalidIdentity }
+    return true
   }
 
   /// The app asks before AI first sees the user's data; an action from here cannot ask.
@@ -487,7 +509,7 @@ private struct OrkSession {
     _ procedure: String, _ input: [String: Any], spaceId: String?, timeout: TimeInterval
   ) throws -> URLRequest {
     guard let url = URL(string: "\(apiBase)/rpc/\(procedure)") else {
-      throw MessageBotError.signedOut
+      throw MessageBotError.server(nil)
     }
     var request = URLRequest(url: url, timeoutInterval: timeout)
     request.httpMethod = "POST"
@@ -524,7 +546,7 @@ private struct OrkSession {
 
 /// Reads an item the way expo-secure-store writes it: service "app:no-auth" ("app" before the
 /// library split items by authentication), with the key as the account.
-private func secureStoreItem(_ key: String) -> String? {
+private func secureStoreItem(_ key: String) throws -> String? {
   for service in ["app:no-auth", "app"] {
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
@@ -534,11 +556,12 @@ private func secureStoreItem(_ key: String) -> String? {
       kSecReturnData as String: true,
     ]
     var result: AnyObject?
-    if SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
-      let data = result as? Data
-    {
-      return String(data: data, encoding: .utf8)
-    }
+    let status = SecItemCopyMatching(query as CFDictionary, &result)
+    if status == errSecItemNotFound { continue }
+    guard status == errSecSuccess, let data = result as? Data,
+      let value = String(data: data, encoding: .utf8)
+    else { throw MessageBotError.server(nil) }
+    return value
   }
   return nil
 }
@@ -561,6 +584,14 @@ private enum MessageBotError: Error, CustomLocalizedStringResourceConvertible {
     }
   }
 }
+
+extension ShortcutTargetError: CustomLocalizedStringResourceConvertible {
+  var localizedStringResource: LocalizedStringResource {
+    "Something went wrong. Try again."
+  }
+}
+
+private struct AuthorizedBot: Decodable { let id: String }
 
 private struct SessionIdentity: Decodable {
   struct User: Decodable { let id: String }

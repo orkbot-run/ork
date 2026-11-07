@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Rakazo material remains Apache-2.0; Ork shortcut verification changes are PolyForm-covered.
+
 const fs = require("node:fs");
 const path = require("node:path");
 const { IOSConfig, withInfoPlist, withXcodeProject } = require("expo/config-plugins");
@@ -5,7 +9,12 @@ const { addPbxGroupWithOwnFiles } = require("./pbx-group");
 
 const INTENTS = path.join(__dirname, "..", "ios-intents");
 const WIDGETS = path.join(__dirname, "..", "ios-widgets");
-const APP_FILES = ["OrkIntents.swift", "VoiceMessageRecorder.swift", "VoiceMessageActivity.swift"];
+const APP_FILES = [
+  "OrkIntents.swift",
+  "ShortcutBotTarget.swift",
+  "VoiceMessageRecorder.swift",
+  "VoiceMessageActivity.swift",
+];
 const WIDGET_TARGET = "OrkWidgets";
 const WIDGET_FILES = ["OrkWidgets.swift", "VoiceMessageActivity.swift"];
 
