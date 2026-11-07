@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 # SPDX-FileCopyrightText: 2026 Ork contributors
-# Modified by Ork contributors to remove the legacy desktop workflow and narrow CI work. See LICENSE.md.
+# Modified by Ork contributors for native CI boundaries and retained failure diagnostics. See LICENSE.md.
 
 name: ci
 on:
@@ -259,6 +259,9 @@ jobs:
         if: steps.areas.outputs.server != 'false'
       - run: pnpm test:integration --shard=${{ matrix.shard }}/2
         if: steps.areas.outputs.server != 'false'
+        env:
+          VERIFY_LOGGING: '1'
+          LOG_LEVEL: error
 
   # The required check and the deploy gate, under one stable name.
   test-integration:
