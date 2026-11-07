@@ -34,7 +34,9 @@ function adapter(): ServerUpdateAdapter {
   return {
     channel: "preview",
     check: vi.fn(async () => ({ revision, version: "edge" })),
-    submit: vi.fn(async () => {}),
+    submit: vi.fn(async (_revision, beforeSubmit) => {
+      await beforeSubmit();
+    }),
   };
 }
 function service(deployment = adapter()) {
@@ -214,7 +216,8 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
   it("records one durable request before submission and never repeats an idempotency key", async () => {
     const response = deferred<void>();
     const deployment = adapter();
-    vi.mocked(deployment.submit).mockImplementation(async () => {
+    vi.mocked(deployment.submit).mockImplementation(async (_revision, beforeSubmit) => {
+      await beforeSubmit();
       expect(
         await system(() =>
           prisma!.serverUpdateRequest.count({ where: { installationId, state: "submitting" } }),
@@ -237,7 +240,7 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
       ),
     ).toBe(true);
     await vi.waitFor(() => expect(deployment.submit).toHaveBeenCalledOnce());
-    expect(deployment.submit).toHaveBeenCalledWith(revision);
+    expect(deployment.submit).toHaveBeenCalledWith(revision, expect.any(Function));
     expect(await system(() => prisma!.session.count())).toBe(1);
     await expect(
       updates.apply(actor, { ...input, idempotencyKey: randomUUID() }),
@@ -254,7 +257,10 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
 
   it("does not retransmit an uncertain request after a timeout or an API restart", async () => {
     const deployment = adapter();
-    vi.mocked(deployment.submit).mockRejectedValue(new Error("Ambiguous transport failure"));
+    vi.mocked(deployment.submit).mockImplementation(async (_revision, beforeSubmit) => {
+      await beforeSubmit();
+      throw new Error("Ambiguous transport failure");
+    });
     const updates = service(deployment);
     await updates.check(actor);
     const input = { candidateRevision: revision, idempotencyKey: randomUUID() };
@@ -526,5 +532,107 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
         }),
       ).rejects.toThrow();
     });
+  });
+
+  it.each(["consent", "renewed-consent", "session", "owner", "intent"] as const)(
+    "refuses deployment after %s retirement during final asynchronous eligibility",
+    async (reason) => {
+      const eligibility = deferred<void>();
+      const entered = deferred<void>();
+      const finished = deferred<void>();
+      const post = vi.fn();
+      const deployment = adapter();
+      vi.mocked(deployment.submit).mockImplementation(
+        async (_revision, beforeSubmit: () => Promise<void>) => {
+          try {
+            entered.resolve();
+            await eligibility.promise;
+            await beforeSubmit();
+            post();
+          } finally {
+            finished.resolve();
+          }
+        },
+      );
+      const updates = service(deployment);
+      try {
+        if (reason === "consent" || reason === "renewed-consent") {
+          await updates.policy(actor, { automatic: true, expectedRevision: 0 });
+          updates.start();
+        } else {
+          await updates.check(actor);
+          await updates.apply(actor, { candidateRevision: revision, idempotencyKey: randomUUID() });
+        }
+        await entered.promise;
+        if (reason === "consent" || reason === "renewed-consent") {
+          await updates.policy(actor, { automatic: false, expectedRevision: 1 });
+          if (reason === "renewed-consent")
+            await updates.policy(actor, { automatic: true, expectedRevision: 2 });
+        } else if (reason === "session")
+          await system(() =>
+            prisma!.session.update({
+              where: { id: actor.sessionId },
+              data: { expiresAt: new Date(0) },
+            }),
+          );
+        else if (reason === "owner")
+          await system(() =>
+            prisma!.account.deleteMany({ where: { userId: actor.userId, accountId: ownerKey } }),
+          );
+        else
+          await system(() =>
+            prisma!.serverUpdateRequest.updateMany({
+              where: { installationId, state: "submitting" },
+              data: { state: "unknown" },
+            }),
+          );
+        eligibility.resolve();
+        await finished.promise;
+        await terminal();
+        expect(post).not.toHaveBeenCalled();
+        const request = await system(() =>
+          prisma!.serverUpdateRequest.findFirstOrThrow({ where: { installationId } }),
+        );
+        expect(request.state).toBe(reason === "intent" ? "unknown" : "failed");
+      } finally {
+        eligibility.resolve();
+      }
+    },
+  );
+
+  it("records failed rather than unknown when final eligibility fails before submission admission", async () => {
+    const deployment = adapter();
+    vi.mocked(deployment.submit).mockRejectedValueOnce(new Error("Final eligibility unavailable"));
+    const updates = service(deployment);
+    await updates.check(actor);
+    await updates.apply(actor, { candidateRevision: revision, idempotencyKey: randomUUID() });
+    await terminal();
+    expect(await updates.status(actor)).toMatchObject({ lastRequest: { state: "failed" } });
+  });
+
+  it("stops a pending eligibility check before its deployment POST", async () => {
+    const eligibility = deferred<void>();
+    const entered = deferred<void>();
+    const post = vi.fn();
+    const deployment = adapter();
+    vi.mocked(deployment.submit).mockImplementation(async (_revision, beforeSubmit) => {
+      entered.resolve();
+      await eligibility.promise;
+      await beforeSubmit();
+      post();
+    });
+    const updates = service(deployment);
+    try {
+      await updates.check(actor);
+      await updates.apply(actor, { candidateRevision: revision, idempotencyKey: randomUUID() });
+      await entered.promise;
+      const stopping = updates.stop();
+      eligibility.resolve();
+      await stopping;
+      expect(post).not.toHaveBeenCalled();
+      expect(await updates.status(actor)).toMatchObject({ lastRequest: { state: "failed" } });
+    } finally {
+      eligibility.resolve();
+    }
   });
 });

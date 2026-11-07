@@ -9,6 +9,7 @@ const revision = "a".repeat(40);
 const digest = `sha256:${"b".repeat(64)}`;
 const INDEX = "application/vnd.oci.image.index.v1+json";
 const ciUrl = `https://api.github.com/repos/orkbot-run/ork/actions/workflows/ci.yml/runs?head_sha=${revision}&event=push&per_page=1`;
+const beforeSubmit = async () => undefined;
 const successfulRun = {
   head_sha: revision,
   head_branch: "main",
@@ -127,7 +128,7 @@ describe("configured channel deployment adapter", () => {
   it("submits exactly one credential-free request and treats acknowledgement only as requested", async () => {
     const { adapter, fetch } = fixture();
     await expect(adapter.check()).resolves.toMatchObject({ revision });
-    await expect(adapter.submit(revision)).resolves.toBeUndefined();
+    await expect(adapter.submit(revision, beforeSubmit)).resolves.toBeUndefined();
     const requests = fetch.mock.calls.filter(([url]) => url === trigger);
     expect(requests).toHaveLength(1);
     expect(requests[0]?.[1]).toMatchObject({ method: "POST", redirect: "error" });
@@ -142,7 +143,7 @@ describe("configured channel deployment adapter", () => {
       const { adapter, fetch } = fixture("stable", {
         [trigger]: () => new Response(trigger, { status }),
       });
-      await expect(adapter.submit(revision)).rejects.toThrow(
+      await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow(
         /^Could not contact the deployment service\.$/,
       );
       expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(1);
@@ -155,7 +156,7 @@ describe("configured channel deployment adapter", () => {
         throw new Error(trigger);
       },
     });
-    await expect(adapter.submit(revision)).rejects.toThrow(
+    await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow(
       /^Could not contact the deployment service\.$/,
     );
     expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(1);
@@ -201,7 +202,7 @@ describe("configured channel deployment adapter", () => {
         Response.json({ workflow_runs: [{ ...successfulRun, ...(overrides as object) }] }),
     });
     await expect(adapter.check()).resolves.toBeNull();
-    await expect(adapter.submit(revision)).rejects.toThrow(
+    await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow(
       /^Could not contact the deployment service\.$/,
     );
     expect(
@@ -216,7 +217,7 @@ describe("configured channel deployment adapter", () => {
     async (response) => {
       const { adapter, fetch } = fixture("preview", { [ciUrl]: response });
       await expect(adapter.check()).resolves.toBeNull();
-      await expect(adapter.submit(revision)).rejects.toThrow();
+      await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow();
       expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
     },
   );
@@ -231,7 +232,7 @@ describe("configured channel deployment adapter", () => {
     });
     await expect(adapter.check()).resolves.toMatchObject({ revision });
     cancelled = true;
-    await expect(adapter.submit(revision)).rejects.toThrow();
+    await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow();
     expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
   });
 
@@ -243,7 +244,7 @@ describe("configured channel deployment adapter", () => {
     });
     await expect(adapter.check()).resolves.toMatchObject({ revision });
     moved = true;
-    await expect(adapter.submit(revision)).rejects.toThrow();
+    await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow();
     expect(
       fetch.mock.calls.some(([url]) => String(url).includes(`manifests/sha-${"c".repeat(40)}`)),
     ).toBe(true);
@@ -263,13 +264,53 @@ describe("configured channel deployment adapter", () => {
     });
     await expect(adapter.check()).resolves.toMatchObject({ revision });
     moved = true;
-    await expect(adapter.submit(revision)).rejects.toThrow();
+    await expect(adapter.submit(revision, beforeSubmit)).rejects.toThrow();
     expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
   });
 
   it("rejects malformed expected revisions before any request", async () => {
     const { adapter, fetch } = fixture();
-    await expect(adapter.submit("main")).rejects.toThrow();
+    await expect(adapter.submit("main", beforeSubmit)).rejects.toThrow();
     expect(fetch).not.toHaveBeenCalled();
   });
+});
+
+it("rechecks authorization only after eligibility and refuses before any deployment POST", async () => {
+  const { adapter, fetch } = fixture();
+  const authorize = vi.fn(async () => {
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("/manifests/"))).toBe(true);
+    expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+    throw new Error("retired authorization");
+  });
+  await expect(adapter.submit(revision, authorize)).rejects.toThrow(
+    /^Could not contact the deployment service\.$/,
+  );
+  expect(authorize).toHaveBeenCalledOnce();
+  expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(0);
+});
+
+it("does not run authorization when the final candidate eligibility check fails", async () => {
+  const { adapter, fetch } = fixture("preview", {
+    [ciUrl]: () => Response.json({ workflow_runs: [] }),
+  });
+  const authorize = vi.fn(async () => undefined);
+  await expect(adapter.submit(revision, authorize)).rejects.toThrow();
+  expect(authorize).not.toHaveBeenCalled();
+  expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+});
+
+it("waits for final live authorization before sending exactly one deployment request", async () => {
+  const { adapter, fetch } = fixture();
+  let release!: () => void;
+  const permission = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const authorize = vi.fn(() => permission);
+  const pending = adapter.submit(revision, authorize);
+  await vi.waitFor(() => expect(authorize).toHaveBeenCalledOnce());
+  expect(fetch.mock.calls.some(([url]) => url === trigger)).toBe(false);
+  release();
+  await pending;
+  expect(fetch.mock.calls.filter(([url]) => url === trigger)).toHaveLength(1);
+  expect(authorize).toHaveBeenCalledOnce();
 });

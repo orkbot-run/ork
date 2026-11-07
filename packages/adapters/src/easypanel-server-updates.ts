@@ -158,11 +158,12 @@ export function createEasypanelServerUpdateAdapter(
   return {
     channel,
     check,
-    async submit(expectedRevision) {
+    async submit(expectedRevision, beforeSubmit) {
       try {
         if (!/^[0-9a-f]{40}$/.test(expectedRevision)) throw failure();
         const candidate = await check();
         if (candidate?.revision !== expectedRevision) throw failure();
+        await beforeSubmit();
         const response = await fetch(trigger, {
           method: "POST",
           redirect: "error",

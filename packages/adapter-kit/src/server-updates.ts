@@ -5,6 +5,9 @@
 export interface ServerUpdateAdapter {
   readonly channel: "stable" | "preview";
   check(): Promise<{ revision: string; version: string } | null>;
-  /** Acknowledgement means requested, not healthy or completed. Never retry an ambiguous error. */
-  submit(expectedRevision: string): Promise<void>;
+  /**
+   * Call the guard once after eligibility checks, immediately before the irreversible request.
+   * Acknowledgement means requested, not healthy or completed. Never retry an ambiguous error.
+   */
+  submit(expectedRevision: string, beforeSubmit: () => Promise<void>): Promise<void>;
 }

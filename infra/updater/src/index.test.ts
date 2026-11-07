@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; Ork recovery qualification changes follow LICENSE.md.
+
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -279,6 +283,43 @@ describe("updater orchestration", () => {
       running: false,
       lastRun: { ok: false, fromTag: "v1.0.0", toTag: `sha-${targetCommit}` },
     });
+  });
+
+  it("keeps the original environment and reports manual recovery when both recreates fail", async () => {
+    const original =
+      "ORKBOT_IMAGE_TAG=v1.0.0\nORKBOT_IMAGE_TAG_PREVIOUS=v0.9.0\nPOSTGRES_APP_PASSWORD=synthetic-existing-password\nTEST_OPERATOR_SETTING=preserved\n";
+    const fixture = await deployment(original);
+    const calls: Array<{ command: string; args: string[]; env?: Record<string, string> }> = [];
+    const run: UpdaterCommandRunner = async (command, args, options) => {
+      calls.push({ command, args, env: options.env });
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.1.0\n`);
+      return args.includes("pull") ? ok("pulled") : failed("Synthetic recreate failure");
+    };
+    const subject = createUpdaterApp(fixture.config, { run });
+    const response = await request(subject, "/apply", {
+      repoUrl: "https://github.com/orkbot-run/ork",
+      branch: "main",
+    });
+    const record = (await response.json()) as ServerUpdateRun;
+    expect(record).toMatchObject({ ok: false, restart: "manual", fromTag: "v1.0.0" });
+    expect(record.steps.map(({ id, ok }) => ({ id, ok }))).toEqual([
+      { id: "pull", ok: true },
+      { id: "recreate", ok: false },
+      { id: "recover", ok: false },
+    ]);
+    const recreates = calls.filter(({ args }) => args.includes("up"));
+    expect(recreates).toHaveLength(2);
+    expect(recreates[1]?.env?.ORKBOT_IMAGE_TAG).toBe("v1.0.0");
+    expect(recreates[1]?.args).toEqual(
+      expect.arrayContaining(["--pull", "never", "--no-build", "--wait"]),
+    );
+    expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toBe(original);
+    const state = await subject.request("/state", { headers: authorized });
+    expect(await state.json()).toMatchObject({
+      running: false,
+      lastRun: { ok: false, restart: "manual" },
+    });
+    expect(calls.filter(({ command }) => command === "docker")).toHaveLength(3);
   });
 
   it("resets a fork checkout when recreate fails after the fast-forward", async () => {

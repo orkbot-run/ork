@@ -140,42 +140,42 @@ export function createServerUpdates(options: {
       return false;
     }
   }
+  async function authorizeSubmission(request: ServerUpdateRequest, actor?: ServerUpdateActor) {
+    const currentOwnerId = await owner();
+    if (!currentOwnerId) throw new ORPCError("FORBIDDEN");
+    if (actor) await authorize(actor);
+    const control = await store.control();
+    if (
+      control.delegatedAccountKey !== request.delegatedAccountKey ||
+      control.channel !== adapter.channel ||
+      (request.automatic &&
+        (!control.automatic ||
+          control.consentedAccountKey !== delegatedAccountKey ||
+          control.consentedUserId !== currentOwnerId ||
+          control.policyRevision !== request.policyRevision)) ||
+      !(await store.isSubmitting(request.id)) ||
+      stopped
+    )
+      throw new ORPCError("FORBIDDEN");
+  }
   async function dispatch(request: ServerUpdateRequest, actor?: ServerUpdateActor) {
     try {
       if (stopped || !(await store.begin(request.id))) return;
-      const currentOwnerId = await owner();
-      if (!currentOwnerId) {
-        await store.settle(request.id, "failed");
-        return;
-      }
-      if (actor) await authorize(actor);
-      const control = await store.control();
-      if (
-        control.delegatedAccountKey !== request.delegatedAccountKey ||
-        control.channel !== adapter.channel ||
-        (request.automatic &&
-          (!control.automatic ||
-            control.consentedAccountKey !== delegatedAccountKey ||
-            control.consentedUserId !== currentOwnerId ||
-            control.policyRevision !== request.policyRevision))
-      ) {
-        await store.settle(request.id, "failed");
-        return;
-      }
-      if (stopped) {
-        await store.settle(request.id, "failed");
-        return;
-      }
+      await authorizeSubmission(request, actor);
     } catch {
       await store.settle(request.id, "failed");
       return;
     }
-    // Submission is outside every transaction. An ambiguous transport outcome is never retried.
+    // The adapter rechecks eligibility outside transactions, then checks live authority before POST.
+    let submissionAuthorized = false;
     try {
-      await adapter.submit(request.revision);
+      await adapter.submit(request.revision, async () => {
+        await authorizeSubmission(request, actor);
+        submissionAuthorized = true;
+      });
       await store.settle(request.id, "requested");
     } catch {
-      await store.settle(request.id, "unknown");
+      await store.settle(request.id, submissionAuthorized ? "unknown" : "failed");
     }
   }
   async function tick() {

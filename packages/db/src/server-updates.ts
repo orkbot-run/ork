@@ -209,6 +209,19 @@ export function serverUpdateStore(prisma: PrismaClient, binding: ServerUpdateBin
         ).count === 1
       );
     },
+    async isSubmitting(id: string) {
+      return Boolean(
+        await prisma.serverUpdateRequest.findFirst({
+          where: {
+            id,
+            installationId: binding.installationId,
+            delegatedAccountKey: binding.delegatedAccountKey,
+            state: "submitting",
+          },
+          select: { id: true },
+        }),
+      );
+    },
     async settle(id: string, state: "requested" | "unknown" | "failed") {
       await prisma.serverUpdateRequest.updateMany({
         where: {
