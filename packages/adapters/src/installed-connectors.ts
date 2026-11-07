@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 connector import is preserved; safe parameter descriptions follow LICENSE.md.
+
 import { isDeepStrictEqual } from "node:util";
 import type {
   AdapterContext,
@@ -541,7 +545,7 @@ export function importOpenApiDocument(document: Record<string, unknown>): {
       const id = typeof operation.operationId === "string" ? operation.operationId : undefined;
       if (!id) continue;
       refs.size = 0;
-      const properties: Record<string, unknown> = {};
+      const properties: Record<string, unknown> = Object.create(null);
       const required: string[] = [];
       const queryParameters: string[] = [];
       const headerParameters: string[] = [];
@@ -550,9 +554,15 @@ export function importOpenApiDocument(document: Record<string, unknown>): {
         (pathValue as Record<string, unknown>).parameters,
         operation.parameters,
       )) {
-        properties[parameter.name] = asRecord(
-          inlineOpenApiSchema(refs, parameter.schema, "string"),
-        ) ?? {
+        // Parameter annotations override schema annotations, including an explicitly empty description.
+        const schema =
+          typeof parameter.description === "string"
+            ? {
+                ...(asRecord(parameter.schema) ?? { type: "string" }),
+                description: parameter.description,
+              }
+            : parameter.schema;
+        properties[parameter.name] = asRecord(inlineOpenApiSchema(refs, schema, "string")) ?? {
           type: "string",
         };
         if (parameter.in === "query") queryParameters.push(parameter.name);

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 connector tests are preserved; parameter description conformance follows LICENSE.md.
+
 import { validateToolArguments } from "@earendil-works/pi-ai/utils/validation";
 import { approvalEffectKey } from "@orkbot/core/node/approval-effect-key";
 import { describe, expect, it, vi } from "vitest";
@@ -793,6 +797,106 @@ describe("OpenAPI connector import", () => {
       }),
     ]);
   });
+
+  it.each(["path", "query", "header"])(
+    "preserves the %s parameter description over a referenced schema description",
+    (location) => {
+      const imported = importOpenApiDocument({
+        servers: [{ url: "https://api.example.test" }],
+        components: {
+          schemas: {
+            Value: { type: "string", enum: ["one", "two"], description: "Schema description" },
+          },
+          parameters: {
+            Value: {
+              name: "value",
+              in: location,
+              description: "Parameter description",
+              schema: { $ref: "#/components/schemas/Value" },
+            },
+          },
+        },
+        paths: {
+          "/items/{value}": {
+            get: {
+              operationId: "getItems",
+              parameters: [{ $ref: "#/components/parameters/Value" }],
+            },
+          },
+        },
+      });
+      expect(imported.operations[0]?.inputSchema.properties).toEqual({
+        value: { type: "string", enum: ["one", "two"], description: "Parameter description" },
+      });
+    },
+  );
+
+  it.each(["__proto__", "constructor", "toString"])(
+    "keeps legal parameter names as own schema properties: %s",
+    (name) => {
+      const [operation] = importOpenApiDocument({
+        servers: [{ url: "https://api.example.test" }],
+        paths: {
+          "/items": {
+            get: {
+              operationId: "listItems",
+              parameters: [{ name, in: "query", schema: { type: "string" } }],
+            },
+          },
+        },
+      }).operations;
+      const properties = operation?.inputSchema.properties as Record<string, unknown>;
+      expect(Object.hasOwn(properties, name)).toBe(true);
+      expect(JSON.parse(JSON.stringify(properties))).toEqual(
+        Object.fromEntries([[name, { type: "string" }]]),
+      );
+    },
+  );
+
+  it.each([
+    {
+      parameter: "Parameter description",
+      schema: "Schema description",
+      expected: "Parameter description",
+    },
+    { parameter: "", schema: "Schema description", expected: "" },
+    { parameter: undefined, schema: "Schema description", expected: "Schema description" },
+    { parameter: { invalid: true }, schema: "Schema description", expected: "Schema description" },
+    { parameter: "Parameter description", schema: undefined, expected: "Parameter description" },
+  ])(
+    "uses defined string parameter descriptions before schema descriptions: %j",
+    ({ parameter, schema, expected }) => {
+      const [operation] = importOpenApiDocument({
+        servers: [{ url: "https://api.example.test" }],
+        paths: {
+          "/items": {
+            parameters: [
+              {
+                name: "limit",
+                in: "query",
+                description: "Path description",
+                schema: { type: "integer" },
+              },
+            ],
+            get: {
+              operationId: "listItems",
+              parameters: [
+                {
+                  name: "limit",
+                  in: "query",
+                  description: parameter,
+                  schema: { type: "integer", description: schema },
+                },
+              ],
+            },
+          },
+        },
+      }).operations;
+      expect(operation?.inputSchema.properties).toEqual({
+        limit: { type: "integer", description: expected },
+      });
+    },
+  );
 
   it("resolves $ref request bodies and body schemas so tool arguments validate", () => {
     const imported = importOpenApiDocument({
