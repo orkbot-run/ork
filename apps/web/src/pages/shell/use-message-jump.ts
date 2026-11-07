@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is retained; mounted jump ownership follows LICENSE.md.
+
 import type { Bot, ComputerStatus, Routine } from "@orkbot/contracts";
 import { foldPeerReplies, jumpTargetId, searchHitThreadTarget } from "@orkbot/core";
 import { fetchFresh } from "@orkbot/core/query";
@@ -64,6 +69,19 @@ export function useMessageJump({
     pinnedAroundRef,
   } = thread;
   const jumpGeneration = useRef(0);
+  const mountedChat = useRef<object | null>(null);
+  const latestQuery = useRef({ searchParams, setSearchParams });
+  useLayoutEffect(() => {
+    latestQuery.current = { searchParams, setSearchParams };
+  }, [searchParams, setSearchParams]);
+  useLayoutEffect(() => {
+    const owner = {};
+    mountedChat.current = owner;
+    return () => {
+      if (mountedChat.current === owner) mountedChat.current = null;
+      jumpGeneration.current += 1;
+    };
+  }, [rpc, active?.id, inGroup, groupId]);
   const [scrollRequest, setScrollRequest] = useState<{
     messageId: string;
     nonce: number;
@@ -71,7 +89,10 @@ export function useMessageJump({
   const clearScrollRequest = useCallback(() => setScrollRequest(null), []);
   const initiallyScrolledThread = useRef<string | null>(null);
 
-  async function jumpToMessage(target: JumpTarget) {
+  async function jumpToMessage(target: JumpTarget, acceptsResult = () => true) {
+    const owner = mountedChat.current;
+    if (!owner) return;
+    const ownsChat = () => mountedChat.current === owner;
     const threadTarget = searchHitThreadTarget(target);
     const epoch = historyEpoch.current;
     jumpGeneration.current += 1;
@@ -83,7 +104,13 @@ export function useMessageJump({
     // The epoch check drops a jump that raced a conversation clear (or a bot switch): applying
     // the fetched page would pin deleted messages that every later refresh keeps restoring.
     // jumpId drops an older jump that finished after a newer click.
-    if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
+    if (
+      !ownsChat() ||
+      !acceptsResult() ||
+      epoch !== historyEpoch.current ||
+      jumpId !== jumpGeneration.current
+    )
+      return;
     if (target.groupId && activeGroupId.current !== target.groupId) return;
     if (target.botId && activeBotId.current !== target.botId) return;
     // A reply folded under its peer marker counts: the transcript expands the marker to show it.
@@ -117,7 +144,8 @@ export function useMessageJump({
         queries.routines.list.queryOptions({ input: { botId: threadTarget.botId } }),
       )
         .then((routines) => {
-          if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
+          if (!ownsChat() || epoch !== historyEpoch.current || jumpId !== jumpGeneration.current)
+            return;
           if (activeBotId.current !== threadTarget.botId) return;
           setRoutines(routines);
           setRoutinesBotId(threadTarget.botId);
@@ -134,7 +162,8 @@ export function useMessageJump({
       setScrollRequest({ messageId, nonce: jumpId });
     } else {
       window.requestAnimationFrame(() => {
-        if (epoch !== historyEpoch.current || jumpId !== jumpGeneration.current) return;
+        if (!ownsChat() || epoch !== historyEpoch.current || jumpId !== jumpGeneration.current)
+          return;
         const element = messageScroll.current;
         if (element) {
           element.scrollTop = element.scrollHeight;
@@ -155,36 +184,49 @@ export function useMessageJump({
   useEffect(() => {
     const messageId = searchParams.get("m");
     const routineId = searchParams.get("routine");
+    const owner = mountedChat.current;
+    let current = true;
+    const ownsQuery = () =>
+      current &&
+      owner !== null &&
+      mountedChat.current === owner &&
+      latestQuery.current.searchParams.get("m") === messageId;
+    const clearMessageQuery = () => {
+      if (!ownsQuery()) return;
+      // Use the current query and setter, never the address captured before an async jump.
+      const latest = latestQuery.current;
+      const next = new URLSearchParams(latest.searchParams);
+      next.delete("m");
+      latest.setSearchParams(next, { replace: true });
+    };
     if (inGroup && groupId && messageId) {
-      void jumpToMessage({ groupId, messageId }).finally(() => {
-        // Keep expandedHistoryThread; only strip the jump URL so refresh does not remount.
+      void jumpToMessage({ groupId, messageId }, ownsQuery)
+        .finally(clearMessageQuery)
+        .catch(() => undefined);
+    } else if (active) {
+      if (routineId && routinesBotId === active.id) {
+        const routine = routines.find((item) => item.id === routineId);
+        if (routine) {
+          editRoutine(routine);
+          setPanel("routine");
+        } else {
+          setPanel("routines");
+        }
         const next = new URLSearchParams(searchParams);
-        next.delete("m");
+        next.delete("routine");
+        latestQuery.current = { searchParams: next, setSearchParams };
         setSearchParams(next, { replace: true });
-      });
-      return;
-    }
-    if (!active) return;
-    if (routineId && routinesBotId === active.id) {
-      const routine = routines.find((item) => item.id === routineId);
-      if (routine) {
-        editRoutine(routine);
-        setPanel("routine");
-      } else {
-        setPanel("routines");
       }
-      const next = new URLSearchParams(searchParams);
-      next.delete("routine");
-      setSearchParams(next, { replace: true });
+      if (messageId) {
+        void jumpToMessage({ botId: active.id, messageId }, ownsQuery)
+          .finally(clearMessageQuery)
+          .catch(() => undefined);
+      }
     }
-    if (messageId) {
-      void jumpToMessage({ botId: active.id, messageId }).finally(() => {
-        const next = new URLSearchParams(searchParams);
-        next.delete("m");
-        setSearchParams(next, { replace: true });
-      });
-    }
-  }, [active?.id, groupId, inGroup, routines, routinesBotId, searchParams, setSearchParams]);
+    return () => {
+      current = false;
+    };
+  }, [rpc, active?.id, groupId, inGroup, routines, routinesBotId, searchParams, setSearchParams]);
 
   const transcriptRef = useRef(transcript);
   useLayoutEffect(() => {

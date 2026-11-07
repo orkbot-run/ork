@@ -154,8 +154,11 @@ test("the chat follows your sends and a reader at the bottom, not a reader who s
     await expect(jumpToLatest).toBeVisible();
   };
   const resetToEnd = async () => {
-    await transcript.hover();
-    await page.mouse.wheel(0, 20_000);
+    // Wheel input is asynchronous; do not queue a redundant downward wheel before scrolling away.
+    if ((await gapToEnd()) >= 2) {
+      await transcript.hover();
+      await page.mouse.wheel(0, 20_000);
+    }
     await expect.poll(gapToEnd).toBeLessThan(2);
     await expect(jumpToLatest).toBeHidden();
   };
@@ -250,4 +253,83 @@ test("the chat follows your sends and a reader at the bottom, not a reader who s
   expect(await scrollTop()).toBe(top);
   await expect(jumpRow).toBeInViewport();
   await expect(jumpToLatest).toBeVisible();
+});
+
+test("a late message jump cannot navigate back after switching chats", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `late-jump-${Date.now()}@orkbot.test`, "password12", "Jump fixture");
+  await completeOnboarding(page);
+  const sourceId = activeBotId(page);
+  const destination = await rpc<{ id: string }>(page, "bots/create", {
+    name: "Destination",
+    title: "",
+    description: "",
+    instructions: "",
+    notifyOnFinish: false,
+  });
+  const composer = page.getByRole("combobox", { name: /Message/ });
+  await composer.fill("Source message for the delayed jump");
+  await composer.press("Enter");
+  const row = page
+    .getByTestId("transcript")
+    .locator("[data-message-id]")
+    .filter({ has: page.getByTestId("message-user-bubble") })
+    .filter({ hasText: "Source message for the delayed jump" })
+    .first();
+  await expect(row).toBeVisible();
+  const messageId = await row.getAttribute("data-message-id");
+  if (!messageId) throw new Error("Missing source message");
+  let release!: () => void;
+  let ready!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const delayed = new Promise<void>((resolve) => {
+    ready = resolve;
+  });
+  await page.route("**/rpc/threads/messages", async (route) => {
+    const input = route.request().postDataJSON().json;
+    if (input.botId !== sourceId || input.around?.messageId !== messageId) return route.continue();
+    const response = await route.fetch();
+    ready();
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await page.evaluate((id) => {
+      history.pushState({}, "", `?m=${id}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, messageId);
+    await delayed;
+    await page.evaluate((id) => {
+      history.pushState({}, "", `/app/${id}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    }, destination.id);
+    const destinationComposer = page.getByRole("combobox", {
+      name: "Message Destination",
+      exact: true,
+    });
+    await expect(destinationComposer).toBeVisible();
+    await destinationComposer.fill("Draft owned by the destination chat");
+    const completed = page.waitForResponse(
+      (response) =>
+        response.url().includes("/rpc/threads/messages") &&
+        (response.request().postData() ?? "").includes(messageId),
+    );
+    release();
+    expect((await completed).ok()).toBe(true);
+    // Let the released RPC continuation and router commit run before checking the destination.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page).toHaveURL(new RegExp(`/app/${destination.id}$`));
+    await expect(destinationComposer).toHaveValue("Draft owned by the destination chat");
+    await captureScreenshot(page, testInfo, "message-jump-keeps-destination");
+  } finally {
+    release();
+  }
 });
