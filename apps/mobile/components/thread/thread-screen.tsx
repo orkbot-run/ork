@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import type { AgentSkillCatalogEntry } from "@orkbot/contracts";
 import {
@@ -484,7 +485,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     groupId,
     inGroup,
     readOnly,
-    onCall,
+    onCall: Boolean(call),
     displayName,
     mentionBots,
     currentBot,

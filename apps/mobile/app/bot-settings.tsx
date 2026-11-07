@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 settings remain. Ork avatars replace the removed legacy style controls.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import type { Bot, ComputerMode, ThinkingLevel } from "@orkbot/contracts";
 import {
@@ -48,7 +49,7 @@ import { createQueuedSave } from "../lib/queued-save";
 import { useSideInsets } from "../lib/side-insets";
 import { thinkingLevelLabel } from "../lib/thinking-level";
 import { errorText } from "../lib/user-error";
-import { stopVoicePlayback } from "../lib/voice";
+import { canStartSpeech, speakWithDeviceVoice, stopVoicePlayback } from "../lib/voice";
 
 export default function BotSettingsScreen() {
   const sideInsets = useSideInsets();
@@ -322,7 +323,7 @@ export default function BotSettingsScreen() {
   async function chooseVoice(voice: Voice) {
     if (!botId) return;
     // Picking a voice cuts off a reply in progress before the sample starts.
-    stopVoicePlayback();
+    if (canStartSpeech()) stopVoicePlayback();
     const choice = ++voiceChoice.current;
     setVoiceId(voice.identifier);
     setError(null);
@@ -337,15 +338,13 @@ export default function BotSettingsScreen() {
     }
     if (choice !== voiceChoice.current) return;
     try {
-      // Native speech loads only when a voice is previewed, as in lib/voice.
-      const Speech = await import("expo-speech");
-      if (choice !== voiceChoice.current) return;
-      await Speech.stop();
-      if (choice !== voiceChoice.current) return;
+      if (choice !== voiceChoice.current || !canStartSpeech()) return;
       const sampleName = name.trim();
-      Speech.speak(
+      await speakWithDeviceVoice(
         sampleName ? t("Hi, I'm {name}.", { name: sampleName }) : t("Hi, this is how I'll sound."),
-        { voice: voice.identifier },
+        undefined,
+        undefined,
+        voice.identifier,
       );
     } catch {
       // The choice is already saved. A sample that cannot play is not a failed save.

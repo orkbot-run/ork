@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Apache-2.0 covers imported tests; Ork's late call-context regression is PolyForm-covered.
 // Modified by Ork contributors to cover navigation while a call's context is being captured.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 // @vitest-environment jsdom
 
@@ -14,7 +15,8 @@ import type { ApiRequestContext, MobileBot } from "./api";
 import { captureApiRequestContext } from "./api";
 import { startCall } from "./call-session";
 import { clearSessionToken, currentSessionGeneration, saveSessionToken } from "./session";
-import { useThreadVoiceCall } from "./thread-voice";
+import { useAutoSpeakReply, useSpeakMessages, useThreadVoiceCall } from "./thread-voice";
+import { speakQueue, speakText } from "./voice";
 import { takeShortcutVoiceChat } from "./voice-chat-intent";
 
 vi.mock("expo-router", () => ({
@@ -23,7 +25,7 @@ vi.mock("expo-router", () => ({
 }));
 vi.mock("react-native", () => ({
   Alert: { alert: vi.fn() },
-  AppState: { currentState: "active" },
+  AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) },
 }));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(async () => null),
@@ -35,7 +37,8 @@ vi.mock("./thread-feedback", () => ({ clearFailedSends: vi.fn() }));
 vi.mock("./network-cache", () => ({ clearNetworkCache: vi.fn() }));
 // Signed out, every request fails; device voice needs none of them to start the microphone.
 vi.mock("./api", () => ({
-  blockText: vi.fn(),
+  blockText: (message: { blocks: { kind: string; text?: string }[] }) =>
+    message.blocks.map((block) => block.text ?? "").join("\n"),
   captureApiRequestContext: vi.fn(async () => ({
     apiBase: "https://api.example.test",
     headers: { "x-orkbot-space-id": "space-riley" },
@@ -52,7 +55,12 @@ vi.mock("./call-session", () => ({
 vi.mock("./device-voice", () => ({ loadDeviceVoiceEnabled: async () => true }));
 vi.mock("./dictation", () => ({ available: async () => true }));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
-vi.mock("./voice", () => ({ speakQueue: vi.fn(), speakText: vi.fn() }));
+vi.mock("./voice", () => ({
+  canStartSpeech: () => voiceAdmission.allowed,
+  speakQueue: vi.fn(),
+  speakText: vi.fn(),
+}));
+const voiceAdmission = vi.hoisted(() => ({ allowed: true }));
 vi.mock("./voice-chat-intent", () => ({
   onShortcutVoiceChat: () => () => undefined,
   takeShortcutVoiceChat: vi.fn(() => false),
@@ -171,4 +179,47 @@ describe("useThreadVoiceCall hand-over", () => {
 
     expect(startCall).not.toHaveBeenCalled();
   });
+});
+
+it("does not prepare manual or automatic chat read-aloud while another call owns the speaker", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const bot = { ...riley, autoSpeak: true };
+  const first = { id: "first", role: "bot", blocks: [{ kind: "text", text: "First" }] };
+  const next = { id: "next", role: "bot", blocks: [{ kind: "text", text: "Next" }] };
+  function Chat({ messages }: { messages: unknown[] }) {
+    useAutoSpeakReply({
+      botId: bot.id,
+      inGroup: false,
+      currentBot: bot,
+      showingSaved: false,
+      snap: { botId: bot.id, messages } as never,
+    });
+    const speak = useSpeakMessages({
+      visibleMessages: messages as never,
+      botId: bot.id,
+      members: undefined,
+      mentionBots: [],
+    });
+    return createElement("button", { type: "button", onClick: () => speak(next as never) });
+  }
+  try {
+    voiceAdmission.allowed = false;
+    vi.mocked(speakText).mockReset().mockResolvedValue(true);
+    vi.mocked(speakQueue).mockReset().mockResolvedValue(true);
+    await act(async () => root.render(createElement(Chat, { messages: [first] })));
+    await act(async () => root.render(createElement(Chat, { messages: [first, next] })));
+    await act(async () => host.querySelector("button")?.click());
+    // The underlying admission also checks races after this handler returns.
+    expect(speakText).not.toHaveBeenCalled();
+    expect(speakQueue).not.toHaveBeenCalled();
+    voiceAdmission.allowed = true;
+    await act(async () => host.querySelector("button")?.click());
+    expect(speakQueue).toHaveBeenCalledOnce();
+  } finally {
+    act(() => root.unmount());
+    voiceAdmission.allowed = true;
+    vi.unstubAllGlobals();
+  }
 });

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { AiConsentBlocked, callIdFromClientNonce, INTERIM_BARGE_IN_MS } from "@orkbot/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CallClip, CallDeps, CallEnded, DictationHandlers } from "./call-session";
@@ -26,6 +30,7 @@ import {
   saveSessionToken,
 } from "./session";
 import type { UiLocale } from "./ui-locale";
+import { claimSpeaker } from "./voice";
 
 const device = vi.hoisted(() => ({ languageTag: "en-US", os: "ios" }));
 
@@ -48,7 +53,8 @@ vi.mock("expo-file-system", () => ({
   },
   Paths: {},
 }));
-vi.mock("./voice", () => ({
+vi.mock("./voice", async () => ({
+  claimSpeaker: vi.fn((await import("@orkbot/core")).createSpeakerOwnership().claim),
   createSpeechOwner: () => Symbol("SpeechOwner"),
   speakText: vi.fn(),
   stopSpeaking: vi.fn(),
@@ -194,6 +200,40 @@ function fakes(opts: { onDevice?: boolean } = {}) {
 afterEach(() => endCall());
 
 describe("mobile call session", () => {
+  it("holds the speaker before the opening cue resolves and ignores stale old opening completion", async () => {
+    const first = fakes();
+    const cue = deferred<void>();
+    startCall({ botId: "same-bot", botName: "First" }, { ...first.deps, cue: () => cue.promise });
+    const oldOwner = vi.mocked(claimSpeaker).mock.results.at(-1)?.value;
+    expect(oldOwner?.isCurrent()).toBe(true);
+    const next = fakes();
+    startCall({ botId: "same-bot", botName: "Next" }, next.deps);
+    const owner = vi.mocked(claimSpeaker).mock.results.at(-1)?.value;
+    cue.resolve();
+    await flush();
+    expect(oldOwner?.isCurrent()).toBe(false);
+    expect(owner?.isCurrent()).toBe(true);
+    endCall();
+    expect(owner?.isCurrent()).toBe(false);
+  });
+
+  it("releases speaker admission after a synchronous startup failure", () => {
+    const fake = fakes();
+    expect(() =>
+      startCall(
+        { botId: "bot", botName: "Ada" },
+        {
+          ...fake.deps,
+          watch: () => {
+            throw new Error("watch failed");
+          },
+        },
+      ),
+    ).toThrow("watch failed");
+    expect(vi.mocked(claimSpeaker).mock.results.at(-1)?.value?.isCurrent()).toBe(false);
+    expect(getSnapshot()).toBeNull();
+  });
+
   it("retains an answered incoming call's id through speech, messages and hang-up", async () => {
     const fake = fakes();
     const id = startCall(

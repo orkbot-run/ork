@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { MAX_VOICE_AUDIO_BYTES, VOICE_RESPONSE_TIMEOUT_MS } from "@orkbot/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Speaker } from "./tts.js";
@@ -25,6 +29,72 @@ function stubSelectedSpace(id: string) {
 }
 
 describe("Speaker", () => {
+  it("rolls back speaker admission when stopping previous audio throws", () => {
+    const speaker = new Speaker();
+    const stop = vi.spyOn(speaker, "stop").mockImplementationOnce(() => {
+      throw new Error("audio teardown failed");
+    });
+    expect(() => speaker.claim()).toThrow("audio teardown failed");
+    expect(speaker.canSpeak()).toBe(true);
+    stop.mockRestore();
+    const next = speaker.claim();
+    expect(next?.isCurrent()).toBe(true);
+    next?.release();
+  });
+
+  it("blocks read-aloud without preparation while a ringing or listening call owns the speaker", async () => {
+    const speaker = new Speaker();
+    const prepare = vi
+      .spyOn(speaker as unknown as { prepare: () => Promise<string[]> }, "prepare")
+      .mockResolvedValue([]);
+    const owner = speaker.claim()!;
+    expect(speaker.canSpeak()).toBe(false);
+    await speaker.speak("Other chat", { botId: "same-bot" });
+    expect(prepare).not.toHaveBeenCalled();
+    await speaker.speak("Current call", { owner, botId: "same-bot" });
+    expect(prepare).toHaveBeenCalledOnce();
+    speaker.stop();
+    expect(speaker.canSpeak()).toBe(false);
+    owner.release();
+    await speaker.speak("After call");
+    expect(prepare).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects retired call speech even after a replacement call releases its claim", async () => {
+    const speaker = new Speaker();
+    const prepare = vi
+      .spyOn(speaker as unknown as { prepare: () => Promise<string[]> }, "prepare")
+      .mockResolvedValue([]);
+    const first = speaker.claim()!;
+    first.release();
+    const second = speaker.claim()!;
+    first.release();
+    expect(speaker.canSpeak()).toBe(false);
+    second.release();
+    await speaker.speak("Late old call", { owner: first });
+    expect(prepare).not.toHaveBeenCalled();
+    expect(speaker.canSpeak()).toBe(true);
+  });
+
+  it("takes over existing preparation once and does not let blocked starts or stale Stop interrupt call speech", async () => {
+    const speaker = new Speaker();
+    const prepare = vi
+      .spyOn(speaker as unknown as { prepare: () => Promise<string[]> }, "prepare")
+      .mockImplementation(() => new Promise(() => undefined));
+    const previous = speaker.speak("Earlier read-aloud");
+    const owner = speaker.claim()!;
+    await expect(previous).resolves.toBeUndefined();
+    const current = speaker.speak("Call reply", { owner, messageId: "call-reply" });
+    await speaker.speak("Blocked chat");
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(speaker.state).toMatchObject({ status: "preparing", messageId: "call-reply" });
+    expect(speaker.claim()).toBeUndefined();
+    speaker.stop();
+    await expect(current).resolves.toBeUndefined();
+    expect(owner.isCurrent()).toBe(true);
+    owner.release();
+  });
+
   it("interrupting before audio arrives leaves the speaker idle", async () => {
     const speaker = new Speaker();
     vi.spyOn(

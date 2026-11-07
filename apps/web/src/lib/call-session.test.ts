@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import type { ProductEvent, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
 import type * as CoreModule from "@orkbot/core";
 import {
@@ -37,8 +41,9 @@ vi.mock("./dictation.js", () => ({
   },
 }));
 
-vi.mock("./tts.js", () => ({
+vi.mock("./tts.js", async () => ({
   speaker: {
+    claim: vi.fn((await import("@orkbot/core")).createSpeakerOwnership().claim),
     speak: vi.fn(async () => undefined),
     stop: vi.fn(),
     isSpeaking: vi.fn(() => false),
@@ -87,6 +92,41 @@ describe("call session", () => {
   afterEach(() => {
     endCall();
     vi.useRealTimers();
+  });
+
+  it("claims the speaker synchronously during pickup and releases it on startup failure", async () => {
+    const pickup = deferred<void>();
+    vi.mocked(pickUp).mockReturnValueOnce(pickup.promise);
+    startCall({ botId: "call-bot", botName: "Ada" });
+    const owner = vi.mocked(speaker.claim).mock.results.at(-1)?.value;
+    expect(owner?.isCurrent()).toBe(true);
+    pickup.reject(new Error("pickup failed"));
+    await flushMicrotasks();
+    expect(owner?.isCurrent()).toBe(false);
+    expect(getSnapshot()).toBeNull();
+  });
+
+  it("does not let an old pickup rejection release a replacement claim", async () => {
+    const oldPickup = deferred<void>();
+    vi.mocked(pickUp).mockReturnValueOnce(oldPickup.promise);
+    startCall({ botId: "call-bot", botName: "Ada" });
+    const oldOwner = vi.mocked(speaker.claim).mock.results.at(-1)?.value;
+    startCall({ botId: "same-bot", botName: "Other call" });
+    const owner = vi.mocked(speaker.claim).mock.results.at(-1)?.value;
+    oldPickup.reject(new Error("old pickup failed"));
+    await flushMicrotasks();
+    expect(oldOwner?.isCurrent()).toBe(false);
+    expect(owner?.isCurrent()).toBe(true);
+    expect(getSnapshot()?.botId).toBe("same-bot");
+  });
+
+  it("releases the claim when synchronous startup fails", () => {
+    vi.mocked(speaker.subscribe).mockImplementationOnce(() => {
+      throw new Error("subscription failed");
+    });
+    expect(() => startCall({ botId: "call-bot", botName: "Ada" })).toThrow("subscription failed");
+    expect(vi.mocked(speaker.claim).mock.results.at(-1)?.value?.isCurrent()).toBe(false);
+    expect(getSnapshot()).toBeNull();
   });
 
   it("starts listening for the bot on the call", async () => {
@@ -261,6 +301,10 @@ describe("call session", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(speak).toHaveBeenCalledExactlyOnceWith("The current task is done", {
         botId: "call-bot",
+        owner: expect.objectContaining({
+          isCurrent: expect.any(Function),
+          release: expect.any(Function),
+        }),
         messageId: "current-reply",
       });
       expect(getSnapshot()?.exchanges).toEqual([
@@ -359,6 +403,10 @@ describe("call session", () => {
     await flushMicrotasks();
     expect(speak).toHaveBeenCalledExactlyOnceWith("The task is done", {
       botId: "call-bot",
+      owner: expect.objectContaining({
+        isCurrent: expect.any(Function),
+        release: expect.any(Function),
+      }),
       messageId: "current",
     });
   });
@@ -1297,10 +1345,12 @@ function interim(transcript: string) {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function eventStream() {
@@ -1590,6 +1640,10 @@ describe("answered incoming call", () => {
     expect(speak).toHaveBeenCalledOnce();
     expect(speak).toHaveBeenCalledWith("You missed my reminders, so I'm calling.", {
       botId: "call-bot",
+      owner: expect.objectContaining({
+        isCurrent: expect.any(Function),
+        release: expect.any(Function),
+      }),
     });
     expect(listen).not.toHaveBeenCalled();
     expect(getSnapshot()?.exchanges).toEqual([

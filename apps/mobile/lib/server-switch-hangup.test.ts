@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 call cleanup tests are preserved; central account cleanup coverage is an Ork addition.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -32,7 +33,8 @@ vi.mock("./call-sounds", () => ({
   startWaitSound: vi.fn(),
   stopWaitSound: vi.fn(),
 }));
-vi.mock("./voice", () => ({
+vi.mock("./voice", async () => ({
+  claimSpeaker: (await import("@orkbot/core")).createSpeakerOwnership().claim,
   createSpeechOwner: () => Symbol("SpeechOwner"),
   speakText: vi.fn(),
   stopSpeaking: vi.fn(),

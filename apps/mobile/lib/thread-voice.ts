@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Apache-2.0 covers the imported implementation; Ork changes are PolyForm-covered.
 // Modified by Ork contributors to abandon calls when their chat changes during context capture.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import { memberName, resolvePersonaColorDef } from "@orkbot/core";
 import { useNavigation, useRouter } from "expo-router";
@@ -20,7 +21,7 @@ import { useI18n } from "./i18n";
 import { currentSessionGeneration } from "./session";
 import { speakerColorFor } from "./thread-message-text";
 import { errorText } from "./user-error";
-import { speakQueue, speakText } from "./voice";
+import { canStartSpeech, speakQueue, speakText } from "./voice";
 import {
   loadCallCallerName,
   probeProviderTranscribe,
@@ -79,6 +80,7 @@ export function useAutoSpeakReply({
     if (decision.action !== "speak") return;
     autoSpokenBotId.current = currentBot.id;
     autoSpoken.current = decision.messageId;
+    if (!canStartSpeech()) return;
     void speakText(decision.text, {
       botId: currentBot.id,
       speaker: {
@@ -129,6 +131,7 @@ export function useSpeakMessages({
   const router = useRouter();
   return useCallback(
     (message: MobileMessage) => {
+      if (!canStartSpeech()) return;
       const startIndex = visibleMessages.findIndex((candidate) => candidate.id === message.id);
       const fromHere = startIndex === -1 ? [message] : visibleMessages.slice(startIndex);
       const items = fromHere.flatMap((candidate) => {

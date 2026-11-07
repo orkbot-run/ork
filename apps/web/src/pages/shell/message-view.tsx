@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import { plural } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -75,6 +76,7 @@ export const MessageView = memo(function MessageView({
   onBotChanged,
   onAddRoutine,
   voiceReady,
+  speechBlocked = false,
   speaking,
   onSpeak,
   onOpenComputer,
@@ -124,6 +126,7 @@ export const MessageView = memo(function MessageView({
   onBotChanged: () => Promise<void>;
   onAddRoutine: (name: string, prompt: string) => void;
   voiceReady: boolean;
+  speechBlocked?: boolean;
   speaking: boolean;
   onSpeak: (message: ThreadMessage) => void;
   onOpenComputer: (botId?: string) => void;
@@ -304,6 +307,7 @@ export const MessageView = memo(function MessageView({
                 <Button
                   variant="text"
                   size="xs"
+                  disabled={speechBlocked && !speaking}
                   aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
                   onClick={speak}
                   className="font-normal"
@@ -576,6 +580,7 @@ export const MessageView = memo(function MessageView({
                     <Button
                       variant="text"
                       size="xs"
+                      disabled={speechBlocked && !speaking}
                       aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
                       onClick={speak}
                       className="mt-2 font-normal"

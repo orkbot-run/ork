@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 import type { ThreadMessage } from "@orkbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
@@ -314,4 +318,27 @@ it("sends a settings Undo through the chat's space client", async () => {
   const undo = [...container.querySelectorAll("button")].find((b) => b.textContent === "Undo");
   await act(async () => undo?.click());
   expect(spaceRpc.bots.update).toHaveBeenCalledTimes(1);
+});
+
+it("disables new read-aloud while a call owns the speaker but keeps Stop reachable", () => {
+  const onSpeak = vi.fn();
+  renderView("bot", [{ kind: "text", text: "Read this" }], {
+    voiceReady: true,
+    speechBlocked: true,
+    onSpeak,
+  });
+  const start = container.querySelector<HTMLButtonElement>('[aria-label="Speak this reply"]');
+  expect(start?.disabled).toBe(true);
+  act(() => start?.click());
+  expect(onSpeak).not.toHaveBeenCalled();
+  renderView("bot", [{ kind: "text", text: "Read this" }], {
+    voiceReady: true,
+    speechBlocked: true,
+    speaking: true,
+    onSpeak,
+  });
+  const stop = container.querySelector<HTMLButtonElement>('[aria-label="Stop speaking"]');
+  expect(stop?.disabled).toBe(false);
+  act(() => stop?.click());
+  expect(onSpeak).toHaveBeenCalledOnce();
 });

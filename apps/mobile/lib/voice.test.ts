@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { MAX_VOICE_AUDIO_BYTES, VOICE_RESPONSE_TIMEOUT_MS } from "@orkbot/core";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import * as SecureStore from "expo-secure-store";
@@ -7,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { captureApiRequestContext, currentApiBase, rpc } from "./api";
 import { DEVICE_VOICE_KEY } from "./device-voice";
 import {
+  canStartSpeech,
+  claimSpeaker,
   createSpeechOwner,
   getVoicePlaybackState,
   pauseVoicePlayback,
@@ -89,6 +95,7 @@ class FakeAudio {
 
 describe("mobile speech", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
     vi.mocked(captureApiRequestContext).mockResolvedValue({
       apiBase: "https://support.example",
@@ -113,6 +120,102 @@ describe("mobile speech", () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  it("rolls back speaker admission when stopping previous device audio throws", async () => {
+    let finish: (() => void) | undefined;
+    vi.mocked(Speech.speak).mockImplementation((_text, options) => {
+      finish = options?.onStopped;
+    });
+    const speaking = speakWithDeviceVoice("Already speaking");
+    await waitFor(() => vi.mocked(Speech.speak).mock.calls.length === 1);
+    vi.mocked(Speech.stop).mockImplementationOnce(() => {
+      throw new Error("device teardown failed");
+    });
+    try {
+      expect(() => claimSpeaker()).toThrow("device teardown failed");
+      expect(canStartSpeech()).toBe(true);
+      const next = claimSpeaker();
+      expect(next?.isCurrent()).toBe(true);
+      next?.release();
+    } finally {
+      finish?.();
+      stopVoicePlayback();
+      await speaking;
+    }
+  });
+
+  it("blocks manual, queued and direct-device speech before preparation while a call owns the speaker", async () => {
+    const owner = claimSpeaker()!;
+    vi.mocked(Speech.speak).mockImplementation((_text, options) => {
+      options?.onDone?.();
+    });
+    try {
+      expect(canStartSpeech()).toBe(false);
+      await expect(speakText("Other chat", { botId: "same-bot" })).resolves.toBe(true);
+      await expect(speakQueue([{ text: "Queued other chat", botId: "other" }])).resolves.toBe(true);
+      await expect(speakWithDeviceVoice("Device other chat")).resolves.toBe(true);
+      expect(captureApiRequestContext).not.toHaveBeenCalled();
+      expect(rpc).not.toHaveBeenCalled();
+      expect(Speech.speak).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      await expect(speakText("Current call", { botId: "same-bot", owner })).resolves.toBe(true);
+      expect(rpc).toHaveBeenCalledWith(
+        "voice/prepare",
+        expect.objectContaining({ text: "Current call" }),
+        expect.anything(),
+      );
+      stopSpeaking();
+      expect(canStartSpeech()).toBe(false);
+    } finally {
+      owner.release();
+    }
+    expect(canStartSpeech()).toBe(true);
+  });
+
+  it("does not let a retired call reclaim speech after a replacement finishes", async () => {
+    const first = claimSpeaker()!;
+    first.release();
+    const second = claimSpeaker()!;
+    first.release();
+    expect(canStartSpeech()).toBe(false);
+    second.release();
+    await expect(speakText("Late call", { owner: first })).resolves.toBe(true);
+    expect(captureApiRequestContext).not.toHaveBeenCalled();
+  });
+
+  it("cancels previous queued preparation when a call claims audio and never prepares its remaining items", async () => {
+    let finishCapture!: (context: Awaited<ReturnType<typeof captureApiRequestContext>>) => void;
+    vi.mocked(captureApiRequestContext).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCapture = resolve;
+      }),
+    );
+    const queued = speakQueue([
+      { text: "Earlier", botId: "old" },
+      { text: "Remaining", botId: "old" },
+    ]);
+    const owner = claimSpeaker()!;
+    try {
+      finishCapture({ apiBase: "https://api.example", headers: {} } as Awaited<
+        ReturnType<typeof captureApiRequestContext>
+      >);
+      await expect(queued).resolves.toBe(true);
+      expect(rpc).not.toHaveBeenCalled();
+      expect(fetch).not.toHaveBeenCalled();
+      await expect(speakText("Call", { owner })).resolves.toBe(true);
+      expect(rpc).toHaveBeenCalledWith(
+        "voice/prepare",
+        expect.objectContaining({ text: "Call" }),
+        expect.anything(),
+      );
+      const preparedCalls = vi.mocked(rpc).mock.calls.length;
+      await speakText("Blocked");
+      expect(rpc).toHaveBeenCalledTimes(preparedCalls);
+    } finally {
+      stopSpeaking(owner);
+      owner.release();
+    }
   });
 
   it("keeps every request on the server and space captured before preparation", async () => {

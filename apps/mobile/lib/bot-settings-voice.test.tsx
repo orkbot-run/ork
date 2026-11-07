@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 // @vitest-environment jsdom
 
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   loadBot: vi.fn(),
   back: vi.fn(),
   push: vi.fn(),
+  speechAllowed: true,
   stopVoicePlayback: vi.fn(),
   stop: vi.fn(),
   speak: vi.fn(),
@@ -67,7 +69,19 @@ vi.mock("./bot-voices", () => ({
   setVoiceForBot: mocks.setVoiceForBot,
 }));
 vi.mock("./device-voice", () => ({ loadDeviceVoiceEnabled: async () => true }));
-vi.mock("./voice", () => ({ stopVoicePlayback: mocks.stopVoicePlayback }));
+vi.mock("./voice", () => ({
+  canStartSpeech: () => mocks.speechAllowed,
+  stopVoicePlayback: mocks.stopVoicePlayback,
+  speakWithDeviceVoice: async (
+    text: string,
+    _botId: unknown,
+    _messageId: unknown,
+    voice: string,
+  ) => {
+    mocks.speak(text, { voice });
+    return true;
+  },
+}));
 vi.mock("expo-speech", () => ({ stop: mocks.stop, speak: mocks.speak }));
 vi.mock("./api", () => ({
   currentApiBase: () => "https://api.example.test",
@@ -367,6 +381,7 @@ describe("bot settings device voice menu", () => {
   let root: Root;
   let container: HTMLDivElement;
   beforeEach(() => {
+    mocks.speechAllowed = true;
     mocks.crossSpaceCommunication = false;
     mocks.avatarSet = undefined;
     vi.clearAllMocks();
@@ -1182,6 +1197,17 @@ describe("bot settings device voice menu", () => {
       "off",
       "on",
     ]);
+  });
+
+  it("saves a device voice without stopping or previewing audio owned by a call", async () => {
+    await render();
+    mocks.speechAllowed = false;
+    const actions = menu()!.querySelectorAll("button");
+    await act(async () => actions[1]!.click());
+    expect(mocks.setVoiceForBot).toHaveBeenCalledWith("bot-fixture", "voice-b");
+    expect(mocks.stopVoicePlayback).not.toHaveBeenCalled();
+    expect(mocks.stop).not.toHaveBeenCalled();
+    expect(mocks.speak).not.toHaveBeenCalled();
   });
 
   it("restores the checkmark and skips the sample when saving fails", async () => {

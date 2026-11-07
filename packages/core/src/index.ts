@@ -3,6 +3,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // Modified by Ork contributors to use generated Ork avatars and retire legacy icon rendering.
 // Inherited Apache-2.0 material is preserved. New changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 export * from "./action-approval.js";
 export * from "./activity-sections.js";
@@ -106,6 +107,7 @@ export * from "./self-update.js";
 export * from "./server-updates.js";
 export * from "./signup-policy.js";
 export * from "./source-settings.js";
+export * from "./speaker-ownership.js";
 export * from "./speech-locale.js";
 export * from "./speech-text.js";
 export * from "./stuck-work.js";

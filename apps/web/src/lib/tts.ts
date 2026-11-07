@@ -1,6 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import type { SettingsScope } from "@orkbot/contracts";
+import type { SpeakerClaim } from "@orkbot/core";
 import {
+  createSpeakerOwnership,
   readVoiceAudio,
   readVoiceError,
   requestDeadline,
@@ -21,6 +27,7 @@ export interface SpeechSnapshot {
 }
 
 interface SpeakOptions {
+  owner?: SpeakerClaim;
   spaceId?: string | null;
   /** Which copy of the voice settings to use; omitted means whichever applies in the space. */
   scope?: SettingsScope;
@@ -32,13 +39,30 @@ interface SpeakOptions {
 const IDLE: SpeechSnapshot = { status: "idle" };
 
 export class Speaker {
+  private readonly ownership = createSpeakerOwnership();
   private snapshot: SpeechSnapshot = IDLE;
   private watchers = new Set<(s: SpeechSnapshot) => void>();
   private token = 0;
+  private activeOwner: SpeakerClaim | undefined;
   private audio: HTMLAudioElement | null = null;
   private objectUrl: string | null = null;
   private settlePlayback: ((finished: boolean) => void) | null = null;
   private request: AbortController | null = null;
+
+  claim(): SpeakerClaim | undefined {
+    const owner = this.ownership.claim();
+    if (!owner) return undefined;
+    try {
+      this.stop();
+      return owner;
+    } catch (error) {
+      owner.release();
+      throw error;
+    }
+  }
+
+  canSpeak = (owner?: SpeakerClaim): boolean => this.ownership.allows(owner);
+  subscribeOwnership = (listener: () => void): (() => void) => this.ownership.subscribe(listener);
 
   subscribe(fn: (s: SpeechSnapshot) => void): () => void {
     this.watchers.add(fn);
@@ -62,7 +86,8 @@ export class Speaker {
     return messageId ? this.snapshot.messageId === messageId : true;
   }
 
-  stop() {
+  stop(owner?: SpeakerClaim) {
+    if (owner && this.activeOwner !== owner) return;
     this.token += 1;
     this.request?.abort();
     this.request = null;
@@ -85,7 +110,9 @@ export class Speaker {
 
   /** Resolves with this request's failure text; stopping or superseding it resolves with none. */
   async speak(text: string, opts: SpeakOptions = {}): Promise<string | undefined> {
+    if (!this.canSpeak(opts.owner)) return;
     this.stop();
+    this.activeOwner = opts.owner;
     const mine = this.token;
     const controller = new AbortController();
     this.request = controller;

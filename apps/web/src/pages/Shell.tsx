@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Empty-space onboarding changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
@@ -455,7 +456,7 @@ function SpaceShell() {
       },
     },
   );
-  const { speakingMessageId, speakMessage } = useReadAloud({
+  const { speakingMessageId, speakMessage, canReadAloud } = useReadAloud({
     active,
     snapshot,
     callBotId: call?.botId,
@@ -1172,6 +1173,7 @@ function SpaceShell() {
               onBotChanged={refreshBots}
               onAddRoutine={addSkillRoutine}
               voiceReady={Boolean(voiceStatus?.ready)}
+              speechBlocked={!canReadAloud}
               speakingMessageId={speakingMessageId}
               onSpeak={speakMessage}
               onOpenComputer={computerControls.onOpenComputer}

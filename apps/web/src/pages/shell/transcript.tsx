@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { i18n } from "@lingui/core";
 import { useLingui } from "@lingui/react/macro";
 import type {
@@ -92,6 +96,7 @@ export const Transcript = memo(function Transcript({
   onBotChanged,
   onAddRoutine,
   voiceReady,
+  speechBlocked = false,
   speakingMessageId,
   onSpeak,
   onOpenComputer,
@@ -142,6 +147,7 @@ export const Transcript = memo(function Transcript({
   onBotChanged: () => Promise<void>;
   onAddRoutine: (name: string, prompt: string) => void;
   voiceReady: boolean;
+  speechBlocked?: boolean;
   speakingMessageId: string | null;
   onSpeak: (message: ThreadMessage) => void;
   onOpenComputer: (botId?: string) => void;
@@ -621,6 +627,7 @@ export const Transcript = memo(function Transcript({
                       onBotChanged={onBotChanged}
                       onAddRoutine={onAddRoutine}
                       voiceReady={voiceReady}
+                      speechBlocked={speechBlocked}
                       speaking={speakingMessageId === message.id}
                       onSpeak={onSpeak}
                       onOpenComputer={onOpenComputer}

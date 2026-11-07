@@ -1,5 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import type { SettingsScope } from "@orkbot/contracts";
+import type { SpeakerClaim } from "@orkbot/core";
 import {
+  createSpeakerOwnership,
   ensureAiDataConsent,
   readVoiceAudio,
   readVoiceError,
@@ -30,7 +36,27 @@ import { errorText, voiceAccountErrorText } from "./user-error";
 /** Who is speaking, for the dock: it is mounted outside any one thread's bot list. */
 export type PlaybackSpeaker = { name?: string; color?: string };
 /** Who started a speech, so their Stop call reaches only their own playback. */
-export type SpeechOwner = symbol;
+export type SpeechOwner = symbol | SpeakerClaim;
+
+const ownership = createSpeakerOwnership();
+
+export function claimSpeaker(): SpeakerClaim | undefined {
+  const owner = ownership.claim();
+  if (!owner) return undefined;
+  try {
+    stopVoicePlayback();
+    return owner;
+  } catch (error) {
+    owner.release();
+    throw error;
+  }
+}
+
+export function canStartSpeech(owner?: SpeechOwner): boolean {
+  return ownership.allows(typeof owner === "symbol" ? undefined : owner);
+}
+
+export const subscribeSpeechOwnership = ownership.subscribe;
 
 /** A unique owner for the speech one surface is about to start, e.g. the current call. */
 export function createSpeechOwner(): SpeechOwner {
@@ -120,6 +146,7 @@ export function stopSpeaking(owner?: SpeechOwner): void {
 // neither hear it nor see its speaker in the dock.
 subscribeSessionGeneration(() => {
   stopVoicePlayback();
+  ownership.clear();
   announcedSpeaker = undefined;
 });
 
@@ -179,7 +206,9 @@ function releasePlayback(epoch: number, stillOwner: boolean, keepForQueue: boole
  * the user when no voice is set up.
  */
 export async function speakQueue(items: SpeechQueueItem[]): Promise<boolean> {
-  const epoch = beginSpeech();
+  if (!canStartSpeech(items[0]?.owner) || items.some((item) => !canStartSpeech(item.owner)))
+    return true;
+  const epoch = beginSpeech(items[0]?.owner);
   // One context for the whole queue, taken before anything plays: a queued
   // reply must never capture the server or account of a later session.
   let requestContext: ApiRequestContext | undefined;
@@ -221,6 +250,7 @@ async function advanceSpeechQueue(epoch: number): Promise<boolean> {
 }
 
 export async function speakText(text: string, opts: SpeechOptions = {}): Promise<boolean> {
+  if (!canStartSpeech(opts.owner)) return true;
   return speakPrepared(text, opts, beginSpeech(opts.owner));
 }
 
@@ -350,8 +380,9 @@ export async function speakWithDeviceVoice(
   text: string,
   botId?: string,
   messageId?: string,
+  voiceId?: string,
 ): Promise<boolean> {
-  return speakOnDevice(text, botId, messageId);
+  return speakOnDevice(text, botId, messageId, undefined, voiceId);
 }
 
 async function speakOnDevice(
@@ -359,7 +390,9 @@ async function speakOnDevice(
   botId?: string,
   messageId?: string,
   epoch?: number,
+  voiceId?: string,
 ): Promise<boolean> {
+  if (epoch === undefined && !canStartSpeech()) return true;
   const utterances = toUtterances(text);
   if (utterances.length === 0) return false;
   const mine = epoch ?? beginSpeech();
@@ -369,7 +402,7 @@ async function speakOnDevice(
   const session = startDeviceSpeechSession();
   const Speech = await loadExpoSpeech();
   // Each bot keeps its own offline voice; without one the engine's default speaks.
-  const voice = botId ? await voiceForBot(botId).catch(() => undefined) : undefined;
+  const voice = voiceId ?? (botId ? await voiceForBot(botId).catch(() => undefined) : undefined);
   if (!isCurrentDeviceSpeechSession(session) || !isCurrentSpeech(mine)) return true;
   await Speech.stop();
   if (!isCurrentDeviceSpeechSession(session) || !isCurrentSpeech(mine)) return true;

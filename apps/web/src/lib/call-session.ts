@@ -1,6 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import type { BotAvatarSet, ProductEvent, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
-import type { CallExchange } from "@orkbot/core";
+import type { CallExchange, SpeakerClaim } from "@orkbot/core";
 import {
   CALL_FAREWELL_TIMEOUT_MS,
   callClientNonce,
@@ -69,6 +73,7 @@ export const SIGN_OUT_HANG_UP_MS = 3_000;
  */
 export const SIGNED_IN_USER_KEY = "orkbot.signedInUser";
 let state: CallState | null = null;
+let speechOwner: SpeakerClaim | undefined;
 /** The signed-in user this page belongs to; undefined until the session first resolves. */
 let identity: string | null | undefined;
 /** Other tabs' sign-outs and account changes are watched once a user is signed in. */
@@ -118,7 +123,7 @@ const interim = createInterimBargeIn(() => {
   if (state?.phase !== "speaking") return;
   // Never resume the cut-off message, and keep the idle it emits from reopening the mic.
   bargedIn = true;
-  speaker.stop();
+  speaker.stop(speechOwner);
   set({ phase: "listening", caption: "" });
 });
 const watchers = new Set<() => void>();
@@ -159,83 +164,97 @@ export function startCall(call: {
 }): void {
   if (leaving) return;
   endCall();
-  callId = call.answered?.callId ?? newClientId();
-  transcribe = call.transcribe;
-  spokenMemory.clear();
-  interim.clear();
-  micOpen = false;
-  bargedIn = false;
-  awaitingReply = false;
-  approvalRunId = null;
-  awaitedRunId = null;
-  finishedRunIds.clear();
-  state = {
-    botId: call.botId,
-    botName: call.botName,
-    botColor: call.botColor ?? "",
-    botAvatarSet: call.botAvatarSet,
-    connectedAt: null,
-    phase: "ringing",
-    muted: false,
-    minimized: false,
-    transcriptOpen: false,
-    caption: "",
-    heard: "",
-    exchanges: [],
-  };
-  unsubSpeech = speaker.subscribe((speech) => {
-    if (!state || state.phase === "ringing") return;
-    if (openingPending && speech.status === "idle") openingPending = false;
-    if (speech.status === "speaking") {
-      bargedIn = false;
-      set({ phase: "speaking", caption: speech.caption ?? "" });
-      // The mic stays open through playback so the caller can talk over the reply.
-      void openMic();
-    } else if (speech.status === "idle" && state.phase !== "listening" && !bargedIn) {
-      set({ caption: "" });
-      guardThenListen();
-    }
-    if (speech.error) set({ caption: speech.error });
-  });
-  unsubDictation = dictation.subscribe((heard) => {
-    if (!state) return;
-    if (heard.status === "listening") {
-      set({ heard: pendingSecretAsk(thread) ? "" : heard.transcript });
-      watchInterim(heard.transcript);
-    } else interim.clear();
-    if (heard.error) {
-      if (heard.status === "idle") micOpen = false;
-      set({ caption: heard.error });
-    }
-  });
-  watchThread(call.botId);
-  emit();
-  const ringing = new AbortController();
-  pickup = ringing;
-  const ringingCallId = callId;
-  const opening = call.answered?.opening.trim() ?? "";
-  void pickUp(ringing.signal, { ring: !call.answered }).then(() => {
-    if (ringing.signal.aborted || !state || callId !== ringingCallId) return;
-    pickup = null;
-    if (!opening) {
-      set({ phase: "listening", connectedAt: Date.now() });
-      void listen();
-      return;
-    }
-    // The bot opens the call; its speech ending hands the turn to the user.
-    set({
-      phase: "thinking",
-      connectedAt: Date.now(),
-      exchanges: [{ role: "bot", text: opening }],
+  const owner = speaker.claim();
+  if (!owner) return;
+  speechOwner = owner;
+  try {
+    callId = call.answered?.callId ?? newClientId();
+    transcribe = call.transcribe;
+    spokenMemory.clear();
+    interim.clear();
+    micOpen = false;
+    bargedIn = false;
+    awaitingReply = false;
+    approvalRunId = null;
+    awaitedRunId = null;
+    finishedRunIds.clear();
+    state = {
+      botId: call.botId,
+      botName: call.botName,
+      botColor: call.botColor ?? "",
+      botAvatarSet: call.botAvatarSet,
+      connectedAt: null,
+      phase: "ringing",
+      muted: false,
+      minimized: false,
+      transcriptOpen: false,
+      caption: "",
+      heard: "",
+      exchanges: [],
+    };
+    unsubSpeech = speaker.subscribe((speech) => {
+      if (!state || state.phase === "ringing") return;
+      if (openingPending && speech.status === "idle") openingPending = false;
+      if (speech.status === "speaking") {
+        bargedIn = false;
+        set({ phase: "speaking", caption: speech.caption ?? "" });
+        // The mic stays open through playback so the caller can talk over the reply.
+        void openMic();
+      } else if (speech.status === "idle" && state.phase !== "listening" && !bargedIn) {
+        set({ caption: "" });
+        guardThenListen();
+      }
+      if (speech.error) set({ caption: speech.error });
     });
-    spokenMemory.remember(opening);
-    openingPending = true;
-    void speaker.speak(opening, { botId: call.botId }).catch(() => {
-      if (callId !== ringingCallId) return;
-      openingPending = false;
-      void listen();
+    unsubDictation = dictation.subscribe((heard) => {
+      if (!state) return;
+      if (heard.status === "listening") {
+        set({ heard: pendingSecretAsk(thread) ? "" : heard.transcript });
+        watchInterim(heard.transcript);
+      } else interim.clear();
+      if (heard.error) {
+        if (heard.status === "idle") micOpen = false;
+        set({ caption: heard.error });
+      }
     });
-  });
+    watchThread(call.botId);
+    emit();
+    const ringing = new AbortController();
+    pickup = ringing;
+    const ringingCallId = callId;
+    const opening = call.answered?.opening.trim() ?? "";
+    void pickUp(ringing.signal, { ring: !call.answered })
+      .then(() => {
+        if (ringing.signal.aborted || !state || callId !== ringingCallId) return;
+        pickup = null;
+        if (!opening) {
+          set({ phase: "listening", connectedAt: Date.now() });
+          void listen();
+          return;
+        }
+        // The bot opens the call; its speech ending hands the turn to the user.
+        set({
+          phase: "thinking",
+          connectedAt: Date.now(),
+          exchanges: [{ role: "bot", text: opening }],
+        });
+        spokenMemory.remember(opening);
+        openingPending = true;
+        void speaker.speak(opening, { botId: call.botId, owner }).catch(() => {
+          if (callId !== ringingCallId) return;
+          openingPending = false;
+          void listen();
+        });
+      })
+      .catch((error: unknown) => {
+        if (ringing.signal.aborted || !state || callId !== ringingCallId) return;
+        reportClientError(error, "voice.turn");
+        dropCall();
+      });
+  } catch (error) {
+    dropCall();
+    throw error;
+  }
 }
 
 export function endCall(): void {
@@ -287,7 +306,11 @@ function dropCall(): void {
   unsubSpeech = null;
   unsubDictation = null;
   dictation.stop("cancel");
-  speaker.stop();
+  if (speechOwner) {
+    speaker.stop(speechOwner);
+    speechOwner.release();
+    speechOwner = undefined;
+  }
   thread = null;
   spokenMessageIds.clear();
   spokenMemory.clear();
@@ -500,7 +523,7 @@ function speakFarewell(payload: Record<string, unknown>) {
   awaitingReply = false;
   set({ exchanges: [...state.exchanges, { role: "bot", text: farewell }], heard: "" });
   spokenMemory.remember(farewell);
-  void speaker.speak(farewell, { botId: state.botId, messageId });
+  void speaker.speak(farewell, { botId: state.botId, messageId, owner: speechOwner });
 }
 
 function commit(next: ThreadSnapshot | null) {
@@ -549,7 +572,7 @@ async function listen() {
   // A guard is already counting down the quiet gap; it calls back here when it ends.
   if (guardTimer) return;
   set({ phase: "listening", heard: "" });
-  speaker.stop();
+  speaker.stop(speechOwner);
   if (state.muted || pendingSecretAsk(thread)) {
     dictation.stop("cancel");
     micOpen = false;
@@ -591,7 +614,7 @@ async function handleTranscript(text: string) {
     }
     // The caller talked over the reply: cut the audio, and never resume that message.
     bargedIn = true;
-    speaker.stop();
+    speaker.stop(speechOwner);
     set({ phase: "thinking", caption: "" });
   }
   dictation.stop("submit");
@@ -740,7 +763,7 @@ function reactToThread() {
             : ask
               ? `${text}. ${t`Say yes or no, or answer in a sentence.`}`
               : text,
-        { botId, messageId: lastBot.id },
+        { botId, messageId: lastBot.id, owner: speechOwner },
       );
       return;
     }

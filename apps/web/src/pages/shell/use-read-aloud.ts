@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 import type { Bot, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
 import { speechFromBlocks } from "@orkbot/core";
 import { toast } from "@orkbot/ui-web";
 import type { RefObject } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { speaker } from "../../lib/tts";
 
 const READ_ALOUD_TOAST = "read-aloud-error";
@@ -26,6 +30,11 @@ export function useReadAloud({
   callBotId: string | undefined;
   activeBotId: RefObject<string | undefined>;
 }) {
+  const canReadAloud = useSyncExternalStore(
+    speaker.subscribeOwnership,
+    speaker.canSpeak,
+    speaker.canSpeak,
+  );
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
@@ -47,7 +56,7 @@ export function useReadAloud({
       autoSpoken.current = lastBot?.id ?? null;
       return;
     }
-    if (callBotId === active.id || !active.autoSpeak) {
+    if (callBotId || !speaker.canSpeak() || !active.autoSpeak) {
       autoSpoken.current = lastBot?.id ?? null;
       return;
     }
@@ -73,10 +82,11 @@ export function useReadAloud({
       speaker.stop();
       return;
     }
+    if (!speaker.canSpeak()) return;
     const text = speechFromBlocks(message.blocks);
     const id = message.botId ?? activeBotId.current;
     if (text && id) readAloud(text, { botId: id, messageId: message.id });
   }, []);
 
-  return { speakingMessageId, speakMessage };
+  return { speakingMessageId, speakMessage, canReadAloud };
 }

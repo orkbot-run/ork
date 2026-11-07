@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+// Modified by Ork contributors for call speaker ownership; see LICENSE.md.
 
 import type { BotAvatarSet } from "@orkbot/contracts";
-import type { CallExchange } from "@orkbot/core";
+import type { CallExchange, SpeakerClaim } from "@orkbot/core";
 import {
   ACTIVE_RUN_STATUSES,
   AiConsentBlocked,
@@ -50,7 +51,7 @@ import { fetchServer } from "./server-headers";
 import { currentSessionGeneration, subscribeSessionGeneration } from "./session";
 import { errorText, voiceAccountErrorText } from "./user-error";
 import type { SpeechOwner } from "./voice";
-import { createSpeechOwner, speakText, stopSpeaking } from "./voice";
+import { claimSpeaker, createSpeechOwner, speakText, stopSpeaking } from "./voice";
 
 export type CallPhase = "listening" | "thinking" | "speaking";
 
@@ -128,6 +129,7 @@ const METER_START_MS = 1_000;
 const MAX_CLIP_MS = 30_000;
 
 let state: CallState | null = null;
+let speakerClaim: SpeakerClaim | undefined;
 /** The session the call started in: a sign-out or an account or server change ends the call. */
 let callSessionGeneration = 0;
 /** Shared by every message this call sends, so the thread can group one call's exchange. */
@@ -233,8 +235,11 @@ export function startCall(
 ): string | undefined {
   if (call.session !== undefined && call.session !== currentSessionGeneration()) return undefined;
   endCall();
+  const owner = claimSpeaker();
+  if (!owner) return undefined;
+  speakerClaim = owner;
   callSessionGeneration = currentSessionGeneration();
-  deps = { ...productionDeps(call.requestContext), ...overrides };
+  deps = { ...productionDeps(call.requestContext, owner), ...overrides };
   switchBot = call.switchBot;
   callId = call.answered?.callId ?? newClientId();
   callRunId = null;
@@ -256,10 +261,20 @@ export function startCall(
     heard: "",
     exchanges: [],
   };
-  unwatch = deps.watch(call.botId, onReply, onCallEnded);
-  emit();
-  void openCall(callId, call.greeting);
-  return callId;
+  const openedCallId = callId;
+  try {
+    unwatch = deps.watch(call.botId, onReply, onCallEnded);
+    emit();
+    void openCall(openedCallId, call.greeting).catch((error: unknown) => {
+      if (!state || callId !== openedCallId) return;
+      reportMobileError(error, "voice.turn");
+      endCall();
+    });
+  } catch (error) {
+    endCall();
+    throw error;
+  }
+  return openedCallId;
 }
 
 /** The opening cue, then the greeting, then the caller's first turn. */
@@ -299,6 +314,8 @@ export function endCall(): void {
     // A reply can still be playing when the caller hangs up: cut it with the call.
     deps.stopSpeaking();
   }
+  const closingSpeaker = speakerClaim;
+  speakerClaim = undefined;
   turn?.abort();
   turn = null;
   unwatch?.();
@@ -319,8 +336,12 @@ export function endCall(): void {
   switching = false;
   interim.clear();
   spokenMemory.clear();
-  if (!state) return;
+  if (!state) {
+    closingSpeaker?.release();
+    return;
+  }
   state = null;
+  closingSpeaker?.release();
   emit();
 }
 
@@ -695,10 +716,12 @@ function onCallEnded(ended: CallEnded): void {
   speakAndListen(farewell);
 }
 
-function productionDeps(requestContext?: ApiRequestContext): CallDeps {
+function productionDeps(
+  requestContext?: ApiRequestContext,
+  speechOwner: SpeechOwner = createSpeechOwner(),
+): CallDeps {
   // One owner per call: its hang-up and barge-in stop only its own speech, never
   // unrelated read-aloud that has since replaced it.
-  const speechOwner = createSpeechOwner();
   // A late request of this call fails instead of going out with a newer session.
   const generation = callSessionGeneration;
   const callContext = async () => {

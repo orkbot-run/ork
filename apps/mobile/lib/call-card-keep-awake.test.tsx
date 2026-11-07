@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -102,7 +106,8 @@ vi.mock("./native", () => ({ useMobileTokens: () => ({}) }));
 vi.mock("../components/bot-avatar", () => ({ BotAvatar: () => null }));
 vi.mock("../components/native-symbol", () => ({ NativeSymbol: () => null }));
 vi.mock("expo-file-system", () => ({ File: class {} }));
-vi.mock("./voice", () => ({
+vi.mock("./voice", async () => ({
+  claimSpeaker: (await import("@orkbot/core")).createSpeakerOwnership().claim,
   createSpeechOwner: () => Symbol("SpeechOwner"),
   speakText: vi.fn(),
   stopSpeaking: vi.fn(),

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 import type { Bot } from "@orkbot/contracts";
 import type * as CoreModule from "@orkbot/core";
@@ -41,8 +45,9 @@ vi.mock("./call-pickup.js", () => ({ pickUp: vi.fn(async () => undefined) }));
 vi.mock("./dictation.js", () => ({
   dictation: { listen: mocks.listen, stop: mocks.stop, subscribe: () => () => undefined },
 }));
-vi.mock("./tts.js", () => ({
+vi.mock("./tts.js", async () => ({
   speaker: {
+    claim: (await import("@orkbot/core")).createSpeakerOwnership().claim,
     speak: mocks.speak,
     stop: vi.fn(),
     isSpeaking: () => false,
