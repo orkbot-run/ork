@@ -54,7 +54,8 @@ check_runs() {
 
 commit_statuses() {
   api --paginate "repos/$1/commits/$2/status?per_page=100" \
-    --jq '.statuses[] | {context, state}' | jq -s .
+    --jq '.statuses[] | {context, state, description}' | jq -s --argjson fork "$3" '
+      if $fork then map(select((.context == "Vercel" and (.state == "failure" or .state == "error") and .description == "Authorization required to deploy") | not)) else . end'
 }
 
 logs() {
@@ -208,7 +209,7 @@ digest() {
 
   local meta head state mergeable branch
   meta=$(gh pr view "$pr" --repo "$repo" \
-    --json headRefOid,state,mergeable,headRefName,reviewDecision) || die "no PR $pr"
+    --json headRefOid,state,mergeable,headRefName,reviewDecision,isCrossRepository) || die "no PR $pr"
   head=$(jq -r .headRefOid <<<"$meta")
   state=$(jq -r .state <<<"$meta")
   mergeable=$(jq -r .mergeable <<<"$meta")
@@ -235,7 +236,7 @@ digest() {
 
   local runs statuses pending failed
   runs=$(check_runs "$repo" "$head") || die "could not read check runs"
-  statuses=$(commit_statuses "$repo" "$head") || die "could not read commit statuses"
+  statuses=$(commit_statuses "$repo" "$head" "$(jq -r '.isCrossRepository == true' <<<"$meta")") || die "could not read commit statuses"
 
   # Legacy commit statuses gate a PR exactly like check runs do, so they have to
   # reach the verdict rather than only being printed.
@@ -350,13 +351,14 @@ main() {
   [ -n "$pr" ] || pr=$(gh pr view --json number --jq .number 2>/dev/null) || die "no PR for this branch"
 
   if [ "$watch" -eq 1 ]; then
-    local started=$SECONDS head runs statuses empty=0 left baseline="" first=1 seen
+    local started=$SECONDS head runs statuses meta empty=0 left baseline="" first=1 seen
     seen=$(seen_path "$repo" "$pr")
     while :; do
-      head=$(gh pr view "$pr" --repo "$repo" --json headRefOid --jq .headRefOid) \
+      meta=$(gh pr view "$pr" --repo "$repo" --json headRefOid,isCrossRepository) \
         || die "could not read PR head"
+      head=$(jq -r .headRefOid <<<"$meta")
       runs=$(check_runs "$repo" "$head") || die "could not read check runs"
-      statuses=$(commit_statuses "$repo" "$head") || die "could not read commit statuses"
+      statuses=$(commit_statuses "$repo" "$head" "$(jq -r '.isCrossRepository == true' <<<"$meta")") || die "could not read commit statuses"
       # Wake as soon as there is something to act on, rather than when the slowest
       # check settles: a check that newly failed, or a finding not yet shown.
       # Failures already present at the start were seen and do not wake it again.
