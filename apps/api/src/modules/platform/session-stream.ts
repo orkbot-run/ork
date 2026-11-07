@@ -1,5 +1,7 @@
-// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
+// Inherited heartbeat and session recheck rules remain Apache-2.0. Ork stream ownership follows LICENSE.md.
 
 import { abortableDelay, withAbort } from "@orkbot/core";
 import { ORPCError } from "@orpc/server";
