@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 auth assertions are preserved; stored-model catalog fixtures follow LICENSE.md.
+
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import type { Actor } from "@orkbot/contracts";
 import { credentialForModel } from "@orkbot/core";
@@ -25,8 +29,33 @@ import {
 import { listAvailablePiCatalog } from "./pi-catalog-availability.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
 import { providerCatalogCache } from "./pi-live-catalog.js";
+import type * as PiModelsModule from "./pi-models.js";
+import type { PiCatalogEntry } from "./pi-models.js";
 import { listPiCatalog } from "./pi-models.js";
 import { serializeModelSecret } from "./pi-oauth.js";
+
+// A saved model's auth policy must be testable after its bundled catalog entry is retired.
+vi.mock("./pi-models.js", async (original) => {
+  const actual = await original<typeof PiModelsModule>();
+  const stored: PiCatalogEntry = {
+    provider: "openai-codex",
+    providerName: "Fixture subscription",
+    id: "gpt-5.3-codex-spark",
+    label: "Stored auth-restricted model",
+    auth: "oauth",
+    billing: "Fixture",
+    subscription: true,
+  };
+  return {
+    ...actual,
+    listPiCatalog: () => [
+      ...actual
+        .listPiCatalog()
+        .filter((entry) => entry.provider !== stored.provider || entry.id !== stored.id),
+      stored,
+    ],
+  };
+});
 
 function credential(provider: string, defaultModel: string | null) {
   return {
