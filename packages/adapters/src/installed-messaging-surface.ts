@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import type {
   AdapterContext,
   MessagingInboundEvent,
@@ -13,7 +18,7 @@ import { credentialDigest } from "./credential-digest.js";
 type CachedSurface = {
   workspaceId: string;
   digest: string;
-  surface: MessagingSurface;
+  surface: Promise<MessagingSurface>;
   users: number;
   retired: boolean;
 };
@@ -190,10 +195,14 @@ export class InstalledMessagingSurface implements MessagingSurface {
       entry = undefined;
     }
     if (!entry) {
-      const surface = this.provider.surface(installation.credential);
-      surface.onInbound(async (event) => {
-        if (event.type === "message") await this.sink?.(scopeMessage(installation, event));
-      });
+      const surface = Promise.resolve()
+        .then(() => this.provider.surface(installation.credential))
+        .then((surface) => {
+          surface.onInbound(async (event) => {
+            if (event.type === "message") await this.sink?.(scopeMessage(installation, event));
+          });
+          return surface;
+        });
       entry = { workspaceId: installation.workspaceId, digest, surface, users: 0, retired: false };
       if (this.surfaces.size >= MAX_CACHED_SURFACES) {
         const idle = [...this.surfaces].find(([, value]) => value.users === 0);
@@ -204,15 +213,23 @@ export class InstalledMessagingSurface implements MessagingSurface {
       }
       if (this.surfaces.size < MAX_CACHED_SURFACES) this.surfaces.set(installation.id, entry);
       else entry.retired = true;
+      const created = entry;
+      void surface.catch(() => {
+        if (this.surfaces.get(installation.id) === created) this.surfaces.delete(installation.id);
+        created.retired = true;
+      });
     }
     // Publish and reserve the entry before awaiting cleanup, so concurrent callers share it.
     entry.users++;
     try {
       await Promise.all(retired.map((old) => this.retire(old)));
-      return await fn(entry.surface);
+      return await fn(await entry.surface);
     } finally {
       entry.users--;
-      if (entry.retired && entry.users === 0) await entry.surface.shutdown?.();
+      if (entry.retired && entry.users === 0) {
+        const surface = await entry.surface.catch(() => undefined);
+        await surface?.shutdown?.();
+      }
     }
   }
 
@@ -225,7 +242,10 @@ export class InstalledMessagingSurface implements MessagingSurface {
 
   private async retire(entry: CachedSurface) {
     entry.retired = true;
-    if (entry.users === 0) await entry.surface.shutdown?.();
+    if (entry.users === 0) {
+      const surface = await entry.surface.catch(() => undefined);
+      await surface?.shutdown?.();
+    }
   }
 }
 

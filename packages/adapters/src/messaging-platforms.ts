@@ -1,23 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createHash } from "node:crypto";
-import { createSlackAdapter } from "@chat-adapter/slack";
-import type { TelegramAdapter } from "@chat-adapter/telegram";
-import {
-  createTelegramAdapter,
-  escapeMarkdownV2,
-  TelegramFormatConverter,
-} from "@chat-adapter/telegram";
-import {
-  createWhatsAppAdapter,
-  splitMessage,
-  WhatsAppAdapter,
-  WhatsAppApiError,
-} from "@chat-adapter/whatsapp";
+import type { TelegramAdapter, TelegramFormatConverter } from "@chat-adapter/telegram";
 import type { HttpInstance } from "@larksuiteoapi/node-sdk";
 import type { MessagingInboundMessage, MessagingOutboundStatus } from "@orkbot/adapter-kit";
 import { getLogger } from "@orkbot/logging";
 import type { Adapter } from "chat";
 import { ConsoleLogger, convertEmojiPlaceholders, markdownToPlainText } from "chat";
-import { createSendblueAdapter } from "chat-adapter-sendblue";
 import type { ClientOptions as SendblueClientOptions } from "sendblue";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
 import { boundInboundMarkdown } from "./chat-sdk-surface.js";
@@ -170,7 +162,7 @@ export function photonProjectsFromEnv(
  * steals Telegram's single getUpdates slot, so both processes lose 409
  * Conflicts and messages stop arriving. Send-only callers leave it false.
  */
-export function messagingPlatformsFromEnv(
+export async function messagingPlatformsFromEnv(
   env: MessagingEnvironmentValues,
   options: {
     pollInboundMessages?: boolean;
@@ -179,7 +171,7 @@ export function messagingPlatformsFromEnv(
     /** Test seam: replace only the official Lark SDK HTTP boundary. */
     larkTransport?: HttpInstance;
   } = {},
-): MessagingPlatform[] {
+): Promise<MessagingPlatform[]> {
   const platforms: MessagingPlatform[] = [];
 
   if (
@@ -188,6 +180,7 @@ export function messagingPlatformsFromEnv(
     env.sendblueSigningSecret &&
     env.sendbluePhoneNumber
   ) {
+    const { createSendblueAdapter } = await import("chat-adapter-sendblue");
     const lineNumber = env.sendbluePhoneNumber;
     const adapter = createSendblueAdapter({
       apiKey: env.sendblueApiKeyId,
@@ -229,6 +222,7 @@ export function messagingPlatformsFromEnv(
   }
 
   if (env.slackBotToken && env.slackSigningSecret) {
+    const { createSlackAdapter } = await import("@chat-adapter/slack");
     const adapter = createSlackAdapter({
       botToken: env.slackBotToken,
       signingSecret: env.slackSigningSecret,
@@ -266,6 +260,7 @@ export function messagingPlatformsFromEnv(
     env.whatsappAppSecret &&
     env.whatsappVerifyToken
   ) {
+    const { createWhatsAppAdapter, WhatsAppApiError } = await import("@chat-adapter/whatsapp");
     platforms.push({
       provider: "whatsapp",
       capabilities: { direct: true, groups: false, receipt: null },
@@ -286,7 +281,7 @@ export function messagingPlatformsFromEnv(
   // webhook posts, so a forged update could reach inbound processing.
   if (env.telegramBotToken && env.telegramWebhookSecret) {
     telegramTokens.add(env.telegramBotToken.trim());
-    const adapter = telegramAdapter(env.telegramBotToken, env.telegramWebhookSecret, options);
+    const adapter = await telegramAdapter(env.telegramBotToken, env.telegramWebhookSecret, options);
     platforms.push({
       provider: "telegram",
       capabilities: { direct: true, groups: true, receipt: null, files: true },
@@ -307,7 +302,7 @@ export function messagingPlatformsFromEnv(
       continue;
     }
     telegramTokens.add(bot.botToken.trim());
-    const adapter = telegramAdapter(bot.botToken, bot.webhookSecret, options);
+    const adapter = await telegramAdapter(bot.botToken, bot.webhookSecret, options);
     platforms.push({
       provider: `telegram-${bot.name}`,
       adapterName: "telegram",
@@ -436,7 +431,7 @@ function withTelegramRedelivery(adapter: TelegramAdapter) {
 }
 
 /** Split before enqueueing so retries only resend the parts that failed. */
-export function splitOutboundBody(provider: string, body: string): string[] {
+export async function splitOutboundBody(provider: string, body: string): Promise<string[]> {
   if (provider === "whatsapp") return splitWhatsAppPart(body);
   if (provider !== "telegram" && !provider.startsWith("telegram-")) return [body];
 
@@ -444,7 +439,8 @@ export function splitOutboundBody(provider: string, body: string): string[] {
 }
 
 /** Split like the SDK, which counts UTF-16 units, but never end a part on half an emoji. */
-function splitKeepingPairs(body: string): string[] {
+async function splitKeepingPairs(body: string): Promise<string[]> {
+  const { splitMessage } = await import("@chat-adapter/whatsapp");
   const parts: string[] = [];
   let rest = body;
   while (rest.length > MESSAGE_PART_LIMIT) {
@@ -457,9 +453,11 @@ function splitKeepingPairs(body: string): string[] {
   return rest || parts.length === 0 ? [...parts, rest] : parts;
 }
 
-const telegramFormat = new TelegramFormatConverter();
+let telegramFormat: TelegramFormatConverter | undefined;
 
-function splitTelegramPart(body: string, literal = false): string[] {
+async function splitTelegramPart(body: string, literal = false): Promise<string[]> {
+  const { escapeMarkdownV2, TelegramFormatConverter } = await import("@chat-adapter/telegram");
+  telegramFormat ??= new TelegramFormatConverter();
   const markdown = literal ? escapeMarkdownV2(body) : body;
   const plainText = literal ? body : markdownToPlainText(body);
   // The adapter truncates *after* rendering and emoji conversion, including
@@ -476,36 +474,44 @@ function splitTelegramPart(body: string, literal = false): string[] {
   // consume literal backslashes. Oversized formatted replies use escaped text.
   if (!literal && plainText !== body) return splitTelegramPart(plainText, true);
 
-  const parts = splitKeepingPairs(body);
-  if (parts.length > 1) return parts.flatMap((part) => splitTelegramPart(part, literal));
+  const parts = await splitKeepingPairs(body);
+  if (parts.length > 1)
+    return (await Promise.all(parts.map((part) => splitTelegramPart(part, literal)))).flat();
 
-  return halve(body).flatMap((half) => splitTelegramPart(half, literal));
+  return (await Promise.all(halve(body).map((half) => splitTelegramPart(half, literal)))).flat();
 }
 
-/** Exposes the adapter's Markdown rendering, which the package does not export. */
-class WhatsAppRenderer extends WhatsAppAdapter {
-  render(markdown: string): string {
-    return convertEmojiPlaceholders(this.formatConverter.renderPostable({ markdown }), "whatsapp");
+let whatsappRenderer: { render(markdown: string): string } | undefined;
+
+async function splitWhatsAppPart(body: string): Promise<string[]> {
+  if (!whatsappRenderer) {
+    const { WhatsAppAdapter } = await import("@chat-adapter/whatsapp");
+    /** Exposes the adapter's Markdown rendering, which the package does not export. */
+    class WhatsAppRenderer extends WhatsAppAdapter {
+      render(markdown: string): string {
+        return convertEmojiPlaceholders(
+          this.formatConverter.renderPostable({ markdown }),
+          "whatsapp",
+        );
+      }
+    }
+    whatsappRenderer ??= new WhatsAppRenderer({
+      accessToken: "",
+      appSecret: "",
+      logger: new ConsoleLogger("silent"),
+      phoneNumberId: "",
+      userName: "",
+      verifyToken: "",
+    });
   }
-}
-
-let whatsappRenderer: WhatsAppRenderer | undefined;
-
-function splitWhatsAppPart(body: string): string[] {
-  whatsappRenderer ??= new WhatsAppRenderer({
-    accessToken: "",
-    appSecret: "",
-    logger: new ConsoleLogger("silent"),
-    phoneNumberId: "",
-    userName: "",
-    verifyToken: "",
-  });
   // The adapter re-splits anything that renders past the limit, outside the
   // queue's per-part retries and without keeping UTF-16 pairs together.
   if (whatsappRenderer.render(body).length <= MESSAGE_PART_LIMIT) return [body];
 
-  const parts = splitKeepingPairs(body);
-  return (parts.length > 1 ? parts : halve(body)).flatMap(splitWhatsAppPart);
+  const parts = await splitKeepingPairs(body);
+  return (
+    await Promise.all((parts.length > 1 ? parts : halve(body)).map(splitWhatsAppPart))
+  ).flat();
 }
 
 /** Refines chunks that only grow beyond the limit during rendering. */
@@ -564,11 +570,12 @@ function isTelegramBlocked(error: unknown): boolean {
   return error instanceof Error && error.name === "PermissionError";
 }
 
-function telegramAdapter(
+async function telegramAdapter(
   botToken: string,
   secretToken: string,
   options: { pollInboundMessages?: boolean },
 ) {
+  const { createTelegramAdapter } = await import("@chat-adapter/telegram");
   return createTelegramAdapter({
     botToken,
     secretToken,

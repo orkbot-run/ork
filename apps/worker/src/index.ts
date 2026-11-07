@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 worker composition is preserved. Shared resource wiring is an Ork addition.
+// Ork deferred messaging SDK loading is PolyForm-covered.
 
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -209,9 +210,10 @@ async function main() {
     : undefined;
   // Never poll inbound here: Telegram allows a single getUpdates consumer,
   // and that is the API process, which owns the inbound sink.
-  const messagingPlatforms = messagingPlatformsFromEnv(messagingEnvFromProcess(process.env)).filter(
-    (platform) => platform.provider !== "slack" || !process.env.SLACK_CLIENT_ID,
-  );
+  const messagingPlatforms = await messagingPlatformsFromEnv({
+    ...messagingEnvFromProcess(process.env),
+    ...(process.env.SLACK_CLIENT_ID ? { slackBotToken: undefined } : {}),
+  });
   const legacyMessaging = isMessagingSurfaceEnabled(messagingPlatforms, {
     deploymentModelConfigured,
     openSignup: process.env.MESSAGING_OPEN_SIGNUP === "true",

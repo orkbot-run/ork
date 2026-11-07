@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { MessagingInstallProvider } from "@orkbot/adapter-kit";
 import { readBoundedJsonResponse } from "@orkbot/core";
@@ -89,9 +94,9 @@ export class SlackInstallProvider implements MessagingInstallProvider {
     };
   }
 
-  surface(credential: string) {
+  async surface(credential: string) {
     return new ChatSdkMessagingSurface(
-      messagingPlatformsFromEnv({
+      await messagingPlatformsFromEnv({
         slackBotToken: credential,
         slackSigningSecret: this.config.signingSecret,
       }),

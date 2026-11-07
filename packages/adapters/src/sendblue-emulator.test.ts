@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { ChatSdkMessagingSurface } from "./chat-sdk-surface.js";
@@ -12,9 +17,9 @@ const context: AdapterContext = {
 };
 
 /** The production sendblue pipeline (Chat SDK + official SDK) over the emulator. */
-function createHarness() {
+async function createHarness() {
   const emulator = new SendBlueEmulator();
-  const surface = new ChatSdkMessagingSurface([createEmulatedSendbluePlatform(emulator)]);
+  const surface = new ChatSdkMessagingSurface([await createEmulatedSendbluePlatform(emulator)]);
   const events: MessagingInboundEvent[] = [];
   surface.onInbound(async (event) => {
     events.push(event);
@@ -24,7 +29,7 @@ function createHarness() {
 
 describe("emulated sendblue platform inbound", () => {
   it("normalizes a DM webhook into a direct inbound message", async () => {
-    const { emulator, surface, events } = createHarness();
+    const { emulator, surface, events } = await createHarness();
     const response = await surface.handleWebhook(
       "sendblue",
       emulator.buildInboundRequest({
@@ -57,7 +62,7 @@ describe("emulated sendblue platform inbound", () => {
   });
 
   it("normalizes a group webhook with roster and display name", async () => {
-    const { emulator, surface, events } = createHarness();
+    const { emulator, surface, events } = await createHarness();
     const response = await surface.handleWebhook(
       "sendblue",
       emulator.buildInboundRequest({
@@ -89,7 +94,7 @@ describe("emulated sendblue platform inbound", () => {
 
 describe("emulated sendblue platform outbound", () => {
   it("sends a DM through openDirectThread + sendToThread", async () => {
-    const { emulator, surface } = createHarness();
+    const { emulator, surface } = await createHarness();
     const threadId = await surface.openDirectThread("sendblue", "+15557654321", context);
     const sent = await surface.sendToThread({ threadId, body: "hello you" }, context);
 
@@ -100,7 +105,7 @@ describe("emulated sendblue platform outbound", () => {
   });
 
   it("posts to a group via the thread id captured from an inbound group event", async () => {
-    const { emulator, surface, events } = createHarness();
+    const { emulator, surface, events } = await createHarness();
     await surface.handleWebhook(
       "sendblue",
       emulator.buildInboundRequest({
@@ -121,7 +126,7 @@ describe("emulated sendblue platform outbound", () => {
   });
 
   it("rejects the send when the vendor API fails", async () => {
-    const { emulator, surface } = createHarness();
+    const { emulator, surface } = await createHarness();
     const threadId = await surface.openDirectThread("sendblue", "+15557654321", context);
     emulator.failNextSends(1);
 
@@ -135,7 +140,7 @@ describe("emulated sendblue platform outbound", () => {
 
 describe("emulated sendblue platform delivery status", () => {
   it("surfaces a signed status webhook to the sink", async () => {
-    const { emulator, surface, events } = createHarness();
+    const { emulator, surface, events } = await createHarness();
     const response = await surface.handleWebhook(
       "sendblue",
       emulator.buildStatusRequest({ handle: "handle-9", status: "DELIVERED" }),
@@ -148,7 +153,7 @@ describe("emulated sendblue platform delivery status", () => {
   });
 
   it("rejects a wrong signing secret with 401 and no sink event", async () => {
-    const { emulator, surface, events } = createHarness();
+    const { emulator, surface, events } = await createHarness();
     const good = emulator.buildStatusRequest({ handle: "handle-9", status: "DELIVERED" });
     const forged = new Request(good.url, {
       method: "POST",
@@ -168,7 +173,7 @@ describe("emulated sendblue platform delivery status", () => {
 
 describe("emulated sendblue platform receipt", () => {
   it("acknowledges a DM with a typing indicator", async () => {
-    const { emulator, surface } = createHarness();
+    const { emulator, surface } = await createHarness();
     const threadId = await surface.openDirectThread("sendblue", "+15557654321", context);
     await surface.acknowledge(threadId, "inbound-1", context);
 

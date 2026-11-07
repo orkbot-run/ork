@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 composition is preserved. Native OIDC callbacks and delegated server updates are Ork additions.
+// Ork deferred messaging SDK loading is PolyForm-covered.
 
 import { hostname } from "node:os";
 import type {
@@ -475,8 +476,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     pipedreamOverride ??
     (isPipedreamEnabled(pipedreamConfig) ? new PipedreamConnector(pipedreamConfig) : undefined);
   // This process registers the inbound sink, so it must hold Telegram's getUpdates connection.
-  const messagingPlatforms = messagingPlatformsFromEnv(env, { pollInboundMessages: true }).filter(
-    (platform) => platform.provider !== "slack" || !env.slackClientId,
+  const messagingPlatforms = await messagingPlatformsFromEnv(
+    env.slackClientId ? { ...env, slackBotToken: undefined } : env,
+    { pollInboundMessages: true },
   );
   const legacyMessaging =
     messagingOverride ??

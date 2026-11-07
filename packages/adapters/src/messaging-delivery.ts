@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+// Ork deferred messaging SDK loading is PolyForm-covered.
 
 import type {
   AdapterContext,
@@ -148,26 +149,30 @@ async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<vo
   // The whole reply takes one explicit, non-overlapping range, like a group
   // reply, so a concurrent DM mirror cannot interleave its parts.
   const linkedPages = linkedPageIds(messages);
-  const rows = messages.flatMap((message) => {
-    const body = extractText(message.blocks, linkedPages);
-    const parts = body ? splitOutboundBody(identity.provider, body) : [];
-    return [
-      ...parts.map((part, index) => ({
-        idempotencyKey: index === 0 ? `msg:${message.id}` : `msg:${message.id}:${index + 1}`,
-        kind: "dm",
-        identityId: identity.id,
-        body: part,
-        sourceMessageId: message.id,
-      })),
-      ...(sendsFiles ? extractArtifactIds(message.blocks) : []).map((artifactId) => ({
-        idempotencyKey: `msg:${message.id}:file:${artifactId}`,
-        kind: "dm",
-        identityId: identity.id,
-        body: "",
-        sourceMessageId: message.id,
-      })),
-    ];
-  });
+  const rows = (
+    await Promise.all(
+      messages.map(async (message) => {
+        const body = extractText(message.blocks, linkedPages);
+        const parts = body ? await splitOutboundBody(identity.provider, body) : [];
+        return [
+          ...parts.map((part, index) => ({
+            idempotencyKey: index === 0 ? `msg:${message.id}` : `msg:${message.id}:${index + 1}`,
+            kind: "dm",
+            identityId: identity.id,
+            body: part,
+            sourceMessageId: message.id,
+          })),
+          ...(sendsFiles ? extractArtifactIds(message.blocks) : []).map((artifactId) => ({
+            idempotencyKey: `msg:${message.id}:file:${artifactId}`,
+            kind: "dm",
+            identityId: identity.id,
+            body: "",
+            sourceMessageId: message.id,
+          })),
+        ];
+      }),
+    )
+  ).flat();
   if (rows.length === 0) return;
   // Atomic dedupe: a concurrent messaging.deliver for the same run loses on
   // the idempotencyKey unique key instead of throwing P2002.
@@ -253,15 +258,21 @@ async function mirrorChannelRun(
   await insertOutboundRows(
     deps.prisma,
     { identityId: null, threadId: channel.threadId },
-    messages.flatMap(({ message, text }) =>
-      splitOutboundBody(identity.provider, `${fromLabel}: ${text}`).map((part, index) => ({
-        idempotencyKey: index === 0 ? `msg:${message.id}` : `msg:${message.id}:${index + 1}`,
-        kind: "group",
-        threadId: channel.threadId,
-        body: part,
-        sourceMessageId: message.id,
-      })),
-    ),
+    (
+      await Promise.all(
+        messages.map(async ({ message, text }) =>
+          (
+            await splitOutboundBody(identity.provider, `${fromLabel}: ${text}`)
+          ).map((part, index) => ({
+            idempotencyKey: index === 0 ? `msg:${message.id}` : `msg:${message.id}:${index + 1}`,
+            kind: "group",
+            threadId: channel.threadId,
+            body: part,
+            sourceMessageId: message.id,
+          })),
+        ),
+      )
+    ).flat(),
   );
 
   const hop = nextBotMessageHop(channelBlock.hop);

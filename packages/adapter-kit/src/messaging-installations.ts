@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import type { MessagingSurface } from "./interfaces.js";
 import type { MessagingCapabilities } from "./types.js";
 
@@ -34,5 +39,5 @@ export interface MessagingInstallProvider {
   parseWebhook(
     request: Request,
   ): Promise<{ request: Request; workspaceId?: string; challenge?: string; uninstalled?: boolean }>;
-  surface(credential: string): MessagingSurface;
+  surface(credential: string): MessagingSurface | Promise<MessagingSurface>;
 }

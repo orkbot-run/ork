@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createHmac } from "node:crypto";
 import type * as SlackAdapterModule from "@chat-adapter/slack";
 import type { AdapterContext, MessagingInboundMessage } from "@orkbot/adapter-kit";
@@ -68,9 +73,12 @@ const context: AdapterContext = {
 };
 const signingSecret = "test-slack-signing-secret";
 
-function createSlackSurface() {
+async function createSlackSurface() {
   return new ChatSdkMessagingSurface(
-    messagingPlatformsFromEnv({ slackBotToken: "xoxb-fake", slackSigningSecret: signingSecret }),
+    await messagingPlatformsFromEnv({
+      slackBotToken: "xoxb-fake",
+      slackSigningSecret: signingSecret,
+    }),
   );
 }
 
@@ -108,7 +116,7 @@ function mentionWebhook(retryNum?: number, text = "<@UBOT> ship it?"): Request {
 }
 
 async function receiveChannelMention() {
-  const surface = createSlackSurface();
+  const surface = await createSlackSurface();
   const events: MessagingInboundMessage[] = [];
   surface.onInbound(async (event) => {
     if (event.type === "message") events.push(event);
@@ -175,7 +183,7 @@ describe("Slack inbound retries", () => {
   });
 
   it("processes Slack's retry of an event the sink failed on, exactly once", async () => {
-    const surface = createSlackSurface();
+    const surface = await createSlackSurface();
     const processed: string[] = [];
     let failNext = true;
     surface.onInbound(async (event) => {
@@ -204,7 +212,7 @@ describe("Slack inbound formatting", () => {
     ["unmatched emphasis", "*_".repeat(8_000)],
     ["deeply nested quotes", ">".repeat(7_000)],
   ])("delivers a message full of %s promptly and in full", async (_name, hostile) => {
-    const surface = createSlackSurface();
+    const surface = await createSlackSurface();
     const events: MessagingInboundMessage[] = [];
     surface.onInbound(async (event) => {
       if (event.type === "message") events.push(event);
@@ -217,7 +225,7 @@ describe("Slack inbound formatting", () => {
   });
 
   it("still renders link targets in an ordinary message", async () => {
-    const surface = createSlackSurface();
+    const surface = await createSlackSurface();
     const events: MessagingInboundMessage[] = [];
     surface.onInbound(async (event) => {
       if (event.type === "message") events.push(event);
@@ -262,7 +270,7 @@ describe("Slack sends", () => {
   ] as const)(
     "fails fast on %s and leaves retries to the outbox",
     async (_label, response, classified) => {
-      const surface = createSlackSurface();
+      const surface = await createSlackSurface();
       slack.postMessageResponse = response;
       try {
         await expect(
@@ -276,7 +284,7 @@ describe("Slack sends", () => {
   );
 
   it("returns the posted message handle", async () => {
-    const surface = createSlackSurface();
+    const surface = await createSlackSurface();
     try {
       await expect(
         surface.sendToThread({ threadId: "slack:CTEST:", body: "hi" }, context),

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createHmac } from "node:crypto";
 import type { MessagingInboundEvent } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,8 +13,8 @@ import { messagingPlatformsFromEnv } from "./messaging-platforms.js";
 // routes webhooks offline; nothing here reaches Spectrum Cloud.
 const webhookSecret = "whsec_test";
 
-function createSurface() {
-  const platforms = messagingPlatformsFromEnv(
+async function createSurface() {
+  const platforms = await messagingPlatformsFromEnv(
     {
       photonProjectId: "project-test",
       photonProjectSecret: "secret-test",
@@ -75,7 +80,7 @@ afterEach(() => {
 
 describe("Photon messaging conformance", () => {
   it("delivers a signed direct message under the photon provider", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const response = await surface.handleWebhook("photon", webhook(delivery()));
     expect(response?.status).toBe(200);
     expect(events).toHaveLength(1);
@@ -91,7 +96,7 @@ describe("Photon messaging conformance", () => {
   });
 
   it("ignores echoes of the line's own outbound messages", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const response = await surface.handleWebhook("photon", webhook(delivery("outbound")));
     expect(response?.status).toBe(200);
     expect(events).toEqual([]);
@@ -99,7 +104,7 @@ describe("Photon messaging conformance", () => {
   });
 
   it("rejects a webhook signed with another secret", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const response = await surface.handleWebhook("photon", webhook(delivery(), "whsec_forged"));
     expect(response?.status).toBe(401);
     expect(events).toEqual([]);

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import type {
   AdapterContext,
   MessagingInboundEvent,
@@ -261,4 +266,117 @@ it("shuts down cached adapters on replacement, removal and process shutdown", as
   const replacement = f.surfaces.mock.results[1]!.value;
   await f.messaging.shutdown();
   expect(replacement.shutdown).toHaveBeenCalledTimes(1);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((ready, failed) => {
+    resolve = ready;
+    reject = failed;
+  });
+  return { promise, resolve, reject };
+}
+
+it("shares pending surface construction for concurrent deliveries", async () => {
+  const f = fixture();
+  const surface = f.surfaces("token-a");
+  const gate = deferred<MessagingSurface>();
+  const started = deferred<void>();
+  const construct = vi.fn(() => {
+    started.resolve();
+    return gate.promise;
+  });
+  f.provider.surface = construct;
+  const sends = ["first", "second"].map((body) =>
+    f.messaging.sendToThread({ threadId: "slack~a:C1", body }, context),
+  );
+  await started.promise;
+  expect(construct).toHaveBeenCalledTimes(1);
+  expect(f.sends).not.toHaveBeenCalled();
+  gate.resolve(surface);
+  await Promise.all(sends);
+  expect(construct).toHaveBeenCalledTimes(1);
+  expect(f.sends).toHaveBeenCalledTimes(2);
+  await f.messaging.shutdown();
+  expect(surface.shutdown).toHaveBeenCalledTimes(1);
+});
+
+it("removes a failed construction so the next delivery can retry", async () => {
+  const f = fixture();
+  const surface = f.surfaces("token-a");
+  const construct = vi
+    .fn()
+    .mockRejectedValueOnce(new Error("fixture construction failure"))
+    .mockResolvedValue(surface);
+  f.provider.surface = construct;
+  await expect(
+    f.messaging.sendToThread({ threadId: "slack~a:C1", body: "first" }, context),
+  ).rejects.toThrow("fixture construction failure");
+  await f.messaging.sendToThread({ threadId: "slack~a:C1", body: "retry" }, context);
+  expect(construct).toHaveBeenCalledTimes(2);
+  expect(f.sends).toHaveBeenCalledTimes(1);
+  await f.messaging.shutdown();
+  expect(surface.shutdown).toHaveBeenCalledTimes(1);
+});
+
+it.each(["resolve", "reject"] as const)(
+  "keeps a rotated replacement when older pending construction later %ss",
+  async (outcome) => {
+    const f = fixture();
+    const old = f.surfaces("token-a");
+    const replacement = f.surfaces("replacement");
+    const gate = deferred<MessagingSurface>();
+    const started = deferred<void>();
+    const construct = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        started.resolve();
+        return gate.promise;
+      })
+      .mockResolvedValue(replacement);
+    f.provider.surface = construct;
+    const pending = f.messaging.sendToThread({ threadId: "slack~a:C1", body: "old" }, context);
+    const observed = pending.then(
+      () => "sent",
+      () => "failed",
+    );
+    await started.promise;
+    f.installations.set("a", { ...f.installations.get("a")!, credential: "replacement" });
+    await f.messaging.sendToThread({ threadId: "slack~a:C1", body: "new" }, context);
+    if (outcome === "resolve") gate.resolve(old);
+    else gate.reject(new Error("fixture old construction failure"));
+    expect(await observed).toBe(outcome === "resolve" ? "sent" : "failed");
+    await f.messaging.sendToThread({ threadId: "slack~a:C1", body: "still new" }, context);
+    expect(construct).toHaveBeenCalledTimes(2);
+    expect(old.shutdown).toHaveBeenCalledTimes(outcome === "resolve" ? 1 : 0);
+    expect(replacement.shutdown).not.toHaveBeenCalled();
+    expect(f.sends.mock.calls.at(-1)?.[0]).toBe("replacement");
+    await f.messaging.shutdown();
+    expect(replacement.shutdown).toHaveBeenCalledTimes(1);
+  },
+);
+
+it("eventually shuts down a pending surface once its admitted users finish", async () => {
+  const f = fixture();
+  const surface = f.surfaces("token-a");
+  const gate = deferred<MessagingSurface>();
+  const started = deferred<void>();
+  f.provider.surface = vi.fn(() => {
+    started.resolve();
+    return gate.promise;
+  });
+  const pending = f.messaging.sendToThread(
+    { threadId: "slack~a:C1", body: "already admitted" },
+    context,
+  );
+  await started.promise;
+  // Shutdown retains the existing non-draining behavior for active users.
+  await f.messaging.shutdown();
+  expect(surface.shutdown).not.toHaveBeenCalled();
+  gate.resolve(surface);
+  await pending;
+  expect(surface.shutdown).toHaveBeenCalledTimes(1);
+  await f.messaging.shutdown();
+  expect(surface.shutdown).toHaveBeenCalledTimes(1);
 });

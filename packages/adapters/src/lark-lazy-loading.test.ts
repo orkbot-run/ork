@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -20,9 +25,9 @@ import { messagingPlatformsFromEnv } from "./messaging-platforms.js";
 
 describe("Lark lazy loading", () => {
   it("loads neither module without credentials, including when another surface mounts", async () => {
-    expect(messagingPlatformsFromEnv({})).toEqual([]);
+    expect(await messagingPlatformsFromEnv({})).toEqual([]);
     const surface = new ChatSdkMessagingSurface(
-      messagingPlatformsFromEnv({
+      await messagingPlatformsFromEnv({
         telegramBotToken: "test-token",
         telegramWebhookSecret: "test-secret",
       }),
@@ -30,7 +35,7 @@ describe("Lark lazy loading", () => {
     expect(surface).toBeDefined();
     expect(implementationLoaded).not.toHaveBeenCalled();
     expect(sdkLoaded).not.toHaveBeenCalled();
-    const [platform] = messagingPlatformsFromEnv({
+    const [platform] = await messagingPlatformsFromEnv({
       larkAppId: "test-app",
       larkAppSecret: "test-secret",
       larkVerificationToken: "test-token",

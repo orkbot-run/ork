@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+// Ork deferred messaging SDK loading is PolyForm-covered.
 
 import type { AdapterContext, MessagingSurface } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
@@ -1421,7 +1422,7 @@ describe("WhatsApp rendered outbound delivery", () => {
       }),
     );
     const messaging = new ChatSdkMessagingSurface(
-      messagingPlatformsFromEnv({
+      await messagingPlatformsFromEnv({
         whatsappAccessToken: "test-token",
         whatsappPhoneNumberId: "123",
         whatsappAppSecret: "test-secret",

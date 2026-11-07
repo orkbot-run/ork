@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createTelegramAdapter } from "@chat-adapter/telegram";
 import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -72,7 +77,7 @@ describe("Telegram messaging Markdown", () => {
     [`\`\`\`text\n${"\\".repeat(4090)}\n\`\`\``, "\\".repeat(4090)],
   ])("sends every split part without adapter truncation", async (body, expected) => {
     const { surface, sends, threadId } = createSurface();
-    const parts = splitOutboundBody("telegram", body);
+    const parts = await splitOutboundBody("telegram", body);
     for (const part of parts) {
       await surface.sendToThread({ threadId, body: part }, context);
     }
@@ -101,7 +106,7 @@ describe("Telegram messaging Markdown", () => {
       "Bad Request: can't parse entities",
     ]);
     const body = "!".repeat(4096);
-    for (const part of splitOutboundBody("telegram", body)) {
+    for (const part of await splitOutboundBody("telegram", body)) {
       await surface.sendToThread({ threadId, body: part }, context);
     }
 
@@ -277,7 +282,7 @@ describe("Telegram bots side by side", () => {
 });
 
 describe("Telegram groups", () => {
-  function createGroupSurface() {
+  async function createGroupSurface() {
     const sends: { token: string; payload: Record<string, unknown> }[] = [];
     vi.stubGlobal(
       "fetch",
@@ -320,7 +325,7 @@ describe("Telegram groups", () => {
     // Mount the production platform entries, not hand-built ones, so the
     // capability and hook wiring itself is under test.
     const surface = new ChatSdkMessagingSurface(
-      messagingPlatformsFromEnv({
+      await messagingPlatformsFromEnv({
         telegramBotToken: "home-token",
         telegramWebhookSecret: "home-secret",
         telegramBots: [{ name: "work", botToken: "work-token", webhookSecret: "work-secret" }],
@@ -361,7 +366,7 @@ describe("Telegram groups", () => {
   }
 
   it("delivers a group message with the chat title and the mention flag", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     expect(
       (
@@ -409,7 +414,7 @@ describe("Telegram groups", () => {
   });
 
   it("keeps a plain reply on the group's own thread", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     expect(
       (
@@ -443,7 +448,7 @@ describe("Telegram groups", () => {
   });
 
   it("keeps a forum topic as its own conversation", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     await surface.handleWebhook(
       "telegram",
@@ -459,7 +464,7 @@ describe("Telegram groups", () => {
   });
 
   it("ignores broadcast channel posts", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     const response = await surface.handleWebhook(
       "telegram",
@@ -479,7 +484,7 @@ describe("Telegram groups", () => {
   });
 
   it("keeps each bot's group threads apart and posts replies to the right chat", async () => {
-    const { surface, sends, inbound } = createGroupSurface();
+    const { surface, sends, inbound } = await createGroupSurface();
 
     await surface.handleWebhook(
       "telegram-work",
@@ -502,7 +507,7 @@ describe("Telegram groups", () => {
   });
 
   it("posts a forum topic reply into its topic", async () => {
-    const { surface, sends } = createGroupSurface();
+    const { surface, sends } = await createGroupSurface();
 
     await surface.sendToThread({ threadId: "telegram:-1001234:12", body: "topic reply" }, context);
 
@@ -510,7 +515,7 @@ describe("Telegram groups", () => {
   });
 
   it("reports a member who left or was removed as a departure, not a message", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     expect(
       (
@@ -541,7 +546,7 @@ describe("Telegram groups", () => {
   });
 
   it("flags the bot's own removal as the channel's end", async () => {
-    const { surface, inbound } = createGroupSurface();
+    const { surface, inbound } = await createGroupSurface();
 
     expect(
       (
@@ -663,7 +668,7 @@ describe("Telegram redelivery", () => {
           Response.json({ ok: true, result: { id: botId, is_bot: true, username: "testbot" } }),
         ),
       );
-      const surface = new ChatSdkMessagingSurface(messagingPlatformsFromEnv(env));
+      const surface = new ChatSdkMessagingSurface(await messagingPlatformsFromEnv(env));
       const inbound: string[] = [];
       surface.onInbound(async (event) => {
         if (event.type !== "message") return;

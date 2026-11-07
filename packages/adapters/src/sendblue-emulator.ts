@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
 import { messagingPlatformsFromEnv } from "./messaging-platforms.js";
 
@@ -166,8 +171,10 @@ export class SendBlueEmulator {
  * The production sendblue platform wired to the emulator: the same
  * messagingPlatformsFromEnv wiring, with only the HTTP boundary swapped.
  */
-export function createEmulatedSendbluePlatform(emulator: SendBlueEmulator): MessagingPlatform {
-  const [platform] = messagingPlatformsFromEnv(
+export async function createEmulatedSendbluePlatform(
+  emulator: SendBlueEmulator,
+): Promise<MessagingPlatform> {
+  const [platform] = await messagingPlatformsFromEnv(
     {
       sendblueApiKeyId: "emulated-key",
       sendblueApiSecret: "emulated-secret",

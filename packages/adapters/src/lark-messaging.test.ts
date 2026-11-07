@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { createCipheriv, createHash } from "node:crypto";
 import type { HttpInstance } from "@larksuiteoapi/node-sdk";
 import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
@@ -32,8 +37,8 @@ const context: AdapterContext = {
 const token = "test-verification-token";
 const encryptKey = "test-encryption-key";
 
-function createSurface(encrypted = false) {
-  const platforms = messagingPlatformsFromEnv(
+async function createSurface(encrypted = false) {
+  const platforms = await messagingPlatformsFromEnv(
     {
       larkAppId: "cli-test",
       larkAppSecret: "test-app-secret",
@@ -130,7 +135,7 @@ beforeEach(() => {
 
 describe("Lark messaging conformance", () => {
   it.each([undefined, "wrong-token"])("rejects a webhook with token %s", async (invalidToken) => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     const response = await surface.handleWebhook(
       "lark",
@@ -143,7 +148,7 @@ describe("Lark messaging conformance", () => {
   it.each([false, true])(
     "answers authenticated URL verification (encrypted: %s)",
     async (encrypted) => {
-      const { surface, events } = createSurface(encrypted);
+      const { surface, events } = await createSurface(encrypted);
       const payload = { type: "url_verification", token, challenge: "test-challenge" };
       const response = await surface.handleWebhook(
         "lark",
@@ -158,7 +163,7 @@ describe("Lark messaging conformance", () => {
   it.each([false, true])(
     "delivers direct messages and sends replies (encrypted: %s)",
     async (encrypted) => {
-      const { surface, events } = createSurface(encrypted);
+      const { surface, events } = await createSurface(encrypted);
       const response = await surface.handleWebhook(
         "lark",
         encrypted ? encryptedWebhook(message()) : webhook(message()),
@@ -198,7 +203,7 @@ describe("Lark messaging conformance", () => {
   it.each([true, false])(
     "verifies encrypted signatures against the raw body (raw signature: %s)",
     async (rawSignature) => {
-      const { surface, events } = createSurface(true);
+      const { surface, events } = await createSurface(true);
       const request = encryptedWebhook(message(), true, true);
       const body = await request.clone().text();
       expect(body).not.toBe(JSON.stringify(JSON.parse(body)));
@@ -226,7 +231,7 @@ describe("Lark messaging conformance", () => {
   );
 
   it("rejects an invalid encrypted signature", async () => {
-    const { surface, events } = createSurface(true);
+    const { surface, events } = await createSurface(true);
     expect((await surface.handleWebhook("lark", encryptedWebhook(message(), false)))?.status).toBe(
       403,
     );
@@ -237,7 +242,7 @@ describe("Lark messaging conformance", () => {
     ["group", "ou-test"],
     ["p2p", "ou-bot"],
   ])("ignores %s messages from %s", async (chatType, sender) => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     expect((await surface.handleWebhook("lark", webhook(message(chatType, sender))))?.status).toBe(
       200,
     );
@@ -245,7 +250,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("returns a retryable failure when inbound persistence fails", async () => {
-    const { surface } = createSurface();
+    const { surface } = await createSurface();
     surface.onInbound(async () => {
       throw new Error("Persistence unavailable");
     });
@@ -254,7 +259,7 @@ describe("Lark messaging conformance", () => {
   it.each([false, true])(
     "rejects unauthenticated URL verification (encrypted: %s)",
     async (encrypted) => {
-      const { surface } = createSurface(encrypted);
+      const { surface } = await createSurface(encrypted);
       const payload = { type: "url_verification", token: "wrong-token", challenge: "challenge" };
       expect(
         (
@@ -268,7 +273,7 @@ describe("Lark messaging conformance", () => {
   );
 
   it("rejects malformed JSON and encrypted payloads", async () => {
-    const { adapter } = createSurface();
+    const { adapter } = await createSurface();
     expect(
       (
         await adapter.handleWebhook(
@@ -293,7 +298,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("edits Markdown as rich text and deletes messages through the SDK", async () => {
-    const { surface, adapter } = createSurface();
+    const { surface, adapter } = await createSurface();
     await surface.handleWebhook("lark", webhook(message()));
     const threadId = encodeThreadId({ chatId: "oc-test" });
     expect(
@@ -316,7 +321,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("posts plain strings as text through the SDK", async () => {
-    const { adapter } = createSurface();
+    const { adapter } = await createSurface();
     const threadId = encodeThreadId({ chatId: "oc-test" });
     expect(await adapter.postMessage(threadId, "hello")).toMatchObject({
       id: "om-reply",
@@ -337,7 +342,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("rejects an empty postable before sending a message", async () => {
-    const { adapter } = createSurface();
+    const { adapter } = await createSurface();
     await expect(
       adapter.postMessage(encodeThreadId({ chatId: "oc-test" }), { raw: "" }),
     ).rejects.toThrow(/empty or unsupported/);
@@ -345,7 +350,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("fails outbound delivery on API errors", async () => {
-    const { surface, adapter } = createSurface();
+    const { surface, adapter } = await createSurface();
     await surface.handleWebhook("lark", webhook(message()));
     request.mockResolvedValueOnce({ code: 230001, msg: "Request rejected" });
     await expect(
@@ -354,7 +359,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("renders post content and links", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -417,7 +422,7 @@ describe("Lark messaging conformance", () => {
       "func main() {\n    return\n}",
     ],
   ])("delivers post %s with code intact", async (_name, content, expected) => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify(content);
@@ -426,7 +431,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("preserves other formatting when a post includes code", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -445,7 +450,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("retains links in list formatting alongside code", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -464,7 +469,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("does not interpret indented ordinary code as a link", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -483,7 +488,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("keeps title formatting when a post includes code and links", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -500,7 +505,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("does not add ordinary Markdown indentation to a link", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -516,7 +521,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("does not duplicate indentation parsed as ordinary Markdown code", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -533,7 +538,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("preserves heading separation with trailing title spaces", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -550,7 +555,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("keeps code literal beside Markdown syntax and a link", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -575,7 +580,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("does not replace mention keys inside code blocks", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -589,7 +594,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("preserves multiple code blocks and their blank lines alongside links", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     const first = "\nfirst\n\n";
     const second = "\n  second\n";
@@ -611,7 +616,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("replaces mention keys split between ordinary items but preserves them in code", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -631,7 +636,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("preserves protected code parts through Message JSON serialization", async () => {
-    const { surface, adapter } = createSurface();
+    const { surface, adapter } = await createSurface();
     await surface.handleWebhook(
       "lark",
       webhook({ type: "url_verification", token, challenge: "test" }),
@@ -653,7 +658,7 @@ describe("Lark messaging conformance", () => {
   });
 
   it("preserves an empty-label link alongside code", async () => {
-    const { surface, events } = createSurface();
+    const { surface, events } = await createSurface();
     const payload = message();
     payload.event.message.message_type = "post";
     payload.event.message.content = JSON.stringify({
@@ -705,7 +710,7 @@ describe("Lark messaging conformance", () => {
       "Hello@Test bot",
     ],
   ])("parses rich-text posts: %s", async (_name, content, expected) => {
-    const { surface, adapter } = createSurface();
+    const { surface, adapter } = await createSurface();
     await surface.handleWebhook(
       "lark",
       webhook({ type: "url_verification", token, challenge: "test" }),

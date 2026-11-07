@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+
 import { randomInt } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,12 +29,12 @@ type App = {
 };
 
 // Offline journeys: injected SendBlueEmulator fetch, no live vendor or paid line.
-describeMessaging("messaging surface journeys", () => {
+describeMessaging("messaging surface journeys", async () => {
   let app: App;
   let stop: () => Promise<void>;
   let prisma: any;
   const emulator = new SendBlueEmulator();
-  const platform = createEmulatedSendbluePlatform(emulator);
+  const platform = await createEmulatedSendbluePlatform(emulator);
   const dataDir = mkdtempSync(path.join(tmpdir(), "orkbot-messaging-"));
   // Unique per run: identities, threads, and outbox rows persist in the dev
   // database. Random E.164 fixtures — a timestamp suffix repeats within

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+// Ork deferred messaging SDK loading is PolyForm-covered.
 
 // Optional vendor SDKs must load through dynamic import() only when configured (AGENTS.md).
 // Bundles each server entry point the way production does and fails if a listed SDK is
@@ -25,10 +26,6 @@ const OPTIONAL_VENDORS =
   /^(@aws-sdk\/.+|@alicloud\/.+|@kubernetes\/client-node|railway|@daytona\/sdk|@e2b\/desktop|novita-sandbox|@composio\/core|@stripe\/link-sdk|@chat-adapter\/(slack|telegram|whatsapp)|@boatdev\/sdk|@boxd-sh\/sdk|chat-adapter-sendblue|@axiomhq\/js|@sentry\/node)$/;
 // Known static imports still to make lazy. Remove an entry once its SDK loads on demand.
 const PENDING = [
-  "@chat-adapter/slack",
-  "@chat-adapter/telegram",
-  "@chat-adapter/whatsapp",
-  "chat-adapter-sendblue",
   // The wallet factory imports its module dynamically, but the bundle inlines that module,
   // so the SDK is a static import of every emitted server bundle.
   "@stripe/link-sdk",
