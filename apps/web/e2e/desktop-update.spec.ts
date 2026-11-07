@@ -5,7 +5,7 @@
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
-test("desktop update can be checked, deferred, and installed from settings", async ({
+test("desktop update can be checked in settings, deferred, and installed from the sidebar", async ({
   page,
 }, testInfo) => {
   await page.addInitScript(() => {
@@ -33,7 +33,7 @@ test("desktop update can be checked, deferred, and installed from settings", asy
           state: async () => state,
           check: async () => {
             if (++checks === 1) {
-              state = { ...state, checkedAt: "2026-01-01T00:01:00.000Z" };
+              // Native rate limiting can return the latest successful automatic check.
               return state;
             }
             state = { ...state, phase: "downloading", availableVersion: "0.1.3", percent: 50 };
@@ -87,10 +87,17 @@ test("desktop update can be checked, deferred, and installed from settings", asy
   );
   await prompt.getByRole("button", { name: "Later" }).click();
   await expect(prompt).toHaveCount(0);
+  const updateButton = page
+    .getByTestId("sidebar-footer")
+    .getByRole("button", { name: "Install update", exact: true });
+  await expect(updateButton).toBeVisible();
+  await expect(updateButton).toHaveText("Install update");
+  await captureScreenshot(page, testInfo, "desktop-update-button");
   await openUserSettings(page, "updates");
   await expect(settings.getByRole("button", { name: "Restart to update" })).toBeVisible();
   await settings.scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "desktop-update-settings");
-  await settings.getByRole("button", { name: "Restart to update" }).click();
+  await page.keyboard.press("Escape");
+  await updateButton.click();
   await expect(page.locator("html")).toHaveAttribute("data-update-installed", "true");
 });

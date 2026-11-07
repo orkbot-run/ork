@@ -110,9 +110,20 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           TAURI_RELEASE_PLATFORM: ${{ matrix.platform }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: ${{ runner.os == 'macOS' && secrets.APPLE_SIGNING_IDENTITY || '' }}
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_PRIVATE_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_PRIVATE_KEY || '' }}
         run: |
           set -euo pipefail
           test -n "$TAURI_SIGNING_PRIVATE_KEY"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            export APPLE_API_KEY_PATH="$RUNNER_TEMP/ork-notarization-key.p8"
+            trap 'rm -f "$APPLE_API_KEY_PATH"' EXIT
+            node apps/desktop/scripts/macos-distribution.ts prepare "$APPLE_API_KEY_PATH"
+          fi
           node apps/desktop/scripts/tauri-release.ts prepare "$RUNNER_TEMP/tauri-release.json"
           case "$RUNNER_OS" in
             macOS) bundles="app,dmg" ;;
@@ -120,6 +131,9 @@ jobs:
             Linux) bundles="appimage" ;;
           esac
           pnpm --filter @orkbot/desktop tauri:build --bundles "$bundles" --config "$RUNNER_TEMP/tauri-release.json"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            node apps/desktop/scripts/macos-distribution.ts verify apps/desktop/src-tauri/target/release/bundle
+          fi
           node apps/desktop/scripts/tauri-release.ts stage apps/desktop/src-tauri/target/release/bundle "$RUNNER_TEMP/updater"
       - name: Upload signed Preview artifacts
         if: >-

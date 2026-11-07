@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited update controls are preserved. Manual check feedback is an Ork addition.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { DesktopUpdateState } from "@orkbot/contracts";
 import { Button, toast } from "@orkbot/ui-web";
@@ -11,6 +15,7 @@ function useDesktopUpdates() {
   const [state, setState] = useState<DesktopUpdateState | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirmedCheck, setConfirmedCheck] = useState<string | null>(null);
+  const [manualCheckRequested, setManualCheckRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef(false);
   const revision = useRef(0);
@@ -46,24 +51,27 @@ function useDesktopUpdates() {
     };
   }, [bridge]);
 
+  useEffect(() => {
+    if (!manualCheckRequested || busy || !state || state.phase === "checking") return;
+    setManualCheckRequested(false);
+    if (!error && state.phase === "idle" && !state.message && state.checkedAt) {
+      setConfirmedCheck(state.checkedAt);
+    }
+  }, [manualCheckRequested, busy, state, error]);
+
   async function act(action: "check" | "install") {
     if (!bridge || pending.current) return;
     pending.current = true;
     revision.current++;
     setBusy(true);
     setError(null);
-    if (action === "check") setConfirmedCheck(null);
+    if (action === "check") {
+      setConfirmedCheck(null);
+      setManualCheckRequested(true);
+    }
     try {
       const next = await bridge[action]();
       setState(next);
-      if (
-        action === "check" &&
-        next.phase === "idle" &&
-        !next.message &&
-        next.checkedAt !== state?.checkedAt
-      ) {
-        setConfirmedCheck(next.checkedAt);
-      }
       if (next.phase === "error" || action === "install") {
         setError(next.message);
       }

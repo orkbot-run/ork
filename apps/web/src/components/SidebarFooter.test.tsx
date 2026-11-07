@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { DesktopUpdatesProvider } from "./DesktopUpdates";
+import { DesktopUpdateSection, DesktopUpdatesProvider } from "./DesktopUpdates";
 import { SidebarFooter, sidebarMarkCount } from "./SidebarFooter";
 
 vi.mock("@lingui/react/macro", () => ({
@@ -35,12 +35,14 @@ async function render(
   onIntegrations = vi.fn(),
   onBoard?: () => void,
   logos?: Array<{ name: string; logo?: string }>,
+  mini = false,
 ) {
   const email = "account@orkbot.test";
   await act(async () =>
     root.render(
       <DesktopUpdatesProvider>
         <SidebarFooter
+          mini={mini}
           logos={logos}
           name={name}
           initials={name
@@ -114,6 +116,7 @@ it("installs the ready update only through the footer button", async () => {
   await render("Ada Lovelace");
   const icon = document.querySelector<HTMLButtonElement>('[aria-label="Install update"]')!;
   expect(icon).not.toBeNull();
+  expect(icon.textContent).toContain("Install update");
   expect(document.body.textContent).not.toContain("New update available");
   await act(async () => icon.click());
   expect(install).toHaveBeenCalledTimes(1);
@@ -306,3 +309,85 @@ it("lists two organizations with the active one checked", async () => {
   await act(async () => rows[1]!.click());
   expect(onSwitch).toHaveBeenCalledWith(work);
 });
+
+it("keeps integrations in the account menu while the update action is visible", async () => {
+  bridge("ready");
+  const onIntegrations = vi.fn();
+  await render("Demo User", undefined, onIntegrations);
+  const footer = host.querySelector('[data-testid="sidebar-footer"]')!;
+  expect(footer.querySelector('[aria-label="Install update"]')?.textContent).toContain(
+    "Install update",
+  );
+  const connect = [
+    ...document.querySelectorAll<HTMLButtonElement>('[data-slot="popover-content"] button'),
+  ].find((button) => button.textContent === "Connect apps")!;
+  expect(connect).toBeDefined();
+  await act(async () => connect.click());
+  expect(onIntegrations).toHaveBeenCalledOnce();
+});
+
+it("keeps the collapsed update action accessible", async () => {
+  const install = bridge("ready");
+  await render("Demo User", undefined, vi.fn(), undefined, undefined, true);
+  const button = host.querySelector<HTMLButtonElement>('[aria-label="Install update"]')!;
+  expect(button).not.toBeNull();
+  await act(async () => button.click());
+  expect(install).toHaveBeenCalledOnce();
+});
+
+async function renderUpdateSettings() {
+  await act(async () =>
+    root.render(
+      <DesktopUpdatesProvider>
+        <DesktopUpdateSection />
+      </DesktopUpdatesProvider>,
+    ),
+  );
+}
+
+it("shows the result of a manual check when native rate limiting returns a cached successful check", async () => {
+  bridge("idle");
+  const state = {
+    ...(await window.orkbotDesktop!.update.state()),
+    checkedAt: "2026-01-01T00:00:00Z",
+  };
+  window.orkbotDesktop!.update.state = vi.fn(async () => state);
+  const check = vi.fn(async () => state);
+  window.orkbotDesktop!.update.check = check;
+  await renderUpdateSettings();
+  expect(host.textContent).not.toContain("Up to date");
+  await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+  expect(check).toHaveBeenCalledOnce();
+  expect(host.querySelector('[role="status"]')?.textContent).toBe("Up to date");
+});
+
+it.each(["idle", "error"] as const)(
+  "waits for a manual check's polled %s result",
+  async (phase) => {
+    vi.useFakeTimers();
+    try {
+      bridge("idle");
+      let state = await window.orkbotDesktop!.update.state();
+      window.orkbotDesktop!.update.state = vi.fn(async () => state);
+      window.orkbotDesktop!.update.check = vi.fn(async () => {
+        state = { ...state, phase: "checking" };
+        return state;
+      });
+      await renderUpdateSettings();
+      await act(async () => host.querySelector<HTMLButtonElement>("button")!.click());
+      expect(host.textContent).not.toContain("Up to date");
+      state = {
+        ...state,
+        phase,
+        checkedAt: "2026-01-01T00:01:00Z",
+        message: phase === "error" ? "Could not reach the update server." : null,
+      };
+      await act(async () => vi.advanceTimersByTimeAsync(2_000));
+      expect(host.querySelector('[role="status"]')?.textContent).toBe(
+        phase === "idle" ? "Up to date" : "Could not reach the update server.",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);

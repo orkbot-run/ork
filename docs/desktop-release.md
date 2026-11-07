@@ -62,7 +62,7 @@ notes and stable versioning still follow `.agents/skills/release/SKILL.md`.
 
 Install a Preview build from GitHub Releases once. Older diagnostic builds have
 updates disabled and need this initial replacement. The installed app checks after
-30 seconds and then every 6 hours, downloads a newer signed package in the background
+30 seconds and then every hour, downloads a newer signed package in the background
 and installs it after you choose Restart. It preserves the application identifier
 and local account data. An empty feed is retried on the next scheduled check.
 
@@ -70,10 +70,31 @@ The app verifies signatures bound to the artifact version, accepts HTTPS only an
 caps downloads at 256 MiB. The server frontend cannot choose the feed or signing key.
 The app menu and Settings also provide manual update controls.
 
-Updater signatures are separate from Apple notarization, provisioning profiles and
-Windows code signing. Preview automation does not configure those platform accounts
-or enable macOS passkeys. Test installation and an update from a previous build on
-each platform before using this channel for wider distribution.
+macOS releases require a Developer ID Application certificate and notarization, and
+before any uploads the release job uses Apple's distribution tools to validate the
+app bundle, the extracted updater archive and the DMG. Missing credentials stop
+publication. The job also rejects invalid signatures and failed notarization.
+Diagnostic builds stay off the public update channel and use an ad-hoc bundle signature.
+
+Add these repository Actions secrets for macOS distribution:
+
+| Secret | Value |
+| --- | --- |
+| `APPLE_CERTIFICATE` | Base64-encoded Developer ID Application `.p12`, including its private key. |
+| `APPLE_CERTIFICATE_PASSWORD` | The export password for that `.p12`. |
+| `APPLE_SIGNING_IDENTITY` | Full Developer ID Application identity matching the certificate. |
+| `APPLE_API_ISSUER` | Issuer UUID for an App Store Connect team API key. |
+| `APPLE_API_KEY` | That API key's identifier. |
+| `APPLE_API_PRIVATE_KEY` | Contents of its downloaded `.p8` private key. |
+
+Keep the original private files outside the checkout. Enter the values in GitHub's
+Actions secrets settings. Tauri imports the certificate into a temporary runner
+keychain, and the workflow removes the temporary notarization key when the build ends.
+The app needs no private signing keys or signing keychain access.
+
+Updater signatures and Apple distribution signing are separate from Windows code
+signing and macOS passkey provisioning. Before wider distribution, install the app
+on each platform and test updating it from a previous build.
 
 ## Signing keys and local builds
 

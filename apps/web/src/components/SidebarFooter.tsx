@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited sidebar behavior is preserved. The visible update action is an Ork addition.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { NavLink } from "@orkbot/contracts";
 import { ANDROID_APP_STORE_URL, IOS_APP_STORE_URL } from "@orkbot/contracts";
@@ -108,7 +112,7 @@ export function SidebarFooter({
     observer.observe(label);
     measure();
     return () => observer.disconnect();
-  }, [mini]);
+  }, [mini, update.available]);
   return (
     <div
       data-testid="sidebar-footer"
@@ -169,7 +173,7 @@ export function SidebarFooter({
                 <div className="my-1 border-t border-border" />
               </>
             ) : null}
-            {mini ? (
+            {mini || update.available ? (
               <Button
                 variant="ghost"
                 className="h-9 w-full justify-start gap-2.5 font-normal"
@@ -274,7 +278,7 @@ export function SidebarFooter({
           </PopoverContent>
         ) : null}
       </Popover>
-      {!mini ? (
+      {!mini && !update.available ? (
         <Button
           variant="outline"
           ref={pillRef}
@@ -287,7 +291,19 @@ export function SidebarFooter({
           <AppMarkStack marks={logos.slice(0, markCount)} ringClassName="ring-sidebar-accent" />
         </Button>
       ) : null}
-      {update.available ? (
+      {update.available && !mini ? (
+        <Button
+          className="h-9 min-w-0 flex-1 gap-2"
+          aria-label={t`Install update`}
+          disabled={update.busy}
+          onClick={update.install}
+        >
+          <Download aria-hidden="true" />
+          <span className="truncate">
+            <Trans>Install update</Trans>
+          </span>
+        </Button>
+      ) : update.available ? (
         <IconTooltip label={t`Install update`}>
           <Button
             size="icon-lg"

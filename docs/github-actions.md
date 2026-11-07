@@ -74,10 +74,12 @@ Pull requests produce diagnostic artifacts. Enable signed Preview builds from ma
 with `TAURI_PREVIEW_RELEASE_ENABLED=true`, the `TAURI_UPDATER_PUBLIC_KEY` variable,
 and the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
 
-`desktop-tauri-publish.yml` promotes the update manifest after both CI and every
-native build pass for the same main revision. Installed Preview apps download new
-versions automatically and ask before restarting to install them. The updater key
-is separate from Apple and Windows platform signing. See [Desktop releases](desktop-release.md)
+`desktop-tauri-publish.yml` promotes the update manifest after CI and every native
+build pass for the same main revision. Installed Preview apps check hourly and
+download new versions automatically, then ask before restarting to install them.
+macOS publication requires Developer ID signing, notarization and Gatekeeper checks.
+Configure the six Apple signing secrets listed in the desktop release guide.
+Platform signing uses separate keys. See [Desktop releases](desktop-release.md)
 for setup, first installation and verification limits.
 
 ## Optional hosted report galleries

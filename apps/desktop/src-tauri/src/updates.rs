@@ -21,6 +21,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use url::Url;
 
+const BACKGROUND_CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 const MIN_CHECK_INTERVAL: Duration = Duration::from_secs(60);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const MAX_UPDATE_BYTES: u64 = 256 * 1024 * 1024;
@@ -468,7 +469,7 @@ pub fn start_background(app: AppHandle) {
         }
         loop {
             check_state(&app).await;
-            tokio::time::sleep(Duration::from_secs(6 * 60 * 60)).await;
+            tokio::time::sleep(BACKGROUND_CHECK_INTERVAL).await;
         }
     });
 }

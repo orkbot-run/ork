@@ -15,6 +15,12 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   expect(signed.if).toContain("github.ref == 'refs/heads/main'");
   expect(signed.if).toContain("github.event_name != 'pull_request'");
   expect(signed.env.ORKBOT_ENABLE_AUTO_UPDATE).toBe("1");
+  expect(signed.run).toContain("macos-distribution.ts prepare");
+  expect(signed.run).toContain("macos-distribution.ts verify");
+  expect(signed.run.indexOf("macos-distribution.ts verify")).toBeLessThan(
+    signed.run.indexOf("tauri-release.ts stage"),
+  );
+  expect(signed.env.APPLE_CERTIFICATE).toContain("runner.os == 'macOS'");
   expect(build.permissions).toEqual({ contents: "read" });
   expect(
     build.jobs["diagnostic-build"].strategy.matrix.include.map(

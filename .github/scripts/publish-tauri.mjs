@@ -39,7 +39,25 @@ const release = (tag) => {
     timeout: 30_000,
   });
   if (result.status === 0) return JSON.parse(result.stdout);
-  if (result.status !== null && /\(HTTP 404\)/.test(result.stderr)) return null;
+  if (result.status !== null && /\(HTTP 404\)/.test(result.stderr)) {
+    // GitHub excludes drafts from the tag endpoint, including a paused update channel.
+    for (let page = 1; ; page++) {
+      const result = JSON.parse(
+        execFileSync(
+          "gh",
+          [
+            "api",
+            `repos/${repository}/releases?per_page=100&page=${page}`,
+            "--jq",
+            `{count:length, match:map(select(.tag_name == ${JSON.stringify(tag)}))[0]}`,
+          ],
+          { encoding: "utf8", timeout: 30_000 },
+        ),
+      );
+      if (result.match) return result.match;
+      if (result.count < 100) return null;
+    }
+  }
   throw new Error("Could not resolve the desktop release.");
 };
 const digest = (file) => `sha256:${createHash("sha256").update(readFileSync(file)).digest("hex")}`;
@@ -88,6 +106,7 @@ async function publish() {
   }
   const tag = `desktop-preview-${version}`;
   const existing = release(tag);
+  if (existing?.draft) throw new Error("Desktop version is withdrawn; start a new build.");
   if (existing && (existing.target_commitish !== revision || !existing.prerelease))
     throw new Error("Desktop version is already assigned to another release.");
   if (!current()) return console.log("Desktop publication skipped: main has advanced.");
@@ -133,11 +152,19 @@ async function publish() {
   if (channel) {
     const channelAsset = channel.assets.find((asset) => asset.name === "latest.json");
     if (channelAsset) {
-      const response = await fetch(channelAsset.browser_download_url, {
-        signal: AbortSignal.timeout(30_000),
-      });
-      if (!response.ok) throw new Error("Cannot read the current desktop channel.");
-      const previous = await response.json();
+      // Draft channels are deliberately unavailable at their anonymous download URL.
+      const previous = JSON.parse(
+        execFileSync(
+          "gh",
+          [
+            "api",
+            `repos/${repository}/releases/assets/${channelAsset.id}`,
+            "-H",
+            "Accept: application/octet-stream",
+          ],
+          { encoding: "utf8", timeout: 30_000 },
+        ),
+      );
       const compare = (value) => value.split(".").map(Number);
       const before = compare(previous.version);
       const next = compare(version);
@@ -153,6 +180,7 @@ async function publish() {
       "release",
       "create",
       "desktop-preview",
+      "--draft",
       "--target",
       revision,
       "--prerelease",
@@ -167,6 +195,8 @@ async function publish() {
   writeFileSync(output, `${JSON.stringify(manifest)}\n`);
   if (!current()) return console.log("Desktop channel promotion skipped: main has advanced.");
   gh("release", "upload", "desktop-preview", output, "--clobber");
+  if (!current()) return console.log("Desktop channel activation skipped: main has advanced.");
+  gh("release", "edit", "desktop-preview", "--draft=false", "--latest=false");
   console.log(`Published Ork Preview ${version} for ${entries.length} platforms.`);
 }
 
