@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { isTerminatingReplyResult, terminatingReplyText } from "./approval-effect.js";
@@ -24,7 +28,12 @@ import {
 } from "./pi-runtime-models.js";
 import { conversationSessionId, reliableModelStream } from "./pi-runtime-stream.js";
 import type { ToolHost } from "./pi-runtime-tools.js";
-import { toAgentTools, toolCallBudgetExceededMessage } from "./pi-runtime-tools.js";
+import {
+  agentToolDefinitions,
+  describeToolActivity,
+  toAgentTools,
+  toolCallBudgetExceededMessage,
+} from "./pi-runtime-tools.js";
 import { observedPiStream } from "./pi-usage.js";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
 import { deliverFinishedShells } from "./shell-command-stream.js";
@@ -125,6 +134,7 @@ export async function executeSubagent(
       !DELEGATION_TOOL_NAMES.has(tool.name) &&
       !(host.computerModeAllowed && COMPUTER_MODE_TOOLS.has(tool.name)),
   );
+  const childByAgentName = agentToolDefinitions(childDefs);
   const nestedHost: ToolHost = {
     ...host,
     activeModel: {
@@ -300,7 +310,12 @@ export async function executeSubagent(
         name,
         task,
         status: "running",
-        progress: `using ${toolName}…`,
+        progress: describeToolActivity(
+          toolName,
+          event.args,
+          (name) => childByAgentName.get(name),
+          host.request.redactToolText,
+        ),
       });
     }
     if (event.type === "message_update" && event.assistantMessageEvent.type === "text_delta") {

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   appendTextSegment,
@@ -1102,5 +1106,17 @@ describe("liveActivityLine", () => {
     expect(
       liveActivityLine([{ id: "m1", blocks: [{ kind: "text", text: "Done" }] }]),
     ).toBeUndefined();
+  });
+});
+
+describe("explicit tool display labels", () => {
+  it("preserves case and underscores in a display label without changing canonical-name fallback", () => {
+    expect(appendToolStep([], "mcp__server__read_items", "Reading API_items")).toEqual([
+      { label: "Reading API_items", count: 1 },
+    ]);
+    expect(appendToolCallSegment([], "mcp__server__read_items", "Reading API_items")).toEqual([
+      { kind: "steps", steps: [{ label: "Reading API_items", count: 1 }] },
+    ]);
+    expect(appendToolStep([], "read_file")).toEqual([{ label: "Read file", count: 1 }]);
   });
 });

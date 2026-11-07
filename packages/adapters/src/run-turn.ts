@@ -39,7 +39,7 @@ import {
   HISTORY_WINDOW_SIZE,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
-import { connectorStepNames } from "./pi-runtime-tools.js";
+import { connectorStepNames, toolDisplayLabel } from "./pi-runtime-tools.js";
 import {
   backOffRoutineAfterAccountError,
   clearRoutineBackoff,
@@ -532,8 +532,15 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
   // client must see that text before the tool call it describes.
   await flushProgress(ctx);
   // Queued first so the text written before this call becomes its note.
-  const stepNames = connectorStepNames(ctx.tools.connector.get(event.name), event.args);
-  reply.pendingToolNames.push(...(stepNames.length > 0 ? stepNames : [event.name]));
+  const redactToolText = (text: string) => redactSecrets(text, ctx.secrets);
+  const stepNames = connectorStepNames(
+    ctx.tools.connector.get(event.name),
+    event.args,
+    redactToolText,
+    (name) => ctx.tools.connector.get(name),
+  );
+  const labels = stepNames.length > 0 ? stepNames : [toolDisplayLabel(event.name, redactToolText)];
+  reply.pendingToolNames.push(...labels.map((label) => ({ name: event.name, label })));
   // Text before ask_user stays pending: the run pauses next, and the question needs it.
   const heldNote =
     event.name === "message_user" || event.name === "ask_user"

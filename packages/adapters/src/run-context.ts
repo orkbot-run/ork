@@ -119,7 +119,7 @@ export interface ReplyState {
    * Tool calls that land mid-sentence wait here until the narration catches up to a
    * sentence boundary, so the step chips never render in the middle of a clause.
    */
-  pendingToolNames: string[];
+  pendingToolNames: Array<{ name: string; label: string }>;
   pendingProgress: string;
   lastProgressAt: number;
   hasStreamedText: boolean;

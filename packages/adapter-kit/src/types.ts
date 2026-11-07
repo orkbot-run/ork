@@ -605,6 +605,8 @@ export interface AgentRunRequest {
   allowSilentEmpty?: boolean;
   /** Contextual fallback when a non-silent run produces no written response. */
   emptyResponseText?: string;
+  /** In-process display redaction. Never serialized into prompts, events, or checkpoints. */
+  redactToolText?: (text: string) => string;
   executeTool?: (
     name: string,
     args: Record<string, unknown>,

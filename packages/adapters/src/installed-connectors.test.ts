@@ -559,6 +559,7 @@ describe("OpenAPI connector import", () => {
           patch: {
             operationId: "updateContact",
             summary: "Update one contact",
+            description: "A detailed API operation description.",
             requestBody: {
               required: true,
               content: {
@@ -579,11 +580,55 @@ describe("OpenAPI connector import", () => {
     expect(imported.operations).toEqual([
       expect.objectContaining({
         id: "updateContact",
+        label: "Update one contact",
+        description: "A detailed API operation description.",
         method: "PATCH",
         path: "/contacts/{contactId}",
         readOnly: false,
         inputSchema: expect.objectContaining({ required: ["contactId", "body"] }),
       }),
+    ]);
+  });
+
+  it("carries imported summaries through discovery without changing execution routes", async () => {
+    const imported = importOpenApiDocument({
+      openapi: "3.1.0",
+      servers: [{ url: "https://api.example.test" }],
+      paths: {
+        "/items": {
+          get: {
+            operationId: "list_items",
+            summary: "Reading API_items",
+            description: "Detailed description.",
+          },
+        },
+      },
+    });
+    const install = {
+      id: "api-1",
+      kind: "api",
+      name: "Fixture API",
+      source: imported.baseUrl,
+      secretId: null,
+      config: { auth: { type: "none" }, operations: imported.operations },
+    };
+    const provider = new InstalledConnectorProvider(
+      { capabilityInstall: { findMany: async () => [install] } } as never,
+      {} as never,
+    );
+    const tools = await provider.discoverTools({
+      spaceId: "space-1",
+      userId: "user-1",
+      botId: "bot-1",
+    } as never);
+    expect(tools).toMatchObject([
+      {
+        name: "list_items",
+        label: "Reading API_items",
+        readOnly: true,
+        description: "GET /items. Provider description: Detailed description.",
+        route: { toolName: "list_items", resourceId: "api-1" },
+      },
     ]);
   });
 

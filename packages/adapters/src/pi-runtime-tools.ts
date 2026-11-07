@@ -21,7 +21,7 @@ import {
   HistoryReadInputSchema,
   HistorySearchInputSchema,
 } from "@orkbot/contracts";
-import { batchActions, humanizeToolName } from "@orkbot/core";
+import { humanizeToolName } from "@orkbot/core";
 import {
   isInternalTermination,
   isTerminatingReplyResult,
@@ -194,43 +194,114 @@ export function normalizeAgentToolName(name: string): string {
 const ACTIVITY_DETAIL_LIMIT = 90;
 
 const MAX_STEP_ACTIONS = 3;
+const MAX_BATCH_ACTIVITY_ITEMS = 100;
+const MAX_ACTIVITY_BYTES = 240;
+const MAX_ACTIVITY_SOURCE_BYTES = 2_048;
 const STEP_ACTION_NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const TOOL_ACTIVITY_FALLBACK = "Using tools";
+type ToolTextRedactor = (text: string) => string;
+type ToolLookup = (name: string) => ConnectorTool | undefined;
 
-/**
- * What a call's steps show: the actions a batch runs, else the tool's label. Empty when neither
- * applies, so callers fall back to the tool name.
- */
-export function connectorStepNames(tool: ConnectorTool | undefined, args: unknown): string[] {
-  const actions = batchStepActions(tool, args);
-  if (actions.length > 0) return actions;
-  return tool?.label ? [tool.label] : [];
+/** Redact before changing whitespace, case, or underscores. Never publish oversized metadata. */
+function activityLabel(value: unknown, redact?: ToolTextRedactor): string | undefined {
+  if (typeof value !== "string" || value.length > MAX_ACTIVITY_SOURCE_BYTES) return undefined;
+  if (Buffer.byteLength(value, "utf8") > MAX_ACTIVITY_SOURCE_BYTES) return undefined;
+  const text = sanitizeSensitiveText(redact ? redact(value) : value)
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return text && Buffer.byteLength(text, "utf8") <= MAX_ACTIVITY_BYTES ? text : undefined;
 }
 
-/** The model writes these names, so show only a few that look like tool names. */
-function batchStepActions(tool: ConnectorTool | undefined, args: unknown): string[] {
-  if (!tool?.batch) return [];
-  const { actions, complete } = batchActions(tool.batch, args);
-  if (!complete || actions.length > MAX_STEP_ACTIONS) return [];
-  if (!actions.every((action) => STEP_ACTION_NAME.test(action))) return [];
-  return actions.map(humanizeToolName);
+/** A canonical name's safe display fallback, without changing its execution identity. */
+export function toolDisplayLabel(name: string, redact?: ToolTextRedactor): string {
+  if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,159}$/.test(name)) return TOOL_ACTIVITY_FALLBACK;
+  const safe = activityLabel(name, redact);
+  return safe ? humanizeToolName(safe) : TOOL_ACTIVITY_FALLBACK;
+}
+
+/** Batch actions or an adapter's optional display label; names remain execution-only. */
+export function connectorStepNames(
+  tool: ConnectorTool | undefined,
+  args: unknown,
+  redact?: ToolTextRedactor,
+  findTool?: ToolLookup,
+): string[] {
+  const actions = batchStepActions(tool, args, redact, findTool);
+  if (actions.length > 0) return actions;
+  if (tool?.label !== undefined)
+    return [activityLabel(tool.label, redact) ?? TOOL_ACTIVITY_FALLBACK];
+  return tool?.batch ? [TOOL_ACTIVITY_FALLBACK] : [];
+}
+
+/** Inspect only a bounded number of names, never action argument values. */
+function batchStepActions(
+  tool: ConnectorTool | undefined,
+  args: unknown,
+  redact?: ToolTextRedactor,
+  findTool?: ToolLookup,
+): string[] {
+  if (!tool?.batch || !args || typeof args !== "object") return [];
+  const items = (args as Record<string, unknown>)[tool.batch.items];
+  if (!Array.isArray(items) || items.length === 0 || items.length > MAX_BATCH_ACTIVITY_ITEMS)
+    return [];
+  const names = new Set<string>();
+  for (const item of items) {
+    const action =
+      item && typeof item === "object"
+        ? (item as Record<string, unknown>)[tool.batch.action]
+        : undefined;
+    if (typeof action !== "string" || !STEP_ACTION_NAME.test(action)) return [];
+    names.add(action);
+    if (names.size > MAX_STEP_ACTIONS) return [];
+  }
+  const labels = [...names].map((name) => {
+    const descriptor = findTool?.(name);
+    return descriptor?.label !== undefined
+      ? (activityLabel(descriptor.label, redact) ?? TOOL_ACTIVITY_FALLBACK)
+      : toolDisplayLabel(name, redact);
+  });
+  return Buffer.byteLength(`Using ${labels.join(", ")}`, "utf8") <= MAX_ACTIVITY_BYTES
+    ? labels
+    : [];
 }
 
 /** One human-readable line describing a tool call, shown live in the thread. */
 export function describeToolActivity(
   toolName: string,
   args: unknown,
-  findTool?: (name: string) => ConnectorTool | undefined,
+  findTool?: ToolLookup,
+  redact?: ToolTextRedactor,
+): string {
+  const line = toolActivity(toolName, args, findTool, redact);
+  const safe = (redact ? redact(line) : line)
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return safe && Buffer.byteLength(safe, "utf8") <= MAX_ACTIVITY_BYTES
+    ? safe
+    : TOOL_ACTIVITY_FALLBACK;
+}
+
+function toolActivity(
+  toolName: string,
+  args: unknown,
+  findTool?: ToolLookup,
+  redact?: ToolTextRedactor,
 ): string {
   const record = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
   if (toolName === USE_TOOL)
-    return describeToolActivity(String(record.name), record.arguments, findTool);
+    return typeof record.name === "string" && record.name !== USE_TOOL
+      ? describeToolActivity(record.name, record.arguments, findTool, redact)
+      : TOOL_ACTIVITY_FALLBACK;
   const tool = findTool?.(toolName);
-  const actions = batchStepActions(tool, args);
+  const actions = batchStepActions(tool, args, redact, findTool);
   if (actions.length > 0) return `Using ${actions.join(", ")}`;
-  if (tool?.label) return tool.label;
+  if (tool?.label !== undefined) return activityLabel(tool.label, redact) ?? TOOL_ACTIVITY_FALLBACK;
+  if (tool?.batch) return TOOL_ACTIVITY_FALLBACK;
   if (toolName === FIND_TOOL) return "Finding a tool";
   const detail = (value: unknown): string => {
-    const text = sanitizeSensitiveText(String(value ?? ""))
+    const text = sanitizeSensitiveText(redact ? redact(String(value ?? "")) : String(value ?? ""))
       .replaceAll(/\s+/g, " ")
       .trim();
     return text.length > ACTIVITY_DETAIL_LIMIT ? `${text.slice(0, ACTIVITY_DETAIL_LIMIT)}…` : text;
@@ -279,9 +350,12 @@ export function describeToolActivity(
     return `Updating skill: ${detail(record.name ?? record.skillId)}`;
   if (toolName === "skill_delete")
     return `Deleting skill: ${detail(record.name ?? record.skillId)}`;
-  const mcp = toolName.match(/^mcp__(.+?)__(.+)$/);
+  if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,159}$/.test(toolName)) return TOOL_ACTIVITY_FALLBACK;
+  const safeName = activityLabel(toolName, redact);
+  if (!safeName) return TOOL_ACTIVITY_FALLBACK;
+  const mcp = safeName.match(/^mcp__(.+?)__(.+)$/);
   if (mcp) return `Using ${mcp[1]}: ${mcp[2]}`;
-  return `Using ${toolName}`;
+  return `Using ${safeName}`;
 }
 
 /**

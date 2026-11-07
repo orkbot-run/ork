@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import {
   appendTextSegment,
@@ -141,8 +145,8 @@ export function flushPendingTools(reply: ReplyState) {
     reply.messageSegments = appendTextSegment(reply.messageSegments, reply.currentTextSegment);
     reply.currentTextSegment = "";
   }
-  for (const name of reply.pendingToolNames) {
-    reply.messageSegments = appendToolCallSegment(reply.messageSegments, name);
+  for (const tool of reply.pendingToolNames) {
+    reply.messageSegments = appendToolCallSegment(reply.messageSegments, tool.name, tool.label);
   }
   reply.pendingToolNames = [];
 }

@@ -1976,6 +1976,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               script,
               allowSilentEmpty: allowSilentEmptyRun,
               emptyResponseText,
+              redactToolText: (text) => redactSecrets(text, runSecrets),
               executeTool: scripted
                 ? undefined
                 : (name, args, executionId, route, observer) =>

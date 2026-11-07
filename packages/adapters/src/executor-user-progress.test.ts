@@ -2,7 +2,10 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
 
-import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import type { AgentRunRequest, AgentRuntimeEvent, ConnectorTool } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import type { AppendEventInput, Prisma } from "@orkbot/db";
 import {
@@ -18,6 +21,7 @@ import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { createRunExecutor } from "./executor.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import type * as ModelVisionModule from "./model-vision.js";
+import { PiAgentRuntime } from "./pi-runtime.js";
 import { GROUP_UNADDRESSED_REPLY_GUIDANCE } from "./run-replies.js";
 import { PEER_NOTHING_NEW_REPLY } from "./silent-reply.js";
 import { MID_TURN_PROGRESS_MIN_TURN_AGE_MS, userProgressClientNonce } from "./user-progress.js";
@@ -70,6 +74,8 @@ async function runTurn(
     executeTools?: boolean;
     /** A hand-written runtime, for orderings a flat event list can't express. */
     runtime?: (request: AgentRunRequest) => AsyncGenerator<AgentRuntimeEvent>;
+    connectorTools?: ConnectorTool[];
+    onConnectorCall?: (tool: string, args: Record<string, unknown>) => void;
     /** Lets a test hold an event write open, to land runtime events while it waits. */
     appendGate?: (event: AppendEventInput) => Promise<void> | undefined;
     /** The computer has a screen and a page browser, and the model can see. */
@@ -181,6 +187,7 @@ async function runTurn(
       findMany: vi.fn(async () => []),
     },
     attempt: {
+      count: vi.fn(async () => 1),
       create: vi.fn(async () => ({ id: "attempt-1" })),
       update: vi.fn(),
       updateMany: vi.fn(async () => ({ count: 1 })),
@@ -294,6 +301,9 @@ async function runTurn(
       })),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    steeringMessage: { findFirst: vi.fn(async () => null) },
+    usageRecord: { createMany: vi.fn(async () => ({ count: 1 })) },
+    modelCreditEntry: { findUnique: vi.fn(async () => null) },
     userActionApprovalRule: { findMany: vi.fn(async () => []) },
     userActionAutoReviewPreference: { findUnique: vi.fn(async () => null) },
     computerExecutionLease: {
@@ -345,9 +355,26 @@ async function runTurn(
     home: { commit: vi.fn(async () => "fixture-revision") },
     memory: { read: async () => ({ documents: [] }) },
     memoryProviders: { resolve: async () => null },
-    events: { append, finalizeRun, pauseRunForInput, notify: vi.fn(async () => undefined) },
+    events: {
+      append,
+      finalizeRun,
+      pauseRunForInput,
+      claimSteering: vi.fn(async () => []),
+      notify: vi.fn(async () => undefined),
+    },
     jobs: { enqueue: vi.fn(async () => undefined) },
     secrets,
+    ...(options.connectorTools
+      ? {
+          connector: {
+            discoverTools: async () => options.connectorTools,
+            async *execute(call: { tool: string; args: Record<string, unknown> }) {
+              options.onConnectorCall?.(call.tool, call.args);
+              yield { type: "result", data: { ok: true } };
+            },
+          },
+        }
+      : {}),
     ...(options.graphical
       ? {
           browser: {
@@ -1943,4 +1970,152 @@ it("keeps the saved proposal bounded after redaction expands repeated secrets", 
   if (block?.kind !== "ask") throw new Error("Expected ask");
   expect(block.detail?.length).toBeLessThanOrEqual(4_000);
   expect(block.detail).not.toContain("test-token");
+});
+
+describe("adapter labels through the real runtime and executor", () => {
+  it.each(["label", "batch"] as const)(
+    "keeps canonical %s calls and publishes redacted display labels live and durably",
+    async (mode) => {
+      const canonical = "mcp__fixture__read_items";
+      const secret = "Secret_Value";
+      const argumentValue = "private argument value";
+      const args =
+        mode === "batch"
+          ? {
+              tools: [
+                { tool_slug: `READ_${secret}`, arguments: { body: argumentValue } },
+                { tool_slug: "READ_OTHER", arguments: { body: argumentValue } },
+              ],
+            }
+          : { collection: argumentValue };
+      const labels =
+        mode === "batch"
+          ? ["Read [redacted]", "Reading records"]
+          : ["Reading API_[redacted]_items"];
+      const live = mode === "batch" ? `Using ${labels.join(", ")}` : labels[0];
+      let calls = 0;
+      const server = createServer(async (request, response) => {
+        for await (const _chunk of request) {
+          /* Drain the controlled local request. */
+        }
+        const first = calls++ === 0;
+        const delta = first
+          ? {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "label-call",
+                  type: "function",
+                  function: { name: canonical, arguments: JSON.stringify(args) },
+                },
+              ],
+            }
+          : { content: "Done." };
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.end(
+          `data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason: null }] })}\n\ndata: ${JSON.stringify({ choices: [{ index: 0, delta: {}, finish_reason: first ? "tool_calls" : "stop" }] })}\n\ndata: [DONE]\n\n`,
+        );
+      });
+      server.listen(0, "127.0.0.1");
+      await once(server, "listening");
+      const executed = vi.fn();
+      try {
+        const runtime = new PiAgentRuntime();
+        const result = await runTurn("", false, "", [secret], "fyi", {
+          connectorTools: [
+            {
+              name: canonical,
+              label: `Reading API_${secret}_items`,
+              description: "Read fixture items",
+              readOnly: true,
+              ...(mode === "batch"
+                ? { batch: { items: "tools", action: "tool_slug", arguments: "arguments" } }
+                : {}),
+              inputSchema:
+                mode === "batch"
+                  ? {
+                      type: "object",
+                      properties: { tools: { type: "array", items: { type: "object" } } },
+                      required: ["tools"],
+                    }
+                  : {
+                      type: "object",
+                      properties: { collection: { type: "string" } },
+                      required: ["collection"],
+                    },
+            },
+            ...(mode === "batch"
+              ? [
+                  {
+                    name: `READ_${secret}`,
+                    description: "Read fixture",
+                    readOnly: true,
+                    inputSchema: { type: "object" },
+                  },
+                  {
+                    name: "READ_OTHER",
+                    label: "Reading records",
+                    description: "Read fixture",
+                    readOnly: true,
+                    inputSchema: { type: "object" },
+                  },
+                ]
+              : []),
+          ],
+          onConnectorCall: executed,
+          runtime: async function* (request) {
+            yield* runtime.run({
+              ...request,
+              model: {
+                provider: "openai-compatible",
+                id: "fixture",
+                apiKey: "fake-fixture-key",
+                baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`,
+                allowPrivateEndpoint: true,
+                contextWindow: 128_000,
+                maxTokens: 1_024,
+              },
+            });
+          },
+        });
+        expect(executed).toHaveBeenCalledExactlyOnceWith(canonical, args);
+        expect(result.savedEvents).toContainEqual(
+          expect.objectContaining({
+            type: "agent.tool.called",
+            payload: expect.objectContaining({
+              name: canonical,
+              executionId: expect.stringContaining("label-call"),
+            }),
+          }),
+        );
+        expect(result.savedEvents).toContainEqual(
+          expect.objectContaining({
+            type: "thread.progress",
+            payload: { text: live, activity: true },
+          }),
+        );
+        expect(result.finalizeRun).toHaveBeenCalledWith(
+          expect.objectContaining({
+            blocks: expect.arrayContaining([
+              { kind: "steps", steps: labels.map((label) => ({ label, count: 1 })) },
+            ]),
+          }),
+        );
+        const published = JSON.stringify([
+          result.savedEvents.filter((event) => event.type === "thread.progress"),
+          result.finalizeRun.mock.calls,
+        ]);
+        expect(published).not.toContain(secret);
+        expect(published).not.toContain("Secret value");
+        expect(published).not.toContain(argumentValue);
+        expect(result.pauseRunForInput).not.toHaveBeenCalled();
+        expect(calls).toBe(2);
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) =>
+          server.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    },
+  );
 });

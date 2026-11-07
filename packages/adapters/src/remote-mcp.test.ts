@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import dns from "node:dns";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -12,6 +16,7 @@ import {
   createSafeLookup,
   createSafeRemoteFetch,
   limitRemoteMcpPayload,
+  listRemoteMcpTools,
 } from "./remote-mcp.js";
 import { toolCompletionAuditPayload } from "./tool-completion-audit.js";
 
@@ -600,6 +605,46 @@ describe("remote MCP tool result", () => {
         serverInfo: { name: "test", version: "1" },
       },
     });
+
+  it("preserves display titles separately from canonical remote tool names", async () => {
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const request = new Request(input, init);
+      if (request.method !== "POST") return new Response(null, { status: 405 });
+      const message = (await request.json()) as { id?: number; method?: string };
+      if (message.method === "initialize") return initialize(message.id);
+      if (message.method === "tools/list")
+        return Response.json({
+          jsonrpc: "2.0",
+          id: message.id,
+          result: {
+            tools: [
+              {
+                name: "list_items",
+                title: "Reading API_items",
+                inputSchema: { type: "object" },
+                annotations: { title: "Fallback", readOnlyHint: true },
+              },
+              {
+                name: "write_items",
+                inputSchema: { type: "object" },
+                annotations: { title: "Updating items", readOnlyHint: false },
+              },
+            ],
+          },
+        });
+      return new Response(null, { status: 202 });
+    });
+    expect(
+      await listRemoteMcpTools({
+        endpoint: "https://mcp.example.test/mcp",
+        fetch,
+        resolveHostname: publicResolver,
+      }),
+    ).toMatchObject([
+      { name: "list_items", label: "Reading API_items", readOnly: true },
+      { name: "write_items", label: "Updating items", readOnly: false },
+    ]);
+  });
 
   /** Streamable HTTP peer answering one fixed tool result over an injected
    * fetch. A raw body string (with `$ID` for the request id) can carry JSON

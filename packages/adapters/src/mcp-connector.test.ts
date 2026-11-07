@@ -149,6 +149,56 @@ function mcpFetch(
 }
 
 describe("MCP connector session cache", () => {
+  it("retains concise MCP titles without renaming calls, routes, or permissions", async () => {
+    const tools = [
+      {
+        name: "echo",
+        title: "Reading API_items",
+        inputSchema: { type: "object" },
+        annotations: { title: "Fallback title", readOnlyHint: true },
+      },
+      {
+        name: "write",
+        inputSchema: { type: "object" },
+        annotations: { title: "Updating items", readOnlyHint: false },
+      },
+    ];
+    vi.stubGlobal("fetch", mcpFetch({ failNext: false, initializations: 0, tools }));
+    const prisma = {
+      mcpServer: NO_SHARED_SERVERS,
+      botMcpServer: {
+        findMany: async () => [ASSIGNMENT],
+        findFirst: async () => ASSIGNMENT,
+      },
+    };
+    const connector = new McpConnector(prisma as never, {} as never, { network: TEST_NETWORK });
+    try {
+      expect(
+        await connector.discoverTools({
+          spaceId: "w1",
+          userId: "u1",
+          botId: "bot-1",
+          signal: new AbortController().signal,
+        } as never),
+      ).toMatchObject([
+        {
+          name: "mcp__demo__echo",
+          label: "Reading API_items",
+          readOnly: true,
+          route: { toolName: "echo", resourceId: SERVER.id },
+        },
+        {
+          name: "mcp__demo__write",
+          label: "Updating items",
+          readOnly: false,
+          route: { toolName: "write", resourceId: SERVER.id },
+        },
+      ]);
+    } finally {
+      await connector.close();
+    }
+  });
+
   it.each([
     "revision",
     "discovery failure",

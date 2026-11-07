@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import type { ConnectorTool } from "@orkbot/adapter-kit";
+import { redactSecrets } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
   agentToolDefinitions,
   connectorStepNames,
   describeToolActivity,
+  toAgentTools,
 } from "./pi-runtime-tools.js";
 
 describe("connector tool labels", () => {
@@ -31,6 +37,16 @@ describe("connector tool labels", () => {
     );
   });
 
+  it("keeps Pi tool labels canonical for computer-mode identity and dispatch", () => {
+    const tools = toAgentTools(
+      [{ ...search, name: "computer_observe", label: "Looking at the screen" }],
+      {} as never,
+    );
+    expect(tools.find((tool) => tool.name === "computer_observe")?.label).toBe("computer_observe");
+    const renamed = toAgentTools([{ ...search, name: "VENDOR SEARCH" }], {} as never);
+    expect(renamed[0]).toMatchObject({ name: "VENDOR_SEARCH", label: "VENDOR SEARCH" });
+  });
+
   it("shows a label or the actions a batch runs instead of the model's tool name", () => {
     expect(describeToolActivity(search.name, { queries: [] }, (name) => tools.get(name))).toBe(
       "Finding tools",
@@ -49,6 +65,54 @@ describe("connector tool labels", () => {
     expect(connectorStepNames(batch, odd)).toEqual(["Running tools"]);
     expect(describeToolActivity(batch.name, odd, (name) => tools.get(name))).toBe("Running tools");
     expect(connectorStepNames(undefined, {})).toEqual([]);
+    expect(connectorStepNames({ ...batch, label: undefined }, odd)).toEqual(["Using tools"]);
+    expect(describeToolActivity(batch.name, odd, () => ({ ...batch, label: undefined }))).toBe(
+      "Using tools",
+    );
+  });
+  it("redacts raw names before humanization and uses action descriptor labels", () => {
+    const secret = "Secret_Action";
+    const redact = (text: string) => redactSecrets(text, [secret]);
+    const call = { tools: [{ tool_slug: `${secret}_READ`, arguments: { body: "do not show" } }] };
+    expect(connectorStepNames(batch, call, redact)).toEqual(["[redacted] read"]);
+    expect(describeToolActivity(batch.name, call, (name) => tools.get(name), redact)).toBe(
+      "Using [redacted] read",
+    );
+    const action = { ...search, name: "READ_POSTS", label: "Reading posts" };
+    expect(
+      connectorStepNames(batch, { tools: [{ tool_slug: action.name }] }, redact, (name) =>
+        name === action.name ? action : undefined,
+      ),
+    ).toEqual(["Reading posts"]);
+  });
+
+  it("bounds UTF-8 metadata and summaries without echoing malformed names or arguments", () => {
+    const invalid = ["x".repeat(10_000), "\u0000\u202e", "   "];
+    for (const label of invalid) {
+      expect(describeToolActivity(search.name, {}, () => ({ ...search, label }))).toBe(
+        "Using tools",
+      );
+    }
+    const unicode = { ...search, label: "読".repeat(80) };
+    const line = describeToolActivity(search.name, {}, () => unicode);
+    expect(Buffer.byteLength(line)).toBeLessThanOrEqual(240);
+    expect(line).toBe(unicode.label);
+    expect(describeToolActivity("x".repeat(10_000), {})).toBe("Using tools");
+    expect(describeToolActivity("bad\nname password=private", {})).toBe("Using tools");
+    const many = { tools: Array.from({ length: 101 }, () => ({ tool_slug: "READ" })) };
+    expect(connectorStepNames(batch, many)).toEqual(["Running tools"]);
+    const normal = {
+      tools: ["READ", "WRITE", "LIST"].map((tool_slug) => ({
+        tool_slug,
+        arguments: { password: "private" },
+      })),
+    };
+    expect(describeToolActivity(batch.name, normal, (name) => tools.get(name))).toBe(
+      "Using Read, Write, List",
+    );
+    expect(
+      describeToolActivity(search.name, {}, () => ({ ...search, label: "Reading\nposts\u202e" })),
+    ).toBe("Reading posts");
   });
 });
 

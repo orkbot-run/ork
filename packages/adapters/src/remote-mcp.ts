@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
 import { isDeepStrictEqual } from "node:util";
@@ -97,6 +101,7 @@ export async function listRemoteMcpTools(options: RemoteMcpOptions): Promise<Con
     (await listMcpTools(client, { signal, timeout: MCP_TIMEOUT_MS })).map((tool) => ({
       name: tool.name,
       description: tool.description ?? tool.title ?? tool.name,
+      label: tool.title ?? tool.annotations?.title,
       inputSchema: tool.inputSchema,
       readOnly: tool.annotations?.readOnlyHint,
       batch: composioToolBatch(tool.name),

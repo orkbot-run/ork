@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+
 import type { MessageBlock, ThreadMessage } from "@orkbot/contracts";
 import { cloudAgentBlockFromPayload } from "./cloud-agent.js";
 import { preserveIdentitySource } from "./identity-source.js";
@@ -383,8 +387,12 @@ export function liveActivityLine(
 
 export type ToolStep = { label: string; count: number; note?: string };
 
-export function appendToolStep(steps: readonly ToolStep[], toolName: string): ToolStep[] {
-  const label = humanizeToolName(toolName);
+export function appendToolStep(
+  steps: readonly ToolStep[],
+  toolName: string,
+  displayLabel?: string,
+): ToolStep[] {
+  const label = displayLabel ?? humanizeToolName(toolName);
   const last = steps.at(-1);
   if (last && last.label === label) {
     return [...steps.slice(0, -1), { ...last, count: last.count + 1 }];
@@ -477,10 +485,11 @@ export function appendTextSegment(segments: readonly MessageBlock[], text: strin
 export function appendToolCallSegment(
   segments: readonly MessageBlock[],
   toolName: string,
+  displayLabel?: string,
 ): MessageBlock[] {
   const last = segments.at(-1);
   const priorSteps = last?.kind === "steps" ? last.steps : [];
-  const steps = appendToolStep(priorSteps, toolName);
+  const steps = appendToolStep(priorSteps, toolName, displayLabel);
   if (last?.kind === "steps") {
     return [...segments.slice(0, -1), { kind: "steps", steps }];
   }

@@ -76,6 +76,7 @@ const McpConfigSchema = z.object({
 const ApiOperationSchema = z.object({
   id: z.string().min(1).max(160),
   name: z.string().min(1).max(160).optional(),
+  label: z.string().max(2_000).optional(),
   description: z.string().max(2_000).optional(),
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
   path: z.string().startsWith("/").max(2_048),
@@ -237,6 +238,7 @@ export class InstalledConnectorProvider implements ConnectorProvider {
         const config = ApiConfigSchema.parse(install.config);
         return config.operations.map((operation) => ({
           name: operation.name ?? operation.id,
+          label: operation.label,
           description: operationDescription(
             `${operation.method} ${operation.path}`,
             operation.description,
@@ -585,6 +587,7 @@ export function importOpenApiDocument(document: Record<string, unknown>): {
       operations.push({
         id,
         name: id,
+        ...(typeof operation.summary === "string" ? { label: operation.summary } : {}),
         description:
           typeof operation.description === "string"
             ? operation.description
