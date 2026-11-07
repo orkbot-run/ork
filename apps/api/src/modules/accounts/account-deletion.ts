@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited material remains Apache-2.0; Ork cancellation changes are PolyForm-covered.
+// Inherited material remains Apache-2.0; Ork cancellation and per-attempt account deletion changes are PolyForm-covered.
 
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import {
@@ -23,9 +23,11 @@ import {
   listStalledOrganizationDeletions,
   recordAuditEvent,
   recordComputerRunEnd,
+  releaseAccountDeletionClaim,
   releaseOrganizationDeletionClaim,
   runAsSystem,
   SPACE_DELETION_CLAIM_TIMEOUT_MS,
+  setAccountDeletionLease,
   setOrganizationDeletionLease,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -39,10 +41,58 @@ import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
  */
 export async function deleteAccountContent(deps: SpaceDeletionDeps, userId: string): Promise<void> {
   const { claimId, spaceIds } = await claimSpacesLeavingWithAccount(deps.prisma, userId);
+  const lease = new AbortController();
+  const loseLease = () => lease.abort(new Error("Account deletion lost its claim"));
+  let expiry: ReturnType<typeof setTimeout> | undefined;
+  const keepLeaseFor = (from: number) => {
+    clearTimeout(expiry);
+    expiry = setTimeout(loseLease, from + LEASE_KEPT_MS - Date.now());
+  };
+  keepLeaseFor(Date.now());
+  let renewing: Promise<void> | undefined;
+  const renewal = setInterval(() => {
+    renewing ??= (async () => {
+      const at = new Date();
+      if (await setAccountDeletionLease(deps.prisma, { userId, claimId, at }))
+        keepLeaseFor(at.getTime());
+      else loseLease();
+    })()
+      .catch((error) => getLogger().error("account deletion lease renewal failed", error))
+      .finally(() => {
+        renewing = undefined;
+      });
+  }, LEASE_RENEWAL_MS);
+  const deadline = requestDeadline(DELETION_TIMEOUT_MS, "Account deletion timed out", lease.signal);
+  try {
+    await withAbort(
+      deleteClaimedAccountContent(deps, { userId, claimId, spaceIds, signal: deadline.signal }),
+      deadline.signal,
+    );
+  } finally {
+    clearInterval(renewal);
+    await renewing;
+    clearTimeout(expiry);
+    // Aborted provider work may still be unwinding. Leave its lease to lapse rather than
+    // allowing an immediate competing attempt while that work may still be running.
+    try {
+      if (!deadline.signal.aborted)
+        await releaseAccountDeletionClaim(deps.prisma, { userId, claimId });
+    } finally {
+      deadline.dispose();
+    }
+  }
+}
+
+async function deleteClaimedAccountContent(
+  deps: SpaceDeletionDeps,
+  input: { userId: string; claimId: string; spaceIds: string[]; signal: AbortSignal },
+): Promise<void> {
+  const { userId, claimId, spaceIds, signal } = input;
   const leaving = { OR: [{ userId }, { spaceId: { in: spaceIds } }] };
   await deleteClaimedSpaces(deps, {
     userId,
-    operationId: `account-delete:${userId}`,
+    operationId: claimId,
+    signal,
     claimId,
     spaceIds,
     soleMemberId: userId,
@@ -50,11 +100,14 @@ export async function deleteAccountContent(deps: SpaceDeletionDeps, userId: stri
     computers: leaving,
   });
 
+  signal.throwIfAborted();
   // Pages in Spaces that stay go with the user row; their links' tokens leave the store now.
   const memberPageSecrets = await deps.prisma.$transaction((tx) =>
     deletePageShareSecrets(tx, { userId, spaceId: { notIn: spaceIds } }),
   );
+  signal.throwIfAborted();
   if (deps.secrets) await forgetPageShareSecrets(deps.secrets, memberPageSecrets);
+  signal.throwIfAborted();
 
   // Bot deletion cleans these best-effort; here a failure fails the account deletion, and the
   // retry finds the ids again in bot_deletions.
@@ -62,6 +115,7 @@ export async function deleteAccountContent(deps: SpaceDeletionDeps, userId: stri
     where: { deletedByUserId: userId, spaceId: { notIn: spaceIds } },
     select: { id: true, spaceId: true },
   });
+  signal.throwIfAborted();
   const deletedBySpace = new Map<string, string[]>();
   for (const { id, spaceId } of deletions)
     deletedBySpace.set(spaceId, [...(deletedBySpace.get(spaceId) ?? []), id]);
@@ -78,7 +132,7 @@ type OrganizationDeletionDeps = SpaceDeletionDeps & {
 
 /** Bounds one attempt. Providers may ignore the abort signal, so without it a hung teardown would
  * keep renewing the lease and no later attempt could resume. */
-const ORGANIZATION_DELETION_TIMEOUT_MS = 15 * 60_000;
+const DELETION_TIMEOUT_MS = 15 * 60_000;
 const LEASE_RENEWAL_MS = SPACE_DELETION_CLAIM_TIMEOUT_MS / 5;
 const LEASE_KEPT_MS = SPACE_DELETION_CLAIM_TIMEOUT_MS - LEASE_RENEWAL_MS;
 
@@ -134,7 +188,7 @@ export async function deleteOrganization(
       });
   }, LEASE_RENEWAL_MS);
   const deadline = requestDeadline(
-    ORGANIZATION_DELETION_TIMEOUT_MS,
+    DELETION_TIMEOUT_MS,
     "Organization deletion timed out",
     signal ? anySignal([signal, lease.signal]) : lease.signal,
   );

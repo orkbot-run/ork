@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited account teardown tests remain Apache-2.0; deletion-attempt race tests are Ork additions.
 
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
@@ -24,14 +25,17 @@ import type { PrismaClient, SpaceKeyRecord, SpaceKeyStore } from "@orkbot/db";
 import {
   asSystem,
   ContentKeyRing,
+  claimSpacesLeavingWithAccount,
   computerHomeKey,
   computerScopeKey,
   createDb,
   LocalKeyProvider,
   legacyTeamHomeKey,
   lockSpaceForContentCreation,
+  releaseAccountDeletionClaim,
   runAsSystem,
   SpaceDeletionInProgressError,
+  setAccountDeletionLease,
 } from "@orkbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
@@ -332,6 +336,15 @@ describePostgres("account deletion on bot computers (PostgreSQL)", () => {
   it("finishes on a retry after a provider fails, and a third run changes nothing", async () => {
     sandbox.failDestroy.add(`sb-dedicated-${suffix}`);
     await expect(deleteAccount(ids.leaver)).rejects.toThrow("provider unavailable");
+    expect(await system.user.findUniqueOrThrow({ where: { id: ids.leaver } })).toMatchObject({
+      accountDeletionClaimId: null,
+      accountDeletionClaimedAt: null,
+    });
+    expect(
+      await system.space.count({
+        where: { deletionClaimId: { startsWith: `account-deletion:${ids.leaver}:` } },
+      }),
+    ).toBe(0);
     // A computer the provider could not confirm gone keeps its handle (and a dedicated one its
     // bot), so the retry can destroy it.
     expect(
@@ -349,6 +362,131 @@ describePostgres("account deletion on bot computers (PostgreSQL)", () => {
     expect(await storedFiles(legacyTeamHomeKey(ids.sharedSpace))).toContain(
       `bots/${ids.stayerBot}/work.txt`,
     );
+  });
+
+  it.each([false, true])(
+    "refuses an overlapping account attempt, including shared-only accounts (%s)",
+    async (sharedOnly) => {
+      if (sharedOnly)
+        await system.space.deleteMany({
+          where: { id: { in: [ids.personalSpace, ids.soloSpace] } },
+        });
+      let reached!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      sandbox.beforeDestroy = async () => {
+        reached();
+        await held;
+      };
+      const first = deleteAccount(ids.leaver);
+      try {
+        await entered;
+        const claimed = await system.user.findUniqueOrThrow({ where: { id: ids.leaver } });
+        expect(claimed.accountDeletionClaimId).toMatch(/^account-deletion:/);
+        await expect(deleteAccount(ids.leaver)).rejects.toThrow(SpaceDeletionInProgressError);
+        expect(await system.user.findUniqueOrThrow({ where: { id: ids.leaver } })).toMatchObject({
+          accountDeletionClaimId: claimed.accountDeletionClaimId,
+        });
+        expect(sandbox.destroyed).toEqual([]);
+      } finally {
+        release();
+        await first;
+      }
+      expect(await system.user.findUniqueOrThrow({ where: { id: ids.leaver } })).toMatchObject({
+        accountDeletionClaimId: null,
+        accountDeletionClaimedAt: null,
+      });
+    },
+  );
+
+  it("rolls back all partial claims without releasing another deletion's Space", async () => {
+    await system.space.update({
+      where: { id: ids.soloSpace },
+      data: { deletingAt: new Date(), deletionClaimId: "another-live-attempt" },
+    });
+
+    await expect(deleteAccount(ids.leaver)).rejects.toThrow(SpaceDeletionInProgressError);
+
+    expect(
+      await system.space.findUniqueOrThrow({ where: { id: ids.personalSpace } }),
+    ).toMatchObject({
+      deletingAt: null,
+      deletionClaimId: null,
+    });
+    expect(await system.user.findUniqueOrThrow({ where: { id: ids.leaver } })).toMatchObject({
+      accountDeletionClaimId: null,
+      accountDeletionClaimedAt: null,
+    });
+    expect(await system.space.findUniqueOrThrow({ where: { id: ids.soloSpace } })).toMatchObject({
+      deletionClaimId: "another-live-attempt",
+    });
+    expect(sandbox.destroyed).toEqual([]);
+  });
+
+  it("respects live legacy account claims and resumes a stale claim someone joined", async () => {
+    await system.space.update({
+      where: { id: ids.soloSpace },
+      data: { deletingAt: new Date(), deletionClaimId: `account-deletion:${ids.leaver}` },
+    });
+    await expect(deleteAccount(ids.leaver)).rejects.toThrow(SpaceDeletionInProgressError);
+    await system.spaceMember.create({
+      data: {
+        id: `${ids.soloSpace}-legacy-joined`,
+        spaceId: ids.soloSpace,
+        organizationId: ids.sharedOrg,
+        userId: ids.stayer,
+        role: "member",
+        createdAt: new Date(),
+      },
+    });
+    await system.space.update({
+      where: { id: ids.soloSpace },
+      data: { deletingAt: new Date(0) },
+    });
+
+    await deleteAccount(ids.leaver);
+
+    expect(await system.space.findUniqueOrThrow({ where: { id: ids.soloSpace } })).toMatchObject({
+      deletingAt: null,
+      deletionClaimId: null,
+    });
+    expect(await system.bot.findUnique({ where: { id: ids.soloBot } })).toBeNull();
+    expect(sandbox.destroyed).toContain(`sb-solo-${suffix}`);
+  });
+
+  it("never lets a stale attempt renew or release the replacement attempt's claims", async () => {
+    const first = await claimSpacesLeavingWithAccount(system, ids.leaver);
+    await setAccountDeletionLease(system, {
+      userId: ids.leaver,
+      claimId: first.claimId,
+      at: new Date(0),
+    });
+    const next = await claimSpacesLeavingWithAccount(system, ids.leaver);
+    expect(next.claimId).not.toBe(first.claimId);
+    await releaseAccountDeletionClaim(system, { userId: ids.leaver, claimId: first.claimId });
+    expect(
+      await setAccountDeletionLease(system, {
+        userId: ids.leaver,
+        claimId: first.claimId,
+        at: new Date(),
+      }),
+    ).toBe(false);
+    expect(await system.user.findUniqueOrThrow({ where: { id: ids.leaver } })).toMatchObject({
+      accountDeletionClaimId: next.claimId,
+    });
+    const spaces = await system.space.findMany({ where: { id: { in: next.spaceIds } } });
+    expect(spaces.length).toBe(next.spaceIds.length);
+    expect(spaces.every((space) => space.deletionClaimId === next.claimId)).toBe(true);
+
+    await releaseAccountDeletionClaim(system, { userId: ids.leaver, claimId: next.claimId });
+    const retry = await claimSpacesLeavingWithAccount(system, ids.leaver);
+    expect(retry.claimId).not.toBe(next.claimId);
+    await releaseAccountDeletionClaim(system, { userId: ids.leaver, claimId: retry.claimId });
   });
 
   it("does not let a running computer's later save bring the deleted bot's folder back", async () => {

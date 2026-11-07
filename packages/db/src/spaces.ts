@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Space operations remain Apache-2.0; per-attempt account deletion leases are Ork additions.
+
 import { randomUUID } from "node:crypto";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "./client.js";
@@ -479,40 +484,129 @@ export async function personalOrganizationIds(
 }
 
 /**
- * Claim the spaces nobody else can use once this account is gone: every space of its personal
- * organizations, and spaces elsewhere where it is the only member. A claimed space refuses new
- * content, so nobody who joins later can lose a bot to the teardown. A retry after a failed
- * deletion keeps every space this account already claimed, even one someone has since joined,
- * so the last step can release it. A space another deletion is still working on fails the
- * account deletion until that claim finishes or goes stale.
+ * Claims the account and its leaving Spaces atomically under one attempt identity. The account
+ * lease also covers shared-only accounts and cleanup after the last claimed Space disappears.
+ * A live earlier attempt is never reused; a lapsed attempt is taken over under the new token.
  */
 export async function claimSpacesLeavingWithAccount(
   prisma: PrismaClient,
   userId: string,
 ): Promise<{ claimId: string; spaceIds: string[] }> {
-  const organizationIds = await personalOrganizationIds(prisma, userId);
-  const claimId = `account-deletion:${userId}`;
-  const candidates = await prisma.space.findMany({
-    where: {
-      OR: [
-        { organizationId: { in: organizationIds } },
-        { memberships: { some: { userId }, every: { userId } } },
-        { deletionClaimId: claimId },
-      ],
-    },
-    select: { id: true },
-    orderBy: { createdAt: "asc" },
+  const claimId = `account-deletion:${userId}:${randomUUID()}`;
+  return withTransactionRetry(() =>
+    prisma.$transaction(
+      async (tx) => {
+        await lockAccountDeletion(tx, userId);
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { accountDeletionClaimId: true, accountDeletionClaimedAt: true },
+        });
+        if (!user) throw new IsolationError();
+        const stale = new Date(Date.now() - SPACE_DELETION_CLAIM_TIMEOUT_MS);
+        if (
+          user.accountDeletionClaimId &&
+          user.accountDeletionClaimedAt &&
+          user.accountDeletionClaimedAt >= stale
+        )
+          throw new SpaceDeletionInProgressError();
+        // Exact stored identities avoid treating another account's token as a prefix match.
+        // The previous release used one token for all of this account's attempts.
+        const earlierClaimIds = [
+          `account-deletion:${userId}`,
+          ...(user.accountDeletionClaimId ? [user.accountDeletionClaimId] : []),
+        ];
+        const earlier: Prisma.SpaceWhereInput = {
+          deletionClaimId: { in: earlierClaimIds },
+        };
+        if (await tx.space.count({ where: { ...earlier, deletingAt: { gte: stale } } }))
+          throw new SpaceDeletionInProgressError();
+        await tx.user.update({
+          where: { id: userId },
+          data: { accountDeletionClaimId: claimId, accountDeletionClaimedAt: new Date() },
+        });
+        const organizationIds = await personalOrganizationIds(tx, userId);
+        const candidates = await tx.space.findMany({
+          where: {
+            OR: [
+              { organizationId: { in: organizationIds } },
+              { memberships: { some: { userId }, every: { userId } } },
+              earlier,
+            ],
+          },
+          select: { id: true, deletionClaimId: true },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
+        const spaceIds: string[] = [];
+        for (const candidate of candidates) {
+          // A Space someone joined during a failed earlier attempt still needs its claim
+          // released by deleteClaimedSpace after this account's remaining content is gone.
+          const resuming =
+            candidate.deletionClaimId !== null &&
+            earlierClaimIds.includes(candidate.deletionClaimId);
+          if (resuming) {
+            await lockSpaceDeletion(tx, candidate.id);
+            const taken = await tx.space.updateMany({
+              where: {
+                id: candidate.id,
+                deletionClaimId: candidate.deletionClaimId,
+                OR: [{ deletingAt: null }, { deletingAt: { lt: stale } }],
+              },
+              data: { deletingAt: new Date(), deletionClaimId: claimId },
+            });
+            if (taken.count === 0) throw new SpaceDeletionInProgressError();
+          }
+          if (await claimSpaceForDeletion(tx, candidate.id, claimId, userId))
+            spaceIds.push(candidate.id);
+        }
+        return { claimId, spaceIds };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    ),
+  );
+}
+
+async function lockAccountDeletion(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+  await tx.$queryRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(hashtextextended(${`account-deletion:${userId}`}, 0))::text AS "lock"
+  `);
+}
+
+/** Renews only the account attempt still held by this caller, along with its remaining Spaces. */
+export async function setAccountDeletionLease(
+  prisma: PrismaClient,
+  input: { userId: string; claimId: string; at: Date },
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    await lockAccountDeletion(tx, input.userId);
+    const { count } = await tx.user.updateMany({
+      where: { id: input.userId, accountDeletionClaimId: input.claimId },
+      data: { accountDeletionClaimedAt: input.at },
+    });
+    if (count === 0) return false;
+    await tx.space.updateMany({
+      where: { deletionClaimId: input.claimId },
+      data: { deletingAt: input.at },
+    });
+    return true;
   });
-  const spaceIds: string[] = [];
-  for (const { id } of candidates) {
-    const won = await withTransactionRetry(() =>
-      prisma.$transaction((tx) => claimSpaceForDeletion(tx, id, claimId, userId), {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      }),
-    );
-    if (won) spaceIds.push(id);
-  }
-  return { claimId, spaceIds };
+}
+
+/** Releases only this settled attempt, so a failed deletion can be retried immediately. */
+export async function releaseAccountDeletionClaim(
+  prisma: PrismaClient,
+  input: { userId: string; claimId: string },
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    await lockAccountDeletion(tx, input.userId);
+    await tx.space.updateMany({
+      where: { deletionClaimId: input.claimId },
+      data: { deletingAt: null, deletionClaimId: null },
+    });
+    await tx.user.updateMany({
+      where: { id: input.userId, accountDeletionClaimId: input.claimId },
+      data: { accountDeletionClaimId: null, accountDeletionClaimedAt: null },
+    });
+  });
 }
 
 /**

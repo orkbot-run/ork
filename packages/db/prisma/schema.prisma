@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 schema is preserved. Ork avatar defaults and server update records are PolyForm-covered additions.
+// Inherited Apache-2.0 schema is preserved. Ork avatar defaults, server update records, and account deletion leases are PolyForm-covered additions.
 
 generator client {
   provider = "prisma-client"
@@ -56,6 +56,9 @@ model User {
   /// and until when that hold lasts. Null once the session is paid, expired, or cancelled.
   byokTrialCheckoutOrganizationId String?
   byokTrialCheckoutExpiresAt      DateTime?
+  /// Per-attempt lease for account teardown, including accounts with only shared Spaces.
+  accountDeletionClaimId       String?
+  accountDeletionClaimedAt     DateTime?
   sessions                    Session[]
   accounts                    Account[]
   passkeys                    Passkey[]
