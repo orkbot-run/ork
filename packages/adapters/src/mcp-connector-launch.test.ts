@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork launch credential regression tests are PolyForm-covered.
+// See LICENSE.md.
+
 import { chmod, mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -179,6 +183,75 @@ describe("MCP connector managed stdio launch", () => {
       await connector.close();
     }
   });
+
+  const credentialArgs = [
+    "-y",
+    SPEC,
+    "--region",
+    "eu",
+    "--api-key",
+    "argument-secret",
+    "-H",
+    "Proxy-Authorization:",
+    "Bearer",
+    "proxy-argument-secret",
+    "API_TOKEN=assignment-secret",
+    "https://url-owner:url-password@example.test/mcp",
+  ];
+  const argumentSecrets = [
+    "argument-secret",
+    "proxy-argument-secret",
+    "assignment-secret",
+    "url-owner",
+    "url-password",
+  ];
+
+  it.each([false, true])(
+    "redacts launch credentials from real tool results (legacy args: %s)",
+    async (legacy) => {
+      await publishPackage(root);
+      args = legacy ? undefined : credentialArgs;
+      const connector = connectorFor({ server: { ...SERVER, args: credentialArgs } });
+      try {
+        const [tool] = await connector.discoverTools(contextFor());
+        const events = await callTool(connector, tool!);
+        expect(events).toMatchObject([{ type: "result" }]);
+        const visible = JSON.stringify(events);
+        for (const value of argumentSecrets) expect(visible).not.toContain(value);
+        expect(visible).toContain("--region eu");
+        expect(visible).toContain("[redacted]");
+      } finally {
+        await connector.close();
+      }
+    },
+  );
+
+  it.each(["install", "launch", "discovery"] as const)(
+    "redacts legacy argv from %s failures and health",
+    async (phase) => {
+      await publishPackage(root);
+      const failure = new Error(`${argumentSecrets.join(" ")} ${SPEC} --region eu`);
+      if (phase === "install") vi.spyOn(installer, "ensureMcpPackage").mockRejectedValue(failure);
+      else if (phase === "launch")
+        vi.spyOn(McpSession.prototype, "connectStdio").mockRejectedValue(failure);
+      else vi.spyOn(McpSession.prototype, "listTools").mockRejectedValue(failure);
+      const log = vi.spyOn(getLogger(), "error");
+      const connector = connectorFor({ server: { ...SERVER, args: credentialArgs } });
+      try {
+        const tools = await connector.discoverTools(contextFor());
+        expect(tools).toMatchObject([{ name: "mcp__mail__unavailable" }]);
+        await vi.waitFor(() =>
+          expect(healthWrites()).toContainEqual(expect.objectContaining({ healthStatus: "error" })),
+        );
+        const visible = JSON.stringify({ tools, health: healthWrites(), logs: log.mock.calls });
+        for (const value of argumentSecrets) expect(visible).not.toContain(value);
+        expect(visible).toContain(SPEC);
+        expect(visible).toContain("--region eu");
+      } finally {
+        await connector.close();
+      }
+    },
+  );
 
   it("launches with the arguments kept in the encrypted credential", async () => {
     await publishPackage(root);

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// Modified by Ork contributors for coordinated OAuth refreshes and launch credential redaction.
+// Inherited Apache material remains Apache-2.0; new Ork changes are PolyForm-covered. See LICENSE.md.
 
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
@@ -75,8 +76,8 @@ export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
   const add = (value: string | undefined) => {
     if (!value) return;
     values.push(value);
-    const bearer = value.match(/^Bearer\s+(.+)$/i);
-    if (bearer?.[1]) values.push(bearer[1]);
+    const authorization = value.match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
+    if (authorization?.[1]) values.push(authorization[1]);
   };
   add(material.secret);
   add(material.oauth?.tokens?.access_token);
@@ -93,6 +94,11 @@ export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
   for (const [key, value] of Object.entries(material.env ?? {})) {
     if (isConfiguredSecret(key, value)) add(value);
   }
+  collectLaunchSecrets(material.args ?? [], add);
+  collectLaunchSecrets(
+    Object.values(material.env ?? {}).filter((value) => /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(value)),
+    add,
+  );
   // A file without references is a literal credential (for example a service-account key).
   // One that uses references is covered by the grant values it embeds.
   for (const content of Object.values(material.files ?? {})) {
@@ -121,6 +127,7 @@ function isAuthHeaderKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/-/g, "_");
   return (
     normalized === "authorization" ||
+    normalized === "proxy_authorization" ||
     normalized === "cookie" ||
     normalized === "set_cookie" ||
     normalized === "x_session" ||
@@ -128,6 +135,93 @@ function isAuthHeaderKey(key: string): boolean {
     normalized === "api_key" ||
     normalized === "x_auth_token"
   );
+}
+
+/** Inspect credential carriers, not every argument: package names and ordinary flags stay useful. */
+function collectLaunchSecrets(args: readonly string[], add: (value: string) => void): void {
+  const credentialKey = (key: string) => {
+    const normalized = key
+      .replace(/^-+/, "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase();
+    return (
+      isExplicitCredentialKey(normalized) ||
+      isAmbiguousCredentialKey(normalized) ||
+      ["auth", "key", "passwd", "user", "u"].includes(normalized)
+    );
+  };
+  const credentialValue = (value: string) => {
+    if (!value.trim() || /^(?:Basic|Bearer|Token)$/i.test(value.trim())) return;
+    add(value);
+    if (value.trim() !== value) add(value.trim());
+    const scheme = value.trim().match(/^(?:Basic|Bearer|Token)\s+(.+)$/i);
+    if (scheme?.[1]) add(scheme[1]);
+  };
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]!;
+    const assignment = arg.match(/^([^=]+)=(.*)$/s);
+    if (
+      assignment &&
+      (/^[A-Za-z_][A-Za-z0-9_]*$/.test(assignment[1]!)
+        ? isConfiguredSecret(assignment[1]!, assignment[2]!)
+        : assignment[1]!.startsWith("-") && credentialKey(assignment[1]!))
+    ) {
+      const value = assignment[2]!;
+      credentialValue(
+        /^(?:Basic|Bearer|Token)$/i.test(value) && args[index + 1]
+          ? `${value} ${args[index + 1]}`
+          : value,
+      );
+    }
+    if (!assignment && arg.startsWith("-") && credentialKey(arg)) {
+      let value = args[index + 1];
+      if (value && !value.startsWith("-")) {
+        if (/^(?:Basic|Bearer|Token)$/i.test(value) && args[index + 2]) {
+          value += ` ${args[index + 2]}`;
+        }
+        credentialValue(value);
+      }
+    }
+    // Header names and schemes can be separate argv entries (e.g. -H Authorization: Bearer x).
+    const header = arg.match(/^(?:--header=|-H)?([\w-]+):\s*(.*)$/s);
+    if (header && isAuthHeaderKey(header[1]!)) {
+      let value = header[2]!.trim() || args[index + 1] || "";
+      if (/^(?:Basic|Bearer|Token)$/i.test(value.trim())) {
+        const next = args[index + (header[2] ? 1 : 2)];
+        if (next) value += ` ${next}`;
+      }
+      credentialValue(value);
+    }
+    // URL userinfo and credential query parameters can be echoed independently of the URL.
+    const candidate = /^[A-Za-z][A-Za-z\d+.-]*:\/\//.test(arg) ? arg : (assignment?.[2] ?? arg);
+    try {
+      const url = new URL(candidate);
+      for (const component of [url.username, url.password]) {
+        if (!component) continue;
+        add(component);
+        try {
+          add(decodeURIComponent(component));
+        } catch {
+          // A malformed percent escape still has an exact encoded value to redact.
+        }
+      }
+      for (const [key, value] of url.searchParams) {
+        if (credentialKey(key)) credentialValue(value);
+      }
+      for (const pair of url.search.slice(1).split("&")) {
+        const separator = pair.indexOf("=");
+        if (separator < 0) continue;
+        try {
+          const key = decodeURIComponent(pair.slice(0, separator).replaceAll("+", " "));
+          if (credentialKey(key)) add(pair.slice(separator + 1));
+        } catch {
+          // Malformed query names are not recognized credential carriers.
+        }
+      }
+    } catch {
+      // Most launch arguments are not URLs.
+    }
+  }
 }
 
 /** Explicit credential keys (access_token, api_key, …); numeric values stay redacted. */

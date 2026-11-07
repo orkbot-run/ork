@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork launch credential redaction changes are PolyForm-covered.
+// See LICENSE.md.
+
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -1061,6 +1065,8 @@ export class McpConnector implements ConnectorProvider {
       const loaded = { material, ...(secret ? { secretId: secret.id } : {}) };
       // Rows saved before arguments moved into the secret still hold them in plaintext.
       const args = material.args ?? (Array.isArray(server.args) ? server.args.map(String) : []);
+      // Include legacy plaintext arguments before installation or launch can echo them.
+      launchSecrets.push(...oauthMaterialSecrets({ args }));
       const env = { ...(material.env ?? {}) };
       const onPersisted = (record: { id: string; ref: string; material: OAuthMaterial }) => {
         ref = record.ref;

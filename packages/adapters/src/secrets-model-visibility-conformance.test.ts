@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; Ork launch credential conformance tests are PolyForm-covered.
+// See LICENSE.md.
+
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import type { BotSecretDestination } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
@@ -68,6 +72,76 @@ describe("secrets model-visibility conformance", () => {
   });
 
   describe("oauth material collection", () => {
+    it("collects stdio credentials without registering ordinary launch arguments", () => {
+      const args = [
+        "-y",
+        "@demo/mail-mcp@1.0.0",
+        "--region",
+        "eu",
+        "NODE_ENV=production",
+        "API_SECRET=production",
+        "CUSTOM=neutral-credential-value",
+        "API_KEY=assignment-secret",
+        "--api-key=inline-secret",
+        "--accessToken",
+        "split-secret",
+        "--authorization",
+        "Bearer",
+        "split-bearer-secret",
+        "-H",
+        "Authorization:",
+        "Bearer",
+        "header-split-secret",
+        "--header=Proxy-Authorization: Basic proxy-secret",
+        "https://url-account:url%2Dpassword@example.test/mcp?token=query-secret&region=eu",
+        "--endpoint=https://example.test/?api_key=endpoint-secret",
+        "https://example.test/mcp?token=percent%2Dsecret&password=plus+secret&region=eu",
+        "--token-count",
+        "4096",
+        "--auth-mode",
+        "oauth",
+        "--verbose",
+        "true",
+      ];
+      const expected = [
+        "assignment-secret",
+        "neutral-credential-value",
+        "inline-secret",
+        "split-secret",
+        "split-bearer-secret",
+        "header-split-secret",
+        "proxy-secret",
+        "url-account",
+        "url%2Dpassword",
+        "url-password",
+        "query-secret",
+        "endpoint-secret",
+        "percent-secret",
+        "percent%2Dsecret",
+        "plus secret",
+        "plus+secret",
+      ];
+      const secrets = oauthMaterialSecrets({
+        args,
+        headers: { "Proxy-Authorization": "Basic header-proxy" },
+      });
+      expect(secrets).toEqual(expect.arrayContaining([...expected, "Basic header-proxy"]));
+      for (const value of [
+        "@demo/mail-mcp@1.0.0",
+        "eu",
+        "production",
+        "4096",
+        "oauth",
+        "true",
+        "Bearer",
+      ])
+        expect(secrets).not.toContain(value);
+      const payload = redactConnectorPayload({ text: args.join(" "), values: expected }, secrets);
+      assertNoLeak(payload, expected);
+      expect(JSON.stringify(payload)).toContain("@demo/mail-mcp@1.0.0");
+      expect(JSON.stringify(payload)).toContain("NODE_ENV=production");
+    });
+
     it("redacts Cookie/X-Session and short auth material without corrupting config enums", () => {
       const material: OAuthMaterial = {
         secret: "Bearer static-mcp-token-value",
