@@ -166,6 +166,7 @@ import { ComputerCommandSchema, ProductEventSchema } from "./events.js";
 import { Id, IsoDate, ThinkingLevelSchema } from "./ids.js";
 import {
   IntegrationProviderConfigSchema,
+  IntegrationProviderIdSchema,
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
 import { ModelHeadersSchema } from "./model-headers.js";
@@ -1166,7 +1167,7 @@ export const appContract = {
           /** The card's own message, so it is found however far back it is. */
           messageId: Id.optional(),
           provider: z.string(),
-          connectorId: z.string().default("composio"),
+          connectorId: IntegrationProviderIdSchema.optional(),
         }),
       )
       .output(z.object({ ok: z.literal(true) })),
@@ -1177,13 +1178,18 @@ export const appContract = {
   },
   connections: {
     catalog: oc
-      .input(z.object({ query: z.string().optional(), connectorId: z.string().optional() }))
+      .input(
+        z.object({
+          query: z.string().optional(),
+          connectorId: IntegrationProviderIdSchema.optional(),
+        }),
+      )
       .output(z.array(ConnectionCatalogItemSchema)),
     list: oc.output(z.array(ConnectionSchema)),
     begin: oc
       .input(
         z.object({
-          connectorId: z.string().default("composio"),
+          connectorId: IntegrationProviderIdSchema.optional(),
           provider: z.string(),
           displayName: z.string(),
         }),
@@ -1202,14 +1208,16 @@ export const appContract = {
       .output(ConnectionSchema),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     /** Tools the connected provider exposes. Read-only; no per-tool allowlist yet. */
-    tools: oc.input(z.object({ connectorId: z.string(), provider: z.string() })).output(
-      z.array(
-        z.object({
-          name: z.string(),
-          description: z.string(),
-        }),
+    tools: oc
+      .input(z.object({ connectorId: IntegrationProviderIdSchema, provider: z.string() }))
+      .output(
+        z.array(
+          z.object({
+            name: z.string(),
+            description: z.string(),
+          }),
+        ),
       ),
-    ),
   },
   /** External messaging surface: link state, group channels, agent connections. */
   messaging: {

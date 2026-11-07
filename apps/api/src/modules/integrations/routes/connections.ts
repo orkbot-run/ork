@@ -1,14 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
 
 import type { AdapterContext, ConnectorCatalogItem } from "@orkbot/adapter-kit";
 import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
 import {
+  legacyConnectorId,
   pickReusableConnection,
   planLiveConnectionSync,
   prepareManagedConnectorForTransaction,
-  sanitizeComposioError,
+  resolveConfiguredConnector,
+  sanitizeConnectorError,
 } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
@@ -230,11 +233,10 @@ export function connectionsRoutes(ctx: RouterContext) {
           "connections.catalog",
           context.signal,
         );
-        const providers = input.connectorId
-          ? [deps.connectors.managed(input.connectorId)].filter(
-              (provider): provider is NonNullable<typeof provider> => Boolean(provider),
-            )
-          : deps.connectors.managedProviders();
+        const selected = input.connectorId ? deps.connectors.managed(input.connectorId) : undefined;
+        if (input.connectorId && !selected)
+          throw new ORPCError("BAD_REQUEST", { message: "Connector is not configured" });
+        const providers = selected ? [selected] : deps.connectors.managedProviders();
         const catalogs = await Promise.all(
           providers.map(async (provider): Promise<ConnectorCatalogItem[]> => {
             try {
@@ -280,14 +282,11 @@ export function connectionsRoutes(ctx: RouterContext) {
         }));
       }),
       begin: authed.connections.begin.handler(async ({ context, input }) => {
-        const connector =
-          deps.integrationSettings &&
-          (input.connectorId === "composio" || input.connectorId === "pipedream")
-            ? await deps.integrationSettings.resolve(input.connectorId)
-            : deps.connectors.managed(input.connectorId);
+        const connectorId = input.connectorId ?? legacyConnectorId();
+        const connector = await resolveConfiguredConnector(deps.connectors, connectorId);
         if (!connector) {
           throw new ORPCError("BAD_REQUEST", {
-            message: `Connector ${input.connectorId} is not configured`,
+            message: "Connector is not configured",
           });
         }
         // Share the revoke scope lock so a slug-wide remote delete cannot miss a
@@ -295,14 +294,14 @@ export function connectionsRoutes(ctx: RouterContext) {
         // Complete and revoke hold that lock across provider calls, so wait as long as they may.
         const row = await providerLockTransaction(
           deps.prisma,
-          providerScopeKey(context.actor, input.connectorId, input.provider),
+          providerScopeKey(context.actor, connectorId, input.provider),
           async (tx) => {
-            await lockProviderConnectionScope(tx, context.actor, input.connectorId, input.provider);
+            await lockProviderConnectionScope(tx, context.actor, connectorId, input.provider);
             const existing = await tx.connection.findMany({
               where: {
                 spaceId: context.actor.spaceId,
                 userId: context.actor.userId,
-                connectorId: input.connectorId,
+                connectorId: connectorId,
                 provider: input.provider,
               },
               select: { id: true, status: true },
@@ -324,7 +323,7 @@ export function connectionsRoutes(ctx: RouterContext) {
               data: {
                 spaceId: context.actor.spaceId,
                 userId: context.actor.userId,
-                connectorId: input.connectorId,
+                connectorId: connectorId,
                 provider: input.provider,
                 displayName: input.displayName,
                 status: "pending",
@@ -345,14 +344,9 @@ export function connectionsRoutes(ctx: RouterContext) {
           let busy = false;
           const applied = await providerLockTransaction(
             deps.prisma,
-            providerScopeKey(context.actor, input.connectorId, input.provider),
+            providerScopeKey(context.actor, connectorId, input.provider),
             async (tx) => {
-              await lockProviderConnectionScope(
-                tx,
-                context.actor,
-                input.connectorId,
-                input.provider,
-              );
+              await lockProviderConnectionScope(tx, context.actor, connectorId, input.provider);
               const updated = await tx.connection.updateMany({
                 where: {
                   id: row.id,
@@ -421,19 +415,19 @@ export function connectionsRoutes(ctx: RouterContext) {
                 // that this cleanup then deletes as unreferenced.
                 await providerLockTransaction(
                   deps.prisma,
-                  providerScopeKey(context.actor, input.connectorId, input.provider),
+                  providerScopeKey(context.actor, connectorId, input.provider),
                   async (tx) => {
                     await lockProviderConnectionScope(
                       tx,
                       context.actor,
-                      input.connectorId,
+                      connectorId,
                       input.provider,
                     );
                     const kept = await tx.connection.findMany({
                       where: {
                         spaceId: context.actor.spaceId,
                         userId: context.actor.userId,
-                        connectorId: input.connectorId,
+                        connectorId: connectorId,
                         provider: input.provider,
                         status: { in: ["connected", "pending", "error"] },
                       },
@@ -474,13 +468,13 @@ export function connectionsRoutes(ctx: RouterContext) {
           if (error instanceof ProviderTransactionBusyError) throw error;
           if (error instanceof ConnectorAuthUnavailableError) {
             getLogger().warn("connections.begin app has no usable auth config", {
-              connectorId: input.connectorId,
+              connectorId: connectorId,
               provider: input.provider,
               reason: String(error.cause),
             });
             throw new ORPCError(error.code, { status: 400, message: error.message });
           }
-          throw new ORPCError("BAD_REQUEST", { message: sanitizeComposioError(error) });
+          throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
         }
       }),
       complete: authed.connections.complete.handler(async ({ context, input }) => {
@@ -641,7 +635,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 try {
                   await transactionConnector.complete({ state, code: input.code }, adapterContext);
                 } catch (error) {
-                  throw new ORPCError("BAD_REQUEST", { message: sanitizeComposioError(error) });
+                  throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
                 }
               }
               const ready = await transactionConnector.connectionReady(
@@ -942,7 +936,7 @@ export function connectionsRoutes(ctx: RouterContext) {
                 );
               } catch (error) {
                 if (error instanceof ORPCError) throw error;
-                throw new ORPCError("BAD_REQUEST", { message: sanitizeComposioError(error) });
+                throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
               }
               return {
                 remote: null as null | RemoteRevoke,
@@ -1003,14 +997,15 @@ export function connectionsRoutes(ctx: RouterContext) {
               else getLogger().error(message, error, where);
             }
             if (error instanceof ORPCError) throw error;
-            throw new ORPCError("BAD_REQUEST", { message: sanitizeComposioError(error) });
+            throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
           }
         }
         return { ok: true as const };
       }),
       tools: authed.connections.tools.handler(async ({ context, input }) => {
         const connector = deps.connectors.managed(input.connectorId);
-        if (!connector) return [];
+        if (!connector)
+          throw new ORPCError("BAD_REQUEST", { message: "Connector is not configured" });
         const row = await deps.prisma.connection.findFirst({
           where: {
             spaceId: context.actor.spaceId,

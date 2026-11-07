@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type {
   Composio,
   ConnectedAccountStatus,
@@ -14,6 +18,8 @@ import type {
   ManagedConnectorProvider,
 } from "@orkbot/adapter-kit";
 import { ConnectorAuthUnavailableError } from "@orkbot/adapter-kit";
+import type { ConfiguredIntegration } from "@orkbot/contracts";
+import { IntegrationProviderIdSchema } from "@orkbot/contracts";
 import { humanizeToolName } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { COMPOSIO_MULTI_EXECUTE_TOOL, composioToolBatch } from "./composio-batch.js";
@@ -860,7 +866,7 @@ export class ConnectorRegistry implements ConnectorProvider {
 
   constructor(providers: ConnectorProvider[]) {
     for (const provider of providers) {
-      const id = provider.describe().id;
+      const id = IntegrationProviderIdSchema.parse(provider.describe().id);
       if (this.providers.has(id)) throw new Error(`Duplicate connector id ${id}`);
       this.providers.set(id, provider);
     }
@@ -868,6 +874,20 @@ export class ConnectorRegistry implements ConnectorProvider {
 
   managedProviders(): ManagedConnectorProvider[] {
     return [...this.providers.values()].filter(isManagedConnectorProvider);
+  }
+
+  async configuredProviders(): Promise<ConfiguredIntegration[]> {
+    const providers = await Promise.all(
+      [...this.providers].map(async ([id, provider]) => {
+        if (
+          !isManagedConnectorProvider(provider) ||
+          (provider.isConfigured && !(await provider.isConfigured()))
+        )
+          return null;
+        return { id };
+      }),
+    );
+    return providers.filter((provider): provider is ConfiguredIntegration => provider !== null);
   }
 
   managed(id: string): ManagedConnectorProvider | undefined {
@@ -1079,6 +1099,9 @@ export function composioResultError(summary: string, data: unknown): string {
   const more = details.length - shown.length;
   return `${summary}: ${shown.join("; ")}${more > 0 ? `; +${more} more` : ""}`;
 }
+
+/** Neutral error boundary for callers outside a provider adapter. */
+export const sanitizeConnectorError = sanitizeComposioError;
 
 export function sanitizeComposioError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);

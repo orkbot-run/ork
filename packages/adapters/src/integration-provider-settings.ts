@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; integration adapter resolution follow LICENSE.md.
+
 import type {
   AdapterContext,
   ConnectorCall,
@@ -7,9 +11,25 @@ import type {
 import type { IntegrationProviderConfig, IntegrationProviderId } from "@orkbot/contracts";
 import { IntegrationProviderConfigSchema, IntegrationProviderIdSchema } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
+import { z } from "zod";
 import { ComposioConnector } from "./composio-connector.js";
 import { credentialDigest } from "./credential-digest.js";
 import { PipedreamConnector } from "./pipedream-connector.js";
+
+// Preserve the credential shapes and encrypted record contexts of existing installations.
+const StoredIntegrationConfig = z.discriminatedUnion("provider", [
+  z.object({ provider: z.literal("composio"), apiKey: z.string().trim().min(1).max(16_384) }),
+  z.object({
+    provider: z.literal("pipedream"),
+    clientId: z.string().trim().min(1).max(512),
+    clientSecret: z.string().trim().min(1).max(16_384),
+    projectId: z.string().trim().min(1).max(512),
+    environment: z.enum(["production", "development"]).default("production"),
+  }),
+]);
+const storedProviderIds = StoredIntegrationConfig.options.map(
+  (schema) => schema.shape.provider.value,
+);
 
 /** Resolve persisted credentials on every operation so API and workers observe changes.
  * Cache adapters by ciphertext to preserve sessions without retaining old credentials. */
@@ -28,26 +48,42 @@ export class IntegrationProviderSettings {
     > = {},
     private readonly factory?: (config: IntegrationProviderConfig) => ManagedConnectorProvider,
   ) {
+    for (const id of Object.keys(this.fallbacks)) IntegrationProviderIdSchema.parse(id);
     this.secrets.onChange?.((ref) => {
       for (const [id, entry] of this.cache) if (entry.ciphertext === ref) this.cache.delete(id);
     });
   }
 
   private create(config: IntegrationProviderConfig): ManagedConnectorProvider {
-    if (this.factory) return this.factory(config);
-    return config.provider === "composio"
-      ? new ComposioConnector({ apiKey: config.apiKey })
-      : new PipedreamConnector({ ...config, identitySecret: this.identitySecret });
+    const parsed = StoredIntegrationConfig.parse(config);
+    if (this.factory) return this.factory(parsed);
+    return parsed.provider === "composio"
+      ? new ComposioConnector({ apiKey: parsed.apiKey })
+      : new PipedreamConnector({ ...parsed, identitySecret: this.identitySecret });
+  }
+
+  private ids(): string[] {
+    return [
+      ...new Set([
+        ...storedProviderIds,
+        ...Object.keys(this.fallbacks).filter((id) => Boolean(this.fallback(id))),
+      ]),
+    ];
+  }
+
+  private fallback(id: string) {
+    return Object.hasOwn(this.fallbacks, id) ? this.fallbacks[id] : undefined;
   }
 
   async configured(id: IntegrationProviderId): Promise<boolean> {
+    if (!this.ids().includes(id)) return false;
     return (
       Boolean(
         await this.prisma.integrationProviderConfig.findUnique({
           where: { id },
           select: { id: true },
         }),
-      ) || Boolean(this.fallbacks[id])
+      ) || Boolean(this.fallback(id))
     );
   }
 
@@ -58,10 +94,11 @@ export class IntegrationProviderSettings {
   async prepare(
     id: IntegrationProviderId,
   ): Promise<{ provider: ManagedConnectorProvider | undefined; ref: string | null }> {
+    if (!this.ids().includes(id)) return { provider: undefined, ref: null };
     const row = await this.prisma.integrationProviderConfig.findUnique({ where: { id } });
     if (!row) {
       this.cache.delete(id);
-      return { provider: this.fallbacks[id], ref: null };
+      return { provider: this.fallback(id), ref: null };
     }
     let invalidated = false;
     const unsubscribe =
@@ -75,7 +112,7 @@ export class IntegrationProviderSettings {
       const digest = credentialDigest(plaintext);
       if (cached?.ciphertext === row.ciphertext && cached.digest === digest)
         return { provider: cached.adapter, ref: row.ciphertext };
-      const config = IntegrationProviderConfigSchema.parse(JSON.parse(plaintext));
+      const config = StoredIntegrationConfig.parse(JSON.parse(plaintext));
       if (config.provider !== id)
         throw new Error("Integration provider configuration does not match");
       const adapter = this.create(config);
@@ -87,6 +124,7 @@ export class IntegrationProviderSettings {
   }
 
   async save(config: IntegrationProviderConfig, context: AdapterContext): Promise<void> {
+    config = IntegrationProviderConfigSchema.parse(config);
     const adapter = this.create(config);
     try {
       // Exercises authenticated access before replacing working credentials.
@@ -109,14 +147,12 @@ export class IntegrationProviderSettings {
   }
 
   providers(): ManagedConnectorProvider[] {
-    return IntegrationProviderIdSchema.options.map(
-      (id) => new ConfiguredIntegrationProvider(id, this),
-    );
+    return this.ids().map((id) => new ConfiguredIntegrationProvider(id, this));
   }
 
   /** Warm catalogs for env- and DB-configured providers. Fire-and-forget. */
   warmDirectories(): void {
-    for (const id of IntegrationProviderIdSchema.options) {
+    for (const id of this.ids()) {
       void this.resolve(id)
         .then((provider) => provider?.warmDirectory?.())
         .catch(() => undefined);
@@ -153,6 +189,9 @@ class ConfiguredIntegrationProvider implements ManagedConnectorProvider {
         return (current?.ciphertext ?? null) === prepared.ref;
       },
     };
+  }
+  isConfigured() {
+    return this.settings.configured(this.id);
   }
   describe() {
     return {

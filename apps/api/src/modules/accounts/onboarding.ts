@@ -4,6 +4,11 @@
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 
 import type { ConnectorRegistry } from "@orkbot/adapters";
+import {
+  ConnectorUnavailableError,
+  legacyConnectorId,
+  resolveConfiguredConnector,
+} from "@orkbot/adapters";
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import {
   appConnectCard,
@@ -313,7 +318,7 @@ export async function markAppConnected(
   actor: Actor,
   botId: string,
   provider: string,
-  connectorId = "composio",
+  connectorId?: string,
   threadId?: string,
   messageId?: string,
 ): Promise<void> {
@@ -328,8 +333,9 @@ export async function markAppConnected(
     if (target.kind !== "group" || !target.memberBotIds.includes(botId)) throw new IsolationError();
     thread = { ...ownThread, id: target.threadId };
   }
-  const providerAdapter = deps.connectors.managed(connectorId);
-  if (!providerAdapter) return;
+  const resolvedConnectorId = connectorId ?? legacyConnectorId();
+  const providerAdapter = await resolveConfiguredConnector(deps.connectors, resolvedConnectorId);
+  if (!providerAdapter) throw new ConnectorUnavailableError();
   const catalog = await providerAdapter.catalog(
     {
       operationId: "onboarding.appConnected",
@@ -342,7 +348,7 @@ export async function markAppConnected(
     provider,
   );
   const entry = matchAppCatalog(
-    catalog.filter((item) => item.connectorId === connectorId),
+    catalog.filter((item) => item.connectorId === resolvedConnectorId),
     provider,
   );
   if (!entry?.connected) return;
@@ -375,11 +381,12 @@ export async function markAppConnected(
       if (
         !blocks.some(
           (block) =>
-            matchesAppConnection(block, connectorId, entry.slug) && block.status !== "connected",
+            matchesAppConnection(block, resolvedConnectorId, entry.slug, legacyConnectorId()) &&
+            block.status !== "connected",
         )
       )
         continue;
-      const next = connectedAppBlocks(blocks, connectorId, entry.slug);
+      const next = connectedAppBlocks(blocks, resolvedConnectorId, entry.slug, legacyConnectorId());
       await tx.message.update({ where: { id: message.id }, data: { blocks: next } });
       events.push(
         await appendEventInTransaction(tx, {

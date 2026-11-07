@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { ConnectionCatalogItem, MessageBlock } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
@@ -38,4 +42,20 @@ describe("inline app cards", () => {
       provider: "googlecalendar",
     });
   });
+});
+
+it("updates an id-less legacy card only for its explicit original owner", () => {
+  const card = {
+    kind: "app_connect" as const,
+    provider: "fixture-app",
+    name: "Fixture",
+    description: "",
+    logo: null,
+    status: "pending" as const,
+  };
+  expect(connectedAppBlocks([card], "new-first", "fixture-app", "original-owner")).toEqual([card]);
+  expect(connectedAppBlocks([card], "original-owner", "fixture-app", "original-owner")).toEqual([
+    { ...card, status: "connected" },
+  ]);
+  expect(connectedAppBlocks([card], "original-owner", "fixture-app")).toEqual([card]);
 });

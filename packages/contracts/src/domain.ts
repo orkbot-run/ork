@@ -9,6 +9,7 @@ import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "./connector-errors.js";
 import { BotSettingsValuesSchema, ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind, ThinkingLevelSchema } from "./ids.js";
+import { IntegrationProviderIdSchema } from "./integration-settings.js";
 import {
   McpHeadersSchema,
   McpRemoteEndpointSchema,
@@ -812,7 +813,7 @@ export function isDeletableMemoryDocument(path: string): boolean {
 
 export const ConnectionSchema = z.object({
   id: Id,
-  connectorId: z.string(),
+  connectorId: IntegrationProviderIdSchema,
   provider: z.string(),
   displayName: z.string(),
   status: z.enum(["pending", "connected", "revoked", "error"]),
@@ -822,7 +823,7 @@ export const ConnectionSchema = z.object({
 export type Connection = z.infer<typeof ConnectionSchema>;
 
 export const ConnectionCatalogItemSchema = z.object({
-  connectorId: z.string(),
+  connectorId: IntegrationProviderIdSchema,
   slug: z.string(),
   name: z.string(),
   logo: z.string().nullable(),

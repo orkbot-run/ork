@@ -1,16 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration contracts follow LICENSE.md.
+
 import * as z from "zod";
 
-export const IntegrationProviderIdSchema = z.enum(["composio", "pipedream"]);
-export const IntegrationProviderConfigSchema = z.discriminatedUnion("provider", [
-  z.object({ provider: z.literal("composio"), apiKey: z.string().trim().min(1).max(16384) }),
-  z.object({
-    provider: z.literal("pipedream"),
-    clientId: z.string().trim().min(1).max(512),
-    clientSecret: z.string().trim().min(1).max(16384),
-    projectId: z.string().trim().min(1).max(512),
-    environment: z.enum(["production", "development"]).default("production"),
-  }),
-]);
+/** Opaque adapter ids retain their persisted spelling and case. */
+export const IntegrationProviderIdSchema = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[a-z0-9][a-z0-9._:-]*$/i);
+export const ConfiguredIntegrationSchema = z.object({ id: IntegrationProviderIdSchema });
+export type ConfiguredIntegration = z.infer<typeof ConfiguredIntegrationSchema>;
+
+/** Legacy setup remains disabled; provider-specific secret validation belongs to adapters. */
+export const IntegrationProviderConfigSchema = z
+  .object({ provider: IntegrationProviderIdSchema })
+  .catchall(z.string().max(16_384))
+  .superRefine((value, context) => {
+    const entries = Object.entries(value);
+    const invalidKey = entries.some(
+      ([key]) => !key || key.length > 64 || ["__proto__", "constructor", "prototype"].includes(key),
+    );
+    const bytes = entries.reduce(
+      (total, [key, field]) =>
+        total +
+        new TextEncoder().encode(key).byteLength +
+        new TextEncoder().encode(field).byteLength,
+      0,
+    );
+    if (entries.length > 16 || invalidKey || bytes > 65_536)
+      context.addIssue({ code: "custom", message: "Invalid integration configuration" });
+  });
 export type IntegrationProviderConfig = z.infer<typeof IntegrationProviderConfigSchema>;
 export type IntegrationProviderId = z.infer<typeof IntegrationProviderIdSchema>;
 export const IntegrationSetupStateSchema = z.object({

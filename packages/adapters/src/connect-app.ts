@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { AdapterContext, ManagedConnectorProvider } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { appConnectCard, matchAppCatalog, matchesAppConnection } from "@orkbot/core";
@@ -7,6 +11,7 @@ import {
   createThreadMessageInTransaction,
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
+import { legacyConnectorId } from "./connector-resolution.js";
 
 const RECENT_MESSAGES = 50;
 
@@ -68,7 +73,7 @@ export async function connectApp(
       recent.some((message) =>
         (message.blocks as MessageBlock[]).some(
           (candidate) =>
-            matchesAppConnection(candidate, entry.connectorId, entry.slug) &&
+            matchesAppConnection(candidate, entry.connectorId, entry.slug, legacyConnectorId()) &&
             candidate.status === "pending",
         ),
       )

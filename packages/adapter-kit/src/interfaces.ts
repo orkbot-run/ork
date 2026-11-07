@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { ComputerSize } from "@orkbot/contracts";
 import type {
   AdapterContext,
@@ -283,6 +287,8 @@ export interface ConnectionAuthProvider {
 export interface ManagedConnectorProvider
   extends ConnectorProvider,
     Omit<ConnectionAuthProvider, "describe"> {
+  /** Metadata-only readiness; must not initialize a provider SDK or access its network. */
+  isConfigured?(): Promise<boolean>;
   catalog(context: AdapterContext, query?: string): Promise<ConnectorCatalogItem[]>;
   listConnectedExternalIds(context: AdapterContext): Promise<string[]>;
   /** Connection refs the provider reports as dead until the user reconnects them. */

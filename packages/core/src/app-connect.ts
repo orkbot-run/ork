@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { ConnectionCatalogItem, MessageBlock } from "@orkbot/contracts";
 import { featuredConnectorProvidersMatch } from "./featured-connectors.js";
 
@@ -42,10 +46,11 @@ export function matchesAppConnection(
   block: MessageBlock,
   connectorId: string,
   provider: string,
+  legacyOwner?: string,
 ): block is AppConnectBlock {
   return (
     block.kind === "app_connect" &&
-    (block.connectorId ?? "composio") === connectorId &&
+    (block.connectorId ?? legacyOwner) === connectorId &&
     (block.provider.toLowerCase() === provider.toLowerCase() ||
       featuredConnectorProvidersMatch(block.provider, provider))
   );
@@ -55,9 +60,12 @@ export function connectedAppBlocks(
   blocks: MessageBlock[],
   connectorId: string,
   provider: string,
+  legacyOwner?: string,
 ): MessageBlock[] {
   return blocks.map((block) =>
-    matchesAppConnection(block, connectorId, provider) ? { ...block, status: "connected" } : block,
+    matchesAppConnection(block, connectorId, provider, legacyOwner)
+      ? { ...block, status: "connected" }
+      : block,
   );
 }
 

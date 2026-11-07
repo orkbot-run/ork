@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
 
 import { logSinkHealth } from "@orkbot/logging";
 import { Hono } from "hono";
@@ -13,6 +14,7 @@ import { Hono } from "hono";
 export function healthRoutes(
   details: () => Record<string, unknown>,
   database?: () => Promise<unknown>,
+  internalDetails?: () => Promise<Record<string, unknown>>,
 ) {
   const app = new Hono();
   // One probe at a time: polls during a hung check wait on it instead of taking more connections.
@@ -29,6 +31,16 @@ export function healthRoutes(
       });
     return inFlight;
   };
+  let internalInFlight: Promise<Record<string, unknown> | null> | null = null;
+  const readInternalDetails = (read: () => Promise<Record<string, unknown>>) => {
+    internalInFlight ??= Promise.resolve()
+      .then(read)
+      .catch(() => null)
+      .finally(() => {
+        internalInFlight = null;
+      });
+    return internalInFlight;
+  };
   app.get("/ready", async (c) => {
     const degraded = details().degraded === true;
     const databaseUp = database ? await withinDeadline(probe(database)) : true;
@@ -39,9 +51,24 @@ export function healthRoutes(
     );
   });
   app.get("/health", (c) => c.json({ ok: true }));
-  app.get("/internal/health", (c) => {
+  app.get("/internal/health", async (c) => {
     if (c.req.header("x-forwarded-for") || c.req.header("forwarded")) return c.notFound();
-    return c.json({ ok: true, ...details(), telemetry: logSinkHealth() });
+    const snapshot = { value: {} as Record<string, unknown> };
+    const available =
+      !internalDetails ||
+      (await withinDeadline(
+        readInternalDetails(internalDetails).then((value) => {
+          if (value === null) return false;
+          snapshot.value = value;
+          return true;
+        }),
+      ));
+    return c.json({
+      ok: true,
+      ...details(),
+      ...(available ? snapshot.value : { diagnostics: "unavailable" }),
+      telemetry: logSinkHealth(),
+    });
   });
   return app;
 }

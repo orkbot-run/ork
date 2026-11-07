@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 
+import { ConnectorUnavailableError, legacyConnectorId } from "@orkbot/adapters";
 import type * as db from "@orkbot/db";
 import { appendEventInTransaction } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -266,4 +267,32 @@ it("updates the authorized card's own message even outside the bounded scan", as
     where: { id: "middle" },
     data: { blocks: [{ ...card, status: "connected" }] },
   });
+});
+
+it("keeps an omitted legacy card owner stable and refuses a missing original adapter", async () => {
+  const owner = legacyConnectorId();
+  const { deps, actor, tx } = fixture([
+    { connectorId: owner, slug: "fixture-app", connected: true },
+  ]);
+  const card = { kind: "app_connect", provider: "fixture-app", name: "Fixture", status: "pending" };
+  tx.message.findMany = vi.fn(async () => [{ id: "legacy-card", blocks: [card] }]) as never;
+  const managed = vi.fn((id: string) =>
+    id === owner
+      ? { catalog: async () => [{ connectorId: owner, slug: "fixture-app", connected: true }] }
+      : undefined,
+  );
+  deps.connectors.managed = managed as never;
+  await markAppConnected(deps, actor, "bot", "fixture-app");
+  expect(managed).toHaveBeenCalledWith(owner);
+  expect(tx.message.update).toHaveBeenCalledWith({
+    where: { id: "legacy-card" },
+    data: { blocks: [{ ...card, status: "connected" }] },
+  });
+  tx.message.update.mockClear();
+  managed.mockReturnValue(undefined);
+  await expect(markAppConnected(deps, actor, "bot", "fixture-app")).rejects.toBeInstanceOf(
+    ConnectorUnavailableError,
+  );
+  expect(tx.message.update).not.toHaveBeenCalled();
+  expect(managed.mock.calls.every(([id]) => id === owner)).toBe(true);
 });

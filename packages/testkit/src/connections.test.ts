@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -76,6 +80,53 @@ describeWithDatabase("Composio catalog reconciliation", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("exposes only neutral configured ids and preserves the original owner for legacy requests", async () => {
+    const cookie = await signup(app, `neutral-integrations-${stamp}@orkbot.test`, "Member");
+    const actor = await rpc<Actor>(app, cookie, "me");
+    const metadata = await rpc<{
+      canConfigure: boolean;
+      needsSetup: boolean;
+      providers: Array<{ id: string; configured: boolean }>;
+    }>(app, cookie, "integrationSetup/get");
+    expect(metadata.canConfigure).toBe(false);
+    expect(metadata.needsSetup).toBe(false);
+    expect(metadata.providers).toEqual([
+      { id: "composio", configured: true },
+      { id: "pipedream", configured: true },
+    ]);
+    const system = asSystem(handles.prisma);
+    const before = await system.connection.count({ where: { userId: actor.userId } });
+    const rejected = await app.request("/rpc/connections/begin", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+      body: JSON.stringify({
+        json: { connectorId: "unknown", provider: "GMAIL", displayName: "Mail" },
+      }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(await system.connection.count({ where: { userId: actor.userId } })).toBe(before);
+    const legacy = await rpc<{ connectionId: string }>(app, cookie, "connections/begin", {
+      provider: "GMAIL",
+      displayName: "Legacy mail",
+    });
+    expect(
+      await system.connection.findUnique({
+        where: { id: legacy.connectionId },
+        select: { connectorId: true, userId: true },
+      }),
+    ).toEqual({ connectorId: "composio", userId: actor.userId });
+    await expect((await app.request("/health")).json()).resolves.toEqual({ ok: true });
+    const internal = (await (await app.request("/internal/health")).json()) as {
+      integrations: Array<{ id: string }>;
+    };
+    expect(internal.integrations).toEqual([{ id: "composio" }, { id: "pipedream" }]);
+    expect(internal).not.toHaveProperty("composio");
+    expect(internal).not.toHaveProperty("pipedream");
+    expect(
+      (await app.request("/internal/health", { headers: { forwarded: "for=203.0.113.7" } })).status,
+    ).toBe(404);
   });
 
   it("serializes overlapping backup replacements without mixing users or orders", async () => {

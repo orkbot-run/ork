@@ -7,6 +7,7 @@ import { AgentImportSetupItemSchema } from "./agent-import-setup.js";
 import { botSecretDestinationSchema, LoginFieldLabels, OneTimeCodeTarget } from "./bot-secrets.js";
 import { ApprovalReasonSchema } from "./decision-card.js";
 import { Id, ThinkingLevelSchema } from "./ids.js";
+import { IntegrationProviderIdSchema } from "./integration-settings.js";
 import { McpTransportSchema } from "./mcp.js";
 import { PAGE_TITLE_MAX_LENGTH } from "./pages.js";
 
@@ -178,10 +179,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     answerId: z.string().optional(),
   }),
   z.object({
-    /** Inline app authorization card (Composio-backed): logo, name, one-line
-        description, and an Authorize button that flips to connected. */
+    /** Inline app authorization card with its original connector owner. */
     kind: z.literal("app_connect"),
-    connectorId: z.string().optional(),
+    connectorId: IntegrationProviderIdSchema.optional(),
     provider: z.string(),
     name: z.string(),
     description: z.string(),

@@ -875,10 +875,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     home,
     secrets,
     oauthLogins,
-    integrationSettings,
     mcpOAuth,
     mcp,
-    composio: stack.composio,
     connectors: stack.connector,
     remoteConnectors,
     modelConnectionFetch,
@@ -1520,8 +1518,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       () => ({
         runtime: env.agentRuntime,
         sandbox: env.sandboxProvider,
-        composio: Boolean(stack.composio),
-        pipedream: Boolean(pipedream),
         messaging: Boolean(messaging),
         email: email?.describe().id ?? null,
         billing: billingProvider?.describe().id ?? null,
@@ -1537,6 +1533,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           prisma.$executeRaw`SET LOCAL statement_timeout = 1500`,
           prisma.$queryRaw`SELECT 1`,
         ]),
+      async () => ({ integrations: await stack.connector.configuredProviders() }),
     ),
   );
 

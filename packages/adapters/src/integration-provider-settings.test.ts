@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { AdapterContext, ManagedConnectorProvider } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -238,5 +242,52 @@ describe("integration credentials with Infisical", () => {
       await store.close();
       vi.useRealTimers();
     }
+  });
+});
+
+it("reads configured persisted ids without decrypting credentials or creating SDKs", async () => {
+  const f = fixture();
+  await f.settings.save({ provider: "composio", apiKey: "fake-key" }, context);
+  f.factory.mockClear();
+  const load = vi.spyOn(f.secrets, "load");
+  const providers = f.settings.providers();
+  expect(
+    await Promise.all(
+      providers.map(async (provider) => ({
+        id: provider.describe().id,
+        configured: await provider.isConfigured!(),
+      })),
+    ),
+  ).toEqual([
+    { id: "composio", configured: true },
+    { id: "pipedream", configured: false },
+  ]);
+  expect(load).not.toHaveBeenCalled();
+  expect(f.factory).not.toHaveBeenCalled();
+});
+
+it("rejects unknown provider configuration and validates known secrets only inside the adapter", async () => {
+  const f = fixture();
+  await expect(
+    f.settings.save({ provider: "unknown", apiKey: "fake-key" }, context),
+  ).rejects.toThrow();
+  await expect(f.settings.save({ provider: "composio", apiKey: "" }, context)).rejects.toThrow();
+  expect(await f.settings.resolve("unknown")).toBeUndefined();
+  expect(f.prisma.integrationProviderConfig.upsert).not.toHaveBeenCalled();
+  expect(f.factory).not.toHaveBeenCalled();
+});
+
+it("retains the legacy encrypted record context and permissive unknown-field read compatibility", async () => {
+  const f = fixture();
+  const stored = await f.secrets.put(
+    JSON.stringify({ provider: "composio", apiKey: "fake-legacy-key", unusedLegacyFlag: true }),
+    context,
+    { recordId: "integration-provider:composio" },
+  );
+  f.rows.set("composio", { id: "composio", ciphertext: stored.ciphertext });
+  expect(await f.settings.resolve("composio")).toBe(f.adapter);
+  expect(f.factory).toHaveBeenCalledExactlyOnceWith({
+    provider: "composio",
+    apiKey: "fake-legacy-key",
   });
 });

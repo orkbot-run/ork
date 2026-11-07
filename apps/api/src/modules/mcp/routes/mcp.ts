@@ -6,6 +6,7 @@
 import { createHash } from "node:crypto";
 import { runContinueJob } from "@orkbot/adapter-kit";
 import {
+  ConnectorUnavailableError,
   createPluginMarketplace,
   isTransientFetchError,
   McpOAuthClientRequiredError,
@@ -15,7 +16,7 @@ import {
   prepareGraphqlInstall,
   previewPluginInstall,
   recordMcpServerHealth,
-  sanitizeComposioError,
+  sanitizeConnectorError,
   verifyMcpInstall,
 } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
@@ -271,7 +272,7 @@ export function mcpRoutes(ctx: RouterContext) {
             config = prepared.config;
           }
         } catch (error) {
-          const message = sanitizeComposioError(error);
+          const message = sanitizeConnectorError(error);
           throw new ORPCError("BAD_REQUEST", {
             message: credential ? message.split(credential).join("[redacted]") : message,
           });
@@ -1067,24 +1068,33 @@ export function mcpRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       appConnected: authed.onboarding.appConnected.handler(async ({ context, input }) => {
-        await markAppConnected(
-          onboardingDeps,
-          context.actor,
-          input.botId,
-          input.provider,
-          input.connectorId,
-          input.threadId,
-          input.messageId,
-        );
+        try {
+          await markAppConnected(
+            onboardingDeps,
+            context.actor,
+            input.botId,
+            input.provider,
+            input.connectorId,
+            input.threadId,
+            input.messageId,
+          );
+        } catch (error) {
+          if (error instanceof ConnectorUnavailableError)
+            throw new ORPCError("BAD_REQUEST", { message: error.message });
+          throw error;
+        }
         return { ok: true as const };
       }),
     },
     integrationSetup: {
-      get: authed.integrationSetup.get.handler(() => ({
+      get: authed.integrationSetup.get.handler(async () => ({
         canConfigure: false,
         needsSetup: false,
         webUrl: new URL("/integrations/setup", deps.env.webOrigin).toString(),
-        providers: [],
+        providers: (await deps.connectors.configuredProviders()).map((provider) => ({
+          ...provider,
+          configured: true,
+        })),
       })),
       save: authed.integrationSetup.save.handler(() => {
         throw new ORPCError("FORBIDDEN");

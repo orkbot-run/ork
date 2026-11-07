@@ -3000,6 +3000,45 @@ describe("private API connectors", () => {
 });
 
 describe("connections.begin", () => {
+  it.each(["catalog", "tools", "begin"])(
+    "rejects an explicit unknown connector in %s without choosing another provider",
+    async (procedure) => {
+      const managed = vi.fn(() => undefined);
+      const managedProviders = vi.fn(() => []);
+      const handler = new RPCHandler(
+        createRouter({
+          prisma: {},
+          connectors: { managed, managedProviders },
+          env: { webOrigin: "https://example.test" },
+        } as unknown as RouterDeps),
+      );
+      const response = await handle(
+        handler,
+        new Request(`https://example.test/rpc/connections/${procedure}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            json: { connectorId: "unknown", provider: "fixture-app", displayName: "Fixture" },
+          }),
+        }),
+        {
+          prefix: "/rpc",
+          context: {
+            actor: {
+              userId: "user",
+              spaceId: "space",
+              email: "user@example.test",
+              isDeploymentOwner: false,
+            },
+          },
+        },
+      );
+      expect(response.status).toBe(400);
+      expect(managed).toHaveBeenCalledExactlyOnceWith("unknown");
+      expect(managedProviders).not.toHaveBeenCalled();
+    },
+  );
+
   it("reuses a revoked row for the same provider instead of inserting a duplicate", async () => {
     const begin = vi.fn().mockResolvedValue({ state: "gmail-state", authorizationUrl: null });
     const update = vi.fn().mockResolvedValue({
@@ -4509,6 +4548,9 @@ describe("integration setup authorization", () => {
         prisma: {},
         env: { webOrigin: "https://example.test" },
         integrationSettings: { configured: lookup },
+        connectors: {
+          configuredProviders: async () => (configured ? [{ id: "fixture-adapter" }] : []),
+        },
       } as unknown as RouterDeps;
       const handler = new RPCHandler(createRouter(deps));
       const response = await handle(
@@ -4532,7 +4574,9 @@ describe("integration setup authorization", () => {
       );
       const result = (await response.json()).json;
       expect(result).toMatchObject({ canConfigure: false, needsSetup });
-      expect(result.providers).toEqual([]);
+      expect(result.providers).toEqual(
+        configured ? [{ id: "fixture-adapter", configured: true }] : [],
+      );
       expect(lookup).not.toHaveBeenCalled();
     },
   );
