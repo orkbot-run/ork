@@ -20,6 +20,7 @@ import {
   catalogApprovalMatchesLiveRoute,
   catalogApprovalRequest,
 } from "./approval-effect.js";
+import { BotFileTransferError, botFilePaths } from "./bot-message-files.js";
 import { listVaultItems } from "./bot-secrets.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { sanitizeConnectorError } from "./connector-safety.js";
@@ -322,6 +323,14 @@ export async function prepareToolRequest(
   const { name, executionId, nextApprovedTool } = request;
   if (name === "update_bot") request.args = normalizeOwnBotTarget(request.args, bot.id);
   let { args } = request;
+  if (name === "message_bot" || name === "handoff_to_bot") {
+    try {
+      botFilePaths(args.files);
+    } catch (error) {
+      if (error instanceof BotFileTransferError) return { error: error.message };
+      throw error;
+    }
+  }
   if (name === "save_page") {
     const prepared = await preparePageSaveRequest(ctx, args, nextApprovedTool === name);
     if ("error" in prepared) return prepared;

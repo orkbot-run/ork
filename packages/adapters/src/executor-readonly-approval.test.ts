@@ -4188,3 +4188,33 @@ describe("automatic built-in rule restrictions", () => {
     expect(f.pauseRunForInput).toHaveBeenCalledOnce();
   });
 });
+
+it.each(["message_bot", "handoff_to_bot"])(
+  "stamps file-reader compatibility before the %s approval pauses",
+  async (name) => {
+    const f = fixture({
+      rules: [{ effect: "require_approval", matchKind: "tool", matchValue: name }],
+    });
+    f.setCalls([
+      {
+        name,
+        args: { bot_id: "receiver", message: "Review", files: ["report.txt"] },
+        executionId: "file-approval",
+      },
+    ]);
+    await f.run();
+    expect(f.effects).toHaveLength(1);
+    expect(f.effects[0]).toMatchObject({ kind: name, request: { files: ["report.txt"] } });
+    expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: "running",
+          leaseOwner: expect.any(String),
+          leaseFence: expect.any(Number),
+        }),
+        data: { requiredReaderVersion: 1 },
+      }),
+    );
+    expect(f.pauseRunForInput).toHaveBeenCalledOnce();
+  },
+);

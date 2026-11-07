@@ -34,6 +34,45 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("shows ordinary handoff attachments immediately while the recipient run continues", () => {
+    const initial = { ...snapshot([]), run: threadRun("receiver-run") };
+    const event: ProductEvent = {
+      id: "handoff-event",
+      spaceId: "space",
+      threadId: initial.threadId,
+      botId: "sender",
+      type: "thread.message.created",
+      seq: 4,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      payload: {
+        messageId: "handoff-message",
+        seq: 7,
+        role: "bot",
+        blocks: [
+          { kind: "handoff", fromBotId: "sender", toBotId: "bot-1", text: "Review" },
+          {
+            kind: "file",
+            artifactId: "artifact",
+            name: "report.txt",
+            mimeType: "text/plain",
+            size: 7,
+          },
+        ],
+      },
+    };
+    expect(isThreadSnapshotEvent(event)).toBe(true);
+    const next = reduceThreadSnapshot(initial, event)!;
+    expect(next.messages[0]).toMatchObject({
+      id: "handoff-message",
+      seq: 7,
+      blocks: [
+        expect.objectContaining({ kind: "handoff" }),
+        expect.objectContaining({ kind: "file", artifactId: "artifact" }),
+      ],
+    });
+    expect(next.run?.status).toBe("running");
+    expect(reduceThreadSnapshot(next, event)?.messages).toHaveLength(1);
+  });
   it("shows a committed direct send as queued before its snapshot refresh returns", () => {
     const initial = snapshot([message("user-1", [{ kind: "text", text: "Continue" }], 4)]);
 

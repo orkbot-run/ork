@@ -3899,6 +3899,40 @@ describe("mobile thread refresh targeting", () => {
 });
 
 describe("discarded mobile thread refresh cursor", () => {
+  it("shows ordinary handoff attachments on the live group without waiting for a final refresh", () => {
+    const initial = snapshot();
+    const event = {
+      type: "thread.message.created",
+      seq: 4,
+      threadId: initial.threadId,
+      botId: "sender",
+      payload: {
+        messageId: "handoff-message",
+        seq: 7,
+        role: "bot",
+        blocks: [
+          { kind: "handoff" as const, fromBotId: "sender", toBotId: "bot-1", text: "Review" },
+          {
+            kind: "file" as const,
+            artifactId: "artifact",
+            name: "report.txt",
+            mimeType: "text/plain",
+            size: 7,
+          },
+        ],
+      },
+    };
+    const next = applyMobileThreadEvent(initial, event)!;
+    expect(next.messages[0]).toMatchObject({
+      id: "handoff-message",
+      seq: 7,
+      blocks: [
+        expect.objectContaining({ kind: "handoff" }),
+        expect.objectContaining({ kind: "file", artifactId: "artifact" }),
+      ],
+    });
+    expect(applyMobileThreadEvent(next, event)?.messages).toHaveLength(1);
+  });
   const onScreen = {
     ...snapshot([mobileMessage("shown", [{ kind: "text", text: "shown" }], 2)]),
     cursor: 2,

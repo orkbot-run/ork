@@ -103,6 +103,12 @@ export interface WorkspaceExportLimits {
   maxFiles: number;
 }
 
+/** Bounds a selected directory; maxFiles counts all visited entries, including directories. */
+export interface DirectoryExportLimits extends WorkspaceExportLimits {
+  maxDepth: number;
+  maxMetadataBytes: number;
+}
+
 export interface ComputerRef {
   id: string;
   botId: string;

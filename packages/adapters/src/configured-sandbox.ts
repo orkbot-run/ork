@@ -10,6 +10,7 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  DirectoryExportLimits,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -491,6 +492,34 @@ export class ConfiguredSandbox implements SandboxProvider {
 
   async listFiles(computer: ComputerRef, path: string, context: AdapterContext) {
     return (await this.route(computer)).listFiles(computer, path, context);
+  }
+
+  async sharesWorkspace(computer: ComputerRef): Promise<boolean> {
+    return (await this.route(computer)).sharesWorkspace?.(computer) ?? false;
+  }
+
+  async readTransferFile(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ) {
+    const provider = await this.route(computer);
+    if (!provider.readTransferFile)
+      throw new Error("File transfer is unsupported on this computer");
+    return provider.readTransferFile(computer, path, context, maxBytes);
+  }
+
+  async *exportDirectory(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    limits: DirectoryExportLimits,
+  ) {
+    const provider = await this.route(computer);
+    if (!provider.exportDirectory)
+      throw new Error("Directory transfer is unsupported on this computer");
+    yield* provider.exportDirectory(computer, path, context, limits);
   }
 
   async readFile(

@@ -1011,6 +1011,8 @@ model Run {
   error                String?
   leaseOwner           String?
   leaseFence           Int               @default(0)
+  /// Minimum execution reader protocol; monotonic so older workers cannot replay newer effects.
+  requiredReaderVersion Int              @default(0)
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?

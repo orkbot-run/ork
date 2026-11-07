@@ -59,6 +59,22 @@ export class FakeSandboxProvider implements SandboxProvider {
     };
   }
 
+  sharesWorkspace(_computer: ComputerRef): boolean {
+    return true;
+  }
+
+  async readTransferFile(
+    computer: ComputerRef,
+    filePath: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ) {
+    context.signal.throwIfAborted();
+    const bytes = await this.readFile(computer, filePath, context);
+    if (bytes.byteLength > maxBytes) throw new Error("File exceeds the byte limit");
+    return bytes;
+  }
+
   async provision(
     request: { botId: string; homePath: string },
     _context: AdapterContext,

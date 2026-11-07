@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited supervisor behavior is preserved; bounded bot-file transfer is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -21,6 +26,7 @@ import type { MiddlewareHandler } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
+import { BOT_FILE_TRANSFER_SCRIPT } from "./bot-file-transfer.js";
 import { computerImageEnsurer } from "./computer-image.js";
 import type { ComputerEgressMode } from "./computer-spec.js";
 import {
@@ -841,6 +847,37 @@ app.post("/computers/:id/actions", async (c) => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return c.json({ error: message }, 500);
+  }
+});
+
+app.get("/computers/:id/files/transfer", async (c) => {
+  try {
+    const { container } = await managedContainer(
+      c.req.param("id"),
+      c.req.header("x-orkbot-bot-id"),
+      c.req.header("x-orkbot-space-id"),
+    );
+    const relative = normalizeWorkspaceRelative(c.req.query("path") ?? "");
+    const maxBytes = Number(c.req.query("maxBytes"));
+    if (
+      !Number.isSafeInteger(maxBytes) ||
+      maxBytes < 0 ||
+      maxBytes > uploadSizeFromEnv(process.env)
+    )
+      return c.json({ error: "invalid transfer limit" }, 400);
+    const result = await runContainerCommand(
+      container,
+      ["python3", "-c", BOT_FILE_TRANSFER_SCRIPT, "/home/orkbot", relative, String(maxBytes), "1"],
+      {
+        timeoutMs: 25_000,
+        signal: AbortSignal.any([c.req.raw.signal, AbortSignal.timeout(27_000)]),
+      },
+    );
+    if (result.code === 42) return c.json({ error: "file exceeds transfer limit" }, 413);
+    if (result.code !== 0) return c.json({ error: "file is unavailable for transfer" }, 422);
+    return c.json({ content: result.stdout.trim() });
+  } catch {
+    return c.json({ error: "file is unavailable for transfer" }, 422);
   }
 });
 

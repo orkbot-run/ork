@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited turn snapshots are preserved; delegated-file protocol admission is an Ork addition.
+
 import type { Message, ToolCall } from "@earendil-works/pi-ai";
 import type { AgentRunModel } from "@orkbot/adapter-kit";
 import { withoutThinkingFrom } from "./thinking-signatures.js";
@@ -82,4 +87,24 @@ export function unresolvedTurnCheckpointCalls(messages: Message[]): ToolCall[] {
     }
   }
   return [...pending.values()];
+}
+
+/** A sequential tail can become replayable before its own approval effect exists. */
+export function turnCheckpointRequiresFileReader(messages: Message[]): boolean {
+  return unresolvedTurnCheckpointCalls(messages).some((call) => {
+    let name = call.name;
+    let args: Record<string, unknown> = call.arguments;
+    if (name === "use_tool") {
+      name = typeof args.name === "string" ? args.name : "";
+      args =
+        args.arguments && typeof args.arguments === "object"
+          ? (args.arguments as Record<string, unknown>)
+          : {};
+    }
+    return (
+      (name === "message_bot" || name === "handoff_to_bot") &&
+      args.files !== undefined &&
+      (!Array.isArray(args.files) || args.files.length > 0)
+    );
+  });
 }

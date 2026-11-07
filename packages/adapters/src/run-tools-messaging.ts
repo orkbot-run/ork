@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited messaging behavior is preserved; bounded delegated files are an Ork addition.
+
 import { isBackgroundRunTrigger, redactSecrets } from "@orkbot/core";
 import {
   connectAgent,
@@ -122,6 +127,15 @@ export const messagingTools: ToolHandlers = {
         message: redactSecrets(String(args.message ?? ""), ctx.secrets),
         intent: args.intent as "request" | "result" | "question" | "status" | "fyi" | undefined,
         deliveryKey: effectKey,
+        files: args.files as string[] | undefined,
+      },
+      {
+        fileSource: {
+          computerId: ctx.computer.stored.id,
+          mode: ctx.computer.mode,
+          computer: () => ctx.computer.get("tool", call.name),
+          context: ctx.context,
+        },
       },
     );
     if (!sent.ok) return call.finish({ error: sent.error });
@@ -181,12 +195,26 @@ export const messagingTools: ToolHandlers = {
     const { args, effectKey } = call;
     const groupId = args.group_id ? String(args.group_id).trim() : thread.groupId;
     if (!groupId) return call.finish({ error: "group_id is required outside a group chat" });
-    const result = await handoffToGroupBot(deps, run, groupId, {
-      bot_id: args.bot_id ? String(args.bot_id) : undefined,
-      confirm_name: args.confirm_name ? String(args.confirm_name) : undefined,
-      message: redactSecrets(String(args.message ?? ""), ctx.secrets),
-      deliveryKey: effectKey,
-    });
+    const result = await handoffToGroupBot(
+      deps,
+      run,
+      groupId,
+      {
+        bot_id: args.bot_id ? String(args.bot_id) : undefined,
+        confirm_name: args.confirm_name ? String(args.confirm_name) : undefined,
+        message: redactSecrets(String(args.message ?? ""), ctx.secrets),
+        deliveryKey: effectKey,
+        files: args.files as string[] | undefined,
+      },
+      {
+        fileSource: {
+          computerId: ctx.computer.stored.id,
+          mode: ctx.computer.mode,
+          computer: () => ctx.computer.get("tool", call.name),
+          context: ctx.context,
+        },
+      },
+    );
     if ("ok" in result && result.ok && thread.groupId) ctx.state.handedOff = true;
     return call.finish(result);
   },

@@ -26,6 +26,7 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  DirectoryExportLimits,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -34,6 +35,7 @@ import type {
   WorkspaceDirectoryRequest,
 } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
+import { exportLocalBotDirectory, readLocalBotFile } from "./bot-file-directory.js";
 import {
   applyPlaceholderAction,
   boundedComputerActions,
@@ -170,6 +172,32 @@ export class DesktopSandboxProvider implements SandboxProvider {
 
   describe() {
     return describeDesktopSandbox();
+  }
+
+  sharesWorkspace(_computer: ComputerRef): boolean {
+    return !this.opts.hostRoots?.length;
+  }
+
+  async readTransferFile(
+    computer: ComputerRef,
+    filePath: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ) {
+    const box = this.requiredBox(computer);
+    const target = await localWorkspaceTarget(box.home, filePath, true);
+    return readLocalBotFile(box.home, target, context, maxBytes, true);
+  }
+
+  async *exportDirectory(
+    computer: ComputerRef,
+    directory: string,
+    context: AdapterContext,
+    limits: DirectoryExportLimits,
+  ) {
+    const box = this.requiredBox(computer);
+    const target = await localWorkspaceTarget(box.home, directory, true);
+    yield* exportLocalBotDirectory(box.home, target, context, limits);
   }
 
   async provision(
@@ -392,11 +420,19 @@ export class DesktopSandboxProvider implements SandboxProvider {
   async readFile(
     computer: ComputerRef,
     filePath: string,
-    _context?: AdapterContext,
+    context?: AdapterContext,
     options?: { maxBytes?: number },
   ) {
     const box = this.requiredBox(computer);
     const target = await localWorkspaceTarget(box.home, filePath, true);
+    if (options?.maxBytes !== undefined) {
+      return readLocalBotFile(
+        box.home,
+        target,
+        context ?? { signal: new AbortController().signal },
+        options.maxBytes,
+      );
+    }
     const info = await stat(target);
     if (options?.maxBytes !== undefined && info.size > options.maxBytes) {
       throw new Error(`computer file exceeds ${options.maxBytes} bytes`);

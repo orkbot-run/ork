@@ -129,6 +129,39 @@ export class DockerSandboxProvider implements SandboxProvider {
     };
   }
 
+  sharesWorkspace(_computer: ComputerRef): boolean {
+    return true;
+  }
+
+  async readTransferFile(
+    computer: ComputerRef,
+    filePath: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ) {
+    const relative = normalizeWorkspacePath(filePath);
+    const response = await fetch(
+      this.url(
+        `/computers/${computer.id}/files/transfer?path=${encodeURIComponent(relative)}&maxBytes=${maxBytes}`,
+      ),
+      { headers: this.headers(context, computer.botId), signal: context.signal },
+    );
+    if (!response.ok) {
+      cancelResponseBody(response);
+      throw new Error("File is unavailable for transfer on this computer");
+    }
+    const result = await readSandboxJson<{ content: string }>(
+      response,
+      context.signal,
+      encodedFileResponseLimit(maxBytes),
+    );
+    if (typeof result.content !== "string")
+      throw new Error("Bounded file transfer is unsupported on this computer");
+    const bytes = Buffer.from(result.content, "base64");
+    if (bytes.length > maxBytes) throw new Error("File exceeds the transfer limit");
+    return bytes;
+  }
+
   private url(path: string) {
     return `${this.supervisorUrl.replace(/\/$/, "")}${path}`;
   }

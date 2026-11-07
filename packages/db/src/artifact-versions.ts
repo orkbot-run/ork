@@ -42,6 +42,17 @@ type ArtifactVersionWrite = {
   version: number;
 };
 
+/** Join an existing content transaction without committing artifact metadata separately. */
+export async function resolveArtifactVersionInTransaction(
+  tx: Prisma.TransactionClient,
+  params: Parameters<typeof resolveNextArtifactVersion>[1],
+): Promise<ArtifactVersionWrite> {
+  await tx.$queryRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(hashtextextended(${artifactVersionLockKey(params)}, 0))::text AS "lock"
+  `);
+  return resolveNextArtifactVersion(tx, params);
+}
+
 // Advisory lock queues same-name publishes; retry a unique family-version clash.
 export async function withResolvedArtifactVersion<T>(
   prisma: Pick<PrismaClient, "$transaction">,
@@ -58,10 +69,7 @@ export async function withResolvedArtifactVersion<T>(
   for (let i = 0; i < MAX_VERSION_ALLOCATION_ATTEMPTS; i++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw(Prisma.sql`
-          SELECT pg_advisory_xact_lock(hashtextextended(${artifactVersionLockKey(params)}, 0))::text AS "lock"
-        `);
-        const version = await resolveNextArtifactVersion(tx, params);
+        const version = await resolveArtifactVersionInTransaction(tx, params);
         return await attempt(tx, version);
       });
     } catch (error) {

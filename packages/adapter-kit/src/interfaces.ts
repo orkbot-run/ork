@@ -50,6 +50,7 @@ import type {
   ConnectorEvent,
   ConnectorTool,
   ControlLeaseRef,
+  DirectoryExportLimits,
   MemoryCapabilities,
   MemoryCommitRequest,
   MemoryExportRequest,
@@ -104,6 +105,22 @@ import type {
 } from "./types.js";
 
 export interface SandboxProvider {
+  /** True only when this exact reference exposes one workspace to all Team bots. */
+  sharesWorkspace?(computer: ComputerRef): boolean | Promise<boolean>;
+  /** A bounded regular-file read, including growth and abort; no unbounded SDK fallback. */
+  readTransferFile?(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ): Promise<Uint8Array>;
+  /** Selected regular files only; enforce entry, metadata and byte bounds before yielding. */
+  exportDirectory?(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    limits: DirectoryExportLimits,
+  ): AsyncIterable<PortableFile>;
   /** Providers tied to one external desktop reject references belonging to another connection. */
   ownsReference?(computer: Pick<ComputerRef, "kind" | "providerRef">): boolean;
   /** True when every running minute is billed, so the active-lifetime cap applies. */

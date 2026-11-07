@@ -21,10 +21,14 @@ import {
   createThreadMessageInTransaction,
   isUniqueViolation,
   lockSpaceForWork,
+  RUN_READER_VERSION,
+  RunHistoryWriteError,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import type { BotFileSource } from "./bot-message-files.js";
+import { BotFileTransferError, botFilePaths, prepareBotFiles } from "./bot-message-files.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { runLeaseFor } from "./run-messages.js";
 
@@ -73,7 +77,8 @@ export async function loadBotMessageContext(
 }
 
 export async function messageBot(
-  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs" | "runLease">,
+  deps: Pick<ExecutorDeps, "prisma" | "events" | "jobs" | "runLease"> &
+    Partial<Pick<ExecutorDeps, "sandbox" | "artifacts" | "maxUploadSizeBytes">>,
   run: {
     id: string;
     spaceId: string;
@@ -89,9 +94,16 @@ export async function messageBot(
     message: string;
     intent?: BotMessageIntent;
     deliveryKey?: string;
+    files?: string[];
   },
-  options?: { allowTerminalSource?: boolean; forceUnread?: boolean },
+  options?: { allowTerminalSource?: boolean; forceUnread?: boolean; fileSource?: BotFileSource },
 ) {
+  let filePaths: string[];
+  try {
+    filePaths = botFilePaths(input.files);
+  } catch (error) {
+    return { ok: false as const, error: (error as BotFileTransferError).message };
+  }
   const message = String(input.message ?? "").trim();
   if (!message) return { ok: false as const, error: "message is required" };
   if (message.length > BOT_MESSAGE_MAX_LENGTH) {
@@ -107,7 +119,7 @@ export async function messageBot(
 
   const candidates = await deps.prisma.bot.findMany({
     where: { spaceId: run.spaceId, userId: run.userId, archivedAt: null },
-    select: { id: true, name: true, thread: { select: { id: true } } },
+    select: { id: true, name: true, computerId: true, thread: { select: { id: true } } },
   });
   const target = resolveBotAddress(candidates, {
     botId: input.bot_id,
@@ -137,6 +149,32 @@ export async function messageBot(
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
   // replayable: without this the recipient is messaged twice and woken twice.
   const deliveryKey = input.deliveryKey ? `bot-message:${input.deliveryKey}` : undefined;
+  let prepared: Awaited<ReturnType<typeof prepareBotFiles>>;
+  if (filePaths.length) {
+    try {
+      const prior =
+        deliveryKey &&
+        (await deps.prisma.message.findFirst({
+          where: { clientNonce: deliveryKey, thread: { spaceId: run.spaceId, userId: run.userId } },
+          select: { threadId: true },
+        }));
+      if (prior && prior.threadId !== targetThreadId)
+        return { ok: false as const, error: "File delivery belongs to a different recipient" };
+      if (!prior)
+        prepared = await prepareBotFiles(
+          deps,
+          run,
+          { botId: target.id, threadId: targetThreadId, computerId: target.computerId ?? null },
+          filePaths,
+          deliveryKey,
+          options?.fileSource,
+        );
+    } catch (error) {
+      if (error instanceof BotFileTransferError)
+        return { ok: false as const, error: error.message };
+      throw error;
+    }
+  }
   const replayed = () =>
     ({
       ok: true as const,
@@ -171,136 +209,157 @@ export async function messageBot(
         ok: true;
         replayed: true;
       };
+  let transactionKnownSettled = false;
   try {
     committed = await withTransactionRetry(() =>
-      deps.prisma.$transaction(async (tx) => {
-        await lockSpaceForWork(tx, run.spaceId);
-        for (const threadId of [run.threadId, targetThreadId].sort()) {
-          await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
-        }
-        // Claim the delivery key inside the transaction so a concurrent retry
-        // either sees the winner or loses on the unique (threadId, clientNonce).
-        if (deliveryKey) {
-          const already = await tx.message.findUnique({
-            where: { threadId_clientNonce: { threadId: targetThreadId, clientNonce: deliveryKey } },
+      deps.prisma
+        .$transaction(async (tx) => {
+          await lockSpaceForWork(tx, run.spaceId);
+          for (const threadId of [run.threadId, targetThreadId].sort()) {
+            await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+          }
+          // Claim the delivery key inside the transaction so a concurrent retry
+          // either sees the winner or loses on the unique (threadId, clientNonce).
+          if (deliveryKey) {
+            const already = await tx.message.findUnique({
+              where: {
+                threadId_clientNonce: { threadId: targetThreadId, clientNonce: deliveryKey },
+              },
+              select: { id: true },
+            });
+            if (already) return { ok: true as const, replayed: true as const };
+          }
+
+          const senderStillRunning = await tx.run.findFirst({
+            where: {
+              id: run.id,
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              userId: run.userId,
+              status: options?.allowTerminalSource
+                ? { in: ["completed", "failed", "cancelled"] }
+                : "running",
+            },
             select: { id: true },
           });
-          if (already) return { ok: true as const, replayed: true as const };
-        }
+          if (!senderStillRunning)
+            return { ok: false as const, error: "source run is no longer active" };
 
-        const senderStillRunning = await tx.run.findFirst({
-          where: {
-            id: run.id,
+          // Re-read the target inside the transaction: it can be archived between
+          // resolving it above and committing here.
+          const stillAddressable = await tx.bot.findFirst({
+            where: {
+              id: target.id,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              archivedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!stillAddressable)
+            return { ok: false as const, error: `${target.name} is no longer available` };
+
+          const fileBlocks = (await prepared?.commit(tx)) ?? [];
+
+          // Echo into the sender's chat in the same transaction so a failed notify
+          // cannot leave one side delivered and the other blank.
+          const outbound = await createThreadMessageInTransaction(tx, {
+            threadId: run.threadId,
+            role: "bot",
+            blocks: [outboundBlock, ...fileBlocks],
+            botId: run.botId,
+            runId: run.id,
+            markUnread: options?.forceUnread === true,
+            allowCancelledRun: options?.allowTerminalSource === true,
+            lease: runLeaseFor(deps, run.id),
+          });
+          const inboundBlock: MessageBlock = {
+            kind: "bot_message_received",
+            fromBotId: sender.id,
+            fromBotName: sender.name,
+            text: message,
+            hop,
+            intent,
+            returnToMessageId: outbound.id,
+            ...(prepared?.workspaceFiles ? { workspaceFiles: prepared.workspaceFiles } : {}),
+          };
+          const inbound = await createThreadMessageInTransaction(tx, {
+            threadId: targetThreadId,
+            role: "user",
+            blocks: [inboundBlock, ...fileBlocks],
+            replyToMessageId:
+              sourceContext?.fromBotId === target.id && intent !== "fyi"
+                ? sourceContext.returnToMessageId
+                : undefined,
+            clientNonce: deliveryKey,
+            markUnread: options?.forceUnread === true,
+          });
+          const task = await tx.task.create({
+            data: {
+              spaceId: run.spaceId,
+              botId: target.id,
+              threadId: targetThreadId,
+              userId: run.userId,
+              prompt: wakePrompt,
+              status: "queued",
+            },
+          });
+          const nextRun = await tx.run.create({
+            data: {
+              spaceId: run.spaceId,
+              botId: target.id,
+              threadId: targetThreadId,
+              taskId: task.id,
+              userId: run.userId,
+              status: "queued",
+              trigger: "bot_message",
+              ...(filePaths.length ? { requiredReaderVersion: RUN_READER_VERSION } : {}),
+              sourceMessageId: inbound.id,
+            },
+            select: { id: true },
+          });
+          await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
+          const inboundEvent = await appendEventInTransaction(tx, {
+            spaceId: run.spaceId,
+            threadId: targetThreadId,
+            botId: target.id,
+            type: "thread.message.created",
+            runId: nextRun.id,
+            payload: { messageId: inbound.id, role: "user", blocks: [inboundBlock, ...fileBlocks] },
+          });
+          const outboundEvent = await appendEventInTransaction(tx, {
             spaceId: run.spaceId,
             threadId: run.threadId,
             botId: run.botId,
-            userId: run.userId,
-            status: options?.allowTerminalSource
-              ? { in: ["completed", "failed", "cancelled"] }
-              : "running",
-          },
-          select: { id: true },
-        });
-        if (!senderStillRunning)
-          return { ok: false as const, error: "source run is no longer active" };
-
-        // Re-read the target inside the transaction: it can be archived between
-        // resolving it above and committing here.
-        const stillAddressable = await tx.bot.findFirst({
-          where: {
-            id: target.id,
-            spaceId: run.spaceId,
-            userId: run.userId,
-            archivedAt: null,
-          },
-          select: { id: true },
-        });
-        if (!stillAddressable)
-          return { ok: false as const, error: `${target.name} is no longer available` };
-
-        // Echo into the sender's chat in the same transaction so a failed notify
-        // cannot leave one side delivered and the other blank.
-        const outbound = await createThreadMessageInTransaction(tx, {
-          threadId: run.threadId,
-          role: "bot",
-          blocks: [outboundBlock],
-          botId: run.botId,
-          runId: run.id,
-          markUnread: options?.forceUnread === true,
-          allowCancelledRun: options?.allowTerminalSource === true,
-          lease: runLeaseFor(deps, run.id),
-        });
-        const inboundBlock: MessageBlock = {
-          kind: "bot_message_received",
-          fromBotId: sender.id,
-          fromBotName: sender.name,
-          text: message,
-          hop,
-          intent,
-          returnToMessageId: outbound.id,
-        };
-        const inbound = await createThreadMessageInTransaction(tx, {
-          threadId: targetThreadId,
-          role: "user",
-          blocks: [inboundBlock],
-          replyToMessageId:
-            sourceContext?.fromBotId === target.id && intent !== "fyi"
-              ? sourceContext.returnToMessageId
-              : undefined,
-          clientNonce: deliveryKey,
-          markUnread: options?.forceUnread === true,
-        });
-        const task = await tx.task.create({
-          data: {
-            spaceId: run.spaceId,
-            botId: target.id,
-            threadId: targetThreadId,
-            userId: run.userId,
-            prompt: wakePrompt,
-            status: "queued",
-          },
-        });
-        const nextRun = await tx.run.create({
-          data: {
-            spaceId: run.spaceId,
-            botId: target.id,
-            threadId: targetThreadId,
-            taskId: task.id,
-            userId: run.userId,
-            status: "queued",
-            trigger: "bot_message",
-            sourceMessageId: inbound.id,
-          },
-          select: { id: true },
-        });
-        await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
-        const inboundEvent = await appendEventInTransaction(tx, {
-          spaceId: run.spaceId,
-          threadId: targetThreadId,
-          botId: target.id,
-          type: "thread.message.created",
-          runId: nextRun.id,
-          payload: { messageId: inbound.id, role: "user", blocks: [inboundBlock] },
-        });
-        const outboundEvent = await appendEventInTransaction(tx, {
-          spaceId: run.spaceId,
-          threadId: run.threadId,
-          botId: run.botId,
-          type: "thread.message.created",
-          runId: run.id,
-          allowCancelledRun: options?.allowTerminalSource === true,
-          lease: runLeaseFor(deps, run.id),
-          payload: { messageId: outbound.id, role: "bot", blocks: [outboundBlock] },
-        });
-        return {
-          ok: true as const,
-          runId: nextRun.id,
-          targetEventSeq: inboundEvent.seq,
-          senderEventSeq: outboundEvent.seq,
-        };
-      }, THREAD_LOCK_TRANSACTION_OPTIONS),
+            type: "thread.message.created",
+            runId: run.id,
+            allowCancelledRun: options?.allowTerminalSource === true,
+            lease: runLeaseFor(deps, run.id),
+            payload: {
+              messageId: outbound.id,
+              role: "bot",
+              blocks: [outboundBlock, ...fileBlocks],
+            },
+          });
+          return {
+            ok: true as const,
+            runId: nextRun.id,
+            targetEventSeq: inboundEvent.seq,
+            senderEventSeq: outboundEvent.seq,
+          };
+        }, THREAD_LOCK_TRANSACTION_OPTIONS)
+        .then((result) => {
+          transactionKnownSettled = true;
+          return result;
+        }),
     );
   } catch (error) {
+    if (error instanceof RunHistoryWriteError) transactionKnownSettled = true;
+    if (error instanceof BotFileTransferError) {
+      transactionKnownSettled = true;
+      return { ok: false as const, error: error.message };
+    }
     // Two concurrent retries can both miss the in-transaction lookup; the
     // loser hits the unique key. Treat that as a successful replay.
     if (deliveryKey && isUniqueViolation(error)) {
@@ -311,6 +370,8 @@ export async function messageBot(
       if (winner) return replayed();
     }
     throw error;
+  } finally {
+    await prepared?.cleanup(transactionKnownSettled);
   }
   if ("replayed" in committed) return replayed();
   if (!committed.ok) return committed;

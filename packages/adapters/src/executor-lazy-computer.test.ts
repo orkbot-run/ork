@@ -44,6 +44,8 @@ async function runRoutine(
     nativeUnavailable?: boolean;
     toolFailure?: "abort" | "recover";
     attachments?: "file" | "image";
+    delegation?: "direct" | "group";
+    sourceBeyondHistory?: boolean;
     steering?: boolean;
     steeringAfterFirst?: boolean;
     copyFailureOnce?: boolean;
@@ -75,8 +77,16 @@ async function runRoutine(
     spaceId: "space-1",
     userId: "user-1",
     status: "queued" as string,
-    trigger: options.attachments && !options.steering ? "user" : "routine",
-    sourceMessageId: options.attachments && !options.steering ? "message-1" : null,
+    trigger:
+      options.delegation === "direct"
+        ? "bot_message"
+        : options.delegation === "group"
+          ? "follow_up"
+          : options.attachments && !options.steering
+            ? "user"
+            : "routine",
+    sourceMessageId:
+      options.delegation || (options.attachments && !options.steering) ? "message-1" : null,
     routineId: "routine-1",
     retryOfRunId: null,
     leaseOwner: null as string | null,
@@ -210,21 +220,49 @@ async function runRoutine(
     },
     message: {
       findMany: vi.fn(async () =>
-        options.attachments && !options.steering
-          ? [
-              {
-                id: "message-1",
-                role: "user",
-                runId: run.id,
-                seq: 1,
-                blocks: [attachment],
-                steeringMessages: [],
-              },
-            ]
-          : [],
+        options.sourceBeyondHistory
+          ? Array.from({ length: 200 }, (_, index) => ({
+              id: `newer-${index}`,
+              role: "bot",
+              runId: "other-run",
+              seq: index + 2,
+              blocks: [{ kind: "text", text: "Newer message" }],
+              steeringMessages: [],
+            }))
+          : options.attachments && !options.steering
+            ? [
+                {
+                  id: "message-1",
+                  role: "user",
+                  runId: run.id,
+                  seq: 1,
+                  blocks: [attachment],
+                  steeringMessages: [],
+                },
+              ]
+            : [],
       ),
       findUnique: vi.fn(async () => null),
-      findFirst: vi.fn(async () => null),
+      findFirst: vi.fn(async (args?: { where?: { id?: string } }) =>
+        options.delegation && args?.where?.id === "message-1"
+          ? {
+              id: "message-1",
+              role: options.delegation === "direct" ? "user" : "bot",
+              runId: options.delegation === "direct" ? run.id : "sender-run",
+              blocks: [
+                options.delegation === "direct"
+                  ? {
+                      kind: "bot_message_received",
+                      fromBotId: "sender",
+                      fromBotName: "Sender",
+                      text: "Review",
+                    }
+                  : { kind: "handoff", fromBotId: "sender", toBotId: run.botId, text: "Review" },
+                attachment,
+              ],
+            }
+          : null,
+      ),
       count: vi.fn(async () => 0),
     },
     task: { findUniqueOrThrow: vi.fn(async () => ({ id: run.taskId, prompt: "Sweep the inbox" })) },
@@ -373,6 +411,36 @@ beforeEach(() => {
   provisionComputer.mockReset();
   provisionComputer.mockResolvedValue(COMPUTER);
 });
+
+it.each(["direct", "group"] as const)(
+  "loads and materializes the exact resumed %s delegation outside the history window",
+  async (delegation) => {
+    const result = await runRoutine([{ name: "list_files", args: { path: "" } }], {
+      delegation,
+      sourceBeyondHistory: true,
+      attachments: "file",
+    });
+    expect(result.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "completed" }),
+    );
+    expect(result.prisma.message.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "message-1",
+          threadId: "thread-1",
+          thread: { spaceId: "space-1", userId: "user-1" },
+        },
+      }),
+    );
+    expect(result.sandbox.writeFile).toHaveBeenCalledOnce();
+    expect(result.sandbox.writeFile.mock.invocationCallOrder[0]).toBeLessThan(
+      result.sandbox.listFiles.mock.invocationCallOrder[0]!,
+    );
+    expect(JSON.stringify(result.runtimeRun.mock.calls[0]?.[0])).toContain(
+      "attachments/artifact-1.txt",
+    );
+  },
+);
 
 afterEach(() => {
   vi.clearAllMocks();

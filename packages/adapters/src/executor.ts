@@ -40,6 +40,7 @@ import {
 import type { ThreadEvents } from "@orkbot/db";
 import {
   availableInSpace,
+  declareRunReaderVersion,
   effectiveMemoryScope,
   isPartialReplyClientNonce,
   isTooManyDatabaseConnections,
@@ -59,6 +60,7 @@ import { sanitizedError } from "@orkbot/logging/monitoring";
 import { formatAgentEnvironmentInstruction } from "./agent-environment.js";
 import { createApprovedEffectReplayQueue } from "./approval-effect.js";
 import { PARTIAL_REPLY_NOTE } from "./automated-messages.js";
+import { delegatedFilesInstruction, loadDelegatedFileSource } from "./bot-message-files.js";
 import { loadBotMessageContext } from "./bot-messages.js";
 import {
   commandCredentialRedactions,
@@ -336,6 +338,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // Keep the accepted run unchanged while deletion is pending. A thrown guard leaves
         // both the durable run and its retryable job available if deletion is cancelled.
         await lockSpaceForWork(tx, run.spaceId);
+        await declareRunReaderVersion(tx);
         return tx.run.updateMany({
           where: {
             id: runId,
@@ -822,12 +825,16 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             runId: message.runId,
             blocks: message.blocks as MessageBlock[],
           }));
-        const currentTurnMessage = userTurnMessageForRun(
-          run.trigger,
-          runId,
-          historyMessages,
-          run.sourceMessageId,
-        );
+        const currentTurnMessage =
+          run.trigger === "bot_message" || run.trigger === "follow_up"
+            ? await loadDelegatedFileSource(deps.prisma, run)
+            : userTurnMessageForRun(
+                run.trigger,
+                runId,
+                historyMessages,
+                run.sourceMessageId,
+                bot.id,
+              );
         const turnBlocks = currentTurnMessage?.blocks;
         // A run owns its source message and steering bound to it, including waiting-input
         // replies. message.runId alone is display linkage: a send during background work
@@ -1239,6 +1246,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const attachedFilesPrompt = [
           currentTurnFilesInstruction(currentTurnFiles),
           recentThreadFilesInstruction(recentThreadFiles),
+          await delegatedFilesInstruction(deps, run, storedComputer, turnBlocks),
         ]
           .filter(Boolean)
           .join("\n\n");

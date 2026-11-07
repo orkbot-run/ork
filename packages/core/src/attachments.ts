@@ -335,7 +335,30 @@ export function attachmentsForBot<T extends { botId: string }>(
 
 export function userTurnMessageForRun<
   T extends { id?: string; role: string; runId?: string | null; blocks: MessageBlock[] },
->(trigger: string, runId: string, messages: T[], sourceMessageId?: string | null): T | undefined {
+>(
+  trigger: string,
+  runId: string,
+  messages: T[],
+  sourceMessageId?: string | null,
+  botId?: string,
+): T | undefined {
+  if (trigger === "bot_message" || trigger === "follow_up") {
+    if (!sourceMessageId || !botId) return undefined;
+    return messages.find(
+      (message) =>
+        message.id === sourceMessageId &&
+        message.blocks.some((block) =>
+          trigger === "bot_message"
+            ? message.role === "user" &&
+              block.kind === "bot_message_received" &&
+              block.fromBotId !== botId
+            : message.role === "bot" &&
+              block.kind === "handoff" &&
+              block.toBotId === botId &&
+              block.fromBotId !== botId,
+        ),
+    );
+  }
   if (trigger !== "user" && trigger !== "messaging" && trigger !== "reaction") return undefined;
   return messages.find(
     (message) =>

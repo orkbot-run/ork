@@ -5,6 +5,7 @@
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
   ASK_DECISION_DETAIL_MAX_LENGTH,
+  ATTACHMENT_MAX_COUNT,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BOT_MEMORY_MAX_BYTES,
@@ -1714,6 +1715,13 @@ export const builtinAgentTools: ConnectorTool[] = [
           description: "Exact name of the target bot when bot_id is omitted.",
         },
         message: { type: "string", description: "What to send." },
+        files: {
+          type: "array",
+          items: { type: "string", maxLength: 4096 },
+          maxItems: ATTACHMENT_MAX_COUNT,
+          description:
+            "Optional files or directories on your computer to share with the recipient.",
+        },
         intent: {
           type: "string",
           enum: ["request", "result", "question", "status", "fyi"],
@@ -1741,6 +1749,12 @@ export const builtinAgentTools: ConnectorTool[] = [
           description: "Exact name of the target member when bot_id is omitted.",
         },
         message: { type: "string", description: "What the receiving bot should do next." },
+        files: {
+          type: "array",
+          items: { type: "string", maxLength: 4096 },
+          maxItems: ATTACHMENT_MAX_COUNT,
+          description: "Optional files or directories on your computer for this stage.",
+        },
       },
       required: ["message"],
     },
