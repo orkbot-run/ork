@@ -640,6 +640,11 @@ msgstr "워크스페이스 추가"
 msgid "Added"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "외부 콘텐츠에서 가져온 대상을 자동 실행에 추가하려면 승인이 필요합니다."
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "{ssoName}(으)로 계속"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "대화 요약, 메모리, 검색 내용, 봇 및 스페이스 ID가 컨텍스트 저장과 검색을 위해 전송됩니다."
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "메시지를 입력하세요"
 msgid "Messaged {peer}"
 msgstr "{peer}에게 메시지 보냄"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "자동 실행을 포함한 봇 실행을 위해 메시지, 대화 기록, 봇 지침, 메모리, 첨부 파일, 스크린샷, 연결된 앱의 콘텐츠가 전송됩니다."
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr "메시징"
@@ -5489,6 +5504,10 @@ msgstr ""
 msgid "Return to Ork"
 msgstr "Ork로 돌아가기"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "계속하기 전에 데이터 공유를 검토하세요."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "서비스 설정을 확인한 뒤 다시 테스트하세요."
@@ -5668,6 +5687,11 @@ msgstr "예약 실행 지연"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "명령 실행을 예약하려면 승인이 필요합니다."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr ""
 msgid "Webhook"
 msgstr "웹훅"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "웹훅으로 시작된 작업에는 승인이 필요합니다."
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "수요일"
@@ -7255,6 +7284,11 @@ msgstr "체험 기간이 끝나면 요금제가 연 {annualPrice}로 바뀝니�
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "체험이 끝나면 요금제가 {tierTargetLabel}(으)로 바뀝니다."
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "녹음은 텍스트로 변환하기 위해 전송되며, 재생할 텍스트는 음성을 생성하기 위해 전송됩니다."
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr ""
@@ -7282,43 +7316,3 @@ msgstr "음성 서비스에서 키를 거부했습니다."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "명령 실행을 예약하려면 승인이 필요합니다."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "외부 콘텐츠에서 가져온 대상을 자동 실행에 추가하려면 승인이 필요합니다."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "웹훅으로 시작된 작업에는 승인이 필요합니다."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "자동 실행을 포함한 봇 실행을 위해 메시지, 대화 기록, 봇 지침, 메모리, 첨부 파일, 스크린샷, 연결된 앱의 콘텐츠가 전송됩니다."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "녹음은 텍스트로 변환하기 위해 전송되며, 재생할 텍스트는 음성을 생성하기 위해 전송됩니다."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "대화 요약, 메모리, 검색 내용, 봇 및 스페이스 ID가 컨텍스트 저장과 검색을 위해 전송됩니다."
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "계속하기 전에 데이터 공유를 검토하세요."

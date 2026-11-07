@@ -640,6 +640,11 @@ msgstr "Adicionar workspace"
 msgid "Added"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Adicionar destinos de rotinas vindos de conteúdo externo exige aprovação."
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "Continuar com {ssoName}"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Resumos de conversas, memórias, buscas e IDs de bots e Espaços são enviados para armazenar e recuperar o contexto."
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "Mensagem…"
 msgid "Messaged {peer}"
 msgstr "Enviou mensagem para {peer}"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Mensagens, histórico de conversas, instruções dos bots, memórias, anexos, capturas de tela e conteúdo de aplicativos conectados são enviados para executar seus bots, incluindo rotinas."
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr ""
@@ -5489,6 +5504,10 @@ msgstr ""
 msgid "Return to Ork"
 msgstr "Retorno a Ork"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Revise o compartilhamento de dados antes de continuar."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Revise as configurações do provedor e teste novamente."
@@ -5668,6 +5687,11 @@ msgstr "Execução agendada atrasada"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "Agendar um comando exige aprovação."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr ""
 msgid "Webhook"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Ações acionadas por webhook exigem aprovação."
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "quarta-feira"
@@ -7255,6 +7284,11 @@ msgstr "Quando seu teste terminar, seu plano passa a custar {annualPrice} / ano.
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "Seu plano passa a custar {tierTargetLabel} quando o teste terminar."
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Suas gravações são enviadas para transcrição, e o texto que você reproduz é enviado para gerar a fala."
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr ""
@@ -7282,43 +7316,3 @@ msgstr "Seu provedor de voz recusou a chave."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "Agendar um comando exige aprovação."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "Adicionar destinos de rotinas vindos de conteúdo externo exige aprovação."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "Ações acionadas por webhook exigem aprovação."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "Mensagens, histórico de conversas, instruções dos bots, memórias, anexos, capturas de tela e conteúdo de aplicativos conectados são enviados para executar seus bots, incluindo rotinas."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "Suas gravações são enviadas para transcrição, e o texto que você reproduz é enviado para gerar a fala."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "Resumos de conversas, memórias, buscas e IDs de bots e Espaços são enviados para armazenar e recuperar o contexto."
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "Revise o compartilhamento de dados antes de continuar."

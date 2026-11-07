@@ -8,7 +8,6 @@ import { ChatMarkdown } from "@orkbot/chat-ui/web";
 import type { LoginFieldInput, ThreadMessage } from "@orkbot/contracts";
 import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@orkbot/contracts";
 import {
-  approvalReasonText,
   effectiveApprovalActions,
   isApprovalAskBlock,
   isSecretAskBlock,
@@ -18,6 +17,7 @@ import {
 import { Button, Input, Textarea } from "@orkbot/ui-web";
 import { Check } from "lucide-react";
 import { useState } from "react";
+import { translateApprovalReason } from "../lib/approval-messages";
 import type { RpcClient } from "../lib/rpc";
 import { rpc as selectedSpaceRpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
@@ -89,7 +89,7 @@ export function AskCard(props: AskCardProps) {
 }
 
 function PromptAskCard({ block, canAnswer, onAnswer, rpc = selectedSpaceRpc }: AskCardProps) {
-  const { t, i18n } = useLingui();
+  const { t } = useLingui();
   const [editing, setEditing] = useState(false);
   const [answer, setAnswer] = useState(block.instructionUpdate?.after ?? "");
   const [acceptedAnswer, setAcceptedAnswer] = useState<string>();
@@ -200,10 +200,7 @@ function PromptAskCard({ block, canAnswer, onAnswer, rpc = selectedSpaceRpc }: A
       </div>
       {block.approvalReason ? (
         <p className="mt-2 text-sm text-muted-foreground">
-          {i18n._({
-            id: approvalReasonText(block.approvalReason),
-            message: approvalReasonText(block.approvalReason),
-          })}
+          {translateApprovalReason(block.approvalReason)}
         </p>
       ) : null}
       {block.detail ? (

@@ -640,6 +640,11 @@ msgstr "Çalışma alanı ekle"
 msgid "Added"
 msgstr "Eklendi"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Dış içerikten alınan hedefleri rutinlere eklemek için onay gerekir."
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr "Ödemeye devam et"
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "{ssoName} ile devam et"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Bağlamı saklamak ve geri çağırmak için konuşma özetleri, anılar, aramalar, bot ve Alan kimlikleri gönderilir."
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "Mesaj…"
 msgid "Messaged {peer}"
 msgstr "{peer} botuna mesaj gönderildi"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Rutinler dahil botlarınızı çalıştırmak için mesajlar, sohbet geçmişi, bot talimatları, anılar, ekler, ekran görüntüleri ve bağlı uygulamaların içeriği gönderilir."
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr "Mesajlaşma"
@@ -5489,6 +5504,10 @@ msgstr "{0} aramasına dön"
 msgid "Return to Ork"
 msgstr "Ork'ya dön"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Devam etmeden önce veri paylaşımını gözden geçirin."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Sağlayıcı ayarlarını gözden geçir ve yeniden test et."
@@ -5668,6 +5687,11 @@ msgstr "Zamanlanmış çalıştırma gecikti"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr "Zamanlanmış rutinler"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "Bir komutun zamanlanması için onay gerekir."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr "Web, masaüstü ve mobil uygulamalar"
 msgid "Webhook"
 msgstr "Webhook"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Webhook ile tetiklenen işlemler için onay gerekir."
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "Çarşamba"
@@ -7255,6 +7284,11 @@ msgstr "Deneme süren bitince planın yıllık {annualPrice} olur."
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "Deneme süreniz bittiğinde planınız {tierTargetLabel} olur."
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Kayıtlarınız metne dönüştürülmek üzere, seslendirdiğiniz metinler ise konuşma üretmek üzere gönderilir."
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr "Becerilerin"
@@ -7282,43 +7316,3 @@ msgstr "Ses sağlayıcınız anahtarı reddetti."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Posta kodu"
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "Bir komutun zamanlanması için onay gerekir."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "Dış içerikten alınan hedefleri rutinlere eklemek için onay gerekir."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "Webhook ile tetiklenen işlemler için onay gerekir."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "Rutinler dahil botlarınızı çalıştırmak için mesajlar, sohbet geçmişi, bot talimatları, anılar, ekler, ekran görüntüleri ve bağlı uygulamaların içeriği gönderilir."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "Kayıtlarınız metne dönüştürülmek üzere, seslendirdiğiniz metinler ise konuşma üretmek üzere gönderilir."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "Bağlamı saklamak ve geri çağırmak için konuşma özetleri, anılar, aramalar, bot ve Alan kimlikleri gönderilir."
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "Devam etmeden önce veri paylaşımını gözden geçirin."

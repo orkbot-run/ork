@@ -640,6 +640,11 @@ msgstr "ワークスペースを追加"
 msgid "Added"
 msgstr "追加済み"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "外部コンテンツからルーティンの送信先を追加するには承認が必要です。"
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr "購入手続きへ進む"
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "{ssoName}で続行"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "会話の要約、メモリ、検索、ボットとスペースのIDが、コンテキストの保存と呼び出しのために送信されます。"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "メッセージ…"
 msgid "Messaged {peer}"
 msgstr "{peer}にメッセージを送信しました"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "メッセージ、チャット履歴、ボットの指示、メモリ、添付ファイル、スクリーンショット、接続アプリのコンテンツが、ルーティンを含むボットの実行のために送信されます。"
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr "メッセージ"
@@ -5489,6 +5504,10 @@ msgstr "{0}との通話に戻る"
 msgid "Return to Ork"
 msgstr "Orkに戻る"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "続行する前に、データ共有を確認してください。"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "プロバイダー設定を確認して、もう一度テストしてください。"
@@ -5668,6 +5687,11 @@ msgstr "予定の実行が遅れています"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr "スケジュール済みのルーティン"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "コマンドの実行を予約するには承認が必要です。"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr "Web、デスクトップ、モバイルアプリ"
 msgid "Webhook"
 msgstr "Webhook"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Webhookで開始される操作には承認が必要です。"
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "水曜日"
@@ -7255,6 +7284,11 @@ msgstr "トライアル終了後、プランは年額 {annualPrice} になりま
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "トライアル終了後、プランは {tierTargetLabel} になります。"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "録音は文字起こしのために送信され、再生するテキストは音声生成のために送信されます。"
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr ""
@@ -7282,37 +7316,3 @@ msgstr "音声プロバイダーのキーが拒否されました。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "外部コンテンツからルーティンの送信先を追加するには承認が必要です。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "会話の要約、メモリ、検索、ボットとスペースのIDが、コンテキストの保存と呼び出しのために送信されます。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "メッセージ、チャット履歴、ボットの指示、メモリ、添付ファイル、スクリーンショット、接続アプリのコンテンツが、ルーティンを含むボットの実行のために送信されます。"
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "続行する前に、データ共有を確認してください。"
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "コマンドの実行を予約するには承認が必要です。"
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "Webhookで開始される操作には承認が必要です。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "録音は文字起こしのために送信され、再生するテキストは音声生成のために送信されます。"

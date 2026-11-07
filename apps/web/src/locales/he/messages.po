@@ -640,6 +640,11 @@ msgstr "הוספת סביבת עבודה"
 msgid "Added"
 msgstr "נוסף"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "הוספת יעדים לרוטינות מתוך תוכן חיצוני דורשת אישור."
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "המשך עם {ssoName}"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "סיכומי שיחות, זיכרונות, חיפושים ומזהים של בוטים ומרחבים נשלחים כדי לשמור הקשר ולאחזר אותו."
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "הודעה…"
 msgid "Messaged {peer}"
 msgstr "נשלחה הודעה אל {peer}"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "הודעות, היסטוריית צ'אט, הוראות לבוטים, זיכרונות, קבצים מצורפים, צילומי מסך ותוכן מאפליקציות מחוברות נשלחים לצורך הפעלת הבוטים שלך, כולל רוטינות."
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr "הודעות"
@@ -5489,6 +5504,10 @@ msgstr ""
 msgid "Return to Ork"
 msgstr "חזרה ל-Ork"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "לפני שממשיכים, יש לבדוק את שיתוף הנתונים."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "יש לבדוק את הגדרות הספק ולבדוק שוב."
@@ -5668,6 +5687,11 @@ msgstr "ההפעלה המתוזמנת מתעכבת"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "תזמון פקודה דורש אישור."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr "אפליקציות ווב, דסקטופ ומובייל"
 msgid "Webhook"
 msgstr "Webhook"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "פעולות שמופעלות באמצעות webhook דורשות אישור."
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "יום רביעי"
@@ -7255,6 +7284,11 @@ msgstr "בסיום תקופת הניסיון, המינוי שלך יעלה {annu
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "התוכנית שלך תעלה {tierTargetLabel} כשתקופת הניסיון תסתיים."
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "ההקלטות שלך נשלחות לתמלול, והטקסט שמושמע נשלח ליצירת דיבור."
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr ""
@@ -7282,43 +7316,3 @@ msgstr "ספק הקול שלך דחה את המפתח."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "תזמון פקודה דורש אישור."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "הוספת יעדים לרוטינות מתוך תוכן חיצוני דורשת אישור."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "פעולות שמופעלות באמצעות webhook דורשות אישור."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "הודעות, היסטוריית צ'אט, הוראות לבוטים, זיכרונות, קבצים מצורפים, צילומי מסך ותוכן מאפליקציות מחוברות נשלחים לצורך הפעלת הבוטים שלך, כולל רוטינות."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "ההקלטות שלך נשלחות לתמלול, והטקסט שמושמע נשלח ליצירת דיבור."
-
-#. js-lingui-explicit-id
-#. Shared message; keep the canonical English message as its ID.
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "סיכומי שיחות, זיכרונות, חיפושים ומזהים של בוטים ומרחבים נשלחים כדי לשמור הקשר ולאחזר אותו."
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "לפני שממשיכים, יש לבדוק את שיתוף הנתונים."

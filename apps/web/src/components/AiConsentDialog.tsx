@@ -3,7 +3,6 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useExternalLinkOpener } from "@orkbot/chat-ui/web";
-import { AI_DATA_DISCLOSURES } from "@orkbot/contracts";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,11 +20,12 @@ import {
   currentAiConsentPrompt,
   subscribeAiConsent,
 } from "../lib/ai-consent";
+import { translateAiDataDisclosure } from "../lib/approval-messages";
 import { authClient } from "../lib/auth";
 
 /** The same per-recipient disclosure as mobile, shown only before an AI action needs it. */
 export function AiConsentDialog() {
-  const { t, i18n } = useLingui();
+  const { t } = useLingui();
   const sessionId = authClient.useSession().data?.session.id;
   const { open, dialog } = useExternalLinkOpener();
   useEffect(() => {
@@ -50,7 +50,7 @@ export function AiConsentDialog() {
             <AlertDialogTitle>{t`Share data with ${name}?`}</AlertDialogTitle>
             <AlertDialogDescription>
               {recipient.detail && <span className="mb-2 block">{recipient.detail}</span>}
-              <span className="block">{i18n._(AI_DATA_DISCLOSURES[recipient.use])}</span>
+              <span className="block">{translateAiDataDisclosure(recipient.use)}</span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <button

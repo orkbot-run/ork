@@ -4,6 +4,7 @@
 
 // @vitest-environment jsdom
 
+import { i18n } from "@lingui/core";
 import type { LoginFieldInput } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
@@ -39,6 +40,8 @@ let root: Root;
 let container: HTMLDivElement;
 
 beforeEach(() => {
+  i18n.load("en", {});
+  i18n.activate("en");
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
   document.body.append(container);

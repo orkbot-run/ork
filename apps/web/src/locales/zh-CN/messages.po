@@ -640,6 +640,11 @@ msgstr "添加工作区"
 msgid "Added"
 msgstr "已添加"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "从外部内容向例行任务添加目标地址需要审批。"
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr "继续结账"
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "通过 {ssoName} 继续"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "对话摘要、记忆、搜索请求及 Bot 和空间 ID 会被发送，用于存储和检索上下文。"
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "消息…"
 msgid "Messaged {peer}"
 msgstr "已发给 {peer}"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "消息、聊天记录、Bot 指令、记忆、附件、截图及已连接应用的内容会被发送，以运行你的 Bot，包括例行任务。"
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr "消息"
@@ -5489,6 +5504,10 @@ msgstr "返回与 {0} 的通话"
 msgid "Return to Ork"
 msgstr "返回 Ork"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "继续之前，请查看数据共享。"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "请检查提供方设置并重新测试。"
@@ -5668,6 +5687,11 @@ msgstr "计划执行延迟"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr "定时例行任务"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "安排命令执行需要审批。"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr "Web、桌面和移动应用"
 msgid "Webhook"
 msgstr "Webhook"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "由 Webhook 触发的操作需要审批。"
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "周三"
@@ -7255,6 +7284,11 @@ msgstr "试用结束后，你的套餐将变为每年 {annualPrice}。"
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "试用结束后，你的方案将变为 {tierTargetLabel}。"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "你的录音会被发送用于转录，你播放的文本会被发送用于生成语音。"
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr "你的技能"
@@ -7282,37 +7316,3 @@ msgstr "你的语音提供方拒绝了该密钥。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "从外部内容向例行任务添加目标地址需要审批。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "对话摘要、记忆、搜索请求及 Bot 和空间 ID 会被发送，用于存储和检索上下文。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "消息、聊天记录、Bot 指令、记忆、附件、截图及已连接应用的内容会被发送，以运行你的 Bot，包括例行任务。"
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "继续之前，请查看数据共享。"
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "安排命令执行需要审批。"
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "由 Webhook 触发的操作需要审批。"
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "你的录音会被发送用于转录，你播放的文本会被发送用于生成语音。"

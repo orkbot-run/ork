@@ -640,6 +640,11 @@ msgstr "Workspace hinzufügen"
 msgid "Added"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Das Hinzufügen von Zielen aus externen Inhalten zu einer Routine erfordert eine Genehmigung."
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -1838,6 +1843,11 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Continue with {ssoName}"
 msgstr "Mit {ssoName} fortfahren"
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Gesprächszusammenfassungen, Erinnerungen, Suchanfragen sowie Bot- und Space-IDs werden gesendet, um Kontext zu speichern und abzurufen."
 
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Conversations"
@@ -4071,6 +4081,11 @@ msgstr "Nachricht…"
 msgid "Messaged {peer}"
 msgstr "Nachricht an {peer} gesendet"
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Nachrichten, Chatverlauf, Bot-Anweisungen, Erinnerungen, Anhänge, Screenshots und Inhalte verbundener Apps werden gesendet, um deine Bots auszuführen, einschließlich Routinen."
+
 #: src/pages/settings-nav.ts
 msgid "Messaging"
 msgstr ""
@@ -5489,6 +5504,10 @@ msgstr "Zurück zum Anruf mit {0}"
 msgid "Return to Ork"
 msgstr "Zurück zu Ork"
 
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Prüfe die Anbietereinstellungen und teste erneut."
@@ -5668,6 +5687,11 @@ msgstr "Ausführung verzögert"
 #: src/components/ModelCredits.tsx
 msgid "Scheduled routines"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Scheduling a command requires approval."
+msgstr "Das Planen eines Befehls erfordert eine Genehmigung."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Scopes (optional)"
@@ -7042,6 +7066,11 @@ msgstr ""
 msgid "Webhook"
 msgstr ""
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Per Webhook ausgelöste Aktionen erfordern eine Genehmigung."
+
 #: src/lib/cron.ts
 msgid "Wednesday"
 msgstr "Mittwoch"
@@ -7255,6 +7284,11 @@ msgstr "Nach dem Testzeitraum kostet dein Plan {annualPrice} / Jahr."
 msgid "Your plan becomes {tierTargetLabel} when your trial ends."
 msgstr "Nach dem Testzeitraum kostet dein Plan {tierTargetLabel}."
 
+#. js-lingui-explicit-id
+#: src/lib/approval-messages.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Deine Aufnahmen werden zur Transkription gesendet, und Text, den du abspielst, wird zur Spracherzeugung gesendet."
+
 #: src/components/integrations/skills-dialog.tsx
 msgid "Your skills"
 msgstr ""
@@ -7282,37 +7316,3 @@ msgstr "Der Schlüssel deines Stimmanbieters wurde abgelehnt."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Adding routine destinations from outside content requires approval."
-msgstr "Das Hinzufügen von Zielen aus externen Inhalten zu einer Routine erfordert eine Genehmigung."
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
-msgstr "Gesprächszusammenfassungen, Erinnerungen, Suchanfragen sowie Bot- und Space-IDs werden gesendet, um Kontext zu speichern und abzurufen."
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
-msgstr "Nachrichten, Chatverlauf, Bot-Anweisungen, Erinnerungen, Anhänge, Screenshots und Inhalte verbundener Apps werden gesendet, um deine Bots auszuführen, einschließlich Routinen."
-
-#: src/lib/user-error.ts
-msgid "Review data sharing before continuing."
-msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Scheduling a command requires approval."
-msgstr "Das Planen eines Befehls erfordert eine Genehmigung."
-
-#. js-lingui-explicit-id
-#: ../../packages/core/src/decision-card.ts
-msgid "Webhook-triggered actions require approval."
-msgstr "Per Webhook ausgelöste Aktionen erfordern eine Genehmigung."
-
-#. js-lingui-explicit-id
-#: ../../packages/contracts/src/ai-consent.ts
-msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
-msgstr "Deine Aufnahmen werden zur Transkription gesendet, und Text, den du abspielst, wird zur Spracherzeugung gesendet."
