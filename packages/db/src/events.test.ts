@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited thread-event tests remain Apache-2.0; Space admission fixture support is an Ork addition.
+
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import { BOT_SECRET_VALUE_MAX_LENGTH, encodeLoginSecret } from "@orkbot/contracts";
 import {
@@ -530,6 +535,7 @@ describe("thread lock transaction budget", () => {
 
   it("clears a thread with the explicit budget", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -2442,6 +2448,7 @@ describe("answerWaitingRunWithTextInTransaction", () => {
 
   it("leaves approval and secret cards on the dedicated answer path", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       message: {
         findMany: vi.fn().mockResolvedValue([
           {
@@ -3810,6 +3817,7 @@ describe("queue admission beside pending cards", () => {
     "admits a %s wake beside waiting_input",
     async (trigger) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         thread: { update: vi.fn().mockResolvedValue({ nextMessageSeq: 3, nextEventSeq: 4 }) },
         message: {
           create: vi.fn().mockResolvedValue({ id: "message-new", seq: 2 }),
@@ -3863,6 +3871,7 @@ describe("queue admission beside pending cards", () => {
       text: "hi all",
     };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       run: {
         findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: "continuation" }),
@@ -3911,6 +3920,7 @@ describe("queue admission beside pending cards", () => {
 
   it("creates a pending steering continuation without attaching it to a paused run", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       run: {
         findFirst: vi.fn(async ({ where }: { where: { status: { in: string[] } } }) =>
           where.status.in.includes("waiting_input") ? { id: "paused" } : null,
@@ -3955,6 +3965,7 @@ describe("sendUserMessage", () => {
     const fanout = new TestFanout();
     const publish = vi.spyOn(fanout, "publish");
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4089,6 +4100,7 @@ describe("sendUserMessage", () => {
 
   it("pins an agreed inbound model onto the run it creates", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4148,6 +4160,7 @@ describe("sendUserMessage", () => {
 
   it("persists steering instead of starting a parallel run when the bot is busy", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4210,6 +4223,7 @@ describe("sendUserMessage", () => {
     "handles a message arriving at a $waiting takeover request ($trigger, group: $group)",
     async ({ waiting, trigger, group }) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         thread: {
           update: vi
             .fn()
@@ -4289,6 +4303,7 @@ describe("sendUserMessage", () => {
 
   it("keeps an agreed inbound model on steering while a routine run is busy", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4351,6 +4366,7 @@ describe("sendUserMessage", () => {
 
   it("keeps an inbound message pending while the creation intro is active", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4403,6 +4419,7 @@ describe("sendUserMessage", () => {
 
   it("keeps a messaging inbound's origin on the hold behind the creation intro", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4463,6 +4480,7 @@ describe("sendUserMessage", () => {
     "keeps the message pending when the busy run is a %s turn",
     async (trigger) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
         thread: {
           update: vi
             .fn()
@@ -4522,6 +4540,7 @@ describe("sendUserMessage", () => {
 
   it("steers the conversational run when a parallel webhook turn is also active", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -4634,6 +4653,7 @@ describe("sendUserMessage", () => {
           ]
         : [{ kind: "text" as const, text: "hello" }];
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: {
         update: vi
           .fn()
@@ -5030,6 +5050,7 @@ describe("claimSteering", () => {
 describe("clearThread", () => {
   it("reports a committed clear even when the legacy binding sweep fails", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       thread: {
         update: vi
@@ -5078,6 +5099,7 @@ describe("clearThread", () => {
     const fanout = new TestFanout();
     const publish = vi.spyOn(fanout, "publish");
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       thread: {
         update: vi
@@ -5168,6 +5190,7 @@ describe("clearThread", () => {
   it("scopes group clear lease cleanup to cancelled run ids", async () => {
     const fanout = new TestFanout();
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       thread: {
         update: vi
@@ -5247,6 +5270,7 @@ describe("appendEvent", () => {
   it("exports only committed run metadata and a coarse error kind, never error text", async () => {
     const created = { ...event(4), type: "run.failed", runId: "run-1" };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 5 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "failed" }) },
       event: { create: vi.fn().mockResolvedValue(created) },
@@ -5318,6 +5342,7 @@ describe("appendEvent", () => {
     const fanout = new TestFanout();
     const publish = vi.spyOn(fanout, "publish");
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 8 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }) },
       event: { create: vi.fn() },
@@ -5350,6 +5375,7 @@ describe("appendEvent", () => {
     const deadlock = Object.assign(new Error("write conflict or a deadlock"), { code: "P2034" });
     const created = { ...event(4), type: "thread.progress", runId: "run-1" };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 5 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "running" }) },
       // The sequence already advanced when the insert deadlocks; Postgres rolls both back.
@@ -5382,6 +5408,7 @@ describe("appendEvent", () => {
       code: "P2025",
     });
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockRejectedValue(missing) },
       run: { findUnique: vi.fn() },
       event: { create: vi.fn() },
@@ -5409,6 +5436,7 @@ describe("appendEvent", () => {
 
   it("does not retry a run that can no longer write history", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 5 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }) },
       event: { create: vi.fn() },
@@ -5437,6 +5465,7 @@ describe("appendEvent", () => {
       runId: "run-2",
     };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 9 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "running" }) },
       event: { create: vi.fn().mockResolvedValue(created) },
@@ -5472,6 +5501,7 @@ describe("appendEvent", () => {
       payload: { delta: "hello \uFFFD", streaming: true },
     };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 4 }) },
       run: {
         findUnique: vi.fn().mockResolvedValue({ status: "running" }),
@@ -5516,6 +5546,7 @@ describe("appendEvent", () => {
     const publish = vi.spyOn(fanout, "publish");
     const created = { ...event(7), type: "run.cancelled", runId: "run-1" };
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 8 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "cancelled" }) },
       event: { create: vi.fn().mockResolvedValue(created) },
@@ -5546,6 +5577,7 @@ describe("appendEvent", () => {
 
   it("rejects run.cancelled while the run is not cancelled", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 8 }) },
       run: { findUnique: vi.fn().mockResolvedValue({ status: "running" }) },
       event: { create: vi.fn() },
@@ -5569,6 +5601,7 @@ describe("appendEvent", () => {
 
   it("rejects run.cancelled without a run", async () => {
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 8 }) },
       run: { findUnique: vi.fn() },
       event: { create: vi.fn() },

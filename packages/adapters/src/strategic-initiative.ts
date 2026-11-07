@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited behavior remains Apache-2.0; Space work admission guards are Ork additions.
+
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
 import {
@@ -8,6 +13,8 @@ import {
 } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
+  lockSpaceForWork,
+  SpaceDeletionInProgressError,
   STRATEGIC_INITIATIVE_NONCE_PREFIX,
   spaceHasModelAccess,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -246,6 +253,7 @@ async function queueStrategicInitiativeRun(
   const nonce = strategicInitiativeNonce(bot.id, now);
   try {
     return await deps.prisma.$transaction(async (tx) => {
+      await lockSpaceForWork(tx, bot.spaceId);
       // Match the thread-before-bot lock order used by message creation. Recheck after
       // the lock so concurrent sweeps and a user starting work cannot race this claim.
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${bot.thread!.id} FOR UPDATE`;
@@ -289,7 +297,7 @@ async function queueStrategicInitiativeRun(
       return run.id;
     }, THREAD_LOCK_TRANSACTION_OPTIONS);
   } catch (error) {
-    if (isUniqueViolation(error)) return null;
+    if (isUniqueViolation(error) || error instanceof SpaceDeletionInProgressError) return null;
     throw error;
   }
 }

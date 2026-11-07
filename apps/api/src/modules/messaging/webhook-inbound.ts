@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited webhook delivery remains Apache-2.0; Space work admission responses are Ork additions.
 
 import { createHash } from "node:crypto";
 import type { JobPublisher, SecretStore } from "@orkbot/adapter-kit";
@@ -9,7 +10,9 @@ import { inboundRoutineModelPin } from "@orkbot/adapters";
 import type { MessageBlock } from "@orkbot/contracts";
 import { escapePromptData, inboundRoutineBlock, messageBlockForArtifact } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
+import { SpaceDeletionInProgressError } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { HTTPException } from "hono/http-exception";
 
 export const WEBHOOK_MAX_BODY_BYTES = 64 * 1024;
 export const WEBHOOK_SECRET_KIND = "webhook";
@@ -300,29 +303,35 @@ export async function deliverWebhookEvent(
     : undefined;
   const pin = inboundRoutineModelPin(input.routines);
 
-  const sent = await deps.events.sendUserMessage({
-    spaceId: target.bot.spaceId,
-    threadId: target.threadId,
-    botId: target.bot.id,
-    userId: target.bot.userId,
-    blocks: [
-      { kind: "text", text: promptText },
-      ...(input.artifacts ?? []).map(messageBlockForArtifact),
-    ],
-    prompt: promptText,
-    trigger: "webhook",
-    clientNonce,
-    ...(input.allowParallelRun ? { allowParallelRun: true } : {}),
-    ...(pin.modelProvider && pin.modelId
-      ? {
-          modelPin: {
-            modelProvider: pin.modelProvider,
-            modelId: pin.modelId,
-            thinkingLevel: pin.thinkingLevel ?? null,
-          },
-        }
-      : {}),
-  });
+  const sent = await deps.events
+    .sendUserMessage({
+      spaceId: target.bot.spaceId,
+      threadId: target.threadId,
+      botId: target.bot.id,
+      userId: target.bot.userId,
+      blocks: [
+        { kind: "text", text: promptText },
+        ...(input.artifacts ?? []).map(messageBlockForArtifact),
+      ],
+      prompt: promptText,
+      trigger: "webhook",
+      clientNonce,
+      ...(input.allowParallelRun ? { allowParallelRun: true } : {}),
+      ...(pin.modelProvider && pin.modelId
+        ? {
+            modelPin: {
+              modelProvider: pin.modelProvider,
+              modelId: pin.modelId,
+              thinkingLevel: pin.thinkingLevel ?? null,
+            },
+          }
+        : {}),
+    })
+    .catch((error: unknown) => {
+      if (error instanceof SpaceDeletionInProgressError)
+        throw new HTTPException(409, { message: error.message });
+      throw error;
+    });
 
   if (sent.runId) {
     await deps.jobs.enqueue(runContinueJob(sent.runId)).catch((error) => {

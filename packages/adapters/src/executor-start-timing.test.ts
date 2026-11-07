@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
+
 import type * as DbModule from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
@@ -45,6 +49,7 @@ function fixture(
 ) {
   const run = {
     id: "run-1",
+    spaceId: "space-1",
     botId: "bot-1",
     status: "queued",
     leaseFence: 0,
@@ -52,6 +57,10 @@ function fixture(
     startedAt: options.startedAt ?? null,
   };
   const prisma = {
+    $queryRaw: vi.fn(async () => []),
+    $transaction: vi.fn(
+      async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),
+    ),
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => ({ ...run, status: "leased" })),

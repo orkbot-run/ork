@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited bot delivery tests remain Apache-2.0; Space admission fixture support is an Ork addition.
+
 import type { PrismaClient } from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -288,7 +293,9 @@ describe("messaging another bot", () => {
       { allowTerminalSource: true },
     );
     expect(sent.ok).toBe(true);
-    expect(harness.tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(
+      harness.tx.$queryRaw.mock.calls.filter(([query]) => String(query).includes("FOR UPDATE")),
+    ).toHaveLength(2);
     expect(harness.tx.message.create).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

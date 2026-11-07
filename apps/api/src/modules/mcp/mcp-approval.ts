@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Space work admission guards are Ork additions.
 
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import { QUEUE_HOLDING_RUN_STATUSES } from "@orkbot/core";
@@ -9,6 +10,7 @@ import {
   appendEventInTransaction,
   availableInSpace,
   IsolationError,
+  lockSpaceForWork,
   withTransactionRetry,
 } from "@orkbot/db";
 import { requireBotThread } from "#modules/threads/bot-thread";
@@ -167,6 +169,9 @@ export async function resolveMcpApprovalCards<T>(
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(
       async (tx) => {
+        // Approval is a new user intent; take the Space lock before any card or assignment row.
+        // Dismissal remains available during deletion because it starts no new work.
+        if (input.status === "connected") await lockSpaceForWork(tx, actor.spaceId);
         const selectable =
           input.threadId === undefined
             ? (block: ApprovalBlock) => block.status !== "connected"

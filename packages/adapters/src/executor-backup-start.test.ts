@@ -102,6 +102,7 @@ async function runTurn({
       (row) => row.userId === where.userId && matchesProvider(where.provider, row.provider),
     );
   const tx = {
+    $queryRaw: vi.fn(async () => []),
     $executeRaw: vi.fn().mockResolvedValue(1),
     userModelCredential: {
       findFirst: vi.fn(
@@ -134,7 +135,9 @@ async function runTurn({
   });
   const prisma = withModelRoles(
     {
-      $transaction: vi.fn(async (work: (client: typeof tx) => Promise<unknown>) => work(tx)),
+      $transaction: vi.fn(async (work: (client: typeof tx) => Promise<unknown>) =>
+        work({ ...prisma, ...tx }),
+      ),
       user: { findUnique: vi.fn(async () => null) },
       run: {
         findUnique: vi.fn(async () => run),

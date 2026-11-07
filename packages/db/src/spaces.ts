@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Space operations remain Apache-2.0; per-attempt account deletion leases are Ork additions.
+// Inherited Space operations remain Apache-2.0; per-attempt account deletion leases and work admission guards are Ork additions.
 
 import { randomUUID } from "node:crypto";
 import { displayName } from "@orkbot/core";
@@ -223,7 +223,33 @@ export async function lockSpaceForContentCreation(
   });
   if (!membership) throw new IsolationError();
   if (membership.space.deletingAt) throw new SpaceDeletionInProgressError();
+  await assertSpaceAcceptsWork(tx, input.spaceId);
   return { organizationId: membership.organizationId };
+}
+
+/** Serialize work admission with deletion before taking any thread, bot, routine, or computer lock. */
+export async function lockSpaceForWork(
+  tx: Prisma.TransactionClient,
+  spaceId: string,
+): Promise<void> {
+  await tx.$queryRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock_shared(hashtextextended(${spaceId}, 0))::text AS "lock"
+  `);
+  await assertSpaceAcceptsWork(tx, spaceId);
+}
+
+async function assertSpaceAcceptsWork(
+  tx: Prisma.TransactionClient,
+  spaceId: string,
+): Promise<void> {
+  // Existing target foreign keys and caller authorization establish the Space. A missing row
+  // cannot accept new work; its target write fails normally without exposing another Space.
+  // A row lock rejects an obsolete Serializable/Repeatable Read snapshot after waiting for
+  // deletion, so a retried transaction observes the claim instead of admitting stale work.
+  const spaces = await tx.$queryRaw<Array<{ deletingAt: Date | null }>>(Prisma.sql`
+    SELECT "deletingAt" FROM spaces WHERE id = ${spaceId} FOR SHARE
+  `);
+  if (spaces.some((space) => space.deletingAt)) throw new SpaceDeletionInProgressError();
 }
 
 /** Serializes creating a Space in an organization with claiming the organization for deletion. */

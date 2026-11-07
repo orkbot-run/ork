@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited behavior remains Apache-2.0; Space work admission guards are Ork additions.
+
 import { runContinueJob } from "@orkbot/adapter-kit";
 import { MessageBlock } from "@orkbot/contracts";
 import {
@@ -15,6 +20,7 @@ import {
   createThreadMessageInTransaction,
   IsolationError,
   lockOwnedGroup,
+  lockSpaceForWork,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
 } from "@orkbot/db";
@@ -39,6 +45,7 @@ export async function handoffToGroupBot(
     return { error: `message must contain 1 to ${BOT_MESSAGE_MAX_LENGTH} characters` } as const;
   }
   const committed = await deps.prisma.$transaction(async (tx) => {
+    await lockSpaceForWork(tx, run.spaceId);
     try {
       await lockOwnedGroup(tx, run, groupId);
     } catch (error) {

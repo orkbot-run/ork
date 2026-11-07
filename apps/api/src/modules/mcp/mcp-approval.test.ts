@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache tests are preserved; deletion admission coverage is an Ork addition.
 
 import type * as db from "@orkbot/db";
+import { SpaceDeletionInProgressError } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   dismissMcpServerApprovals,
@@ -36,6 +38,7 @@ type MessageQuery = { where?: { blocks?: { array_contains?: unknown } } };
 
 function fixture(blocks: unknown[]) {
   const tx = {
+    $queryRaw: vi.fn(async (): Promise<Array<{ deletingAt: Date | null }>> => []),
     message: {
       findMany: vi.fn(
         async (_query: MessageQuery): Promise<unknown[]> => [
@@ -63,6 +66,43 @@ function fixture(blocks: unknown[]) {
 }
 
 describe("resolveMcpApprovalCards", () => {
+  it("rejects approval before card and assignment writes when the Space is deleting", async () => {
+    const { deps, actor, tx } = fixture([
+      { kind: "mcp_approval", serverId: "srv-a", status: "pending" },
+    ]);
+    tx.$queryRaw.mockResolvedValue([{ deletingAt: new Date() }]);
+    const effect = vi.fn();
+    await expect(
+      resolveMcpApprovalCards(
+        deps,
+        actor,
+        {
+          botId: "bot",
+          serverId: "srv-a",
+          status: "connected",
+        },
+        effect,
+      ),
+    ).rejects.toThrow(SpaceDeletionInProgressError);
+    expect(tx.message.findMany).not.toHaveBeenCalled();
+    expect(tx.message.update).not.toHaveBeenCalled();
+    expect(effect).not.toHaveBeenCalled();
+  });
+
+  it("still lets the user dismiss a pending card in a deleting Space", async () => {
+    const { deps, actor, tx } = fixture([
+      { kind: "mcp_approval", serverId: "srv-a", status: "pending" },
+    ]);
+    tx.$queryRaw.mockResolvedValue([{ deletingAt: new Date() }]);
+    await resolveMcpApprovalCards(deps, actor, {
+      botId: "bot",
+      serverId: "srv-a",
+      status: "dismissed",
+    });
+    expect(tx.$queryRaw).not.toHaveBeenCalled();
+    expect(tx.message.update).toHaveBeenCalled();
+  });
+
   it("flips pending and pre-upgrade cards for the matching server", async () => {
     const blocks = [
       { kind: "text", text: "before" },

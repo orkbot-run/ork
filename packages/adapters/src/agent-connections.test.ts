@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited connection tests remain Apache-2.0; Space admission query fixtures are Ork additions.
+
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -86,8 +91,8 @@ function createDeps(
     thread: { update: vi.fn(async () => ({ nextMessageSeq: 4, nextEventSeq: 9 })) },
     bot: { findFirst: vi.fn(async () => ({ id: "bot-2" })) },
     // What a `SELECT ... FOR UPDATE` on the connection row would see.
-    $queryRaw: vi.fn(async (query: TemplateStringsArray) => {
-      if (query.join("").includes("FROM bots"))
+    $queryRaw: vi.fn(async (query: TemplateStringsArray | { strings: string[] }) => {
+      if (("strings" in query ? query.strings : query).join("").includes("FROM bots"))
         return policyRows().map((bot) => ({
           ...bot,
           crossSpaceCommunication: overrides.disabledInsideTx ? false : bot.crossSpaceCommunication,
@@ -186,8 +191,10 @@ function createDeps(
     user: { findUnique: vi.fn(async () => ({ id: "user-1", name: "Alice Owner" })) },
     thread: { findFirst: vi.fn(async () => ({ id: "thread-2" })) },
     $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(txMock)),
-    $queryRaw: vi.fn(async (query: TemplateStringsArray) =>
-      query.join("").includes("FROM bots") ? policyRows() : txMock.$queryRaw(query),
+    $queryRaw: vi.fn(async (query: TemplateStringsArray | { strings: string[] }) =>
+      ("strings" in query ? query.strings : query).join("").includes("FROM bots")
+        ? policyRows()
+        : txMock.$queryRaw(query),
     ),
   };
   // connectAgent claim+invite runs on the transaction client.

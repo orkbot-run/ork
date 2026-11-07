@@ -8,6 +8,7 @@ import type { ComputerUpdate } from "@orkbot/contracts";
 import { ComputerUpdateSchema } from "@orkbot/contracts";
 import { ACTIVE_RUN_STATUSES } from "@orkbot/core";
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
+import { lockSpaceForWork } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import {
   enqueueTakeoverContinuation,
@@ -61,7 +62,9 @@ export async function queueComputerUpdate(
   botId: string,
   action: "update" | "recover" = "update",
 ) {
+  const target = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computerId } });
   const prepared = await deps.prisma.$transaction(async (tx) => {
+    await lockSpaceForWork(tx, target.spaceId);
     // Mode switches lock this same row before marking a bot as switching.
     // The following statement then observes their committed reservation.
     await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computerId} FOR UPDATE`;
@@ -522,9 +525,17 @@ async function recordTakeoverHandback(
 }
 
 export async function performComputerUpdate(deps: Deps, updateId: string) {
-  const claimed = await deps.prisma.computerUpdate.updateMany({
-    where: { id: updateId, status: "queued" },
-    data: { status: "running" },
+  const target = await deps.prisma.computerUpdate.findUnique({
+    where: { id: updateId },
+    include: { computer: true },
+  });
+  if (!target) return;
+  const claimed = await deps.prisma.$transaction(async (tx) => {
+    await lockSpaceForWork(tx, target.computer.spaceId);
+    return tx.computerUpdate.updateMany({
+      where: { id: updateId, status: "queued" },
+      data: { status: "running" },
+    });
   });
   if (claimed.count !== 1) return; // Never replay a destructive operation on job redelivery.
   const update = await deps.prisma.computerUpdate.findUniqueOrThrow({

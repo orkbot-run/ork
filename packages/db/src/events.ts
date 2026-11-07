@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited thread events remain Apache-2.0; Space work admission guards are Ork additions.
+
 import type { ProductAnalytics, RealtimeFanout } from "@orkbot/adapter-kit";
 import type {
   BotSecretDestination,
@@ -63,6 +68,7 @@ import { deleteRunSecretsInTransaction } from "./run-secrets.js";
 import { isRunResponse, readRunTimingFields } from "./run-timing.js";
 import { RUN_TURN_CHECKPOINT_KIND } from "./run-turn-checkpoint.js";
 import { recordSecurityEvent } from "./security-events.js";
+import { lockSpaceForWork } from "./spaces.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 export const STRATEGIC_INITIATIVE_NONCE_PREFIX = "strategic-initiative";
@@ -527,6 +533,7 @@ export async function sendUserMessage(
 
   const commit = () =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await lockSpaceForWork(tx, input.spaceId);
       // Message first: its thread-row lock serializes the whole send against clearThread, so a
       // concurrent clear either sees the committed run and cancels it, or strictly precedes this
       // transaction. Created in separate transactions, the run could land inside the clear's
@@ -1158,10 +1165,10 @@ export async function answerRunInput(
   runSecretWriter?: RunSecretWriter,
 ): Promise<boolean> {
   const commit = (writer = runSecretWriter) =>
-    prisma.$transaction(
-      async (tx: Prisma.TransactionClient) => commitAnswerRunInput(tx, input, writer),
-      THREAD_LOCK_TRANSACTION_OPTIONS,
-    );
+    prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      await lockSpaceForWork(tx, input.spaceId);
+      return commitAnswerRunInput(tx, input, writer);
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
   // Unwrapping space keys can wait on the key manager; keep that wait outside the transaction.
   await contentEncryptionOf(prisma)?.ring.all(input.spaceId);
   // A dismissal has no secret to prepare.

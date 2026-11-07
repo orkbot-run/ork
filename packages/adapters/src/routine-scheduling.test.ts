@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited scheduling tests remain Apache-2.0; Space admission fixture support is an Ork addition.
+
 import type { BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { createRunExecutor } from "./executor.js";
@@ -45,6 +50,7 @@ function pendingTimerFixture(reuse = true) {
     updatedAt: scheduledAt,
   };
   const tx = {
+    $queryRaw: vi.fn().mockResolvedValue([]),
     computerExecutionLease: { findMany: vi.fn(async () => []) },
     computer: { findMany: vi.fn(async () => []) },
     routine: {

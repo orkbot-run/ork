@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved. Personal Ork and Space work admission changes follow LICENSE.md.
 
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -48,6 +48,7 @@ import {
   expireComputerExecutionLeases,
   IsolationError,
   lockOwnedGroup,
+  lockSpaceForWork,
   primaryActiveRun,
   retireWaitingQuestionInTransaction,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -826,6 +827,7 @@ export async function sendThreadMessage(
 
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
+      await lockSpaceForWork(tx, actor.spaceId);
       let routineRuns: Array<{ id: string; status: string }> = [];
       let replyToMessageId: string | undefined;
       let replyQuote: string | undefined;
@@ -1342,6 +1344,7 @@ export async function reactToThreadMessage(
   releaseTakeover?: (runId: string) => Promise<void>,
 ) {
   const committed = await deps.prisma.$transaction(async (tx) => {
+    await lockSpaceForWork(tx, actor.spaceId);
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
     const parent = await tx.message.findFirst({
       where: { id: input.messageId, threadId: target.threadId },

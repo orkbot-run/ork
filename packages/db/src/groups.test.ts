@@ -493,7 +493,7 @@ describe("createGroup", () => {
       ],
     };
     const tx = {
-      $queryRaw: vi.fn(),
+      $queryRaw: vi.fn().mockResolvedValue([]),
       spaceMember: {
         findUnique: vi.fn(async () => ({
           organizationId: "org-1",

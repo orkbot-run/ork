@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited behavior remains Apache-2.0; Space work admission guards are Ork additions.
+
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
@@ -13,6 +18,7 @@ import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   crossSpaceCommunicationAllowed,
+  lockSpaceForWork,
   runAsSystem,
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
@@ -347,6 +353,8 @@ async function deliverToConnectedAgent(
   let committed!: Awaited<ReturnType<typeof deliverTx>>;
   const deliverTx = () =>
     deps.prisma.$transaction(async (tx) => {
+      for (const spaceId of [...new Set([run.spaceId, targetIdentity.spaceId])].sort())
+        await lockSpaceForWork(tx, spaceId);
       if (deliveryKey) {
         const already = await tx.message.findUnique({
           where: { threadId_clientNonce: { threadId: targetThreadId, clientNonce: deliveryKey } },

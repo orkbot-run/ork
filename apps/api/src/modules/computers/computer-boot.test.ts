@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited boot tests remain Apache-2.0; Space admission fixture support is an Ork addition.
 
 import { SandboxDamagedError } from "@orkbot/adapter-kit";
 import type * as Adapters from "@orkbot/adapters";
@@ -87,6 +88,7 @@ describe("computer boot", () => {
     lifecycle.acquireComputerExecutionLease.mockImplementation(lifecycle.realAcquire!);
     lifecycle.provisionComputer.mockRejectedValue(new Error("stop after the lease"));
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       computer: { findUniqueOrThrow: vi.fn().mockResolvedValue(stoppedBot.computer) },
       computerExecutionLease: {
         updateManyAndReturn: vi.fn().mockResolvedValue([]),

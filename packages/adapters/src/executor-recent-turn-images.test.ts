@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
+
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -165,6 +169,10 @@ async function runWithModel(
     yield { type: "done" as const, text: "Done" };
   });
   const prisma = {
+    $queryRaw: vi.fn(async () => []),
+    $transaction: vi.fn(
+      async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),
+    ),
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),

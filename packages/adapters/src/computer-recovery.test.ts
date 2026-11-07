@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited computer tests remain Apache-2.0; Space admission transaction fixtures are Ork additions.
+
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -83,6 +88,10 @@ async function fixture(provider: "fake" | "desktop" = "fake") {
   };
   const deps = {
     prisma: {
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      $transaction: vi.fn(
+        async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> => work(deps.prisma),
+      ),
       computer,
       computerExecutionLease: { findFirst: vi.fn().mockResolvedValue(null) },
       run: { findFirst: vi.fn().mockResolvedValue(null) },

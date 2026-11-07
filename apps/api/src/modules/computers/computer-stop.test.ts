@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Stop tests remain Apache-2.0; Space admission transaction fixtures are Ork additions.
 
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -71,6 +72,10 @@ describe("Stop during a computer reconnect", () => {
       });
       const stop = vi.spyOn(sandbox, "stop");
       const prisma = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $transaction: vi.fn(
+          async (work: (tx: PrismaClient) => Promise<unknown>): Promise<unknown> => work(prisma),
+        ),
         bot: {
           findFirst: vi.fn(async () => ({
             id: "bot",

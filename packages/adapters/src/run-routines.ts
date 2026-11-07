@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited routine execution remains Apache-2.0; Space work admission guards are Ork additions.
+
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import {
   routineJobKey,
@@ -12,6 +17,7 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@orkbot/core";
+import { lockSpaceForWork, SpaceDeletionInProgressError } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizedError } from "@orkbot/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -159,7 +165,10 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
       })
     : null;
   const thread = targetThread ?? bot.thread;
-  // A change trigger checks first, without a model; only news becomes a run.
+  // A change trigger checks first, without a model; only news becomes a run. Admit the
+  // check before provider I/O, then recheck under the run-creation transaction below.
+  if (routine.watch != null)
+    await deps.prisma.$transaction((tx) => lockSpaceForWork(tx, routine.spaceId));
   const watchTick =
     routine.watch == null
       ? null
@@ -189,6 +198,7 @@ export async function wakeRoutine(deps: ExecutorDeps, routineId: string, schedul
     userId: routine.userId,
   });
   const claimed = await deps.prisma.$transaction(async (tx) => {
+    await lockSpaceForWork(tx, routine.spaceId);
     const updated = await tx.routine.updateMany({
       where: {
         id: routine.id,
@@ -390,6 +400,7 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
   let retry: { id: string; taskId: string } | null;
   try {
     retry = await deps.prisma.$transaction(async (tx) => {
+      await lockSpaceForWork(tx, failed.spaceId);
       // Claim the still-eligible routine without changing its state. One-shot routines
       // may already be inactive; match their crons so an edit cannot revive a paused routine.
       const claimed = await tx.routine.updateMany({
@@ -457,6 +468,12 @@ export async function retryRoutineRun(deps: ExecutorDeps, runId: string) {
       });
     });
   } catch (error) {
+    if (error instanceof SpaceDeletionInProgressError) {
+      // A deletion is temporary, not a failed execution attempt. Preserve the accepted retry
+      // even for an in-memory queue or an almost-exhausted durable job.
+      await deps.jobs.enqueue(routineRetryJob(runId, new Date(Date.now() + 60_000)));
+      return;
+    }
     // retryOfRunId is unique: another delivery of this job already queued the retry.
     if (isUniqueViolation(error)) return;
     throw error;

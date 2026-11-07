@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
+
 import type { AgentRunRequest, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import type { AppendEventInput, Prisma } from "@orkbot/db";
@@ -256,7 +260,10 @@ async function runTurn(
         prompt: "Look again",
       })),
     },
-    computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    computer: {
+      findUniqueOrThrow: vi.fn(async () => ({ id: "computer-1", spaceId: run.spaceId })),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
     connection: { findMany: vi.fn(async () => []) },
     userModelPreference: {
       findFirst: vi.fn<(...args: unknown[]) => Promise<Record<string, unknown> | null>>(

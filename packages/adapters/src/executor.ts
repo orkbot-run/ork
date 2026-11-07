@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// Modified by Ork contributors for coordinated OAuth refreshes and Space work admission. See LICENSE.md.
 
 import type { AgentRunRequest, ComputerRef, SemanticMemoryProvider } from "@orkbot/adapter-kit";
 import {
@@ -43,6 +43,7 @@ import {
   isTooManyDatabaseConnections,
   loadRunHistoryMessages,
   loadRunTurnCheckpoint,
+  lockSpaceForWork,
   parseComputerMode,
   RunHistoryWriteError,
   readRunTimingFields,
@@ -329,28 +330,33 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
 
       const fence = nextFence(run.leaseFence);
       const now = new Date();
-      const leased = await deps.prisma.run.updateMany({
-        where: {
-          id: runId,
-          ...continueRunClaimFence(run),
-          AND: [{ OR: [{ wakeAt: null }, { wakeAt: { lte: now } }] }],
-          OR: [
-            { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
-            {
-              status: { in: ["leased", "running"] },
-              leaseExpiresAt: { lte: now },
-            },
-          ],
-        },
-        data: {
-          status: "leased",
-          leaseOwner: workerId,
-          leaseFence: fence,
-          leaseExpiresAt: new Date(Date.now() + 5 * 60_000),
-          error: null,
-          checkpoint: null,
-          wakeAt: null,
-        },
+      const leased = await deps.prisma.$transaction(async (tx) => {
+        // Keep the accepted run unchanged while deletion is pending. A thrown guard leaves
+        // both the durable run and its retryable job available if deletion is cancelled.
+        await lockSpaceForWork(tx, run.spaceId);
+        return tx.run.updateMany({
+          where: {
+            id: runId,
+            ...continueRunClaimFence(run),
+            AND: [{ OR: [{ wakeAt: null }, { wakeAt: { lte: now } }] }],
+            OR: [
+              { status: { in: ["queued", "waiting_input", "waiting_takeover"] } },
+              {
+                status: { in: ["leased", "running"] },
+                leaseExpiresAt: { lte: now },
+              },
+            ],
+          },
+          data: {
+            status: "leased",
+            leaseOwner: workerId,
+            leaseFence: fence,
+            leaseExpiresAt: new Date(Date.now() + 5 * 60_000),
+            error: null,
+            checkpoint: null,
+            wakeAt: null,
+          },
+        });
       });
       if (leased.count !== 1) return;
 

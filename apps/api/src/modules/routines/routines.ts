@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited routine operations remain Apache-2.0; Space work admission guards are Ork additions.
 
 import { routineWakeupJob } from "@orkbot/adapter-kit";
 import { parseRoutineWatch, parseRoutineWatchState, routineRunModelPin } from "@orkbot/adapters";
@@ -13,7 +14,7 @@ import {
   routineScheduleDelayed,
 } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
-import { IsolationError } from "@orkbot/db";
+import { IsolationError, lockSpaceForWork } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
@@ -197,6 +198,7 @@ export async function createRoutineTestRun(
   prompt: string,
   nonce: string | undefined,
 ) {
+  await lockSpaceForWork(tx, actor.spaceId);
   const { routine, botId, threadId } = target;
   const task = await tx.task.create({
     data: {

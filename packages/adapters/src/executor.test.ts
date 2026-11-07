@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 tests are preserved. Personal Ork notification coverage follows LICENSE.md.
+// Inherited Apache-2.0 tests are preserved. Personal Ork notifications and transactional work-admission fixtures follow LICENSE.md.
 
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
@@ -59,8 +59,15 @@ import {
 } from "./tool-completion-audit.js";
 import { parseUpdateBotPatch } from "./update-bot-patch.js";
 
-const createRunExecutor = (deps: Parameters<typeof createExecutor>[0]) =>
-  createExecutor({ ...deps, prisma: withModelRoles(deps.prisma) });
+const createRunExecutor = (deps: Parameters<typeof createExecutor>[0]) => {
+  // These fixtures model an available Space; deletion admission has real database race tests.
+  const prisma = deps.prisma;
+  prisma.$queryRaw ??= vi.fn(async () => []) as never;
+  prisma.$transaction ??= vi.fn(async (work: (tx: PrismaClient) => Promise<unknown>) =>
+    work(prisma),
+  ) as never;
+  return createExecutor({ ...deps, prisma: withModelRoles(prisma) });
+};
 
 describe("bot tool permissions", () => {
   it("describes bounded cross-chat keyword fanout and authorized reads", () => {
@@ -2128,6 +2135,7 @@ describe("createRunExecutor", () => {
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany,
             findUnique: vi.fn(async () => ({
@@ -2202,6 +2210,7 @@ describe("createRunExecutor", () => {
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany,
             findUnique: vi.fn(async () => ({
@@ -2286,6 +2295,7 @@ describe("createRunExecutor", () => {
         agentSkill: { findMany: vi.fn(async () => []) },
         $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
           callback({
+            $queryRaw: vi.fn(async () => []),
             routine: {
               updateMany: vi.fn(async () => ({ count: 1 })),
               // The claimed row carries the prompt alongside the model.
@@ -2437,6 +2447,7 @@ describe("createRunExecutor", () => {
       agentSkill: { findMany: vi.fn(async () => []) },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2514,6 +2525,7 @@ describe("createRunExecutor", () => {
       agentSkill: { findMany: vi.fn(async () => []) },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2608,6 +2620,7 @@ description: Prepare standup notes
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany: vi.fn(async () => ({ count: 1 })),
             findUnique: vi.fn(async () => ({
@@ -2669,6 +2682,7 @@ description: Prepare standup notes
       },
       $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
         callback({
+          $queryRaw: vi.fn(async () => []),
           routine: {
             updateMany,
             findUnique: vi.fn(async () => ({
@@ -2735,6 +2749,7 @@ description: Prepare standup notes
         transactionCalls += 1;
         if (transactionCalls === 1) {
           return callback({
+            $queryRaw: vi.fn(async () => []),
             routine: {
               updateMany: claimUpdateMany,
               findUnique: vi.fn(async () => ({
@@ -2749,6 +2764,7 @@ description: Prepare standup notes
           });
         }
         return callback({
+          $queryRaw: vi.fn(async () => []),
           routine: { updateMany: restoreUpdateMany },
           task: { deleteMany: deleteTaskMany },
           run: { deleteMany: deleteRunMany },

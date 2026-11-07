@@ -59,6 +59,7 @@ function fixture(status = "queued") {
   };
   const computerUpdate = {
     create: vi.fn(async () => row),
+    findUnique: vi.fn(async () => row),
     findUniqueOrThrow: vi.fn(async () => row),
     findMany: vi.fn(async ({ where }) => {
       const choices = where.OR ?? [where];

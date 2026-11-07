@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited bot delivery remains Apache-2.0; Space work admission guards are Ork additions.
+
 import { runContinueJob } from "@orkbot/adapter-kit";
 import type { BotMessageIntent, MessageBlock } from "@orkbot/contracts";
 import {
@@ -13,6 +18,7 @@ import type { PrismaClient } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  lockSpaceForWork,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
 } from "@orkbot/db";
@@ -166,6 +172,7 @@ export async function messageBot(
   try {
     committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
+        await lockSpaceForWork(tx, run.spaceId);
         for (const threadId of [run.threadId, targetThreadId].sort()) {
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
         }

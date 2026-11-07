@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited routes remain Apache-2.0; Space work admission guards are Ork additions.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import { settleCallRequest } from "@orkbot/adapters";
@@ -21,6 +22,7 @@ import {
   createThreadMessageInTransaction,
   IsolationError,
   lockOwnedGroup,
+  lockSpaceForWork,
   touchGroupUpdatedAt,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -413,6 +415,7 @@ export function threadsRoutes(ctx: RouterContext) {
           return { ok: true as const };
         }
         const committed = await deps.prisma.$transaction(async (tx) => {
+          await lockSpaceForWork(tx, context.actor.spaceId);
           if (input.clientNonce) {
             const existing = await tx.message.findUnique({
               where: {

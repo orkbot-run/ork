@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; transactional work-admission fixtures are Ork additions.
+
 import type { AgentRunRequest, ComputerRef } from "@orkbot/adapter-kit";
 import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
@@ -109,6 +113,10 @@ async function runRoutine(
     yield { type: "done" as const, text: "Inbox is clear." };
   });
   const prisma = {
+    $queryRaw: vi.fn(async () => []),
+    $transaction: vi.fn(
+      async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),
+    ),
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited handoff tests remain Apache-2.0; Space admission query assertions are Ork additions.
+
 import type { PrismaClient } from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -414,7 +419,10 @@ describe("explicit group destinations", () => {
       }),
     ).resolves.toMatchObject({ error: "group is no longer available" });
     expect(h.messageCreate).not.toHaveBeenCalled();
-    expect(h.tx.$queryRaw.mock.calls[0]?.slice(1)).toEqual(["group-1", run.spaceId, run.userId]);
+    const groupLock = h.tx.$queryRaw.mock.calls.find(([query]) =>
+      String(query).includes("FROM chat_groups"),
+    );
+    expect(groupLock?.slice(1)).toEqual(["group-1", run.spaceId, run.userId]);
   });
 
   it("requires both bots to be active members of the destination", async () => {

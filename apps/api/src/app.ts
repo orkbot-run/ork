@@ -129,6 +129,7 @@ import {
   requireMembership,
   rowSecurityWarning,
   runAsSystem,
+  SpaceDeletionInProgressError,
   securityEventRetentionDays,
   verifyContentKeys,
 } from "@orkbot/db";
@@ -1682,6 +1683,9 @@ export function handleRpcError(
   if (error instanceof IsolationError) {
     getLogger().warn(`rpc ${path.join("/")} not found`, { "error.stack": error.stack });
     throw new ORPCError("NOT_FOUND", { message: error.message, cause: error });
+  }
+  if (error instanceof SpaceDeletionInProgressError) {
+    throw new ORPCError("CONFLICT", { message: error.message, cause: error });
   }
   // The user's own voice account refused the request: theirs to fix.
   if (error instanceof VoiceAccountError) {
