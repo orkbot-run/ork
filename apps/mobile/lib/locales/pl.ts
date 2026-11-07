@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Haptic feedback": "Reakcje haptyczne",
   "Check again": "Sprawdź ponownie",
   "Computers unavailable": "Komputery niedostępne",
   "Screen unavailable": "Ekran niedostępny",

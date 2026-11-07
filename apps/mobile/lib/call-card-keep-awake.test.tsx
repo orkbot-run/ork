@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved. Call speaker ownership changes follow LICENSE.md.
+// Modified by Ork contributors to cover optional feedback on the custom mute control.
 
 // @vitest-environment jsdom
 
@@ -12,7 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CallCard } from "../components/CallCard";
 import { rpc } from "./api";
 import type { CallDeps } from "./call-session";
-import { endCall, startCall } from "./call-session";
+import { endCall, getSnapshot, startCall } from "./call-session";
+import { selectionHaptic } from "./haptics";
 
 const { activeTags, platform, sessionChange, startBackground, stopBackground, useKeepAwake } =
   vi.hoisted(() => ({
@@ -81,7 +83,15 @@ vi.mock("react-native", () => {
     StyleSheet: { create: <T,>(styles: T) => styles, hairlineWidth: 1 },
   };
 });
-vi.mock("../components/glass-icon-button", () => ({ GlassIconButton: () => null }));
+vi.mock("../components/glass-icon-button", () => ({
+  GlassIconButton: (props: { accessibilityLabel: string; onPress: () => void }) =>
+    createElement("button", {
+      type: "button",
+      "aria-label": props.accessibilityLabel,
+      onClick: props.onPress,
+    }),
+}));
+vi.mock("./haptics", () => ({ loadHapticsEnabled: async () => false, selectionHaptic: vi.fn() }));
 vi.mock("./api", () => ({
   rpc: vi.fn().mockResolvedValue({ name: "Test" }),
   applyMobileThreadEvent: vi.fn(),
@@ -140,6 +150,7 @@ describe("CallCard background lifetime", () => {
   let container: HTMLDivElement;
 
   beforeEach(() => {
+    vi.mocked(selectionHaptic).mockClear();
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     useKeepAwake.mockImplementation((tag: string) => {
       useEffect(() => {
@@ -168,6 +179,23 @@ describe("CallCard background lifetime", () => {
     container.remove();
     activeTags.clear();
     vi.unstubAllGlobals();
+  });
+
+  it("changes mute before one optional feedback and keeps other call controls silent", async () => {
+    act(() => root.render(<CallCard />));
+    await act(async () => {
+      startCall({ botId: "bot-1", botName: "Ada" }, deps);
+    });
+    vi.mocked(selectionHaptic).mockImplementationOnce(() => {
+      expect(getSnapshot()?.muted).toBe(true);
+    });
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Mute"]')?.click());
+    expect(selectionHaptic).toHaveBeenCalledOnce();
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Transcript"]')?.click());
+    expect(selectionHaptic).toHaveBeenCalledOnce();
+    act(() => container.querySelector<HTMLButtonElement>('[aria-label="Hang up"]')?.click());
+    expect(getSnapshot()).toBeNull();
+    expect(selectionHaptic).toHaveBeenCalledOnce();
   });
 
   it("keeps the screen awake while the native service has not started", async () => {

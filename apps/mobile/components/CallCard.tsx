@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+// Modified by Ork contributors for optional device-local feedback on the custom mute control.
 
 import { accountDisplay } from "@orkbot/core";
 import { typeScale } from "@orkbot/ui-tokens";
@@ -16,6 +17,7 @@ import { rpc } from "../lib/api";
 import { startCallBackground, stopCallBackground } from "../lib/call-background";
 import type { CallPhase } from "../lib/call-session";
 import { endCall, toggleMute, toggleTranscript, useCallSession } from "../lib/call-session";
+import { loadHapticsEnabled, selectionHaptic } from "../lib/haptics";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { currentSessionGeneration, subscribeSessionGeneration } from "../lib/session";
@@ -49,6 +51,9 @@ export function CallCard() {
   const serviceStartedFor = useRef<string | null>(null);
   const startSeq = useRef(0);
   const onCall = Boolean(call);
+  useEffect(() => {
+    void loadHapticsEnabled();
+  }, []);
   // A crash inside the call UI unmounts this card without ending the call, so the
   // service and its wake lock are released here rather than on the next call change.
   const mountedCall = useRef(false);
@@ -200,7 +205,10 @@ export function CallCard() {
           selected={call.muted}
           color={call.muted ? tokens.mutedForeground : tokens.foreground}
           border={tokens.border}
-          onPress={toggleMute}
+          onPress={() => {
+            toggleMute();
+            selectionHaptic();
+          }}
         />
         <RoundButton
           label={t("Hang up")}

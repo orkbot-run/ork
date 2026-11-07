@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Haptic feedback": "触感反馈",
   "Check again": "重新检查",
   "Computers unavailable": "计算机不可用",
   "Screen unavailable": "屏幕不可用",

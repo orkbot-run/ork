@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Haptic feedback": "触覚フィードバック",
   "Check again": "もう一度確認",
   "Computers unavailable": "コンピューターを利用できません",
   "Screen unavailable": "画面を利用できません",

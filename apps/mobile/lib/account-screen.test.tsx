@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+// Modified by Ork contributors to cover the device-local haptics setting.
 
 // @vitest-environment jsdom
 
@@ -54,6 +55,10 @@ vi.mock("./server-updates", () => ({
 vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("expo-notifications", () => ({
   getPermissionsAsync: vi.fn(async () => ({ status: "granted" })),
+}));
+vi.mock("expo-secure-store", () => ({
+  getItemAsync: async () => null,
+  setItemAsync: async () => undefined,
 }));
 vi.mock("react-native", () => ({
   ActivityIndicator: () => null,
@@ -174,8 +179,8 @@ vi.mock("../components/settings-group", () => ({
       },
       title,
     ),
-  SettingsSwitch: ({ title }: { title: string }) =>
-    createElement("button", { type: "button" }, title),
+  SettingsSwitch: ({ label }: { label: string }) =>
+    createElement("button", { type: "button" }, label),
   useStackedSettings: () => false,
 }));
 vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
@@ -316,6 +321,7 @@ it("offers no original bot or avatar style choice even for a saved legacy prefer
 
   expect(container.querySelector('[aria-label="Appearance"]')).not.toBeNull();
   expect(container.textContent).toContain("Language");
+  expect(container.textContent).toContain("Haptic feedback");
   expect(container.querySelector('[aria-label="Avatar style"]')).toBeNull();
   expect(container.querySelector('[aria-label="Bot style"]')).toBeNull();
   expect(container.textContent).not.toContain("Original");

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
+// Modified by Ork contributors to expose the optional device-local haptics preference.
 
 import { MenuView } from "@expo/ui/community/menu";
 import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
@@ -23,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAccountDeletion } from "../../components/account-deletion";
 import { AppMark } from "../../components/app-mark";
 import { ApprovalModeRow, ApprovalRulesRow } from "../../components/approval-settings-rows";
+import { HapticsSetting } from "../../components/haptics-setting";
 import { NameDialog } from "../../components/name-dialog";
 import { NativeActionButton } from "../../components/native-action-button";
 import { NativeSegmentedControl } from "../../components/native-segmented-control";
@@ -597,6 +599,7 @@ export default function Account() {
             title={t("Language")}
             value={UI_LOCALE_LABELS[locale]}
           />
+          <HapticsSetting />
         </SettingsGroup>
 
         {Platform.OS === "android" ? (
