@@ -33,8 +33,8 @@ describe("withTransactionRetry", () => {
     }
   });
   it.each([
-    [0, [25, 75]],
-    [0.999, [50, 150]],
+    [0, [25, 75, 225]],
+    [0.999, [50, 150, 450]],
   ] as const)("backs off between conflicts with bounded jitter %s", async (random, waits) => {
     vi.useFakeTimers();
     const jitter = vi.spyOn(Math, "random").mockReturnValue(random);
@@ -42,20 +42,20 @@ describe("withTransactionRetry", () => {
       .fn()
       .mockRejectedValueOnce(driverConflict("40001"))
       .mockRejectedValueOnce(driverConflict("40001"))
+      .mockRejectedValueOnce(driverConflict("40001"))
       .mockResolvedValue("committed");
     const result = withTransactionRetry(operation);
     try {
       await vi.advanceTimersByTimeAsync(0);
       expect(operation).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(waits[0] - 1);
-      expect(operation).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1);
-      expect(operation).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(waits[1] - 1);
-      expect(operation).toHaveBeenCalledTimes(2);
-      await vi.advanceTimersByTimeAsync(1);
+      for (const [index, wait] of waits.entries()) {
+        await vi.advanceTimersByTimeAsync(wait - 1);
+        expect(operation).toHaveBeenCalledTimes(index + 1);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(operation).toHaveBeenCalledTimes(index + 2);
+      }
       await expect(result).resolves.toBe("committed");
-      expect(operation).toHaveBeenCalledTimes(3);
+      expect(operation).toHaveBeenCalledTimes(4);
     } finally {
       await vi.runAllTimersAsync();
       jitter.mockRestore();
@@ -88,12 +88,12 @@ describe("withTransactionRetry", () => {
     expect(operation).toHaveBeenCalledTimes(2);
   });
 
-  it("gives up after three conflicting attempts", async () => {
+  it("gives up after four conflicting attempts", async () => {
     const error = conflict("P2034");
     const operation = vi.fn().mockRejectedValue(error);
 
     await expect(withTransactionRetry(operation)).rejects.toBe(error);
-    expect(operation).toHaveBeenCalledTimes(3);
+    expect(operation).toHaveBeenCalledTimes(4);
   });
 
   it("does not retry a transaction that expired after it started", async () => {

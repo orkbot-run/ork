@@ -426,8 +426,8 @@ postgres("send consent acceptance (PostgreSQL)", () => {
     ).toBe(1);
     expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(2);
   });
-  it.each([1, 3])(
-    "retries a real group send conflict within the three-attempt bound (%i conflicts)",
+  it.each([1, 4])(
+    "retries a real group send conflict within the four-attempt bound (%i conflicts)",
     async (conflicts) => {
       const group = await prisma.chatGroup.create({
         data: {
@@ -488,14 +488,14 @@ postgres("send consent acceptance (PostgreSQL)", () => {
             },
           },
         });
-        expect(attempts).toBe(3);
+        expect(attempts).toBe(4);
         expect(await prisma.message.count({ where: { threadId: group.thread!.id } })).toBe(0);
         expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(0);
         expect(enqueue).not.toHaveBeenCalled();
       }
     },
   );
-  it("retries a group send after a finite burst of real worker event writes", async () => {
+  it.each([1, 3])("retries a group send after %i finite worker event bursts", async (conflicts) => {
     const group = await prisma.chatGroup.create({
       data: {
         spaceId: actor.spaceId,
@@ -513,34 +513,28 @@ postgres("send consent acceptance (PostgreSQL)", () => {
     const preflight = await runAsTenant(actor, () =>
       prepareSendAiConsent(deps, actor, { groupId: group.id }),
     );
-    let begin!: () => void;
-    const beginning = new Promise<void>((resolve) => {
-      begin = resolve;
-    });
     const workerEvents = createThreadEvents(prisma);
-    const workers = Promise.all(
-      Array.from({ length: 4 }, async (_, worker) => {
-        await beginning;
-        for (let event = 0; event < 12; event += 1) {
-          await workerEvents.append({
-            spaceId: actor.spaceId,
-            threadId: group.thread!.id,
-            botId,
-            type: "agent.tool.called",
-            payload: { name: "fixture", executionId: `${worker}:${event}` },
-          });
-        }
-      }),
-    );
+    const input = { text: "Send while workers publish", clientNonce: randomUUID() };
     let attempts = 0;
     const failedQueries: string[] = [];
     const observed = observeTransactionQueries(deps.prisma, async (statement, execute) => {
       if (statement.includes("FROM threads WHERE id =") && statement.includes("FOR UPDATE")) {
         attempts += 1;
-        if (attempts === 1) {
-          begin();
+        if (attempts <= conflicts) {
           // Finish the real competing commits before the stale lock, without a host-speed budget.
-          await workers;
+          await Promise.all(
+            Array.from({ length: 4 }, async (_, worker) => {
+              for (let event = 0; event < 12; event += 1) {
+                await workerEvents.append({
+                  spaceId: actor.spaceId,
+                  threadId: group.thread!.id,
+                  botId,
+                  type: "agent.tool.called",
+                  payload: { name: "fixture", executionId: `${attempts}:${worker}:${event}` },
+                });
+              }
+            }),
+          );
         }
       }
       try {
@@ -551,31 +545,36 @@ postgres("send consent acceptance (PostgreSQL)", () => {
       }
     });
     const error = await runAsTenant(actor, () =>
-      sendThreadMessage({ ...deps, prisma: observed, consentPreflight: preflight }, actor, target, {
-        text: "Send while workers publish",
-        clientNonce: randomUUID(),
-      }),
-    )
-      .then(
-        () => undefined,
-        (failure: unknown) => failure,
-      )
-      .finally(async () => {
-        begin();
-        await workers;
-      });
+      sendThreadMessage(
+        { ...deps, prisma: observed, consentPreflight: preflight },
+        actor,
+        target,
+        input,
+      ),
+    ).then(
+      () => undefined,
+      (failure: unknown) => failure,
+    );
     expect(error, JSON.stringify({ attempts, failedQueries })).toBeUndefined();
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(conflicts + 1);
+    expect(failedQueries).toHaveLength(conflicts);
     expect(failedQueries[0]).toContain("FROM threads WHERE id =");
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    // A lost acceptance response must reuse the committed submission after all retries.
+    await runAsTenant(actor, () =>
+      sendThreadMessage({ ...deps, consentPreflight: preflight }, actor, target, input),
+    );
     expect(
       await prisma.event.count({
         where: { threadId: group.thread!.id, type: "agent.tool.called" },
       }),
-    ).toBe(48);
+    ).toBe(48 * conflicts);
     expect(
       await prisma.message.count({ where: { threadId: group.thread!.id, role: "user" } }),
     ).toBe(1);
     expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(2);
+    expect(enqueue).toHaveBeenCalledTimes(4);
+    expect(enqueue.mock.calls.slice(2)).toEqual(enqueue.mock.calls.slice(0, 2));
   });
   it("rejects a changed encrypted endpoint before any acceptance without loading a provider under the lock", async () => {
     await prisma.secret.create({
