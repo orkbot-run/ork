@@ -2748,6 +2748,18 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if let Some(appdir) = std::env::var_os("APPDIR") {
+        let webkit =
+            std::path::PathBuf::from(appdir).join("usr/lib/x86_64-linux-gnu/webkit2gtk-4.1");
+        if webkit.join("WebKitNetworkProcess").is_file() {
+            std::env::set_var("WEBKIT_EXEC_PATH", &webkit);
+            std::env::set_var(
+                "WEBKIT_INJECTED_BUNDLE_PATH",
+                webkit.join("injected-bundle"),
+            );
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             if !args.iter().any(|argument| {
