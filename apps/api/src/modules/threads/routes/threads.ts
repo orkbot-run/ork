@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited routes remain Apache-2.0; Space work admission guards are Ork additions.
-// Ork thread-lock budget coverage is PolyForm-covered.
+// Ork thread-lock budget and stream-lifetime changes are PolyForm-covered.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import { settleCallRequest } from "@orkbot/adapters";
@@ -38,13 +38,12 @@ import type { RouterContext } from "#modules/platform/routes/context";
 import {
   botsRunOwnModels,
   computerContext,
-  HEARTBEAT_MS,
   isUniqueViolation,
   modelSetup,
-  SESSION_RECHECK_MS,
   THREAD_MESSAGE_PAGE_SIZE,
 } from "#modules/platform/routes/shared";
 import { withSerializableRetry } from "#modules/platform/serializable-retry";
+import { sessionStream } from "#modules/platform/session-stream";
 import {
   createRoutineTestRun,
   routineTestRunNonce,
@@ -196,65 +195,35 @@ export function threadsRoutes(ctx: RouterContext) {
           input.includePeerReceipts,
         );
       }),
-      subscribe: authed.threads.subscribe.handler(async function* ({ context, input }) {
-        const target = await resolveThreadTarget(deps.prisma, context.actor, input);
-        const peerRunCache = new Map<string, Promise<boolean>>();
-        const backgroundRunCache = new Map<string, Promise<boolean>>();
-        const follow = deps.events.follow(target.threadId, input.cursor, context.signal);
-        // A half-open stream looks identical to an idle one, so punctuate silence:
-        // the client treats any frame as liveness and reconnects once they stop.
-        let pending: Promise<IteratorResult<ProductEvent>> | undefined;
-        // Auth ran once when the stream opened. Re-check before delivering more, so a signed-out
-        // or revoked session stops within SESSION_RECHECK_MS, or at the next heartbeat when idle.
-        let authorizedAt = Date.now();
-        const assertStillAuthorized = async () => {
-          if (!context.stillAuthorized || Date.now() - authorizedAt < SESSION_RECHECK_MS) return;
-          if (!(await context.stillAuthorized())) throw new ORPCError("UNAUTHORIZED");
-          authorizedAt = Date.now();
-        };
-        try {
-          while (!context.signal?.aborted) {
-            pending ??= follow.next();
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const next = await Promise.race([
-              pending,
-              new Promise<"silent">((resolve) => {
-                timer = setTimeout(() => resolve("silent"), HEARTBEAT_MS);
-              }),
-            ]).finally(() => clearTimeout(timer));
-            if (next === "silent") {
-              await assertStillAuthorized();
-              // Keep `pending` so the in-flight read stays the next event in order.
-              yield {
-                id: "heartbeat",
-                spaceId: context.actor.spaceId,
-                threadId: target.threadId,
-                // A bot thread's id is not the bot. Groups have no single bot, so the thread id stands in.
-                botId: target.kind === "bot" ? target.botId : target.threadId,
-                seq: 0,
-                type: "heartbeat",
-                createdAt: new Date().toISOString(),
-                payload: {},
-              };
-              continue;
-            }
-            pending = undefined;
-            if (next.done) return;
-            const event = next.value;
-            // Filtered peer events also restart the heartbeat, so check before skipping them.
-            await assertStillAuthorized();
-            if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
-              if (!shouldForwardPeerThreadEvent(event)) continue;
-            } else if (await isBackgroundRun(deps.prisma, event.runId, backgroundRunCache)) {
-              if (!shouldForwardBackgroundThreadEvent(event)) continue;
-            }
-            yield event;
-          }
-        } finally {
-          // Not awaited: closing can queue behind a read that the abort has not landed on yet.
-          void follow.return(undefined).catch(() => {});
-        }
-      }),
+      subscribe: authed.threads.subscribe.handler(({ context, input }) =>
+        sessionStream<ProductEvent, ProductEvent>(context, async (signal) => {
+          const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+          const peerRunCache = new Map<string, Promise<boolean>>();
+          const backgroundRunCache = new Map<string, Promise<boolean>>();
+          return {
+            source: deps.events.follow(target.threadId, input.cursor, signal),
+            heartbeat: () => ({
+              id: "heartbeat",
+              spaceId: context.actor.spaceId,
+              threadId: target.threadId,
+              // Groups have no single bot, so their thread id stands in.
+              botId: target.kind === "bot" ? target.botId : target.threadId,
+              seq: 0,
+              type: "heartbeat",
+              createdAt: new Date().toISOString(),
+              payload: {},
+            }),
+            project: async (event) => {
+              if (await isPeerRun(deps.prisma, event.runId, peerRunCache)) {
+                if (!shouldForwardPeerThreadEvent(event)) return null;
+              } else if (await isBackgroundRun(deps.prisma, event.runId, backgroundRunCache)) {
+                if (!shouldForwardBackgroundThreadEvent(event)) return null;
+              }
+              return event;
+            },
+          };
+        }),
+      ),
       send: authed.threads.send.handler(({ context, input }) => send(context.actor, input)),
       sendWithRoutines: authed.threads.sendWithRoutines.handler(async ({ context, input }) => {
         const { actor } = context;

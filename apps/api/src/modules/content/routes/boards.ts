@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+
+// Inherited Apache routes are preserved; Ork stream-lifetime changes follow LICENSE.md.
 
 import { commentTicket, createTicket, updateTicket } from "@orkbot/adapters";
 import type { BoardEvent } from "@orkbot/contracts";
@@ -19,7 +21,7 @@ import {
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { HEARTBEAT_MS, SESSION_RECHECK_MS } from "#modules/platform/routes/shared";
+import { sessionStream } from "#modules/platform/session-stream";
 
 async function resolveSpaceBoard(
   prisma: PrismaClient,
@@ -95,40 +97,13 @@ export function boardsRoutes(ctx: RouterContext) {
         }
         return toBoardDto(row);
       }),
-      subscribe: boardEnabled.boards.subscribe.handler(async function* ({ context }) {
+      subscribe: boardEnabled.boards.subscribe.handler(({ context }) => {
         const spaceId = context.actor.spaceId;
-        const follow = deps.boardEvents.follow(spaceId, context.signal);
-        // Board signals are transient, so a heartbeat stands in for liveness and
-        // gives the client a periodic catch-up reload if a push was missed.
-        let pending: Promise<IteratorResult<BoardEvent>> | undefined;
-        let authorizedAt = Date.now();
-        const assertStillAuthorized = async () => {
-          if (!context.stillAuthorized || Date.now() - authorizedAt < SESSION_RECHECK_MS) return;
-          if (!(await context.stillAuthorized())) throw new ORPCError("UNAUTHORIZED");
-          authorizedAt = Date.now();
-        };
-        try {
-          while (!context.signal?.aborted) {
-            pending ??= follow.next();
-            let timer: ReturnType<typeof setTimeout> | undefined;
-            const next = await Promise.race([
-              pending,
-              new Promise<"silent">((resolve) => {
-                timer = setTimeout(() => resolve("silent"), HEARTBEAT_MS);
-              }),
-            ]).finally(() => clearTimeout(timer));
-            await assertStillAuthorized();
-            if (next === "silent") {
-              yield { spaceId, createdAt: new Date().toISOString() };
-              continue;
-            }
-            pending = undefined;
-            if (next.done) return;
-            yield next.value;
-          }
-        } finally {
-          void follow.return(undefined).catch(() => {});
-        }
+        return sessionStream<BoardEvent, BoardEvent>(context, (signal) => ({
+          source: deps.boardEvents.follow(spaceId, signal),
+          heartbeat: () => ({ spaceId, createdAt: new Date().toISOString() }),
+          project: (event) => event,
+        }));
       }),
     },
     tickets: {
