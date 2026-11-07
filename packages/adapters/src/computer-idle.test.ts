@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -55,6 +60,9 @@ describe("sandbox idle", () => {
       await sleepComputerIfIdle(harness.deps, harness.computer.id);
       await sleepComputerIfIdle(harness.deps, harness.computer.id);
       expect(harness.prisma.message.create).toHaveBeenCalledOnce();
+      expect(harness.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+        timeout: 20_000,
+      });
       expect(harness.prisma.message.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -2007,7 +2015,7 @@ function idleHarness(
   };
   const notices = new Map<string, { id: string }>();
   const prisma = {
-    $transaction: async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(prisma),
+    $transaction: vi.fn(async <T>(work: (tx: unknown) => Promise<T>): Promise<T> => work(prisma)),
     $queryRaw: vi.fn(async () => [{ kind: "e2b", hours: options.computerHours ?? 0 }]),
     deploymentSettings: {
       findUnique: vi.fn(async () => ({ modelCreditsEnabled: options.computerHours !== undefined })),

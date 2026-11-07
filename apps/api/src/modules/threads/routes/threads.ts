@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited routes remain Apache-2.0; Space work admission guards are Ork additions.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import { settleCallRequest } from "@orkbot/adapters";
@@ -23,6 +24,7 @@ import {
   IsolationError,
   lockOwnedGroup,
   lockSpaceForWork,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -511,7 +513,7 @@ export function threadsRoutes(ctx: RouterContext) {
           });
           await touchGroupUpdatedAt(tx, target.groupId);
           return { runId: run?.id, eventSeq: event.seq, message };
-        });
+        }, THREAD_LOCK_TRANSACTION_OPTIONS);
         if (committed) {
           deps.analytics?.capture(
             context.actor.userId,
@@ -648,7 +650,7 @@ export function threadsRoutes(ctx: RouterContext) {
               },
             });
             return { runId: run.id, eventSeq: ended.seq };
-          })
+          }, THREAD_LOCK_TRANSACTION_OPTIONS)
           .catch((error) => {
             if (!isUniqueViolation(error)) throw error;
             return null;

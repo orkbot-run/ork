@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8894,6 +8895,7 @@ describe("threads.endCall", () => {
     const handler = new RPCHandler(createRouter(deps));
     return {
       tx,
+      prisma,
       created,
       events,
       enqueue,
@@ -8911,9 +8913,10 @@ describe("threads.endCall", () => {
   }
 
   it("closes the card and queues a call_end run", async () => {
-    const { call, created, events, tx, enqueue } = fixture();
+    const { call, created, events, tx, enqueue, prisma } = fixture();
     const response = await call();
     expect(response.status).toBe(200);
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 20_000 });
     await expect(response.json()).resolves.toEqual({ json: { ok: true } });
     expect(created[0]?.blocks).toEqual([
       { kind: "voice_call", callId: "call-1", title: "", farewell: "" },

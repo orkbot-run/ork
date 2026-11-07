@@ -1,8 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 // Modified by Ork contributors for product naming and domain module imports.
 
 import { randomUUID } from "node:crypto";
+import { executeCloudAgentTool, postRoutineWatchMessage } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import {
@@ -202,6 +204,115 @@ describe.skipIf(!enabled)("thread writes behind a long read (PostgreSQL)", () =>
         open();
         await done.catch(() => undefined);
         await work.catch(() => undefined);
+        probe?.release();
+      }
+    },
+    THREAD_LOCK_HOLD_MS * 4,
+  );
+
+  it.each(["message", "delivery", "delegation"] as const)(
+    "%s commits after waiting beyond the default transaction timeout",
+    async (kind) => {
+      const nonce = randomUUID();
+      const text = `Budget fixture ${kind} ${nonce}`;
+      const task = await system.task.create({
+        data: { spaceId, botId, threadId, userId, prompt: text, status: "running" },
+      });
+      const run = await system.run.create({
+        data: {
+          spaceId,
+          botId,
+          threadId,
+          userId,
+          taskId: task.id,
+          status: "running",
+          trigger: "user",
+        },
+      });
+      const { lockTaken, open, done } = holdThreadShare();
+      const xactId = await lockTaken;
+      let probe: Probe | undefined;
+      let work: Promise<unknown> = Promise.resolve();
+      try {
+        probe = await connectProbe();
+        work = runAsTenant<unknown>({ spaceId, userId }, () => {
+          if (kind === "message")
+            return createThreadMessage(prisma, {
+              threadId,
+              role: "system",
+              blocks: [{ kind: "text", text }],
+              clientNonce: nonce,
+            });
+          if (kind === "delivery")
+            return postRoutineWatchMessage(
+              { prisma, events: { notify } as never },
+              { spaceId, botId, threadId, role: "system", text },
+            );
+          return executeCloudAgentTool(
+            {
+              prisma,
+              jobs: { enqueue } as never,
+              events: { notify },
+              cloudAgent: { key: "fixture", spaceId, provider: {} as never },
+            },
+            {
+              spaceId,
+              userId,
+              botId,
+              operationId: nonce,
+              traceId: nonce,
+              signal: new AbortController().signal,
+            },
+            run,
+            "cloud_agent_launch",
+            { prompt: text },
+          );
+        });
+        work.catch(() => undefined);
+        await untilBlocked(probe, xactId);
+        await sleep(THREAD_LOCK_HOLD_MS);
+        expect(await heldOutcome(work)).toBe("waiting");
+        open();
+        await work;
+        // These assertions also catch best-effort writers that swallowed an expired transaction.
+        const messages = await system.message.findMany({
+          where: { threadId },
+          select: { id: true, role: true, blocks: true, clientNonce: true },
+        });
+        if (kind === "message")
+          expect(messages.find((message) => message.clientNonce === nonce)).toMatchObject({
+            role: "system",
+          });
+        if (kind === "delivery")
+          expect(
+            messages.some(
+              (message) =>
+                JSON.stringify(message.blocks) === JSON.stringify([{ kind: "meta", text }]),
+            ),
+          ).toBe(true);
+        if (kind === "delegation") {
+          const agent = await system.cloudAgent.findUniqueOrThrow({
+            where: { operationKey: nonce },
+          });
+          const messageId = agent.messageId;
+          if (!messageId) throw new Error("Delegated intent is missing its committed card");
+          expect(messages.some((message) => message.id === messageId)).toBe(true);
+          expect(
+            await system.event.count({
+              where: {
+                threadId,
+                type: "thread.message.created",
+                payload: { path: ["messageId"], equals: messageId },
+              },
+            }),
+          ).toBe(1);
+          await system.cloudAgent.delete({ where: { id: agent.id } });
+        }
+      } finally {
+        open();
+        await done.catch(() => undefined);
+        await work.catch(() => undefined);
+        await system.run.update({ where: { id: run.id }, data: { status: "cancelled" } });
         probe?.release();
       }
     },

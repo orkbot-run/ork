@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited thread-event tests remain Apache-2.0; Space admission fixture support is an Ork addition.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import { BOT_SECRET_VALUE_MAX_LENGTH, encodeLoginSecret } from "@orkbot/contracts";
@@ -532,6 +533,38 @@ describe("thread lock transaction budget", () => {
   // override the client's longer connection wait, so a saturated pool that frees
   // a connection late would fail the checkout instead of waiting it out.
   const budget = { timeout: 20_000 };
+
+  it.each([
+    [
+      "sends a user message",
+      (prisma: PrismaClient) =>
+        sendUserMessage(prisma, {
+          spaceId: "space-1",
+          threadId: "thread-1",
+          botId: "bot-1",
+          userId: "user-1",
+          blocks: [{ kind: "text", text: "Hello" }],
+          prompt: "Hello",
+          trigger: "user",
+        }),
+    ],
+    [
+      "appends a thread event",
+      (prisma: PrismaClient) =>
+        appendEvent(prisma, {
+          spaceId: "space-1",
+          threadId: "thread-1",
+          botId: "bot-1",
+          type: "thread.message.created",
+          payload: {},
+        }),
+    ],
+  ])("%s with the explicit budget", async (_name, act) => {
+    const unreachable = new Error("transaction body not under test");
+    const $transaction = vi.fn().mockRejectedValue(unreachable);
+    await expect(act({ $transaction } as unknown as PrismaClient)).rejects.toBe(unreachable);
+    expect($transaction).toHaveBeenCalledWith(expect.any(Function), budget);
+  });
 
   it("clears a thread with the explicit budget", async () => {
     const tx = {

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork cancellation changes are PolyForm-covered.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import type {
   AdapterContext,
@@ -31,6 +32,7 @@ import {
   expireComputerExecutionLeases,
   legacyTeamHomeKey,
   recordComputerRunEnd,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -203,7 +205,7 @@ async function ensureSpawnRun(
           clientNonce,
         },
       });
-    });
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
   } catch (error) {
     const winner = await prisma.run.findUnique({ where });
     if (winner) return winner;

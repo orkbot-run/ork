@@ -1,5 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "./client.js";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "./transaction-options.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 /**
@@ -75,8 +81,9 @@ export interface CreateThreadMessageInput {
 
 export async function createThreadMessage(prisma: PrismaClient, input: CreateThreadMessageInput) {
   return withTransactionRetry(() =>
-    prisma.$transaction((tx: Prisma.TransactionClient) =>
-      createThreadMessageInTransaction(tx, input),
+    prisma.$transaction(
+      (tx: Prisma.TransactionClient) => createThreadMessageInTransaction(tx, input),
+      THREAD_LOCK_TRANSACTION_OPTIONS,
     ),
   );
 }

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 
 import type * as db from "@orkbot/db";
 import { appendEventInTransaction } from "@orkbot/db";
@@ -58,6 +59,9 @@ describe("onboarding connection suggestions", () => {
     expect(posted[0]?.markUnread).toBe(false);
     expect(posted.slice(1).every((message) => message.markUnread === true)).toBe(true);
     expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), budget);
+    expect(deps.prisma.$transaction).toHaveBeenCalledTimes(3);
+    for (const call of vi.mocked(deps.prisma.$transaction).mock.calls)
+      expect(call[1]).toEqual(budget);
   });
   it("uses the available connector and omits unavailable apps", async () => {
     const { deps, actor } = fixture([

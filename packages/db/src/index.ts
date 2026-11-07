@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 export * from "./account-export.js";
 export * from "./approval-settings.js";
@@ -54,6 +55,7 @@ export * from "./sessions.js";
 export * from "./space-settings.js";
 export * from "./spaces.js";
 export { primaryActiveRun } from "./thread-listing.js";
+export * from "./transaction-options.js";
 export * from "./transaction-retry.js";
 export * from "./unread-inbox-chats.js";
 export * from "./usage.js";

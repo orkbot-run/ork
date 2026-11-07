@@ -1,5 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 
 import type {
   AdapterContext,
@@ -9,6 +11,7 @@ import type {
 } from "@orkbot/adapter-kit";
 import { mediaPollJob, runContinueJob } from "@orkbot/adapter-kit";
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { generateMediaFromTool, MEDIA_JOB_KIND } from "./media-generation-tools.js";
 import { persistMessageInTransaction } from "./run-messages.js";
@@ -136,7 +139,7 @@ export function mediaDelivery(
         );
         await options.onSettled?.(tx, "completed");
         return message;
-      });
+      }, THREAD_LOCK_TRANSACTION_OPTIONS);
       if (committed)
         await deps.events
           .notify(run.threadId, committed.eventSeq, committed.firstResponseRunId)
@@ -284,7 +287,7 @@ export async function pollMediaVideo(deps: MediaVideoDeps, payload: { jobId: str
       });
       if (failed.count) await onSettled(tx, "failed");
       return failed.count > 0;
-    });
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
   }
   // Still running, briefly locked by another check, or a provider error: try again later.
   if (!settled) await scheduleMediaPoll(deps.jobs, job.id, job.createdAt);

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import { randomUUID } from "node:crypto";
 import type { JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
@@ -258,7 +259,7 @@ export async function requestUserCall(
         firstResponseRunId: event.firstResponse ? run.id : undefined,
         botName: target.bot.name,
       };
-    }),
+    }, THREAD_LOCK_TRANSACTION_OPTIONS),
   );
   if ("error" in result) return result;
   await deps.events

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import { ATTACHMENT_MAX_BYTES } from "@orkbot/contracts";
 import { toolRequiresApproval } from "@orkbot/core";
@@ -120,6 +125,29 @@ describe("bot media tools", () => {
     expect(await generateMediaFromTool(options)).toHaveProperty("error");
     expect(generate).not.toHaveBeenCalled();
     expect(externalEffect.create).not.toHaveBeenCalled();
+  });
+  it("commits a failed video and its thread-writing settlement under the thread-lock budget", async () => {
+    const { options, externalEffect, row, provider } = setup();
+    externalEffect.findFirst.mockResolvedValue(row);
+    vi.spyOn(provider, "pollVideo").mockResolvedValue({ id: "remote-job", status: "failed" });
+    const tx = { externalEffect, thread: { updateMany: vi.fn(async () => ({ count: 1 })) } };
+    const transaction = vi.fn(async (work: (client: typeof tx) => Promise<void>) => work(tx));
+    Object.assign(options.prisma, { $transaction: transaction });
+    const onSettled = vi.fn(async (client: unknown) => {
+      expect(client).toBe(tx);
+      await tx.thread.updateMany();
+    });
+    await expect(
+      generateMediaFromTool({
+        ...options,
+        name: "generate_video",
+        args: { jobId: row.id },
+        onSettled,
+      }),
+    ).resolves.toMatchObject({ status: "failed" });
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 20_000 });
+    expect(onSettled).toHaveBeenCalledWith(tx, "failed");
+    expect(tx.thread.updateMany).toHaveBeenCalledOnce();
   });
   it("submits and persists async jobs without posting a pending result as a message", async () => {
     const { options, externalEffect, publish } = setup();

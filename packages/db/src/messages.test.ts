@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import {
@@ -74,6 +79,7 @@ describe("createThreadMessage", () => {
       }),
     ).resolves.toEqual({ id: "message-1" });
     expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenCalledWith(expect.any(Function), { timeout: 20_000 });
     expect(tx.thread.update).toHaveBeenCalledTimes(2);
     expect(tx.message.create).toHaveBeenCalledTimes(2);
   });

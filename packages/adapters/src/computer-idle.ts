@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import type {
   AdapterContext,
@@ -27,6 +28,7 @@ import {
   createThreadMessageInTransaction,
   recordComputerRunEnd,
   recordComputerRunSeen,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { activeCodingAgent } from "./coding-agent-activity.js";
@@ -882,7 +884,7 @@ async function postComputerNote(
           payload: { messageId: message.id, role: "system", blocks },
         });
         return event.seq;
-      });
+      }, THREAD_LOCK_TRANSACTION_OPTIONS);
       if (seq !== undefined) await deps.events.notify(threadId, seq).catch(() => undefined);
     } catch (cause) {
       // A competing worker already wrote the same nonce. Other failures are retried next tick.

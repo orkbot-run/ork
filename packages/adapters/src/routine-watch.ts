@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import type {
@@ -21,6 +26,7 @@ import {
   createThreadMessageInTransaction,
   listApprovalRules,
   parseComputerMode,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { loadLoginPasswordRedactions, shellCommandEnvironment } from "./bot-secrets.js";
@@ -825,7 +831,7 @@ export async function postRoutineWatchMessage(
         payload: { messageId: message.id, role: input.role, blocks },
       });
       return event.seq;
-    });
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
     if (seq !== undefined) await deps.events.notify(input.threadId, seq).catch(() => undefined);
   } catch {
     // Best effort: the routine's state is already saved.

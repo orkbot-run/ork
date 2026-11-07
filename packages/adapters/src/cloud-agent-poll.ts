@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import { randomUUID } from "node:crypto";
 import type {
   AdapterContext,
@@ -12,7 +17,7 @@ import {
 import type { MessageBlock } from "@orkbot/contracts";
 import { cloudAgentHttpsUrl } from "@orkbot/core";
 import type { CloudAgent } from "@orkbot/db";
-import { appendEventInTransaction, Prisma } from "@orkbot/db";
+import { appendEventInTransaction, Prisma, THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { cloudAgentsEnabled } from "./cloud-agent-factory.js";
 import type { CloudAgentDeps } from "./cloud-agent-service.js";
@@ -379,7 +384,7 @@ async function finishPoll(
       }
     }
     return { seq, wakeRunId, nextPollAt };
-  });
+  }, THREAD_LOCK_TRANSACTION_OPTIONS);
   if (!committed) return;
   if (committed.seq !== undefined)
     await deps.events.notify(agent.threadId, committed.seq).catch(() => undefined);

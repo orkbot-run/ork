@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import { describe, expect, it, vi } from "vitest";
 import {
   appendRecordingEvent,
@@ -238,6 +243,13 @@ describe("completeTeachingSession", () => {
     const actor = { spaceId: "workspace-1", userId: "user-1" } as never;
 
     await completeTeachingSession(deps as never, actor, "skill-1", "stopped");
+    // Finalizing and publishing each hold the thread row, through their event/message writes.
+    expect(deps.prisma.$transaction).toHaveBeenNthCalledWith(1, expect.any(Function), {
+      timeout: 20_000,
+    });
+    expect(deps.prisma.$transaction).toHaveBeenNthCalledWith(2, expect.any(Function), {
+      timeout: 20_000,
+    });
     const stoppedEvents = () =>
       tx.event.create.mock.calls.filter(
         (call) => (call[0] as { data: { type: string } }).data.type === "skill.teaching.stopped",

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { RealtimeFanout } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import type { StuckWorkStatus } from "@orkbot/core";
@@ -9,11 +14,11 @@ import {
   createPendingSteeringRun,
   discardAnsweredSteering,
   notifyRealtime,
-  THREAD_LOCK_TRANSACTION_OPTIONS,
   transientRunEventsWhere,
 } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { clearEndedRunState } from "./run-secrets.js";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "./transaction-options.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 export interface ExpireStuckRunInput {

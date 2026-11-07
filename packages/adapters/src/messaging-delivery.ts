@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type {
   AdapterContext,
   ArtifactStore,
@@ -16,6 +21,7 @@ import {
   createThreadMessageInTransaction,
   crossSpaceCommunicationAllowed,
   runAsSystem,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { MessagingSendError } from "./chat-sdk-surface.js";
@@ -369,7 +375,7 @@ async function fanOutToPeers(
             type: "thread.message.created",
             payload: { messageId: created.id, role: "user", blocks: [block] },
           });
-        })
+        }, THREAD_LOCK_TRANSACTION_OPTIONS)
         .catch((error: unknown) => {
           if (error instanceof CrossSpaceCommunicationBlockedError) return null;
           throw error;

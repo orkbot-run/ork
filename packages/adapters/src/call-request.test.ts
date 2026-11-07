@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
@@ -314,6 +319,9 @@ describe("requestUserCall security", () => {
       }),
     };
     await requestUserCall({ ...deps, notifications }, run, input);
+    expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      timeout: 20_000,
+    });
     const block = (saved()!.blocks as { callId: string; expiresAt: string }[])[0]!;
     expect(incomingCall).toHaveBeenCalledWith(run.userId, {
       callId: block.callId,

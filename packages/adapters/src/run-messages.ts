@@ -1,9 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import { callIdFromClientNonce, isBackgroundRunTrigger, redactSecrets } from "@orkbot/core";
 import type { Prisma, RunLease } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -107,7 +113,7 @@ export async function publishMessage(
         Boolean(stoppedHelper),
         lease,
       );
-    }),
+    }, THREAD_LOCK_TRANSACTION_OPTIONS),
   );
   await deps.events
     .notify(run.threadId, committed.eventSeq, committed.firstResponseRunId)

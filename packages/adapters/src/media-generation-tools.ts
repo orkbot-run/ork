@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type {
   AdapterContext,
   GeneratedMedia,
@@ -8,6 +13,7 @@ import { MediaGenerationError } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { messageBlockForArtifact } from "@orkbot/core";
 import type { ExternalEffect, Prisma, PrismaClient } from "@orkbot/db";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { z } from "zod";
 import { mediaPromptSchema, validateGeneratedMedia } from "./media-generation-provider.js";
 
@@ -206,7 +212,8 @@ export async function generateMediaFromTool(options: {
         });
         if (updated.count && output.status === "failed") await options.onSettled?.(tx, "failed");
       };
-      if (output.status === "failed" && options.onSettled) await prisma.$transaction(settle);
+      if (output.status === "failed" && options.onSettled)
+        await prisma.$transaction(settle, THREAD_LOCK_TRANSACTION_OPTIONS);
       else await settle(prisma);
     }
     if (output.status !== "completed")

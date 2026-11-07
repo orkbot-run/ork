@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { AdapterContext, PurchaseSnapshot, PurchaseStatus } from "@orkbot/adapter-kit";
 import {
   PaymentWalletDisconnected,
@@ -5,6 +10,7 @@ import {
   runContinueJob,
 } from "@orkbot/adapter-kit";
 import type { Purchase } from "@orkbot/db";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { PurchaseDeps } from "./purchase-service.js";
 import {
@@ -159,7 +165,7 @@ async function settle(
       },
     });
     return { nextPollAt, wakeRunId: run.id };
-  });
+  }, THREAD_LOCK_TRANSACTION_OPTIONS);
   if (!committed) return;
   if (committed.wakeRunId) {
     // The run reconciler recovers a queued wake after an enqueue failure.

@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited thread events remain Apache-2.0; Space work admission and decision-card guards are Ork additions.
+// Ork thread-lock budget coverage is PolyForm-covered.
 
 import type { ProductAnalytics, RealtimeFanout } from "@orkbot/adapter-kit";
 import type {
@@ -71,6 +72,7 @@ import { isRunResponse, readRunTimingFields } from "./run-timing.js";
 import { RUN_TURN_CHECKPOINT_KIND } from "./run-turn-checkpoint.js";
 import { recordSecurityEvent } from "./security-events.js";
 import { lockSpaceForWork } from "./spaces.js";
+import { THREAD_LOCK_TRANSACTION_OPTIONS } from "./transaction-options.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 export const STRATEGIC_INITIATIVE_NONCE_PREFIX = "strategic-initiative";
@@ -695,7 +697,7 @@ export async function sendUserMessage(
         },
       });
       return { message, task, run, busy, event };
-    });
+    }, THREAD_LOCK_TRANSACTION_OPTIONS);
   const committed = await commit().catch(async (error) => {
     const winner = await replay();
     if (winner) return { replay: winner } as const;
@@ -1774,7 +1776,10 @@ export async function appendEvent(
 ): Promise<ProductEvent> {
   // Concurrent writers in one thread (group members, bot messages) can deadlock on the thread row.
   const event = await withTransactionRetry(() =>
-    prisma.$transaction((tx: Prisma.TransactionClient) => appendEventInTransaction(tx, input)),
+    prisma.$transaction(
+      (tx: Prisma.TransactionClient) => appendEventInTransaction(tx, input),
+      THREAD_LOCK_TRANSACTION_OPTIONS,
+    ),
   );
   if (
     input.runId &&
@@ -1835,14 +1840,6 @@ export function completedRunBlocks(
       : block,
   );
 }
-
-// Transactions that lock the thread row before writing run state share the body budget: the
-// lock is held up to 15s by snapshot reads, Prisma's 5s default counts that wait, and expiring
-// fails a user stop, clear, send, reaction or card answer, a run's steering claim or takeover
-// handoff, or a run whose work already finished. Only the timeout is shared; an explicit
-// maxWait would override the client's longer connection wait, so a saturated pool that frees
-// a connection late would fail the checkout instead of waiting.
-export const THREAD_LOCK_TRANSACTION_OPTIONS = { timeout: 20_000 };
 
 // The thread lock is shared with snapshot reads that may hold it for up to 15s. Prisma's 5s
 // default counts that wait, and expiring would fail a run whose work already finished.

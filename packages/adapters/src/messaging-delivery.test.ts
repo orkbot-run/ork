@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+
 import type { AdapterContext, MessagingSurface } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -998,6 +1003,9 @@ describe("deliverMessagingOutbound channel runs", () => {
   it("posts the bot reply to the group with owner attribution and fans it out to peers", async () => {
     const deps = createChannelDeps();
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+    expect(deps.prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
+      timeout: 20_000,
+    });
 
     expect(deps.sendToThread).toHaveBeenCalledWith(
       { threadId: "sendblue:grp-1", body: "Alice's agent: found it" },
