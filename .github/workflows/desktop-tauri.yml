@@ -64,7 +64,7 @@ jobs:
             platform: darwin-x86_64
           - os: windows-2022
             platform: windows-x86_64
-          - os: ubuntu-24.04
+          - os: ubuntu-22.04
             platform: linux-x86_64
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -96,11 +96,22 @@ jobs:
         run: pnpm --filter @orkbot/desktop tauri:test
       - name: Check native code
         run: pnpm --filter @orkbot/desktop tauri:check
+      - name: Configure Linux WebKit helpers
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          jq -n '{bundle:{linux:{appimage:{files:{"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1":"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"}}}}}' > "$RUNNER_TEMP/linux-webkit.json"
       - name: Build diagnostic installers
         if: >-
           github.ref != 'refs/heads/main' || github.event_name == 'pull_request' ||
           vars.TAURI_PREVIEW_RELEASE_ENABLED != 'true'
-        run: pnpm --filter @orkbot/desktop tauri:build
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            pnpm --filter @orkbot/desktop tauri:build --config "$RUNNER_TEMP/linux-webkit.json"
+          else
+            pnpm --filter @orkbot/desktop tauri:build
+          fi
       - name: Build signed Preview updates
         if: >-
           github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
@@ -128,6 +139,10 @@ jobs:
             node apps/desktop/scripts/macos-distribution.ts prepare "$APPLE_API_KEY_PATH"
           fi
           node apps/desktop/scripts/tauri-release.ts prepare "$RUNNER_TEMP/tauri-release.json"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            jq -s '.[0] * .[1]' "$RUNNER_TEMP/tauri-release.json" "$RUNNER_TEMP/linux-webkit.json" > "$RUNNER_TEMP/linux-release.json"
+            mv "$RUNNER_TEMP/linux-release.json" "$RUNNER_TEMP/tauri-release.json"
+          fi
           case "$RUNNER_OS" in
             macOS) bundles="app,dmg" ;;
             Windows) bundles="nsis" ;;
