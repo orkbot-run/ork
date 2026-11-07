@@ -1068,6 +1068,8 @@ export const ZH_TW_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth 已連線",
   "OAuth expired": "OAuth 已過期",
   "Needs an OAuth client ID": "需要 OAuth 用戶端 ID",
+  Credential: "憑證",
+  "Not working": "無法正常工作",
   "Credential saved": "憑證已儲存",
   Authentication: "驗證方式",
   "No auth": "無驗證",

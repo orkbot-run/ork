@@ -1088,6 +1088,8 @@ export const NL_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth verbonden",
   "OAuth expired": "OAuth verlopen",
   "Needs an OAuth client ID": "OAuth-client-ID nodig",
+  Credential: "Inloggegevens",
+  "Not working": "Werkt niet",
   "Credential saved": "Inloggegevens opgeslagen",
   Authentication: "Authenticatiemethode",
   "No auth": "Geen authenticatie",

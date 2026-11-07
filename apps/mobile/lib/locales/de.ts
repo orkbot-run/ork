@@ -1095,6 +1095,8 @@ export const DE_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth verbunden",
   "OAuth expired": "OAuth abgelaufen",
   "Needs an OAuth client ID": "Benötigt eine OAuth-Client-ID",
+  Credential: "Zugangsdaten",
+  "Not working": "Funktioniert nicht",
   "Credential saved": "Zugangsdaten gespeichert",
   Authentication: "Authentifizierungsmethode",
   "No auth": "Keine Authentifizierung",

@@ -1126,6 +1126,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth подключён",
   "OAuth expired": "Срок действия OAuth истёк",
   "Needs an OAuth client ID": "Нужен идентификатор клиента OAuth",
+  Credential: "Учётные данные",
+  "Not working": "Не работает",
   "Credential saved": "Учётные данные сохранены",
   Authentication: "Способ аутентификации",
   "No auth": "Без авторизации",

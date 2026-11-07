@@ -1100,6 +1100,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth 已连接",
   "OAuth expired": "OAuth 已过期",
   "Needs an OAuth client ID": "需要 OAuth 客户端 ID",
+  Credential: "凭据",
+  "Not working": "无法正常工作",
   "Credential saved": "凭据已保存",
   Authentication: "身份验证方式",
   "No auth": "无需身份验证",

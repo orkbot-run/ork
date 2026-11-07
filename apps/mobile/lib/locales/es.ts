@@ -1035,6 +1035,8 @@ export const ES_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth conectado",
   "OAuth expired": "OAuth expirado",
   "Needs an OAuth client ID": "Necesita un ID de cliente OAuth",
+  Credential: "Credencial",
+  "Not working": "No funciona",
   "Credential saved": "Credencial guardada",
   Authentication: "Autenticación",
   "No auth": "Sin autenticación",

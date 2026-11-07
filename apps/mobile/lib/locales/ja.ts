@@ -1074,6 +1074,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "OAuth connected": "OAuth接続済み",
   "OAuth expired": "OAuthの有効期限切れ",
   "Needs an OAuth client ID": "OAuth クライアント ID が必要です",
+  Credential: "認証情報",
+  "Not working": "動作していません",
   "Credential saved": "認証情報を保存済み",
   Authentication: "認証方式",
   "No auth": "認証なし",

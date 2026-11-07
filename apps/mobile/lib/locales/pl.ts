@@ -1079,6 +1079,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "OAuth connected": "Połączono przez OAuth",
   "OAuth expired": "OAuth wygasło",
   "Needs an OAuth client ID": "Wymaga identyfikatora klienta OAuth",
+  Credential: "Dane uwierzytelniające",
+  "Not working": "Nie działa",
   "Credential saved": "Zapisano dane uwierzytelniające",
   Authentication: "Uwierzytelnianie",
   "No auth": "Bez uwierzytelniania",
