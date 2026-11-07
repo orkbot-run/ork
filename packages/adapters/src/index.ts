@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 export * from "./agent-connections.js";
 export * from "./agent-environment.js";
 export * from "./agent-import-settings.js";
@@ -12,7 +15,7 @@ export * from "./auto-review-factory.js";
 export * from "./aws-kms-key-provider.js";
 export * from "./background-job-handlers.js";
 export * from "./billing-emulator.js";
-export * from "./boat-sandbox.js";
+export type * from "./boat-sandbox.js";
 export * from "./bot-avatar.js";
 export * from "./bot-messages.js";
 export {
@@ -30,7 +33,7 @@ export {
   SPACE_VAULT_NOT_IN_USE,
   storeBotSecret,
 } from "./bot-secrets.js";
-export * from "./boxd-sandbox.js";
+export type * from "./boxd-sandbox.js";
 export * from "./browser-emulator.js";
 export * from "./browser-provider-factory.js";
 export * from "./browser-tools.js";
@@ -64,16 +67,16 @@ export * from "./computer-tools.js";
 export * from "./computer-update.js";
 export * from "./computer-workspace.js";
 export * from "./configured-sandbox.js";
-export * from "./createos-sandbox.js";
+export type * from "./createos-sandbox.js";
 export * from "./current-time.js";
 export * from "./cursor-cloud-agent.js";
-export * from "./daytona-sandbox.js";
+export type * from "./daytona-sandbox.js";
 export * from "./decision-models.js";
 export * from "./deployment-model.js";
 export * from "./desktop-sandbox.js";
 export * from "./destination-emulator.js";
 export * from "./docker-sandbox.js";
-export * from "./e2b-sandbox.js";
+export type * from "./e2b-sandbox.js";
 export * from "./elevenlabs-voice.js";
 export * from "./email-emulator.js";
 export * from "./executor.js";
@@ -92,7 +95,7 @@ export * from "./home-object-store.js";
 export { HonchoMemoryProvider } from "./honcho-memory-provider.js";
 export * from "./host-aware-sandbox.js";
 export * from "./http-decisions.js";
-export * from "./incus-sandbox.js";
+export type * from "./incus-sandbox.js";
 export * from "./infisical-secret-store.js";
 export * from "./installed-connectors.js";
 export * from "./installed-messaging-surface.js";
@@ -102,7 +105,7 @@ export * from "./job-reconciler.js";
 export * from "./keenable-web.js";
 export * from "./key-provider-factory.js";
 export * from "./keyless-http-web.js";
-export * from "./kubernetes-sandbox.js";
+export type * from "./kubernetes-sandbox.js";
 export * from "./macos-voice.js";
 export * from "./mcp-connector.js";
 export * from "./mcp-emulator.js";
@@ -133,7 +136,7 @@ export * from "./model-roles.js";
 export * from "./model-selection.js";
 export * from "./model-vision.js";
 export * from "./none-sandbox.js";
-export * from "./novita-sandbox.js";
+export type * from "./novita-sandbox.js";
 export * from "./novita-template.js";
 export * from "./openai-compatible-url.js";
 export * from "./openai-compatible-voice.js";
@@ -164,7 +167,7 @@ export * from "./product-analytics.js";
 export * from "./purchase-poll.js";
 export * from "./purchase-service.js";
 export * from "./push-token-store.js";
-export * from "./railway-sandbox.js";
+export type * from "./railway-sandbox.js";
 export * from "./realtime.js";
 export * from "./release-watch.js";
 export * from "./remote-mcp.js";

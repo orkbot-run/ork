@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
+  BoatApi as BoatApiClient,
   Sandbox as BoatMachine,
   Command200Response,
   CommandResponse,
@@ -10,7 +14,6 @@ import type {
   SandboxTypeEnum,
   SavedSnapshot,
 } from "@boatdev/sdk";
-import { BoatApi, Configuration, FetchError, followCommand } from "@boatdev/sdk";
 import type {
   AdapterContext,
   CommandRequest,
@@ -63,10 +66,13 @@ import { isSandboxGoneError } from "./sandbox-errors.js";
 import { shellExportScript, sourceEnvironmentCommand } from "./sandbox-shell-environment.js";
 import { withAbort } from "./web-ssrf.js";
 import { readWorkspaceArchive } from "./workspace-archive.js";
+
 import {
   shouldSkipPortableWorkspaceFile,
   workspaceSaveFindCommand,
 } from "./workspace-save-policy.js";
+
+const { BoatApi, Configuration, FetchError, followCommand } = await import("@boatdev/sdk");
 
 const DISPLAY_START = 20;
 const BOAT_API_BASE = "https://boat.dev/api/v1";
@@ -114,7 +120,7 @@ const BOAT_MACHINE_TYPES: Record<ComputerSize, SandboxTypeEnum> = {
 
 /** The Boat API surface the adapter uses. Failures are the SDK's raw `ResponseError`s. */
 export type BoatSandboxSdk = Pick<
-  BoatApi,
+  BoatApiClient,
   | "artifactRaw"
   | "attachCommandRaw"
   | "command"
@@ -1366,7 +1372,7 @@ export class BoatSandboxProvider implements SandboxProvider {
     try {
       for await (const frame of followCommand(
         // The helper only attaches; this client's attach waits out Boat's rate limit.
-        this.client as Pick<BoatApi, "attachCommandRaw"> as BoatApi,
+        this.client as Pick<BoatApiClient, "attachCommandRaw"> as BoatApiClient,
         id,
         processId,
         { signal: signal ? AbortSignal.any([signal, timeout]) : timeout },

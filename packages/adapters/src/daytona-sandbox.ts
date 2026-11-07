@@ -1,17 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { CreateSandboxFromSnapshotParams, DaytonaConfig, Sandbox } from "@daytona/sdk";
-import {
-  Daytona,
-  DaytonaBadRequestError,
-  DaytonaConflictError,
-  DaytonaError,
-  DaytonaGoneError,
-  DaytonaNotFoundError,
-  DaytonaProcessExecutionTimeoutError,
-  DaytonaTimeoutError,
-  SandboxState,
-} from "@daytona/sdk";
 import type {
   AdapterContext,
   CommandRequest,
@@ -38,6 +30,18 @@ import { sandboxCommandArgv } from "./sandbox-command-environment.js";
 import { isSandboxGoneError } from "./sandbox-errors.js";
 import { withAbort } from "./web-ssrf.js";
 import { shouldSkipPortableWorkspaceFile } from "./workspace-save-policy.js";
+
+const {
+  Daytona,
+  DaytonaBadRequestError,
+  DaytonaConflictError,
+  DaytonaError,
+  DaytonaGoneError,
+  DaytonaNotFoundError,
+  DaytonaProcessExecutionTimeoutError,
+  DaytonaTimeoutError,
+  SandboxState,
+} = await import("@daytona/sdk");
 
 const DISPLAY_START = 20;
 const DAYTONA_SCREEN_TTL_SECONDS = 3_600;

@@ -1,19 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import type { ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
 import { SandboxKind } from "@orkbot/contracts";
-import { BoatSandboxProvider } from "./boat-sandbox.js";
-import { BoxdSandboxProvider } from "./boxd-sandbox.js";
-import { CreateOSSandboxProvider } from "./createos-sandbox.js";
-import { DaytonaSandboxProvider } from "./daytona-sandbox.js";
 import { assertHostCommandsAllowed, DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
-import { E2BSandboxProvider } from "./e2b-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
-import { IncusSandboxProvider } from "./incus-sandbox.js";
 import type { KubernetesSandboxOptions } from "./kubernetes-sandbox.js";
-import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
-import { NovitaSandboxProvider } from "./novita-sandbox.js";
-import { RailwaySandboxProvider } from "./railway-sandbox.js";
 
 export interface SandboxProviderOptions {
   hostComputerUrl?: string;
@@ -104,49 +98,64 @@ export async function createSandboxProvider(
   switch (sandboxKind) {
     case "none":
       return new NoneSandboxProvider();
-    case "e2b":
+    case "e2b": {
       if (!opts.e2bApiKey?.trim()) return missingRemoteKey("e2b", "E2B_API_KEY");
+      const { E2BSandboxProvider } = await import("./e2b-sandbox.js");
       return new E2BSandboxProvider(opts.e2bApiKey);
-    case "novita":
+    }
+    case "novita": {
       if (!opts.novitaApiKey?.trim()) return missingRemoteKey("novita", "NOVITA_API_KEY");
+      const { NovitaSandboxProvider } = await import("./novita-sandbox.js");
       return new NovitaSandboxProvider({
         apiKey: opts.novitaApiKey,
         template: opts.sandboxTemplate,
         onUnsafeStop: opts.onUnsafeStop,
       });
-    case "daytona":
+    }
+    case "daytona": {
       if (!opts.daytonaApiKey?.trim()) return missingRemoteKey("daytona", "DAYTONA_API_KEY");
+      const { DaytonaSandboxProvider } = await import("./daytona-sandbox.js");
       return new DaytonaSandboxProvider({
         apiKey: opts.daytonaApiKey,
         apiUrl: opts.daytonaApiUrl,
         target: opts.daytonaTarget,
       });
-    case "createos":
+    }
+    case "createos": {
       if (!opts.createosApiKey?.trim())
         return missingRemoteKey("createos", "CREATEOS_SANDBOX_API_KEY");
+      const { CreateOSSandboxProvider } = await import("./createos-sandbox.js");
       return new CreateOSSandboxProvider({
         apiKey: opts.createosApiKey,
         baseUrl: opts.createosBaseUrl,
         shape: opts.createosShape,
         rootfs: opts.createosRootfs,
       });
-    case "boat":
+    }
+    case "boat": {
       if (!opts.boatApiKey?.trim()) return missingRemoteKey("boat", "BOAT_API_KEY");
+      const { BoatSandboxProvider } = await import("./boat-sandbox.js");
       return new BoatSandboxProvider({ apiKey: opts.boatApiKey, apiUrl: opts.boatApiUrl });
-    case "boxd":
+    }
+    case "boxd": {
       if (!opts.boxdApiKey?.trim()) return missingRemoteKey("boxd", "BOXD_API_KEY");
+      const { BoxdSandboxProvider } = await import("./boxd-sandbox.js");
       return new BoxdSandboxProvider({ apiKey: opts.boxdApiKey, org: opts.boxdOrg });
-    case "railway":
+    }
+    case "railway": {
       if (!opts.railwayApiToken?.trim()) return missingRemoteKey("railway", "RAILWAY_API_TOKEN");
       if (!opts.railwayEnvironmentId?.trim())
         return missingRemoteKey("railway", "RAILWAY_ENVIRONMENT_ID");
+      const { RailwaySandboxProvider } = await import("./railway-sandbox.js");
       return new RailwaySandboxProvider({
         token: opts.railwayApiToken,
         environmentId: opts.railwayEnvironmentId,
         maxWorkspaceFileBytes: opts.railwayMaxWorkspaceFileBytes,
         region: opts.railwaySandboxRegion,
       });
-    case "kubernetes":
+    }
+    case "kubernetes": {
+      const { KubernetesSandboxProvider } = await import("./kubernetes-sandbox.js");
       return new KubernetesSandboxProvider({
         namespace: opts.kubernetesNamespace,
         runtimeClassName: opts.kubernetesRuntimeClassName,
@@ -160,6 +169,7 @@ export async function createSandboxProvider(
         homeColocateNamespace: opts.kubernetesHomeColocateNamespace,
         homeColocateLabels: opts.kubernetesHomeColocateLabels,
       });
+    }
     case "incus": {
       const required = {
         INCUS_SANDBOX_URL: opts.incusUrl,
@@ -168,6 +178,7 @@ export async function createSandboxProvider(
       };
       const missing = Object.entries(required).find(([, value]) => !value?.trim());
       if (missing) return missingRemoteKey("incus", missing[0]);
+      const { IncusSandboxProvider } = await import("./incus-sandbox.js");
       return new IncusSandboxProvider({
         url: opts.incusUrl ?? "",
         clientCert: opts.incusClientCert ?? "",

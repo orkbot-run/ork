@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import {
-  BoatSandboxProvider,
-  BoxdSandboxProvider,
-  CreateOSSandboxProvider,
-  E2BSandboxProvider,
-  NovitaSandboxProvider,
-  PiAgentRuntime,
-} from "@orkbot/adapters";
+import { PiAgentRuntime } from "@orkbot/adapters";
+import { BoatSandboxProvider } from "@orkbot/adapters/boat-sandbox";
+import { BoxdSandboxProvider } from "@orkbot/adapters/boxd-sandbox";
+import { CreateOSSandboxProvider } from "@orkbot/adapters/createos-sandbox";
+import { E2BSandboxProvider } from "@orkbot/adapters/e2b-sandbox";
+import { NovitaSandboxProvider } from "@orkbot/adapters/novita-sandbox";
 import type { RunStatus } from "@orkbot/contracts";
 import { isTerminal } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";

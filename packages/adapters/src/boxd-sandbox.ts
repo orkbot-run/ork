@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
-import type { Machine } from "@boxd-sh/sdk";
-import { Boxd, ConflictError, FilesystemError, NotFoundError, RateLimitError } from "@boxd-sh/sdk";
+import type { Boxd as BoxdClient, Machine } from "@boxd-sh/sdk";
 import type {
   AdapterContext,
   CommandRequest,
@@ -41,6 +43,10 @@ import {
   workspaceSaveFindCommand,
 } from "./workspace-save-policy.js";
 
+const { Boxd, ConflictError, FilesystemError, NotFoundError, RateLimitError } = await import(
+  "@boxd-sh/sdk"
+);
+
 const DISPLAY_START = 20;
 const HOME = "/home/boxd";
 const WORKSPACE = `${HOME}/orkbot-home`;
@@ -70,13 +76,13 @@ const SNAPSHOT_LOOKUP_RETRY_MS = 60_000;
 /** The boxd SDK calls this provider makes; tests pass a stand-in. */
 export interface BoxdSandboxClient {
   machines: Pick<
-    Boxd["machines"],
+    BoxdClient["machines"],
     "create" | "get" | "delete" | "start" | "pause" | "streamExec"
   > & {
-    fs: Pick<Boxd["machines"]["fs"], "read" | "write" | "list" | "remove">;
-    proxies: Pick<Boxd["machines"]["proxies"], "create">;
+    fs: Pick<BoxdClient["machines"]["fs"], "read" | "write" | "list" | "remove">;
+    proxies: Pick<BoxdClient["machines"]["proxies"], "create">;
   };
-  snapshots: Pick<Boxd["snapshots"], "create" | "get">;
+  snapshots: Pick<BoxdClient["snapshots"], "create" | "get">;
 }
 
 interface BoxdCommandResult {

@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
+
 import { setTimeout as delay } from "node:timers/promises";
-import { FetchError, ResponseError } from "@boatdev/sdk";
+import type { FetchError as BoatFetchError } from "@boatdev/sdk";
 import { SandboxRateLimitError, SandboxUnresponsiveError } from "@orkbot/adapter-kit";
 import { redactSecrets } from "@orkbot/core";
 import { readBodyCapped } from "./web-ssrf.js";
+
+const { FetchError, ResponseError } = await import("@boatdev/sdk");
 
 const MAX_BOAT_ERROR_RESPONSE_BYTES = 16 * 1024;
 const BOAT_ERROR_RESPONSE_TIMEOUT_MS = 2_000;
@@ -184,7 +189,7 @@ function unsent(error: unknown): boolean {
 }
 
 /** A fetch the caller cancelled or that ran out of time, rather than one the network lost. */
-function aborted(error: FetchError, signal: AbortSignal | undefined): boolean {
+function aborted(error: BoatFetchError, signal: AbortSignal | undefined): boolean {
   const name = error.cause instanceof Error ? error.cause.name : undefined;
   return signal?.aborted === true || name === "AbortError" || name === "TimeoutError";
 }
