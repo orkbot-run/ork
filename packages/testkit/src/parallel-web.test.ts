@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Updated boundary fixtures follow LICENSE.md.
+
 import type { AgentRunRequest, AgentRuntime } from "@orkbot/adapter-kit";
 import { createRunExecutor, createWebProvider, PiAgentRuntime } from "@orkbot/adapters";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -91,6 +95,8 @@ function executorFixture(
     externalEffect: { findMany: async () => [] },
     usageRecord: { createMany: async () => ({ count: 1 }) },
     modelCreditEntry: { findUnique: async () => null },
+    $queryRaw: async (query: { strings: readonly string[] }) =>
+      query.strings.join("").includes("FROM spaces") ? [{ deletingAt: null }] : [],
     $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
   };
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));

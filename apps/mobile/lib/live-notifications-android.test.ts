@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Updated boundary fixtures follow LICENSE.md.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { native } = vi.hoisted(() => ({
@@ -9,7 +13,10 @@ const { native } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("expo-modules-core", () => ({ requireNativeModule: () => native }));
+vi.mock("expo-modules-core", () => ({
+  requireNativeModule: () => native,
+  requireOptionalNativeModule: () => null,
+}));
 vi.mock("expo-notifications", () => ({
   setNotificationHandler: vi.fn(),
   dismissAllNotificationsAsync: vi.fn(),
