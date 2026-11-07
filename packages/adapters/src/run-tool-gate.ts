@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; shared-page mandatory approvals are an Ork addition.
+
 import type {
   AdapterContext,
   AgentToolExecutionObserver,
@@ -268,6 +272,7 @@ export async function gateToolCall(
   // A gated read still fails closed when its review errors, and keeps its approval key.
   const gated = requiresApprovalByDefault || connectorReadGated;
   const requiresMandatoryApproval =
+    request.mandatoryApproval ||
     paying ||
     commandWatch ||
     scheduleNamesNewSite ||
@@ -326,22 +331,26 @@ export async function gateToolCall(
             ),
           )
         : false));
-  const plan = USER_COMPUTER_TOOLS.has(name)
-    ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
-    : planActionGate({
-        resolved: approvalResolved,
-        mode,
-        mandatory: requiresMandatoryApproval,
-        steerable:
-          guardedInNeverAsk && mode === "never"
-            ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
-            : undefined,
-        consequential: requiresApprovalByDefault,
-        reviewOnly: connectorReadGated,
-        checkerConfigured,
-        newDestination: siteGate === "new",
-        purchase: paying,
-      });
+  const plan = request.mandatoryApproval
+    ? approvalResolved.decision === "deny"
+      ? "deny"
+      : "ask"
+    : USER_COMPUTER_TOOLS.has(name)
+      ? await userComputerGate(ctx, approvalResolved.decision === "deny", name, args)
+      : planActionGate({
+          resolved: approvalResolved,
+          mode,
+          mandatory: requiresMandatoryApproval,
+          steerable:
+            guardedInNeverAsk && mode === "never"
+              ? !ctx.source.ownerStartedRun || (await isRunTainted(ctx))
+              : undefined,
+          consequential: requiresApprovalByDefault,
+          reviewOnly: connectorReadGated,
+          checkerConfigured,
+          newDestination: siteGate === "new",
+          purchase: paying,
+        });
   // Nobody is there to approve a purchase a webhook run reaches.
   if (paying && run.trigger === "webhook" && plan !== "deny") {
     await auditToolCall(ctx, name, "denied", { reason: "purchase_unattended" });

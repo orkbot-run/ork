@@ -48,6 +48,7 @@ import {
 } from "./run-effects.js";
 import { fleetPrepareDeps } from "./run-model.js";
 import { BUILTIN_AGENT_TOOL_NAMES, FLEET_WRITE_TOOL_NAMES_SET } from "./run-tool-selection.js";
+import { preparePageSaveRequest } from "./run-tools-pages.js";
 import { scheduleCreateRefusal } from "./run-tools-tasks.js";
 import { USER_COMPUTER_TOOLS } from "./run-tools-user-computer.js";
 import { SCHEDULE_TOOL_NAMES } from "./schedule-tools.js";
@@ -74,6 +75,8 @@ export interface ToolRequest {
   fleetSummary: FleetCardSummary | undefined;
   /** Gated like a consequential action, even when the tool alone is not. */
   heldForApproval: boolean;
+  /** This resolved operation always needs a person, regardless of rules or reviewer. */
+  mandatoryApproval?: boolean;
   /** This page tool call completes a purchase, which a person approves each time. */
   purchase: PurchaseApproval | undefined;
   /** This page tool call types a saved card into a checkout, which a person approves each time. */
@@ -309,6 +312,14 @@ export async function prepareToolRequest(
   const { deps, run, bot } = ctx;
   const { name, executionId, nextApprovedTool } = request;
   let { args } = request;
+  if (name === "save_page") {
+    const prepared = await preparePageSaveRequest(ctx, args, nextApprovedTool === name);
+    if ("error" in prepared) return prepared;
+    args = prepared.args;
+    request.fleetSummary = prepared.summary;
+    request.heldForApproval = Boolean(prepared.summary);
+    request.mandatoryApproval = Boolean(prepared.summary);
+  }
   if (
     (SCHEDULE_TOOL_NAMES.has(name) || SKILL_TOOL_NAMES.has(name)) &&
     (ctx.source.messagingChannelRun ||
@@ -466,7 +477,12 @@ export async function prepareToolRequest(
       request.effectRequest = args;
   }
   request.args = args;
-  if (name === "respond_agent_connection" || name === "update_bot" || isFleetApprovalTool(name))
+  if (
+    name === "save_page" ||
+    name === "respond_agent_connection" ||
+    name === "update_bot" ||
+    isFleetApprovalTool(name)
+  )
     request.effectRequest = args;
   return undefined;
 }

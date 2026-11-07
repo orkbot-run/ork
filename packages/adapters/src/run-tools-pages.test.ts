@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; shared-page approval races are Ork additions.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { buildApprovalAskBlock } from "./approval-ask.js";
+import { prepareToolRequest } from "./run-tool-request.js";
 
 const publishMessage = vi.fn();
 vi.mock("./run-messages.js", async (importActual) => ({
@@ -6,7 +12,7 @@ vi.mock("./run-messages.js", async (importActual) => ({
   publishMessage: (...args: unknown[]) => publishMessage(...args),
 }));
 
-const { pageTools } = await import("./run-tools-pages.js");
+const { pageTools, preparePageSaveRequest } = await import("./run-tools-pages.js");
 const { redactBlocks } = await import("./run-messages.js");
 
 const source = (heading: string) =>
@@ -14,7 +20,12 @@ const source = (heading: string) =>
 
 function context(
   tx: Record<string, unknown>,
-  existing?: { currentVersion: number },
+  existing?: {
+    currentVersion: number;
+    visibility?: string;
+    shareTokenHash?: string | null;
+    source?: string;
+  },
   secrets: string[] = [],
 ) {
   const prisma = {
@@ -25,7 +36,9 @@ function context(
               id: "page-1",
               title: "Plan",
               currentVersion: existing.currentVersion,
-              versions: [{ source: source("Plan") }],
+              visibility: existing.visibility ?? "private",
+              shareTokenHash: existing.shareTokenHash ?? null,
+              versions: [{ source: existing.source ?? source("Plan") }],
             }
           : null,
       ),
@@ -168,5 +181,153 @@ describe("save_page", () => {
     });
     expect(JSON.stringify(tx.pageVersion.create.mock.calls)).not.toContain(secret);
     expect(JSON.stringify(publishMessage.mock.calls)).not.toContain(secret);
+  });
+});
+
+describe("shared-page approval", () => {
+  const existing = () => ({ currentVersion: 2, visibility: "link", shareTokenHash: "hash-1" });
+  const write = () => ({ pageId: "page-1", source: source("Revised") });
+
+  it("pins the approved content and sharing, with a redacted once-only card", async () => {
+    const secret = "fake-page-title-secret";
+    const ctx = context({}, existing(), [secret]);
+    const request = { name: "save_page", args: { ...write(), title: `Plan ${secret}` } };
+    expect(await prepareToolRequest(ctx, request as never)).toBeUndefined();
+    expect(request).toMatchObject({ heldForApproval: true, mandatoryApproval: true });
+    const prepared = request as unknown as {
+      args: Record<string, unknown>;
+      fleetSummary: never;
+      effectRequest: unknown;
+    };
+    expect(prepared.effectRequest).toEqual(prepared.args);
+    expect(prepared.args.pageSaveBaseline).toEqual({
+      ...existing(),
+      titleHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+    });
+    const block = buildApprovalAskBlock("effect-1", "save_page", prepared.args, [secret], {
+      summary: prepared.fleetSummary,
+    });
+    expect(JSON.stringify(prepared.args)).not.toContain(secret);
+    expect(JSON.stringify(block)).not.toContain(secret);
+    expect(block).toMatchObject({
+      detail: expect.stringContaining('-   <Page title="Plan">'),
+      actions: [{ id: "allow" }, { id: "deny" }],
+    });
+  });
+
+  it("drops model-supplied approval metadata and refuses replay without a pinned baseline", async () => {
+    const result = await preparePageSaveRequest(
+      context({}, existing()),
+      { ...write(), pageSaveBaseline: { currentVersion: 99 } },
+      false,
+    );
+    expect(result).toMatchObject({ args: { pageSaveBaseline: { currentVersion: 2 } } });
+    await expect(
+      preparePageSaveRequest(context({}, existing()), write(), true),
+    ).resolves.toHaveProperty("error");
+  });
+
+  it.each([
+    { currentVersion: 3, visibility: "link", shareTokenHash: "hash-1" },
+    { currentVersion: 2, visibility: "private", shareTokenHash: null },
+    { currentVersion: 2, visibility: "link", shareTokenHash: "hash-2" },
+  ])("rejects a stale approved write before changing state: %j", async (changed) => {
+    const prepared = await preparePageSaveRequest(context({}, existing()), write(), false);
+    if ("error" in prepared) throw Error(prepared.error);
+    await expect(
+      preparePageSaveRequest(context({}, changed), prepared.args, true),
+    ).resolves.toHaveProperty("error");
+    const tx = { page: { updateMany: vi.fn() } };
+    expect(
+      await pageTools.save_page!(context(tx, changed), {
+        args: prepared.args,
+        claimedEffect: true,
+        bypassApproval: false,
+        finish: (r: unknown) => r,
+      } as never),
+    ).toMatchObject({ unchanged: true });
+    expect(tx.page.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("requires a fresh approval when a private page becomes link-visible", async () => {
+    const prepared = await preparePageSaveRequest(
+      context({}, { currentVersion: 2 }),
+      write(),
+      false,
+    );
+    if ("error" in prepared) throw Error(prepared.error);
+    const tx = { page: { updateMany: vi.fn() } };
+    expect(
+      await pageTools.save_page!(context(tx, existing()), {
+        args: prepared.args,
+        finish: (r: unknown) => r,
+      } as never),
+    ).toMatchObject({ unchanged: true });
+    expect(tx.page.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("refuses oversized review detail instead of approving a truncated change", async () => {
+    await expect(
+      preparePageSaveRequest(
+        context({}, existing()),
+        { pageId: "page-1", source: source("x".repeat(5000)) },
+        false,
+      ),
+    ).resolves.toMatchObject({ error: expect.stringContaining("too large") });
+  });
+
+  it("keeps a small edit reviewable in a large page by omitting unchanged lines", async () => {
+    const previous = `// ${"unchanged".repeat(1000)}\n// context\n${source("Plan")}`;
+    const prepared = await preparePageSaveRequest(
+      context({}, { ...existing(), source: previous }),
+      { pageId: "page-1", edits: [{ find: 'title="Plan"', replace: 'title="Revised"' }] },
+      false,
+    );
+    if ("error" in prepared) throw Error(prepared.error);
+    expect(prepared.summary?.lines.join("\n")).not.toContain("unchanged".repeat(1000));
+    expect(prepared.summary?.lines.join("\n")).toContain('+   <Page title="Revised">');
+    expect(prepared.args.source).toBe(previous.replace('title="Plan"', 'title="Revised"'));
+  });
+
+  it("rejects a secret-bearing proposal before it can become a stored approval request", async () => {
+    const secret = "fake-proposal-secret";
+    const prepared = await preparePageSaveRequest(
+      context({}, existing(), [secret]),
+      {
+        pageId: "page-1",
+        source: source(secret),
+      },
+      false,
+    );
+    expect(prepared).toMatchObject({ error: expect.stringContaining("contains a secret") });
+    expect(prepared).not.toHaveProperty("args");
+  });
+
+  it("compares sharing state atomically with the version when the approved save executes", async () => {
+    const tx = {
+      page: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      pageVersion: { create: vi.fn() },
+    };
+    const prepared = await preparePageSaveRequest(context({}, existing()), write(), false);
+    if ("error" in prepared) throw Error(prepared.error);
+    const result = await pageTools.save_page!(context(tx, existing()), {
+      args: prepared.args,
+      claimedEffect: true,
+      bypassApproval: false,
+      finish: (r: unknown) => r,
+    } as never);
+    expect(result).toMatchObject({ unchanged: true });
+    expect(tx.page.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: "page-1",
+          currentVersion: 2,
+          visibility: "link",
+          shareTokenHash: "hash-1",
+          title: "Plan",
+        },
+      }),
+    );
+    expect(tx.pageVersion.create).not.toHaveBeenCalled();
   });
 });
