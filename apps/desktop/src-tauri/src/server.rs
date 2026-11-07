@@ -12,6 +12,14 @@ use url::{Host, Url};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_PROBE_BYTES: usize = 64 * 1024;
+const MAX_SAFE_PROTOCOL_VERSION: f64 = 9_007_199_254_740_991.0;
+
+fn client_protocol_version() -> f64 {
+    include_str!("../../../../packages/contracts/src/client-protocol-version.json")
+        .trim()
+        .parse()
+        .expect("The shared client protocol version must be numeric")
+}
 
 /// Match the desktop's existing server-origin policy, including private HTTP servers.
 pub fn normalize_server_url(input: &str) -> Result<Url, String> {
@@ -106,6 +114,7 @@ pub async fn probe_server(server: &Url) -> Result<(), String> {
     let mut response = client
         .post(target)
         .header(reqwest::header::CACHE_CONTROL, "no-store")
+        .header("x-orkbot-protocol", client_protocol_version().to_string())
         .json(&json!({ "json": {} }))
         .send()
         .await
@@ -189,6 +198,37 @@ pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
         return Err(ERROR.into());
     }
     if value.get("nativeRenderer").and_then(Value::as_str) != Some("bundled-v1") {
+        return Err("Update this server before connecting with this version of Ork.".into());
+    }
+    require_client_protocol(value.get("protocol"))
+}
+
+/// Match the shared positive safe-integer range, including JSON numbers written as 1.0.
+fn require_client_protocol(range: Option<&Value>) -> Result<(), String> {
+    const INVALID: &str = "That address did not respond like an Ork server.";
+    let legacy = json!({ "min": 1, "max": 1 });
+    let range = range.unwrap_or(&legacy);
+    let Some(range) = range.as_object().filter(|range| range.len() == 2) else {
+        return Err(INVALID.into());
+    };
+    let bound = |name| {
+        range.get(name).and_then(Value::as_f64).filter(|value| {
+            value.is_finite()
+                && value.fract() == 0.0
+                && *value > 0.0
+                && *value <= MAX_SAFE_PROTOCOL_VERSION
+        })
+    };
+    let (Some(min), Some(max)) = (bound("min"), bound("max")) else {
+        return Err(INVALID.into());
+    };
+    if min > max {
+        return Err(INVALID.into());
+    }
+    if min > client_protocol_version() {
+        return Err("Update Ork to connect to this server.".into());
+    }
+    if max < client_protocol_version() {
         return Err("Update this server before connecting with this version of Ork.".into());
     }
     Ok(())
@@ -408,6 +448,7 @@ mod tests {
         assert!(headers.starts_with("post /rpc/health http/1.1\r\n"));
         assert!(headers.contains("content-type: application/json"));
         assert!(headers.contains("cache-control: no-store"));
+        assert!(headers.contains("x-orkbot-protocol: 1"));
         assert!(!headers.contains("authorization:"));
         assert!(!headers.contains("cookie:"));
         assert_eq!(
@@ -454,6 +495,42 @@ mod tests {
                 require_accounts_only(&server).await.unwrap_err(),
                 "Update this server before connecting with this version of Ork."
             );
+            request.join().unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn accounts_only_capability_check_requires_a_supported_protocol_range() {
+        for (range, accepted) in [
+            (json!({"min": 1, "max": 1}), true),
+            (json!({"min": 1.0, "max": 2.0}), true),
+            (json!({"min": 1, "max": 9_007_199_254_740_991_u64}), true),
+            (json!({"min": 2, "max": 3}), false),
+            (json!({"min": 2, "max": 1}), false),
+            (json!({"min": 0, "max": 1}), false),
+            (json!({"min": -1, "max": 1}), false),
+            (json!({"min": 1.5, "max": 2}), false),
+            (json!({"min": "1", "max": 1}), false),
+            (json!({"min": 1, "max": 9_007_199_254_740_992_u64}), false),
+            (json!({"min": 1}), false),
+            (json!({"min": 1, "max": 1, "extra": true}), false),
+            (json!(null), false),
+            (json!("1"), false),
+        ] {
+            let value = json!({"passwordAuth": false, "accountsLogin": true,
+                "nativeRenderer": "bundled-v1", "protocol": range});
+            let (server, request) = serve_once(http_response("200 OK", &value.to_string()));
+            let result = require_accounts_only(&server).await;
+            if accepted {
+                result.unwrap();
+            } else {
+                let expected = if range == json!({"min": 2, "max": 3}) {
+                    "Update Ork to connect to this server."
+                } else {
+                    "That address did not respond like an Ork server."
+                };
+                assert_eq!(result.unwrap_err(), expected);
+            }
             request.join().unwrap();
         }
     }

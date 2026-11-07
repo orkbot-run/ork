@@ -4,6 +4,7 @@
 // Preserves the inherited Polish catalog and adds the progressive Ork welcome.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Update Ork to connect to this server.": "Zaktualizuj Ork, aby połączyć się z tym serwerem.",
   // Menus
   "About {name}": "O {name}",
   "Check for Updates…": "Sprawdź aktualizacje…",
@@ -188,6 +189,9 @@ export const PL_MESSAGES: Record<string, string> = {
   "Setup could not start. Quit Ork and try again.":
     "Nie udało się rozpocząć konfiguracji. Zamknij Ork i spróbuj ponownie.",
 
+  "Update this server before connecting with this version of Ork.":
+    "Zaktualizuj serwer, aby połączyć się z nim w tej wersji Ork.",
+  "That address did not respond like an Ork server.": "Ten adres nie odpowiedział jak serwer Ork.",
   // Connecting to a server
   "Enter a server address.": "Wpisz adres serwera.",
   "Enter a valid http:// or https:// address.": "Wpisz poprawny adres http:// lub https://.",

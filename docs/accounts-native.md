@@ -87,6 +87,15 @@ build cannot receive links. Expo requires a development or release binary with
 the configured schemes. The renderer Playwright fixture opens the native
 renderer entry directly; ordinary browser tests use the connection page.
 
+## Protocol compatibility
+
+RPC requests from Tauri and Expo send `x-orkbot-protocol: 1` to the selected Ork server.
+`/api/auth/capabilities` advertises the server's `protocol: { min, max }` range.
+Missing ranges and client headers mean version 1. Malformed or incompatible ranges fail
+validation, and the API rejects malformed headers with 400 and unsupported versions with 426.
+Build-age checks remain separate. The optional `aiConsent` flag reports support for the
+consent API, without granting or recording the user's consent.
+
 ## Local server sign-in
 
 "This computer" uses Ork Accounts as its only sign-in method. The desktop build supplies

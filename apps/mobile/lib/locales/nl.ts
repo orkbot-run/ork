@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Update Ork to connect to this server.": "Werk Ork bij om verbinding te maken met deze server.",
+  "Update this server before connecting with this version of Ork.":
+    "Werk deze server bij voordat je verbinding maakt met deze versie van Ork.",
   Updates: "Updates",
   "Check for updates": "Controleren op updates",
   "Update server": "Server bijwerken",

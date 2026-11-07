@@ -1,5 +1,11 @@
 import type { AuthCapabilities } from "@orkbot/contracts";
-import { authCapabilitiesSchema, legacyAuthCapabilitiesSchema } from "@orkbot/contracts";
+import {
+  authCapabilitiesSchema,
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  legacyAuthCapabilitiesSchema,
+  supportsProtocolVersion,
+} from "@orkbot/contracts";
 import { ResponseBodyTooLargeError, readBoundedJsonResponse } from "@orkbot/core";
 
 export type { AuthCapabilities } from "@orkbot/contracts";
@@ -31,7 +37,10 @@ async function loadAuthCapabilities(): Promise<AuthCapabilities> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch("/api/auth/capabilities", { signal: controller.signal });
+    const response = await fetch("/api/auth/capabilities", {
+      signal: controller.signal,
+      headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
+    });
     if (!response.ok) throw new Error("Could not load authentication capabilities");
     const length = Number(response.headers.get("content-length") ?? Number.NaN);
     let body: unknown;
@@ -56,7 +65,10 @@ async function loadAuthCapabilities(): Promise<AuthCapabilities> {
         controller.signal,
       );
     }
-    return authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
+    const capabilities = authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
+    if (!supportsProtocolVersion(capabilities.protocol))
+      throw new Error("Could not load authentication capabilities");
+    return capabilities;
   } finally {
     clearTimeout(timer);
   }

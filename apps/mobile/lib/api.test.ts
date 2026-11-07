@@ -303,6 +303,7 @@ describe("mobile API authentication", () => {
       },
     });
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      expect(new Headers(init?.headers).get("x-orkbot-protocol")).toBe("1");
       const { response } = await handler.handle(new Request(input, init), { prefix: "/rpc" });
       if (!response) throw new Error("The real RPC handler did not match the request");
       return response;
@@ -457,7 +458,10 @@ describe("mobile API authentication", () => {
       await expect(request()).rejects.toThrow(message);
 
       expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
-      expect(await authHeaders(null)).toEqual({ authorization: "Bearer fake-session" });
+      expect(await authHeaders(null)).toEqual({
+        "x-orkbot-protocol": "1",
+        authorization: "Bearer fake-session",
+      });
     });
   });
 
@@ -1674,6 +1678,189 @@ describe("mobile API authentication", () => {
     expect(store.get("orkbot.space_id")).toBe("space-support");
   });
 
+  it("blocks AI actions before status and upload when discovery explicitly disables consent", async () => {
+    vi.mocked(promptAiConsent).mockClear();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(new URL(String(input)).pathname).toBe("/api/auth/capabilities");
+      expect(init).toMatchObject({ credentials: "omit", redirect: "error" });
+      expect(new Headers(init?.headers).has("authorization")).toBe(false);
+      expect(init?.body).toBeUndefined();
+      return Response.json({ aiConsent: false, protocol: { min: 1, max: 1 } });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    for (const proc of [
+      "threads/send",
+      "artifacts/create",
+      "routines/create",
+      "voice/prepare",
+    ] as const) {
+      await expect(rpc(proc, { botId: "bot", text: "private content" } as never)).rejects.toThrow(
+        "Update your server",
+      );
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(promptAiConsent).not.toHaveBeenCalled();
+  });
+
+  it("keeps normal reads and routine disabling independent from AI capabilities", async () => {
+    const paths: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        paths.push(new URL(String(input)).pathname);
+        return Response.json({ json: { ok: true } });
+      }),
+    );
+    await rpc("bots/list");
+    await rpc("routines/update", { routineId: "routine", active: false } as never);
+    expect(paths).toEqual(["/rpc/bots/list", "/rpc/routines/update"]);
+  });
+
+  it("refreshes an explicit refusal after a server upgrade and still checks user consent", async () => {
+    vi.mocked(promptAiConsent).mockClear();
+    vi.mocked(promptAiConsent).mockResolvedValue(false);
+    let available = false;
+    const paths: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const path = new URL(String(input)).pathname;
+        paths.push(path);
+        if (path === "/api/auth/capabilities") return Response.json({ aiConsent: available });
+        expect(path).toBe("/rpc/aiConsent/status");
+        return Response.json({
+          json: {
+            scope: "account-space",
+            version: "2026-09-14",
+            recipients: [
+              { key: "provider", name: "Example AI", use: "model", detail: "", allowed: false },
+            ],
+          },
+        });
+      }),
+    );
+    await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
+    available = true;
+    await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("AI data sharing");
+    expect(promptAiConsent).toHaveBeenCalledOnce();
+    expect(paths).toEqual([
+      "/api/auth/capabilities",
+      "/api/auth/capabilities",
+      "/rpc/aiConsent/status",
+    ]);
+  });
+
+  it.each([true, false])(
+    "does not reuse late server A capability %s on server B",
+    async (availableA) => {
+      mockSecureStore(new Map());
+      const initialBase = currentApiBase();
+      let resolveA!: (response: Response) => void;
+      const paths: string[] = [];
+      const fetchMock = vi.fn(async (input: string | URL | Request) => {
+        const url = String(input);
+        paths.push(url);
+        if (url === `${initialBase}/api/auth/capabilities`)
+          return new Promise<Response>((resolve) => {
+            resolveA = resolve;
+          });
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: false });
+        throw new Error("Unexpected RPC after a server change");
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const pendingA = rpc("threads/send", { botId: "bot" });
+      const rejectedA = expect(pendingA).rejects.toThrow();
+      await vi.waitFor(() => expect(resolveA).toBeTypeOf("function"));
+      try {
+        expect(await saveApiBase("https://capabilities-b.example.test")).toMatchObject({
+          ok: true,
+        });
+        await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
+        resolveA(Response.json({ aiConsent: availableA }));
+        await rejectedA;
+        expect(paths).toEqual([
+          `${initialBase}/api/auth/capabilities`,
+          "https://capabilities-b.example.test/api/auth/capabilities",
+        ]);
+      } finally {
+        await resetApiBase();
+      }
+    },
+  );
+
+  it("does not share a capability lookup across logout on the same server", async () => {
+    mockSecureStore(new Map());
+    let resolveOld!: (response: Response) => void;
+    let lookups = 0;
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      expect(String(input)).toContain("/api/auth/capabilities");
+      if (++lookups === 1)
+        return new Promise<Response>((resolve) => {
+          resolveOld = resolve;
+        });
+      return Response.json({ aiConsent: false });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const old = rpc("threads/send", { botId: "bot" });
+    const rejectedOld = expect(old).rejects.toThrow();
+    await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
+    await clearSessionToken();
+    await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
+    resolveOld(Response.json({ aiConsent: true }));
+    await rejectedOld;
+    expect(lookups).toBe(2);
+  });
+
+  it("keeps a late server A refusal from blocking server B", async () => {
+    mockSecureStore(new Map());
+    const initialBase = currentApiBase();
+    let resolveA!: (response: Response) => void;
+    const paths: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input) => {
+        const url = String(input);
+        paths.push(url);
+        if (url === `${initialBase}/api/auth/capabilities`)
+          return new Promise<Response>((resolve) => {
+            resolveA = resolve;
+          });
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/rpc/aiConsent/status"))
+          return Response.json({
+            json: { scope: "account-space", version: "2026-09-14", recipients: [] },
+          });
+        return Response.json({ json: { ok: true } });
+      }),
+    );
+    const old = rpc("threads/send", { botId: "bot" });
+    const rejectedOld = expect(old).rejects.toThrow();
+    await vi.waitFor(() => expect(resolveA).toBeTypeOf("function"));
+    try {
+      expect(await saveApiBase("https://capabilities-b.example.test")).toMatchObject({ ok: true });
+      await expect(rpc("threads/send", { botId: "bot" })).resolves.toEqual({ ok: true });
+      resolveA(Response.json({ aiConsent: false }));
+      await rejectedOld;
+      await expect(rpc("threads/send", { botId: "bot" })).resolves.toEqual({ ok: true });
+      expect(paths.filter((path) => path === `${initialBase}/rpc/threads/send`)).toEqual([]);
+      expect(paths.filter((path) => path.endsWith("/rpc/threads/send"))).toHaveLength(2);
+    } finally {
+      await resetApiBase();
+    }
+  });
+
+  it("bounds capability body reads before dispatching any AI status or content", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => new Response(new ReadableStream({ start() {} })));
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = rpc("threads/send", { botId: "bot" });
+    const rejected = expect(pending).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(8_000);
+    await rejected;
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("blocks mobile message and attachment submission when AI sharing is declined", async () => {
     vi.mocked(promptAiConsent).mockResolvedValue(false);
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
@@ -1692,10 +1879,12 @@ describe("mobile API authentication", () => {
       const body = { botId: "bot-1", text: "private content" } as RpcInput<typeof proc>;
       await expect(rpc(proc, body)).rejects.toThrow("AI data sharing");
     }
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
     for (const [url, init] of fetchMock.mock.calls) {
-      expect(String(url)).toContain("/rpc/aiConsent/status");
-      expect(init?.body).not.toContain("private content");
+      expect(new URL(String(url)).pathname).toMatch(
+        /^\/(api\/auth\/capabilities|rpc\/aiConsent\/status)$/,
+      );
+      expect(init?.body ?? "").not.toContain("private content");
     }
   });
 
@@ -1707,7 +1896,7 @@ describe("mobile API authentication", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it.each(["throws", "rejects", "stalls"])(
@@ -1723,7 +1912,7 @@ describe("mobile API authentication", () => {
         vi.fn(async () => ({ status: 404, body: { cancel } })),
       );
       await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
-      expect(cancel).toHaveBeenCalledOnce();
+      expect(cancel).toHaveBeenCalledTimes(2);
     },
   );
 
@@ -1755,7 +1944,12 @@ describe("mobile API authentication", () => {
       }),
     );
     await rpc("threads/send", { botId: "bot-1", text: "authorized content" });
-    expect(calls).toEqual(["/rpc/aiConsent/status", "/rpc/aiConsent/allow", "/rpc/threads/send"]);
+    expect(calls).toEqual([
+      "/api/auth/capabilities",
+      "/rpc/aiConsent/status",
+      "/rpc/aiConsent/allow",
+      "/rpc/threads/send",
+    ]);
     expect(promptAiConsent).toHaveBeenLastCalledWith(recipient, "https://example.com/privacy");
   });
 
@@ -1793,6 +1987,7 @@ describe("mobile API authentication", () => {
     ]);
 
     expect(promptAiConsent).toHaveBeenCalledTimes(1);
+    expect(calls.filter((path) => path === "/api/auth/capabilities")).toHaveLength(1);
     expect(calls.filter((path) => path.endsWith("/aiConsent/status"))).toHaveLength(2);
     expect(calls.filter((path) => path.endsWith("/aiConsent/allow"))).toHaveLength(1);
     expect(calls.filter((path) => path.endsWith("/threads/send"))).toHaveLength(2);
@@ -1857,6 +2052,7 @@ describe("mobile API authentication", () => {
     await selectSpace("space-support");
 
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -1969,6 +2165,7 @@ describe("mobile API authentication", () => {
       error: "Could not clear the previous server session",
     });
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2011,6 +2208,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2039,6 +2237,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       "x-orkbot-space-id": "space-support",
     });
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith("orkbot.space_id", "space-support");
@@ -2083,6 +2282,7 @@ describe("mobile API authentication", () => {
       key === "orkbot.session_token" ? "session-token" : null,
     );
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2137,6 +2337,7 @@ describe("mobile API authentication", () => {
     await expect(saveApiBase("https://third-server.example")).resolves.toMatchObject({ ok: false });
 
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2164,6 +2365,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -3141,6 +3343,7 @@ describe("mobile API authentication", () => {
       error: "Could not save the server URL",
     });
     await expect(authHeaders()).resolves.toEqual({
+      "x-orkbot-protocol": "1",
       "x-orkbot-space-id": "space-support",
     });
     expect(storage.get("orkbot.space_rollback")).toBe(

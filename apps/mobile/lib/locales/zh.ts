@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Update Ork to connect to this server.": "请更新 Ork 以连接此服务器。",
+  "Update this server before connecting with this version of Ork.":
+    "使用此版本的 Ork 连接前，请先更新此服务器。",
   Updates: "更新",
   "Check for updates": "检查更新",
   "Update server": "更新服务器",

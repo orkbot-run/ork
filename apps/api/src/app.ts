@@ -114,6 +114,7 @@ import {
   isLocalhostOrLoopbackIp,
   PLUGIN_SUBMISSIONS_PATH,
   SERVER_BUILD_HEADER,
+  SERVER_PROTOCOL_RANGE,
 } from "@orkbot/contracts";
 import { encryptionKeyWarning, signupPolicyFromEnv } from "@orkbot/core";
 import type { Pool, PrismaClient } from "@orkbot/db";
@@ -201,6 +202,7 @@ import {
   requestClientIp,
   withClientIp,
 } from "#modules/platform/client-ip";
+import { clientProtocolMiddleware } from "#modules/platform/client-protocol";
 import type { AppEnv } from "#modules/platform/env";
 import { loadEnv } from "#modules/platform/env";
 import { healthRoutes } from "#modules/platform/health";
@@ -960,6 +962,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   }
   app.get("/api/auth/capabilities", (c) => {
     return c.json({
+      protocol: SERVER_PROTOCOL_RANGE,
+      aiConsent: true,
       accountsLogin: env.accountsEnabled || undefined,
       nativeRenderer: "bundled-v1",
       managedAccountKey: managedAccountKeyForRequest(
@@ -1078,6 +1082,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       return c.redirect(target.toString());
     });
   }
+  app.use("/rpc/*", clientProtocolMiddleware());
   app.use(
     "/rpc/*",
     clientBuildMiddleware({

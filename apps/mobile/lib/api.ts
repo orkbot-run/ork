@@ -36,6 +36,8 @@ import type {
 import {
   accountSecuritySchema,
   authCapabilitiesSchema,
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
   CLIENT_UPDATE_REQUIRED_STATUS,
   IncomingBotCallSchema,
   legacyAccountSecurity,
@@ -76,7 +78,12 @@ import * as SecureStore from "expo-secure-store";
 import { signOutAccounts } from "./accounts";
 import { promptAiConsent } from "./ai-consent";
 import type { EndpointResult } from "./endpoint";
-import { defaultApiBase, normalizeApiBase } from "./endpoint";
+import {
+  defaultApiBase,
+  MAX_API_PROBE_RESPONSE_BYTES,
+  normalizeApiBase,
+  requireSupportedProtocol,
+} from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
 import { identityLabels } from "./identity-display";
 import { resumeLiveNotifications } from "./live-notifications";
@@ -637,6 +644,7 @@ export async function authHeaders(
   const token = await loadSessionToken();
   return {
     ...clientBuild.headers(),
+    [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
     ...(token ? { authorization: `Bearer ${token}` } : {}),
     ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}),
   };
@@ -666,6 +674,68 @@ export async function captureApiRequestContext(
   if (generation !== currentSessionGeneration())
     throw new Error(t("Something went wrong. Try again."));
   return { apiBase, headers, sessionGeneration: generation };
+}
+
+const pendingAiCapabilities = new Map<string, Promise<void>>();
+
+/** Discovery only gates AI entry points; it never replaces the live user-consent check. */
+async function requireAiConsentCapability(
+  apiBase: string,
+  sessionGeneration: number,
+  signal: AbortSignal,
+): Promise<void> {
+  const key = `${apiBase}\u0000${sessionGeneration}`;
+  let pending = pendingAiCapabilities.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const deadline = requestSignal(undefined, RPC_TIMEOUT_MS);
+      try {
+        const response = await withAbort(
+          fetchServer(
+            `${apiBase}/api/auth/capabilities`,
+            {
+              headers: { origin: "orkbot://", "cache-control": "no-store" },
+              credentials: "omit",
+              redirect: "error",
+              signal: deadline.signal,
+            },
+            apiBase,
+          ).then((response) => {
+            if (deadline.signal.aborted) cancelResponseBody(response);
+            return response;
+          }),
+          deadline.signal,
+        );
+        // Pre-discovery servers still prove consent through the existing status RPC.
+        if (response.status === 404) {
+          cancelResponseBody(response);
+          return;
+        }
+        if (!response.ok) {
+          cancelResponseBody(response);
+          throw new Error(t("Could not load sign-in options"));
+        }
+        const value = await readBoundedJsonResponse<unknown>(
+          response,
+          MAX_API_PROBE_RESPONSE_BYTES,
+          deadline.signal,
+        );
+        if (!value || typeof value !== "object" || Array.isArray(value))
+          throw new Error(t("Could not load sign-in options"));
+        requireSupportedProtocol(value);
+        if ("aiConsent" in value && value.aiConsent !== true) {
+          throw new Error(t("Update your server to use AI data sharing in this mobile version."));
+        }
+      } finally {
+        deadline.dispose();
+      }
+    })().finally(() => {
+      if (pendingAiCapabilities.get(key) === pending) pendingAiCapabilities.delete(key);
+    });
+    pendingAiCapabilities.set(key, pending);
+  }
+  // Never retain a refusal across attempts: a server upgrade can enable the feature immediately.
+  await withAbort(pending, signal);
 }
 
 async function postAuth(path: string, input: Record<string, string>) {
@@ -746,6 +816,7 @@ export async function passwordResetCapabilities(): Promise<PasswordResetCapabili
     { headers: { origin: "orkbot://" } },
   );
   if (!response.ok) throw new Error(t("Could not load sign-in options"));
+  requireSupportedProtocol(body);
   return authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
 }
 
@@ -1072,6 +1143,17 @@ async function request(
   try {
     const requestHeaders = consentContext?.headers ?? (await authHeaders());
     const requestSpaceId = requestHeaders["x-orkbot-space-id"];
+    if (proc === "aiConsent/status") {
+      deadline.signal.throwIfAborted();
+      if (
+        requestApiBase !== currentApiBase() ||
+        requestSessionGeneration !== currentSessionGeneration() ||
+        (consentContext?.sessionGeneration !== undefined &&
+          consentContext.sessionGeneration !== currentSessionGeneration())
+      )
+        throw new Error(t("Something went wrong. Try again."));
+      await requireAiConsentCapability(requestApiBase, requestSessionGeneration, deadline.signal);
+    }
     if (requestApiBase !== currentApiBase())
       throw new Error(t("The server changed while starting the request"));
     if (requestSessionGeneration !== currentSessionGeneration())

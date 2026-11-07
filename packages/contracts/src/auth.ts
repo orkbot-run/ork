@@ -3,8 +3,13 @@
 // Inherited auth contracts are preserved; native account proof is an Ork addition.
 
 import { z } from "zod";
+import { protocolRangeSchema } from "./client-protocol.js";
 
 export const authCapabilitiesSchema = z.object({
+  /** Supported RPC versions; omitted by servers that speak the original protocol. */
+  protocol: protocolRangeSchema.optional(),
+  /** The AI disclosure procedures exist; each request still needs its own consent check. */
+  aiConsent: z.boolean().optional(),
   /** Native Accounts proofs are exchanged for a server session, without server OIDC credentials. */
   accountsLogin: z.boolean().optional(),
   /** The server supplies browser handoff pages while the desktop carries its renderer. */

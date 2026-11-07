@@ -1,3 +1,4 @@
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -21,6 +22,21 @@ afterEach(() => {
 });
 
 describe("signed-out responses", () => {
+  it.each([rpc, createSpaceRpc("space-a")])(
+    "advertises the wire protocol on RPC requests without changing cookie authentication",
+    async (client) => {
+      const fetch = vi.fn(async (_request: Request, _init: RequestInit) =>
+        Response.json({ json: {} }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      await client.me();
+      expect(new Headers(fetch.mock.calls[0]?.[1].headers).get(CLIENT_PROTOCOL_HEADER)).toBe(
+        String(CLIENT_PROTOCOL_VERSION),
+      );
+      expect(fetch.mock.calls[0]?.[1].credentials).toBe("include");
+    },
+  );
+
   it("preserves cookie authentication, oRPC error identity and server error data", async () => {
     const fetch = vi.fn(async (_request: Request, _init: RequestInit) =>
       Response.json(

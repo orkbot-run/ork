@@ -136,6 +136,7 @@ describe("read-aloud across session changes", () => {
       vi.fn(async (input: string | URL, init?: RequestInit) => {
         const url = String(input);
         requests.push(url);
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -428,6 +429,7 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -464,6 +466,7 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -499,6 +502,7 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
+        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }

@@ -17,6 +17,7 @@ export * from "./bot-secrets.js";
 export * from "./bot-settings-layout.js";
 export * from "./builtin-tools.js";
 export * from "./client-build.js";
+export * from "./client-protocol.js";
 export * from "./cloudflare-ai-gateway.js";
 export * from "./connector-errors.js";
 export * from "./desktop.js";

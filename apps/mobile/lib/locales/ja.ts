@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Update Ork to connect to this server.": "このサーバーに接続するには、Orkを更新してください。",
+  "Update this server before connecting with this version of Ork.":
+    "このバージョンのOrkで接続する前に、サーバーを更新してください。",
   Updates: "アップデート",
   "Check for updates": "アップデートを確認",
   "Update server": "サーバーを更新",

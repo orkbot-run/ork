@@ -1,6 +1,11 @@
 import { createRpcLink } from "@orkbot/client-transport";
 import type { AppContract, ProductEvent } from "@orkbot/contracts";
-import { CLIENT_BUILD_HEADER, formatClientBuild } from "@orkbot/contracts";
+import {
+  CLIENT_BUILD_HEADER,
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  formatClientBuild,
+} from "@orkbot/contracts";
 import { displayIdentityEvent, displayIdentityResult } from "@orkbot/core";
 import { clientCorrelationHeaders, responseCorrelation } from "@orkbot/logging/monitoring";
 import { createORPCClient } from "@orpc/client";
@@ -83,6 +88,7 @@ const link = createRpcLink<RpcClientContext>({
       options.context.spaceId === undefined ? selectedSpaceId() : options.context.spaceId;
     const correlation = clientCorrelationHeaders();
     const headers = withSpaceHeaders(undefined, spaceId);
+    headers.set(CLIENT_PROTOCOL_HEADER, String(CLIENT_PROTOCOL_VERSION));
     if (CLIENT_BUILD) headers.set(CLIENT_BUILD_HEADER, formatClientBuild("web", CLIENT_BUILD));
     for (const [key, value] of Object.entries(correlation)) headers.set(key, value);
     return headers;

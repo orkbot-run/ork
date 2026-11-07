@@ -33,6 +33,25 @@ it("treats email code sign-in as an optional boolean capability", () => {
   expect(authCapabilitiesSchema.safeParse({ ...base, emailCode: "true" }).success).toBe(false);
 });
 
+it("adds RPC discovery without requiring new fields from older servers", () => {
+  const base = { passwordAuth: false, passwordReset: false, resetUrl: null, sso: null };
+  const legacy = authCapabilitiesSchema.parse(base);
+  expect(legacy.protocol).toBeUndefined();
+  expect(legacy.aiConsent).toBeUndefined();
+  for (const aiConsent of [true, false]) {
+    expect(
+      authCapabilitiesSchema.parse({ ...base, protocol: { min: 1, max: 2 }, aiConsent }),
+    ).toMatchObject({ protocol: { min: 1, max: 2 }, aiConsent });
+  }
+  for (const protocol of [null, { min: 0, max: 1 }, { min: 2, max: 1 }]) {
+    const malformed = { ...base, protocol };
+    expect(
+      authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).safeParse(malformed).success,
+    ).toBe(false);
+  }
+  expect(authCapabilitiesSchema.safeParse({ ...base, aiConsent: "true" }).success).toBe(false);
+});
+
 it("versions the bundled desktop renderer contract without requiring it from older servers", () => {
   const base = { passwordAuth: false, passwordReset: false, resetUrl: null, sso: null };
   expect(authCapabilitiesSchema.parse(base).nativeRenderer).toBeUndefined();

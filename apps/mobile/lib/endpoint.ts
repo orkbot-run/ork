@@ -3,7 +3,12 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 endpoint validation is preserved. Accounts-only server checks are Ork additions.
 
-import { isPrivateNetworkHost } from "@orkbot/contracts";
+import {
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  isPrivateNetworkHost,
+  protocolRangeSchema,
+} from "@orkbot/contracts";
 import { cancelResponseBody, readBoundedJsonResponse, withAbort } from "@orkbot/core";
 import { t } from "./i18n";
 import { DEFAULT_API, LOCAL_API } from "./server-config";
@@ -18,14 +23,23 @@ export async function requireAccountsSignIn(
 ): Promise<{ accountsLogin: boolean }> {
   const parsed = normalizeApiBase(url);
   if (!parsed.ok || parsed.url !== url) throw new Error("Invalid server address.");
-  const response = await fetch(`${url}/api/auth/capabilities`, {
-    headers,
-    credentials: "omit",
-    redirect: "error",
-    signal: AbortSignal.timeout(API_PROBE_TIMEOUT_MS),
-  });
+  const signal = AbortSignal.timeout(API_PROBE_TIMEOUT_MS);
+  const response = await withAbort(
+    fetch(`${url}/api/auth/capabilities`, {
+      headers,
+      credentials: "omit",
+      redirect: "error",
+      signal,
+    }),
+    signal,
+  );
   if (!response.ok) throw new Error("Could not read the server's sign-in options.");
-  const value = await readBoundedJsonResponse<unknown>(response, MAX_API_PROBE_RESPONSE_BYTES);
+  const value = await readBoundedJsonResponse<unknown>(
+    response,
+    MAX_API_PROBE_RESPONSE_BYTES,
+    signal,
+  );
+  requireSupportedProtocol(value);
   if (
     value &&
     typeof value === "object" &&
@@ -51,6 +65,17 @@ export async function requireAccountsSignIn(
   )
     throw new Error("This server must use Accounts sign-in.");
   return { accountsLogin: false };
+}
+
+/** Discovery describes wire compatibility, independently of the app's release timestamp. */
+export function requireSupportedProtocol(value: unknown): void {
+  if (!value || typeof value !== "object" || !("protocol" in value)) return;
+  const parsed = protocolRangeSchema.safeParse(value.protocol);
+  if (!parsed.success) throw new Error(t("Could not load sign-in options"));
+  if (parsed.data.min > CLIENT_PROTOCOL_VERSION)
+    throw new Error(t("Update Ork to connect to this server."));
+  if (parsed.data.max < CLIENT_PROTOCOL_VERSION)
+    throw new Error(t("Update this server before connecting with this version of Ork."));
 }
 
 /** Read initialization state without sending Accounts or product credentials. */
@@ -173,7 +198,12 @@ export async function probeApiBase(
       fetchImpl(`${parsed.url}/rpc/health`, {
         method: "POST",
         ...(Object.keys(headers).length ? { redirect: "error" as const } : {}),
-        headers: { ...headers, "content-type": "application/json", origin: "orkbot://" },
+        headers: {
+          ...headers,
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          origin: "orkbot://",
+        },
         body: JSON.stringify({ json: {} }),
         signal: controller.signal,
       }),

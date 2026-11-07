@@ -117,7 +117,10 @@ describe("probeApiBase", () => {
     });
     expect(fetchImpl).toHaveBeenCalledWith(
       "https://app.example.com/rpc/health",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "x-orkbot-protocol": "1" }),
+      }),
     );
   });
 

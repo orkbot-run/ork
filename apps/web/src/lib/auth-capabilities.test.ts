@@ -32,6 +32,90 @@ it("validates configured SSO even during discovery downtime", async () => {
   );
   await expect(fetchAuthCapabilities()).resolves.toEqual(capability);
 });
+
+it("advertises its protocol while discovering a compatible server and preserves optional flags", async () => {
+  const body = {
+    ...capability,
+    protocol: { min: 1, max: 2 },
+    aiConsent: true,
+    nativeRenderer: "bundled-v1",
+  };
+  const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+    Response.json(body),
+  );
+  vi.stubGlobal("fetch", fetch);
+  await expect(fetchAuthCapabilities()).resolves.toEqual(body);
+  expect(
+    new Headers(fetch.mock.calls[0]?.[1]?.headers).get(loaded.contracts.CLIENT_PROTOCOL_HEADER),
+  ).toBe(String(loaded.contracts.CLIENT_PROTOCOL_VERSION));
+});
+
+it.each([
+  { min: 2, max: 2 },
+  { min: 2, max: 3 },
+])("rejects incompatible explicit server protocol ranges: %j", async (protocol) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ ...capability, protocol })),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow(
+    "Could not load authentication capabilities",
+  );
+});
+
+it.each([
+  null,
+  {},
+  { min: 1 },
+  { min: "1", max: 1 },
+  { min: 0, max: 1 },
+  { min: 2, max: 1 },
+  { min: 1, max: 1.5 },
+])("fails closed for malformed explicit protocol ranges: %j", async (protocol) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ ...capability, protocol })),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow();
+});
+
+it("does not let the legacy capability schema hide an invalid protocol advertisement", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({ passwordReset: false, resetUrl: null, protocol: { min: 1 } }),
+    ),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow();
+});
+
+it("retries protocol discovery after the server becomes compatible", async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 2, max: 2 } }))
+    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 1, max: 1 } }));
+  vi.stubGlobal("fetch", fetch);
+  await expect(fetchAuthCapabilities()).rejects.toThrow();
+  await expect(fetchAuthCapabilities()).resolves.toMatchObject({ protocol: { min: 1, max: 1 } });
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it("treats an absent optional AI consent flag as unavailable without inventing a default", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ ...capability, protocol: { min: 1, max: 1 } })),
+  );
+  const result = await fetchAuthCapabilities();
+  expect(result.aiConsent).toBeUndefined();
+});
+
+it("rejects malformed explicit optional capability flags", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ ...capability, aiConsent: "true" })),
+  );
+  await expect(fetchAuthCapabilities()).rejects.toThrow();
+});
 it.each([{}, { passwordReset: false, resetUrl: null, sso: null }, { ...capability, sso: {} }])(
   "rejects malformed successful capabilities",
   async (body) => {

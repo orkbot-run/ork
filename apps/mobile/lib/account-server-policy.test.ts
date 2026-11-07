@@ -49,3 +49,65 @@ it("accepts native Accounts proofs without an OIDC provider", async () => {
     accountsLogin: true,
   });
 });
+
+it.each([undefined, { min: 1, max: 1 }, { min: 1.0, max: Number.MAX_SAFE_INTEGER }])(
+  "accepts a legacy or supported protocol range %j",
+  async (protocol) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        Response.json({
+          passwordAuth: false,
+          accountsLogin: true,
+          protocol,
+        }),
+      ),
+    );
+    await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
+      accountsLogin: true,
+    });
+  },
+);
+
+it.each([
+  null,
+  "1",
+  { min: 0, max: 1 },
+  { min: -1, max: 1 },
+  { min: 1.5, max: 2 },
+  { min: "1", max: 1 },
+  { min: 1 },
+  { min: 2, max: 1 },
+  { min: 1, max: Number.MAX_SAFE_INTEGER + 1 },
+  { min: 1, max: 1, extra: true },
+])("rejects an explicitly malformed protocol range %j", async (protocol) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        passwordAuth: false,
+        accountsLogin: true,
+        protocol,
+      }),
+    ),
+  );
+  await expect(requireAccountsSignIn("https://server.example.test")).rejects.toThrow(
+    "Could not load sign-in options",
+  );
+});
+
+it("asks for an app update when the server requires a newer protocol", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        passwordAuth: false,
+        accountsLogin: true,
+        protocol: { min: 2, max: 3 },
+      }),
+    ),
+  );
+  await expect(requireAccountsSignIn("https://server.example.test")).rejects.toThrow(
+    "Update Ork to connect to this server.",
+  );
+});
