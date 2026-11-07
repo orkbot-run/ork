@@ -75,7 +75,9 @@ it("caps actual bytes when the opened regular file grows after its size check", 
   const file = path.join(dir, "grow.txt");
   await writeFile(file, "a");
   hooks.growPath = file;
-  await expect(readLocalBotFile(dir, file, context, 2)).rejects.toThrow("byte limit");
+  await expect(readLocalBotFile(dir, file, context, 2)).rejects.toThrow(
+    "computer file exceeds 2 bytes",
+  );
   expect(hooks.grew).toBe(true);
 });
 
@@ -161,7 +163,7 @@ it.runIf(process.platform === "linux")(
 
 it.runIf(process.platform === "linux").each([
   { maxFiles: 0, message: "entry limit" },
-  { maxBytes: 0, message: "byte limit" },
+  { maxBytes: 0, message: "computer file exceeds 0 bytes" },
   { maxMetadataBytes: 0, message: "metadata limit" },
 ])("rejects directory resource overflow: $message", async (cap) => {
   const dir = await root();

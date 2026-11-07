@@ -433,10 +433,6 @@ export class DesktopSandboxProvider implements SandboxProvider {
         options.maxBytes,
       );
     }
-    const info = await stat(target);
-    if (options?.maxBytes !== undefined && info.size > options.maxBytes) {
-      throw new Error(`computer file exceeds ${options.maxBytes} bytes`);
-    }
     return new Uint8Array(await readFile(target));
   }
 

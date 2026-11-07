@@ -44,7 +44,7 @@ export async function readLocalBotFile(
       !contained(root, await openedPath(file.fd))
     )
       throw new Error("File is not a regular contained file");
-    if (info.size > maxBytes) throw new Error("File exceeds the byte limit");
+    if (info.size > maxBytes) throw new Error(`computer file exceeds ${maxBytes} bytes`);
     const chunks: Buffer[] = [];
     let size = 0;
     for (;;) {
@@ -54,10 +54,11 @@ export async function readLocalBotFile(
       context.signal.throwIfAborted();
       if (!bytesRead) break;
       size += bytesRead;
-      if (size > maxBytes) throw new Error("File exceeds the byte limit");
+      if (size > maxBytes) throw new Error(`computer file exceeds ${maxBytes} bytes`);
       chunks.push(chunk.subarray(0, bytesRead));
     }
-    return Buffer.concat(chunks, size);
+    const bytes = Buffer.concat(chunks, size);
+    return new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   } finally {
     await file.close();
   }

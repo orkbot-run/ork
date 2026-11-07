@@ -95,8 +95,10 @@ function executorFixture(
     externalEffect: { findMany: async () => [] },
     usageRecord: { createMany: async () => ({ count: 1 }) },
     modelCreditEntry: { findUnique: async () => null },
-    $queryRaw: async (query: { strings: readonly string[] }) =>
-      query.strings.join("").includes("FROM spaces") ? [{ deletingAt: null }] : [],
+    $queryRaw: async (query: { strings: readonly string[] } | TemplateStringsArray) =>
+      ("strings" in query ? query.strings : query).join("").includes("FROM spaces")
+        ? [{ deletingAt: null }]
+        : [],
     $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(prisma),
   };
   const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
