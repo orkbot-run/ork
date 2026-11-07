@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 web egress is preserved; shared CONNECT transport extraction follows LICENSE.md.
+
 import { lookup } from "node:dns/promises";
 import {
   ipVersion,
@@ -8,7 +12,7 @@ import {
 } from "@orkbot/contracts";
 import { readBoundedResponseBytes } from "@orkbot/core";
 import type { Dispatcher } from "undici";
-import { EnvHttpProxyAgent, Pool } from "undici";
+import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import { createAddressCheckedLookup, egressRefused } from "./network-address.js";
 import { fetchPairedWithDispatcher } from "./undici-fetch.js";
@@ -177,30 +181,10 @@ export async function fetchSafeHttpRequest(
  * IP, so the proxy never resolves the hostname itself and DNS rebinding cannot reach past it.
  */
 function safeWebDispatcher(resolve: ResolveHostname): Dispatcher {
-  const { env } = process;
-  for (const proxy of [env.http_proxy ?? env.HTTP_PROXY, env.https_proxy ?? env.HTTPS_PROXY]) {
-    if (proxy && !/^https?:\/\//i.test(proxy)) throw new Error("Only HTTP proxies are supported");
-  }
-  return new EnvHttpProxyAgent({
-    connect: { lookup: createAddressCheckedLookup(resolve, assertPublicAddresses) },
-    proxyTunnel: true,
-    clientFactory: (origin, options) => {
-      const pool = new Pool(origin, options);
-      const connect = pool.connect.bind(pool) as (
-        options: Dispatcher.ConnectOptions,
-      ) => Promise<Dispatcher.ConnectData>;
-      return Object.assign(pool, {
-        connect: async (options: Dispatcher.ConnectOptions) => {
-          const authority = await checkedAuthority(options.path, resolve);
-          return connect({
-            ...options,
-            path: authority,
-            headers: { ...(options.headers as Record<string, string>), host: authority },
-          });
-        },
-      });
-    },
-  });
+  return createCheckedProxyDispatcher(
+    createAddressCheckedLookup(resolve, assertPublicAddresses),
+    (authority) => checkedAuthority(authority, resolve),
+  );
 }
 
 async function checkedAuthority(authority: string, resolve: ResolveHostname): Promise<string> {

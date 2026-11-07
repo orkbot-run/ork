@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved; bounded discovery and guarded proxy changes follow LICENSE.md.
 
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -11,7 +11,6 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { isLocalhostOrLoopbackIp } from "@orkbot/contracts";
-import { cancelResponseBody } from "@orkbot/core";
 import { combineSignals } from "./connector-safety.js";
 import { closeMcpResource } from "./mcp-close.js";
 import type { McpDiscoveryLimits, McpDiscoveryResult } from "./mcp-discovery.js";
@@ -24,7 +23,7 @@ import {
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
 
 import type { RemoteTransportDependencies, SafeRemoteFetch } from "./remote-mcp.js";
-import { createSafeRemoteFetch, listMcpTools } from "./remote-mcp.js";
+import { ConnectorRedirectError, createSafeRemoteFetch, listMcpTools } from "./remote-mcp.js";
 
 export type McpRemoteTransport = "streamable-http" | "sse";
 
@@ -155,7 +154,7 @@ export function secureFetch(
   headerPolicy: McpHeaderPolicy = {},
   network: RemoteTransportDependencies = {},
 ): SafeRemoteFetch {
-  // A local hostname is not authorization: the unguarded loopback fetch below
+  // A local hostname is not authorization: the configured loopback origin
   // needs the deployment-owner private-endpoint escape as well.
   const localOrigin =
     urlPolicy.allowHttpLocalhost === true &&
@@ -234,12 +233,16 @@ export function secureFetch(
             ? input.signal
             : undefined,
     } satisfies RequestInit;
-    const response = localHttp
-      ? await (network.fetch ?? globalThis.fetch)(url, requestInit)
-      : await safeRemoteFetch(url, requestInit);
-    if (response.status >= 300 && response.status < 400) {
-      cancelResponseBody(response);
-      throw new Error("MCP redirects are not permitted; configure the final HTTPS URL explicitly");
+    let response: Response;
+    try {
+      response = await safeRemoteFetch(url, requestInit);
+    } catch (error) {
+      if (localHttp && error instanceof ConnectorRedirectError) {
+        throw new Error(
+          "MCP redirects are not permitted; configure the final HTTPS URL explicitly",
+        );
+      }
+      throw error;
     }
     return limitMcpResponseBody(response, headers);
   };

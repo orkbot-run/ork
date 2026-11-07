@@ -1,7 +1,7 @@
 <!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
-<!-- Inherited configuration guidance is preserved. Browser helper terminology is an Ork modification. -->
+<!-- Inherited configuration guidance is preserved. Browser helper terminology and guarded proxy guidance are Ork modifications. -->
 
 # Configuration
 
@@ -171,5 +171,9 @@ To send the API and worker's outbound traffic through a corporate proxy, set `HT
 HTTPS_PROXY=http://proxy.example.com:3128
 NO_PROXY=localhost,127.0.0.1,postgres,supervisor,api,worker,web
 ```
+
+HTTP MCP connections and HTTP/GraphQL tool sources tunnel to a checked IP. `NO_PROXY`
+selects direct connections. Both paths apply destination checks, and a proxy failure never
+retries directly.
 
 For mirrors of the installer and images, see [restricted networks](./self-host-restricted-network.md).

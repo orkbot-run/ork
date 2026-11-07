@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved; bounded discovery, guarded proxies and action labels follow LICENSE.md.
 
 import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
@@ -27,7 +27,8 @@ import {
 } from "@orkbot/contracts";
 import { cancelResponseBody } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
-import { Agent } from "undici";
+import type { Dispatcher } from "undici";
+import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import { composioToolBatch } from "./composio-batch.js";
 import { sensitiveQueryParameter } from "./connector-http.js";
 import { combineSignals } from "./connector-safety.js";
@@ -674,7 +675,15 @@ export function createSafeRemoteFetch(
   resolve: ResolveHostname = resolveHostname,
   policy: RemoteUrlPolicy = {},
 ): SafeRemoteFetch {
-  const dispatcher = new Agent({ connect: { lookup: createSafeLookup(resolve, policy) } });
+  const dispatcher = createCheckedProxyDispatcher(
+    createSafeLookup(resolve, policy),
+    async (authority) => {
+      const target = new URL(`https://${authority}`);
+      const { addresses } = await inspectSafeRemoteUrl(target.href, resolve, policy);
+      assertRemoteAddresses(addresses, target.hostname, policy);
+      return checkedAddressAuthority(authority, addresses);
+    },
+  );
   // Injected fetches are not given this Agent; they keep the original hostname
   // for TLS/SNI and pin TCP to the already-validated address through dns.lookup.
   const usePackageFetch = fetchPairedWithDispatcher(baseFetch) === dispatcherFetch;
@@ -690,7 +699,7 @@ export function createSafeRemoteFetch(
         ? await dispatcherFetch(url, {
             ...requestInit,
             dispatcher,
-          } as RequestInit & { dispatcher: Agent })
+          } as RequestInit & { dispatcher: Dispatcher })
         : await withPinnedDnsLookup(url.hostname, addresses, () =>
             baseFetch!(url, requestInitWithHost(url, requestInit)),
           );
@@ -736,9 +745,17 @@ export function createPrivateNetworkFetch(
   baseFetch?: typeof globalThis.fetch,
   resolve: ResolveHostname = resolveHostname,
 ): SafeRemoteFetch {
-  const dispatcher = new Agent({
-    connect: { lookup: createAddressCheckedLookup(resolve, assertPrivateAddresses) },
-  });
+  const dispatcher = createCheckedProxyDispatcher(
+    createAddressCheckedLookup(resolve, assertPrivateAddresses),
+    async (authority) => {
+      const target = new URL(`https://${authority}`);
+      const addresses =
+        literalAddresses(target.hostname.replace(/^\[|\]$/g, "")) ??
+        (await resolve(target.hostname.replace(/^\[|\]$/g, "")));
+      assertPrivateAddresses(addresses);
+      return checkedAddressAuthority(authority, addresses);
+    },
+  );
   const usePackageFetch = fetchPairedWithDispatcher(baseFetch) === dispatcherFetch;
   const privateFetch = async (input: string | URL | Request, init?: RequestInit) => {
     if (typeof input !== "string" && !(input instanceof URL)) {
@@ -757,7 +774,7 @@ export function createPrivateNetworkFetch(
         ? await dispatcherFetch(url, {
             ...requestInit,
             dispatcher,
-          } as RequestInit & { dispatcher: Agent })
+          } as RequestInit & { dispatcher: Dispatcher })
         : await withPinnedDnsLookup(url.hostname, addresses, () =>
             baseFetch!(url, requestInitWithHost(url, requestInit)),
           );
@@ -801,16 +818,30 @@ export function createSafeLookup(
   resolve: ResolveHostname = resolveHostname,
   policy: RemoteUrlPolicy = {},
 ): LookupFunction {
-  return createAddressCheckedLookup(resolve, (addresses, hostname) => {
-    if (
-      policy.allowPrivateEndpoint === true &&
-      isLocalhostOrLoopbackIp(hostname.replace(/^\[|\]$/g, ""))
-    ) {
-      assertLoopbackAddresses(addresses);
-      return;
-    }
-    assertAllowedAddresses(addresses, policy);
-  });
+  return createAddressCheckedLookup(resolve, (addresses, hostname) =>
+    assertRemoteAddresses(addresses, hostname, policy),
+  );
+}
+
+function assertRemoteAddresses(
+  addresses: ResolvedAddress[],
+  hostname: string,
+  policy: RemoteUrlPolicy,
+): void {
+  if (
+    policy.allowPrivateEndpoint === true &&
+    isLocalhostOrLoopbackIp(hostname.replace(/^\[|\]$/g, ""))
+  ) {
+    assertLoopbackAddresses(addresses);
+    return;
+  }
+  assertAllowedAddresses(addresses, policy);
+}
+
+function checkedAddressAuthority(authority: string, addresses: ResolvedAddress[]): string {
+  const address = addresses[0]!.address;
+  const host = ipVersion(address) === 6 ? `[${address}]` : address;
+  return `${host}${authority.slice(authority.lastIndexOf(":"))}`;
 }
 
 /** Reserved local names (localhost, .local, .internal, Docker Desktop) and non-public literals. */

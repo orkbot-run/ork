@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved; bounded discovery and guarded proxy changes follow LICENSE.md.
 
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { setFlagsFromString } from "node:v8";
 import { runInNewContext } from "node:vm";
-import { Agent } from "undici";
+import { EnvHttpProxyAgent } from "undici";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MCP_CLOSE_TIMEOUT_MS } from "./mcp-close.js";
 import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
@@ -144,7 +144,7 @@ describe("MCP transport seam", () => {
       .spyOn(session.client, "close")
       .mockImplementation(() => new Promise(() => {}));
     let rejectClose: ((error: Error) => void) | undefined;
-    const dispatcherClose = vi.spyOn(Agent.prototype, "close").mockImplementation(
+    const dispatcherClose = vi.spyOn(EnvHttpProxyAgent.prototype, "close").mockImplementation(
       () =>
         new Promise<void>((_resolve, reject) => {
           rejectClose = reject;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 client behavior is preserved; response cleanup follows LICENSE.md.
+// Inherited Apache-2.0 client behavior is preserved; response cleanup and guarded proxy transport follow LICENSE.md.
 
 import { lookup } from "node:dns/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -12,7 +12,8 @@ import {
   isNonPublicAddress,
 } from "@orkbot/contracts";
 import { cancelResponseBody } from "@orkbot/core";
-import { Agent } from "undici";
+import type { Dispatcher } from "undici";
+import { createCheckedProxyDispatcher } from "./checked-proxy-dispatcher.js";
 import {
   combineSignals,
   redactConnectorPayload,
@@ -218,16 +219,13 @@ function assertNotRateLimited(response: Response): Response {
 }
 
 /**
- * Owner-gated private endpoints: IP literals use plain fetch; hostnames pin DNS
- * to private non-metadata addresses so persisted endpointTrust cannot rebind to
- * IMDS. Public HTTPS uses createSafeRemoteFetch (public-only pin).
+ * Owner-gated private endpoints pin each request to private non-metadata addresses.
+ * IP literals stay literal and hostnames cannot rebind beyond the captured answer set.
+ * Public HTTPS uses createSafeRemoteFetch (public-only pin).
  */
-function serenityFetchPath(
-  config: SerenityConnectionConfig,
-  url: URL,
-): "private-literal" | "private-dns" | "public" {
+function serenityFetchPath(config: SerenityConnectionConfig, url: URL): "private" | "public" {
   if (config.endpointTrust === "private" || serenityEndpointRequiresPrivateEndpoint(url.href)) {
-    return ipVersion(hostnameOf(url)) !== 0 ? "private-literal" : "private-dns";
+    return "private";
   }
   return "public";
 }
@@ -263,19 +261,25 @@ export function createSerenityPrivateLanFetch(
       throw new Error("Serenity fetch requires a URL, not a Request");
     }
     const url = new URL(String(input));
-    const pinned = await resolve(hostnameOf(url));
+    const hostname = hostnameOf(url);
+    const family = ipVersion(hostname);
+    const pinned = family ? [{ address: hostname, family }] : await resolve(hostname);
     assertPrivateLanAddresses(pinned);
-    const dispatcher = new Agent({
-      connect: {
-        lookup: createAddressCheckedLookup(async () => pinned, assertPrivateLanAddresses),
+    const dispatcher = createCheckedProxyDispatcher(
+      createAddressCheckedLookup(async () => pinned, assertPrivateLanAddresses),
+      async (authority) => {
+        assertPrivateLanAddresses(pinned);
+        const address = pinned[0]!.address;
+        const host = ipVersion(address) === 6 ? `[${address}]` : address;
+        return `${host}${authority.slice(authority.lastIndexOf(":"))}`;
       },
-    });
+    );
     try {
       const response = await transport(url, {
         ...init,
         redirect: "manual",
         dispatcher,
-      } as RequestInit & { dispatcher: Agent });
+      } as RequestInit & { dispatcher: Dispatcher });
       if (response.status >= 300 && response.status < 400) {
         cancelResponseBody(response);
         throw new Error("Serenity MCP redirects are not permitted; configure the final URL.");
@@ -307,13 +311,10 @@ async function withSerenityClient<T>(
   const requestSignal = combineSignals(signal, AbortSignal.timeout(SERENITY_TIMEOUT_MS));
   const path = serenityFetchPath(config, url);
   const resolve = network.resolveHostname ?? defaultResolveHostname();
-  const pinnedFetch: SafeRemoteFetch | null =
+  const pinnedFetch: SafeRemoteFetch =
     path === "public"
       ? createSafeRemoteFetch(network.fetch, network.resolveHostname)
-      : path === "private-dns"
-        ? createSerenityPrivateLanFetch(network.fetch, resolve)
-        : null;
-  const localFetch = network.fetch ?? globalThis.fetch;
+      : createSerenityPrivateLanFetch(network.fetch, resolve);
   const transport = new StreamableHTTPClientTransport(url, {
     requestInit: {
       headers: {
@@ -324,13 +325,7 @@ async function withSerenityClient<T>(
       signal: requestSignal,
     },
     fetch: async (input, init) => {
-      if (pinnedFetch) return assertNotRateLimited(await pinnedFetch(input, init));
-      const response = await localFetch(input, { ...init, redirect: "manual" });
-      if (response.status >= 300 && response.status < 400) {
-        cancelResponseBody(response);
-        throw new Error("Serenity MCP redirects are not permitted; configure the final URL.");
-      }
-      return assertNotRateLimited(response);
+      return assertNotRateLimited(await pinnedFetch(input, init));
     },
   });
   const client = new Client({ name: "orkbot", version: "0.1.0" }, { capabilities: {} });
@@ -352,7 +347,7 @@ async function withSerenityClient<T>(
       clearTimeout(timer);
     }
     await client.close().catch(() => undefined);
-    await pinnedFetch?.close().catch(() => undefined);
+    await pinnedFetch.close().catch(() => undefined);
   }
 }
 

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; explicit guarded transport fixtures follow LICENSE.md.
+
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -1836,6 +1840,10 @@ describe("MCP connector session cache", () => {
     };
     const connector = new McpConnector(prisma as never, {} as never, {
       allowPrivateEndpoint: true,
+      network: {
+        ...TEST_NETWORK,
+        resolveHostname: async () => [{ address: "127.0.0.1", family: 4 }],
+      },
     });
 
     const tools = await connector.discoverTools({
@@ -1871,7 +1879,13 @@ describe("MCP connector session cache", () => {
             JSON.stringify({ secret: "local-token", headers: { "X-Api-Key": "local-key" } }),
           ),
       } as never,
-      { allowPrivateEndpoint: true },
+      {
+        allowPrivateEndpoint: true,
+        network: {
+          ...TEST_NETWORK,
+          resolveHostname: async () => [{ address: "127.0.0.1", family: 4 }],
+        },
+      },
     );
 
     await connector.discoverTools({

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 client tests are preserved; response cleanup regressions follow LICENSE.md.
+// Inherited Apache-2.0 client tests are preserved; response cleanup and guarded transport regressions follow LICENSE.md.
 
 import { createServer } from "node:http";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -111,10 +111,10 @@ describe("serenity SSRF fetch path", () => {
     if (!result.ok) expect(result.error).toMatch(/safe-path-fetch-reached|Could not reach/);
   });
 
-  it("uses plain fetch for loopback without DNS pinning", async () => {
+  it("keeps literal loopback addresses without another DNS lookup", async () => {
     let resolved = false;
     const fetchMock = vi.fn(async () => {
-      throw new Error("plain-fetch-reached");
+      throw new Error("literal-fetch-reached");
     });
     const result = await probeSerenity(
       { endpoint: "http://127.0.0.1:8787/mcp", token: TOKEN },
@@ -130,7 +130,7 @@ describe("serenity SSRF fetch path", () => {
     expect(resolved).toBe(false);
     expect(fetchMock).toHaveBeenCalled();
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toMatch(/plain-fetch-reached/);
+    if (!result.ok) expect(result.error).toMatch(/literal-fetch-reached/);
   });
 
   it("releases the body of a refused loopback redirect", async () => {
@@ -623,7 +623,7 @@ describe("serenity verbs", () => {
         expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
           clientClose.mock.invocationCallOrder[0]!,
         );
-        if (path === "private DNS") {
+        if (path === "private DNS" || path === "loopback") {
           expect(dispatcherClose).toHaveBeenCalled();
           expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
             dispatcherClose.mock.invocationCallOrder[0]!,
