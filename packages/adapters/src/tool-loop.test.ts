@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; loop identity and producer-stop changes are Ork additions.
+
 import { describe, expect, it } from "vitest";
 import { observationToolResult } from "./computer-tools.js";
 import {
@@ -28,6 +32,69 @@ function identicalStopsAt(seen: (call: number) => string | undefined) {
 }
 
 describe("advanceToolCallLoopGuard", () => {
+  it("counts nested reordered object keys and omitted undefined fields as identical calls", () => {
+    let streak = { key: undefined as string | undefined, count: 0 };
+    let stuck = false;
+    for (let call = 0; call < 6; call += 1) {
+      const args =
+        call % 2
+          ? { input: { path: "job.log", flags: { lines: 10, follow: false } } }
+          : { input: { flags: { follow: false, lines: 10 }, path: "job.log", extra: undefined } };
+      const next = advanceToolCallLoopGuard(streak, "read_file", args, failure());
+      streak = next.streak;
+      stuck = next.stuck;
+    }
+    expect(streak.count).toBe(6);
+    expect(stuck).toBe(true);
+  });
+
+  it("keeps array order significant while canonicalizing their object elements", () => {
+    const first = advanceToolCallLoopGuard({ key: undefined, count: 0 }, "batch", [
+      { path: "one", optional: undefined },
+      { path: "two" },
+    ]);
+    const same = advanceToolCallLoopGuard(first.streak, "batch", [
+      { path: "one" },
+      { optional: undefined, path: "two" },
+    ]);
+    expect(same.streak.count).toBe(2);
+    expect(
+      advanceToolCallLoopGuard(same.streak, "batch", [{ path: "two" }, { path: "one" }]).streak
+        .count,
+    ).toBe(1);
+  });
+
+  it("normalizes once and reuses the call identity when a fresh result restarts the streak", () => {
+    let streak = advanceToolCallLoopGuard({ key: undefined, count: 0 }, "read_file", {
+      path: "job.log",
+      options: { follow: true, lines: 10 },
+    }).streak;
+    streak = advanceToolCallLoopGuard(
+      streak,
+      "read_file",
+      { options: { lines: 10, follow: true }, path: "job.log" },
+      answer("first result"),
+    ).streak;
+    let reads = 0;
+    const next = advanceToolCallLoopGuard(
+      streak,
+      "read_file",
+      {
+        options: { lines: 10, follow: true },
+        get path() {
+          reads += 1;
+          return "job.log";
+        },
+      },
+      answer("new result"),
+    );
+    expect(reads).toBe(1);
+    expect(next.streak.key).toBe(streak.key);
+    expect(next.streak.count).toBe(2);
+    expect(next.streak.results).toHaveLength(2);
+    expect(next.stuck).toBe(false);
+  });
+
   it("allows a parallel Open Connector batch with distinct action inputs", () => {
     let streak = { key: undefined as string | undefined, count: 0 };
 

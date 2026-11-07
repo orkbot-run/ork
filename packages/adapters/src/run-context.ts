@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; loop identity and producer-stop changes are Ork additions.
+
 import type {
   AdapterContext,
   BrowserProvider,
@@ -272,9 +276,12 @@ export interface RunContext {
   bot: Bot & { computer: Computer | null };
   thread: Thread;
   task: Task;
-  /** Provider context for this run's calls; aborting the run aborts its signal. */
+  /** Model/tool context; a producer stop or attempt cancellation aborts its signal. */
   context: AdapterContext;
+  /** Cancels the whole attempt, including its workspace checkpoint. */
   abortController: AbortController;
+  /** Stops model/tool production while the attempt can still save its terminal state. */
+  stopProduction: () => void;
   fleetRun: FleetRun;
   /** Every value redacted from what this run shows or stores. Grows during the run. */
   secrets: string[];

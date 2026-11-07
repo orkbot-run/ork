@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; loop identity and producer-stop changes are Ork additions.
+
 import { createHash } from "node:crypto";
 import type { ToolCallStreak } from "@orkbot/core";
 import { trackToolCallStreak } from "@orkbot/core";
@@ -102,6 +106,22 @@ export function toolResultFingerprint(result: unknown, error?: unknown): string 
     .digest("hex")}`;
 }
 
+/** Model arguments are JSON values: object order and absent optional fields are not intent. */
+function canonicalToolArguments(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalToolArguments);
+  if (value && typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return value;
+    return Object.fromEntries(
+      Object.entries(value)
+        .filter(([, field]) => field !== undefined)
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, field]) => [key, canonicalToolArguments(field)]),
+    );
+  }
+  return value;
+}
+
 /**
  * `previousResult` is the fingerprint of the streak's last call, once it has finished. A repeat
  * whose last answer is new to the run is polling something that changes, so the identical run
@@ -116,14 +136,16 @@ export function advanceToolCallLoopGuard(
   previousResult?: string,
   response?: number,
 ): { streak: LoopGuardStreak; stuck: boolean } {
-  let next = trackToolCallStreak(streak, name, args);
+  const canonicalArgs = canonicalToolArguments(args);
+  let next = trackToolCallStreak(streak, name, canonicalArgs);
   if (response !== undefined && response === streak.response && next.shape === streak.shape)
     return { streak, stuck: false };
   const same = next.key === streak.key;
   const seen = (same && streak.results) || [];
   const fresh = previousResult !== undefined && !seen.includes(previousResult);
   const restart = same && fresh && seen.length > 0;
-  if (restart) next = trackToolCallStreak({ ...streak, count: 1, shapeCount: 1 }, name, args);
+  if (restart)
+    next = trackToolCallStreak({ ...streak, count: 1, shapeCount: 1 }, name, canonicalArgs);
   const results = fresh
     ? [...seen, previousResult].slice(-MAX_CONSECUTIVE_SIMILAR_TOOL_CALLS)
     : seen;

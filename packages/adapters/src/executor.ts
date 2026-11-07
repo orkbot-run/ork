@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes and Space work admission. See LICENSE.md.
+// Modified by Ork contributors for coordinated OAuth refreshes, Space work admission and producer lifetimes. See LICENSE.md.
 
 import type { AgentRunRequest, ComputerRef, SemanticMemoryProvider } from "@orkbot/adapter-kit";
 import {
@@ -708,6 +708,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               )
             : null;
         runAbortController = new AbortController();
+        const attemptSignal = runAbortController.signal;
+        const productionController = new AbortController();
         if (!lease.valid) runAbortController.abort();
         if (deps.shutdownSignal?.aborted) runAbortController.abort(deps.shutdownSignal.reason);
         const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
@@ -739,7 +741,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           botId: bot.id,
           runId,
           screenLeaseId: screenLeaseIdForRun(computerLease, runId, fence),
-          signal: runAbortController.signal,
+          signal: AbortSignal.any([attemptSignal, productionController.signal]),
           ...connectedContext(connectedPlugins),
           connectedProviders: connectedComposio.map((row) => row.provider),
         };
@@ -1154,10 +1156,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(
           async () => {
             if (!runComputer.ready) return;
-            await checkpointRunComputerWorkspace(deps, storedComputer, runComputer.ready, context);
+            await checkpointRunComputerWorkspace(deps, storedComputer, runComputer.ready, {
+              ...context,
+              signal: attemptSignal,
+            });
           },
           { id: storedComputer.id, kind: computerKind },
-          context.signal,
+          attemptSignal,
         );
         const pendingTurnFiles: MessageBlock[][] = [turnBlocks ?? []];
         let copyingTurnFiles = Promise.resolve();
@@ -1541,6 +1546,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           task,
           context,
           abortController: runAbortController,
+          stopProduction: () => productionController.abort(),
           fleetRun,
           secrets: runSecrets,
           source: {

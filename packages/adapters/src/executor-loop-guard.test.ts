@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; loop identity and producer-stop changes are Ork additions.
+
 import { once } from "node:events";
 import { createServer } from "node:http";
+import type { AdapterContext, ComputerRef } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { isLoopGuardStopText, MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS } from "./tool-loop.js";
@@ -54,6 +59,13 @@ function toolResultTexts(messages: Array<Record<string, unknown>>): string[] {
 }
 
 type Answer = { text?: string; calls?: Array<{ name: string; args: object }> };
+type CheckpointInspection = {
+  productionSignal: AbortSignal | undefined;
+  checkpointSignal: AbortSignal | undefined;
+  requestCount: () => number;
+  toolCount: () => number;
+  finalizeCount: () => number;
+};
 
 /**
  * One real executor turn: real PiAgentRuntime and run loop against a fake OpenAI-compatible
@@ -62,7 +74,13 @@ type Answer = { text?: string; calls?: Array<{ name: string; args: object }> };
  */
 async function runLoop(
   answer: (request: number) => Answer,
-  { listing = (_call: number) => [REPORT] } = {},
+  {
+    listing = (_call: number) => [REPORT],
+    onCheckpoint,
+  }: {
+    listing?: (call: number) => (typeof REPORT)[];
+    onCheckpoint?: (inspection: CheckpointInspection) => Promise<void>;
+  } = {},
 ) {
   vi.stubEnv("ORKBOT_LOCAL_MODELS", "example-model");
   vi.stubEnv("ORKBOT_LOCAL_VISION_MODELS", "example-model");
@@ -291,13 +309,21 @@ async function runLoop(
   const listFiles = vi.fn(async (_computer: unknown, path: string) =>
     path.endsWith("downloads") ? listing(++listings) : [],
   );
+  let productionSignal: AbortSignal | undefined;
   const sandbox = {
     describe: () => ({ id: "e2b", capabilities: { graphical: true } }),
     act,
     listFiles,
     writeFile: vi.fn(async () => undefined),
     releaseScreen: vi.fn(async () => undefined),
-    exportWorkspace: vi.fn(async function* () {
+    exportWorkspace: vi.fn(async function* (_computer: ComputerRef, context: AdapterContext) {
+      await onCheckpoint?.({
+        productionSignal,
+        checkpointSignal: context.signal,
+        requestCount: () => requests.length,
+        toolCount: () => act.mock.calls.length + listFiles.mock.calls.length,
+        finalizeCount: () => finalizeRun.mock.calls.length,
+      });
       yield* [];
     }),
   };
@@ -309,10 +335,16 @@ async function runLoop(
     finalizeRun,
     pauseRunForTakeover: vi.fn(async () => false),
   };
+  const runtime = new PiAgentRuntime();
+  const runRuntime = runtime.run.bind(runtime);
+  vi.spyOn(runtime, "run").mockImplementation((request, context) => {
+    productionSignal = context?.signal;
+    return runRuntime(request, context);
+  });
   const executor = createRunExecutor({
     prisma: proxied,
     deploymentModelKey: "fake-deployment-key",
-    runtime: new PiAgentRuntime(),
+    runtime,
     sandbox,
     home: { commit: vi.fn(async () => "fixture-revision") },
     memory: { read: async () => ({ documents: [] }) },
@@ -369,6 +401,44 @@ function expectStoppedAt(calls: number, run: { requests: unknown[]; finalText: s
 }
 
 describe("over-limit computer_act batches through the run loop", () => {
+  it("stops production before a held checkpoint and finalizes once after releasing it", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let started!: (inspection: CheckpointInspection) => void;
+    const checkpoint = new Promise<CheckpointInspection>((resolve) => {
+      started = resolve;
+    });
+    const execution = runLoop(
+      (n) => ({ calls: [{ name: "computer_act", args: clickBatch(n === 1 ? 1 : 30, n) }] }),
+      {
+        onCheckpoint: async (inspection) => {
+          started(inspection);
+          await held;
+        },
+      },
+    );
+    try {
+      const inspection = await checkpoint;
+      expect(inspection.productionSignal?.aborted).toBe(true);
+      expect(inspection.checkpointSignal?.aborted).toBe(false);
+      expect(inspection.finalizeCount()).toBe(0);
+      const requests = inspection.requestCount();
+      const tools = inspection.toolCount();
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(inspection.requestCount()).toBe(requests);
+      expect(inspection.toolCount()).toBe(tools);
+      expect(inspection.finalizeCount()).toBe(0);
+    } finally {
+      release();
+      const result = await execution;
+      expect(result.finalizeRun).toHaveBeenCalledOnce();
+      expect(result.finalText).toContain("with too many actions 4 times in a row");
+    }
+  }, 30_000);
+
   it("ends the run after four refused batches in a row", async () => {
     const { requests, act, finalizeRun, finalText } = await runWithBatches([30]);
 
@@ -389,10 +459,12 @@ describe("over-limit computer_act batches through the run loop", () => {
     // over, over, in-limit, then over until the run is stopped.
     const { requests, act, finalText } = await runWithBatches([30, 30, 24, 30]);
 
-    // Not stopped by the first two, nor by the three after the reset: the fourth ends it. The
-    // checkpoint flush of the executed batch lets a few more requests out before the abort lands.
+    // Not stopped by the first two, nor by the three after the reset: the fourth ends it.
+    // At most one request was already starting before the consumer accepted the stop.
     expect(requests.length).toBeGreaterThanOrEqual(2 + 1 + MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS);
-    expect(requests.length).toBeLessThan(REQUEST_CAP);
+    expect(requests.length).toBeLessThanOrEqual(
+      2 + 1 + MAX_CONSECUTIVE_OVER_LIMIT_ACTION_CALLS + 1,
+    );
     expect(act).toHaveBeenCalledTimes(1);
     expect(act.mock.calls[0]![1].actions).toHaveLength(24);
     expect(finalText).toContain("with too many actions 4 times in a row");

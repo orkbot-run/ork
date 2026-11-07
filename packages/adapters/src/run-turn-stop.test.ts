@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; loop identity and producer-stop changes are Ork additions.
+
 import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RunContext } from "./run-context.js";
@@ -89,6 +93,79 @@ describe("consumeRunEvents and Stop", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("keeps production stopped while helpers settle and queues the accepted continuation once", async () => {
+    const { ctx } = await context({ status: "running" });
+    const producer = new AbortController();
+    ctx.stopProduction = () => producer.abort();
+    ctx.context = {
+      operationId: ctx.runId,
+      traceId: ctx.runId,
+      spaceId: ctx.run.spaceId,
+      userId: ctx.run.userId,
+      signal: AbortSignal.any([ctx.abortController.signal, producer.signal]),
+    };
+    // Background runs do not publish tool-step messages before their terminal state.
+    ctx.run.trigger = "tickets";
+    ctx.tools.connector = new Map();
+    ctx.state.overLimitActionCalls = 3;
+    ctx.stopHeartbeatAfterCompletion = vi.fn();
+    const enqueue = vi.fn(async () => undefined);
+    ctx.deps.jobs = { enqueue } as never;
+    const finalize = vi.mocked(ctx.deps.events.finalizeRun);
+    finalize.mockResolvedValue({ continuationRunId: "continuation-1" });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let settling!: () => void;
+    const started = new Promise<void>((resolve) => {
+      settling = resolve;
+    });
+    ctx.settleRunningHelpers = vi.fn(async () => {
+      settling();
+      await held;
+    });
+    let nextCalls = 0;
+    async function* runtime(): AsyncIterable<AgentRuntimeEvent> {
+      yield {
+        type: "tool",
+        name: "computer_act",
+        args: { actions: Array.from({ length: 30 }, () => ({ kind: "click", x: 1, y: 1 })) },
+        executionId: "stuck-call",
+      };
+      nextCalls += 1;
+      yield { type: "done" };
+    }
+    const consumed = consumeRunEvents(ctx, runtime());
+    try {
+      await Promise.race([
+        started,
+        consumed.then(() => {
+          throw new Error("The turn ended before helper settlement");
+        }),
+      ]);
+      expect(ctx.context.signal.aborted).toBe(true);
+      expect(ctx.abortController.signal.aborted).toBe(false);
+      expect(ctx.computer.checkpoint.flush).toHaveBeenCalledOnce();
+      expect(finalize).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(nextCalls).toBe(0);
+      expect(finalize).not.toHaveBeenCalled();
+      expect(enqueue).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await expect(consumed).resolves.toBe(true);
+    }
+    expect(ctx.settleRunningHelpers).toHaveBeenCalledOnce();
+    expect(finalize).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ outcome: "completed", leaseOwner: "worker-1", leaseFence: 1 }),
+    );
+    expect(enqueue).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ name: "run.continue", payload: { runId: "continuation-1" } }),
+    );
+    expect(ctx.abortController.signal.aborted).toBe(true);
   });
 
   it("aborts a quiet model call within two seconds of Stop", async () => {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+// Inherited Apache-2.0 material is preserved; decision-card and producer-stop changes are Ork additions.
 
 import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import {
@@ -619,6 +619,7 @@ async function onToolCalled(ctx: RunContext, event: RuntimeEvent<"tool">): Promi
 
 /** The model keeps repeating the same call: finish the run with what it has and say why. */
 async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
+  ctx.stopProduction();
   const { deps, run, runId, bot, thread, workerId, fence } = ctx;
   const { reply } = ctx.state;
   ctx.tools.approvedReplays.assertDrained();
