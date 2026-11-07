@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 vision assertions are preserved; unbundled model fixtures follow LICENSE.md.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
 import {
@@ -70,7 +74,7 @@ describe("model vision gating for computer tools", () => {
   });
 
   it("follows the account catalog for a live Codex slug outside its sibling family", () => {
-    const id = "gpt-6.1-terra";
+    const id = "gpt-unbundled-fixture";
     const provider = CHATGPT_OAUTH_PROVIDER;
     const auth: CodexCatalogSpaceAuth = {
       byProvider: { [provider]: "oauth" },

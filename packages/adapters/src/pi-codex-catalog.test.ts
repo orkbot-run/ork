@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 catalog assertions are preserved; stable stored-model fixtures follow LICENSE.md.
+
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { listAvailablePiCatalog } from "./pi-catalog-availability.js";
@@ -13,8 +17,35 @@ import {
   resolveCodexOAuthDefaultModel,
 } from "./pi-codex-catalog.js";
 import { liveCatalogEntry } from "./pi-live-catalog.js";
+import type * as PiModelsModule from "./pi-models.js";
+import type { PiCatalogEntry } from "./pi-models.js";
 import { listPiCatalog } from "./pi-models.js";
 import { CHATGPT_OAUTH_PROVIDER, parseModelSecret } from "./pi-oauth.js";
+
+// Stored auth policy and overlay order do not depend on upstream retaining this model.
+vi.mock("./pi-models.js", async (original) => {
+  const actual = await original<typeof PiModelsModule>();
+  const stored: PiCatalogEntry = {
+    provider: "openai-codex",
+    providerName: "Fixture subscription",
+    id: "gpt-5.3-codex-spark",
+    label: "Stored auth-restricted model",
+    auth: "oauth",
+    billing: "Fixture",
+    subscription: true,
+  };
+  return {
+    ...actual,
+    listPiCatalog: () => {
+      const entries = actual
+        .listPiCatalog()
+        .filter((entry) => entry.provider !== stored.provider || entry.id !== stored.id);
+      const first = entries.findIndex((entry) => entry.provider === stored.provider);
+      entries.splice(first < 0 ? entries.length : first, 0, stored);
+      return entries;
+    },
+  };
+});
 
 const SPARK = "gpt-5.3-codex-spark";
 const LUNA = "gpt-6-luna";
@@ -1244,13 +1275,13 @@ describe("applyCodexLiveCatalog", () => {
   });
 
   it("keeps image support from the account list when a live slug is outside its sibling family", () => {
-    const terra = "gpt-6.1-terra";
+    const crossFamily = "gpt-unbundled-fixture";
     const sol = "gpt-6.1-sol";
     const bundled = base.find(
       (entry) => entry.provider === CHATGPT_OAUTH_PROVIDER && entry.id === sol,
     );
     expect(bundled?.images).toBe(true);
-    expect(liveCatalogEntry(CHATGPT_OAUTH_PROVIDER, terra)?.images).toBe(false);
+    expect(liveCatalogEntry(CHATGPT_OAUTH_PROVIDER, crossFamily)?.images).toBe(false);
 
     const modalities = (image: boolean) =>
       parseCodexCatalog(
@@ -1262,7 +1293,7 @@ describe("applyCodexLiveCatalog", () => {
             input_modalities: image ? ["text", "image"] : ["text"],
           },
           {
-            slug: terra,
+            slug: crossFamily,
             visibility: "list",
             supported_in_api: true,
             input_modalities: image ? ["text", "image"] : ["text"],
@@ -1274,15 +1305,15 @@ describe("applyCodexLiveCatalog", () => {
         (entry) => entry.provider === CHATGPT_OAUTH_PROVIDER && entry.id === id,
       )?.images;
 
-    expect(imagesOf(modalities(true), terra)).toBe(true);
+    expect(imagesOf(modalities(true), crossFamily)).toBe(true);
     expect(imagesOf(modalities(true), sol)).toBe(true);
-    expect(imagesOf(modalities(false), terra)).toBe(false);
+    expect(imagesOf(modalities(false), crossFamily)).toBe(false);
     expect(imagesOf(modalities(false), sol)).toBe(false);
   });
 
   it("keeps bundled image support when the account omits input modalities", () => {
     const sol = "gpt-6.1-sol";
-    const terra = "gpt-6.1-terra";
+    const crossFamily = "gpt-unbundled-fixture";
     const parsed = (inputModalities: null | undefined | string[]) =>
       parseCodexCatalog(
         catalogPayload([
@@ -1293,7 +1324,7 @@ describe("applyCodexLiveCatalog", () => {
             ...(inputModalities !== undefined ? { input_modalities: inputModalities } : {}),
           },
           {
-            slug: terra,
+            slug: crossFamily,
             visibility: "list",
             supported_in_api: true,
             ...(inputModalities !== undefined ? { input_modalities: inputModalities } : {}),
@@ -1309,9 +1340,9 @@ describe("applyCodexLiveCatalog", () => {
     expect(parsed(null)[0]?.supportsImages).toBeUndefined();
     expect(imagesOf(parsed(undefined), sol)).toBe(true);
     expect(imagesOf(parsed(null), sol)).toBe(true);
-    expect(imagesOf(parsed(undefined), terra)).toBe(false);
+    expect(imagesOf(parsed(undefined), crossFamily)).toBe(false);
     expect(imagesOf(parsed(["text"]), sol)).toBe(false);
-    expect(imagesOf(parsed(["text"]), terra)).toBe(false);
+    expect(imagesOf(parsed(["text"]), crossFamily)).toBe(false);
   });
 
   it("leaves other providers untouched", () => {
