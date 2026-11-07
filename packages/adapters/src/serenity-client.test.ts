@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 client tests are preserved; response cleanup regressions follow LICENSE.md.
+
 import { createServer } from "node:http";
-import { fetch as undiciFetch } from "undici";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { Agent, fetch as undiciFetch } from "undici";
 import { describe, expect, it, vi } from "vitest";
 import {
   classifySerenityEndpointTrust,
@@ -570,6 +575,66 @@ describe("serenity verbs", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toMatch(/rate limit reached; retry after 30s/);
   });
+
+  it.each([
+    { path: "loopback", config: LOOPBACK, address: "127.0.0.1" },
+    {
+      path: "public",
+      config: { endpoint: "https://memory.example.test/mcp", token: TOKEN },
+      address: "93.184.216.34",
+    },
+    {
+      path: "private DNS",
+      config: {
+        endpoint: "https://memory.internal/mcp",
+        endpointTrust: "private" as const,
+        token: TOKEN,
+      },
+      address: "10.9.9.9",
+    },
+  ])(
+    "cancels a rate-limited $path response before closing its transport",
+    async ({ path, config, address }) => {
+      const cancel = vi.fn();
+      const response = new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(`unread response ${TOKEN}`));
+          },
+          cancel,
+        }),
+        { status: 429, headers: { "retry-after": "30" } },
+      );
+      const fetch = vi.fn(async () => response);
+      const clientClose = vi.spyOn(Client.prototype, "close");
+      const dispatcherClose = vi.spyOn(Agent.prototype, "close");
+      try {
+        const result = await recallSerenity(config, {
+          network: {
+            fetch,
+            resolveHostname: async () => [{ address, family: 4 as const }],
+          },
+        });
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error).toMatch(/rate limit reached; retry after 30s/);
+        expect(JSON.stringify(result)).not.toContain(TOKEN);
+        expect(cancel).toHaveBeenCalledOnce();
+        expect(clientClose).toHaveBeenCalled();
+        expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+          clientClose.mock.invocationCallOrder[0]!,
+        );
+        if (path === "private DNS") {
+          expect(dispatcherClose).toHaveBeenCalled();
+          expect(cancel.mock.invocationCallOrder[0]).toBeLessThan(
+            dispatcherClose.mock.invocationCallOrder[0]!,
+          );
+        }
+      } finally {
+        clientClose.mockRestore();
+        dispatcherClose.mockRestore();
+      }
+    },
+  );
 
   it("keeps an HTTP-date Retry-After as a date", async () => {
     const date = "Wed, 23 Sep 2026 23:40:00 GMT";

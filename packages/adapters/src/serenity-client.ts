@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 client behavior is preserved; response cleanup follows LICENSE.md.
+
 import { lookup } from "node:dns/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -202,6 +206,7 @@ function verbErrorMessage(payload: unknown, fallback: string): string {
 /** Surface hosted gateway rate limits plainly instead of as an opaque transport error. */
 function assertNotRateLimited(response: Response): Response {
   if (response.status !== 429) return response;
+  cancelResponseBody(response);
   const retryAfter = response.headers.get("retry-after")?.trim();
   // Retry-After is either delta-seconds or an HTTP date.
   const when = !retryAfter ? null : /^\d+$/.test(retryAfter) ? `${retryAfter}s` : retryAfter;
@@ -275,6 +280,8 @@ export function createSerenityPrivateLanFetch(
         cancelResponseBody(response);
         throw new Error("Serenity MCP redirects are not permitted; configure the final URL.");
       }
+      // The caller formats rate-limit errors after this dispatcher has closed.
+      if (response.status === 429) cancelResponseBody(response);
       return response;
     } catch (error) {
       throw new Error(
