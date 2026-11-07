@@ -1,13 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; authorized screen messages follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ComputerStatus } from "@orkbot/contracts";
-import type { ReactNode } from "react";
-import { act, createElement, Fragment, useEffect } from "react";
+import type { ReactNode, Ref } from "react";
+import { act, createElement, Fragment, useEffect, useImperativeHandle } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Computer from "../app/computer";
+import type { ComputerKeyboardCommand } from "./computer-keyboard";
 
 const rpc = vi.hoisted(() => vi.fn());
 const textScale = vi.hoisted(() => ({ fontScale: 1 }));
@@ -18,7 +23,13 @@ const folds = vi.hoisted(() => ({
 }));
 const screens = vi.hoisted(() => ({
   mounts: 0,
+  inject: vi.fn(),
+  readyMessage: "",
+  command: undefined as undefined | ((command: ComputerKeyboardCommand) => void),
   error: undefined as undefined | (() => void),
+  httpError: undefined as undefined | (() => void),
+  rendererLost: undefined as undefined | (() => void),
+  contentProcessLost: undefined as undefined | (() => void),
   onMessage: undefined as
     | ((event: { nativeEvent: { data: string; url?: string } }) => void)
     | undefined,
@@ -113,22 +124,38 @@ vi.mock("react-native-keyboard-controller", () => ({
     createElement("div", { "data-avoids-keyboard": String(enabled ?? true) }, children),
 }));
 vi.mock("../components/computer-keyboard-bar", () => ({
-  ComputerKeyboardBar: (props: { active: boolean }) =>
-    createElement("div", { "data-keyboard-bar": true, "data-active": String(props.active) }),
+  ComputerKeyboardBar: (props: {
+    active: boolean;
+    onCommand: (command: ComputerKeyboardCommand) => void;
+  }) => {
+    screens.command = props.onCommand;
+    return createElement("div", { "data-keyboard-bar": true, "data-active": String(props.active) });
+  },
 }));
 
 vi.mock("react-native-webview", () => {
   return {
     WebView: (props: {
+      ref?: Ref<{ injectJavaScript: (script: string) => void }>;
+      injectedJavaScript?: string;
       accessibilityElementsHidden?: boolean;
       importantForAccessibility?: string;
       onMessage?: (event: { nativeEvent: { data: string; url?: string } }) => void;
       onError?: () => void;
+      onHttpError?: () => void;
+      onRenderProcessGone?: () => void;
+      onContentProcessDidTerminate?: () => void;
       source?: { uri: string };
       onLoadStart?: (event?: { nativeEvent: { url: string } }) => void;
     }) => {
+      useImperativeHandle(props.ref, () => ({ injectJavaScript: screens.inject }));
+      screens.readyMessage =
+        props.injectedJavaScript?.match(/orkbot-computer-keyboard-ready:\d+/)?.[0] ?? "";
       screens.onMessage = props.onMessage;
       screens.error = props.onError;
+      screens.httpError = props.onHttpError;
+      screens.rendererLost = props.onRenderProcessGone;
+      screens.contentProcessLost = props.onContentProcessDidTerminate;
       screens.source = props.source?.uri ?? "";
       screens.onLoadStart = props.onLoadStart;
       useEffect(() => {
@@ -283,6 +310,9 @@ describe("computer screen", () => {
     foreground.value = true;
     folds.regions = [];
     screens.mounts = 0;
+    screens.inject.mockReset();
+    screens.readyMessage = "";
+    screens.command = undefined;
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   });
 
@@ -415,6 +445,112 @@ describe("computer screen", () => {
     vi.useRealTimers();
   });
 
+  it("accepts a sandboxed report after query-token rotation and the known page suffix normalization", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const source =
+      "https://screen.example.test/novnc/session/view/1.t/embed.html?token=first&view_only=true&path=websockify";
+    const loaded =
+      "https://screen.example.test/novnc/session/view/1.t/vnc.html?view_only=true&token=renewed&path=%2Fnovnc%2Fsession%2Fview%2F1.t%2Fwebsockify";
+    respond(botWorking, source);
+    const view = await render();
+    await act(async () => {
+      screens.onLoadStart?.({ nativeEvent: { url: loaded } });
+      screens.onMessage?.({ nativeEvent: { url: "null", data: '{"orkbotScreen":"connected"}' } });
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(16_000));
+    expect(view.querySelector("iframe")).not.toBeNull();
+    expect(view.textContent).not.toContain("Could not connect to the computer screen");
+    vi.useRealTimers();
+  });
+
+  it("rejects a stale full-URL report after same-host navigation leaves the authorized screen", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const source = "https://screen.example.test/novnc/session/view/1.t/vnc.html";
+    respond(botWorking, source);
+    const view = await render();
+    await act(async () => {
+      screens.onLoadStart?.({ nativeEvent: { url: "https://screen.example.test/account" } });
+      screens.onMessage?.({ nativeEvent: { url: source, data: '{"orkbotScreen":"connected"}' } });
+    });
+    await act(async () => vi.advanceTimersByTimeAsync(16_000));
+    expect(view.textContent).toContain("Could not connect to the computer screen");
+    vi.useRealTimers();
+  });
+
+  it("does not let a retired bot page report into the newly selected bot", async () => {
+    const oldSource = "https://screen.example.test/novnc/session/view/1.old/vnc.html";
+    respond(botWorking, oldSource);
+    const view = await render();
+    await act(async () => screens.onLoadStart?.({ nativeEvent: { url: oldSource } }));
+    const oldMessage = screens.onMessage;
+    routeParams.botId = "bot-2";
+    respond(botWorking, "https://screen.example.test/novnc/session/view/2.new/vnc.html");
+    act(() => root?.render(<Computer />));
+    await settle();
+    expect(screens.source).toContain("2.new");
+    await act(async () =>
+      oldMessage?.({ nativeEvent: { url: oldSource, data: '{"orkbotScreen":"failed"}' } }),
+    );
+    expect(view.querySelector("iframe")).not.toBeNull();
+    expect(view.textContent).not.toContain("Could not connect to the computer screen");
+  });
+
+  it.each(["error", "httpError", "rendererLost", "contentProcessLost"] as const)(
+    "ignores a retired page's native %s callback after another bot commits",
+    async (handler) => {
+      const oldSource = "https://screen.example.test/novnc/session/view/1.old/vnc.html";
+      respond(botWorking, oldSource);
+      const view = await render();
+      const oldCallback = screens[handler];
+      expect(oldCallback).toBeTypeOf("function");
+      routeParams.botId = "bot-2";
+      respond(botWorking, "https://screen.example.test/novnc/session/view/2.new/vnc.html");
+      act(() => root?.render(<Computer />));
+      await settle();
+      expect(screens.source).toContain("2.new");
+      const mounted = screens.mounts;
+      const reads = calls("computer/screenUrl").length;
+      await act(async () => oldCallback?.());
+      await settle();
+      expect(view.querySelector("iframe")).not.toBeNull();
+      expect(view.textContent).not.toContain("Could not load the desktop.");
+      expect(screens.source).toContain("2.new");
+      expect(screens.mounts).toBe(mounted);
+      expect(calls("computer/screenUrl")).toHaveLength(reads);
+    },
+  );
+
+  it("keeps keyboard commands queued until both the current page and its keyboard session are verified", async () => {
+    const source = "https://screen.example.test/novnc/session/control/1.t/vnc.html";
+    respond(
+      { ...botWorking, controlHolder: "user", controlBotId: "bot-1", busyBotName: null },
+      source,
+    );
+    const view = await render();
+    await act(async () => preview(view).click());
+    await settle();
+    expect(screens.readyMessage).not.toBe("");
+    const readyMessage = screens.readyMessage;
+    screens.inject.mockClear();
+    act(() => screens.command?.({ type: "text", text: "queued-fixture" }));
+    expect(screens.inject).not.toHaveBeenCalled();
+    await act(async () => {
+      screens.onLoadStart?.({ nativeEvent: { url: "https://screen.example.test/account" } });
+      screens.onMessage?.({ nativeEvent: { url: "null", data: readyMessage } });
+    });
+    expect(screens.inject).not.toHaveBeenCalled();
+    await act(async () => {
+      screens.onLoadStart?.({ nativeEvent: { url: source } });
+      screens.onMessage?.({ nativeEvent: { url: source, data: `${readyMessage}-wrong` } });
+    });
+    expect(screens.inject).not.toHaveBeenCalled();
+    await act(async () =>
+      screens.onMessage?.({ nativeEvent: { url: "null", data: readyMessage } }),
+    );
+    expect(screens.inject).toHaveBeenCalledTimes(1);
+    expect(screens.inject.mock.calls[0]?.[0]).toContain("queued-fixture");
+  });
+
   it("does not rearm a connected retained page on token rotation", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     respond(botWorking);
@@ -422,7 +558,7 @@ describe("computer screen", () => {
     let token = "first";
     rpc.mockImplementation(async (method: string, ...args: unknown[]) =>
       method === "computer/screenUrl"
-        ? { url: "https://screen.example.test/novnc/session/view/1." + token + "/vnc.html" }
+        ? { url: `https://screen.example.test/novnc/session/view/1.${token}/vnc.html` }
         : original(method, ...args),
     );
     const view = await render();

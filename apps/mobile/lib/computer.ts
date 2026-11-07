@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; authorized screen messages follow LICENSE.md.
+
 import type { ComputerMode, ComputerStatus as ContractComputerStatus } from "@orkbot/contracts";
 import { isLocalhostOrLoopbackIp, isPrivateNetworkHost } from "@orkbot/contracts";
 import type { ScreenPageState } from "@orkbot/core";
@@ -247,24 +251,51 @@ export function isProxiedScreenPage(url: string): boolean {
   }
 }
 
-/** Whether a WebView message came from the screen's own page, not a page it navigated to. */
+function screenPageIdentity(value: string) {
+  const page = new URL(value);
+  if (!["http:", "https:"].includes(page.protocol) || page.username || page.password) return null;
+  const match = page.pathname.match(/^\/novnc\/session\/(view|control)\/([A-Za-z0-9_.-]+)(\/.*)?$/);
+  const query = new URLSearchParams(page.search);
+  let pathname = page.pathname;
+  let entryPage = false;
+  if (match) {
+    const prefix = `/novnc/session/${match[1]}/${match[2]}`;
+    entryPage = match[3] === "/embed.html" || match[3] === "/vnc.html";
+    if (entryPage) pathname = prefix;
+    // Only the sealed path establishes identity; this top-level token is a rotating page input.
+    query.delete("token");
+    if (query.getAll("path").length === 1 && query.get("path") === `${prefix}/websockify`)
+      query.set("path", "websockify");
+  }
+  query.sort();
+  return {
+    page,
+    proxied: Boolean(match),
+    key: JSON.stringify([page.origin, entryPage, pathname, [...query], page.hash]),
+  };
+}
+
+/** A loaded page can confirm an origin-only native report, but cannot authorize another stream. */
 export function fromScreenPage(
   pageUrl: string | undefined,
   screenUrl: string,
   loadedPageUrl?: string | null,
 ): boolean {
   try {
-    // Android WebMessageListener reports the sender's origin, which is "null" for the
-    // sandboxed screen. Accept its advisory state only while the native navigation
-    // event identifies the exact authorized screen page; other pages stay rejected.
+    const source = screenPageIdentity(screenUrl);
+    if (!source) return false;
+    const loaded = loadedPageUrl == null ? null : screenPageIdentity(loadedPageUrl);
+    if (loadedPageUrl != null && loaded?.key !== source.key) return false;
+    // Android supplies only the sender's origin; the loaded URL supplies its authorized path.
     if (pageUrl === "null") {
-      return (
-        isProxiedScreenPage(screenUrl) &&
-        Boolean(loadedPageUrl) &&
-        new URL(loadedPageUrl!).href === new URL(screenUrl).href
-      );
+      return source.proxied && loaded?.key === source.key;
     }
-    return Boolean(pageUrl) && new URL(pageUrl!).origin === new URL(screenUrl).origin;
+    if (!pageUrl) return false;
+    const sender = screenPageIdentity(pageUrl);
+    if (!sender || sender.page.origin !== source.page.origin) return false;
+    if (sender.key === source.key) return true;
+    const originOnly = pageUrl === sender.page.origin || pageUrl === `${sender.page.origin}/`;
+    return originOnly && loaded?.key === source.key;
   } catch {
     return false;
   }

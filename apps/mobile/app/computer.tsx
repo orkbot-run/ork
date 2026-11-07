@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; authorized screen messages follow LICENSE.md.
+
 import type { ComputerMode, ComputerReleaseReason } from "@orkbot/contracts";
 import type { ScreenPageState } from "@orkbot/core";
 import {
@@ -887,6 +891,17 @@ function ScreenWebView({
   sourceUrl.current = retainScreenSource(sourceUrl.current, url);
   const loadedSource = sourceUrl.current;
   const loadedPageUrl = useRef<string | null>(null);
+  const pageKey = `${nativeKeyboard ? "keys" : "view"}:${loadedSource}`;
+  const binding = useMemo(() => ({ key: pageKey }), [pageKey]);
+  const pageBinding = useRef<typeof binding | null>(null);
+  useLayoutEffect(() => {
+    pageBinding.current = binding;
+    loadedPageUrl.current = null;
+    return () => {
+      if (pageBinding.current === binding) pageBinding.current = null;
+    };
+  }, [binding]);
+  const currentPage = () => pageBinding.current === binding;
   const reportStarted = useRef(false);
   const reportCallback = useRef(onScreenState);
   reportCallback.current = onScreenState;
@@ -895,7 +910,7 @@ function ScreenWebView({
     // Only proxy pages report their state; one that never starts shows as failed.
     if (!isProxiedScreenPage(loadedSource)) return;
     const timer = setTimeout(() => {
-      if (!reportStarted.current) reportCallback.current?.("failed");
+      if (currentPage() && !reportStarted.current) reportCallback.current?.("failed");
     }, 15_000);
     return () => clearTimeout(timer);
   }, [loadedSource, nativeKeyboard]);
@@ -904,7 +919,7 @@ function ScreenWebView({
       ref={webViewRef}
       // Reload when control enables the native keyboard. The boot script only
       // runs on load, and a view-only page never attaches the key bridge.
-      key={`${nativeKeyboard ? "keys" : "view"}:${sourceUrl.current}`}
+      key={pageKey}
       source={{ uri: sourceUrl.current }}
       injectedJavaScriptBeforeContentLoaded={
         nativeKeyboard ? NATIVE_COMPUTER_KEYBOARD_BOOT : undefined
@@ -913,19 +928,19 @@ function ScreenWebView({
         nativeKeyboard && keyboardSession ? computerKeyboardReadyProbe(keyboardSession) : undefined
       }
       onMessage={(event) => {
-        const state = fromScreenPage(
-          event.nativeEvent.url,
-          sourceUrl.current,
-          loadedPageUrl.current,
+        if (
+          !currentPage() ||
+          !fromScreenPage(event.nativeEvent.url, loadedSource, loadedPageUrl.current)
         )
-          ? screenPageState(event.nativeEvent.data)
-          : null;
+          return;
+        const state = screenPageState(event.nativeEvent.data);
         if (state) {
           if (state !== "loading") reportStarted.current = true;
           onScreenState?.(state);
         } else if (nativeKeyboard) onKeyboardMessage?.(event.nativeEvent.data);
       }}
       onLoadStart={(event) => {
+        if (!currentPage()) return;
         loadedPageUrl.current = event?.nativeEvent?.url ?? null;
         onLoadStart?.();
       }}
@@ -945,10 +960,18 @@ function ScreenWebView({
       setSupportMultipleWindows={false}
       scrollEnabled={false}
       overScrollMode="never"
-      onError={onError}
-      onHttpError={onError}
-      onRenderProcessGone={onRendererLost}
-      onContentProcessDidTerminate={onRendererLost}
+      onError={() => {
+        if (currentPage()) onError();
+      }}
+      onHttpError={() => {
+        if (currentPage()) onError();
+      }}
+      onRenderProcessGone={() => {
+        if (currentPage()) onRendererLost?.();
+      }}
+      onContentProcessDidTerminate={() => {
+        if (currentPage()) onRendererLost?.();
+      }}
     />
   );
 }

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; authorized screen messages follow LICENSE.md.
+
 import { describe, expect, it, vi } from "vitest";
 import type { ComputerStatus } from "./computer.js";
 import {
@@ -374,7 +378,7 @@ describe("screen page redirects and origin", () => {
     await expect(screenPageStatus("https://app.example.test/novnc/x", manual)).resolves.toBe(0);
   });
 
-  it("hears only the screen's own origin", () => {
+  it("hears only the screen's authorized page", () => {
     const screen = "https://app.example.test/novnc/session/control/1.t/vnc.html";
     expect(
       fromScreenPage("https://app.example.test/novnc/session/control/1.t/vnc.html", screen),
@@ -401,6 +405,60 @@ describe("screen page redirects and origin", () => {
     ).toBe(false);
     expect(fromScreenPage(undefined, screen, screen)).toBe(false);
     expect(fromScreenPage("not a url", screen, screen)).toBe(false);
+  });
+
+  it("accepts a rotated nonidentity query token and the known page alias within one sealed capability", () => {
+    const screen =
+      "https://app.example.test/novnc/session/control/1.t/embed.html?token=old&view_only=false&path=websockify&bot=bot-1";
+    const loaded =
+      "https://app.example.test/novnc/session/control/1.t/vnc.html?bot=bot-1&path=%2Fnovnc%2Fsession%2Fcontrol%2F1.t%2Fwebsockify&view_only=false&token=new";
+    expect(fromScreenPage("null", screen, loaded)).toBe(true);
+    expect(fromScreenPage("https://app.example.test", screen, loaded)).toBe(true);
+    expect(fromScreenPage(loaded, screen, loaded)).toBe(true);
+  });
+
+  it("does not treat an arbitrary same-origin sender or a departed loaded page as authorized", () => {
+    const screen = "https://app.example.test/novnc/session/view/1.t/vnc.html";
+    const other = "https://app.example.test/account";
+    expect(fromScreenPage(other, screen)).toBe(false);
+    expect(fromScreenPage(screen, screen, other)).toBe(false);
+    expect(fromScreenPage("https://app.example.test", screen, other)).toBe(false);
+    expect(fromScreenPage("https://app.example.test", screen)).toBe(false);
+  });
+
+  it.each([
+    "https://app.example.test/novnc/session/control/2.other/vnc.html?view_only=false&bot=bot-1",
+    "https://app.example.test/novnc/session/view/1.t/vnc.html?view_only=false&bot=bot-1",
+    "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=true&bot=bot-1",
+    "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-2",
+    "https://app.example.test/novnc/session/control/1.t/other.html?view_only=false&bot=bot-1",
+    "https://app.example.test:444/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1",
+    "http://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1",
+    "https://elsewhere.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1",
+    "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1&path=elsewhere",
+    "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1#other",
+    "https://app.example.test/novnc/session/control/1.t/screen-page?view_only=false&bot=bot-1",
+    "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1&path=%2Fnovnc%2Fsession%2Fcontrol%2F1.t%2Fwebsockify&path=elsewhere",
+  ])("rejects a different screen capability, policy, page or authority: %s", (loaded) => {
+    const screen =
+      "https://app.example.test/novnc/session/control/1.t/vnc.html?view_only=false&bot=bot-1";
+    expect(fromScreenPage("null", screen, loaded)).toBe(false);
+    expect(fromScreenPage(loaded, screen, loaded)).toBe(false);
+  });
+
+  it("preserves an explicitly authorized nonstandard page without normalizing unrelated suffixes", () => {
+    const source = "https://app.example.test/novnc/session/view/1.t/custom/index.html?token=first";
+    expect(fromScreenPage("null", source, source.replace("first", "renewed"))).toBe(true);
+    expect(
+      fromScreenPage("null", source, source.replace("custom/index.html", "custom/vnc.html")),
+    ).toBe(false);
+  });
+
+  it("does not guess a direct screen's identity by dropping its query credential", () => {
+    const screen = "https://screen.example.test/vnc.html?token=first&view_only=true";
+    expect(fromScreenPage(screen, screen, screen)).toBe(true);
+    expect(fromScreenPage(screen.replace("first", "other"), screen)).toBe(false);
+    expect(fromScreenPage("null", screen, screen)).toBe(false);
   });
 
   it("keeps one stream key across a renewed link for the same screen", () => {
