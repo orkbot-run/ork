@@ -29,7 +29,7 @@ import {
   attachmentSizeLabel,
   resolveBotAvatarSet,
 } from "@orkbot/contracts";
-import { organicAvatarFamily } from "@orkbot/core";
+import { organicAvatarFamily, withAbort } from "@orkbot/core";
 import {
   createRepos,
   createSpaceForMember,
@@ -43,17 +43,21 @@ import {
 import { getLogger } from "@orkbot/logging";
 import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { checkPageSource } from "@orkbot/page-kit/validate";
-import { Unzip, UnzipInflate } from "fflate";
 import type { Hono } from "hono";
 import { cancelBody } from "#modules/platform/http-body";
 import type { SpaceDeletionDeps } from "#modules/spaces/space-deletion";
 import { deleteSpaceWithContent } from "#modules/spaces/space-deletion";
+import { readZipArchive, ZipArchiveError } from "./account-import-archive.js";
 
 export const ACCOUNT_IMPORT_LIMITS = {
   /** The uploaded zip as sent. */
   bodyBytes: 4 * 1024 ** 3,
   /** Everything the zip inflates to, so a bomb stops early. */
   unpackedBytes: 16 * 1024 ** 3,
+  /** Central and local headers, names, extra fields and comments. */
+  metadataBytes: 64 * 1024 * 1024,
+  entries: 100_000,
+  nameBytes: 4096,
   manifestBytes: 1024 * 1024,
   /** Room for about a million executable paths, more than a space's workspace files could hold. */
   executablesBytes: 64 * 1024 * 1024,
@@ -62,8 +66,6 @@ export const ACCOUNT_IMPORT_LIMITS = {
 };
 type ArchiveLimits = typeof ACCOUNT_IMPORT_LIMITS & { artifactBytes: number };
 
-/** Bounds what one push can inflate to (deflate expands at most ~1032x). */
-const PUSH_SLICE_BYTES = 16 * 1024;
 const MESSAGE_BATCH_SIZE = 500;
 
 export class AccountImportError extends Error {
@@ -133,40 +135,26 @@ export interface ArchiveSink {
   close(): Promise<void>;
 }
 
-/**
- * Streams the zip once. fflate inflates synchronously inside `push`, so input goes in small
- * slices and the queued output is handed to the sink before the next slice is read.
- */
+/** Validate the bounded ZIP directory before importing entries; nested archives remain opaque bytes. */
 export async function readArchive(
   body: AsyncIterable<Uint8Array>,
   limits: ArchiveLimits,
   sink: ArchiveSink,
+  signal?: AbortSignal,
 ): Promise<void> {
-  type Event = { entry: ArchiveEntry } | { data: Uint8Array; final: boolean };
-  const queue: Event[] = [];
-  let failure: unknown;
   let index = 0;
   let unpacked = 0;
-  let open = false;
-  const unzip = new Unzip((file) => {
-    try {
-      if (failure) return;
-      if (file.compression !== 0 && file.compression !== 8) throw unreadable();
-      const entry = parseEntryName(file.name, index++);
-      const maxBytes = entryLimit(entry, limits);
-      let size = 0;
-      queue.push({ entry });
-      file.ondata = (error, data, final) => {
-        if (failure) return;
-        if (error) {
-          failure = unreadable();
-          return;
-        }
-        size += data.byteLength;
-        unpacked += data.byteLength;
-        if (size > maxBytes || unpacked > limits.unpackedBytes) {
-          failure =
-            entry.kind === "artifact"
+  try {
+    await readZipArchive(
+      body,
+      limits,
+      async (name, advertisedSize, chunks) => {
+        signal?.throwIfAborted();
+        const entry = parseEntryName(name, index++);
+        const maxBytes = entryLimit(entry, limits);
+        const checkSize = (size: number) => {
+          if (size > maxBytes)
+            throw entry.kind === "artifact"
               ? new AccountImportError(
                   `An artifact in the export exceeds the ${attachmentSizeLabel(maxBytes)} limit.`,
                 )
@@ -175,48 +163,27 @@ export async function readArchive(
                     `A workspace file in the export exceeds the ${attachmentSizeLabel(maxBytes)} limit.`,
                   )
                 : tooLarge();
-          file.terminate();
-          return;
+        };
+        checkSize(advertisedSize);
+        if (advertisedSize > limits.unpackedBytes - unpacked) throw tooLarge();
+        await sink.open(entry);
+        let size = 0;
+        for await (const chunk of chunks) {
+          size += chunk.byteLength;
+          unpacked += chunk.byteLength;
+          checkSize(size);
+          if (unpacked > limits.unpackedBytes) throw tooLarge();
+          await sink.write(chunk);
         }
-        queue.push({ data, final });
-      };
-      file.start();
-    } catch (error) {
-      failure ??= error;
-    }
-  });
-  unzip.register(UnzipInflate);
-  const drain = async () => {
-    if (failure) throw failure;
-    for (const event of queue.splice(0)) {
-      if ("entry" in event) {
-        await sink.open(event.entry);
-        open = true;
-        continue;
-      }
-      if (event.data.byteLength) await sink.write(event.data);
-      if (event.final) {
-        open = false;
+        signal?.throwIfAborted();
         await sink.close();
-      }
-    }
-  };
-  const push = (chunk: Uint8Array, final: boolean) => {
-    try {
-      unzip.push(chunk, final);
-    } catch {
-      failure ??= unreadable();
-    }
-  };
-  for await (const chunk of body) {
-    for (let offset = 0; offset < chunk.byteLength; offset += PUSH_SLICE_BYTES) {
-      push(chunk.subarray(offset, offset + PUSH_SLICE_BYTES), false);
-      await drain();
-    }
+      },
+      signal,
+    );
+  } catch (error) {
+    if (error instanceof ZipArchiveError) throw error.oversized ? tooLarge() : unreadable();
+    throw error;
   }
-  push(new Uint8Array(0), true);
-  await drain();
-  if (index === 0 || open) throw unreadable();
 }
 
 /**
@@ -1052,6 +1019,7 @@ export async function importAccount(
   deps: AccountImportDeps,
   actor: Actor,
   body: AsyncIterable<Uint8Array>,
+  signal?: AbortSignal,
 ): Promise<AccountImportResult> {
   const importer = new AccountImporter(deps, actor);
   try {
@@ -1059,20 +1027,29 @@ export async function importAccount(
       body,
       { ...ACCOUNT_IMPORT_LIMITS, artifactBytes: deps.maxArtifactBytes },
       importer,
+      signal,
     );
-    return await importer.finish();
+    signal?.throwIfAborted();
+    const result = await importer.finish();
+    signal?.throwIfAborted();
+    return result;
   } catch (error) {
     await importer.rollback();
     throw error;
   }
 }
 
-async function* boundedBody(body: ReadableStream<Uint8Array>, maxBytes: number) {
+async function* boundedBody(
+  body: ReadableStream<Uint8Array>,
+  maxBytes: number,
+  signal: AbortSignal,
+) {
   const reader = body.getReader();
   let size = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      signal.throwIfAborted();
+      const { done, value } = await withAbort(reader.read(), signal);
       if (done) return;
       size += value.byteLength;
       if (size > maxBytes) throw tooLarge();
@@ -1080,6 +1057,7 @@ async function* boundedBody(body: ReadableStream<Uint8Array>, maxBytes: number) 
     }
   } finally {
     cancelBody(reader);
+    reader.releaseLock();
   }
 }
 
@@ -1111,7 +1089,8 @@ export function mountAccountImportRoute(
         await importAccount(
           deps,
           actor,
-          boundedBody(request.body, ACCOUNT_IMPORT_LIMITS.bodyBytes),
+          boundedBody(request.body, ACCOUNT_IMPORT_LIMITS.bodyBytes, request.signal),
+          request.signal,
         ),
       );
     } catch (error) {
