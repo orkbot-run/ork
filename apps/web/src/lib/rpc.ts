@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; native revocation retry integration is PolyForm-covered. See LICENSE.md.
+
 import { createRpcLink } from "@orkbot/client-transport";
 import type { AppContract, ProductEvent } from "@orkbot/contracts";
 import {
@@ -12,6 +15,7 @@ import { createORPCClient } from "@orpc/client";
 import type { ContractRouterClient } from "@orpc/contract";
 import { authClient } from "./auth";
 import { CLIENT_BUILD } from "./client-build";
+import { desktopBridge } from "./desktop";
 import { i18n } from "./i18n";
 import { identityLabels } from "./identity-display";
 import { reportClientError } from "./monitoring";
@@ -116,6 +120,10 @@ const link = createRpcLink<RpcClientContext>({
     return response;
   },
   onResponse: (response) => {
+    if (response.ok)
+      void Promise.resolve()
+        .then(() => desktopBridge()?.accounts?.retryRevocations?.())
+        .catch(() => undefined);
     for (const listener of responseListeners) listener(response);
   },
 });

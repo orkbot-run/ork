@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; signed-out message push suppression is an Ork addition.
+
 package com.orkbot.notifications
 
 import android.app.*
@@ -20,11 +24,15 @@ import java.util.concurrent.Executors
 /** Expo remains the single FCM token owner; other messages use its normal delegate unless [SenderPush] renders them. */
 class OrkMessagingService : ExpoFirebaseMessagingService() {
   override fun onMessageReceived(message: RemoteMessage) {
+    // Expo's fallback must not revive a message preview after the native session was cleared.
+    if (NotificationStorage(this).token.isBlank()) return
     val call = runCatching { JSONObject(message.data["body"] ?: "{}") }.getOrNull() ?: JSONObject()
     when (call.optString("kind")) {
       "incoming_call" -> IncomingCalls.report(this, call)
       "incoming_call_ended" -> IncomingCalls.settled(this, call)
-      else -> if (!SenderPush.present(this, call)) super.onMessageReceived(message)
+      else -> OrkNotificationService.withMessageSession(this, call.optString("sessionScope")) {
+        if (!SenderPush.present(this, call)) super.onMessageReceived(message)
+      }
     }
   }
 }

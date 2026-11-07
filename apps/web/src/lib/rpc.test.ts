@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material; native revocation retry regressions are PolyForm-covered. See LICENSE.md.
+
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +25,24 @@ afterEach(() => {
 });
 
 describe("signed-out responses", () => {
+  it("retries captured native revocations only after successful API replies", async () => {
+    const retryRevocations = vi.fn(async () => undefined);
+    vi.stubGlobal("window", {
+      location: { origin: "https://app.example.test" },
+      orkbotDesktop: { accounts: { retryRevocations } },
+    });
+    const fetch = vi.fn(async () => Response.json({ json: {} }));
+    vi.stubGlobal("fetch", fetch);
+    await rpc.me();
+    await vi.waitFor(() => expect(retryRevocations).toHaveBeenCalledOnce());
+    retryRevocations.mockClear();
+    fetch.mockImplementation(async () =>
+      Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 }),
+    );
+    await expect(rpc.me()).rejects.toMatchObject({ status: 401 });
+    expect(retryRevocations).not.toHaveBeenCalled();
+  });
+
   it.each([rpc, createSpaceRpc("space-a")])(
     "advertises the wire protocol on RPC requests without changing cookie authentication",
     async (client) => {

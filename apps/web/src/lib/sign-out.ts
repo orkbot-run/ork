@@ -20,23 +20,15 @@ let logOutFailed = false;
  * answer or queued request from this session survives in the page.
  */
 export async function signOut(destination: string): Promise<void> {
-  // Hang up while the session still exists, so the server-side hang-up is authorized.
-  await endCallBeforeSignOut();
-  // The account changed while hanging up: signing out now would sign out the other account.
-  if (sessionChangedUnderPage()) {
-    window.location.reload();
-    return;
-  }
-  // Local device access ends even if the web sign-out request fails.
-  await Promise.resolve()
-    .then(() => desktopBridge()?.pairing?.clear())
-    .catch(() => undefined);
-  if (sessionChangedUnderPage()) {
-    window.location.reload();
-    return;
-  }
   const desktop = desktopBridge();
   if (desktop?.accounts) {
+    if (sessionChangedUnderPage()) {
+      window.location.reload();
+      return;
+    }
+    // Native logout durably queues revocation and clears HttpOnly cookies without network access.
+    // Stop local audio now; a pending server hang-up cannot delay leaving the old session.
+    void endCallBeforeSignOut().catch(() => undefined);
     try {
       await desktop.accounts.logout();
     } catch {
@@ -47,17 +39,33 @@ export async function signOut(destination: string): Promise<void> {
       window.location.reload();
       return;
     }
+    forgetSignedInUser();
+    clearSpaceSelection();
+    clearComposerDrafts();
+    await Promise.resolve()
+      .then(() => desktop.server?.change())
+      .catch(() => undefined);
+    window.location.assign(destination);
+    return;
+  }
+  // Browser fixtures and older hosts still use the authenticated server logout endpoint.
+  await endCallBeforeSignOut();
+  if (sessionChangedUnderPage()) {
+    window.location.reload();
+    return;
+  }
+  await Promise.resolve()
+    .then(() => desktop?.pairing?.clear())
+    .catch(() => undefined);
+  if (sessionChangedUnderPage()) {
+    window.location.reload();
+    return;
   }
   const result = await authClient.signOut().catch(() => null);
   if (result && !result.error) {
     forgetSignedInUser();
     clearSpaceSelection();
     clearComposerDrafts();
-    if (desktop?.accounts) {
-      await Promise.resolve()
-        .then(() => desktop.server?.change())
-        .catch(() => undefined);
-    }
     window.location.assign(destination);
   } else {
     reloadAfterFailedSignOut();

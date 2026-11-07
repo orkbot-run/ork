@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; atomic signed-out preview suppression is an Ork addition.
+
 package com.orkbot.notifications
 
 import android.app.Notification
@@ -440,6 +444,8 @@ class OrkNotificationService : Service() {
 
     fun clearSession(context: Context) {
       synchronized(sessionLock) {
+        NotificationStorage(context).token = ""
+        NotificationStorage(context).messageSessionScope = ""
         sessionGeneration.incrementAndGet()
         sessionEpoch++
         openBotId = null
@@ -447,6 +453,27 @@ class OrkNotificationService : Service() {
         stop(context)
         context.getSharedPreferences(STATE_PREFERENCES, MODE_PRIVATE).edit().clear().apply()
         context.getSystemService(NotificationManager::class.java).cancelAll()
+      }
+    }
+
+    /** Posting and session clearing share a lock, so a delayed push cannot restore a cleared preview. */
+    fun withMessageSession(context: Context, scope: String, post: () -> Unit): Boolean = synchronized(sessionLock) {
+      val storage = NotificationStorage(context)
+      if (storage.token.isBlank() || scope.isBlank() || storage.messageSessionScope != scope) false
+      else { post(); true }
+    }
+
+    fun updateSession(context: Context, token: String, write: () -> Unit) = synchronized(sessionLock) {
+      if (NotificationStorage(context).token != token) clearSession(context)
+      write()
+    }
+
+    fun configureMessageSession(context: Context, scope: String) = synchronized(sessionLock) {
+      if (!scope.matches(Regex("[a-f0-9]{64}"))) {
+        clearSession(context)
+      } else {
+        val storage = NotificationStorage(context)
+        storage.messageSessionScope = if (storage.token.isNotBlank()) scope else ""
       }
     }
   }

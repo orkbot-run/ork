@@ -10,6 +10,7 @@ import {
 } from "./artifact-cache-session";
 import { stopLiveNotifications } from "./live-notifications";
 import { clearNetworkCache } from "./network-cache";
+import { clearNotificationSessionScope } from "./notification-session";
 import { forgetReferrals } from "./referral";
 import { rememberSignedIn } from "./returning-user";
 import { clearFailedSends } from "./thread-feedback";
@@ -53,6 +54,7 @@ export function registerSessionDiskCache(
 }
 
 function invalidateSessionCaches(reason: SessionChangeReason): Promise<void> {
+  void clearNotificationSessionScope().catch(() => undefined);
   scopeInvalidated = true;
   if (reason !== "session_rejected" && reason !== "password_change") clearFailedSends();
   clearNetworkCache();
@@ -189,7 +191,9 @@ export async function saveSessionToken(token: string, reason: SessionSaveReason 
   const clearingScope = invalidateSessionCaches(reason);
   // Marked before the token lands, so an account deletion that clears it afterwards also clears the mark.
   await rememberSignedIn();
-  await enqueueScopeWrite(() => SecureStore.setItemAsync(SESSION_KEY, token));
+  await enqueueScopeWrite(async () => {
+    if (generation === sessionGeneration) await SecureStore.setItemAsync(SESSION_KEY, token);
+  });
   await clearingScope;
   if (generation !== sessionGeneration) return;
   sessionInvalidated = false;
@@ -198,13 +202,17 @@ export async function saveSessionToken(token: string, reason: SessionSaveReason 
 }
 
 /** Clears the session. Returns false only when SecureStore could neither delete nor overwrite. */
-export async function clearSessionToken(reason: SessionClearReason = "logout"): Promise<boolean> {
+export async function clearSessionToken(
+  reason: SessionClearReason = "logout",
+  retire?: (token: string) => Promise<void>,
+): Promise<boolean> {
+  const fallback = sessionFallback;
   const generation = ++sessionGeneration;
   publishSessionGeneration(false);
   sessionInvalidated = true;
   sessionFallback = undefined;
   const clearingScope = invalidateSessionCaches(reason);
-  const clearingToken = clearStoredSessionToken(generation);
+  const clearingToken = clearStoredSessionToken(generation, retire, fallback);
   await stopLiveNotifications(true).catch(() => undefined);
   const tokenCleared = await clearingToken;
   await clearingScope;
@@ -212,8 +220,20 @@ export async function clearSessionToken(reason: SessionClearReason = "logout"): 
   return tokenCleared;
 }
 
-async function clearStoredSessionToken(generation: number): Promise<boolean> {
+async function clearStoredSessionToken(
+  generation: number,
+  retire?: (token: string) => Promise<void>,
+  fallback?: string,
+): Promise<boolean> {
   return enqueueScopeWrite(async () => {
+    if (retire) {
+      try {
+        const token = fallback ?? (await SecureStore.getItemAsync(SESSION_KEY));
+        if (token) await retire(token);
+      } catch {
+        // Offline logout must still forget local credentials when recovery storage is unavailable.
+      }
+    }
     let cleared = false;
     try {
       await SecureStore.deleteItemAsync(SESSION_KEY);

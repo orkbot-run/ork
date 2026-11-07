@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; signed-out preview tests are an Ork addition.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-modules-core", () => ({ requireNativeModule: vi.fn() }));
@@ -9,6 +13,10 @@ vi.mock("expo-notifications", () => ({
 }));
 vi.mock("react-native", () => ({ Platform: { OS: "ios" } }));
 vi.mock("expo-secure-store", () => ({}));
+vi.mock("./session", () => ({
+  currentSessionGeneration: () => 1,
+  loadSessionToken: vi.fn(async () => "signed-in-token"),
+}));
 
 import * as Notifications from "expo-notifications";
 import {
@@ -19,8 +27,16 @@ import {
   setOpenNotificationThread,
   stopLiveNotifications,
 } from "./live-notifications";
+import { setNotificationSessionScope } from "./notification-session";
+import { loadSessionToken } from "./session";
 
-beforeEach(() => vi.clearAllMocks());
+const NOTIFICATION_SCOPE = "a".repeat(64);
+
+beforeEach(async () => {
+  await setNotificationSessionScope(NOTIFICATION_SCOPE, () => true);
+  vi.clearAllMocks();
+  vi.mocked(loadSessionToken).mockResolvedValue("signed-in-token");
+});
 
 // The handler is installed once per module; keep it across cleared mocks.
 let foreground: Parameters<typeof Notifications.setNotificationHandler>[0] | undefined;
@@ -31,6 +47,28 @@ function foregroundHandler() {
 }
 
 describe("notification thread targeting", () => {
+  it("suppresses message previews without a local session", async () => {
+    vi.mocked(loadSessionToken).mockResolvedValue("");
+    const handler = foregroundHandler();
+    await expect(
+      handler?.handleNotification({
+        request: {
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, kind: "help", botId: "bot-2" } },
+        },
+      } as never),
+    ).resolves.toMatchObject({ shouldShowBanner: false, shouldShowList: false });
+  });
+
+  it("suppresses a delayed message from the previous account after another signs in", async () => {
+    const handler = foregroundHandler();
+    await expect(
+      handler?.handleNotification({
+        request: {
+          content: { data: { sessionScope: "b".repeat(64), kind: "help", botId: "bot-2" } },
+        },
+      } as never),
+    ).resolves.toMatchObject({ shouldShowBanner: false, shouldShowList: false });
+  });
   it("matches Expo and native notification keys for the open agent", () => {
     expect(notificationTargetsThread({ botId: "bot-1" }, { botId: "bot-1" })).toBe(true);
     expect(
@@ -76,12 +114,18 @@ describe("notification thread targeting", () => {
     };
     await expect(
       handler?.handleNotification({
-        request: { content: { data: { kind: "completion", botId: "bot-2" } } },
+        request: {
+          content: {
+            data: { sessionScope: NOTIFICATION_SCOPE, kind: "completion", botId: "bot-2" },
+          },
+        },
       } as never),
     ).resolves.toEqual(silent);
     await expect(
       handler?.handleNotification({
-        request: { content: { data: { kind: "help", botId: "bot-2" } } },
+        request: {
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, kind: "help", botId: "bot-2" } },
+        },
       } as never),
     ).resolves.toMatchObject({ shouldShowBanner: true, shouldShowList: true });
   });
@@ -90,7 +134,7 @@ describe("notification thread targeting", () => {
     await setOpenNotificationThread({ botId: "bot-1" });
     await expect(
       foregroundHandler()?.handleNotification({
-        request: { content: { data: { kind, botId: "bot-2" } } },
+        request: { content: { data: { sessionScope: NOTIFICATION_SCOPE, kind, botId: "bot-2" } } },
       } as never),
     ).resolves.toMatchObject({
       shouldShowBanner: true,
@@ -102,13 +146,31 @@ describe("notification thread targeting", () => {
   it("dismisses a group's notifications without dismissing its bots' direct chats", async () => {
     vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([
       {
-        request: { identifier: "group", content: { data: { groupId: "group-1", botId: "bot-1" } } },
+        request: {
+          identifier: "group",
+          content: {
+            data: { sessionScope: NOTIFICATION_SCOPE, groupId: "group-1", botId: "bot-1" },
+          },
+        },
       },
       {
-        request: { identifier: "native-group", content: { data: { "orkbot.groupId": "group-1" } } },
+        request: {
+          identifier: "native-group",
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, "orkbot.groupId": "group-1" } },
+        },
       },
-      { request: { identifier: "bot", content: { data: { botId: "bot-1" } } } },
-      { request: { identifier: "other-group", content: { data: { groupId: "group-2" } } } },
+      {
+        request: {
+          identifier: "bot",
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, botId: "bot-1" } },
+        },
+      },
+      {
+        request: {
+          identifier: "other-group",
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, groupId: "group-2" } },
+        },
+      },
     ] as never);
     await dismissThreadNotifications({ groupId: "group-1" });
     expect(vi.mocked(Notifications.dismissNotificationAsync).mock.calls).toEqual([
@@ -123,10 +185,14 @@ describe("notification thread targeting", () => {
     expect(handler).toBeTruthy();
 
     await expect(
-      handler?.handleNotification({ request: { content: { data: { botId: "bot-1" } } } } as never),
+      handler?.handleNotification({
+        request: { content: { data: { sessionScope: NOTIFICATION_SCOPE, botId: "bot-1" } } },
+      } as never),
     ).resolves.toMatchObject({ shouldShowBanner: false, shouldShowList: false });
     await expect(
-      handler?.handleNotification({ request: { content: { data: { botId: "bot-2" } } } } as never),
+      handler?.handleNotification({
+        request: { content: { data: { sessionScope: NOTIFICATION_SCOPE, botId: "bot-2" } } },
+      } as never),
     ).resolves.toMatchObject({ shouldShowBanner: true, shouldShowList: true });
   });
 });
@@ -134,8 +200,18 @@ describe("notification thread targeting", () => {
 describe("after a chat's notifications change", () => {
   it("clears that chat's delivered notifications only when they are turned off", async () => {
     vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([
-      { request: { identifier: "a", content: { data: { threadId: "thread-1" } } } },
-      { request: { identifier: "b", content: { data: { threadId: "thread-2" } } } },
+      {
+        request: {
+          identifier: "a",
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, threadId: "thread-1" } },
+        },
+      },
+      {
+        request: {
+          identifier: "b",
+          content: { data: { sessionScope: NOTIFICATION_SCOPE, threadId: "thread-2" } },
+        },
+      },
     ] as never);
 
     await afterChatNotifyChange("", "", "", { botId: "bot-1", threadId: "thread-1", notify: true });

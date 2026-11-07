@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; non-secret message delivery scopes are an Ork addition.
+
 package com.orkbot.notifications
 
 import android.content.Context
@@ -65,6 +69,10 @@ internal class NotificationStorage(context: Context) {
   var token: String
     get() = readSecret(TOKEN)
     set(value) = writeSecret(TOKEN, value)
+
+  var messageSessionScope: String
+    get() = preferences.getString("message_session_scope", "").orEmpty()
+    set(value) = commit { putString("message_session_scope", value) }
 
   /** The server's custom request headers as a JSON object; they can hold an access proxy's secret. */
   var headers: String

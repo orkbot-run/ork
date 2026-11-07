@@ -9,6 +9,7 @@ import {
 } from "@orkbot/contracts/accounts";
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
+import { queueAccountsRevocation, retryPendingRevocations } from "./pending-revocations";
 import { clearServerInitialization } from "./server-connect";
 
 export const ACCOUNTS_REDIRECT_URI = "run.orkbot.app:/oauth2/callback";
@@ -459,7 +460,7 @@ async function validAccessToken(): Promise<string | null> {
 export async function signOutAccounts(): Promise<void> {
   clearServerInitialization();
   const pendingRefresh = refreshSnapshot;
-  const owner = ++generation;
+  ++generation;
   invalidated = true;
   accountChanged();
   const previous = await enqueue(async () => {
@@ -469,27 +470,23 @@ export async function signOutAccounts(): Promise<void> {
     } catch {
       // An unreadable snapshot only prevents remote revocation, never the local wipe.
     }
-    await clearStored();
-    return stored ?? (pendingRefresh ? JSON.stringify(pendingRefresh) : null);
-  });
-  if (!previous || owner !== generation) return;
-  void (async () => {
-    try {
-      const tokens = JSON.parse(previous) as Tokens;
-      const expected = accountsConfig({ issuer: tokens.issuer, clientId: tokens.clientId });
-      const metadata = await discover(expected);
-      if (!metadata.revocation_endpoint || owner !== generation) return;
-      await requestJson(metadata.revocation_endpoint, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_id: expected.clientId,
-          token: tokens.refreshToken ?? tokens.accessToken,
-          token_type_hint: tokens.refreshToken ? "refresh_token" : "access_token",
-        }).toString(),
-      });
-    } catch {
-      // Revocation cannot delay local logout or change a newer account's credentials.
+    const previous = stored ?? (pendingRefresh ? JSON.stringify(pendingRefresh) : null);
+    if (previous) {
+      try {
+        const tokens = JSON.parse(previous) as Tokens;
+        const expected = accountsConfig({ issuer: tokens.issuer, clientId: tokens.clientId });
+        await queueAccountsRevocation(
+          expected.issuer,
+          expected.clientId,
+          tokens.refreshToken ?? tokens.accessToken,
+          tokens.refreshToken ? "refresh_token" : "access_token",
+        );
+      } catch {
+        // Failed recovery persistence must not retain a live local sign-in.
+      }
     }
-  })();
+    await clearStored();
+    return previous;
+  });
+  if (previous) retryPendingRevocations();
 }

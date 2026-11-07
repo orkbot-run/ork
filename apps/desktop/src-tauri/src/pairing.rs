@@ -253,16 +253,43 @@ impl Pairings {
         blocked.and(deleted)
     }
 
-    /// Call before server logout. Invalidate pending work before waiting for its origin lock.
-    pub async fn clear(&self, origin: &Url) -> Result<(), String> {
+    /// Invalidate old pairing work before scheduling any asynchronous logout cleanup.
+    pub fn begin_clear(&self, origin: &Url) -> Result<Attempt, String> {
         let origin = secure_origin(origin)?;
         let server = self.server(&origin)?;
-        server.generation.fetch_add(1, Ordering::SeqCst);
-        let _operation = server.operation.lock().await;
-        if let Some(binding) = self.binding(&origin).await? {
+        let generation = server.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        Ok(Attempt { server, generation })
+    }
+
+    pub async fn clear_attempt(
+        &self,
+        origin: &Url,
+        attempt: Attempt,
+        current: impl Fn() -> bool,
+    ) -> Result<(), String> {
+        let origin = secure_origin(origin)?;
+        if !attempt.is_current() || !current() {
+            return Ok(());
+        }
+        let _operation = attempt.server.operation.lock().await;
+        if !attempt.is_current() || !current() {
+            return Ok(());
+        }
+        let binding = self.binding(&origin).await?;
+        if !attempt.is_current() || !current() {
+            return Ok(());
+        }
+        if let Some(binding) = binding {
+            // The origin lock pins this binding until its captured token has been retired.
             self.forget(&client()?, &origin, binding).await?;
         }
         Ok(())
+    }
+
+    /// Call before server logout. Invalidate pending work before waiting for its origin lock.
+    pub async fn clear(&self, origin: &Url) -> Result<(), String> {
+        self.clear_attempt(origin, self.begin_clear(origin)?, || true)
+            .await
     }
 
     /// Synchronize pairing only; computer access and transport remain a separate capability.
@@ -624,6 +651,36 @@ mod tests {
             .unwrap();
         assert!(server.state.lock().unwrap().requests.is_empty());
         assert!(!has_token(&store));
+    }
+
+    #[tokio::test]
+    async fn deferred_logout_cannot_clear_a_newer_account_pairing() {
+        let server = Server::new().await;
+        let store = Arc::new(MemoryStore::default());
+        let access = pairings(&store);
+        access
+            .sync(&server.origin, "fixture", || true)
+            .await
+            .unwrap();
+        let attempt = access.begin_clear(&server.origin).unwrap();
+        server.state.lock().unwrap().identity = Some(("account-b".into(), "session-b".into()));
+        access
+            .sync(&server.origin, "fixture", || true)
+            .await
+            .unwrap();
+        let before = server.state.lock().unwrap().revoked.len();
+        access
+            .clear_attempt(&server.origin, attempt, || false)
+            .await
+            .unwrap();
+        let saved = access.binding(&server.origin).await.unwrap().unwrap();
+        assert_eq!(saved.user_id, "account-b");
+        assert!(access
+            .credential(&server.origin, &saved)
+            .await
+            .unwrap()
+            .is_some());
+        assert_eq!(server.state.lock().unwrap().revoked.len(), before);
     }
 
     #[tokio::test]

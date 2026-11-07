@@ -20,6 +20,9 @@ mod native;
 mod pairing;
 mod passkeys;
 mod profile;
+#[cfg(any(windows, test))]
+mod revocation_storage;
+mod revocations;
 mod server;
 mod server_directory;
 mod server_link;
@@ -431,6 +434,10 @@ async fn native_command(
             }
             serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
         }
+        Command::AccountsRetryRevocations => {
+            state.accounts.retry_revocations();
+            Ok(unit)
+        }
         Command::AccountsSession => {
             let account = state.accounts.session(&document.origin).await?;
             if !state.sessions.is_current(&document)
@@ -494,23 +501,52 @@ async fn native_command(
                 return Err("Accounts sign-in changed. Try again.".into());
             }
             let logout = begin_accounts_logout(&state)?;
+            let cleanup_app = app.clone();
+            let cleanup_origin = document.origin.clone();
+            let cleanup_document = document.clone();
+            let cleanup_account = account.clone();
+            let cleanup_attempt = state.pairings.begin_clear(&document.origin)?;
+            tauri::async_runtime::spawn(async move {
+                let state = cleanup_app.state::<DesktopState>();
+                let _ = state
+                    .pairings
+                    .clear_attempt(&cleanup_origin, cleanup_attempt, || {
+                        logout.is_current(&state)
+                            && logout_document_matches(
+                                &state,
+                                &cleanup_document,
+                                cleanup_account.as_deref(),
+                            )
+                    })
+                    .await;
+            });
             state.browser_auth.cancel_owner(&owner);
             state.speech.cancel_owner(&owner);
             auth::close_popup(&app, &document.label);
             update_startup(&app, Startup::idle());
-            clear_accounts_credentials(&state, &logout, Some(&document.origin), || {
-                logout_document_matches(&state, &document, account.as_deref())
-            })
-            .await?;
+            let server_result =
+                clear_server_session(&window, &state, &logout, &document, account.as_deref()).await;
+            let accounts_result =
+                clear_accounts_credentials(&state, &logout, Some(&document.origin), || {
+                    logout_document_matches(&state, &document, account.as_deref())
+                })
+                .await;
             let _switch = state.switching.lock().await;
-            reset_setup_after_product_logout(
+            let reset_result = reset_setup_after_product_logout(
                 &app,
                 &logout,
                 &document,
                 account.as_deref(),
                 previous_setup,
             )
-            .await?;
+            .await;
+            let result = server_result.and(accounts_result).and(reset_result);
+            if result.is_err() && logout.is_current(&state) {
+                // A cookie-store failure must never reload a still-authenticated old product page.
+                retire_server_windows(&app, &state);
+                let _ = show_setup(&app);
+            }
+            result?;
             Ok(unit)
         }
         Command::Hello { .. } => {
@@ -2038,6 +2074,105 @@ fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     }
 }
 
+fn auth_cookie(name: &str) -> bool {
+    name.ends_with(".session_token")
+        || name.ends_with(".session_data")
+        || name.contains(".session_data.")
+        || name.ends_with(".dont_remember")
+}
+
+fn same_captured_cookie(
+    captured: &tauri::webview::Cookie<'_>,
+    current: &tauri::webview::Cookie<'_>,
+) -> bool {
+    captured.name() == current.name()
+        && captured.domain() == current.domain()
+        && captured.path() == current.path()
+        && captured.value() == current.value()
+}
+
+async fn clear_server_session(
+    window: &WebviewWindow,
+    state: &DesktopState,
+    logout: &AccountsLogout,
+    document: &native::Document,
+    account: Option<&str>,
+) -> Result<(), String> {
+    let current = || logout.is_current(state) && logout_document_matches(state, document, account);
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    let cookie_window = window.clone();
+    let cookie_url = document
+        .origin
+        .join("/api/auth/get-session")
+        .map_err(|_| "Invalid server.")?;
+    let read_url = cookie_url.clone();
+    let captured = tokio::task::spawn_blocking(move || cookie_window.cookies_for_url(read_url))
+        .await
+        .map_err(|_| "Could not read the server session.")?
+        .map_err(|_| "Could not read the server session.")?;
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    let cookies = captured
+        .iter()
+        .filter(|cookie| cookie.name().ends_with(".session_token"))
+        .map(|cookie| format!("{}={}", cookie.name(), cookie.value()))
+        .collect::<Vec<_>>()
+        .join("; ");
+    let queued = state
+        .accounts
+        .queue_server_logout(&document.origin, cookies)
+        .await;
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    let cookie_window = window.clone();
+    let cookie_app = window.app_handle().clone();
+    let cookie_document = document.clone();
+    let cookie_logout = *logout;
+    let cookie_account = account.map(str::to_owned);
+    tokio::task::spawn_blocking(move || {
+        let state = cookie_app.state::<DesktopState>();
+        for cookie in captured
+            .into_iter()
+            .filter(|cookie| auth_cookie(cookie.name()))
+        {
+            let current = || {
+                cookie_logout.is_current(&state)
+                    && logout_document_matches(&state, &cookie_document, cookie_account.as_deref())
+            };
+            if !current() {
+                return Err("Accounts sign-in changed. Try again.");
+            }
+            let latest = cookie_window
+                .cookies_for_url(cookie_url.clone())
+                .map_err(|_| "Could not read the server session.")?;
+            if !current() {
+                return Err("Accounts sign-in changed. Try again.");
+            }
+            // Recheck each captured value immediately before erasure, never a replacement cookie.
+            if latest
+                .iter()
+                .any(|value| same_captured_cookie(&cookie, value))
+            {
+                cookie_window
+                    .delete_cookie(cookie)
+                    .map_err(|_| "Could not clear the server session.")?;
+            }
+        }
+        Ok::<(), &str>(())
+    })
+    .await
+    .map_err(|_| "Could not clear the server session.")??;
+    if !current() {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    state.accounts.retry_revocations();
+    queued
+}
+
 async fn server_session_cookies(window: &WebviewWindow, origin: &Url) -> Result<String, String> {
     let cookie_window = window.clone();
     let cookie_url = origin
@@ -2713,6 +2848,7 @@ fn main() {
                 pending_bookmark: Mutex::new(None),
                 bookmark_sync: tokio::sync::Mutex::new(()),
             });
+            app.state::<DesktopState>().accounts.retry_revocations();
             app.manage(updates::UpdateCheck::default());
             updates::start_background(app.handle().clone());
             refresh_menu(app.handle())?;
@@ -2909,6 +3045,29 @@ mod tests {
             .unwrap();
         *app.state::<DesktopState>().active_window.lock().unwrap() = Some("server-missing".into());
         assert!(!focus_active(app.handle()));
+    }
+
+    #[test]
+    fn logout_clears_only_captured_auth_cookies_and_preserves_replacements() {
+        use tauri::webview::Cookie;
+        let original = Cookie::build(("better-auth.session_token", "old-session"))
+            .domain("server.example.test")
+            .path("/")
+            .build();
+        assert!(auth_cookie(original.name()));
+        assert!(auth_cookie("__Secure-better-auth.session_data.0"));
+        assert!(!auth_cookie("color-mode"));
+        assert!(!auth_cookie("other.session_data_backup"));
+        assert!(same_captured_cookie(&original, &original.clone()));
+        let mut replacement = original.clone();
+        replacement.set_value("new-session");
+        assert!(!same_captured_cookie(&original, &replacement));
+        let mut other_domain = original.clone();
+        other_domain.set_domain("other.example.test");
+        assert!(!same_captured_cookie(&original, &other_domain));
+        let mut other_path = original.clone();
+        other_path.set_path("/different");
+        assert!(!same_captured_cookie(&original, &other_path));
     }
 
     #[test]

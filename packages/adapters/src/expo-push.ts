@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; session-bound message payloads are an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import type {
@@ -13,6 +17,7 @@ import type { IncomingCallPush, VoipPushProvider } from "./apns-voip.js";
 import { combineSignals } from "./connector-safety.js";
 import { credentialDigest } from "./credential-digest.js";
 import type { PushRecord, PushTokenStore } from "./push-token-store.js";
+import { notificationSessionScope } from "./push-token-store.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -296,7 +301,12 @@ export class ExpoPushProvider implements NotificationProvider {
     const title = capped(message.title, MAX_PUSH_TITLE_CHARS);
     let bodyChars = MAX_PUSH_BODY_CHARS;
     let text = capped(message.body, bodyChars);
-    const data = expoPushData(message, context.spaceId, randomUUID());
+    const data = {
+      ...expoPushData(message, context.spaceId, randomUUID()),
+      ...(registration.sessionId
+        ? { sessionScope: notificationSessionScope(registration.sessionId) }
+        : {}),
+    };
     const shared = {
       to: token,
       collapseId: message.threadId,
@@ -322,7 +332,7 @@ export class ExpoPushProvider implements NotificationProvider {
             title,
             body: text,
             data,
-            ...(message.sender ? { mutableContent: true } : {}),
+            mutableContent: true,
             ...(urgent ? { priority: "high" } : {}),
           };
     let payload = build();

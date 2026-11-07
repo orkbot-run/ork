@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; session-bound preview suppression is an Ork addition.
+
 import Intents
 import UserNotifications
 
@@ -7,11 +11,17 @@ final class NotificationService: UNNotificationServiceExtension {
   private var handler: ((UNNotificationContent) -> Void)?
   private let lock = NSLock()
   private var fallback: UNNotificationContent?
+  private var pushScope = ""
+  private var hasSession: Bool {
+    !pushScope.isEmpty && UserDefaults(suiteName: "group.run.orkbot.app")?.string(forKey: "orkbot.message-session") == pushScope
+  }
 
   override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
     handler = contentHandler
     fallback = request.content
     let data = request.content.userInfo["body"] as? [AnyHashable: Any] ?? request.content.userInfo
+    pushScope = data["sessionScope"] as? String ?? ""
+    guard hasSession else { finish(UNMutableNotificationContent()); return }
     guard let sender = data["sender"] as? [String: Any],
           let botId = sender["botId"] as? String,
           let name = sender["name"] as? String,
@@ -53,6 +63,8 @@ final class NotificationService: UNNotificationServiceExtension {
     let completion = handler
     handler = nil
     lock.unlock()
-    completion?(content)
+    // The app group carries only an active-session marker, never authentication material.
+    // Recheck after asynchronous intent donation too, so logout suppresses a late completion.
+    completion?(hasSession ? content : UNMutableNotificationContent())
   }
 }

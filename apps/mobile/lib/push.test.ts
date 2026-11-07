@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; session-bound registration tests are an Ork addition.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
@@ -51,7 +55,7 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { rpc, selectInitialSpace } from "./api";
 import { registerPushToken } from "./push";
-import { restoreSessionToken } from "./session";
+import { clearSessionToken, restoreSessionToken } from "./session";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -136,6 +140,26 @@ describe("push registration on iOS", () => {
           body: JSON.stringify({ json: { token: "ExponentPushToken[fake]" } }),
         }),
       ),
+    );
+  });
+
+  it("does not register against a replacement session after permission waits", async () => {
+    const pending = registerPushToken();
+    await vi.waitFor(() => expect(Notifications.requestPermissionsAsync).toHaveBeenCalledOnce());
+    await restoreSessionToken("replacement-session");
+    permission.resolve({ granted: true });
+    await pending;
+    expect(fetch.mock.calls.some(([url]) => url.endsWith("/rpc/notifications/registerPush"))).toBe(
+      false,
+    );
+  });
+
+  it("does not request push permission while signed out", async () => {
+    await clearSessionToken();
+    await registerPushToken();
+    expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    expect(fetch.mock.calls.some(([url]) => url.endsWith("/rpc/notifications/registerPush"))).toBe(
+      false,
     );
   });
 });

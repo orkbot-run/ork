@@ -39,6 +39,8 @@ pub enum Command {
     AccountsSession,
     #[serde(rename = "accounts.logout")]
     AccountsLogout,
+    #[serde(rename = "accounts.retryRevocations")]
+    AccountsRetryRevocations,
     #[serde(rename = "accounts.createServerLoginGrant")]
     AccountsCreateServerLoginGrant { origin: String, challenge: String },
     #[serde(rename = "accounts.consumeServerInitializationSecret")]

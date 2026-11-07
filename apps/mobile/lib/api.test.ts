@@ -64,6 +64,7 @@ import {
 import { artifactCacheSession } from "./artifact-cache-session";
 import { resumeLiveNotifications } from "./live-notifications.js";
 import { clearNetworkCache } from "./network-cache.js";
+import { queueSessionRevocation, retryPendingRevocations } from "./pending-revocations";
 import { threadRefreshDelayMs } from "./refresh";
 import {
   clearSessionToken,
@@ -77,6 +78,10 @@ import type { UnsentDisk } from "./thread-feedback.js";
 import { configureUnsentSends } from "./thread-feedback.js";
 
 vi.mock("./accounts", () => ({ signOutAccounts: vi.fn(async () => undefined) }));
+vi.mock("./pending-revocations", () => ({
+  queueSessionRevocation: vi.fn(async () => undefined),
+  retryPendingRevocations: vi.fn(),
+}));
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(),
@@ -108,6 +113,8 @@ describe("mobile API authentication", () => {
   beforeEach(async () => {
     vi.restoreAllMocks();
     vi.mocked(signOutAccounts).mockReset().mockResolvedValue(undefined);
+    vi.mocked(queueSessionRevocation).mockReset().mockResolvedValue(undefined);
+    vi.mocked(retryPendingRevocations).mockClear();
     vi.mocked(SecureStore.getItemAsync).mockReset();
     vi.mocked(SecureStore.setItemAsync).mockReset();
     vi.mocked(SecureStore.deleteItemAsync).mockReset();
@@ -1390,46 +1397,41 @@ describe("mobile API authentication", () => {
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
   });
 
-  it("does not unregister a new account after Accounts cleanup changes the session", async () => {
+  it("does not retire a product login established while Accounts cleanup finishes", async () => {
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("old-session");
     vi.mocked(signOutAccounts).mockImplementationOnce(async () => {
       await saveSessionToken("new-session");
     });
-    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);
     await signOut();
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
     expect(fetcher).not.toHaveBeenCalled();
+    expect(queueSessionRevocation).toHaveBeenCalledWith("http://127.0.0.1:3100", "old-session", {});
     expect(await authHeaders()).toMatchObject({ authorization: "Bearer new-session" });
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
   });
 
-  it("does not clear a newer product login after old push unregistration finishes", async () => {
-    await saveSessionToken("old-session");
+  it("invalidates the old bearer before retirement storage finishes and preserves a later login", async () => {
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("old-session");
     let release!: () => void;
-    let started!: () => void;
-    const reached = new Promise<void>((resolve) => {
-      started = resolve;
-    });
-    const fetcher = vi.fn(async () => {
-      started();
-      await new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      return jsonResponse({ json: null });
-    });
-    vi.stubGlobal("fetch", fetcher);
+    vi.mocked(queueSessionRevocation).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
     const logout = signOut();
-    await reached;
-    await saveSessionToken("new-session");
-    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
-    vi.mocked(SecureStore.deleteItemAsync).mockClear();
+    expect(await authHeaders()).not.toHaveProperty("authorization");
+    await vi.waitFor(() => expect(queueSessionRevocation).toHaveBeenCalledOnce());
+    const login = saveSessionToken("new-session");
     release();
-    await logout;
+    await Promise.all([logout, login]);
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("new-session");
     expect(await authHeaders()).toMatchObject({ authorization: "Bearer new-session" });
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.space_id");
-    expect(fetcher).toHaveBeenCalledOnce();
-    expect(signOutAccounts).toHaveBeenCalledOnce();
+    expect(queueSessionRevocation).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(SecureStore.deleteItemAsync).mock.invocationCallOrder.at(-1)).toBeLessThan(
+      vi.mocked(SecureStore.setItemAsync).mock.invocationCallOrder.at(-1)!,
+    );
   });
 
   it("clears the product session even if central credential persistence fails", async () => {
@@ -1455,79 +1457,35 @@ describe("mobile API authentication", () => {
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
   });
 
-  it("unregisters push delivery before invalidating the session", async () => {
+  it("persists the originating bearer for revocation before deleting its live slot", async () => {
     vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ json: null }))
-      .mockResolvedValueOnce(jsonResponse({}));
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
     vi.stubGlobal("fetch", fetchMock);
-
     await signOut();
-
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "http://127.0.0.1:3100/rpc/notifications/unregisterPush",
-      "http://127.0.0.1:3100/api/auth/sign-out",
-    ]);
+    expect(queueSessionRevocation).toHaveBeenCalledWith(
+      "http://127.0.0.1:3100",
+      "session-token",
+      {},
+    );
+    const deleted = vi
+      .mocked(SecureStore.deleteItemAsync)
+      .mock.calls.findIndex(([key]) => key === "orkbot.session_token");
+    expect(vi.mocked(queueSessionRevocation).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(SecureStore.deleteItemAsync).mock.invocationCallOrder[deleted]!,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(retryPendingRevocations).toHaveBeenCalled();
   });
 
-  it("sends sign-out with a JSON body so the server ends the session", async () => {
-    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ json: null }))
-      .mockResolvedValueOnce(jsonResponse({ success: true }));
-    vi.stubGlobal("fetch", fetchMock);
-
-    await signOut();
-
-    const [, init] = fetchMock.mock.calls[1] as [string, RequestInit];
-    expect(init.headers).toMatchObject({ "content-type": "application/json" });
-    expect(init.body).toBe("{}");
-  });
-
-  it("continues sign-out when push unregistration times out", async () => {
+  it("clears local session state without waiting for any network timeout", async () => {
     vi.useFakeTimers();
     vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
-    const fetchMock = vi
-      .fn()
-      .mockImplementationOnce(
-        (_url, options: RequestInit) =>
-          new Promise((_resolve, reject) => {
-            options.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
-              once: true,
-            });
-          }),
-      )
-      .mockResolvedValueOnce(jsonResponse({}));
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
     vi.stubGlobal("fetch", fetchMock);
-
-    const pending = signOut();
-    await vi.advanceTimersByTimeAsync(8_000);
-    await pending;
-
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      "http://127.0.0.1:3100/rpc/notifications/unregisterPush",
-      "http://127.0.0.1:3100/api/auth/sign-out",
-    ]);
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
-  });
-
-  it("clears the local session when the sign-out request stalls", async () => {
-    vi.useFakeTimers();
-    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ json: null }))
-      .mockImplementationOnce(() => new Promise<Response>(() => undefined));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const pending = signOut();
-    await vi.advanceTimersByTimeAsync(8_000);
-    await pending;
-
+    await signOut();
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.session_token");
     expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith("orkbot.space_id");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not unregister push delivery when deleting the account", async () => {

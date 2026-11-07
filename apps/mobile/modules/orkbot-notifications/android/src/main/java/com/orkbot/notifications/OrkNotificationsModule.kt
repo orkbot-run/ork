@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; session-scoped message delivery is an Ork addition.
+
 package com.orkbot.notifications
 
 import android.app.NotificationManager
@@ -15,6 +19,9 @@ class OrkNotificationsModule : Module() {
     Name("OrkNotifications")
     Constants("supportsSenderAvatars" to true)
     Events("onIncomingCallChanged")
+    AsyncFunction("configureMessageSession") { scope: String ->
+      OrkNotificationService.configureMessageSession(context(), scope)
+    }
     OnStartObserving {
       val receiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) { sendEvent("onIncomingCallChanged", emptyMap<String, String>()) }
@@ -32,9 +39,12 @@ class OrkNotificationsModule : Module() {
     AsyncFunction("configureIncomingSession") { endpoint: String, headers: Map<String, String> ->
       if (!isAllowedNotificationEndpoint(endpoint)) throw IllegalArgumentException("Invalid notification endpoint")
       val storage = NotificationStorage(context())
-      storage.endpoint = endpoint
-      storage.token = headers["authorization"]?.removePrefix("Bearer ") ?: ""
-      storage.headers = org.json.JSONObject(headers.filterKeys { it.lowercase() != "authorization" && it.lowercase() != "x-orkbot-space-id" }).toString()
+      val token = headers["authorization"]?.removePrefix("Bearer ") ?: ""
+      OrkNotificationService.updateSession(context(), token) {
+        storage.endpoint = endpoint
+        storage.token = token
+        storage.headers = org.json.JSONObject(headers.filterKeys { it.lowercase() != "authorization" && it.lowercase() != "x-orkbot-space-id" }).toString()
+      }
     }
     AsyncFunction("reportIncomingCall") { call: Map<String, String> ->
       IncomingCalls.report(context(), org.json.JSONObject(call), fromApp = true)
@@ -54,12 +64,14 @@ class OrkNotificationsModule : Module() {
       if (endpoint.isNotBlank() && !isAllowedNotificationEndpoint(endpoint)) {
         throw IllegalArgumentException("Public servers need https://. HTTP only works on your local network.")
       }
-      storage.endpoint = endpoint
-      storage.token = token
-      storage.headers = headers
-      storage.spaceId = spaceId
-      storage.locale = locale
-      storage.settings = NotificationSettings.fromMap(value)
+      OrkNotificationService.updateSession(context, token) {
+        storage.endpoint = endpoint
+        storage.token = token
+        storage.headers = headers
+        storage.spaceId = spaceId
+        storage.locale = locale
+        storage.settings = NotificationSettings.fromMap(value)
+      }
       if (storage.settings.liveConnection && endpoint.isNotBlank() && token.isNotBlank()) {
         OrkNotificationService.start(context)
       } else {
@@ -153,11 +165,13 @@ class OrkNotificationsModule : Module() {
       OrkNotificationService.stop(context)
     } else {
       val storage = NotificationStorage(context)
-      storage.endpoint = endpoint
-      storage.token = token
-      storage.headers = headers
-      storage.spaceId = spaceId
-      storage.locale = locale
+      OrkNotificationService.updateSession(context, token) {
+        storage.endpoint = endpoint
+        storage.token = token
+        storage.headers = headers
+        storage.spaceId = spaceId
+        storage.locale = locale
+      }
       if (storage.settings.liveConnection && endpoint.isNotBlank() && token.isNotBlank()) {
         OrkNotificationService.start(context, mutedBotId = mutedBotId)
       }

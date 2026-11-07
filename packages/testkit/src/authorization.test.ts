@@ -896,6 +896,45 @@ describeWithDatabase("API authorization and resource isolation", () => {
     expect(multiline.status).toBe(400);
   });
 
+  it("does not unregister another session's newer push registration", async () => {
+    const email = `push-session-owner-${stamp}@orkbot.test`;
+    const first = await signup(app, email, "Push Owner");
+    const second = await signin(app, email);
+    const userId = (await rpc<Actor>(app, first, "me")).userId;
+    const token = "ExponentPushToken[newer-session-device]";
+    const firstRegistration = await rpc<{ sessionScope: string }>(
+      app,
+      first,
+      "notifications/registerPush",
+      { token: "ExponentPushToken[older-device]" },
+    );
+    const secondRegistration = await rpc<{ sessionScope: string }>(
+      app,
+      second,
+      "notifications/registerPush",
+      { token },
+    );
+    expect(secondRegistration.sessionScope).toMatch(/^[a-f0-9]{64}$/);
+    expect(secondRegistration.sessionScope).not.toBe(firstRegistration.sessionScope);
+    await rpc(app, first, "notifications/registerCallPush", {
+      deviceId: "00000000-0000-4000-8000-000000000001",
+      platform: "ios",
+      expoToken: "ExponentPushToken[older-device]",
+    });
+    await rpc(app, second, "notifications/registerCallPush", {
+      deviceId: "00000000-0000-4000-8000-000000000002",
+      platform: "ios",
+      expoToken: token,
+    });
+    await rpc(app, first, "notifications/unregisterPush");
+    await expect(loadPushToken(userId)).resolves.toBe(token);
+    expect((await pushTokens.devices(userId)).map((device) => device.deviceId)).toEqual([
+      "00000000-0000-4000-8000-000000000002",
+    ]);
+    await rpc(app, second, "notifications/unregisterPush");
+    await expect(loadPushToken(userId)).resolves.toBeUndefined();
+  });
+
   // On the wire, the POST older phone apps send without a body arrives as an empty one.
   const emptyBody = { method: "POST", body: "" };
 

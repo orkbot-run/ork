@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Modified by Ork contributors to remove an unused push-token helper. Inherited material remains Apache-2.0.
+// Inherited Apache material is preserved; unused helper removal and session-bound push registration are Ork changes.
 
 import { newClientId } from "@orkbot/core";
 import Constants from "expo-constants";
@@ -8,8 +8,22 @@ import { requireOptionalNativeModule } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
-import { rpc } from "./api";
+import type { ApiRequestContext } from "./api";
+import { captureApiRequestContext, currentApiBase, rpc } from "./api";
+import {
+  configureNotificationSessionWriter,
+  setNotificationSessionScope,
+} from "./notification-session";
+import { serverHeaders } from "./server-headers";
 import { currentSessionGeneration } from "./session";
+
+const notificationModule = requireOptionalNativeModule<{
+  configureMessageSession?: (scope: string) => Promise<void>;
+  configureIncomingSession?: (endpoint: string, headers: Record<string, string>) => Promise<void>;
+}>("OrkNotifications");
+configureNotificationSessionWriter(async (scope) => {
+  await notificationModule?.configureMessageSession?.(scope);
+});
 
 async function notificationsAllowed() {
   // On iOS getPermissionsAsync holds Expo's shared native queue until the system answers,
@@ -23,19 +37,33 @@ async function notificationsAllowed() {
 export async function registerPushToken() {
   const projectId = Constants.easConfig?.projectId ?? Constants.expoConfig?.extra?.eas?.projectId;
   if (!projectId) return;
-  if (!(await notificationsAllowed())) return;
   try {
+    const owner = await captureApiRequestContext(null);
+    if (!owner.headers.authorization) return;
+    if (!(await notificationsAllowed())) return;
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     if (!token) return;
-    await rpc("notifications/registerPush", {
-      token,
-      ...(Platform.OS === "android" &&
-      requireOptionalNativeModule<{ supportsSenderAvatars?: boolean }>("OrkNotifications")
-        ?.supportsSenderAvatars
-        ? { presentation: "android_sender" as const }
-        : {}),
-    });
-    await registerCallPushToken({ expoToken: token });
+    const registered = await rpc(
+      "notifications/registerPush",
+      {
+        token,
+        ...(Platform.OS === "android" &&
+        requireOptionalNativeModule<{ supportsSenderAvatars?: boolean }>("OrkNotifications")
+          ?.supportsSenderAvatars
+          ? { presentation: "android_sender" as const }
+          : {}),
+      },
+      { requestContext: owner },
+    );
+    const current = () =>
+      owner.sessionGeneration === currentSessionGeneration() && owner.apiBase === currentApiBase();
+    if (current())
+      await notificationModule?.configureIncomingSession?.(owner.apiBase, {
+        ...serverHeaders(owner.apiBase),
+        ...owner.headers,
+      });
+    await setNotificationSessionScope(registered.sessionScope, current);
+    await registerCallPushToken({ expoToken: token }, owner);
   } catch {
     // Expo Go without an EAS project id and Android builds without a Firebase config
     // cannot mint an Expo push token.
@@ -67,9 +95,14 @@ const nativeCalls = Boolean(
   requireOptionalNativeModule<{ incomingState?: unknown }>("OrkNotifications")?.incomingState,
 );
 
-export async function registerCallPushToken(tokens: { expoToken?: string; voipToken?: string }) {
+export async function registerCallPushToken(
+  tokens: { expoToken?: string; voipToken?: string },
+  requestContext?: ApiRequestContext,
+) {
   if (!nativeCalls) return;
-  const generation = currentSessionGeneration();
+  const owner = requestContext ?? (await captureApiRequestContext(null));
+  const generation = owner.sessionGeneration;
+  if (!owner.headers.authorization || generation !== currentSessionGeneration()) return;
   if (generation !== tokenGeneration) {
     callTokens = {};
     registeredKey = undefined;
@@ -82,6 +115,10 @@ export async function registerCallPushToken(tokens: { expoToken?: string; voipTo
   const deviceId = await installationId();
   if (generation !== currentSessionGeneration()) return;
   if (Platform.OS !== "ios" && Platform.OS !== "android") return;
-  await rpc("notifications/registerCallPush", { deviceId, platform: Platform.OS, ...registration });
+  await rpc(
+    "notifications/registerCallPush",
+    { deviceId, platform: Platform.OS, ...registration },
+    { requestContext: owner },
+  );
   if (generation === currentSessionGeneration()) registeredKey = key;
 }

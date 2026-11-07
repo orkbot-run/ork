@@ -70,6 +70,7 @@ if (
       signIn: () => call("accounts.signIn"),
       session: () => call("accounts.session"),
       logout: () => call("accounts.logout"),
+      retryRevocations: () => call("accounts.retryRevocations"),
       createServerLoginGrant: (request) => call("accounts.createServerLoginGrant", request),
       consumeServerInitializationSecret: () => call("accounts.consumeServerInitializationSecret"),
     },

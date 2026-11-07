@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; session-scoped push removal is an Ork addition.
 
 import {
   changeUserTimezone,
@@ -8,6 +9,7 @@ import {
   hasHostedModelCredits,
   isAutoReviewCheckerConfigured,
   loadUserIncomingCalls,
+  notificationSessionScope,
   PushSessionEndedError,
   settleCallRequest,
 } from "@orkbot/adapters";
@@ -472,12 +474,11 @@ export function accountRoutes(ctx: RouterContext) {
           if (error instanceof PushSessionEndedError) throw new ORPCError("UNAUTHORIZED");
           throw error;
         }
-        return { ok: true as const };
+        return { ok: true as const, sessionScope: notificationSessionScope(sessionId) };
       }),
       unregisterPush: authed.notifications.unregisterPush.handler(async ({ context }) => {
-        if (context.sessionId)
-          await deps.pushTokens.endSession(context.actor.userId, context.sessionId);
-        await deps.pushTokens.remove(context.actor.userId);
+        if (!context.sessionId) throw new ORPCError("UNAUTHORIZED");
+        await deps.pushTokens.endSession(context.actor.userId, context.sessionId);
         return { ok: true as const };
       }),
     },

@@ -68,6 +68,7 @@ beforeEach(() => {
   sessionChangedUnderPage.mockReturnValue(false);
   nativePairing.clear.mockResolvedValue(undefined);
   vi.stubGlobal("location", location);
+  requestSignOut.mockReset();
   requestSignOut.mockResolvedValue({ data: { success: true }, error: null });
   localStorage.setItem(SIGNED_IN_USER_KEY, "user-1");
   selectSpace("space-1");
@@ -101,9 +102,10 @@ function mountSignOut(destination: string, onError: (message: string) => void = 
 }
 
 describe("signOut", () => {
-  it("forgets native Accounts before ending the server session and opens a fresh picker", async () => {
+  it("leaves a native session without waiting for hang-up or a server logout request", async () => {
     nativeAccounts.enabled = true;
     nativePairing.enabled = true;
+    endCallBeforeSignOut.mockReturnValueOnce(new Promise<undefined>(() => {}));
     let finish = () => {};
     nativeAccounts.logout.mockReturnValueOnce(
       new Promise<void>((resolve) => {
@@ -112,24 +114,28 @@ describe("signOut", () => {
     );
     const pending = signOut("/sign-in");
     await vi.waitFor(() => expect(nativeAccounts.logout).toHaveBeenCalledOnce());
+    expect(endCallBeforeSignOut).toHaveBeenCalledOnce();
     expect(requestSignOut).not.toHaveBeenCalled();
     finish();
     await pending;
-    expect(requestSignOut).toHaveBeenCalledOnce();
+    expect(requestSignOut).not.toHaveBeenCalled();
+    expect(nativePairing.clear).not.toHaveBeenCalled();
     expect(nativeAccounts.change).toHaveBeenCalledOnce();
-    expect(nativePairing.clear.mock.invocationCallOrder[0]).toBeLessThan(
-      nativeAccounts.logout.mock.invocationCallOrder[0]!,
-    );
-    expect(nativeAccounts.logout.mock.invocationCallOrder[0]).toBeLessThan(
-      requestSignOut.mock.invocationCallOrder[0]!,
-    );
-    expect(requestSignOut.mock.invocationCallOrder[0]).toBeLessThan(
-      nativeAccounts.change.mock.invocationCallOrder[0]!,
-    );
-    expect(nativeAccounts.change.mock.invocationCallOrder[0]).toBeLessThan(
-      location.assign.mock.invocationCallOrder[0]!,
-    );
     expect(location.assign).toHaveBeenCalledWith("/sign-in");
+    expect(readComposerDraft("bot:bot-1")).toBe("");
+    expect(localStorage.getItem(SIGNED_IN_USER_KEY)).toBeNull();
+    expect(sessionStorage.getItem(LOG_OUT_FAILED_KEY)).toBeNull();
+  });
+
+  it("finishes native offline logout even when HTTP sign-out would fail", async () => {
+    nativeAccounts.enabled = true;
+    requestSignOut.mockRejectedValueOnce(new TypeError("offline"));
+    await signOut("/sign-in");
+    expect(nativeAccounts.logout).toHaveBeenCalledOnce();
+    expect(requestSignOut).not.toHaveBeenCalled();
+    expect(location.assign).toHaveBeenCalledWith("/sign-in");
+    expect(location.reload).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(LOG_OUT_FAILED_KEY)).toBeNull();
   });
 
   it("reports failure when native Accounts cannot be forgotten", async () => {
@@ -144,10 +150,7 @@ describe("signOut", () => {
 
   it("does not end a newer server session after native Accounts cleanup", async () => {
     nativeAccounts.enabled = true;
-    sessionChangedUnderPage
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(false)
-      .mockReturnValueOnce(true);
+    sessionChangedUnderPage.mockReturnValueOnce(false).mockReturnValueOnce(true);
     await signOut("/sign-in");
     expect(nativeAccounts.logout).toHaveBeenCalledOnce();
     expect(requestSignOut).not.toHaveBeenCalled();

@@ -95,6 +95,7 @@ import {
   syncMobileAvatarSession,
 } from "./logo-avatar-activity";
 import { reportMobileError } from "./monitoring";
+import { queueSessionRevocation, retryPendingRevocations } from "./pending-revocations";
 import { followSelectedSpace, selectedSpaceChanged } from "./referral";
 import { API_BASE_STORAGE_KEY as ENDPOINT_KEY } from "./server-config";
 import { fetchServer, loadServerHeaders, saveServerHeaders, serverHeaders } from "./server-headers";
@@ -207,6 +208,7 @@ export function currentApiBase() {
 }
 
 export async function loadApiBase() {
+  retryPendingRevocations();
   let apiBase = defaultApiBase();
   try {
     const stored = await SecureStore.getItemAsync(ENDPOINT_KEY);
@@ -999,45 +1001,23 @@ export async function fetchMobileJson<T>(
 
 export async function signOut() {
   const server = currentApiBase();
-  const generation = currentSessionGeneration();
-  const current = () => server === currentApiBase() && generation === currentSessionGeneration();
-  // Invalidate Accounts before awaiting any server request or local credential read.
+  const headers = { ...serverHeaders(server) };
+  // Invalidate both local identities before any network operation. Retirement reads the old
+  // bearer within the credential-write queue, then persists it before deleting the live slot.
+  const clearingSession = clearSessionToken("logout", (token) =>
+    queueSessionRevocation(server, token, headers),
+  );
+  const clearingSpace = clearSpace();
   const clearingAccounts = signOutAccounts().then(
     () => true,
     () => false,
   );
-  if (current()) await rpc("notifications/unregisterPush").catch(() => undefined);
-  if (current()) {
-    const headers = await authHeaders();
-    if (current()) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-      try {
-        await withAbort(
-          fetchServer(
-            `${server}/api/auth/sign-out`,
-            {
-              method: "POST",
-              headers: { "content-type": "application/json", origin: "orkbot://", ...headers },
-              body: "{}",
-              signal: controller.signal,
-            },
-            server,
-          ),
-          controller.signal,
-          "Request timed out",
-        ).catch(() => undefined);
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-  }
-  const accountsCleared = await clearingAccounts;
-  if (!current()) {
-    if (!accountsCleared) throw new Error(t("Could not clear the local session"));
-    return;
-  }
-  const [sessionCleared, spaceCleared] = await Promise.all([clearSessionToken(), clearSpace()]);
+  const [accountsCleared, sessionCleared, spaceCleared] = await Promise.all([
+    clearingAccounts,
+    clearingSession,
+    clearingSpace,
+  ]);
+  retryPendingRevocations();
   if (!accountsCleared || !sessionCleared || !spaceCleared)
     throw new Error(t("Could not clear the local session"));
 }
@@ -1217,6 +1197,7 @@ async function request(
       if (!res.ok && error instanceof SyntaxError) return {};
       throw requestError(error, deadline.signal);
     });
+    if (res.ok) retryPendingRevocations();
     if (!res.ok) {
       // oRPC sends a failure as `{ json: { code, status, message } }`; the message is the
       // server's user-facing copy.

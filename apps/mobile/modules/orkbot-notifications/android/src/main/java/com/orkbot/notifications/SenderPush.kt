@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; atomic session-bound push presentation is an Ork addition.
+
 package com.orkbot.notifications
 
 import android.app.ActivityManager
@@ -38,7 +42,9 @@ internal object SenderPush {
     // Matches the app's foreground handler: finished work is already on screen.
     val foreground = inForeground()
     if (data.optString("kind") == "completion" && foreground) return true
-    return runCatching { post(context, data, title, botId, threadId, foreground) }
+    return runCatching { OrkNotificationService.withMessageSession(context, data.optString("sessionScope")) {
+      post(context, data, title, botId, threadId, foreground)
+    } }
       .onFailure { Log.w("OrkSenderPush", "Could not post push", it) }
       .isSuccess
   }

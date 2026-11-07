@@ -284,6 +284,7 @@ describe("Tauri native bridge", () => {
     await bridge.accounts?.signIn();
     await bridge.accounts?.session();
     await bridge.accounts?.logout();
+    await bridge.accounts?.retryRevocations?.();
     await bridge.pairing?.sync();
     await bridge.pairing?.clear();
     await bridge.badge?.set(7);
@@ -310,6 +311,7 @@ describe("Tauri native bridge", () => {
       { type: "accounts.signIn" },
       { type: "accounts.session" },
       { type: "accounts.logout" },
+      { type: "accounts.retryRevocations" },
       { type: "pairing.sync" },
       { type: "pairing.clear" },
       { type: "badge.set", count: 7 },

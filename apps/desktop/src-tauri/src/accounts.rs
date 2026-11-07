@@ -493,6 +493,7 @@ mod tests {
             discovery.revocation_endpoint = Some(format!("{base}/revoke"));
             let accounts = Arc::new(Accounts {
                 store: Store(store.clone()),
+                revocations: crate::revocations::Revocations::new(Store(store.clone())),
                 discovery: Mutex::new(Some((Instant::now(), discovery))),
                 ..Default::default()
             });
@@ -554,7 +555,11 @@ mod tests {
             .logout_config(std::slice::from_ref(&fixture.origin), &config())
             .await
             .unwrap();
-        assert!(fixture.store.0.lock().unwrap().is_empty());
+        assert!(fixture
+            .store
+            .get(&config().key(&fixture.origin))
+            .unwrap()
+            .is_none());
         tokio::time::timeout(Duration::from_secs(2), async {
             loop {
                 if fixture
@@ -601,7 +606,11 @@ mod tests {
             .await
             .unwrap()
             .is_none());
-        assert!(fixture.store.0.lock().unwrap().is_empty());
+        assert!(fixture
+            .store
+            .get(&config().key(&fixture.origin))
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test]
@@ -638,6 +647,123 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn logout_cancels_network_work_before_waiting_for_its_operation_lock() {
+        let fixture = Fixture::new(false).await;
+        let accounts = fixture.accounts.clone();
+        let (started, ready) = tokio::sync::oneshot::channel();
+        let network = tokio::spawn(async move {
+            let _operation = accounts.operation.lock().await;
+            let generation = accounts.generation.load(Ordering::SeqCst);
+            accounts
+                .network(generation, async {
+                    started.send(()).unwrap();
+                    std::future::pending::<Result<(), String>>().await
+                })
+                .await
+        });
+        ready.await.unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(2),
+            fixture
+                .accounts
+                .logout_config(std::slice::from_ref(&fixture.origin), &config()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert!(network.await.unwrap().is_err());
+        assert!(fixture
+            .store
+            .get(&config().key(&fixture.origin))
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn unreadable_credentials_are_still_deleted_and_cannot_restore_after_restart() {
+        struct Unreadable(Arc<MemoryStore>);
+        impl CredentialStore for Unreadable {
+            fn get(&self, _: &str) -> Result<Option<String>, String> {
+                Err(STORAGE_ERROR.into())
+            }
+            fn set(&self, key: &str, value: &str) -> Result<(), String> {
+                self.0.set(key, value)
+            }
+            fn delete(&self, key: &str) -> Result<(), String> {
+                self.0.delete(key)
+            }
+        }
+        let store = Arc::new(MemoryStore::default());
+        let origin = Url::parse("https://server.example.test").unwrap();
+        store
+            .set(
+                &config().key(&origin),
+                &serde_json::to_string(&credential()).unwrap(),
+            )
+            .unwrap();
+        let accounts = Accounts::new(Store(Arc::new(Unreadable(store.clone()))));
+        accounts
+            .logout_config(std::slice::from_ref(&origin), &config())
+            .await
+            .unwrap();
+        assert!(store.get(&config().key(&origin)).unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn malformed_or_foreign_saved_credentials_are_forgotten_without_replaying_them() {
+        for malformed in [true, false] {
+            let store = Arc::new(MemoryStore::default());
+            let origin = Url::parse("https://server.example.test").unwrap();
+            let mut foreign = credential();
+            foreign.account.issuer = "https://other.example.test".into();
+            let value = if malformed {
+                "invalid json".into()
+            } else {
+                serde_json::to_string(&foreign).unwrap()
+            };
+            store.set(&config().key(&origin), &value).unwrap();
+            let accounts = Accounts::new(Store(store.clone()));
+            accounts
+                .logout_config(std::slice::from_ref(&origin), &config())
+                .await
+                .unwrap();
+            assert!(store.get(&config().key(&origin)).unwrap().is_none());
+        }
+    }
+
+    #[tokio::test]
+    async fn failed_revocation_persistence_still_retires_the_local_credential() {
+        struct RefuseQueue(Arc<MemoryStore>);
+        impl CredentialStore for RefuseQueue {
+            fn get(&self, key: &str) -> Result<Option<String>, String> {
+                self.0.get(key)
+            }
+            fn set(&self, key: &str, value: &str) -> Result<(), String> {
+                if key == "pending-session-revocations.v1" {
+                    Err(STORAGE_ERROR.into())
+                } else {
+                    self.0.set(key, value)
+                }
+            }
+            fn delete(&self, key: &str) -> Result<(), String> {
+                self.0.delete(key)
+            }
+        }
+        let store = Arc::new(MemoryStore::default());
+        let accounts = Accounts::new(Store(Arc::new(RefuseQueue(store.clone()))));
+        let origin = Url::parse("https://server.example.test").unwrap();
+        accounts
+            .save(&config().key(&origin), &credential())
+            .await
+            .unwrap();
+        assert!(accounts
+            .logout_config(std::slice::from_ref(&origin), &config())
+            .await
+            .is_err());
+        assert!(store.get(&config().key(&origin)).unwrap().is_none());
+    }
+
+    #[tokio::test]
     async fn logout_fences_inflight_persistence_and_clears_after_it_finishes() {
         let fixture = Fixture::new(false).await;
         let accounts = fixture.accounts.clone();
@@ -657,7 +783,11 @@ mod tests {
             .unwrap();
         drop(operation);
         logout.await.unwrap().unwrap();
-        assert!(fixture.store.0.lock().unwrap().is_empty());
+        assert!(fixture
+            .store
+            .get(&config().key(&fixture.origin))
+            .unwrap()
+            .is_none());
     }
 
     #[tokio::test]
@@ -747,10 +877,7 @@ mod tests {
             current: current.clone(),
             deletes: AtomicU64::new(0),
         });
-        let accounts = Accounts {
-            store: Store(guarded.clone()),
-            ..Default::default()
-        };
+        let accounts = Accounts::new(Store(guarded.clone()));
         let origin = crate::server_directory::origin();
         accounts
             .save(&config().key(&origin), &credential())
@@ -783,14 +910,11 @@ mod tests {
                 let request_tx = request_tx.clone();
                 async move {
                     let body = request.into_body().collect().await.unwrap().to_bytes();
-                    request_tx
-                        .lock()
-                        .unwrap()
-                        .take()
-                        .unwrap()
-                        .send(body)
-                        .unwrap();
-                    release.notified().await;
+                    let first = request_tx.lock().unwrap().take();
+                    if let Some(sender) = first {
+                        sender.send(body).unwrap();
+                        release.notified().await;
+                    }
                     Ok::<_, std::convert::Infallible>(hyper::Response::new(Full::new(Bytes::from(
                         "{}",
                     ))))
@@ -806,6 +930,7 @@ mod tests {
         metadata.revocation_endpoint = Some(endpoint);
         let accounts = Accounts {
             store: Store(store.clone()),
+            revocations: crate::revocations::Revocations::new(Store(store.clone())),
             discovery: Mutex::new(Some((Instant::now(), metadata))),
             ..Default::default()
         };
@@ -898,13 +1023,10 @@ mod tests {
         let store = Arc::new(MemoryStore::default());
         let central = crate::server_directory::origin();
         let legacy = Url::parse("https://server.example.test").unwrap();
-        let accounts = Accounts {
-            store: Store(Arc::new(FailLegacy {
-                store: store.clone(),
-                key: config().key(&legacy),
-            })),
-            ..Default::default()
-        };
+        let accounts = Accounts::new(Store(Arc::new(FailLegacy {
+            store: store.clone(),
+            key: config().key(&legacy),
+        })));
         accounts
             .save(&config().key(&central), &credential())
             .await
@@ -1336,40 +1458,69 @@ async fn fetch_discovery(config: &Config, client: &Client) -> Result<Discovery, 
     Ok(discovery)
 }
 
-/// Revocation owns only old tokens and immutable provider metadata, never the live credential store.
-fn revoke_old_tokens(config: Config, discovery: Option<Discovery>, tokens: Vec<String>) {
-    if tokens.is_empty() {
-        return;
+/// A proxy's successful HTML login page is not an acknowledgement from the product API.
+pub(crate) async fn revocation_ack(mut response: Response) -> bool {
+    const LIMIT: usize = 4096;
+    if !response.status().is_success()
+        || response
+            .content_length()
+            .is_some_and(|length| length > LIMIT as u64)
+    {
+        return false;
     }
-    tauri::async_runtime::spawn(async move {
-        let Ok(client) = client() else {
-            return;
-        };
-        let discovery = match discovery {
-            Some(discovery) => discovery,
-            None => match fetch_discovery(&config, &client).await {
-                Ok(discovery) => discovery,
-                Err(_) => return,
-            },
-        };
-        if let Some(endpoint) = discovery.revocation_endpoint {
-            for token in tokens {
-                let _ = client
-                    .post(&endpoint)
-                    .form(&[("client_id", &config.client_id), ("token", &token)])
-                    .send()
-                    .await;
+    let mut bytes = Vec::new();
+    loop {
+        match response.chunk().await {
+            Ok(Some(chunk)) if chunk.len() <= LIMIT.saturating_sub(bytes.len()) => {
+                bytes.extend_from_slice(&chunk)
             }
+            Ok(None) => break,
+            _ => return false,
         }
-    });
+    }
+    serde_json::from_slice::<serde_json::Value>(&bytes)
+        .ok()
+        .is_some_and(|value| value.get("success") == Some(&serde_json::Value::Bool(true)))
+}
+
+/// Resolve immutable queued provider metadata without ever reading a newer login.
+pub(crate) async fn revoke_queued_token(
+    client: &Client,
+    issuer: &str,
+    client_id: &str,
+    token: &str,
+    endpoint: Option<&str>,
+) -> bool {
+    let Ok(config) = Config::new(Some(issuer), Some(client_id)) else {
+        return false;
+    };
+    let endpoint = match endpoint {
+        Some(endpoint) => endpoint.to_owned(),
+        None => match fetch_discovery(&config, client).await {
+            Ok(discovery) => match discovery.revocation_endpoint {
+                Some(endpoint) => endpoint,
+                None => return false,
+            },
+            Err(_) => return false,
+        },
+    };
+    client
+        .post(endpoint)
+        .form(&[("client_id", client_id), ("token", token)])
+        .send()
+        .await
+        .ok()
+        .is_some_and(|response| response.status().is_success())
 }
 
 #[derive(Default)]
 pub struct Accounts {
     store: Store,
+    revocations: crate::revocations::Revocations,
     discovery: Mutex<Option<(Instant, Discovery)>>,
     operation: Mutex<()>,
     generation: AtomicU64,
+    cancelled: tokio::sync::Notify,
     signing_in: AtomicBool,
 }
 
@@ -1384,13 +1535,87 @@ impl Drop for SignInGuard<'_> {
 impl Accounts {
     pub fn new(store: Store) -> Self {
         Self {
+            revocations: crate::revocations::Revocations::new(store.clone()),
             store,
             ..Self::default()
         }
     }
 
+    pub(crate) async fn queue_server_logout(
+        &self,
+        origin: &Url,
+        cookies: String,
+    ) -> Result<(), String> {
+        if cookies.is_empty() {
+            return Ok(());
+        }
+        self.revocations
+            .enqueue(crate::revocations::Target::Session {
+                origin: origin.origin().ascii_serialization(),
+                cookies,
+            })
+            .await
+    }
+
+    pub(crate) fn retry_revocations(&self) {
+        if self.revocations.is_known_empty() || self.revocations.is_running() {
+            return;
+        }
+        let revocations = self.revocations.clone();
+        tauri::async_runtime::spawn(async move {
+            revocations.flush().await;
+        });
+    }
+
     pub(crate) fn invalidate(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
+        self.cancelled.notify_waiters();
+    }
+
+    async fn network<T>(
+        &self,
+        generation: u64,
+        operation: impl Future<Output = Result<T, String>>,
+    ) -> Result<T, String> {
+        let cancelled = self.cancelled.notified();
+        tokio::pin!(cancelled);
+        cancelled.as_mut().enable();
+        if generation != self.generation.load(Ordering::SeqCst) {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        tokio::select! {
+            biased;
+            _ = cancelled => Err("Accounts sign-in changed. Try again.".into()),
+            result = operation => result,
+        }
+    }
+
+    async fn queue_credential(
+        &self,
+        config: &Config,
+        credential: &Credential,
+    ) -> Result<(), String> {
+        let endpoint = self.discovery.try_lock().ok().and_then(|cache| {
+            cache
+                .as_ref()
+                .filter(|(_, discovery)| discovery.issuer == config.issuer)
+                .and_then(|(_, discovery)| discovery.revocation_endpoint.clone())
+        });
+        for token in credential
+            .refresh_token
+            .iter()
+            .chain(std::iter::once(&credential.access_token))
+        {
+            self.revocations
+                .enqueue(crate::revocations::Target::OAuth {
+                    issuer: config.issuer.clone(),
+                    client_id: config.client_id.clone(),
+                    token: token.clone(),
+                    endpoint: endpoint.clone(),
+                })
+                .await?;
+        }
+        Ok(())
     }
 
     pub(crate) fn is_current(&self, authorization: &Authorization) -> bool {
@@ -1472,9 +1697,12 @@ impl Accounts {
         }
         let _signing_in = SignInGuard(&self.signing_in);
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.cancelled.notify_waiters();
         let config = Config::build()?;
         let client = client()?;
-        let discovery = self.discover(&config, &client).await?;
+        let discovery = self
+            .network(generation, self.discover(&config, &client))
+            .await?;
         let proof = Proof::new()?;
         let (callback, redirect) = browser
             .authorize_public(
@@ -1488,30 +1716,33 @@ impl Accounts {
         if !current() || generation != self.generation.load(Ordering::SeqCst) {
             return Err("Sign-in cancelled.".into());
         }
-        let response: TokenResponse = json(
-            client
-                .post(&discovery.token_endpoint)
-                .form(&[
-                    ("grant_type", "authorization_code"),
-                    ("client_id", &config.client_id),
-                    ("code", &callback.code),
-                    ("redirect_uri", &redirect),
-                    ("code_verifier", &proof.verifier),
-                ])
-                .send()
-                .await
-                .map_err(|_| ERROR)?,
-        )
-        .await?;
         let credential = self
-            .validate_tokens(
-                &client,
-                &config,
-                &discovery,
-                response,
-                Some(&proof.nonce),
-                None,
-            )
+            .network(generation, async {
+                let response: TokenResponse = json(
+                    client
+                        .post(&discovery.token_endpoint)
+                        .form(&[
+                            ("grant_type", "authorization_code"),
+                            ("client_id", &config.client_id),
+                            ("code", &callback.code),
+                            ("redirect_uri", &redirect),
+                            ("code_verifier", &proof.verifier),
+                        ])
+                        .send()
+                        .await
+                        .map_err(|_| ERROR)?,
+                )
+                .await?;
+                self.validate_tokens(
+                    &client,
+                    &config,
+                    &discovery,
+                    response,
+                    Some(&proof.nonce),
+                    None,
+                )
+                .await
+            })
             .await?;
         if !current() || generation != self.generation.load(Ordering::SeqCst) {
             return Err("Sign-in cancelled.".into());
@@ -1624,6 +1855,7 @@ impl Accounts {
         {
             return Err("Accounts sign-in changed. Try again.".into());
         }
+        self.retry_revocations();
         Ok(account)
     }
 
@@ -1632,12 +1864,16 @@ impl Accounts {
         origin: &Url,
         config: &Config,
     ) -> Result<Option<Credential>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
         if self.signing_in.load(Ordering::SeqCst) {
             return Err("Accounts sign-in is in progress.".into());
         }
         let _operation = self.operation.lock().await;
         if self.signing_in.load(Ordering::SeqCst) {
             return Err("Accounts sign-in is in progress.".into());
+        }
+        if generation != self.generation.load(Ordering::SeqCst) {
+            return Err("Accounts sign-in changed. Try again.".into());
         }
         let key = config.key(origin);
         let Some(raw) = self.store.get(key.clone()).await? else {
@@ -1655,29 +1891,46 @@ impl Accounts {
             return Ok(None);
         };
         let client = client()?;
-        let discovery = self.discover(config, &client).await?;
-        // Retire the predecessor before sending: an ambiguous network result must never replay it.
-        self.store.delete(key.clone()).await?;
-        let response = client
-            .post(&discovery.token_endpoint)
-            .form(&[
-                ("grant_type", "refresh_token"),
-                ("client_id", &config.client_id),
-                ("refresh_token", refresh),
-            ])
-            .send()
-            .await
-            .map_err(|_| ERROR)?;
-        if response.status() == reqwest::StatusCode::BAD_REQUEST
-            || response.status() == reqwest::StatusCode::UNAUTHORIZED
-        {
-            self.store.delete(key).await?;
-            return Ok(None);
-        }
-        let response: TokenResponse = json(response).await?;
-        let credential = self
-            .validate_tokens(&client, config, &discovery, response, None, Some(&previous))
+        let discovery = self
+            .network(generation, self.discover(config, &client))
             .await?;
+        if generation != self.generation.load(Ordering::SeqCst) {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        // Storage writes settle before cancellation can queue or retire this credential again.
+        // Retire the predecessor before sending: an ambiguous result must never replay it.
+        self.store.delete(key.clone()).await?;
+        let result = self
+            .network(generation, async {
+                let response = client
+                    .post(&discovery.token_endpoint)
+                    .form(&[
+                        ("grant_type", "refresh_token"),
+                        ("client_id", &config.client_id),
+                        ("refresh_token", refresh),
+                    ])
+                    .send()
+                    .await
+                    .map_err(|_| ERROR)?;
+                if response.status() == reqwest::StatusCode::BAD_REQUEST
+                    || response.status() == reqwest::StatusCode::UNAUTHORIZED
+                {
+                    return Ok(None);
+                }
+                let response: TokenResponse = json(response).await?;
+                self.validate_tokens(&client, config, &discovery, response, None, Some(&previous))
+                    .await
+                    .map(Some)
+            })
+            .await;
+        if generation != self.generation.load(Ordering::SeqCst) {
+            // Logout can interrupt a refresh whose predecessor has already been retired.
+            self.queue_credential(config, &previous).await?;
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        let Some(credential) = result? else {
+            return Ok(None);
+        };
         self.save(&key, &credential).await?;
         Ok(Some(credential))
     }
@@ -1703,6 +1956,7 @@ impl Accounts {
             return Err("Accounts sign-in changed. Try again.".into());
         }
         let generation = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        self.cancelled.notify_waiters();
         let operation = self.operation.lock().await;
         let current = || {
             if still_current() && generation == self.generation.load(Ordering::SeqCst) {
@@ -1713,7 +1967,7 @@ impl Accounts {
         };
         current()?;
         let mut keys = std::collections::HashSet::new();
-        let mut tokens = Vec::new();
+        let mut failure = None;
         for origin in origins {
             let key = config.key(origin);
             if !keys.insert(key.clone()) {
@@ -1721,25 +1975,27 @@ impl Accounts {
             }
             let raw = self.store.get(key.clone()).await;
             current()?;
-            self.store.delete(key).await?;
-            current()?;
+            // An unreadable or damaged credential must still be retired when deletion is available.
             if let Ok(Some(raw)) = raw {
                 if let Ok(credential) = serde_json::from_str::<Credential>(&raw) {
-                    tokens.push(credential.refresh_token.unwrap_or(credential.access_token));
+                    if credential.account.issuer == config.issuer {
+                        if let Err(error) = self.queue_credential(config, &credential).await {
+                            failure = Some(error);
+                        }
+                    }
                 }
             }
+            current()?;
+            if let Err(error) = self.store.delete(key).await {
+                failure = Some(error);
+            }
+            current()?;
         }
-        current()?;
-        let discovery = self.discovery.try_lock().ok().and_then(|cache| {
-            cache
-                .as_ref()
-                .filter(|(time, discovery)| {
-                    time.elapsed() < Duration::from_secs(300) && discovery.issuer == config.issuer
-                })
-                .map(|(_, discovery)| discovery.clone())
-        });
         drop(operation);
-        revoke_old_tokens(config.clone(), discovery, tokens);
-        Ok(())
+        self.retry_revocations();
+        match failure {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }

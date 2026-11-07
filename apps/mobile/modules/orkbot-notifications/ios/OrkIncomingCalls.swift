@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; the non-secret notification session marker is an Ork addition.
+
 import ExpoModulesCore
 import CallKit
 import PushKit
@@ -168,6 +172,9 @@ final class IncomingCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate,
   }
   private static let credentialKey = "orkbot.incoming-session"
   func configure(_ base: String, headers: [String: String]) {
+    if savedSession()?.headers["authorization"] != headers["authorization"] {
+      UserDefaults(suiteName: "group.run.orkbot.app")?.set("", forKey: "orkbot.message-session")
+    }
     let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: "orkbot.calls", kSecAttrAccount as String: Self.credentialKey]
     SecItemDelete(query as CFDictionary)
@@ -176,9 +183,16 @@ final class IncomingCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate,
     value[kSecValueData as String] = data
     // A decline from the lock screen needs this session, just like Android's encrypted store.
     value[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-    SecItemAdd(value as CFDictionary, nil)
+    if SecItemAdd(value as CFDictionary, nil) != errSecSuccess {
+      UserDefaults(suiteName: "group.run.orkbot.app")?.set("", forKey: "orkbot.message-session")
+    }
+  }
+  func configureMessages(_ scope: String) {
+    let valid = hasSession() && scope.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
+    UserDefaults(suiteName: "group.run.orkbot.app")?.set(valid ? scope : "", forKey: "orkbot.message-session")
   }
   func clear() {
+    UserDefaults(suiteName: "group.run.orkbot.app")?.set("", forKey: "orkbot.message-session")
     SecItemDelete([kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: "orkbot.calls", kSecAttrAccount as String: Self.credentialKey] as CFDictionary)
     for id in Array(calls.keys) { end(id, reason: .remoteEnded) }
@@ -242,6 +256,7 @@ public class OrkNotificationsModule: Module {
       self.observer = nil
     }
     AsyncFunction("configureIncomingSession") { (base: String, headers: [String: String]) in IncomingCalls.shared.configure(base, headers: headers) }.runOnQueue(.main)
+    AsyncFunction("configureMessageSession") { (scope: String) in IncomingCalls.shared.configureMessages(scope) }.runOnQueue(.main)
     AsyncFunction("incomingState") { () -> [String: Any] in IncomingCalls.shared.state() }.runOnQueue(.main)
     AsyncFunction("reportIncomingCall") { (call: [String: String]) in IncomingCalls.shared.report(call) }.runOnQueue(.main)
     AsyncFunction("finishAnswer") { (id: String, success: Bool) in IncomingCalls.shared.finishAnswer(id, success: success) }.runOnQueue(.main)

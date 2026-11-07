@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; notification marker entitlement tests are an Ork addition.
+
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -68,7 +72,10 @@ it("lists the extension for EAS signing with the communication entitlement", () 
   expect(extension).toEqual({
     targetName: "AgentNotifications",
     bundleIdentifier: `${app.ios.bundleIdentifier}.notifications`,
-    entitlements: { "com.apple.developer.usernotifications.communication": true },
+    entitlements: {
+      "com.apple.developer.usernotifications.communication": true,
+      "com.apple.security.application-groups": ["group.run.orkbot.app"],
+    },
   });
   expect(app.ios.entitlements["com.apple.developer.usernotifications.communication"]).toBe(true);
 });

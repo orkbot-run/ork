@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; the notification session marker entitlement is an Ork addition.
+
 const fs = require("node:fs");
 const path = require("node:path");
 const { withXcodeProject } = require("expo/config-plugins");
@@ -25,7 +29,9 @@ const INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 
 const ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>${ENTITLEMENT}</key><true/></dict></plist>
+<plist version="1.0"><dict><key>${ENTITLEMENT}</key><true/>
+<key>com.apple.security.application-groups</key><array><string>group.run.orkbot.app</string></array>
+</dict></plist>
 `;
 
 /**

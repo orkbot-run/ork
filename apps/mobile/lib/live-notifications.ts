@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; signed-out preview suppression is an Ork addition.
+
 import { requireNativeModule } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { apiBaseWarning, normalizeApiBase } from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
+import { matchesNotificationSession } from "./notification-session";
 import { serverHeaders } from "./server-headers";
+import { currentSessionGeneration, loadSessionToken } from "./session";
 
 export interface LiveNotificationSettings {
   liveConnection: boolean;
@@ -88,8 +94,13 @@ export function configureForegroundNotifications(): void {
   foregroundHandlerConfigured = true;
   Notifications.setNotificationHandler({
     handleNotification: async ({ request }) => {
+      const generation = currentSessionGeneration();
+      const signedIn =
+        Boolean(await loadSessionToken()) && generation === currentSessionGeneration();
       // Finished work is already on screen while the app is open; only questions and failures alert.
       const show =
+        signedIn &&
+        matchesNotificationSession(request.content.data?.sessionScope) &&
         request.content.data?.kind !== "completion" &&
         !notificationTargetsThread(request.content.data, openThread);
       return {

@@ -1,7 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; notification session scopes are an Ork addition.
+
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem, withTransactionRetry } from "@orkbot/db";
 import { credentialDigest } from "./credential-digest.js";
 import { EncryptedSecretStore } from "./secrets.js";
+
+/** A non-secret delivery scope; unlike a bearer it cannot authenticate a request. */
+export function notificationSessionScope(sessionId: string): string {
+  return credentialDigest(`notification-session:${sessionId}`);
+}
 
 export interface PushRecord {
   token: string;

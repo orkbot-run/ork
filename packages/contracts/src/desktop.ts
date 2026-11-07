@@ -102,6 +102,8 @@ export interface OrkDesktop {
     signIn: () => Promise<OrkDesktopAccount>;
     session: () => Promise<OrkDesktopAccount | null>;
     logout: () => Promise<void>;
+    /** Retry only captured retired credentials; live credentials remain native. */
+    retryRevocations?: () => Promise<void>;
     /** Only an audience-bound proof crosses the bridge; the central bearer stays native. */
     createServerLoginGrant?: (request: {
       origin: string;

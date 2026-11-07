@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; session-bound message payload tests are an Ork addition.
+
 import type { BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +13,7 @@ import {
   expoPushErrorMessage,
   MAX_EXPO_PUSH_RESPONSE_BYTES,
 } from "./expo-push.js";
-
+import { notificationSessionScope } from "./push-token-store.js";
 import { MemoryPushTokenStore } from "./push-token-store.test-support.js";
 
 const loadPushToken = async (store: MemoryPushTokenStore, userId: string) =>
@@ -33,6 +37,25 @@ function jsonResponse(body: unknown, status = 200) {
 }
 
 describe("expo push tickets", () => {
+  it("binds private message pushes to the registration's non-secret session scope", async () => {
+    const tokens = new MemoryPushTokenStore();
+    await tokens.save("user-1", "ExponentPushToken[test]", "session-1");
+    const fetcher = vi.fn(async () => jsonResponse({ data: { status: "ok" } }));
+    vi.stubGlobal("fetch", fetcher);
+    await new ExpoPushProvider(tokens, {
+      sessionExpiresAt: async () => new Date(Date.now() + 60_000),
+    }).send(
+      { kind: "completion", title: "Done", body: "private", botId: "bot", threadId: "thread" },
+      notifyContext,
+    );
+    const payload = JSON.parse(
+      String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body),
+    );
+    expect(payload.data.sessionScope).toBe(notificationSessionScope("session-1"));
+    expect(payload.data.sessionScope).not.toBe(notificationSessionScope("session-2"));
+    expect(payload.mutableContent).toBe(true);
+    expect(JSON.stringify(payload)).not.toContain("session-1");
+  });
   it("reads a single Expo ticket and a ticket array", () => {
     expect(expoPushErrorMessage({ data: { status: "ok", id: "1" } }, 200)).toBeUndefined();
     expect(expoPushErrorMessage({ data: { status: "error", message: "bad token" } }, 200)).toBe(

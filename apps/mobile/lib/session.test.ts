@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; delayed sign-in retirement tests are an Ork addition.
+
 import * as Notifications from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -62,6 +66,29 @@ describe("mobile session storage", () => {
     expect(await snapshotSessionToken()).toEqual({ ok: true, value: "" });
     finish();
     await saving;
+  });
+
+  it("does not revive a delayed sign-in after logout cleared the live slot", async () => {
+    const stored = new Map<string, string>();
+    let release!: () => void;
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => stored.get(key) ?? null);
+    vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+      stored.delete(key);
+    });
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      if (key === "orkbot.signed-in-before")
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      stored.set(key, value);
+    });
+    const signingIn = saveSessionToken("late-retired-token");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await clearSessionToken();
+    release();
+    await signingIn;
+    expect(stored.has("orkbot.session_token")).toBe(false);
+    expect(await loadSessionToken()).toBe("");
   });
 
   it("wipes the outbox on sign-in, sign-out and server-session restoration", async () => {

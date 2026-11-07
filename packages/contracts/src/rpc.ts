@@ -1431,7 +1431,15 @@ export const appContract = {
           presentation: z.literal("android_sender").optional(),
         }),
       )
-      .output(z.object({ ok: z.literal(true) })),
+      .output(
+        z.object({
+          ok: z.literal(true),
+          sessionScope: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
+        }),
+      ),
     unregisterPush: oc.output(z.object({ ok: z.literal(true) })),
   },
   search: {
