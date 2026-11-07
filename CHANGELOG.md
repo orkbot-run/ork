@@ -33,10 +33,6 @@ Prepared for release. Publication is pending the licensing rollout review.
 - Model OAuth refreshes are coordinated across server instances, preventing simultaneous use of the same rotating refresh token.
 - Interrupted organization deletions can resume, and stalled housekeeping no longer holds up recovery of queued work, routines or message deliveries.
 
-### Removed
-
-- The Electron desktop client. Desktop builds now use Tauri.
-
 ### Fixed
 
 - Mobile keeps unsent messages after session rejection.
@@ -543,7 +539,7 @@ Prepared for release. Publication is pending the licensing rollout review.
 
 - Ollama Cloud preset in Models settings on web and mobile, using an OpenAI-compatible connection with model discovery and no deployment configuration.
 - Bot computer homes can live in any S3-compatible bucket instead of only on the server's disk: set `OBJECT_STORAGE_BUCKET` and its connection settings on the API and worker. Homes are encrypted on the server before upload with a per-home key, each saved revision is a single object, and deleting a bot or space makes its stored home unreadable at once. `home-storage migrate` uploads existing homes and verifies each one. Without the setting, homes stay under `DATA_DIR` as before ([self-hosting](docs/self-host-storage.md#bot-homes-in-object-storage)).
-- The web app installs as a PWA on phones: Android Chrome offers a real install prompt, the app shell and its assets are cached so an installed app opens offline (showing its reconnecting state), and a new deploy takes over on the next launch or reload. On iOS the installed app runs full screen and keeps content clear of the notch and home indicator, and the installed app no longer zooms on pinch, double tap or input focus (browser tabs still zoom). Electron and dev builds never register the service worker, and API, RPC and screen traffic always go to the server.
+- The web app installs as a PWA on phones: Android Chrome offers a real install prompt, the app shell and its assets are cached so an installed app opens offline (showing its reconnecting state), and a new deploy takes over on the next launch or reload. On iOS the installed app runs full screen and keeps content clear of the notch and home indicator, and the installed app no longer zooms on pinch, double tap or input focus (browser tabs still zoom). Desktop and dev builds never register the service worker, and API, RPC and screen traffic always go to the server.
 
 ### Changed
 
@@ -676,4 +672,4 @@ Prepared for release. Publication is pending the licensing rollout review.
 
 ## [0.1.0-beta] - 2026-08-13
 
-Initial public beta: web, Electron, and Expo clients; Pi runtime; Docker and E2B computers; plugins; one thread, computer, memory, routines, and history per bot.
+Initial public beta: web, desktop, and Expo clients; Pi runtime; Docker and E2B computers; plugins; one thread, computer, memory, routines, and history per bot.
