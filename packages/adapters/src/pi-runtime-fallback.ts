@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; independent backup settings are an Ork addition.
+
 import type {
   AssistantMessage,
   AssistantMessageEvent,
@@ -464,8 +468,9 @@ export function fallbackAwareModelStream(
           ? thinkingLevelFor(
               target.model,
               target.config.thinkingLevel ??
-                options?.reasoning ??
-                state.request.model.thinkingLevel,
+                (sameModelTarget(target.config, state.request.model)
+                  ? (options?.reasoning ?? state.request.model.thinkingLevel)
+                  : undefined),
             )
           : "off");
       const sentTarget = outputBudget ? withOutputBudget(target, outputBudget) : target;

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for reasoning effort recovery. See LICENSE.md.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for reasoning effort recovery and independent backup settings. See LICENSE.md.
 
 import type * as AgentCore from "@earendil-works/pi-agent-core";
 import type { AgentMessage, AgentOptions } from "@earendil-works/pi-agent-core";
@@ -640,6 +641,36 @@ describe("Pi runtime transient model retries", () => {
 });
 
 describe("Pi runtime ordered model fallback", () => {
+  it("keeps per-stream effort for the original model and connection with backups configured", async () => {
+    const reasoningPrimary = { ...primary, reasoning: true };
+    providerState.models.set(`${primary.provider}/${primary.id}`, reasoningPrimary);
+    const initialStream = new AssistantMessageEventStream();
+    providerState.stream.mockReturnValueOnce(initialStream);
+    const input = request([{ provider: backupA.provider, id: backupA.id, apiKey: "backup-key" }]);
+    input.model.connectionId = "primary-connection";
+    const running = run(input);
+    try {
+      await vi.waitFor(() => expect(providerState.stream).toHaveBeenCalledOnce());
+      const agentOptions = providerState.agentOptions;
+      if (!agentOptions) throw new Error("Agent was not created");
+      providerState.stream.mockImplementation((target: Model<"openai-completions">) =>
+        stream(target, message(target, [{ type: "text", text: "Same target." }], "stop")),
+      );
+      const response = await agentOptions.streamFn(
+        reasoningPrimary,
+        { messages: [] } as unknown as TranscriptContext,
+        { reasoning: "high" },
+      );
+      await expect(response.result()).resolves.toMatchObject({ stopReason: "stop" });
+      expect(providerState.stream.mock.lastCall?.[2].reasoning).toBe("high");
+    } finally {
+      const completed = message(primary, [{ type: "text", text: "Done." }], "stop");
+      initialStream.push({ type: "done", reason: "stop", message: completed });
+      initialStream.end(completed);
+      await running;
+    }
+  });
+
   it.each(["absent", "empty"])(
     "passes the original stream options and terminal content through with %s backups",
     async (backups) => {
@@ -1983,6 +2014,73 @@ describe("Pi runtime ordered model fallback", () => {
         ([target]) => (target as Model<"openai-completions">).provider,
       ),
     ).toEqual([primary.provider, smallContextBackup.provider]);
+  });
+
+  it.each([
+    [undefined, "medium"],
+    [null, "medium"],
+    ["low", "low"],
+    ["off", undefined],
+  ] as const)("uses a backup's own %s thinking policy across tool turns", async (effort, sent) => {
+    providerState.models.set(`${primary.provider}/${primary.id}`, { ...primary, reasoning: true });
+    providerState.models.set(`${backupA.provider}/${backupA.id}`, { ...backupA, reasoning: true });
+    const input = request([
+      { provider: backupA.provider, id: backupA.id, apiKey: "backup-key", thinkingLevel: effort },
+    ]);
+    input.model.thinkingLevel = "high";
+    let backupCalls = 0;
+    providerState.stream.mockImplementation((target: Model<"openai-completions">) => {
+      if (target.provider === primary.provider)
+        return stream(target, message(target, [], "error", "429 quota exhausted"));
+      backupCalls += 1;
+      return stream(
+        target,
+        message(
+          target,
+          backupCalls === 1
+            ? [{ type: "toolCall", id: "call-1", name: "write_effect", arguments: { value: "a" } }]
+            : [{ type: "text", text: "Done." }],
+          backupCalls === 1 ? "toolUse" : "stop",
+        ),
+      );
+    });
+
+    expect((await run(input)).at(-1)).toEqual({ type: "done", text: "Done." });
+    expect(input.executeTool).toHaveBeenCalledOnce();
+    expect(providerState.stream.mock.calls.map(([, , options]) => options.reasoning)).toEqual([
+      "high",
+      sent,
+      sent,
+    ]);
+  });
+
+  it("does not inherit effort when the same model uses a different connection", async () => {
+    providerState.models.set(`${primary.provider}/${primary.id}`, { ...primary, reasoning: true });
+    const input = request([
+      {
+        provider: primary.provider,
+        id: primary.id,
+        connectionId: "backup-connection",
+        apiKey: "backup-key",
+      },
+    ]);
+    input.model = { ...input.model, connectionId: "primary-connection", thinkingLevel: "high" };
+    providerState.stream.mockImplementation(
+      (target: Model<"openai-completions">, _context: unknown, options?: { apiKey?: string }) =>
+        stream(
+          target,
+          options?.apiKey === "fake-primary-key"
+            ? message(target, [], "error", "429 quota exhausted")
+            : message(target, [{ type: "text", text: "Done." }], "stop"),
+        ),
+    );
+
+    expect((await run(input)).at(-1)).toEqual({ type: "done", text: "Done." });
+    expect(providerState.stream.mock.calls.map(([, , options]) => options.reasoning)).toEqual([
+      "high",
+      "medium",
+    ]);
+    expect(providerState.stream.mock.lastCall?.[2].apiKey).toBe("backup-key");
   });
 
   it("runs a backup without reasoning with thinking off when the primary thinks", async () => {
