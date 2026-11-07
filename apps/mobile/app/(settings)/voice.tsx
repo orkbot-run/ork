@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Confirmed voice settings changes follow LICENSE.md.
+
 import type { VoiceCatalogEntry, VoiceCredential, VoiceInfo, VoiceStatus } from "@orkbot/contracts";
 import {
   DEFAULT_COMPATIBLE_STT_MODEL,
@@ -7,7 +11,14 @@ import {
 import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import { isCancelledError } from "@tanstack/react-query";
 import { useFocusEffect, useLocalSearchParams } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -35,10 +46,10 @@ import { useI18n } from "../../lib/i18n";
 import { native, useThemedStyles } from "../../lib/native";
 import { queryClient, rpcQuery } from "../../lib/query";
 import type { SettingsTarget } from "../../lib/settings-target";
-import { settingsRpc, settingsTarget } from "../../lib/settings-target";
+import { captureSettingsContext, settingsTarget } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
 import { errorText } from "../../lib/user-error";
-import { speakText } from "../../lib/voice";
+import { canStartSpeech, speakText, subscribeSpeechOwnership } from "../../lib/voice";
 
 type VoiceField = "voiceId" | "speechModel" | "baseUrl" | "ttsModel" | "sttModel";
 
@@ -85,7 +96,14 @@ function cachedVoiceSettings(target: SettingsTarget) {
 export default function VoiceSettings() {
   const params = useLocalSearchParams<{ spaceId?: string }>();
   const target = useMemo(() => settingsTarget(params.spaceId), [params.spaceId]);
-  const rpc = useMemo(() => settingsRpc(target), [target]);
+  const origin = useMemo(() => captureSettingsContext(target), [target]);
+  const rpc = origin.send;
+  const live = useRef<typeof origin | null>(origin);
+  const previousOrigin = useRef(origin);
+  const reads = useMemo(() => voiceReads(target), [target]);
+  const mutationRevision = useRef(0);
+  const fieldRevisions = useRef<Partial<Record<VoiceField, number>>>({});
+  const apiKeyRevision = useRef(0);
   const scope = target.scope;
   const deviceSettings = scope === "account";
   const sideInsets = useSideInsets();
@@ -125,49 +143,120 @@ export default function VoiceSettings() {
   const deviceVoiceRevision = useRef(0);
   const deviceVoiceSaveInFlight = useRef(false);
 
+  const ownerCurrent = () => live.current === origin && origin.isCurrent();
+  const canPreview = useSyncExternalStore(subscribeSpeechOwnership, canStartSpeech, canStartSpeech);
+  useLayoutEffect(() => {
+    live.current = origin;
+    if (previousOrigin.current !== origin) {
+      previousOrigin.current = origin;
+      speechModelSave.current = null;
+      setCatalog([]);
+      setCredentials([]);
+      setStatus(null);
+      setProvider("");
+      setVoices([]);
+      setApiKey("");
+      setVoiceId("");
+      setSpeechModel("");
+      setBaseUrl("");
+      setTtsModel("");
+      setSttModel("");
+      edited.current.clear();
+      fieldRevisions.current = {};
+      apiKeyRevision.current++;
+      setError(null);
+      setLoadError(null);
+      setLoading(true);
+      setPending(null);
+    }
+    return () => {
+      if (live.current === origin) live.current = null;
+      loadRevision.current++;
+      mutationRevision.current++;
+    };
+  }, [origin]);
+  function beginMutation(kind: NonNullable<typeof pending>) {
+    if (!ownerCurrent()) return null;
+    const revision = ++mutationRevision.current;
+    if (kind !== "test") loadRevision.current++;
+    setPending(kind);
+    return { current: () => ownerCurrent() && mutationRevision.current === revision };
+  }
+  function assertCurrent(current: () => boolean) {
+    if (!current()) throw new Error("Session changed");
+  }
+  async function keepCredentials(
+    update: (current: VoiceCredential[]) => VoiceCredential[],
+    current: () => boolean,
+  ) {
+    await writeSaved(queryClient, reads.credentials.queryKey, (cached) => {
+      assertCurrent(current);
+      return update(cached ?? []);
+    });
+  }
+  async function keepStatus(saved: VoiceStatus, current: () => boolean) {
+    await writeSaved(queryClient, reads.status.queryKey, () => {
+      assertCurrent(current);
+      return saved;
+    });
+  }
+  function fillFields(cred: VoiceCredential | undefined, keepForm: boolean) {
+    const fields: [VoiceField, (value: string) => void, string | undefined][] = [
+      ["voiceId", setVoiceId, cred?.voiceId],
+      ["speechModel", setSpeechModel, cred?.speechModel],
+      ["baseUrl", setBaseUrl, cred?.endpoint],
+      ["ttsModel", setTtsModel, cred?.ttsModel],
+      ["sttModel", setSttModel, cred?.sttModel],
+    ];
+    for (const [field, set, value] of fields)
+      if (!keepForm || !edited.current.has(field)) set(value ?? "");
+  }
+  function refreshAfterSave(nextProvider: string | undefined, current: () => boolean) {
+    void load(nextProvider, false, true).catch((err: unknown) => {
+      if (current()) setLoadError(errorText(err, t("Could not load voice settings")));
+    });
+  }
+
   /**
    * Opening keeps fields typed into meanwhile and may share a read already in flight; after a
    * change, every field takes the server's value from a read sent afterwards.
    */
   const load = useCallback(
-    async (nextProvider?: string, opening = false) => {
+    async (nextProvider?: string, opening = false, keepForm = opening) => {
+      if (!ownerCurrent()) return;
       const revision = ++loadRevision.current;
-      if (!opening) edited.current.clear();
-      const reads = voiceReads(target);
+      const current = () => ownerCurrent() && revision === loadRevision.current;
+      if (!keepForm) edited.current.clear();
       const reuse = { reuse: opening };
-      const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
-        fetchFresh(queryClient, reads.catalog, reuse),
-        fetchFresh(queryClient, reads.credentials, reuse),
-        fetchFresh(queryClient, reads.status, reuse),
-      ]);
-      if (revision !== loadRevision.current) return;
-      setLoadError(null);
-      const selected = pickProvider(nextCatalog, nextStatus, nextProvider);
-      setCatalog(nextCatalog);
-      setCredentials(nextCredentials);
-      setStatus(nextStatus);
-      setProvider(selected);
-      const cred = nextCredentials.find((entry) => entry.provider === selected);
-      const fields: [VoiceField, (value: string) => void, string | undefined][] = [
-        ["voiceId", setVoiceId, cred?.voiceId],
-        ["speechModel", setSpeechModel, cred?.speechModel],
-        ["baseUrl", setBaseUrl, cred?.endpoint],
-        ["ttsModel", setTtsModel, cred?.ttsModel],
-        ["sttModel", setSttModel, cred?.sttModel],
-      ];
-      for (const [field, set, value] of fields) if (!edited.current.has(field)) set(value ?? "");
-      if (cred) {
-        const nextVoices = await fetchFresh(queryClient, voicesRead(target, selected), reuse);
-        if (revision === loadRevision.current) setVoices(nextVoices);
-      } else {
-        setVoices([]);
+      try {
+        const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
+          fetchFresh(queryClient, reads.catalog, reuse),
+          fetchFresh(queryClient, reads.credentials, reuse),
+          fetchFresh(queryClient, reads.status, reuse),
+        ]);
+        if (!current()) return;
+        setLoadError(null);
+        const selected = pickProvider(nextCatalog, nextStatus, nextProvider);
+        setCatalog(nextCatalog);
+        setCredentials(nextCredentials);
+        setStatus(nextStatus);
+        setProvider(selected);
+        const cred = nextCredentials.find((entry) => entry.provider === selected);
+        fillFields(cred, keepForm);
+        if (cred) {
+          const nextVoices = await fetchFresh(queryClient, voicesRead(target, selected), reuse);
+          if (current()) setVoices(nextVoices);
+        } else setVoices([]);
+      } catch (err) {
+        if (current()) throw err;
       }
     },
-    [target],
+    [target, origin, reads],
   );
 
   const edit = (field: VoiceField, set: (value: string) => void) => (value: string) => {
     edited.current.add(field);
+    fieldRevisions.current[field] = (fieldRevisions.current[field] ?? 0) + 1;
     set(value);
   };
 
@@ -175,10 +264,12 @@ export default function VoiceSettings() {
     void load(undefined, true)
       .catch((err: unknown) => {
         // A newer read replaced this one and reports for both.
-        if (!isCancelledError(err))
+        if (ownerCurrent() && !isCancelledError(err))
           setLoadError(errorText(err, t("Could not load voice settings")));
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (ownerCurrent()) setLoading(false);
+      });
   }, [load, t]);
 
   useFocusEffect(
@@ -280,14 +371,15 @@ export default function VoiceSettings() {
 
   async function chooseProvider(nextProvider: string) {
     if (pending !== null || !deviceVoiceReady) return;
+    const action = beginMutation("voice");
+    if (!action) return;
     const wasDeviceVoice = deviceVoice;
     const previousProvider = provider;
-    loadRevision.current++;
-    setPending("voice");
     setError(null);
     if (status) setLoadError(null);
     try {
       if (deviceSettings && !(await saveDeviceVoice(false))) return;
+      if (!action.current()) return;
       setProvider(nextProvider);
       const cred = credentials.find((entry) => entry.provider === nextProvider);
       if (cred?.voiceId && status?.provider !== nextProvider) {
@@ -297,28 +389,33 @@ export default function VoiceSettings() {
             provider: nextProvider,
             scope,
           });
+          if (!action.current()) return;
           setStatus(saved);
-          await writeSaved(queryClient, voiceReads(target).status.queryKey, () => saved);
+          await keepStatus(saved, action.current);
         } catch (err) {
+          if (!action.current()) return;
           setProvider(previousProvider);
           if (wasDeviceVoice && !(await saveDeviceVoice(true))) return;
-          setError(errorText(err, t("Could not save that voice")));
+          if (action.current()) setError(errorText(err, t("Could not save that voice")));
           return;
         }
       }
+      if (!action.current()) return;
       setApiKey("");
+      apiKeyRevision.current++;
       setVoiceId(cred?.voiceId ?? "");
       setSpeechModel(cred?.speechModel ?? "");
       setVoices([]);
       try {
         await load(nextProvider);
       } catch (err) {
-        // A refresh failure must not leave another provider's voices available.
-        setVoices([]);
-        setError(errorText(err, t("Could not load voice settings")));
+        if (action.current()) {
+          setVoices([]);
+          setLoadError(errorText(err, t("Could not load voice settings")));
+        }
       }
     } finally {
-      setPending(null);
+      if (action.current()) setPending(null);
     }
   }
 
@@ -333,16 +430,19 @@ export default function VoiceSettings() {
   const canConnect = keyless || (selfHosted ? Boolean(baseUrl.trim()) : apiKey.trim().length >= 8);
 
   async function connect() {
-    if (!selected || !canConnect) return;
-    setPending("connect");
+    if (!selected || !canConnect || pending !== null) return;
+    const action = beginMutation("connect");
+    if (!action) return;
     setError(null);
     if (status) setLoadError(null);
+    const sentApiKey = apiKey;
+    const sentKeyRevision = apiKeyRevision.current;
+    const sentFields = { ...fieldRevisions.current };
     try {
-      await rpc("voice/connect", {
+      const saved = await rpc("voice/connect", {
         provider: selected.id,
         scope,
-        apiKey: apiKey.trim(),
-        // The server drops this voice when the address or speech model really changed.
+        apiKey: sentApiKey.trim(),
         voiceId: voiceId || undefined,
         ...(selected.id === "fish-audio" ? { speechModel: speechModel.trim() } : {}),
         ...(selfHosted
@@ -353,38 +453,80 @@ export default function VoiceSettings() {
             }
           : {}),
       });
-      setApiKey("");
-      await load(selected.id);
+      if (!action.current()) return;
+      const merge = (current: VoiceCredential[]) => [
+        ...current
+          .filter((entry) => entry.provider !== saved.provider)
+          .map((entry) => (saved.isDefault ? { ...entry, isDefault: false } : entry)),
+        saved,
+      ];
+      const confirmed: VoiceStatus = {
+        configured: true,
+        ready: Boolean(saved.voiceId),
+        transcribe: saved.transcribe,
+        provider: saved.provider,
+        voiceId: saved.voiceId,
+      };
+      for (const field of ["voiceId", "speechModel", "baseUrl", "ttsModel", "sttModel"] as const)
+        if (fieldRevisions.current[field] === sentFields[field]) edited.current.delete(field);
+      setApiKey((current) => (apiKeyRevision.current === sentKeyRevision ? "" : current));
+      setCredentials(merge);
+      setStatus(confirmed);
+      fillFields(saved, true);
+      await Promise.all([
+        keepCredentials(merge, action.current),
+        keepStatus(confirmed, action.current),
+      ]);
+      if (action.current()) refreshAfterSave(selected.id, action.current);
     } catch (err) {
-      setError(errorText(err, t("Could not connect")));
+      if (action.current()) setError(errorText(err, t("Could not connect")));
     } finally {
-      setPending(null);
+      if (action.current()) setPending(null);
     }
   }
 
   async function disconnect(providerId = credential?.provider) {
-    if (!providerId) return;
-    setPending("disconnect");
+    if (!providerId || pending !== null) return;
+    const action = beginMutation("disconnect");
+    if (!action) return;
+    const sentKeyRevision = apiKeyRevision.current;
     setError(null);
     if (status) setLoadError(null);
     try {
       await rpc("voice/disconnect", { provider: providerId });
-      setApiKey("");
-      await load(providerId);
+      if (!action.current()) return;
+      const remove = (current: VoiceCredential[]) =>
+        current.filter((entry) => entry.provider !== providerId);
+      setCredentials(remove);
+      setApiKey((current) => (apiKeyRevision.current === sentKeyRevision ? "" : current));
+      if (provider === providerId) {
+        fillFields(undefined, true);
+        setVoices([]);
+      }
+      await keepCredentials(remove, action.current);
+      if (!action.current()) return;
+      await queryClient.cancelQueries({ queryKey: reads.status.queryKey, exact: true });
+      if (!action.current()) return;
+      if (status?.provider === providerId) {
+        setStatus(null);
+        queryClient.removeQueries({ queryKey: reads.status.queryKey, exact: true });
+      }
+      refreshAfterSave(providerId, action.current);
     } catch (err) {
-      setError(errorText(err, t("Could not disconnect")));
+      if (action.current()) setError(errorText(err, t("Could not disconnect")));
     } finally {
-      setPending(null);
+      if (action.current()) setPending(null);
     }
   }
 
   async function saveSpeechModel() {
     if (!credential || selected?.id !== "fish-audio" || pending !== null) return;
     const next = speechModel.trim();
-    if (next === (credential.speechModel ?? "")) return;
-    if (speechModelSave.current === next) return;
+    if (next === (credential.speechModel ?? "") || speechModelSave.current === next) return;
+    const action = beginMutation("speech");
+    if (!action) return;
+    const sentRevision = fieldRevisions.current.speechModel;
     speechModelSave.current = next;
-    setPending("speech");
     setError(null);
     if (status) setLoadError(null);
     try {
@@ -393,52 +535,83 @@ export default function VoiceSettings() {
         scope,
         speechModel: next,
       });
-      const merge = (current: VoiceCredential[] = []) =>
+      if (!action.current()) return;
+      const merge = (current: VoiceCredential[]) =>
         current.map((entry) => (entry.id === saved.id ? { ...entry, ...saved } : entry));
-      // A read still out started before this save, so it must not land; read again after it.
-      loadRevision.current++;
-      edited.current.delete("speechModel");
-      setSpeechModel(saved.speechModel ?? "");
+      if (fieldRevisions.current.speechModel === sentRevision) {
+        edited.current.delete("speechModel");
+        setSpeechModel(saved.speechModel ?? "");
+      }
       setCredentials(merge);
-      await writeSaved(queryClient, voiceReads(target).credentials.queryKey, merge);
-      void load(selected.id, true).catch(() => undefined);
+      await keepCredentials(merge, action.current);
+      if (action.current()) refreshAfterSave(selected.id, action.current);
     } catch (err) {
-      setError(errorText(err, t("Could not save that speech model")));
+      if (action.current()) setError(errorText(err, t("Could not save that speech model")));
     } finally {
-      speechModelSave.current = null;
-      setPending(null);
+      if (action.current()) {
+        speechModelSave.current = null;
+        setPending(null);
+      }
     }
   }
 
   async function chooseVoice(nextVoiceId: string) {
-    loadRevision.current++;
+    if (!credential || pending !== null) return;
+    const action = beginMutation("voice");
+    if (!action) return;
+    fieldRevisions.current.voiceId = (fieldRevisions.current.voiceId ?? 0) + 1;
+    const sentRevision = fieldRevisions.current.voiceId;
+    edited.current.add("voiceId");
     setVoiceId(nextVoiceId);
-    setPending("voice");
+    setError(null);
+    if (status) setLoadError(null);
     try {
-      await rpc("voice/setVoice", { voiceId: nextVoiceId, provider: selected?.id, scope });
-      await load(selected?.id);
+      const saved = await rpc("voice/setVoice", {
+        voiceId: nextVoiceId,
+        provider: selected?.id,
+        scope,
+      });
+      if (!action.current()) return;
+      const merge = (current: VoiceCredential[]) =>
+        current.map((entry) =>
+          entry.provider === saved.provider
+            ? { ...entry, voiceId: saved.voiceId, isDefault: true }
+            : { ...entry, isDefault: false },
+        );
+      setStatus(saved);
+      setCredentials(merge);
+      if (fieldRevisions.current.voiceId === sentRevision) {
+        edited.current.delete("voiceId");
+        setVoiceId(saved.voiceId);
+      }
+      await Promise.all([
+        keepStatus(saved, action.current),
+        keepCredentials(merge, action.current),
+      ]);
+      if (action.current()) refreshAfterSave(selected?.id, action.current);
     } catch (err) {
-      setError(errorText(err, t("Could not save that voice")));
+      if (action.current()) setError(errorText(err, t("Could not save that voice")));
     } finally {
-      setPending(null);
+      if (action.current()) setPending(null);
     }
   }
 
   async function testVoice() {
-    setPending("test");
+    if (!canStartSpeech() || pending !== null) return;
+    const action = beginMutation("test");
+    if (!action) return;
     setError(null);
     if (status) setLoadError(null);
     try {
       const ready = await speakText(t("Hi, this is how I'll sound when I read replies out loud."), {
         scope,
       });
-      if (!ready) {
-        throw new Error(t("Connect a voice provider first."));
-      }
+      if (!action.current() || !canStartSpeech()) return;
+      if (!ready) throw new Error(t("Connect a voice provider first."));
     } catch (err) {
-      setError(errorText(err, t("Could not play a sample")));
+      if (action.current()) setError(errorText(err, t("Could not play a sample")));
     } finally {
-      setPending(null);
+      if (action.current()) setPending(null);
     }
   }
 
@@ -547,7 +720,10 @@ export default function VoiceSettings() {
                 autoCorrect={false}
                 importantForAutofill="no"
                 value={apiKey}
-                onChangeText={setApiKey}
+                onChangeText={(value) => {
+                  apiKeyRevision.current++;
+                  setApiKey(value);
+                }}
                 placeholder={
                   selfHosted
                     ? t("Optional")
@@ -652,7 +828,7 @@ export default function VoiceSettings() {
         ) : null}
         {deviceSettings && (deviceVoice || status?.ready) ? (
           <NativeActionButton
-            disabled={pending !== null}
+            disabled={pending !== null || !canPreview}
             label={t("Hear a sample")}
             onPress={() => void testVoice()}
           />

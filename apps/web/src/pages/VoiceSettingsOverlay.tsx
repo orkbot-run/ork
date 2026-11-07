@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Confirmed voice settings changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   SettingsScope,
@@ -11,7 +15,7 @@ import {
   DEFAULT_COMPATIBLE_TTS_MODEL,
   OPENAI_COMPATIBLE_PROVIDER_ID,
 } from "@orkbot/contracts";
-import { fetchFresh } from "@orkbot/core/query";
+import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import {
   Button,
   Dialog,
@@ -27,9 +31,18 @@ import {
 } from "@orkbot/ui-web";
 import { useQueryClient } from "@tanstack/react-query";
 import { XIcon } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { useSpaceQueries } from "../lib/query";
-import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
+import { captureRpcContext } from "../lib/rpc";
+import { useBoundSpaceId } from "../lib/space-rpc";
 import { speaker } from "../lib/tts";
 import { errorText } from "../lib/user-error";
 
@@ -49,11 +62,21 @@ export function VoiceSettingsOverlay({
    */
   scope: SettingsScope;
 }) {
-  const rpc = useSpaceRpc();
   const spaceId = useBoundSpaceId();
   const queries = useSpaceQueries();
   const queryClient = useQueryClient();
   const scoped = { input: { scope } };
+  const origin = useMemo(
+    () => ({ ...captureRpcContext(spaceId ?? undefined), queries, scope }),
+    [spaceId, queries, scope],
+  );
+  const rpc = origin.client;
+  const live = useRef<typeof origin | null>(origin);
+  const previousOrigin = useRef(origin);
+  const loadRevision = useRef(0);
+  const mutationRevision = useRef(0);
+  const fieldRevisions = useRef<Partial<Record<EditableField, number>>>({});
+  const apiKeyRevision = useRef(0);
   // A revisit opens with what this scope showed last time and refreshes it in the background.
   const [cached] = useState(() => {
     const catalog = queryClient.getQueryData(queries.voice.catalog.queryKey());
@@ -105,6 +128,91 @@ export function VoiceSettingsOverlay({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  const ownerCurrent = () => live.current === origin && origin.isCurrent();
+  useLayoutEffect(() => {
+    live.current = origin;
+    if (previousOrigin.current !== origin) {
+      previousOrigin.current = origin;
+      speechModelSave.current = null;
+      setCatalog([]);
+      setCredentials([]);
+      setStatus(null);
+      setProvider("");
+      providerRef.current = "";
+      setVoiceList({ provider: "", voices: [] });
+      setApiKey("");
+      setVoiceId("");
+      setSpeechModel("");
+      setBaseUrl("");
+      setTtsModel("");
+      setSttModel("");
+      edited.current.clear();
+      fieldRevisions.current = {};
+      apiKeyRevision.current++;
+      setError(null);
+      setNotice(null);
+      setLoading(true);
+      markPending(null);
+    }
+    return () => {
+      if (live.current === origin) live.current = null;
+      loadRevision.current++;
+      mutationRevision.current++;
+      voicesRequest.current++;
+    };
+  }, [origin]);
+
+  function changed(field: EditableField) {
+    edited.current.add(field);
+    fieldRevisions.current[field] = (fieldRevisions.current[field] ?? 0) + 1;
+  }
+  function beginMutation(kind: "connect" | "disconnect" | "voice" | "test") {
+    if (!ownerCurrent()) return null;
+    const revision = ++mutationRevision.current;
+    if (kind !== "test") {
+      loadRevision.current++;
+      voicesRequest.current++;
+    }
+    markPending(kind);
+    return { current: () => ownerCurrent() && mutationRevision.current === revision };
+  }
+  function assertCurrent(current: () => boolean) {
+    if (!current()) throw new DOMException("Session changed", "AbortError");
+  }
+  function fillFields(cred: VoiceCredential | undefined, keepForm: boolean) {
+    const keep = (field: EditableField) => keepForm && edited.current.has(field);
+    if (!keep("voiceId")) setVoiceId(cred?.voiceId ?? "");
+    if (!keep("speechModel")) setSpeechModel(cred?.speechModel ?? "");
+    if (!keep("baseUrl")) setBaseUrl(cred?.endpoint ?? "");
+    if (!keep("ttsModel")) setTtsModel(cred?.ttsModel ?? "");
+    if (!keep("sttModel")) setSttModel(cred?.sttModel ?? "");
+  }
+  async function keepCredentials(
+    update: (current: VoiceCredential[]) => VoiceCredential[],
+    current: () => boolean,
+  ) {
+    await writeSaved(queryClient, queries.voice.credentials.queryKey(scoped), (cached) => {
+      assertCurrent(current);
+      return update(cached ?? []);
+    });
+  }
+  async function keepStatus(saved: VoiceStatus, current: () => boolean) {
+    await writeSaved(queryClient, queries.voice.status.queryKey(scoped), () => {
+      assertCurrent(current);
+      return saved;
+    });
+  }
+  function refreshAfterSave(nextProvider: string | undefined, current: () => boolean) {
+    void refresh(nextProvider, { keepForm: true }).catch((err: unknown) => {
+      if (current()) setError(errorText(err, t`Could not load voice settings`));
+    });
+  }
+
+  const canPreview = useSyncExternalStore(
+    speaker.subscribeOwnership,
+    speaker.canSpeak,
+    speaker.canSpeak,
+  );
   const busy = pending !== null;
 
   useEffect(() => {
@@ -136,82 +244,136 @@ export function VoiceSettingsOverlay({
       setProvider(nextProvider);
       setVoiceList({ provider: nextProvider, voices: [] });
     }
-    if (!keep("voiceId")) setVoiceId(activeVoice);
-    if (!keep("speechModel")) setSpeechModel(cred?.speechModel ?? "");
-    if (!keep("baseUrl")) setBaseUrl(cred?.endpoint ?? "");
-    if (!keep("ttsModel")) setTtsModel(cred?.ttsModel ?? "");
-    if (!keep("sttModel")) setSttModel(cred?.sttModel ?? "");
+    fillFields(cred, keepForm);
     if (!cred) return Promise.resolve();
     return queryClient
       .fetchQuery(
         queries.voice.voices.queryOptions({
           input: { provider: nextProvider, scope },
           staleTime: 0,
+          queryFn: ({ signal }) => {
+            assertCurrent(origin.isCurrent);
+            return rpc.voice.voices({ provider: nextProvider, scope }, { signal });
+          },
         }),
       )
       .then(
         (listed) => {
-          if (request !== voicesRequest.current) return;
+          if (!ownerCurrent() || request !== voicesRequest.current) return;
           setVoiceList({ provider: nextProvider, voices: listed });
           if (!keep("voiceId") && !activeVoice && listed[0]) setVoiceId(listed[0].id);
         },
         (err: unknown) => {
-          if (request === voicesRequest.current) throw err;
+          if (ownerCurrent() && request === voicesRequest.current) throw err;
         },
       );
   }
 
-  /** After a change (every call but the one on open) it never reuses a read sent before it. */
+  /** After a change (every call but the one on open) it never reuses a read sent before it.
+   * Cache-owned requests can survive a same-session remount; only UI publication uses its revision.
+   */
   async function refresh(nextProvider?: string, { keepForm = false, reuse = false } = {}) {
-    const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
-      fetchFresh(queryClient, queries.voice.catalog.queryOptions(), { reuse }),
-      fetchFresh(queryClient, queries.voice.credentials.queryOptions(scoped), { reuse }),
-      fetchFresh(queryClient, queries.voice.status.queryOptions(scoped), { reuse }),
-    ]);
-    const current = providerRef.current;
-    const selected = selectedProvider(nextCatalog, [nextProvider, current, nextStatus.provider]);
-    setCatalog(nextCatalog);
-    setCredentials(nextCredentials);
-    setStatus(nextStatus);
-    await showProvider(selected, nextCredentials, keepForm && selected === current);
+    const revision = ++loadRevision.current;
+    const current = () => ownerCurrent() && revision === loadRevision.current;
+    if (!current()) return;
+    try {
+      const [nextCatalog, nextCredentials, nextStatus] = await Promise.all([
+        fetchFresh(
+          queryClient,
+          {
+            ...queries.voice.catalog.queryOptions(),
+            queryFn: ({ signal }) => {
+              assertCurrent(origin.isCurrent);
+              return rpc.voice.catalog(undefined, { signal });
+            },
+          },
+          { reuse },
+        ),
+        fetchFresh(
+          queryClient,
+          {
+            ...queries.voice.credentials.queryOptions(scoped),
+            queryFn: ({ signal }) => {
+              assertCurrent(origin.isCurrent);
+              return rpc.voice.credentials({ scope }, { signal });
+            },
+          },
+          { reuse },
+        ),
+        fetchFresh(
+          queryClient,
+          {
+            ...queries.voice.status.queryOptions(scoped),
+            queryFn: ({ signal }) => {
+              assertCurrent(origin.isCurrent);
+              return rpc.voice.status({ scope }, { signal });
+            },
+          },
+          { reuse },
+        ),
+      ]);
+      if (!current()) return;
+      const selected = selectedProvider(nextCatalog, [
+        nextProvider,
+        providerRef.current,
+        nextStatus.provider,
+      ]);
+      setCatalog(nextCatalog);
+      setCredentials(nextCredentials);
+      setStatus(nextStatus);
+      await showProvider(selected, nextCredentials, keepForm && selected === providerRef.current);
+    } catch (err) {
+      if (current()) throw err;
+    }
   }
 
   async function chooseProvider(nextProvider: string) {
+    if (pending) return;
+    const action = beginMutation("voice");
+    if (!action) return;
     setApiKey("");
+    apiKeyRevision.current++;
     setError(null);
     setNotice(null);
     const cred = credentials.find((entry) => entry.provider === nextProvider);
-    if (
-      catalog.find((entry) => entry.id === nextProvider)?.keyless &&
-      cred?.voiceId &&
-      status?.provider !== nextProvider
-    ) {
-      markPending("voice");
-      try {
-        const saved = await rpc.voice.setVoice({
-          scope,
-          voiceId: cred.voiceId,
-          provider: nextProvider,
-        });
-        setStatus(saved);
-        queryClient.setQueryData(queries.voice.status.queryKey(scoped), saved);
-      } catch (err) {
-        setError(errorText(err, t`Could not save that voice`));
-        return;
-      } finally {
-        markPending(null);
+    try {
+      if (
+        catalog.find((entry) => entry.id === nextProvider)?.keyless &&
+        cred?.voiceId &&
+        status?.provider !== nextProvider
+      ) {
+        try {
+          const saved = await rpc.voice.setVoice({
+            scope,
+            voiceId: cred.voiceId,
+            provider: nextProvider,
+          });
+          if (!action.current()) return;
+          setStatus(saved);
+          await keepStatus(saved, action.current);
+        } catch (err) {
+          if (action.current()) setError(errorText(err, t`Could not save that voice`));
+          return;
+        }
       }
+      if (!action.current()) return;
+      await showProvider(nextProvider, credentials);
+    } catch (err) {
+      if (action.current()) setError(errorText(err, t`Could not load voice settings`));
+    } finally {
+      if (action.current()) markPending(null);
     }
-    await showProvider(nextProvider, credentials).catch((err: unknown) =>
-      setError(errorText(err, t`Could not load voice settings`)),
-    );
   }
 
   useEffect(() => {
     void refresh(undefined, { keepForm: Boolean(cached), reuse: true })
-      .catch((err: unknown) => setError(errorText(err, t`Could not load voice settings`)))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((err: unknown) => {
+        if (ownerCurrent()) setError(errorText(err, t`Could not load voice settings`));
+      })
+      .finally(() => {
+        if (ownerCurrent()) setLoading(false);
+      });
+  }, [origin]);
 
   const selected = catalog.find((entry) => entry.id === provider) ?? catalog[0];
   const credential = credentials.find((entry) => entry.provider === provider);
@@ -230,18 +392,19 @@ export function VoiceSettingsOverlay({
   const canConnect = keyless || (selfHosted ? Boolean(baseUrl.trim()) : apiKey.trim().length >= 8);
 
   async function connectKey() {
-    if (!selected || !canConnect) return;
+    if (!selected || !canConnect || pending) return;
+    const action = beginMutation("connect");
+    if (!action) return;
     setError(null);
     setNotice(null);
-    // What this connect carries; anything typed after this point was not saved.
     const sentApiKey = apiKey;
-    markPending("connect");
+    const sentKeyRevision = apiKeyRevision.current;
+    const sentFields = { ...fieldRevisions.current };
     try {
-      await rpc.voice.connect({
+      const saved = await rpc.voice.connect({
         scope,
         provider: selected.id,
         apiKey: sentApiKey.trim(),
-        // The server drops this voice when the address or speech model really changed.
         voiceId: voiceId || undefined,
         ...(selected.id === "fish-audio" ? { speechModel: speechModel.trim() } : {}),
         ...(selfHosted
@@ -252,100 +415,171 @@ export function VoiceSettingsOverlay({
             }
           : {}),
       });
-      // A key typed while the connect ran was not saved; keep it for the next try.
-      setApiKey((current) => (current === sentApiKey ? "" : current));
-      // The connect saved the voice the server kept for these values, and the
-      // disabled field cannot hold a newer edit, so the voice follows the saved one.
-      edited.current.delete("voiceId");
-      // The connect saved the values it carried; fields typed meanwhile keep theirs.
-      await refresh(selected.id, { keepForm: true });
+      if (!action.current()) return;
+      const merge = (current: VoiceCredential[]) => [
+        ...current
+          .filter((entry) => entry.provider !== saved.provider)
+          .map((entry) => (saved.isDefault ? { ...entry, isDefault: false } : entry)),
+        saved,
+      ];
+      const confirmed: VoiceStatus = {
+        configured: true,
+        ready: Boolean(saved.voiceId),
+        provider: saved.provider,
+        voiceId: saved.voiceId,
+        transcribe: saved.transcribe,
+      };
+      for (const field of ["voiceId", "speechModel", "baseUrl", "ttsModel", "sttModel"] as const)
+        if (fieldRevisions.current[field] === sentFields[field]) edited.current.delete(field);
+      setApiKey((current) => (apiKeyRevision.current === sentKeyRevision ? "" : current));
+      setCredentials(merge);
+      setStatus(confirmed);
+      fillFields(saved, true);
+      await Promise.all([
+        keepCredentials(merge, action.current),
+        keepStatus(confirmed, action.current),
+      ]);
+      if (!action.current()) return;
       setNotice(t`Connected ${selected.name}.`);
+      refreshAfterSave(selected.id, action.current);
     } catch (err) {
-      setError(errorText(err, t`Could not connect this voice provider`));
+      if (action.current()) setError(errorText(err, t`Could not connect this voice provider`));
     } finally {
-      markPending(null);
+      if (action.current()) markPending(null);
     }
   }
 
   async function disconnectProvider(providerId = credential?.provider) {
-    if (!providerId) return;
+    if (!providerId || pending) return;
+    const action = beginMutation("disconnect");
+    if (!action) return;
+    const sentKeyRevision = apiKeyRevision.current;
     setError(null);
     setNotice(null);
-    markPending("disconnect");
     try {
       await rpc.voice.disconnect({ provider: providerId });
-      setApiKey("");
-      await refresh(providerId);
+      if (!action.current()) return;
+      const remove = (current: VoiceCredential[]) =>
+        current.filter((entry) => entry.provider !== providerId);
+      setCredentials(remove);
+      setApiKey((current) => (apiKeyRevision.current === sentKeyRevision ? "" : current));
+      if (providerRef.current === providerId) {
+        fillFields(undefined, true);
+        setVoiceList({ provider: providerId, voices: [] });
+      }
+      await keepCredentials(remove, action.current);
+      if (!action.current()) return;
+      await queryClient.cancelQueries({
+        queryKey: queries.voice.status.queryKey(scoped),
+        exact: true,
+      });
+      if (!action.current()) return;
+      if (status?.provider === providerId) {
+        setStatus(null);
+        queryClient.removeQueries({ queryKey: queries.voice.status.queryKey(scoped), exact: true });
+      }
+      refreshAfterSave(providerId, action.current);
     } catch (err) {
-      setError(errorText(err, t`Could not disconnect this voice provider`));
+      if (action.current()) setError(errorText(err, t`Could not disconnect this voice provider`));
     } finally {
-      markPending(null);
+      if (action.current()) markPending(null);
     }
   }
 
   async function chooseVoice(nextVoiceId: string) {
-    edited.current.add("voiceId");
+    changed("voiceId");
     setVoiceId(nextVoiceId);
-    if (!credential) return;
-    markPending("voice");
+    if (!credential || pending) return;
+    const action = beginMutation("voice");
+    if (!action) return;
+    const sentRevision = fieldRevisions.current.voiceId;
     setError(null);
     try {
-      await rpc.voice.setVoice({ scope, voiceId: nextVoiceId, provider: selected?.id });
-      await refresh(selected?.id, { keepForm: true });
+      const saved = await rpc.voice.setVoice({
+        scope,
+        voiceId: nextVoiceId,
+        provider: selected?.id,
+      });
+      if (!action.current()) return;
+      const merge = (current: VoiceCredential[]) =>
+        current.map((entry) =>
+          entry.provider === saved.provider
+            ? { ...entry, voiceId: saved.voiceId, isDefault: true }
+            : { ...entry, isDefault: false },
+        );
+      setStatus(saved);
+      setCredentials(merge);
+      if (fieldRevisions.current.voiceId === sentRevision) {
+        edited.current.delete("voiceId");
+        setVoiceId(saved.voiceId);
+      }
+      await Promise.all([
+        keepStatus(saved, action.current),
+        keepCredentials(merge, action.current),
+      ]);
+      if (action.current()) refreshAfterSave(selected?.id, action.current);
     } catch (err) {
-      setError(errorText(err, t`Could not save that voice`));
+      if (action.current()) setError(errorText(err, t`Could not save that voice`));
     } finally {
-      markPending(null);
+      if (action.current()) markPending(null);
     }
   }
 
   async function saveSpeechModel() {
-    if (!credential || selected?.id !== "fish-audio") return;
+    if (!credential || selected?.id !== "fish-audio" || pending) return;
     const next = speechModel.trim();
-    if (next === credential.speechModel) return;
-    if (speechModelSave.current === next) return;
+    if (next === credential.speechModel || speechModelSave.current === next) return;
+    const action = beginMutation("voice");
+    if (!action) return;
+    const sentRevision = fieldRevisions.current.speechModel;
     speechModelSave.current = next;
     setError(null);
-    markPending("voice");
     try {
       const saved = await rpc.voice.setSpeechModel({
         scope,
         provider: selected.id,
         speechModel: next,
       });
-      setSpeechModel(saved.speechModel);
+      if (!action.current()) return;
       const update = (current: VoiceCredential[]) =>
         current.map((entry) => (entry.id === saved.id ? saved : entry));
+      if (fieldRevisions.current.speechModel === sentRevision) {
+        edited.current.delete("speechModel");
+        setSpeechModel(saved.speechModel);
+      }
       setCredentials(update);
-      queryClient.setQueryData(queries.voice.credentials.queryKey(scoped), (current) =>
-        current ? update(current) : current,
-      );
+      await keepCredentials(update, action.current);
     } catch (err) {
-      setError(errorText(err, t`Could not save that speech model`));
+      if (action.current()) setError(errorText(err, t`Could not save that speech model`));
     } finally {
-      speechModelSave.current = null;
-      markPending(null);
+      if (action.current()) {
+        speechModelSave.current = null;
+        markPending(null);
+      }
     }
   }
 
   async function testVoice() {
+    if (!speaker.canSpeak() || pending) return;
+    const action = beginMutation("test");
+    if (!action) return;
     setError(null);
     setNotice(null);
-    markPending("test");
     try {
       await speaker.speak(t`Hi, this is how I'll sound when I read replies out loud.`, {
         spaceId,
         scope,
       });
+      if (!action.current() || !speaker.canSpeak()) return;
       if (speaker.state.error) {
         setError(speaker.state.error);
         return;
       }
       setNotice(t`If you heard that, voice is ready.`);
     } catch (err) {
-      setError(errorText(err, t`Could not play a test clip`));
+      if (action.current()) setError(errorText(err, t`Could not play a test clip`));
     } finally {
-      markPending(null);
+      if (action.current()) markPending(null);
     }
   }
 
@@ -410,7 +644,7 @@ export function VoiceSettingsOverlay({
                     spellCheck={false}
                     value={baseUrl}
                     onChange={(event) => {
-                      edited.current.add("baseUrl");
+                      changed("baseUrl");
                       setBaseUrl(event.target.value);
                     }}
                     placeholder="http://192.168.1.10:8880/v1"
@@ -427,7 +661,10 @@ export function VoiceSettingsOverlay({
                     type="password"
                     autoComplete="new-password"
                     value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
+                    onChange={(event) => {
+                      apiKeyRevision.current++;
+                      setApiKey(event.target.value);
+                    }}
                     placeholder={
                       selfHosted
                         ? t`Optional`
@@ -451,7 +688,7 @@ export function VoiceSettingsOverlay({
                       value={ttsModel}
                       maxLength={200}
                       onChange={(event) => {
-                        edited.current.add("ttsModel");
+                        changed("ttsModel");
                         setTtsModel(event.target.value);
                       }}
                       placeholder={DEFAULT_COMPATIBLE_TTS_MODEL}
@@ -468,7 +705,7 @@ export function VoiceSettingsOverlay({
                       value={sttModel}
                       maxLength={200}
                       onChange={(event) => {
-                        edited.current.add("sttModel");
+                        changed("sttModel");
                         setSttModel(event.target.value);
                       }}
                       placeholder={DEFAULT_COMPATIBLE_STT_MODEL}
@@ -528,7 +765,7 @@ export function VoiceSettingsOverlay({
                       value={voiceId}
                       disabled={busy}
                       onChange={(event) => {
-                        edited.current.add("voiceId");
+                        changed("voiceId");
                         setVoiceId(event.target.value);
                       }}
                       onBlur={() => {
@@ -581,7 +818,7 @@ export function VoiceSettingsOverlay({
                     disabled={busy}
                     placeholder={t`Optional`}
                     onChange={(event) => {
-                      edited.current.add("speechModel");
+                      changed("speechModel");
                       setSpeechModel(event.target.value);
                     }}
                     onBlur={() => void saveSpeechModel()}
@@ -597,7 +834,7 @@ export function VoiceSettingsOverlay({
                 type="button"
                 variant="secondary"
                 className="mt-4"
-                disabled={busy || !status?.ready}
+                disabled={busy || !status?.ready || !canPreview}
                 onClick={() => void testVoice()}
               >
                 {pending === "test" ? <Trans>Playing…</Trans> : <Trans>Hear a sample</Trans>}

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache tests are preserved. Confirmed settings and ownership coverage follows LICENSE.md.
+
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
 import { act, useEffect } from "react";
@@ -39,6 +43,7 @@ vi.mock("./call-sounds", () => ({
 vi.mock("./api", () => ({
   currentApiBase: () => "https://app.example.test",
   selectedSpaceId: () => "space-fixture",
+  spaceSelectionSeq: () => 0,
   captureApiRequestContext: async () => ({ apiBase: "https://app.example.test", headers: {} }),
   rpc: async (method: string) => {
     if (mocks.failStatus && method === "voice/status") throw new Error("offline");
@@ -53,7 +58,11 @@ vi.mock("./device-voice", () => ({
   loadDeviceVoiceEnabled: mocks.loadDevice,
   saveDeviceVoiceEnabled: vi.fn(),
 }));
-vi.mock("./voice", () => ({ speakText: vi.fn() }));
+vi.mock("./voice", () => ({
+  speakText: vi.fn(),
+  canStartSpeech: () => true,
+  subscribeSpeechOwnership: () => () => undefined,
+}));
 vi.mock("./i18n", () => ({ t: mocks.t, useI18n: () => ({ t: mocks.t }) }));
 vi.mock("./appearance", () => ({ mobileTokens: () => ({ destructive: "red" }) }));
 vi.mock("./native", () => ({ native: {}, useThemedStyles: (factory: () => unknown) => factory() }));

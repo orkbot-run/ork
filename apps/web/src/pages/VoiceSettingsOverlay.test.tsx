@@ -1,11 +1,16 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache tests are preserved. Confirmed settings and ownership coverage follows LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
+const session = vi.hoisted(() => ({ generation: 0, server: "fixture-one" }));
 const voice = vi.hoisted(() => ({
   catalog: vi.fn(),
   credentials: vi.fn(),
@@ -17,9 +22,28 @@ const voice = vi.hoisted(() => ({
   setSpeechModel: vi.fn(),
 }));
 
+const playback = vi.hoisted(() => ({ allowed: true, listeners: new Set<() => void>() }));
 const { speak } = vi.hoisted(() => ({ speak: vi.fn(async () => undefined) }));
-vi.mock("../lib/tts.js", () => ({ speaker: { speak, state: {} } }));
+vi.mock("../lib/tts.js", () => ({
+  speaker: {
+    speak,
+    state: {},
+    canSpeak: () => playback.allowed,
+    subscribeOwnership: (listener: () => void) => {
+      playback.listeners.add(listener);
+      return () => playback.listeners.delete(listener);
+    },
+  },
+}));
 vi.mock("../lib/rpc", () => ({
+  captureRpcContext: () => {
+    const generation = session.generation;
+    const server = session.server;
+    return {
+      client: { voice },
+      isCurrent: () => session.generation === generation && session.server === server,
+    };
+  },
   rpc: { voice },
   rpcForSpace: () => ({ voice }),
   createSpaceRpc: () => ({ voice }),
@@ -52,6 +76,7 @@ vi.mock("@orkbot/ui-web", () => {
   };
 });
 
+import { spaceQueries } from "../lib/query";
 import { SpaceRpcProvider } from "../lib/space-rpc";
 import { VoiceSettingsOverlay } from "./VoiceSettingsOverlay";
 
@@ -796,7 +821,13 @@ it("picks a Space's own voice from the account's connections without managing th
     { id: "voice-1", label: "Aria" },
     { id: "voice-2", label: "Bo" },
   ]);
-  voice.setVoice.mockReset().mockResolvedValue({ ready: true, provider: "fish-audio" });
+  voice.setVoice.mockReset().mockResolvedValue({
+    configured: true,
+    ready: true,
+    transcribe: true,
+    voiceId: "voice-2",
+    provider: "fish-audio",
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -851,7 +882,13 @@ it("saves a typed self-hosted voice on blur without dropping other unsaved edits
   voice.credentials.mockReset().mockResolvedValue([saved]);
   voice.status.mockReset().mockResolvedValue({ ready: true, provider: "openai-compatible" });
   voice.voices.mockReset().mockResolvedValue([{ id: "af_heart", label: "Heart" }]);
-  voice.setVoice.mockReset().mockResolvedValue({ ready: true, provider: "openai-compatible" });
+  voice.setVoice.mockReset().mockResolvedValue({
+    configured: true,
+    ready: true,
+    transcribe: true,
+    voiceId: "am_custom",
+    provider: "openai-compatible",
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -910,7 +947,18 @@ it("connects a keyless provider without asking for a key", async () => {
     provider: null,
     voiceId: "",
   });
-  voice.connect.mockClear().mockResolvedValue(undefined);
+  voice.connect.mockClear().mockResolvedValue({
+    id: "cred-device",
+    provider: "macos",
+    hasKey: false,
+    isDefault: true,
+    voiceId: "Albert",
+    speechModel: "",
+    transcribe: false,
+    endpoint: "",
+    ttsModel: "",
+    sttModel: "",
+  });
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -991,3 +1039,656 @@ it.each(["account", "space"] as const)(
     }
   },
 );
+
+it.each(["credentials", "voices"] as const)(
+  "keeps a confirmed connection when the following %s refresh fails and on reopen",
+  async (failedRead) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const saved = {
+      id: "confirmed-voice",
+      provider: "fixture-speech",
+      hasKey: true,
+      isDefault: true,
+      voiceId: "confirmed-choice",
+      speechModel: "",
+      transcribe: true,
+      endpoint: "",
+      ttsModel: "",
+      sttModel: "",
+    };
+    const confirmed = {
+      configured: true,
+      ready: true,
+      transcribe: true,
+      provider: saved.provider,
+      voiceId: saved.voiceId,
+    };
+    voice.catalog
+      .mockReset()
+      .mockResolvedValue([
+        { id: saved.provider, name: "Speech", description: "", transcribe: true },
+      ]);
+    voice.credentials.mockReset().mockResolvedValueOnce([]);
+    if (failedRead === "credentials")
+      voice.credentials.mockRejectedValue(new Error("settings read unavailable"));
+    else voice.credentials.mockResolvedValue([saved]);
+    voice.status
+      .mockReset()
+      .mockResolvedValueOnce({
+        configured: false,
+        ready: false,
+        transcribe: false,
+        provider: null,
+        voiceId: "",
+      })
+      .mockResolvedValue(confirmed);
+    voice.voices.mockReset();
+    if (failedRead === "voices")
+      voice.voices.mockRejectedValue(new Error("settings read unavailable"));
+    else voice.voices.mockResolvedValue([{ id: saved.voiceId, label: "Confirmed voice" }]);
+    voice.connect.mockReset().mockResolvedValue(saved);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const container = document.createElement("div");
+    document.body.append(container);
+    let root = createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          withQueries(
+            <VoiceSettingsOverlay embedded scope="account" onClose={() => undefined} />,
+            client,
+          ),
+        ),
+      );
+      const key = labelledInput(container, "API key");
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          key,
+          "synthetic-test-key",
+        );
+        key.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await act(async () =>
+        [...container.querySelectorAll("button")]
+          .find((item) => item.textContent === "Connect")
+          ?.click(),
+      );
+      const queries = spaceQueries(null, null);
+      expect(
+        client.getQueryData(queries.voice.credentials.queryKey({ input: { scope: "account" } })),
+      ).toEqual([saved]);
+      expect(container.textContent).toContain("Disconnect");
+      expect(container.textContent).toContain("settings read unavailable");
+      expect(
+        [...container.querySelectorAll("button")].find(
+          (item) => item.textContent === "Hear a sample",
+        )?.disabled,
+      ).toBe(false);
+      await act(async () => root.unmount());
+      root = createRoot(container);
+      await act(async () =>
+        root.render(
+          withQueries(
+            <VoiceSettingsOverlay embedded scope="account" onClose={() => undefined} />,
+            client,
+          ),
+        ),
+      );
+      expect(container.textContent).toContain("Disconnect");
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+      client.clear();
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it("commits the selected voice before a credentials refresh fails", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = { ...fish, provider: "fixture-speech" };
+  const confirmed = {
+    configured: true,
+    ready: true,
+    transcribe: true,
+    provider: saved.provider,
+    voiceId: "voice-2",
+  };
+  voice.catalog
+    .mockReset()
+    .mockResolvedValue([{ id: saved.provider, name: "Speech", description: "", transcribe: true }]);
+  voice.credentials
+    .mockReset()
+    .mockResolvedValueOnce([saved])
+    .mockRejectedValue(new Error("settings read unavailable"));
+  voice.status
+    .mockReset()
+    .mockResolvedValueOnce({ ...confirmed, voiceId: "voice-1" })
+    .mockResolvedValue(confirmed);
+  voice.voices.mockReset().mockResolvedValue([
+    { id: "voice-1", label: "First" },
+    { id: "voice-2", label: "Second" },
+  ]);
+  voice.setVoice.mockReset().mockResolvedValue(confirmed);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () =>
+      root.render(
+        withQueries(
+          <VoiceSettingsOverlay embedded scope="account" onClose={() => undefined} />,
+          client,
+        ),
+      ),
+    );
+    await act(async () => {
+      const select = container.querySelectorAll("select")[1]!;
+      select.value = "voice-2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const queries = spaceQueries(null, null);
+    expect(
+      client.getQueryData(queries.voice.credentials.queryKey({ input: { scope: "account" } })),
+    ).toEqual([{ ...saved, voiceId: "voice-2" }]);
+    expect(
+      client.getQueryData(queries.voice.status.queryKey({ input: { scope: "account" } })),
+    ).toEqual(confirmed);
+    expect(container.textContent).toContain("settings read unavailable");
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+    client.clear();
+    vi.unstubAllGlobals();
+  }
+});
+
+async function confirmedVoiceFixture(connected = false, provider = "fixture-speech") {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  session.generation = 0;
+  session.server = "fixture-one";
+  playback.allowed = true;
+  speak.mockClear();
+  const saved = {
+    id: "confirmed",
+    provider,
+    hasKey: true,
+    isDefault: true,
+    voiceId: "voice-1",
+    speechModel: "",
+    transcribe: true,
+    endpoint: "",
+    ttsModel: "",
+    sttModel: "",
+  };
+  const server = { saved: connected ? saved : (null as typeof saved | null) };
+  for (const mock of Object.values(voice)) mock.mockReset();
+  voice.catalog.mockResolvedValue([
+    { id: saved.provider, name: "Speech", description: "", transcribe: true },
+  ]);
+  voice.credentials.mockImplementation(async () => (server.saved ? [server.saved] : []));
+  voice.status.mockImplementation(async () => ({
+    configured: Boolean(server.saved),
+    ready: Boolean(server.saved?.voiceId),
+    transcribe: Boolean(server.saved),
+    provider: server.saved?.provider ?? null,
+    voiceId: server.saved?.voiceId ?? "",
+  }));
+  voice.voices.mockResolvedValue([
+    { id: "voice-1", label: "First" },
+    { id: "voice-2", label: "Second" },
+  ]);
+  voice.connect.mockImplementation(async () => {
+    server.saved = saved;
+    return saved;
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  const render = async (scope: "account" | "space" = "account", spaceId: string | null = null) => {
+    await act(async () =>
+      root.render(
+        withQueries(
+          <SpaceRpcProvider spaceId={spaceId}>
+            <VoiceSettingsOverlay embedded scope={scope} onClose={() => undefined} />
+          </SpaceRpcProvider>,
+          client,
+        ),
+      ),
+    );
+  };
+  const type = async (label: string, value: string) => {
+    const input = labelledInput(container, label);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const click = async (label: string) => {
+    await act(async () =>
+      [...container.querySelectorAll("button")].find((item) => item.textContent === label)?.click(),
+    );
+  };
+  const dispose = async () => {
+    await act(async () => root.unmount());
+    container.remove();
+    client.clear();
+    playback.allowed = true;
+    vi.unstubAllGlobals();
+  };
+  await render();
+  return { saved, server, client, container, render, type, click, dispose };
+}
+
+it("retains a replacement key edited back to its submitted value during connect", async () => {
+  const f = await confirmedVoiceFixture();
+  let finish!: () => void;
+  voice.connect.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = () => {
+          f.server.saved = f.saved;
+          resolve(f.saved);
+        };
+      }),
+  );
+  try {
+    await f.type("API key", "synthetic-test-key");
+    await f.click("Connect");
+    await f.type("API key", "replacement-test-key");
+    await f.type("API key", "synthetic-test-key");
+    await act(async () => finish());
+    expect(labelledInput(f.container, "API key").value).toBe("synthetic-test-key");
+  } finally {
+    await f.dispose();
+  }
+});
+
+it.each(["session", "server"] as const)(
+  "does not publish or refresh a confirmed response after %s retirement",
+  async (reason) => {
+    const f = await confirmedVoiceFixture();
+    let finish!: () => void;
+    voice.connect.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve(f.saved);
+        }),
+    );
+    try {
+      await f.type("API key", "synthetic-test-key");
+      await f.click("Connect");
+      const reads = voice.credentials.mock.calls.length;
+      if (reason === "session") session.generation++;
+      else session.server = "fixture-two";
+      f.client.clear();
+      await act(async () => finish());
+      expect(voice.credentials).toHaveBeenCalledTimes(reads);
+      expect(f.client.getQueryCache().getAll()).toHaveLength(0);
+      expect(f.container.textContent).not.toContain("Disconnect");
+      expect(labelledInput(f.container, "API key").value).toBe("synthetic-test-key");
+    } finally {
+      await f.dispose();
+    }
+  },
+);
+
+it.each(["resolve", "reject"] as const)(
+  "keeps a replacement Space's pending operation when the old connect later %s",
+  async (outcome) => {
+    const f = await confirmedVoiceFixture();
+    let oldFinish!: () => void;
+    let oldFail!: () => void;
+    let newFinish!: () => void;
+    const replacement = { ...f.saved, id: "replacement-confirmed", voiceId: "voice-2" };
+    voice.connect
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            oldFinish = () => resolve(f.saved);
+            oldFail = () => reject(new Error("retired failure"));
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            newFinish = () => {
+              f.server.saved = replacement;
+              resolve(replacement);
+            };
+          }),
+      );
+    try {
+      await f.type("API key", "original-test-key");
+      await f.click("Connect");
+      await f.render("space", "replacement-space");
+      await f.type("API key", "replacement-test-key");
+      await f.click("Connect");
+      await act(async () => {
+        if (outcome === "resolve") oldFinish();
+        else oldFail();
+      });
+      expect(f.container.textContent).toContain("Connecting…");
+      expect(f.container.textContent).not.toContain("retired failure");
+      expect(labelledInput(f.container, "API key").value).toBe("replacement-test-key");
+      expect(
+        f.client.getQueryData(
+          spaceQueries(null, "replacement-space").voice.credentials.queryKey({
+            input: { scope: "space" },
+          }),
+        ),
+      ).toEqual([]);
+      await act(async () => newFinish());
+      expect(
+        f.client.getQueryData(
+          spaceQueries(null, "replacement-space").voice.credentials.queryKey({
+            input: { scope: "space" },
+          }),
+        ),
+      ).toEqual([replacement]);
+    } finally {
+      await f.dispose();
+    }
+  },
+);
+
+it("keeps confirmed state unchanged when the actual connect fails", async () => {
+  const f = await confirmedVoiceFixture();
+  voice.connect.mockRejectedValueOnce(new Error("write rejected"));
+  try {
+    await f.type("API key", "synthetic-test-key");
+    await f.click("Connect");
+    expect(f.container.textContent).toContain("write rejected");
+    expect(f.container.textContent).not.toContain("Disconnect");
+    expect(
+      f.client.getQueryData(
+        spaceQueries(null, null).voice.credentials.queryKey({ input: { scope: "account" } }),
+      ),
+    ).toEqual([]);
+    expect(voice.credentials).toHaveBeenCalledTimes(1);
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("does not start a voice-settings preview when a call claims the speaker before admission", async () => {
+  const f = await confirmedVoiceFixture(true);
+  try {
+    // Retire admission after rendering an enabled control, before its event is handled.
+    playback.allowed = false;
+    await f.click("Hear a sample");
+    expect(speak).not.toHaveBeenCalled();
+    expect(f.container.textContent).not.toContain("voice is ready");
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("does not report preview success when a call claims the speaker during preparation", async () => {
+  const f = await confirmedVoiceFixture(true);
+  let finish!: () => void;
+  speak.mockImplementationOnce(
+    () =>
+      new Promise<undefined>((resolve) => {
+        finish = () => resolve(undefined);
+      }),
+  );
+  try {
+    await f.click("Hear a sample");
+    await act(async () => {
+      playback.allowed = false;
+      for (const listener of playback.listeners) listener();
+      finish();
+    });
+    expect(f.container.textContent).not.toContain("voice is ready");
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("keeps a confirmed choice usable with an empty voices list", async () => {
+  const f = await confirmedVoiceFixture();
+  voice.voices.mockResolvedValue([]);
+  try {
+    await f.type("API key", "synthetic-test-key");
+    await f.click("Connect");
+    expect(f.container.textContent).toContain("Disconnect");
+    expect(
+      [...f.container.querySelectorAll("button")].find(
+        (item) => item.textContent === "Hear a sample",
+      )?.disabled,
+    ).toBe(false);
+    expect(
+      f.client.getQueryData(
+        spaceQueries(null, null).voice.credentials.queryKey({ input: { scope: "account" } }),
+      ),
+    ).toEqual([f.saved]);
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("does not change confirmed cache or start a refresh when the actual voice save fails", async () => {
+  const f = await confirmedVoiceFixture(true);
+  voice.setVoice.mockRejectedValueOnce(new Error("write rejected"));
+  try {
+    const before = f.client.getQueryData(
+      spaceQueries(null, null).voice.status.queryKey({ input: { scope: "account" } }),
+    );
+    await act(async () => {
+      const select = f.container.querySelectorAll("select")[1]!;
+      select.value = "voice-2";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(f.container.textContent).toContain("write rejected");
+    expect(
+      f.client.getQueryData(
+        spaceQueries(null, null).voice.credentials.queryKey({ input: { scope: "account" } }),
+      ),
+    ).toEqual([f.saved]);
+    expect(
+      f.client.getQueryData(
+        spaceQueries(null, null).voice.status.queryKey({ input: { scope: "account" } }),
+      ),
+    ).toEqual(before);
+    expect(voice.credentials).toHaveBeenCalledTimes(1);
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("does not let a cached read sent before reconnect replace the acknowledged credential", async () => {
+  const f = await confirmedVoiceFixture(true);
+  let oldRead!: () => void;
+  const old = f.saved;
+  const acknowledged = { ...old, voiceId: "voice-2", speechModel: "acknowledged" };
+  voice.credentials.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        oldRead = () => resolve([old]);
+      }),
+  );
+  voice.connect.mockImplementationOnce(async () => {
+    f.server.saved = acknowledged;
+    return acknowledged;
+  });
+  try {
+    // Start an equivalent scoped read before saving; writeSaved must cancel its cache publication.
+    const options = spaceQueries(null, null).voice.credentials.queryOptions({
+      input: { scope: "account" },
+      staleTime: 0,
+    });
+    const pending = f.client.fetchQuery(options).catch(() => undefined);
+    await act(async () => Promise.resolve());
+    await f.type("API key", "synthetic-test-key");
+    await f.click("Replace key");
+    await act(async () => oldRead());
+    await pending;
+    expect(f.client.getQueryData(options.queryKey)).toEqual([acknowledged]);
+    expect(f.container.querySelectorAll<HTMLSelectElement>("select")[1]?.value).toBe("voice-2");
+  } finally {
+    await f.dispose();
+  }
+});
+
+it.each(["resolve", "reject"] as const)(
+  "retires the old speech-model deduplication value across Space change and ignores its late %s",
+  async (outcome) => {
+    const f = await confirmedVoiceFixture(true, fish.provider);
+    const saved = { ...f.saved, speechModel: "next" };
+    let oldFinish!: () => void;
+    let oldFail!: () => void;
+    let newFinish: (() => void) | undefined;
+    voice.setSpeechModel
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            oldFinish = () => resolve(saved);
+            oldFail = () => reject(new Error("retired model failure"));
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            newFinish = () => {
+              f.server.saved = saved;
+              resolve(saved);
+            };
+          }),
+      );
+    const blur = async () => {
+      await act(async () => {
+        const input = labelledInput(f.container, "Speech model");
+        input.focus();
+        input.blur();
+      });
+    };
+    try {
+      await f.type("Speech model", "next");
+      await blur();
+      await f.render("space", "replacement-space");
+      await f.type("Speech model", "next");
+      await blur();
+      expect(voice.setSpeechModel).toHaveBeenCalledTimes(2);
+      await act(async () => {
+        if (outcome === "resolve") oldFinish();
+        else oldFail();
+      });
+      expect(labelledInput(f.container, "Speech model").disabled).toBe(true);
+      expect(f.container.textContent).not.toContain("retired model failure");
+      await act(async () => newFinish?.());
+      expect(labelledInput(f.container, "Speech model").disabled).toBe(false);
+      expect(
+        f.client.getQueryData(
+          spaceQueries(null, "replacement-space").voice.credentials.queryKey({
+            input: { scope: "space" },
+          }),
+        ),
+      ).toEqual([saved]);
+    } finally {
+      await act(async () => {
+        oldFinish?.();
+        newFinish?.();
+      });
+      await f.dispose();
+    }
+  },
+);
+
+it("keeps a confirmed connection when a structured503 refresh becomes the standard offline message", async () => {
+  const f = await confirmedVoiceFixture();
+  voice.credentials.mockRejectedValueOnce(
+    Object.assign(new Error("Could not load voice settings"), {
+      code: "SERVICE_UNAVAILABLE",
+      status: 503,
+    }),
+  );
+  try {
+    await f.type("API key", "synthetic-test-key");
+    await f.click("Connect");
+    expect(f.container.textContent).toContain("Could not reach the server");
+    expect(f.container.textContent).toContain("Disconnect");
+    expect(
+      f.client.getQueryData(
+        spaceQueries(null, null).voice.credentials.queryKey({ input: { scope: "account" } }),
+      ),
+    ).toEqual([f.saved]);
+  } finally {
+    await f.dispose();
+  }
+});
+
+it("keeps a same-session cached reopen readable through StrictMode replay and query retry", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.useFakeTimers();
+  session.generation = 0;
+  session.server = "fixture-one";
+  playback.allowed = true;
+  const saved = {
+    id: "strict-confirmed",
+    provider: "fixture-speech",
+    hasKey: true,
+    isDefault: true,
+    voiceId: "voice-1",
+    speechModel: "",
+    transcribe: true,
+    endpoint: "",
+    ttsModel: "",
+    sttModel: "",
+  };
+  for (const mock of Object.values(voice)) mock.mockReset();
+  voice.catalog.mockResolvedValue([
+    { id: saved.provider, name: "Speech", description: "", transcribe: true },
+  ]);
+  voice.credentials.mockResolvedValue([saved]);
+  voice.status.mockResolvedValue({
+    configured: true,
+    ready: true,
+    transcribe: true,
+    provider: saved.provider,
+    voiceId: saved.voiceId,
+  });
+  voice.voices.mockResolvedValue([{ id: "voice-1", label: "First" }]);
+  // Exercise the renderer's actual retry behavior, not withQueries' retry:false fixture.
+  const client = new QueryClient({ defaultOptions: { queries: { retry: 1, retryDelay: 0 } } });
+  const container = document.createElement("div");
+  document.body.append(container);
+  let root = createRoot(container);
+  const settings = (
+    <QueryClientProvider client={client}>
+      <VoiceSettingsOverlay embedded scope="account" onClose={() => undefined} />
+    </QueryClientProvider>
+  );
+  try {
+    await act(async () => root.render(settings));
+    expect(container.textContent).toContain("Disconnect");
+    await act(async () => root.unmount());
+    voice.credentials.mockRejectedValue(
+      Object.assign(new Error("Could not load voice settings"), {
+        code: "SERVICE_UNAVAILABLE",
+        status: 503,
+      }),
+    );
+    root = createRoot(container);
+    await act(async () => root.render(<StrictMode>{settings}</StrictMode>));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(container.textContent).toContain("Could not reach the server");
+    expect(container.textContent).not.toContain("Session changed");
+    expect(container.textContent).toContain("Disconnect");
+    expect(
+      [...container.querySelectorAll("button")].find((item) => item.textContent === "Hear a sample")
+        ?.disabled,
+    ).toBe(false);
+    expect(voice.credentials).toHaveBeenCalledTimes(3);
+  } finally {
+    await act(async () => root.unmount());
+    client.clear();
+    container.remove();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  }
+});

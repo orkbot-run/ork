@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
-import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import type { VoiceCredential } from "@orkbot/contracts";
+import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
 test("changing language updates settings overflow without resizing", async ({ page }, testInfo) => {
@@ -255,4 +256,64 @@ test("Honcho memory settings empty and filled", async ({ page }, testInfo) => {
   await documents.scrollIntoViewIfNeeded();
   await expect(documents).toBeVisible();
   await captureScreenshot(page, testInfo, "memory-dark-bottom");
+});
+
+test("voice settings keep a confirmed connection when the later credentials refresh fails", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `voice-refresh-${Date.now()}@orkbot.test`, "password12", "Voice settings");
+  await completeOnboarding(page);
+  const settings = await openUserSettings(page, "voice");
+  const panel = settings.getByTestId("voice-settings");
+  await panel.getByLabel("Provider", { exact: true }).selectOption("scripted");
+  await panel.getByLabel("API key", { exact: true }).fill("synthetic-voice-test-key");
+
+  let saved = false;
+  await page.route("**/rpc/voice/connect", async (route) => {
+    const response = await route.fetch();
+    saved = response.ok();
+    await route.fulfill({ response });
+  });
+  await page.route("**/rpc/voice/credentials", (route) =>
+    saved
+      ? route.fulfill({
+          status: 503,
+          json: {
+            json: {
+              defined: false,
+              code: "SERVICE_UNAVAILABLE",
+              status: 503,
+              message: "Could not load voice settings",
+            },
+          },
+        })
+      : route.continue(),
+  );
+  const connected = page.waitForResponse(
+    (response) => response.url().includes("/rpc/voice/connect") && response.ok(),
+  );
+  const failedRefresh = page.waitForResponse(
+    (response) => response.url().includes("/rpc/voice/credentials") && response.status() === 503,
+  );
+  await panel.getByRole("button", { name: "Connect", exact: true }).click();
+  const { json: confirmed } = (await (await connected).json()) as { json: VoiceCredential };
+  await failedRefresh;
+  expect(confirmed.provider).toBe("scripted");
+  expect(confirmed.voiceId).not.toBe("");
+  await expect(panel.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Hear a sample", exact: true })).toBeEnabled();
+  await expect(panel.getByLabel("API key", { exact: true })).toHaveValue("");
+  await expect(panel.getByText("Could not reach the server", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "voice-settings-saved-refresh-failed");
+
+  await page.getByRole("button", { name: "Close voice settings", exact: true }).click();
+  await expect(settings).toHaveCount(0);
+  const reopened = (await openUserSettings(page, "voice")).getByTestId("voice-settings");
+  await expect(reopened.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
+  await expect(reopened.getByRole("button", { name: "Hear a sample", exact: true })).toBeEnabled();
+  await expect(reopened.getByText("Could not reach the server", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "voice-settings-confirmed-revisit");
+  await page.unroute("**/rpc/voice/credentials");
+  const credentials = await rpc<VoiceCredential[]>(page, "voice/credentials", { scope: "account" });
+  expect(credentials).toContainEqual(confirmed);
 });
