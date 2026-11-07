@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 GraphQL import is preserved; input nullability and validation follow LICENSE.md.
 
+import { cancelResponseBody } from "@orkbot/core";
 import { Check } from "typebox/value";
 import { z } from "zod";
 import {
@@ -422,9 +423,15 @@ async function introspectGraphqlEndpoint(
       body: JSON.stringify({ query: INTROSPECTION_QUERY, operationName: "OrkIntrospection" }),
       signal: combineSignals(signal, AbortSignal.timeout(15_000)),
     });
-    if (!response.ok) throw new Error(`GraphQL introspection returned HTTP ${response.status}`);
+    if (!response.ok) {
+      cancelResponseBody(response);
+      throw new Error(`GraphQL introspection returned HTTP ${response.status}`);
+    }
     const size = Number(response.headers.get("content-length") ?? 0);
-    if (size > 2_000_000) throw new Error("GraphQL introspection response is too large");
+    if (size > 2_000_000) {
+      cancelResponseBody(response);
+      throw new Error("GraphQL introspection response is too large");
+    }
     const { text, truncated } = await readBoundedText(response, 2_000_000);
     if (truncated) throw new Error("GraphQL introspection response is too large");
     const payload = JSON.parse(text) as Record<string, unknown>;
