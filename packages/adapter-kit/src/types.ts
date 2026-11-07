@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Modified by Ork contributors for coordinated OAuth refreshes and neutral model routing. See LICENSE.md.
+// Modified by Ork contributors for coordinated OAuth refreshes, neutral model routing and protocol validation. See LICENSE.md.
 
 import type {
   BillingCancellationReason,
@@ -270,6 +270,8 @@ export interface ConnectorTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
+  /** Pure protocol validation before runtime coercion. Never exposed to the model. */
+  validateArguments?: (args: unknown) => void;
   /** Declared effect. `false` forces approval; `true` never relaxes the name-based gate. */
   readOnly?: boolean;
   /** Set when the tool runs other actions named in its arguments; see ToolBatch. */

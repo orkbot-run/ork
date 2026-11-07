@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 GraphQL import is preserved; input nullability and validation follow LICENSE.md.
+
+import { Check } from "typebox/value";
 import { z } from "zod";
 import {
   AuthSchema,
@@ -15,6 +20,9 @@ import { assertSafeRemoteUrl, createSafeRemoteFetch } from "./remote-mcp.js";
 const MAX_GRAPHQL_SELECTION_CHARS = 6_000;
 const MAX_GRAPHQL_RESULT_BYTES = 1_000_000;
 const MAX_GRAPHQL_VALIDATION_BYTES = 2_000_000;
+const INVALID_INPUT = "GraphQL schema has an invalid input definition.";
+const BUILTIN_INPUT_SCALARS = new Set(["String", "ID", "Int", "Float", "Boolean"]);
+const MAX_INPUT_WRAPPERS = 8;
 
 export const GraphqlOperationSchema = z.object({
   id: z.string().min(1).max(160),
@@ -22,6 +30,7 @@ export const GraphqlOperationSchema = z.object({
   description: z.string().max(2_000).optional(),
   operationType: z.enum(["query", "mutation"]),
   fieldName: z.string().min(1).max(160),
+  inputSemanticsVersion: z.literal(1).optional(),
   variableTypes: z.record(z.string(), z.string().min(1).max(200)).default({}),
   inputSchema: z.record(z.string(), z.unknown()).default({
     type: "object",
@@ -176,6 +185,7 @@ export function importGraphqlSchema(document: Record<string, unknown>): GraphqlO
 
   const queries: GraphqlOperation[] = [];
   const mutations: GraphqlOperation[] = [];
+  const checkedInputs = new Set<string>();
   const roots: Array<{
     operationType: "query" | "mutation";
     typeName: string | undefined;
@@ -203,6 +213,7 @@ export function importGraphqlSchema(document: Record<string, unknown>): GraphqlO
       const required: string[] = [];
       const variableTypes: Record<string, string> = {};
       for (const arg of field.args ?? []) {
+        assertInputDefinition(arg, typeMap, checkedInputs);
         if (!arg.name) continue;
         variableTypes[arg.name] = printGraphqlType(
           isNonNull(arg.type) && arg.defaultValue != null
@@ -222,6 +233,7 @@ export function importGraphqlSchema(document: Record<string, unknown>): GraphqlO
         description: field.description ?? `${root.operationType} ${field.name}`,
         operationType: root.operationType,
         fieldName: field.name,
+        inputSemanticsVersion: 1,
         variableTypes,
         inputSchema: {
           type: "object",
@@ -264,6 +276,7 @@ export async function executeGraphqlOperation(
   signal: AbortSignal,
   remote: RemoteGraphqlDependencies = {},
 ): Promise<unknown> {
+  validateGraphqlArguments(operation, args);
   assertNoSensitiveQuery(endpoint);
   const url = new URL(endpoint);
   const headers: Record<string, string> = {
@@ -344,6 +357,55 @@ export async function executeGraphqlOperation(
   } finally {
     await safeFetch.close().catch(() => undefined);
   }
+}
+
+/** Reject forbidden nulls before an SDK can erase them or coerce them to strings. */
+export function validateGraphqlArguments(operation: GraphqlOperation, args: unknown): void {
+  // Older stored projections omitted nullable information, including the difference between
+  // nullable inputs and defaulted NON_NULL inputs. Only a fresh import can establish it.
+  if (operation.inputSemanticsVersion !== 1) return;
+  if (!Check(inputNullability(operation.inputSchema), args)) {
+    throw new Error("GraphQL arguments contain an invalid null value.");
+  }
+}
+
+function inputNullability(schema: Record<string, unknown>): Record<string, unknown> {
+  // The runtime still owns scalar/list coercion and required-field validation. This projection
+  // keeps only null constraints, including nested input fields and independent list items.
+  if (schema.type === "null") return { type: "null" };
+  const result: Record<string, unknown> = {};
+  if (Array.isArray(schema.anyOf)) {
+    result.anyOf = schema.anyOf.map((branch) => inputNullability(asRecord(branch) ?? {}));
+  } else if (
+    (typeof schema.type === "string" && schema.type !== "null") ||
+    (Array.isArray(schema.enum) && !schema.enum.includes(null))
+  ) {
+    result.not = { type: "null" };
+  }
+  const properties = asRecord(schema.properties);
+  if (properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(properties).map(([name, property]) => [
+        name,
+        inputNullability(asRecord(property) ?? {}),
+      ]),
+    );
+  }
+  const items = asRecord(schema.items);
+  if (items) {
+    const itemNullability = inputNullability(items);
+    // Pi also wraps a scalar or input object into a singleton list. Validate that raw item
+    // before its nested optional nulls can be erased, without performing the coercion here.
+    result.allOf = [
+      {
+        anyOf: [
+          { type: "array", items: itemNullability },
+          { not: { type: "array" }, allOf: [itemNullability] },
+        ],
+      },
+    ];
+  }
+  return result;
 }
 
 async function introspectGraphqlEndpoint(
@@ -451,10 +513,19 @@ function graphqlTypeToJsonSchema(
   typeMap: Map<string, GqlType>,
   depth: number,
 ): Record<string, unknown> {
-  if (!type) return {};
+  if (!type) throw new Error(INVALID_INPUT);
   if (type.kind === "NON_NULL") {
-    return graphqlTypeToJsonSchema(type.ofType ?? undefined, typeMap, depth);
+    return graphqlNonNullTypeToJsonSchema(type.ofType ?? undefined, typeMap, depth);
   }
+  return { anyOf: [graphqlNonNullTypeToJsonSchema(type, typeMap, depth), { type: "null" }] };
+}
+
+function graphqlNonNullTypeToJsonSchema(
+  type: GqlTypeRef | undefined,
+  typeMap: Map<string, GqlType>,
+  depth: number,
+): Record<string, unknown> {
+  if (!type) throw new Error(INVALID_INPUT);
   if (type.kind === "LIST") {
     return {
       type: "array",
@@ -480,10 +551,11 @@ function graphqlTypeToJsonSchema(
       .filter((name): name is string => Boolean(name));
     return values.length > 0 ? { type: "string", enum: values } : { type: "string" };
   }
-  if ((type.kind === "INPUT_OBJECT" || type.kind === "OBJECT") && type.name && depth < 2) {
+  if (type.kind === "INPUT_OBJECT" && type.name) {
+    if (depth >= 2) return { type: "object" };
     const resolved = typeMap.get(type.name);
-    const fields = resolved?.inputFields ?? resolved?.fields ?? [];
-    const properties: Record<string, unknown> = {};
+    const fields = resolved?.inputFields ?? [];
+    const properties: Record<string, unknown> = Object.create(null);
     const required: string[] = [];
     for (const field of fields) {
       if (!field.name) continue;
@@ -500,7 +572,68 @@ function graphqlTypeToJsonSchema(
       ...(required.length > 0 ? { required } : {}),
     };
   }
-  return { type: "object" };
+  throw new Error(INVALID_INPUT);
+}
+
+function inputName(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^[_A-Za-z][_0-9A-Za-z]*$/.test(value) && !value.startsWith("__")
+  );
+}
+
+function assertInputDefinition(
+  arg: GqlArg,
+  types: Map<string, GqlType>,
+  checked: Set<string>,
+): void {
+  if (!arg || !inputName(arg.name)) throw new Error(INVALID_INPUT);
+  if (
+    arg.defaultValue != null &&
+    (typeof arg.defaultValue !== "string" ||
+      !arg.defaultValue.trim() ||
+      (isNonNull(arg.type) && arg.defaultValue.trim() === "null"))
+  )
+    throw new Error(INVALID_INPUT);
+  assertInputType(arg.type, types, checked);
+}
+
+/** Validate references even below the bounded schema projection, without expanding named cycles. */
+function assertInputType(
+  type: GqlTypeRef | undefined,
+  types: Map<string, GqlType>,
+  checked: Set<string>,
+  wrappers = 0,
+): void {
+  if (!type || wrappers > MAX_INPUT_WRAPPERS) throw new Error(INVALID_INPUT);
+  if (type.kind === "NON_NULL" || type.kind === "LIST") {
+    if (!type.ofType || (type.kind === "NON_NULL" && type.ofType.kind === "NON_NULL"))
+      throw new Error(INVALID_INPUT);
+    assertInputType(type.ofType, types, checked, wrappers + 1);
+    return;
+  }
+  if (!inputName(type.name)) throw new Error(INVALID_INPUT);
+  const declared = types.get(type.name);
+  if (
+    type.kind === "SCALAR" &&
+    (declared ? declared.kind === "SCALAR" : BUILTIN_INPUT_SCALARS.has(type.name))
+  )
+    return;
+  if (
+    type.kind === "ENUM" &&
+    declared?.kind === "ENUM" &&
+    declared.enumValues?.length &&
+    declared.enumValues.every((value) => inputName(value?.name))
+  )
+    return;
+  if (
+    type.kind !== "INPUT_OBJECT" ||
+    declared?.kind !== "INPUT_OBJECT" ||
+    !declared.inputFields?.length
+  )
+    throw new Error(INVALID_INPUT);
+  if (checked.has(type.name)) return;
+  checked.add(type.name);
+  for (const field of declared.inputFields) assertInputDefinition(field, types, checked);
 }
 
 function printGraphqlType(type: GqlTypeRef | undefined): string {

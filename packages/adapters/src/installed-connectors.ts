@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 connector import is preserved; safe parameter descriptions follow LICENSE.md.
+// Inherited Apache-2.0 connector import is preserved; parameter descriptions and protocol validation follow LICENSE.md.
 
 import { isDeepStrictEqual } from "node:util";
 import type {
@@ -32,7 +32,11 @@ import {
   redactConnectorPayload,
   sanitizeConnectorError,
 } from "./connector-safety.js";
-import { executeGraphqlOperation, GraphqlConfigSchema } from "./graphql-connectors.js";
+import {
+  executeGraphqlOperation,
+  GraphqlConfigSchema,
+  validateGraphqlArguments,
+} from "./graphql-connectors.js";
 import {
   CATALOG_EXECUTE,
   catalogEntries,
@@ -264,6 +268,7 @@ export class InstalledConnectorProvider implements ConnectorProvider {
           ),
           inputSchema: operation.inputSchema,
           readOnly: operation.readOnly && operation.operationType === "query",
+          validateArguments: (args: unknown) => validateGraphqlArguments(operation, args),
           route: {
             connectorId: "installed",
             resourceId: install.id,

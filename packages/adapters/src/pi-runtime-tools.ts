@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 runtime tools are preserved. History argument handling is an Ork addition.
+// Inherited Apache-2.0 runtime tools are preserved. History and protocol argument handling are Ork additions.
 
 import type { Agent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
@@ -458,6 +458,7 @@ function toAgentTool(
       : {}),
     parameters: parametersFor(tool),
     prepareArguments: (args: unknown) => {
+      tool.validateArguments?.(args);
       const raw = args && typeof args === "object" ? (args as Record<string, unknown>) : {};
       if (tool.name === "search_history" || tool.name === "read_history") {
         const parsed = (
