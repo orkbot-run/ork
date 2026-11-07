@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache retry classification is preserved; bounded conflict backoff is an Ork addition.
+
 const MAX_TRANSACTION_ATTEMPTS = 3;
 const RETRYABLE_DATABASE_CODES = new Set(["40001", "40P01"]);
 
@@ -31,6 +35,11 @@ export async function withTransactionRetry<T>(operation: () => Promise<T>): Prom
       if (!isRetryableTransactionConflict(error) || attempt >= MAX_TRANSACTION_ATTEMPTS) {
         throw error;
       }
+      // The failed transaction has rolled back. Give competing commits time to finish before
+      // taking another snapshot, with jitter so unrelated callers do not retry in lockstep.
+      const minimumMs = attempt === 1 ? 25 : 75;
+      const delayMs = minimumMs + Math.floor(Math.random() * (minimumMs + 1));
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }
   }
 }

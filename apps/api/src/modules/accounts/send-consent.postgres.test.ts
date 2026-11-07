@@ -27,6 +27,38 @@ const createHandler = (deps: RouterDeps) =>
   new RPCHandler(createRouter(deps), {
     clientInterceptors: [onError((error, { path }) => handleRpcError(error, path))],
   });
+function observeTransactionQueries(
+  prisma: PrismaClient,
+  observe: (statement: string, execute: () => Promise<unknown>) => Promise<unknown>,
+): PrismaClient {
+  return new Proxy(prisma, {
+    get(client, property) {
+      if (property !== "$transaction") return Reflect.get(client, property);
+      return (
+        work: (tx: Prisma.TransactionClient) => Promise<unknown>,
+        options?: Parameters<PrismaClient["$transaction"]>[1],
+      ) =>
+        client.$transaction(
+          (tx) =>
+            work(
+              new Proxy(tx, {
+                get(transaction, method) {
+                  const original = Reflect.get(transaction, method);
+                  if (method !== "$queryRaw") return original;
+                  return (...query: [Prisma.Sql | TemplateStringsArray, ...unknown[]]) => {
+                    const sql = query[0];
+                    const statement = "strings" in sql ? sql.strings.join("") : sql.join("");
+                    return observe(statement, () => Reflect.apply(original, transaction, query));
+                  };
+                },
+              }),
+            ),
+          options,
+        );
+    },
+  });
+}
+
 const url = process.env.DATABASE_URL;
 const postgres = process.env.VERIFY_DATABASE && url ? describe.sequential : describe.skip;
 postgres("send consent acceptance (PostgreSQL)", () => {
@@ -415,45 +447,17 @@ postgres("send consent acceptance (PostgreSQL)", () => {
         prepareSendAiConsent(deps, actor, { groupId: group.id }),
       );
       let attempts = 0;
-      const conflicting = new Proxy(deps.prisma, {
-        get(client, property) {
-          if (property !== "$transaction") return Reflect.get(client, property);
-          return (
-            work: (tx: Prisma.TransactionClient) => Promise<unknown>,
-            options?: Parameters<PrismaClient["$transaction"]>[1],
-          ) =>
-            client.$transaction(
-              (tx) =>
-                work(
-                  new Proxy(tx, {
-                    get(transaction, method) {
-                      const original = Reflect.get(transaction, method);
-                      if (method !== "$queryRaw") return original;
-                      return async (
-                        ...query: [Prisma.Sql | TemplateStringsArray, ...unknown[]]
-                      ) => {
-                        const sql = query[0];
-                        const statement = "strings" in sql ? sql.strings.join("") : sql.join("");
-                        if (
-                          statement.includes("FROM threads WHERE id =") &&
-                          statement.includes("FOR UPDATE")
-                        ) {
-                          attempts += 1;
-                          // The Space lock establishes a snapshot before the thread row lock.
-                          if (attempts <= conflicts)
-                            await prisma.thread.update({
-                              where: { id: group.thread!.id },
-                              data: { unread: attempts % 2 === 1 },
-                            });
-                        }
-                        return Reflect.apply(original, transaction, query);
-                      };
-                    },
-                  }),
-                ),
-              options,
-            );
-        },
+      const conflicting = observeTransactionQueries(deps.prisma, async (statement, execute) => {
+        if (statement.includes("FROM threads WHERE id =") && statement.includes("FOR UPDATE")) {
+          attempts += 1;
+          // The Space lock establishes a snapshot before the thread row lock.
+          if (attempts <= conflicts)
+            await prisma.thread.update({
+              where: { id: group.thread!.id },
+              data: { unread: attempts % 2 === 1 },
+            });
+        }
+        return execute();
       });
       const sending = runAsTenant(actor, () =>
         sendThreadMessage(
@@ -491,6 +495,89 @@ postgres("send consent acceptance (PostgreSQL)", () => {
       }
     },
   );
+  it("accepts a group send during a finite burst of real worker event writes", async () => {
+    const group = await prisma.chatGroup.create({
+      data: {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        name: "Busy worker group",
+        members: { create: [{ botId }, { botId: routineBotId }] },
+        thread: { create: { spaceId: actor.spaceId, userId: actor.userId } },
+      },
+      include: { thread: true },
+    });
+    await grant(threadRecipient.key);
+    const target = await runAsTenant(actor, () =>
+      resolveThreadTarget(deps.prisma, actor, { groupId: group.id }),
+    );
+    const preflight = await runAsTenant(actor, () =>
+      prepareSendAiConsent(deps, actor, { groupId: group.id }),
+    );
+    let begin!: () => void;
+    const beginning = new Promise<void>((resolve) => {
+      begin = resolve;
+    });
+    let committed!: () => void;
+    const firstCommit = new Promise<void>((resolve) => {
+      committed = resolve;
+    });
+    const workerEvents = createThreadEvents(prisma);
+    const workers = Promise.all(
+      Array.from({ length: 4 }, async (_, worker) => {
+        await beginning;
+        for (let event = 0; event < 12; event += 1) {
+          await workerEvents.append({
+            spaceId: actor.spaceId,
+            threadId: group.thread!.id,
+            botId,
+            type: "agent.tool.called",
+            payload: { name: "fixture", executionId: `${worker}:${event}` },
+          });
+          committed();
+        }
+      }),
+    );
+    let attempts = 0;
+    const failedQueries: string[] = [];
+    const observed = observeTransactionQueries(deps.prisma, async (statement, execute) => {
+      if (statement.includes("FROM threads WHERE id =") && statement.includes("FOR UPDATE")) {
+        attempts += 1;
+        if (attempts === 1) {
+          begin();
+          await firstCommit;
+        }
+      }
+      try {
+        return await execute();
+      } catch (error) {
+        failedQueries.push(statement.trim());
+        throw error;
+      }
+    });
+    const error = await runAsTenant(actor, () =>
+      sendThreadMessage({ ...deps, prisma: observed, consentPreflight: preflight }, actor, target, {
+        text: "Send while workers publish",
+        clientNonce: randomUUID(),
+      }),
+    ).then(
+      () => undefined,
+      (failure: unknown) => failure,
+    );
+    await workers;
+    expect(error, JSON.stringify({ attempts, failedQueries })).toBeUndefined();
+    expect(attempts).toBeGreaterThanOrEqual(2);
+    expect(attempts).toBeLessThanOrEqual(3);
+    expect(failedQueries[0]).toContain("FROM threads WHERE id =");
+    expect(
+      await prisma.event.count({
+        where: { threadId: group.thread!.id, type: "agent.tool.called" },
+      }),
+    ).toBe(48);
+    expect(
+      await prisma.message.count({ where: { threadId: group.thread!.id, role: "user" } }),
+    ).toBe(1);
+    expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(2);
+  });
   it("rejects a changed encrypted endpoint before any acceptance without loading a provider under the lock", async () => {
     await prisma.secret.create({
       data: {
