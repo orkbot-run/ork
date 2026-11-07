@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; explicit fixture consent follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -6,6 +10,7 @@ import { ComposioConnector, FakeComposioClient } from "@orkbot/adapters";
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
+import { allowFixtureAiDataSharing } from "./fixture-ai-consent.js";
 import { sessionCookieHeader } from "./index.js";
 import type { ModelEmulatorRequest } from "./model-emulator.js";
 import { startModelEmulator } from "./model-emulator.js";
@@ -274,6 +279,7 @@ describe.skipIf(!enabled)("history retrieval through executor", () => {
         modelProvider: model.model.provider,
         modelId: model.model.id,
       });
+      await allowFixtureAiDataSharing(handles.app, cookie, { botId: bot.id });
       const thread = await db.thread.findFirstOrThrow({ where: { botId: bot.id } });
       await db.$transaction(async (tx) => {
         await tx.message.create({
@@ -361,6 +367,7 @@ describe.skipIf(!enabled)("history retrieval through executor", () => {
         name: "History group",
         botIds: [bot.id, peer.id],
       });
+      await allowFixtureAiDataSharing(handles.app, cookie, { groupId: group.id });
       const groupThread = await db.thread.findUniqueOrThrow({
         where: { id: group.threadId },
       });

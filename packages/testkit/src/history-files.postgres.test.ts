@@ -1,5 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; explicit fixture consent follows LICENSE.md.
 
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -8,6 +10,7 @@ import path from "node:path";
 import { ComposioConnector, FakeComposioClient } from "@orkbot/adapters";
 import { describe, expect, it } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
+import { allowFixtureAiDataSharing } from "./fixture-ai-consent.js";
 import { sessionCookieHeader } from "./index.js";
 import type { ModelEmulatorRequest } from "./model-emulator.js";
 import { startModelEmulator } from "./model-emulator.js";
@@ -129,6 +132,7 @@ describe.skipIf(!enabled)("earlier files through history tools", () => {
         modelProvider: model.model.provider,
         modelId: model.model.id,
       });
+      await allowFixtureAiDataSharing(handles.app, cookie, { botId: bot.id });
       const upload = (name: string, content: string) =>
         rpc<{ id: string; name: string; mimeType: string; size: number }>("artifacts/create", {
           botId: bot.id,

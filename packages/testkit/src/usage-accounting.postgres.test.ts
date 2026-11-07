@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; explicit fixture consent follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -8,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import { runAutoReviewJudge } from "../../adapters/src/auto-review.js";
 import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
+import { allowFixtureAiDataSharing } from "./fixture-ai-consent.js";
 import { sessionCookieHeader } from "./index.js";
 import { startModelEmulator } from "./model-emulator.js";
 import { asSystem } from "./system-db.js";
@@ -148,6 +153,7 @@ describe.skipIf(!enabled)("persisted Pi usage accounting", () => {
         modelProvider: model.model.provider,
         modelId: model.model.id,
       });
+      await allowFixtureAiDataSharing(handles.app, cookie, { botId: bot.id });
       const connectedThread = await db.thread.findFirstOrThrow({
         where: { botId: bot.id },
       });

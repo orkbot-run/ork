@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; explicit fixture consent follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type { AgentRuntime, JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
 import { runJobKey } from "@orkbot/adapter-kit";
@@ -11,6 +15,7 @@ import { ACTIVE_RUN_STATUSES, attachmentComputerPath, isTerminal } from "@orkbot
 import type { createDb } from "@orkbot/db";
 import { createThreadEvents } from "@orkbot/db";
 import { discardBotIntroRun } from "../discard-bot-intro.js";
+import { allowFixtureAiDataSharing } from "../fixture-ai-consent.js";
 import { sessionCookieHeader } from "../index.js";
 import { asSystem } from "../system-db.js";
 import type { EvalCase, Evidence, SettingsSnapshot } from "./cases.js";
@@ -280,6 +285,7 @@ export async function runTrial(
         });
         group = { ...created, memberIds };
       }
+      await allowFixtureAiDataSharing(app, cookie, group ? { groupId: group.id } : { botId });
       messagingLinked = false;
       messagingAddress = `U-eval-${randomUUID()}`;
       messaging.resetWitnesses();
