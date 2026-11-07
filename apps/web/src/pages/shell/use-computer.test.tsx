@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { SCREEN_RECONNECT_STABLE_MS } from "@orkbot/core";
@@ -376,7 +380,7 @@ it("closes the computer view on Escape, but not on the Escape that ends an IME c
       activeBotId: { current: undefined },
       activeGroupId: { current: undefined },
       runStatus: undefined,
-      sandboxProvider: undefined,
+      computerCapabilities: undefined,
       refreshThread: vi.fn(),
       refreshGroupThread: vi.fn(),
     });

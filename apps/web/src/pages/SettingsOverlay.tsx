@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
 
 import { useLingui } from "@lingui/react/macro";
-import type { SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
+import type { ComputerCapabilities, Me, SpaceMemoryConfig, UsageSummary } from "@orkbot/contracts";
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web";
 import { ChevronLeft, ChevronRight, XIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,7 +11,7 @@ import { ApprovalRulesSettings } from "../components/ApprovalRulesSettings";
 import { computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { SETTINGS_CONTENT_WIDTH, SettingsGroup, SettingsRow } from "../components/SettingsRows";
 import { VaultSettings } from "../components/VaultSettings";
-import { canChooseOwnComputer } from "../lib/computer-sandbox";
+
 import { desktopBridge } from "../lib/desktop";
 import { useServerUpdates } from "../lib/server-updates";
 import { SpaceRpcProvider } from "../lib/space-rpc";
@@ -51,8 +51,9 @@ export function SettingsOverlay({
   onAccountImported,
   onImportAgent,
   billingEnabled = false,
-  sandboxProvider,
-  onSandboxProviderChange,
+  computerCapabilities,
+  canConfigureAccountComputers = false,
+  onComputerConfigurationChange,
   canConfigureComputers = false,
   messagingEnabled = false,
   paymentWalletProvider = null,
@@ -79,8 +80,9 @@ export function SettingsOverlay({
   onAccountImported?: () => Promise<void>;
   onImportAgent?: () => void;
   billingEnabled?: boolean;
-  sandboxProvider?: string | null;
-  onSandboxProviderChange?: (sandboxProvider: string) => void;
+  computerCapabilities?: ComputerCapabilities | null;
+  canConfigureAccountComputers?: boolean;
+  onComputerConfigurationChange?: (me: Me) => void;
   /** Admins choose where new computers run. */
   canConfigureComputers?: boolean;
   messagingEnabled?: boolean;
@@ -103,8 +105,8 @@ export function SettingsOverlay({
   const showComputer =
     canConfigureComputers ||
     keepComputerRecovery ||
-    computersAreUnavailable(sandboxProvider) ||
-    canChooseOwnComputer(sandboxProvider);
+    computersAreUnavailable(computerCapabilities) ||
+    canConfigureAccountComputers;
   const serverUpdates = useServerUpdates(requestedSection === "updates");
   const showUpdates =
     Boolean(desktopBridge()?.update) || serverUpdates.state.status?.available === true;
@@ -415,9 +417,10 @@ export function SettingsOverlay({
                   ) : null}
                   {section === "computer" && showComputer ? (
                     <ComputerSettingsPanel
-                      sandboxProvider={sandboxProvider}
-                      onSandboxProviderChange={(next) => {
-                        onSandboxProviderChange?.(next);
+                      computerCapabilities={computerCapabilities}
+                      canConfigureAccountComputers={canConfigureAccountComputers}
+                      onComputerConfigurationChange={(next) => {
+                        onComputerConfigurationChange?.(next);
                         holdComputerRecovery();
                       }}
                       onRecoveryDismissed={releaseComputerRecovery}

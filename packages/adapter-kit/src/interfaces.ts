@@ -2,7 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
 
-import type { ComputerSize } from "@orkbot/contracts";
+import type { ComputerCapabilities, ComputerSize } from "@orkbot/contracts";
+import type { ComputerCapabilityTarget } from "./computer-capabilities.js";
 import type {
   AdapterContext,
   AdapterDescriptor,
@@ -155,6 +156,8 @@ export interface SandboxProvider {
    * choice can depend on whose it is.
    */
   provisionKind?(homeKey?: string): Promise<ComputerRef["kind"]>;
+  /** Inspect configured targets without starting or contacting a computer. */
+  computerCapabilities?(input: ComputerCapabilityTarget): Promise<ComputerCapabilities>;
   /**
    * Read-only probe that never starts or resumes anything. Resolves true only when the provider
    * reports this exact reference running, and false only when it reports it not running or gone;

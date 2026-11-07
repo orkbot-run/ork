@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
@@ -22,7 +26,9 @@ vi.mock("@orkbot/ui-web", () => ({
   ),
 }));
 vi.mock("../../components/ComputersUnavailableHint", () => ({
-  ComputersUnavailableHint: () => null,
+  ComputersUnavailableHint: () => (
+    <div data-testid="computers-unavailable-hint">Computers unavailable</div>
+  ),
 }));
 
 import { ComputerPanel } from "./computer-panel";
@@ -48,6 +54,7 @@ function computer(state: ComputerStatus["state"]): ComputerStatus {
     busyBotName: null,
     canUpdate: false,
     terminalAvailable: false,
+    capabilities: { start: true, screen: true, control: true, terminal: false },
   };
 }
 
@@ -55,10 +62,12 @@ async function render(
   status: ComputerStatus | null,
   onOpen = vi.fn(),
   disk?: { cleaningUpDisk?: boolean; onCleanUpDisk: () => void; onDismissDiskWarning: () => void },
+  props: Partial<ComponentProps<typeof ComputerPanel>> = {},
 ) {
   await act(async () => {
     root.render(
       <ComputerPanel
+        computerCapabilities={{ start: true, screen: true, control: true, terminal: false }}
         bot={bot}
         computer={status}
         computerOpen={false}
@@ -73,6 +82,7 @@ async function render(
         onRecoveryDismissed={() => undefined}
         onOpen={onOpen}
         {...disk}
+        {...props}
       />,
     );
   });
@@ -154,4 +164,27 @@ it("shows no disk warning while the disk has room", async () => {
     onDismissDiskWarning: vi.fn(),
   });
   expect(container.querySelector('[data-testid="computer-disk-warning"]')).toBeNull();
+});
+
+it("shows computer recovery before the missing-screen state for a disabled target", async () => {
+  await render(
+    {
+      ...computer("stopped"),
+      capabilities: { start: false, screen: false, control: false, terminal: false },
+    },
+    vi.fn(),
+    undefined,
+    { showComputerRecoveryHint: true, showingRecoveryHint: true },
+  );
+  expect(container.querySelector('[data-testid="computers-unavailable-hint"]')).not.toBeNull();
+  expect(container.textContent).not.toContain("Screen unavailable");
+});
+
+it("shows the missing-screen state for an available headless target", async () => {
+  await render({
+    ...computer("running"),
+    capabilities: { start: true, screen: false, control: false, terminal: false },
+  });
+  expect(container.textContent).toContain("Screen unavailable");
+  expect(container.querySelector('[data-testid="computers-unavailable-hint"]')).toBeNull();
 });

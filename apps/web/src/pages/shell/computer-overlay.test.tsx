@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
@@ -56,10 +60,15 @@ function computer(state: ComputerStatus["state"]): ComputerStatus {
     busyBotName: null,
     canUpdate: false,
     terminalAvailable: false,
+    capabilities: { start: true, screen: true, control: true, terminal: false },
   };
 }
 
-async function render(state: ComputerStatus["state"], onStart = vi.fn()) {
+async function render(
+  state: ComputerStatus["state"],
+  onStart = vi.fn(),
+  props: Partial<ComponentProps<typeof ComputerOverlay>> = {},
+) {
   await act(async () => {
     root.render(
       <ComputerOverlay
@@ -85,6 +94,7 @@ async function render(state: ComputerStatus["state"], onStart = vi.fn()) {
         onRefreshTeaching={async () => undefined}
         onRefreshComputer={async () => undefined}
         onClose={() => undefined}
+        {...props}
       />,
     );
   });
@@ -121,4 +131,48 @@ it("offers Start for an asleep computer", async () => {
   await render("suspended");
   expect(container.textContent).toContain("Computer is asleep");
   expect(startButton()).toBeDefined();
+});
+
+it("keeps ordinary control unavailable on an older server without an explicit capability", async () => {
+  const status = computer("running");
+  delete status.capabilities;
+  status.screenAvailable = true;
+  await render("running", vi.fn(), { computer: status });
+  expect(
+    [...container.querySelectorAll("button")].some(
+      (button) => button.textContent === "Take control",
+    ),
+  ).toBe(false);
+});
+
+it("retains Release after control capability is withdrawn", async () => {
+  const onRelease = vi.fn(async () => undefined);
+  await render("running", vi.fn(), {
+    hasControl: true,
+    onRelease,
+    computer: {
+      ...computer("running"),
+      controlHolder: "user",
+      capabilities: { start: false, screen: false, control: false, terminal: false },
+    },
+  });
+  const release = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Release control",
+  );
+  expect(release).toBeDefined();
+  await act(async () => release?.click());
+  expect(onRelease).toHaveBeenCalledOnce();
+});
+
+it("disables Start for an explicitly disabled target without inferring from kind", async () => {
+  const onStart = vi.fn();
+  await render("stopped", onStart, {
+    computer: {
+      ...computer("stopped"),
+      capabilities: { start: false, screen: true, control: true, terminal: false },
+    },
+  });
+  expect(startButton()?.disabled).toBe(true);
+  await act(async () => startButton()?.click());
+  expect(onStart).not.toHaveBeenCalled();
 });

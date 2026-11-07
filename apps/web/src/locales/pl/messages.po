@@ -1657,8 +1657,8 @@ msgid "Computers are available. Reload or open a bot to continue."
 msgstr "Komputery są dostępne. Odśwież stronę lub otwórz bota, aby kontynuować."
 
 #: src/components/ComputersUnavailableHint.tsx
-msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after changing .env."
-msgstr "Komputery są wyłączone. Ustaw SANDBOX_PROVIDER=docker z SANDBOX_SUPERVISOR_TOKEN lub ustaw SANDBOX_PROVIDER na e2b, novita, daytona albo boat z odpowiednim kluczem API. Po zmianie .env odtwórz środowisko."
+msgid "Computers unavailable"
+msgstr "Komputery niedostępne"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1845,7 +1845,6 @@ msgstr "Podsumowania rozmów, wspomnienia, wyszukiwania oraz identyfikatory bot�
 msgid "Conversations"
 msgstr "Rozmowy"
 
-#: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
@@ -1861,10 +1860,6 @@ msgstr "Skopiowano"
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
 msgstr "Kopiuj"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Copy .env example"
-msgstr "Kopiuj przykład .env"
 
 #: src/components/markdown-copy.tsx
 msgid "Copy code"
@@ -2436,10 +2431,6 @@ msgstr "Nie udało się zaktualizować reakcji"
 msgid "Could not update the default memory scope"
 msgstr "Nie udało się zaktualizować domyślnego zakresu pamięci"
 
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
-msgstr "Nie udało się sprawdzić konfiguracji komputera ({failureMessage}). Napraw połączenie i sprawdź ponownie."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr "Nie udało się wczytać uprawnień"
@@ -2623,6 +2614,7 @@ msgstr "dni"
 msgid "Decline"
 msgstr "Odrzuć"
 
+#: src/components/ComputerProviderSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -2739,11 +2731,6 @@ msgstr "Odmowa"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "Odmów"
-
-#. placeholder {0}: settings.defaultProvider
-#: src/components/ComputerProviderSettings.tsx
-msgid "Deployment default ({0})"
-msgstr "Domyślne dla wdrożenia ({0})"
 
 #: src/components/ServerUpdates.tsx
 msgid "Deployment requested"
@@ -2869,10 +2856,6 @@ msgstr "Odrzucono. Możesz połączyć się ponownie w ustawieniach MCP."
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker"
 msgstr "Docker"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Docker is configured but computers are not responding. Confirm the sandbox supervisor is running, then recreate the stack after changing .env."
-msgstr "Docker jest skonfigurowany, ale komputery nie odpowiadają. Sprawdź, czy nadzorca piaskownicy działa. Po zmianie .env odtwórz środowisko."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
@@ -5683,6 +5666,10 @@ msgstr "Zakresy (opcjonalnie)"
 msgid "Screen not connected"
 msgstr "Ekran nie jest połączony"
 
+#: src/pages/shell/computer-view.tsx
+msgid "Screen unavailable"
+msgstr "Ekran niedostępny"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
@@ -6466,10 +6453,6 @@ msgstr "Nie udało się odczytać tej kopii zapasowej."
 #: src/pages/shell/agent-import.tsx
 msgid "This bot"
 msgstr "Ten bot"
-
-#: src/pages/shell/computer-view.tsx
-msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
-msgstr "Ten bot działa na tym komputerze, bez pulpitu Linuksa. Powłoka i pliki korzystają z Twojego folderu domowego."
 
 #: src/lib/dictation.ts
 msgid "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer."

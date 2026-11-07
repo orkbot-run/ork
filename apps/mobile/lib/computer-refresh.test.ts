@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type { ComputerStatus } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createComputerRefresh, SCREEN_URL_RENEW_MS } from "./computer-refresh";
@@ -30,6 +34,19 @@ function setup() {
 
 afterEach(() => vi.useRealTimers());
 describe("computer refresh lifecycle", () => {
+  it("does not open a screen session for a target that explicitly has no screen", async () => {
+    const fixture = setup();
+    fixture.readStatus.mockResolvedValue({
+      ...running,
+      capabilities: { start: true, screen: false, control: false, terminal: false },
+    });
+    fixture.controller.start();
+    await fixture.controller.refresh();
+    expect(fixture.readScreen).not.toHaveBeenCalled();
+    expect(fixture.onScreen).toHaveBeenCalledWith(null);
+    fixture.controller.dispose();
+  });
+
   it("waits for a slow refresh to finish before scheduling the next poll", async () => {
     vi.useFakeTimers();
     const fixture = setup();

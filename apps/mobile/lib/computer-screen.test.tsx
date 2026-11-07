@@ -282,6 +282,7 @@ const botWorking: ComputerStatus = {
   busyBotName: "Basil",
   canUpdate: false,
   terminalAvailable: false,
+  capabilities: { start: true, screen: true, control: true, terminal: false },
 };
 
 function respond(status: ComputerStatus, screenUrl = "https://screen.example.test/embed") {
@@ -354,6 +355,46 @@ describe("computer screen", () => {
       (button) => button.textContent === "Take control",
     );
   }
+
+  it("does not boot or offer control for a disabled configured target", async () => {
+    respond({
+      ...botWorking,
+      state: "stopped",
+      screenAvailable: false,
+      capabilities: { start: false, screen: false, control: false, terminal: false },
+    });
+    const view = await render();
+    expect(view.textContent).toContain("Computers unavailable");
+    expect(
+      [...view.querySelectorAll("button")].some((button) => button.textContent === "Take control"),
+    ).toBe(false);
+    expect(calls("computer/boot")).toHaveLength(0);
+    expect(calls("computer/takeover")).toHaveLength(0);
+    expect(calls("computer/screenUrl")).toHaveLength(0);
+    const check = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Check again",
+    );
+    await act(async () => check?.click());
+    expect(calls("computer/status").length).toBeGreaterThan(1);
+    expect(calls("computer/boot")).toHaveLength(0);
+  });
+
+  it("keeps Release available after capabilities are revoked", async () => {
+    respond({
+      ...botWorking,
+      controlHolder: "user",
+      controlBotId: "bot-1",
+      capabilities: { start: false, screen: false, control: false, terminal: false },
+    });
+    const view = await render();
+    const release = [...view.querySelectorAll("button")].find(
+      (button) => button.textContent === "Release",
+    );
+    expect(release).toBeDefined();
+    await act(async () => release?.click());
+    expect(calls("computer/release")).toHaveLength(1);
+    expect(calls("computer/takeover")).toHaveLength(0);
+  });
 
   it("offers Retry screen when the full-window page fails to load", async () => {
     respond(botWorking);

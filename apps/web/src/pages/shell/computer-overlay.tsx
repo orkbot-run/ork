@@ -11,6 +11,7 @@ import type {
   Run,
   TaughtSkill,
 } from "@orkbot/contracts";
+import { computerCapabilitiesFor } from "@orkbot/core";
 import { BotAvatar, Button } from "@orkbot/ui-web";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
@@ -21,7 +22,7 @@ import { TeachRecordingChrome, TeachStopButton } from "../../components/teach/Te
 import { screenIframeSandbox } from "../../lib/computer-screen";
 import { computerTakeoverBlocked } from "../../lib/thread-events";
 import { ComputerReleaseActions } from "./computer-release-actions";
-import { computerLabel, DesktopKindEmptyState } from "./computer-view";
+import { computerLabel, ScreenUnavailableState } from "./computer-view";
 
 type ComputerOverlayProps = {
   bot: Bot;
@@ -146,7 +147,9 @@ export function ComputerOverlay({
                 takeoverRequested={Boolean(computer?.takeoverRequested)}
                 onRelease={onRelease}
               />
-            ) : computer?.state === "running" && !computerTakeoverBlocked(computer, runStatus) ? (
+            ) : computer?.state === "running" &&
+              computerCapabilitiesFor(computer).control &&
+              !computerTakeoverBlocked(computer, runStatus) ? (
               <Button
                 type="button"
                 variant="outline"
@@ -157,7 +160,7 @@ export function ComputerOverlay({
                 <Trans>Take control</Trans>
               </Button>
             ) : null}
-            {!recordingSkill ? (
+            {!recordingSkill && computerCapabilitiesFor(computer).control ? (
               <TeachComputerOverlayControl
                 key={bot.id}
                 botId={bot.id}
@@ -195,9 +198,12 @@ export function ComputerOverlay({
           </div>
         ) : null}
         <div className="relative min-h-0 flex-1 bg-background">
-          {computer?.kind === "desktop" ? (
-            <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-          ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+          {computer?.capabilities?.screen === false ? (
+            <ScreenUnavailableState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
+          ) : computerCapabilitiesFor(computer).screen &&
+            computer?.state === "running" &&
+            embeddedScreenUrl &&
+            !computerScreenError ? (
             <>
               <iframe
                 key={screenFrameKey}
@@ -208,7 +214,10 @@ export function ComputerOverlay({
                 className="h-full w-full border-0 bg-black"
                 allow="clipboard-read; clipboard-write; fullscreen"
                 style={{
-                  pointerEvents: recordingSkill || !hasControl ? "none" : "auto",
+                  pointerEvents:
+                    recordingSkill || !hasControl || !computerCapabilitiesFor(computer).control
+                      ? "none"
+                      : "auto",
                 }}
               />
               {bot ? (
@@ -232,7 +241,12 @@ export function ComputerOverlay({
                         ? t`Computer is asleep`
                         : t`Computer is stopped`}
                     </p>
-                    <Button variant="outline" size="sm" onClick={onStart}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!computerCapabilitiesFor(computer).start}
+                      onClick={onStart}
+                    >
                       <Trans>Start</Trans>
                     </Button>
                   </div>

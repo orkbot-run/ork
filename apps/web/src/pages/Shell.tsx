@@ -13,6 +13,7 @@ import type {
 import { DEFAULT_NEW_BOT_AVATAR_SET } from "@orkbot/contracts";
 import {
   answerableAskMessageIds,
+  canConfigureComputers,
   channelMessageSender,
   chatUserBubbleColors,
   dismissableAskMessageIds,
@@ -682,7 +683,7 @@ function SpaceShell() {
     activeBotId,
     activeGroupId,
     runStatus: snapshot?.run?.status,
-    sandboxProvider: bootstrapMe?.sandboxProvider,
+    computerCapabilities: bootstrapMe?.computerCapabilities,
     refreshThread,
     refreshGroupThread: (id) => refreshGroupThreadRef.current(id),
   });
@@ -855,7 +856,7 @@ function SpaceShell() {
   const settingsNavItems = useSettingsNavItems({
     messaging: messagingSurfaceEnabled,
     wallet: Boolean(bootstrapMe?.paymentWalletProvider),
-    computer: computersAreUnavailable(bootstrapMe?.sandboxProvider),
+    computer: computersAreUnavailable(bootstrapMe?.computerCapabilities),
     billing: bootstrapMe?.billingEnabled === true,
     updates: Boolean(desktopBridge()?.update),
   });
@@ -1290,13 +1291,18 @@ function SpaceShell() {
               booting={booting}
               showingRecoveryHint={computerControls.showingRecoveryHint}
               showComputerRecoveryHint={computerControls.showComputerRecoveryHint}
-              sandboxProvider={bootstrapMe?.sandboxProvider}
-              onRecovered={(sandboxProvider) => {
-                setBootstrapMe((prev) => (prev ? { ...prev, sandboxProvider } : prev));
+              computerCapabilities={bootstrapMe?.computerCapabilities}
+              onRecovered={(me, status) => {
+                setBootstrapMe(me);
+                if (status) computerState.commitComputer(status);
                 computerControls.holdComputerRecovery();
               }}
               onRecoveryDismissed={computerControls.releaseComputerRecovery}
-              onOpenComputerSettings={() => openSettings("computer")}
+              onOpenComputerSettings={
+                bootstrapMe && canConfigureComputers(bootstrapMe)
+                  ? () => openSettings("computer")
+                  : undefined
+              }
               onOpen={() => void openComputer()}
               cleaningUpDisk={cleaningUpDisk}
               onCleanUpDisk={() => {

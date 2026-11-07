@@ -1,62 +1,47 @@
-import { describe, expect, it } from "vitest";
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
+import { describe, expect, it, vi } from "vitest";
 import {
-  canChooseOwnComputer,
-  classifySandboxProvider,
   computersAreUnavailable,
+  refreshSandboxFromServer,
   sandboxCheckFailureMessage,
-  sandboxEnvGuidanceLines,
-  sandboxEnvGuidanceText,
-  sandboxProviderLabel,
 } from "./computer-sandbox.js";
 
-describe("computersAreUnavailable", () => {
-  it("treats none and empty as unavailable", () => {
-    expect(computersAreUnavailable("none")).toBe(true);
-    expect(computersAreUnavailable("")).toBe(true);
-    expect(computersAreUnavailable(null)).toBe(false);
-  });
+vi.mock("./rpc", () => ({ captureRpcContext: vi.fn() }));
 
-  it("treats configured providers as available", () => {
-    expect(computersAreUnavailable("docker")).toBe(false);
-    expect(computersAreUnavailable("e2b")).toBe(false);
+describe("computer availability", () => {
+  it("requires explicit server capability rather than a configured provider identifier", () => {
+    expect(computersAreUnavailable(undefined)).toBe(true);
+    expect(computersAreUnavailable(null)).toBe(true);
+    expect(
+      computersAreUnavailable({ start: false, screen: true, control: true, terminal: true }),
+    ).toBe(true);
+    expect(
+      computersAreUnavailable({ start: true, screen: false, control: false, terminal: false }),
+    ).toBe(false);
   });
-});
-
-describe("canChooseOwnComputer", () => {
-  it("offers an account its own desktop wherever Settings routes computers", () => {
-    expect(canChooseOwnComputer("docker")).toBe(true);
-    expect(canChooseOwnComputer("test-desktop")).toBe(true);
-    expect(canChooseOwnComputer("none")).toBe(false);
-    expect(canChooseOwnComputer("desktop")).toBe(false);
-    expect(canChooseOwnComputer("fake")).toBe(false);
-    expect(canChooseOwnComputer(null)).toBe(false);
+  it("rejects a recovery from a retired origin after both reads settle", async () => {
+    const me = {
+      computerCapabilities: { start: true, screen: true, control: true, terminal: true },
+    };
+    const origin = {
+      client: { health: vi.fn(async () => ({ ok: true })), me: vi.fn(async () => me) },
+      isCurrent: () => false,
+    };
+    await expect(refreshSandboxFromServer(origin as never)).rejects.toMatchObject({
+      name: "AbortError",
+    });
   });
-});
-
-describe("classifySandboxProvider", () => {
-  it("classifies none, docker, and hosted providers", () => {
-    expect(classifySandboxProvider("none")).toBe("none");
-    expect(classifySandboxProvider(null)).toBe("none");
-    expect(classifySandboxProvider("docker")).toBe("docker");
-    expect(classifySandboxProvider("e2b")).toBe("hosted");
-    expect(classifySandboxProvider("novita")).toBe("hosted");
-    expect(sandboxProviderLabel("novita")).toBe("Novita");
-  });
-});
-
-describe("sandboxEnvGuidanceText", () => {
-  it("uses placeholder tokens and activates only one provider", () => {
-    const text = sandboxEnvGuidanceText();
-    expect(text).toContain("SANDBOX_SUPERVISOR_TOKEN=<generate-a-secret>");
-    expect(text).not.toMatch(/sk-[a-zA-Z0-9]{10,}/);
-    expect(sandboxEnvGuidanceLines().filter((line) => /^SANDBOX_PROVIDER=/.test(line))).toEqual([
-      "SANDBOX_PROVIDER=docker",
-    ]);
-    expect(text).toContain("# SANDBOX_PROVIDER=e2b");
-    expect(text).toContain("# SANDBOX_PROVIDER=novita");
-    expect(text).toContain("# Build template: pnpm sandbox:novita-template");
-    expect(text).toContain("# SANDBOX_PROVIDER=daytona");
-    expect(text).toContain("# SANDBOX_PROVIDER=boat");
+  it("keeps a failed health response unavailable", async () => {
+    const origin = {
+      client: { health: vi.fn(async () => ({ ok: false })), me: vi.fn(async () => ({})) },
+      isCurrent: () => true,
+    };
+    await expect(refreshSandboxFromServer(origin as never)).rejects.toThrow(
+      "Server health check failed",
+    );
   });
 });
 

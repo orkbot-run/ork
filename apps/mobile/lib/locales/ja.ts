@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Check again": "もう一度確認",
+  "Computers unavailable": "コンピューターを利用できません",
+  "Screen unavailable": "画面を利用できません",
   "The computer service cannot start computers for this account.":
     "このアカウントではコンピューターサービスがコンピューターを起動できません。",
   Rule: "ルール",

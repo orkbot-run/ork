@@ -1657,8 +1657,8 @@ msgid "Computers are available. Reload or open a bot to continue."
 msgstr "Las computadoras están disponibles. Recarga o abre un bot para continuar."
 
 #: src/components/ComputersUnavailableHint.tsx
-msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after changing .env."
-msgstr "Las computadoras están apagadas. Configura SANDBOX_PROVIDER=docker con SANDBOX_SUPERVISOR_TOKEN, o establece SANDBOX_PROVIDER en e2b, novita, daytona o boat con su clave de API. Recrea el stack después de cambiar .env."
+msgid "Computers unavailable"
+msgstr "Computadoras no disponibles"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1845,7 +1845,6 @@ msgstr "Los resúmenes de conversaciones, las memorias, las búsquedas y los ID 
 msgid "Conversations"
 msgstr "Conversaciones"
 
-#: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
@@ -1861,10 +1860,6 @@ msgstr "Copiado"
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
 msgstr "Copiar"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Copy .env example"
-msgstr "Copiar ejemplo de .env"
 
 #: src/components/markdown-copy.tsx
 msgid "Copy code"
@@ -2436,10 +2431,6 @@ msgstr "No se pudo actualizar la reacción"
 msgid "Could not update the default memory scope"
 msgstr "No se pudo actualizar el alcance de memoria predeterminado"
 
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
-msgstr "No se pudo verificar la configuración de la computadora ({failureMessage}). Corrige la conexión y vuelve a comprobar."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2623,6 +2614,7 @@ msgstr "días"
 msgid "Decline"
 msgstr "Rechazar"
 
+#: src/components/ComputerProviderSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -2739,11 +2731,6 @@ msgstr "Denegado"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "Denegar"
-
-#. placeholder {0}: settings.defaultProvider
-#: src/components/ComputerProviderSettings.tsx
-msgid "Deployment default ({0})"
-msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Deployment requested"
@@ -2869,10 +2856,6 @@ msgstr "Descartado: puedes volver a conectar cuando quieras desde la configuraci
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker"
 msgstr "Docker"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Docker is configured but computers are not responding. Confirm the sandbox supervisor is running, then recreate the stack after changing .env."
-msgstr "Docker está configurado, pero las computadoras no responden. Confirma que el supervisor del sandbox esté en funcionamiento y recrea el stack después de cambiar .env."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
@@ -5683,6 +5666,10 @@ msgstr "Ámbitos (opcional)"
 msgid "Screen not connected"
 msgstr "Pantalla no conectada"
 
+#: src/pages/shell/computer-view.tsx
+msgid "Screen unavailable"
+msgstr "Pantalla no disponible"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
@@ -6466,10 +6453,6 @@ msgstr "No se pudo leer esta copia de seguridad."
 #: src/pages/shell/agent-import.tsx
 msgid "This bot"
 msgstr "Este bot"
-
-#: src/pages/shell/computer-view.tsx
-msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
-msgstr "Este bot se ejecuta en esta computadora, no en un escritorio Linux. El shell y los archivos usan tu carpeta de inicio."
 
 #: src/lib/dictation.ts
 msgid "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer."

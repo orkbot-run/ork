@@ -3,7 +3,13 @@
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
 import type { Route } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, openBotPanelTab, signup } from "./helpers";
+import {
+  captureScreenshot,
+  completeOnboarding,
+  openBotPanelTab,
+  openUserSettings,
+  signup,
+} from "./helpers";
 import { expect, test } from "./renderer-test";
 
 async function patchJson(route: Route, patch: (body: { json?: Record<string, unknown> }) => void) {
@@ -22,9 +28,10 @@ function stopComputer(computer: unknown) {
   if (!record) return;
   record.state = "stopped";
   record.screenAvailable = false;
+  record.capabilities = { start: false, screen: false, control: false, terminal: false };
 }
 
-test("unavailable computers explain setup and open computer settings", async ({
+test("unavailable computers offer scoped recovery without operator setup instructions", async ({
   page,
 }, testInfo) => {
   await signup(page, `computers-off-${Date.now()}@orkbot.test`, "password12", "Computers Off");
@@ -33,6 +40,13 @@ test("unavailable computers explain setup and open computer settings", async ({
     patchJson(route, (body) => {
       if (!body.json) return;
       body.json.sandboxProvider = "none";
+      body.json.computerCapabilities = {
+        start: false,
+        screen: false,
+        control: false,
+        terminal: false,
+      };
+      body.json.canConfigureAccountComputers = false;
       body.json.isDeploymentOwner = true;
     }),
   );
@@ -41,6 +55,8 @@ test("unavailable computers explain setup and open computer settings", async ({
       const me = asRecord(body.json?.me);
       if (me) {
         me.sandboxProvider = "none";
+        me.computerCapabilities = { start: false, screen: false, control: false, terminal: false };
+        me.canConfigureAccountComputers = false;
         me.isDeploymentOwner = true;
       }
       const thread = asRecord(body.json?.thread);
@@ -64,43 +80,26 @@ test("unavailable computers explain setup and open computer settings", async ({
   const preview = page.getByTestId("computer-preview");
   const hint = preview.getByTestId("computers-unavailable-hint");
   await expect(hint).toBeVisible();
-  await expect(hint.getByText(/Computers are off/)).toBeVisible();
+  await expect(hint.getByText("Computers unavailable", { exact: true })).toBeVisible();
   await expect(hint.getByRole("button", { name: "Check again" })).toBeVisible();
-  await expect(hint.getByRole("button", { name: "Open computer settings" })).toBeVisible();
-  await expect(hint.getByRole("button", { name: "Copy .env example" })).toBeVisible();
+  await expect(hint.getByRole("button", { name: "Open computer settings" })).toHaveCount(0);
+  await expect(hint.getByRole("button", { name: "Copy .env example" })).toHaveCount(0);
   await expect(preview.getByTestId("computer-preview-open")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "computers-unavailable-preview");
 
   await hint.getByRole("button", { name: "Check again" }).click();
-  await expect(hint.getByText(/Computers are off/)).toBeVisible();
+  await expect(hint.getByText("Computers unavailable", { exact: true })).toBeVisible();
   await expect(hint.getByRole("button", { name: "Check again" })).toBeEnabled();
 
-  await hint.getByRole("button", { name: "Open computer settings" }).click();
-  const settings = page.getByTestId("user-settings");
+  const settings = await openUserSettings(page, "computer");
   await expect(settings).toHaveAttribute("data-settings-section", "computer");
   await expect(settings.getByTestId("computers-setup-settings")).toBeVisible();
   await expect(settings.getByTestId("settings-nav-computer")).toHaveAttribute(
     "aria-current",
     "page",
   );
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async (text: string) => {
-          document.documentElement.dataset.copiedSandboxEnv = text;
-        },
-      },
-    });
-  });
-  await settings.getByRole("button", { name: "Copy .env example" }).click();
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-copied-sandbox-env",
-    /# SANDBOX_PROVIDER=novita/,
-  );
-  await expect(page.locator("html")).toHaveAttribute(
-    "data-copied-sandbox-env",
-    /pnpm sandbox:novita-template/,
-  );
+  await expect(settings.getByRole("button", { name: "Copy .env example" })).toHaveCount(0);
+  await expect(settings.getByTestId("computer-provider-settings")).toHaveCount(0);
+  await expect(settings.getByText("Computers unavailable", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "computers-unavailable-settings");
 });

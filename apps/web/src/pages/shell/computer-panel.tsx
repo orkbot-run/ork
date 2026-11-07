@@ -4,13 +4,14 @@
 
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import type { Bot, ComputerStatus } from "@orkbot/contracts";
+import type { Bot, ComputerCapabilities, ComputerStatus, Me } from "@orkbot/contracts";
+import { computerCapabilitiesFor } from "@orkbot/core";
 import { BotAvatar, Button } from "@orkbot/ui-web";
 import { HardDrive, Maximize2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { ComputersUnavailableHint } from "../../components/ComputersUnavailableHint";
 import { screenIframeSandbox } from "../../lib/computer-screen";
-import { computerLabel, computerPlaceholder, DesktopKindEmptyState } from "./computer-view";
+import { computerLabel, computerPlaceholder, ScreenUnavailableState } from "./computer-view";
 
 type ComputerPanelProps = {
   bot: Bot;
@@ -25,8 +26,8 @@ type ComputerPanelProps = {
   booting: boolean;
   showingRecoveryHint: boolean;
   showComputerRecoveryHint: boolean;
-  sandboxProvider?: string | null;
-  onRecovered: (sandboxProvider: string) => void;
+  computerCapabilities?: ComputerCapabilities | null;
+  onRecovered: (me: Me, computer?: ComputerStatus) => void;
   onRecoveryDismissed: () => void;
   onOpenComputerSettings?: () => void;
   onOpen: () => void;
@@ -85,7 +86,7 @@ function ComputerPreview({
   booting,
   showingRecoveryHint,
   showComputerRecoveryHint,
-  sandboxProvider,
+  computerCapabilities,
   onRecovered,
   onRecoveryDismissed,
   onOpenComputerSettings,
@@ -98,7 +99,8 @@ function ComputerPreview({
     !computerBooting &&
     !computerScreenError &&
     !showComputerRecoveryHint &&
-    computer?.kind !== "desktop" &&
+    computerCapabilitiesFor(computer, computerCapabilities).start &&
+    computerCapabilitiesFor(computer, computerCapabilities).screen &&
     (!computer || computer.state === "stopped" || computer.state === "suspended");
   if (idle) {
     return (
@@ -132,7 +134,10 @@ function ComputerPreview({
       </div>
     );
   }
-  const canOpen = !computerScreenError && !showingRecoveryHint;
+  const canOpen =
+    computerCapabilitiesFor(computer, computerCapabilities).screen &&
+    !computerScreenError &&
+    !showingRecoveryHint;
   // The Open pill replaces the status text on hover; fade it so they never overlap.
   const hideOnHover = canOpen
     ? "transition-opacity group-hover:opacity-0 group-has-[:focus-visible]:opacity-0"
@@ -151,11 +156,14 @@ function ComputerPreview({
           >
             <Trans>Open in full window</Trans>
           </div>
-        ) : computer?.kind === "desktop" ? (
-          <DesktopKindEmptyState
+        ) : computer?.capabilities?.screen === false && !showComputerRecoveryHint ? (
+          <ScreenUnavailableState
             className={`grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80 ${hideOnHover}`}
           />
-        ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+        ) : computerCapabilitiesFor(computer, computerCapabilities).screen &&
+          computer?.state === "running" &&
+          embeddedScreenUrl &&
+          !computerScreenError ? (
           <iframe
             key={screenFrameKey}
             title={t`Bot screen preview`}
@@ -173,7 +181,10 @@ function ComputerPreview({
             {computerScreenError ??
               (showComputerRecoveryHint ? (
                 <ComputersUnavailableHint
-                  sandboxProvider={sandboxProvider}
+                  botId={bot.id}
+                  computerCapabilities={
+                    computer?.capabilities ?? (computer ? undefined : computerCapabilities)
+                  }
                   onRecovered={onRecovered}
                   onRecoveryDismissed={onRecoveryDismissed}
                   onOpenComputerSettings={onOpenComputerSettings}

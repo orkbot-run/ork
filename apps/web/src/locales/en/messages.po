@@ -1657,8 +1657,8 @@ msgid "Computers are available. Reload or open a bot to continue."
 msgstr "Computers are available. Reload or open a bot to continue."
 
 #: src/components/ComputersUnavailableHint.tsx
-msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after changing .env."
-msgstr "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after changing .env."
+msgid "Computers unavailable"
+msgstr "Computers unavailable"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1845,7 +1845,6 @@ msgstr "Conversation summaries, memories, searches and bot and Space IDs are sen
 msgid "Conversations"
 msgstr "Conversations"
 
-#: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
@@ -1861,10 +1860,6 @@ msgstr "Copied"
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
 msgstr "Copy"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Copy .env example"
-msgstr "Copy .env example"
 
 #: src/components/markdown-copy.tsx
 msgid "Copy code"
@@ -2436,10 +2431,6 @@ msgstr "Could not update reaction"
 msgid "Could not update the default memory scope"
 msgstr "Could not update the default memory scope"
 
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
-msgstr "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr "Couldn't load grants"
@@ -2623,6 +2614,7 @@ msgstr "days"
 msgid "Decline"
 msgstr "Decline"
 
+#: src/components/ComputerProviderSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -2739,11 +2731,6 @@ msgstr "Denied"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "Deny"
-
-#. placeholder {0}: settings.defaultProvider
-#: src/components/ComputerProviderSettings.tsx
-msgid "Deployment default ({0})"
-msgstr "Deployment default ({0})"
 
 #: src/components/ServerUpdates.tsx
 msgid "Deployment requested"
@@ -2869,10 +2856,6 @@ msgstr "Dismissed. Reconnect anytime from MCP settings."
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker"
 msgstr "Docker"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Docker is configured but computers are not responding. Confirm the sandbox supervisor is running, then recreate the stack after changing .env."
-msgstr "Docker is configured but computers are not responding. Confirm the sandbox supervisor is running, then recreate the stack after changing .env."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
@@ -5683,6 +5666,10 @@ msgstr "Scopes (optional)"
 msgid "Screen not connected"
 msgstr "Screen not connected"
 
+#: src/pages/shell/computer-view.tsx
+msgid "Screen unavailable"
+msgstr "Screen unavailable"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
@@ -6466,10 +6453,6 @@ msgstr "This backup could not be read."
 #: src/pages/shell/agent-import.tsx
 msgid "This bot"
 msgstr "This bot"
-
-#: src/pages/shell/computer-view.tsx
-msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
-msgstr "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
 
 #: src/lib/dictation.ts
 msgid "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer."

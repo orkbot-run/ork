@@ -1,98 +1,100 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ComputerCapabilities, ComputerStatus, Me } from "@orkbot/contracts";
+import { computerCapabilitiesFor } from "@orkbot/core";
 import { Button, Spinner } from "@orkbot/ui-web";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { SandboxAvailabilityPhase } from "../lib/computer-sandbox";
 import {
-  classifySandboxProvider,
   computersAreUnavailable,
   refreshSandboxFromServer,
   sandboxCheckFailureMessage,
-  sandboxEnvGuidanceText,
 } from "../lib/computer-sandbox";
+import { captureRpcContext } from "../lib/rpc";
 import { SuccessPop } from "./ai/primitives";
 
 export { computersAreUnavailable } from "../lib/computer-sandbox";
 
 type ComputersUnavailableHintProps = {
+  botId?: string;
   className?: string;
-  sandboxProvider?: string | null;
-  /** When set, shows a control that opens Settings → Computer. */
+  computerCapabilities?: ComputerCapabilities | null;
   onOpenComputerSettings?: () => void;
-  /** Called when a check finds computers available again. */
-  onRecovered?: (sandboxProvider: string) => void;
-  /** Called when the confirmation should leave the screen. */
+  onRecovered?: (me: Me, computer?: ComputerStatus) => void;
   onRecoveryDismissed?: () => void;
-  /** When false, hides Check again (e.g. inline preview without actions). */
   showRetry?: boolean;
 };
 
 export function ComputersUnavailableHint({
   className,
-  sandboxProvider: initialProvider,
+  botId,
+  computerCapabilities,
   onOpenComputerSettings,
   onRecovered,
   onRecoveryDismissed,
   showRetry = true,
 }: ComputersUnavailableHintProps) {
   const { t } = useLingui();
-  const [provider, setProvider] = useState(initialProvider);
+  const [capabilities, setCapabilities] = useState(computerCapabilities);
   const [phase, setPhase] = useState<SandboxAvailabilityPhase>("idle");
   const [failureMessage, setFailureMessage] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const onRecoveredRef = useRef(onRecovered);
-  onRecoveredRef.current = onRecovered;
+  const lifetime = useRef(0);
+  const previousBotId = useRef(botId);
   const onRecoveryDismissedRef = useRef(onRecoveryDismissed);
   onRecoveryDismissedRef.current = onRecoveryDismissed;
-
-  useEffect(() => {
-    setProvider(initialProvider);
-  }, [initialProvider]);
-
+  useLayoutEffect(
+    () => () => {
+      lifetime.current++;
+    },
+    [],
+  );
+  useLayoutEffect(() => {
+    const sameBot = previousBotId.current === botId;
+    previousBotId.current = botId;
+    setCapabilities(computerCapabilities);
+    lifetime.current++;
+    setPhase((previous) =>
+      sameBot && previous === "recovered" && computerCapabilities?.start ? previous : "idle",
+    );
+  }, [computerCapabilities, botId]);
   useEffect(() => {
     if (phase !== "recovered") return;
+    const origin = captureRpcContext();
     const timer = window.setTimeout(() => {
+      if (!origin.isCurrent()) return;
       onRecoveryDismissedRef.current?.();
       setPhase("idle");
     }, 4000);
     return () => window.clearTimeout(timer);
-  }, [phase]);
-
-  const unavailable = computersAreUnavailable(provider);
-  const kind = classifySandboxProvider(provider);
+  }, [phase, botId]);
 
   async function handleCheckAgain() {
     if (phase === "loading") return;
+    const origin = captureRpcContext();
+    const generation = lifetime.current;
+    const isCurrent = () => generation === lifetime.current && origin.isCurrent();
     setPhase("loading");
     setFailureMessage(null);
     try {
-      const me = await refreshSandboxFromServer();
-      setProvider(me.sandboxProvider);
-      if (computersAreUnavailable(me.sandboxProvider)) {
-        setPhase("unavailable");
-        return;
-      }
-      onRecoveredRef.current?.(me.sandboxProvider);
-      setPhase("recovered");
+      const [me, computer] = await Promise.all([
+        refreshSandboxFromServer(origin),
+        botId ? origin.client.computer.status({ botId }) : undefined,
+      ]);
+      if (!isCurrent()) return;
+      const checked = computer ? computerCapabilitiesFor(computer) : me.computerCapabilities;
+      setCapabilities(checked);
+      setPhase(computersAreUnavailable(checked) ? "unavailable" : "recovered");
+      onRecovered?.(me, computer);
     } catch (error) {
+      if (!isCurrent()) return;
       setPhase("failure");
       setFailureMessage(sandboxCheckFailureMessage(error));
-      // Do not treat stale cached provider as authoritative after a failed check.
-      setProvider(null);
+      setCapabilities(null);
     }
   }
-
-  async function handleCopyGuidance() {
-    const text = sandboxEnvGuidanceText();
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      setCopied(false);
-    }
-  }
-
-  const showUnavailableCopy = phase === "idle" || phase === "unavailable" || phase === "failure";
 
   return (
     <div
@@ -103,14 +105,14 @@ export function ComputersUnavailableHint({
       {phase === "loading" ? (
         <Spinner className="text-muted-foreground" aria-label={t`Checking computer setup…`} />
       ) : null}
-
       {phase === "recovered" ? (
         <SuccessPop label={t`Computers are available. Reload or open a bot to continue.`} />
+      ) : phase !== "loading" ? (
+        <p className="text-[13px] leading-relaxed text-muted-foreground">
+          {failureMessage ?? t`Computers unavailable`}
+        </p>
       ) : null}
-
-      {showUnavailableCopy ? <UnavailableCopy kind={kind} failureMessage={failureMessage} /> : null}
-
-      {showRetry && (unavailable || phase === "failure") ? (
+      {showRetry && (computersAreUnavailable(capabilities) || phase === "failure") ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -126,50 +128,8 @@ export function ComputersUnavailableHint({
               <Trans>Open computer settings</Trans>
             </Button>
           ) : null}
-          <Button type="button" variant="ghost" size="sm" onClick={() => void handleCopyGuidance()}>
-            {copied ? <Trans>Copied</Trans> : <Trans>Copy .env example</Trans>}
-          </Button>
         </div>
       ) : null}
     </div>
-  );
-}
-
-function UnavailableCopy({
-  kind,
-  failureMessage,
-}: {
-  kind: ReturnType<typeof classifySandboxProvider>;
-  failureMessage: string | null;
-}) {
-  if (failureMessage) {
-    return (
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
-        <Trans>
-          Could not verify computer setup ({failureMessage}). Fix the connection, then check again.
-        </Trans>
-      </p>
-    );
-  }
-
-  if (kind === "docker") {
-    return (
-      <p className="text-[13px] leading-relaxed text-muted-foreground">
-        <Trans>
-          Docker is configured but computers are not responding. Confirm the sandbox supervisor is
-          running, then recreate the stack after changing .env.
-        </Trans>
-      </p>
-    );
-  }
-
-  return (
-    <p className="text-[13px] leading-relaxed text-muted-foreground">
-      <Trans>
-        Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set
-        SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after
-        changing .env.
-      </Trans>
-    </p>
   );
 }

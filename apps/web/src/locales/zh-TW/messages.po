@@ -1658,8 +1658,8 @@ msgid "Computers are available. Reload or open a bot to continue."
 msgstr "電腦已可使用。請重新載入或開啟機器人以繼續。"
 
 #: src/components/ComputersUnavailableHint.tsx
-msgid "Computers are off. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or set SANDBOX_PROVIDER to e2b, novita, daytona, or boat with its API key. Recreate the stack after changing .env."
-msgstr "電腦未開啟。請設定 SANDBOX_PROVIDER=docker 並提供 SANDBOX_SUPERVISOR_TOKEN，或將 SANDBOX_PROVIDER 設為 e2b、novita、daytona 或 boat 並提供對應 API 金鑰。更改 .env 後請重建環境。"
+msgid "Computers unavailable"
+msgstr "電腦無法使用"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1846,7 +1846,6 @@ msgstr "對話摘要、記憶、搜尋請求及機器人和空間 ID 會被傳�
 msgid "Conversations"
 msgstr "對話"
 
-#: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
 #: src/components/vault/VaultItemDetail.tsx
@@ -1862,10 +1861,6 @@ msgstr "已複製"
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Copy"
 msgstr "複製"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Copy .env example"
-msgstr "複製 .env 範例"
 
 #: src/components/markdown-copy.tsx
 msgid "Copy code"
@@ -2437,10 +2432,6 @@ msgstr "無法更新反應"
 msgid "Could not update the default memory scope"
 msgstr "無法更新預設記憶範圍"
 
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
-msgstr "無法驗證電腦設定（{failureMessage}）。請修復連線後再次檢查。"
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2624,6 +2615,7 @@ msgstr "天"
 msgid "Decline"
 msgstr "拒絕"
 
+#: src/components/ComputerProviderSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
@@ -2740,11 +2732,6 @@ msgstr "已拒絕"
 #: src/components/AskCard.tsx
 msgid "Deny"
 msgstr "拒絕"
-
-#. placeholder {0}: settings.defaultProvider
-#: src/components/ComputerProviderSettings.tsx
-msgid "Deployment default ({0})"
-msgstr ""
 
 #: src/components/ServerUpdates.tsx
 msgid "Deployment requested"
@@ -2870,10 +2857,6 @@ msgstr "已關閉，可隨時在 MCP 設定中重新連線。"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker"
 msgstr "Docker"
-
-#: src/components/ComputersUnavailableHint.tsx
-msgid "Docker is configured but computers are not responding. Confirm the sandbox supervisor is running, then recreate the stack after changing .env."
-msgstr "Docker 已設定，但電腦沒有回應。請確認沙箱管理服務正在執行，並在修改 .env 後重新建立服務。"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
@@ -5684,6 +5667,10 @@ msgstr "範圍（選填）"
 msgid "Screen not connected"
 msgstr "螢幕未連線"
 
+#: src/pages/shell/computer-view.tsx
+msgid "Screen unavailable"
+msgstr "螢幕無法使用"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
@@ -6467,10 +6454,6 @@ msgstr "無法讀取此備份。"
 #: src/pages/shell/agent-import.tsx
 msgid "This bot"
 msgstr "此機器人"
-
-#: src/pages/shell/computer-view.tsx
-msgid "This bot runs on this computer, not a Linux desktop. Shell and files use your home folder."
-msgstr "此機器人執行在這臺電腦上，而不是 Linux 桌面。Shell 和檔案使用你的主目錄。"
 
 #: src/lib/dictation.ts
 msgid "This browser can't detect when you stop talking. Use Chrome, the desktop app, or hold-to-talk in the composer."

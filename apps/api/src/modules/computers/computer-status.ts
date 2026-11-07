@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 
 import {
   computerSupportsTerminal,
@@ -8,7 +8,7 @@ import {
   DISK_WARNING_PERCENT,
   diskUsedPercent,
 } from "@orkbot/adapters";
-import type { ComputerStatus } from "@orkbot/contracts";
+import type { ComputerCapabilities, ComputerStatus } from "@orkbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 
@@ -74,6 +74,7 @@ export function toComputerStatus(
     diskDismissedPercent?: number | null;
   } | null,
   busyBotName: string | null = null,
+  capabilities?: ComputerCapabilities,
 ): ComputerStatus {
   const kind = (computer?.kind ?? "fake") as ComputerStatus["kind"];
   const state =
@@ -106,13 +107,17 @@ export function toComputerStatus(
     controlHolder: (computer?.controlHolder ?? "none") as ComputerStatus["controlHolder"],
     controlBotId: computer?.controlBotId ?? null,
     takeoverRequested: Boolean(computer?.controlRunId),
-    screenAvailable: !computer?.maintenanceId && (state === "running" || state === "booting"),
+    screenAvailable:
+      capabilities?.screen !== false &&
+      !computer?.maintenanceId &&
+      (state === "running" || state === "booting"),
     screenWidth: screen.width,
     screenHeight: screen.height,
     homeRevision: computer?.homeRevision ?? null,
     busyBotName,
     canUpdate: computerSupportsUpdate(kind),
-    terminalAvailable: computerSupportsTerminal(kind),
+    terminalAvailable: capabilities?.terminal ?? computerSupportsTerminal(kind),
+    ...(capabilities ? { capabilities } : {}),
     ...(diskFull ? { diskFullPercent: diskPercent } : {}),
   };
 }

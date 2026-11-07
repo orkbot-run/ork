@@ -1,85 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { t } from "@lingui/core/macro";
-import type { Me } from "@orkbot/contracts";
-import { rpc } from "./rpc";
+import type { ComputerCapabilities, Me } from "@orkbot/contracts";
+import { captureRpcContext } from "./rpc";
 import { errorText } from "./user-error";
 
-export function computersAreUnavailable(sandboxProvider: string | null | undefined): boolean {
-  return sandboxProvider === "none" || sandboxProvider === "";
-}
-
-/** Whether an account may run its computers on its own provider on this deployment. */
-export function canChooseOwnComputer(sandboxProvider: string | null | undefined): boolean {
-  // Those deployments run every computer on the server's own provider.
-  return (
-    !!sandboxProvider &&
-    !computersAreUnavailable(sandboxProvider) &&
-    sandboxProvider !== "desktop" &&
-    sandboxProvider !== "fake"
-  );
+export function computersAreUnavailable(
+  capabilities: ComputerCapabilities | null | undefined,
+): boolean {
+  return capabilities?.start !== true;
 }
 
 export type SandboxAvailabilityPhase = "idle" | "loading" | "recovered" | "unavailable" | "failure";
 
-/** Lines to paste into `.env` — placeholders only, never real secrets. */
-export function sandboxEnvGuidanceLines(): string[] {
-  return [
-    "# Pick one provider. Leave every other SANDBOX_PROVIDER line commented out.",
-    "",
-    "# Docker on your server or Compose stack",
-    "SANDBOX_PROVIDER=docker",
-    "SANDBOX_SUPERVISOR_TOKEN=<generate-a-secret>",
-    "",
-    "# Hosted sandbox: E2B",
-    "# SANDBOX_PROVIDER=e2b",
-    "# E2B_API_KEY=<your-key>",
-    "",
-    "# Hosted sandbox: Novita",
-    "# SANDBOX_PROVIDER=novita",
-    "# NOVITA_API_KEY=<your-key>",
-    "# Build template: pnpm sandbox:novita-template",
-    "",
-    "# Hosted sandbox: Daytona",
-    "# SANDBOX_PROVIDER=daytona",
-    "# DAYTONA_API_KEY=<your-key>",
-    "",
-    "# Hosted sandbox: Boat",
-    "# SANDBOX_PROVIDER=boat",
-    "# BOAT_API_KEY=<your-key>",
-    "",
-    "# Recreate the stack after changing .env",
-  ];
-}
-
-export function sandboxEnvGuidanceText(): string {
-  return sandboxEnvGuidanceLines().join("\n");
-}
-
-export type SandboxProviderKind = "none" | "docker" | "hosted" | "other";
-
-export function classifySandboxProvider(provider: string | null | undefined): SandboxProviderKind {
-  if (provider == null || provider === "" || computersAreUnavailable(provider)) return "none";
-  if (provider === "docker" || provider === "desktop") return "docker";
-  if (provider === "e2b" || provider === "novita" || provider === "daytona" || provider === "boat")
-    return "hosted";
-  return "other";
-}
-
-export function sandboxProviderLabel(provider: string): string {
-  if (provider === "docker") return "Docker";
-  if (provider === "desktop") return "Desktop";
-  if (provider === "e2b") return "E2B";
-  if (provider === "novita") return "Novita";
-  if (provider === "daytona") return "Daytona";
-  if (provider === "boat") return "Boat";
-  if (provider === "fake") return "Fake";
-  return provider;
-}
-
-export async function refreshSandboxFromServer(): Promise<Me> {
-  const [health, me] = await Promise.all([rpc.health(), rpc.me()]);
-  if (!health.ok) {
-    throw new Error("Server health check failed");
-  }
+export async function refreshSandboxFromServer(origin = captureRpcContext()): Promise<Me> {
+  const [health, me] = await Promise.all([origin.client.health(), origin.client.me()]);
+  if (!origin.isCurrent()) throw new DOMException("Session changed", "AbortError");
+  if (!health.ok) throw new Error("Server health check failed");
   return me;
 }
 

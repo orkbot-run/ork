@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited boot tests remain Apache-2.0; Space admission fixture support is an Ork addition.
 
+import type { SandboxProvider } from "@orkbot/adapter-kit";
 import { SandboxDamagedError } from "@orkbot/adapter-kit";
 import type * as Adapters from "@orkbot/adapters";
-import { ComputerBusyError } from "@orkbot/adapters";
+import { ComputerBusyError, FakeSandboxProvider, NoneSandboxProvider } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { Prisma } from "@orkbot/db";
@@ -44,6 +45,7 @@ const actor = {
 function routerDeps(prisma: PrismaClient) {
   return {
     prisma,
+    sandbox: new FakeSandboxProvider(),
     jobs: { enqueue: vi.fn() },
     env: {
       defaultProvider: "fake",
@@ -56,12 +58,20 @@ function routerDeps(prisma: PrismaClient) {
   } as unknown as RouterDeps;
 }
 
-async function boot(prisma: PrismaClient) {
-  const handler = new RPCHandler(createRouter(routerDeps(prisma)), {
+async function boot(
+  prisma: PrismaClient,
+  options: {
+    action?: "boot" | "takeover" | "screenUrl" | "terminalUrl";
+    sandbox?: SandboxProvider;
+  } = {},
+) {
+  const deps = routerDeps(prisma);
+  if (options.sandbox) deps.sandbox = options.sandbox;
+  const handler = new RPCHandler(createRouter(deps), {
     clientInterceptors: [onError((error, { path }) => handleRpcError(error, path))],
   });
   const { response } = await handler.handle(
-    new Request("https://api.example.test/rpc/computer/boot", {
+    new Request(`https://api.example.test/rpc/computer/${options.action ?? "boot"}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ json: { botId: "bot-1" } }),
@@ -73,6 +83,8 @@ async function boot(prisma: PrismaClient) {
 
 const stoppedBot = {
   id: "bot-1",
+  userId: actor.userId,
+  spaceId: actor.spaceId,
   thread: { id: "thread-1" },
   computer: { id: "computer-1", state: "stopped", providerRef: null, scope: "team" },
 };
@@ -84,6 +96,75 @@ beforeEach(() => {
 });
 
 describe("computer boot", () => {
+  it("refuses a disabled start before claiming a lease or provisioning", async () => {
+    const prisma = { bot: { findFirst: vi.fn(async () => stoppedBot) } } as unknown as PrismaClient;
+    const response = await boot(prisma, { sandbox: new NoneSandboxProvider() });
+    expect(response?.status).toBe(400);
+    expect(lifecycle.acquireComputerExecutionLease).not.toHaveBeenCalled();
+    expect(lifecycle.provisionComputer).not.toHaveBeenCalled();
+  });
+
+  it("refuses graphical control before any lease write on a headless active target", async () => {
+    const sandbox = new FakeSandboxProvider();
+    const descriptor = sandbox.describe();
+    vi.spyOn(sandbox, "describe").mockReturnValue({
+      ...descriptor,
+      capabilities: { ...descriptor.capabilities, graphical: false, takeover: false },
+    });
+    const prisma = {
+      bot: {
+        findFirst: vi.fn(async () => ({
+          ...stoppedBot,
+          computer: {
+            ...stoppedBot.computer,
+            state: "running",
+            kind: "fake",
+            providerRef: "active",
+          },
+        })),
+      },
+      computer: { updateMany: vi.fn() },
+    } as unknown as PrismaClient;
+    const response = await boot(prisma, { action: "takeover", sandbox });
+    expect(response?.status).toBe(400);
+    expect(prisma.computer.updateMany).not.toHaveBeenCalled();
+    expect(lifecycle.acquireComputerExecutionLease).not.toHaveBeenCalled();
+  });
+  it("fences the checked active reference when acquiring graphical control", async () => {
+    const computer = {
+      ...stoppedBot.computer,
+      state: "running",
+      kind: "fake",
+      providerRef: "checked-reference",
+      controlHolder: "none",
+      controlLeaseId: null,
+    };
+    const updateMany = vi.fn(async () => ({ count: 0 }));
+    const prisma = {
+      bot: { findFirst: vi.fn(async () => ({ ...stoppedBot, computer })) },
+      computerExecutionLease: { findUnique: vi.fn(async () => null) },
+      computer: {
+        updateMany,
+        findUniqueOrThrow: vi.fn(async () => ({
+          ...computer,
+          kind: "desktop",
+          providerRef: "replacement",
+        })),
+      },
+    } as unknown as PrismaClient;
+    const response = await boot(prisma, { action: "takeover" });
+    expect(response?.status).toBe(409);
+    expect(updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          kind: "fake",
+          providerRef: "checked-reference",
+          controlLeaseId: null,
+        }),
+      }),
+    );
+  });
+
   it.each([false, true])("uses claimless lease acquisition when busy=%s", async (busy) => {
     lifecycle.acquireComputerExecutionLease.mockImplementation(lifecycle.realAcquire!);
     lifecycle.provisionComputer.mockRejectedValue(new Error("stop after the lease"));

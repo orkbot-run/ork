@@ -19,9 +19,14 @@ import {
   canonicalPiProviderId,
   resolveBotAvatarSet,
 } from "@orkbot/contracts";
+import { computerHomeKey } from "@orkbot/db";
 import { isAdmin } from "#modules/accounts/admins";
 import { syncPrimaryOrk } from "#modules/accounts/first-ork";
-import { effectiveSandboxProvider } from "#modules/computers/computer-provider-config";
+import { computerCapabilities } from "#modules/computers/computer-capabilities";
+import {
+  effectiveSandboxProvider,
+  getAccountComputerSettings,
+} from "#modules/computers/computer-provider-config";
 import type { RouterDeps } from "../router.js";
 
 export { createAdapterContext as computerContext } from "@orkbot/adapter-kit";
@@ -52,6 +57,13 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
   await syncPrimaryOrk(deps.prisma, actor, user.orkAvatar);
   // Where the deployment runs computers once an admin's choice in Settings applies.
   const sandboxProvider = effectiveSandboxProvider(setup.settings, deps.env.sandboxProvider);
+  const [capabilities, accountSettings] = await Promise.all([
+    computerCapabilities(deps.sandbox, {
+      homeKey: computerHomeKey({ mode: "team", spaceId: actor.spaceId, userId: actor.userId }),
+      ownerUserId: actor.userId,
+    }),
+    getAccountComputerSettings(deps, actor).catch(() => null),
+  ]);
   return {
     ticketBoardEnabled: deps.env.ticketBoardEnabled === true,
     phoneCallsEnabled: deps.env.phoneCallsEnabled === true,
@@ -80,6 +92,8 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
       Boolean(deps.env.desktopHostChoiceEnabled) && sandboxProvider === "docker",
     // The deployment's provider: an account's own choice covers only its Team Computers.
     sandboxProvider,
+    computerCapabilities: capabilities,
+    canConfigureAccountComputers: Boolean(accountSettings?.providers.length),
     mcpStdioEnabled:
       admin &&
       mcpStdioAvailable({

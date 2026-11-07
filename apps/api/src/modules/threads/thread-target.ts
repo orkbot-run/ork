@@ -57,6 +57,7 @@ import {
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
+import { botComputerCapabilities } from "#modules/computers/computer-capabilities";
 import { resolveBusyBotName, toComputerStatus } from "#modules/computers/computer-status";
 import {
   buildSendPrompt,
@@ -437,7 +438,7 @@ export async function threadHead(prisma: PrismaClient, target: ThreadTarget) {
 }
 
 export async function threadSnapshot(
-  deps: { prisma: PrismaClient },
+  deps: { prisma: PrismaClient; sandbox: SandboxProvider },
   target: ThreadTarget,
 ): Promise<ThreadSnapshot> {
   // Lock the thread row so messages, the event cursor, active runs, and live
@@ -445,7 +446,8 @@ export async function threadSnapshot(
   // otherwise advance the client cursor past thread.message.created while the
   // ask message page still omits it — leaving waiting_input with no AskCard.
   if (target.kind === "bot") {
-    const [busyBotName, core] = await Promise.all([
+    const [capabilities, busyBotName, core] = await Promise.all([
+      botComputerCapabilities(deps, target.bot),
       resolveBusyBotName(deps.prisma, {
         computerId: target.bot.computer?.id,
         botId: target.botId,
@@ -539,7 +541,7 @@ export async function threadSnapshot(
       olderCursor: core.messagePage.olderCursor,
       run: core.run ? mapRun(core.run) : null,
       activeRuns: core.activeRuns.map(mapRun),
-      computer: toComputerStatus(target.botId, target.bot.computer, busyBotName),
+      computer: toComputerStatus(target.botId, target.bot.computer, busyBotName, capabilities),
     };
   }
 

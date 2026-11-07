@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -27,12 +31,18 @@ vi.mock("@orkbot/ui-web", () => ({
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
 }));
 vi.mock("./ai/primitives", () => ({ SuccessPop: () => null }));
-const { deployment, account } = vi.hoisted(() => ({
+const { deployment, account, current, me } = vi.hoisted(() => ({
+  current: { value: true },
+  me: vi.fn(),
   deployment: { get: vi.fn(), update: vi.fn() },
   account: { get: vi.fn(), update: vi.fn() },
 }));
 // Like the real client, every property read returns a new object.
 vi.mock("../lib/rpc", () => ({
+  captureRpcContext: () => ({
+    isCurrent: () => current.value,
+    client: { me, computerProvider: { ...deployment, account } },
+  }),
   rpc: {
     get computerProvider() {
       return {
@@ -69,6 +79,11 @@ let root: ReturnType<typeof createRoot>;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  current.value = true;
+  me.mockResolvedValue({
+    computerCapabilities: { start: true, screen: true, control: true, terminal: false },
+    sandboxProvider: "deployment-target",
+  });
   host = document.createElement("div");
   document.body.append(host);
   root = createRoot(host);
@@ -82,9 +97,11 @@ afterEach(async () => {
 it("saves an account's own desktop to the account, never the deployment", async () => {
   account.get.mockResolvedValue(saved);
   account.update.mockResolvedValue(saved);
-  const onProviderChange = vi.fn();
+  const onConfigurationChange = vi.fn();
   await act(async () =>
-    root.render(<ComputerProviderSettings scope="account" onProviderChange={onProviderChange} />),
+    root.render(
+      <ComputerProviderSettings scope="account" onConfigurationChange={onConfigurationChange} />,
+    ),
   );
   expect(host.querySelector<HTMLInputElement>("input")?.value).toBe("example-desktop");
   // Loaded once, not again on every render.
@@ -97,8 +114,10 @@ it("saves an account's own desktop to the account, never the deployment", async 
   });
   expect(deployment.get).not.toHaveBeenCalled();
   expect(deployment.update).not.toHaveBeenCalled();
-  // An account's choice covers its Team Computers, not what the deployment reports.
-  expect(onProviderChange).not.toHaveBeenCalled();
+  // Refresh authoritative account capability metadata without rewriting the deployment target.
+  expect(onConfigurationChange).toHaveBeenCalledWith(
+    expect.objectContaining({ sandboxProvider: "deployment-target" }),
+  );
 });
 
 it("sends an account back to the deployment default", async () => {
@@ -109,14 +128,16 @@ it("sends an account back to the deployment default", async () => {
     values: {},
     savedSecrets: {},
   });
-  const onProviderChange = vi.fn();
+  const onConfigurationChange = vi.fn();
   await act(async () =>
-    root.render(<ComputerProviderSettings scope="account" onProviderChange={onProviderChange} />),
+    root.render(
+      <ComputerProviderSettings scope="account" onConfigurationChange={onConfigurationChange} />,
+    ),
   );
   expect(host.querySelector("input")).toBeNull();
   await act(async () => host.querySelector("form")?.requestSubmit());
   expect(account.update).toHaveBeenCalledWith({ provider: "default", values: {} });
-  expect(onProviderChange).not.toHaveBeenCalled();
+  expect(onConfigurationChange).toHaveBeenCalledOnce();
 });
 
 /** Types into the field labelled `label` the way a person pasting would. */
@@ -163,4 +184,40 @@ it("blocks the fields while a save is in flight", async () => {
   finishSave();
   await act(async () => {});
   expect(host.querySelector("fieldset")?.disabled).toBe(false);
+});
+
+it("does not publish a completed save into a replacement session", async () => {
+  account.get.mockResolvedValue(saved);
+  let finish!: (value: typeof saved) => void;
+  account.update.mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const onConfigurationChange = vi.fn();
+  await act(async () =>
+    root.render(
+      <ComputerProviderSettings scope="account" onConfigurationChange={onConfigurationChange} />,
+    ),
+  );
+  await act(async () => host.querySelector("form")?.requestSubmit());
+  current.value = false;
+  await act(async () => finish(saved));
+  expect(me).not.toHaveBeenCalled();
+  expect(onConfigurationChange).not.toHaveBeenCalled();
+});
+
+it("does not report a late failed save in a replacement session", async () => {
+  account.get.mockResolvedValue(saved);
+  let fail!: (error: Error) => void;
+  account.update.mockReturnValue(
+    new Promise((_resolve, reject) => {
+      fail = reject;
+    }),
+  );
+  await act(async () => root.render(<ComputerProviderSettings scope="account" />));
+  await act(async () => host.querySelector("form")?.requestSubmit());
+  current.value = false;
+  await act(async () => fail(new Error("old account failure")));
+  expect(host.querySelector('[role="alert"]')).toBeNull();
 });

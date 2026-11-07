@@ -161,11 +161,10 @@ export function SettingsOverlays({
           section={overlay.section}
           onSectionChange={(section) => setOverlay({ ...overlay, section })}
           billingEnabled={bootstrapMe?.billingEnabled === true}
-          sandboxProvider={bootstrapMe?.sandboxProvider}
+          computerCapabilities={bootstrapMe?.computerCapabilities}
+          canConfigureAccountComputers={bootstrapMe?.canConfigureAccountComputers}
           canConfigureComputers={bootstrapMe?.isAdmin === true}
-          onSandboxProviderChange={(sandboxProvider) =>
-            setBootstrapMe((prev) => (prev ? { ...prev, sandboxProvider } : prev))
-          }
+          onComputerConfigurationChange={(me) => setBootstrapMe(() => me)}
           messagingEnabled={messagingEnabled}
           paymentWalletProvider={bootstrapMe?.paymentWalletProvider ?? null}
           timezone={bootstrapMe?.timezone ?? null}

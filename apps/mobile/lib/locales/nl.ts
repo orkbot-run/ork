@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Check again": "Opnieuw controleren",
+  "Computers unavailable": "Computers niet beschikbaar",
+  "Screen unavailable": "Scherm niet beschikbaar",
   "The computer service cannot start computers for this account.":
     "De computerservice kan voor dit account geen computers starten.",
   Rule: "Regel",

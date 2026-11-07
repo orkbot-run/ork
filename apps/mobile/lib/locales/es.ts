@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Check again": "Comprobar de nuevo",
+  "Computers unavailable": "Computadoras no disponibles",
+  "Screen unavailable": "Pantalla no disponible",
   "The computer service cannot start computers for this account.":
     "El servicio de equipos no puede iniciar equipos para esta cuenta.",
   Rule: "Regla",

@@ -1,8 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { homedir } from "node:os";
 import type {
   AdapterContext,
   CommandRequest,
   ComputerActionRequest,
+  ComputerCapabilityTarget,
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
@@ -15,6 +20,7 @@ import type {
   WorkspaceDirectoryRequest,
   WorkspaceExportLimits,
 } from "@orkbot/adapter-kit";
+import { inspectComputerCapabilities } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -23,6 +29,7 @@ import { computerProviderDescriptor } from "./computer-provider-registry.js";
 import { manageComputerWorkspaceDirectories } from "./computer-workspace.js";
 import {
   ConfiguredSandbox,
+  loadAccountComputerSettings,
   loadComputerOwnerSettings,
   loadComputerProviderSelection,
 } from "./configured-sandbox.js";
@@ -54,6 +61,7 @@ export async function createRunSandbox(
     {
       onSecretChange: secrets.onChange?.bind(secrets),
       loadOwn: (homeKey) => loadComputerOwnerSettings(prisma, secrets, homeKey, true),
+      loadOwnForUser: (userId) => loadAccountComputerSettings(prisma, secrets, userId, true),
       createProvider: (settings) =>
         createBaseRunSandbox(settings.provider, {
           ...opts,
@@ -168,6 +176,18 @@ export class HostAwareSandbox implements SandboxProvider {
   async provisionKind() {
     const provider = (await this.hostEnabled()) ? this.host : this.isolated;
     return provider.describe().id as ComputerRef["kind"];
+  }
+
+  async computerCapabilities(input: ComputerCapabilityTarget) {
+    const unavailable = { start: false, screen: false, control: false, terminal: false };
+    const next = (async () =>
+      inspectComputerCapabilities((await this.hostEnabled()) ? this.host : this.isolated, {
+        homeKey: input.homeKey,
+      }))().catch(() => unavailable);
+    const active = input.computer
+      ? inspectComputerCapabilities(this.route(input.computer), input).catch(() => unavailable)
+      : next;
+    return { ...(await active), start: (await next).start };
   }
 
   async provision(

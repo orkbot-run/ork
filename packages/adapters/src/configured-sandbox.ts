@@ -1,7 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
   ComputerActionRequest,
+  ComputerCapabilityTarget,
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
@@ -14,6 +19,7 @@ import type {
   WorkspaceDirectoryRequest,
   WorkspaceExportLimits,
 } from "@orkbot/adapter-kit";
+import { inspectComputerCapabilities } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import { cancelComputerRunWork, probeBackgroundWork, providerKeepsHome } from "./computer-idle.js";
@@ -191,6 +197,7 @@ export class ConfiguredSandbox implements SandboxProvider {
     private readonly load: () => Promise<ComputerProviderSelection>,
     private readonly options: {
       loadOwn?: (homeKey: string) => Promise<StoredComputerSettings | null>;
+      loadOwnForUser?: (userId: string) => Promise<StoredComputerSettings | null>;
       onSecretChange?: SecretStore["onChange"];
       createProvider?: (settings: StoredComputerSettings) => Promise<SandboxProvider>;
     } = {},
@@ -321,6 +328,9 @@ export class ConfiguredSandbox implements SandboxProvider {
   private async target(homeKey?: string) {
     const own = homeKey ? await this.ownSettings(homeKey) : null;
     if (own) return this.providerFor(own, homeKey!);
+    return this.defaultTarget();
+  }
+  private async defaultTarget() {
     // An unreadable store must not stop every computer from starting: use the last settings read.
     await this.current().catch((error) => {
       if (!this.selectionLoadedAt) throw error;
@@ -340,6 +350,27 @@ export class ConfiguredSandbox implements SandboxProvider {
       (await this.primary.provisionKind?.(homeKey)) ??
       (this.primary.describe().id as ComputerRef["kind"])
     );
+  }
+
+  async computerCapabilities(input: ComputerCapabilityTarget) {
+    const unavailable = { start: false, screen: false, control: false, terminal: false };
+    const next = (async () => {
+      // An owner is known before a first Team Computer exists; never substitute a viewer's keys.
+      const own = input.ownerUserId ? await this.options.loadOwnForUser?.(input.ownerUserId) : null;
+      const target = own
+        ? await this.providerFor(own, input.homeKey ?? input.ownerUserId!)
+        : input.ownerUserId && this.options.loadOwnForUser
+          ? await this.defaultTarget()
+          : await this.target(input.homeKey);
+      return inspectComputerCapabilities(target, { homeKey: input.homeKey });
+    })().catch(() => unavailable);
+    // An unreadable new target must not hide an independently routable active computer.
+    const active = input.computer
+      ? this.route(input.computer)
+          .then((provider) => inspectComputerCapabilities(provider, input))
+          .catch(() => unavailable)
+      : next;
+    return { ...(await active), start: (await next).start };
   }
 
   async provision(

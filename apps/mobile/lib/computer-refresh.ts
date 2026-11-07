@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type { ComputerStatus } from "@orkbot/contracts";
 import { isRetryableError } from "@orkbot/core";
 import { SCREEN_URL_RENEW_MS, screenRenewReadAt } from "./computer";
@@ -21,6 +25,7 @@ function screenKey(status: ComputerStatus) {
     status.controlHolder,
     status.controlBotId,
     status.screenAvailable,
+    status.capabilities?.screen,
     status.screenWidth,
     status.screenHeight,
     status.homeRevision,
@@ -80,7 +85,11 @@ export function createComputerRefresh(options: {
       const status = await options.readStatus();
       if (!current()) return;
       options.onStatus(status);
-      if (screenStale(status, !poll)) {
+      if (status.capabilities?.screen === false) {
+        screenLoaded = true;
+        screenStatus = screenKey(status);
+        options.onScreen(null);
+      } else if (screenStale(status, !poll)) {
         try {
           const url = await options.readScreen(screenAttempts);
           if (!current()) return;

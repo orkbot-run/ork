@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Check again": "重新检查",
+  "Computers unavailable": "计算机不可用",
+  "Screen unavailable": "屏幕不可用",
   "The computer service cannot start computers for this account.":
     "计算机服务无法为此账户启动计算机。",
   Rule: "规则",

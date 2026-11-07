@@ -257,6 +257,8 @@ export interface SnapshotRef {
 }
 
 export interface SandboxCapabilities {
+  /** False for an explicitly disabled computer target. Older adapters can provision. */
+  provisioning?: boolean;
   graphical: boolean;
   pty: boolean;
   snapshots: boolean;

@@ -1,13 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import type { ComputerStatus } from "@orkbot/contracts";
 
-export function DesktopKindEmptyState({ className }: { className?: string }) {
+export function ScreenUnavailableState({ className }: { className?: string }) {
   return (
     <div className={className}>
-      <Trans>
-        This bot runs on this computer, not a Linux desktop. Shell and files use your home folder.
-      </Trans>
+      <Trans>Screen unavailable</Trans>
     </div>
   );
 }

@@ -1,21 +1,30 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { ComputerProviderSettings as Settings } from "@orkbot/contracts";
+import type { Me, ComputerProviderSettings as Settings } from "@orkbot/contracts";
 import { Button, Field, FieldLabel, Input, NativeSelect, NativeSelectOption } from "@orkbot/ui-web";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@orkbot/ui-web/components/ui/collapsible";
-import { useEffect, useId, useState } from "react";
-import { rpc } from "../lib/rpc";
+import { useEffect, useId, useRef, useState } from "react";
+import { captureRpcContext } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
 import { SuccessPop } from "./ai/primitives";
 
 type Draft = { provider: string; values: Record<string, string> };
 
 // The RPC client hands out a new object on every property read, so pick by scope, never hold it.
-function settingsApi(scope: "deployment" | "account") {
-  return scope === "account" ? rpc.computerProvider.account : rpc.computerProvider;
+function settingsApi(
+  scope: "deployment" | "account",
+  origin: ReturnType<typeof captureRpcContext>,
+) {
+  return scope === "account"
+    ? origin.client.computerProvider.account
+    : origin.client.computerProvider;
 }
 
 // Field labels come from the server in English; translate the ones the registry uses.
@@ -50,10 +59,10 @@ function draftFrom(settings: Settings): Draft {
 
 export function ComputerProviderSettings({
   scope,
-  onProviderChange,
+  onConfigurationChange,
 }: {
   scope: "deployment" | "account";
-  onProviderChange?: (sandboxProvider: string) => void;
+  onConfigurationChange?: (me: Me) => void;
 }) {
   const { t } = useLingui();
   const fieldLabel = useFieldLabel();
@@ -63,21 +72,26 @@ export function ComputerProviderSettings({
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const owner = useRef<ReturnType<typeof captureRpcContext> | null>(null);
 
   useEffect(() => {
     let alive = true;
-    settingsApi(scope)
+    const origin = captureRpcContext();
+    owner.current = origin;
+    settingsApi(scope, origin)
       .get()
       .then((next) => {
-        if (!alive) return;
+        if (!alive || !origin.isCurrent()) return;
         setSettings(next);
         setDraft(draftFrom(next));
       })
       .catch((caught: unknown) => {
-        if (alive) setError(errorText(caught, t`Could not load computer settings`));
+        if (alive && origin.isCurrent())
+          setError(errorText(caught, t`Could not load computer settings`));
       });
     return () => {
       alive = false;
+      if (owner.current === origin) owner.current = null;
     };
   }, [scope, t]);
 
@@ -94,21 +108,25 @@ export function ComputerProviderSettings({
     setDraft({ ...draft, ...patch });
   };
   async function save() {
-    if (!draft || pending) return;
+    const origin = owner.current;
+    if (!draft || pending || !origin?.isCurrent()) return;
+    const isCurrent = () => owner.current === origin && origin.isCurrent();
     setPending(true);
     setError(null);
     try {
-      const next = await settingsApi(scope).update(draft);
+      const next = await settingsApi(scope, origin).update(draft);
+      if (!isCurrent()) return;
       setSettings(next);
       setDraft(draftFrom(next));
       setSaved(true);
-      // An account's choice covers only its Team Computers, never what the deployment runs.
-      if (scope === "deployment")
-        onProviderChange?.(next.provider === "default" ? next.defaultProvider : next.provider);
+      if (onConfigurationChange) {
+        const me = await origin.client.me();
+        if (isCurrent()) onConfigurationChange(me);
+      }
     } catch (caught) {
-      setError(errorText(caught, t`Could not save computer settings`));
+      if (isCurrent()) setError(errorText(caught, t`Could not save computer settings`));
     } finally {
-      setPending(false);
+      if (isCurrent()) setPending(false);
     }
   }
 
@@ -142,7 +160,7 @@ export function ComputerProviderSettings({
               className="w-full"
             >
               <NativeSelectOption value="default">
-                {t`Deployment default (${settings.defaultProvider})`}
+                <Trans>Default</Trans>
               </NativeSelectOption>
               {settings.providers.map((provider) => (
                 <NativeSelectOption key={provider.id} value={provider.id}>

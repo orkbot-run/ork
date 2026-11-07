@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 code remains separately licensed. Generator-only avatar editing is an Ork addition.
 
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
+import type { AccountSecurity, ComputerCapabilities, Me, UsageSummary } from "@orkbot/contracts";
 import type { createServerUpdates, ServerUpdatesView } from "@orkbot/core";
 import {
   accountDisplay,
@@ -563,18 +563,20 @@ export function UsageSettingsPanel({
 }
 
 export function ComputerSettingsPanel({
-  sandboxProvider,
-  onSandboxProviderChange,
+  computerCapabilities,
+  canConfigureAccountComputers = false,
+  onComputerConfigurationChange,
   onRecoveryDismissed,
   canConfigureComputers = false,
 }: {
-  sandboxProvider?: string | null;
-  onSandboxProviderChange?: (sandboxProvider: string) => void;
+  computerCapabilities?: ComputerCapabilities | null;
+  canConfigureAccountComputers?: boolean;
+  onComputerConfigurationChange?: (me: Me) => void;
   onRecoveryDismissed?: () => void;
   canConfigureComputers?: boolean;
 }) {
   // Once shown, the hint stays mounted so a successful check can show its confirmation.
-  const unavailable = computersAreUnavailable(sandboxProvider);
+  const unavailable = computersAreUnavailable(computerCapabilities);
   const [hintShown, setHintShown] = useState(unavailable);
   if (unavailable && !hintShown) setHintShown(true);
   return (
@@ -588,16 +590,16 @@ export function ComputerSettingsPanel({
       {hintShown ? (
         <ComputersUnavailableHint
           className="mt-3 text-[13px] leading-relaxed text-muted-foreground"
-          sandboxProvider={sandboxProvider}
-          onRecovered={onSandboxProviderChange}
+          computerCapabilities={computerCapabilities}
+          onRecovered={onComputerConfigurationChange}
           onRecoveryDismissed={onRecoveryDismissed}
         />
       ) : null}
       {/* The server decides what an account may change, including removing keys it saved. */}
-      {canConfigureComputers || sandboxProvider ? (
+      {canConfigureComputers || canConfigureAccountComputers ? (
         <ComputerProviderSettings
           scope={canConfigureComputers ? "deployment" : "account"}
-          onProviderChange={onSandboxProviderChange}
+          onConfigurationChange={onComputerConfigurationChange}
         />
       ) : null}
     </div>

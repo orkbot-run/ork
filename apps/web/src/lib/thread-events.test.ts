@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type {
   ComputerStatus,
   ProductEvent,
@@ -1879,7 +1883,9 @@ describe("computer event reduction", () => {
       screenMissing({ ...options, screenUrlLoaded: true, embeddedUrl: "https://screen.example" }),
     ).toBe(false);
     expect(screenMissing({ ...options, screenUrlLoaded: true, booting: true })).toBe(false);
-    expect(screenMissing({ ...options, screenUrlLoaded: true, kind: "desktop" })).toBe(false);
+    expect(screenMissing({ ...options, screenUrlLoaded: true, screenAvailable: false })).toBe(
+      false,
+    );
     expect(screenMissing({ ...options, screenUrlLoaded: true, state: "error" })).toBe(false);
   });
 

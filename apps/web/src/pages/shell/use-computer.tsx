@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   Bot,
@@ -8,6 +12,7 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
+  computerCapabilitiesFor,
   createScreenReconnects,
   isRetryableError,
   screenProbeUrl,
@@ -17,7 +22,6 @@ import { Button, Spinner } from "@orkbot/ui-web";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ComputerMaintenanceActions } from "../../components/ComputerMaintenanceActions";
-import { computersAreUnavailable } from "../../components/ComputersUnavailableHint";
 import {
   bootComputerOnce,
   createScreenRefocus,
@@ -369,7 +373,8 @@ export function useComputerState({
   }
 
   async function refreshComputerScreen(id: string, request?: number) {
-    if (!computerVisible.current) return null;
+    if (!computerVisible.current || computerRef.current?.capabilities?.screen === false)
+      return null;
     const read = request ?? ++screenRequest.current;
     const issuedState = computerRef.current?.botId === id ? computerRef.current.state : undefined;
     return loadComputerScreen({
@@ -465,7 +470,7 @@ export function useComputerControls({
   activeBotId,
   activeGroupId,
   runStatus,
-  sandboxProvider,
+  computerCapabilities,
   refreshThread,
   refreshGroupThread,
 }: {
@@ -478,7 +483,7 @@ export function useComputerControls({
   activeBotId: RefObject<string | undefined>;
   activeGroupId: RefObject<string | undefined>;
   runStatus: Run["status"] | undefined;
-  sandboxProvider: Me["sandboxProvider"] | undefined;
+  computerCapabilities: Me["computerCapabilities"] | undefined;
   refreshThread: (botId: string) => Promise<ThreadSnapshot>;
   refreshGroupThread: (groupId: string) => Promise<ThreadSnapshot>;
 }) {
@@ -514,7 +519,8 @@ export function useComputerControls({
   } = state;
   const [keepComputerRecovery, setKeepComputerRecovery] = useState(false);
   const recoveryHoldTimer = useRef<number | undefined>(undefined);
-  const showComputerRecoveryHint = computersAreUnavailable(sandboxProvider) || keepComputerRecovery;
+  const showComputerRecoveryHint =
+    !computerCapabilitiesFor(computer, computerCapabilities).start || keepComputerRecovery;
   const releaseComputerRecovery = useCallback(() => {
     window.clearTimeout(recoveryHoldTimer.current);
     recoveryHoldTimer.current = undefined;
@@ -559,8 +565,10 @@ export function useComputerControls({
       computerBotIdRef.current === targetBotId || activeBotId.current === targetBotId;
     const cached = computerCacheRef.current.get(targetBotId);
     const targetComputer = computer?.botId === targetBotId ? computer : (cached?.computer ?? null);
-    const targetScreen = computer?.botId === targetBotId ? screenUrl : (cached?.screenUrl ?? null);
-    const needsBoot = force || targetComputer?.state !== "running" || !targetScreen;
+    const needsBoot = force || targetComputer?.state !== "running";
+    const capabilities = computerCapabilitiesFor(targetComputer, computerCapabilities);
+    if (needsBoot && !capabilities.start) return;
+    if (takeControl && !capabilities.control) return;
     if (showProgress && needsBoot) setBootingBotId(targetBotId);
     setComputerError(null);
     setComputerErrorFromScreen(false);
@@ -623,7 +631,14 @@ export function useComputerControls({
       const state = snap?.computer?.state;
       const screen = state === "running" ? await refreshComputerScreen(botId) : null;
       if (cancelled || activeBotId.current !== botId) return;
-      if (!computerPanelNeedsScreen(state, screen) || autoBooted.current === botId) return;
+      const available = computerCapabilitiesFor(snap?.computer, computerCapabilities);
+      if (
+        !available.start ||
+        !available.screen ||
+        !computerPanelNeedsScreen(state, screen) ||
+        autoBooted.current === botId
+      )
+        return;
       autoBooted.current = botId;
       await bootComputer({
         botId,
@@ -766,7 +781,7 @@ export function useComputerControls({
     Boolean(computerError && !hideScreenLoadError && computerErrorFromScreen) ||
     screenMissing({
       state: computer?.state,
-      kind: computer?.kind,
+      screenAvailable: computerCapabilitiesFor(computer, computerCapabilities).screen,
       booting,
       screenUrlLoaded: Boolean(computerBot?.id && screenUrlLoadedBotId === computerBot.id),
       embeddedUrl: embeddedScreenUrl,
@@ -836,16 +851,12 @@ export function useComputerControls({
     ) : null;
   const computerPreviewScreen =
     !computerOpen &&
-    computer?.kind !== "desktop" &&
+    computerCapabilitiesFor(computer, computerCapabilities).screen &&
     computer?.state === "running" &&
     Boolean(embeddedScreenUrl) &&
     !computerScreenError;
   const showingRecoveryHint =
-    !computerOpen &&
-    computer?.kind !== "desktop" &&
-    !computerPreviewScreen &&
-    !computerScreenError &&
-    showComputerRecoveryHint;
+    !computerOpen && !computerPreviewScreen && !computerScreenError && showComputerRecoveryHint;
 
   return {
     computerBot,

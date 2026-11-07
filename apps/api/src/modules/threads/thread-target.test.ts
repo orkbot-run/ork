@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 
 import type { SandboxProvider } from "@orkbot/adapter-kit";
+import { FakeSandboxProvider } from "@orkbot/adapters";
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import { callClientNonce } from "@orkbot/core";
 import type * as MessageQuoteModule from "@orkbot/core/message-quote";
@@ -613,7 +614,7 @@ describe("threadSnapshot", () => {
     const prisma = {
       $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
     } as unknown as PrismaClient;
-    const snapshot = await threadSnapshot({ prisma }, {
+    const snapshot = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, {
       kind: "bot",
       botId: "bot-1",
       threadId: "thread-1",
@@ -681,7 +682,7 @@ describe("threadSnapshot", () => {
         bot: { computer: null },
       } as ThreadTarget;
 
-      const snapshot = await threadSnapshot({ prisma }, target);
+      const snapshot = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, target);
 
       expect(tx.$queryRaw).toHaveBeenCalledOnce();
       if (trigger === "bot_message") {
@@ -762,7 +763,7 @@ describe("threadSnapshot", () => {
       bot: { computer: null },
     } as ThreadTarget;
 
-    const snapshot = await threadSnapshot({ prisma }, target);
+    const snapshot = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, target);
 
     expect(findFirstRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -821,6 +822,7 @@ describe("threadSnapshot", () => {
     };
     const snapshot = await threadSnapshot(
       {
+        sandbox: new FakeSandboxProvider(),
         prisma: {
           $transaction: vi.fn(async (callback: (client: unknown) => unknown) =>
             callback({
@@ -868,6 +870,7 @@ describe("threadSnapshot", () => {
       };
       const snapshot = await threadSnapshot(
         {
+          sandbox: new FakeSandboxProvider(),
           prisma: {
             $transaction: vi.fn(async (callback: (client: unknown) => unknown) =>
               callback({
@@ -950,7 +953,7 @@ describe("threadSnapshot", () => {
       bot: { computer: null },
     } as ThreadTarget;
 
-    const snapshot = await threadSnapshot({ prisma }, target);
+    const snapshot = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, target);
 
     expect(findFirstRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -986,7 +989,7 @@ describe("threadSnapshot", () => {
       bot: { computer: null },
     } as ThreadTarget;
 
-    const snapshot = await threadSnapshot({ prisma }, target);
+    const snapshot = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, target);
 
     expect(findFirstRun).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1017,7 +1020,10 @@ describe("threadSnapshot", () => {
     };
     const findManyRuns = groupRunFindMany({ terminals: [run] });
     const prisma = groupPrisma(findManyRuns);
-    const snapshot = await threadSnapshot({ prisma }, groupTarget());
+    const snapshot = await threadSnapshot(
+      { prisma, sandbox: new FakeSandboxProvider() },
+      groupTarget(),
+    );
 
     expect(findManyRuns).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1085,7 +1091,10 @@ describe("threadSnapshot", () => {
       active: [peerActive],
       terminals: [peerFailed],
     });
-    const snapshot = await threadSnapshot({ prisma: groupPrisma(findManyRuns) }, groupTarget());
+    const snapshot = await threadSnapshot(
+      { sandbox: new FakeSandboxProvider(), prisma: groupPrisma(findManyRuns) },
+      groupTarget(),
+    );
 
     expect(snapshot.activeRuns).toEqual([]);
     expect(snapshot.run).toBeNull();
@@ -1126,7 +1135,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:05.000Z"),
     };
     const findManyRuns = groupRunFindMany({ active: [peerWaiting] });
-    const snapshot = await threadSnapshot({ prisma: groupPrisma(findManyRuns) }, groupTarget());
+    const snapshot = await threadSnapshot(
+      { sandbox: new FakeSandboxProvider(), prisma: groupPrisma(findManyRuns) },
+      groupTarget(),
+    );
 
     expect(snapshot.activeRuns).toEqual([
       expect.objectContaining({ id: "run-peer-waiting", status: "waiting_input" }),
@@ -1172,7 +1184,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:05.000Z"),
     };
     const findManyRuns = groupRunFindMany({ active: [newerBusy, olderWaiting] });
-    const snapshot = await threadSnapshot({ prisma: groupPrisma(findManyRuns) }, groupTarget());
+    const snapshot = await threadSnapshot(
+      { sandbox: new FakeSandboxProvider(), prisma: groupPrisma(findManyRuns) },
+      groupTarget(),
+    );
 
     expect(snapshot.run).toEqual(expect.objectContaining({ id: "run-older-waiting" }));
     // activeRuns is unaffected by which one is chosen as primary.
@@ -1212,7 +1227,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:02.000Z"),
     };
     const snapshot = await threadSnapshot(
-      { prisma: groupPrisma(groupRunFindMany({ terminals: [completed, failed] })) },
+      {
+        sandbox: new FakeSandboxProvider(),
+        prisma: groupPrisma(groupRunFindMany({ terminals: [completed, failed] })),
+      },
       groupTarget(),
     );
 
@@ -1250,7 +1268,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:03.000Z"),
     };
     const snapshot = await threadSnapshot(
-      { prisma: groupPrisma(groupRunFindMany({ terminals: [cancelled, failed] })) },
+      {
+        sandbox: new FakeSandboxProvider(),
+        prisma: groupPrisma(groupRunFindMany({ terminals: [cancelled, failed] })),
+      },
       groupTarget(),
     );
 
@@ -1287,7 +1308,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:02.000Z"),
     };
     const snapshot = await threadSnapshot(
-      { prisma: groupPrisma(groupRunFindMany({ terminals: [failed, completed] })) },
+      {
+        sandbox: new FakeSandboxProvider(),
+        prisma: groupPrisma(groupRunFindMany({ terminals: [failed, completed] })),
+      },
       groupTarget(),
     );
 
@@ -1311,7 +1335,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:00.000Z"),
     };
     const snapshot = await threadSnapshot(
-      { prisma: groupPrisma(groupRunFindMany({ terminals: [run] })) },
+      {
+        sandbox: new FakeSandboxProvider(),
+        prisma: groupPrisma(groupRunFindMany({ terminals: [run] })),
+      },
       groupTarget(),
     );
 
@@ -1354,7 +1381,10 @@ describe("threadSnapshot", () => {
       createdAt: new Date("2026-08-23T00:00:01.000Z"),
     };
     const snapshot = await threadSnapshot(
-      { prisma: groupPrisma(groupRunFindMany({ active: [active], terminals: [failed] })) },
+      {
+        sandbox: new FakeSandboxProvider(),
+        prisma: groupPrisma(groupRunFindMany({ active: [active], terminals: [failed] })),
+      },
       groupTarget(),
     );
 
@@ -1397,6 +1427,7 @@ describe("threadSnapshot", () => {
     };
     const snapshot = await threadSnapshot(
       {
+        sandbox: new FakeSandboxProvider(),
         prisma: groupPrisma(groupRunFindMany({ active: [lateActive], terminals: [failed] })),
       },
       groupTarget(),
@@ -4481,7 +4512,7 @@ describe("helper snapshot settlement", () => {
       const prisma = {
         $transaction: vi.fn(async (work: (client: typeof tx) => unknown) => work(tx)),
       } as unknown as PrismaClient;
-      const result = await threadSnapshot({ prisma }, {
+      const result = await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, {
         kind,
         botId: "bot-1",
         threadId: "thread-1",

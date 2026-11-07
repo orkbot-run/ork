@@ -5,6 +5,7 @@
 import type { ComputerMode, ComputerReleaseReason } from "@orkbot/contracts";
 import type { ScreenPageState } from "@orkbot/core";
 import {
+  computerCapabilitiesFor,
   createScreenReconnect,
   displayName,
   isRetryableError,
@@ -122,11 +123,16 @@ export default function Computer() {
   const unreachableScreen =
     computer?.state === "running" && Boolean(screenUrl) && !embeddedScreenUrl;
 
+  const capabilities = computerCapabilitiesFor(computer);
   const hasControl = computer?.controlHolder === "user" && computer.controlBotId === botId;
   // Propped open like a laptop, the desktop stays above the fold and the keys go below it.
   const tabletop = hasControl ? tabletopLayout(windowSize.width, windowSize.height, folds) : null;
   const screenVisible =
-    computerOpen && computer?.state === "running" && Boolean(embeddedScreenUrl) && !screenError;
+    computerOpen &&
+    capabilities.screen &&
+    computer?.state === "running" &&
+    Boolean(embeddedScreenUrl) &&
+    !screenError;
   const loadedScreenUrl = nextLoadedScreenUrl(
     heldScreenUrl.current,
     embeddedScreenUrl,
@@ -224,8 +230,9 @@ export default function Computer() {
     force?: boolean;
   }) {
     if (!botId || !refreshController.isActive()) return false;
+    const needsBoot = force || computer?.state !== "running";
+    if ((needsBoot && !capabilities.start) || (takeControl && !capabilities.control)) return false;
     const action = refreshController.beginAction();
-    const needsBoot = force || computer?.state !== "running" || !screenUrl;
     let starting = needsBoot;
     const showBooting = showProgress && needsBoot;
     if (showBooting) {
@@ -275,7 +282,8 @@ export default function Computer() {
   }
 
   useEffect(() => {
-    if (!botId || readyBotId !== botId || switching) return;
+    if (!botId || readyBotId !== botId || switching || !capabilities.start || !capabilities.screen)
+      return;
     if (computer?.state === "booting" || computer?.state === "suspended") return;
     if (autoBooted.current === botId) return;
     autoBooted.current = botId;
@@ -284,7 +292,7 @@ export default function Computer() {
       showProgress: computer?.state !== "running",
       force: true,
     }).catch(() => undefined);
-  }, [readyBotId, botId, computer?.state, switching]);
+  }, [readyBotId, botId, computer?.state, switching, capabilities.start, capabilities.screen]);
 
   const reloadScreen = useCallback(async () => {
     await refresh().catch(() => undefined);
@@ -399,7 +407,7 @@ export default function Computer() {
 
   /** Open the full window. Only an explicit Take control asks for the lease. */
   async function openComputer({ takeControl }: { takeControl: boolean }) {
-    if (!botId) return;
+    if (!botId || !capabilities.screen) return;
     const needsTakeover = takeControl && !hasControl;
     try {
       const opened = await bootComputer({
@@ -458,7 +466,8 @@ export default function Computer() {
   }
 
   async function setComputerMode(mode: ComputerMode) {
-    if (!botId || !refreshController.isActive() || mode === computer?.mode) return;
+    if (!botId || !refreshController.isActive() || mode === computer?.mode || !capabilities.start)
+      return;
     const action = refreshController.beginAction();
     setSwitchingCount((count) => count + 1);
     setError(null);
@@ -485,15 +494,21 @@ export default function Computer() {
     }
   }
 
-  const keyboardBar = hasControl ? (
-    <ComputerKeyboardBar
-      active={computerOpen && !releasing}
-      onCommand={(command) => {
-        injectKeyboardCommands(keyboardGate.current.bridge.push(command));
-      }}
-    />
-  ) : null;
+  const keyboardBar =
+    hasControl && capabilities.control ? (
+      <ComputerKeyboardBar
+        active={computerOpen && !releasing}
+        onCommand={(command) => {
+          injectKeyboardCommands(keyboardGate.current.bridge.push(command));
+        }}
+      />
+    ) : null;
   const placeholder =
+    (!capabilities.start && computer?.state !== "running"
+      ? t("Computers unavailable")
+      : !capabilities.screen
+        ? t("Screen unavailable")
+        : null) ??
     screenError ??
     (unreachableScreen
       ? t("Could not load the desktop. This device cannot reach the screen URL.")
@@ -571,7 +586,11 @@ export default function Computer() {
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
             <Text style={{ color: tokens.mutedForeground }}>{t("Open in full window")}</Text>
           </View>
-        ) : foreground && computer?.state === "running" && embeddedScreenUrl && !screenError ? (
+        ) : foreground &&
+          capabilities.screen &&
+          computer?.state === "running" &&
+          embeddedScreenUrl &&
+          !screenError ? (
           <ScreenWebView
             key={screenReload}
             url={embeddedScreenUrl}
@@ -606,8 +625,8 @@ export default function Computer() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={bootPending ? placeholder : t("Open computer")}
-          accessibilityState={{ disabled: bootPending, busy: bootPending }}
-          disabled={bootPending}
+          accessibilityState={{ disabled: bootPending || !capabilities.screen, busy: bootPending }}
+          disabled={bootPending || !capabilities.screen}
           onPress={() => void openComputer({ takeControl: false })}
           style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
         />
@@ -634,7 +653,7 @@ export default function Computer() {
             takeoverRequested={computer?.takeoverRequested ?? false}
             onRelease={releaseComputer}
           />
-        ) : (
+        ) : capabilities.control ? (
           <NativeActionButton
             label={t("Take control")}
             prominence="secondary"
@@ -642,8 +661,15 @@ export default function Computer() {
             style={{ alignSelf: "center" }}
             onPress={() => void openComputer({ takeControl: true })}
           />
-        )}
+        ) : null}
       </View>
+      {!capabilities.start || !capabilities.screen ? (
+        <NativeActionButton
+          label={t("Check again")}
+          prominence="secondary"
+          onPress={() => void refresh().catch(() => undefined)}
+        />
+      ) : null}
       {computer?.diskFullPercent !== undefined ? (
         <View
           style={{
@@ -678,13 +704,15 @@ export default function Computer() {
           onChanged={refreshAfterMaintenance}
         />
       ) : null}
-      <ComputerModePicker
-        // Restacking the row above leaves the native picker at its old measured height; remount it.
-        key={stacked ? "stacked" : "row"}
-        value={computer?.mode}
-        disabled={switching || bootPending}
-        onChange={(mode) => void setComputerMode(mode)}
-      />
+      {capabilities.start ? (
+        <ComputerModePicker
+          // Restacking the row above leaves the native picker at its old measured height; remount it.
+          key={stacked ? "stacked" : "row"}
+          value={computer?.mode}
+          disabled={switching || bootPending}
+          onChange={(mode) => void setComputerMode(mode)}
+        />
+      ) : null}
 
       <Modal
         visible={computerOpen}
@@ -753,7 +781,7 @@ export default function Computer() {
                     takeoverRequested={computer?.takeoverRequested ?? false}
                     onRelease={releaseComputer}
                   />
-                ) : (
+                ) : capabilities.control ? (
                   <NativeActionButton
                     label={t("Take control")}
                     prominence="secondary"
@@ -765,7 +793,7 @@ export default function Computer() {
                       )
                     }
                   />
-                )}
+                ) : null}
                 <GlassIconButton
                   accessibilityLabel={t("Close computer")}
                   onPress={() => setComputerOpen(false)}

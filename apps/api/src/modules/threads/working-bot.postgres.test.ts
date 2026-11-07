@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 
 import type { SandboxProvider } from "@orkbot/adapter-kit";
+import { FakeSandboxProvider } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
 import type { ThreadEvents } from "@orkbot/db";
 import {
@@ -105,7 +106,10 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
           await assertRosterStatus(status);
         }
         await prisma.run.update({ where: { id: running.id }, data: { status: "running" } });
-        const snapshot = await threadSnapshot({ prisma }, target);
+        const snapshot = await threadSnapshot(
+          { prisma, sandbox: new FakeSandboxProvider() },
+          target,
+        );
         expect(snapshot.run).toMatchObject({ id: running.id, status: "running" });
         expect(snapshot.activeRuns).toEqual(
           expect.arrayContaining([expect.objectContaining({ id: running.id })]),
@@ -123,7 +127,9 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
             trigger: "bot_message",
           },
         });
-        expect(await threadSnapshot({ prisma }, groupTarget)).toMatchObject({
+        expect(
+          await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, groupTarget),
+        ).toMatchObject({
           run: null,
           activeRuns: [],
         });
@@ -131,7 +137,9 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
           where: { id: peerRun.id },
           data: { status: "failed", error: "Sample failure" },
         });
-        expect(await threadSnapshot({ prisma }, groupTarget)).toMatchObject({
+        expect(
+          await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, groupTarget),
+        ).toMatchObject({
           run: null,
           activeRuns: [],
         });
@@ -157,7 +165,9 @@ describe.skipIf(!enabled)("working bot visibility (PostgreSQL)", () => {
             select: { status: true },
           }),
         ).toEqual([{ status: "cancelled" }, { status: "cancelled" }]);
-        expect(await threadSnapshot({ prisma }, target)).toMatchObject({
+        expect(
+          await threadSnapshot({ prisma, sandbox: new FakeSandboxProvider() }, target),
+        ).toMatchObject({
           run: null,
           activeRuns: [],
         });

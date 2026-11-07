@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type {
   ComputerStatus,
   ProductEvent,
@@ -704,14 +708,14 @@ function replacedSubagent(message: ThreadMessage, agentIds: ReadonlySet<string>)
 
 export function screenMissing(options: {
   state: ComputerStatus["state"] | undefined;
-  kind: ComputerStatus["kind"] | undefined;
+  screenAvailable?: boolean;
   booting: boolean;
   screenUrlLoaded: boolean;
   embeddedUrl: string | null;
 }): boolean {
   return (
     options.state === "running" &&
-    options.kind !== "desktop" &&
+    options.screenAvailable !== false &&
     !options.booting &&
     options.screenUrlLoaded &&
     !options.embeddedUrl

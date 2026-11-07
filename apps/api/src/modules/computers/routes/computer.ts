@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, SandboxProvider } from "@orkbot/adapter-kit";
@@ -63,6 +63,7 @@ import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
 import { computerContext, isRecordNotFound } from "#modules/platform/routes/shared";
+import { botComputerCapabilities } from "../computer-capabilities.js";
 import { scrollPoint } from "../computer-input.js";
 import {
   executionBlocksUserTakeover,
@@ -101,6 +102,9 @@ export function computerRoutes(ctx: RouterContext) {
           }
         }
         const ctx = computerContext(context.actor, bot.id, "boot");
+        if (!(await botComputerCapabilities(deps, bot)).start) {
+          throw new ORPCError("BAD_REQUEST", { message: "Computers unavailable" });
+        }
         const manualRunId = `boot:${randomUUID()}`;
         let lease: ComputerExecutionLease | null;
         try {
@@ -342,6 +346,10 @@ export function computerRoutes(ctx: RouterContext) {
         if (!bot.computer?.providerRef || bot.computer.state !== "running") {
           throw new ORPCError("BAD_REQUEST", { message: "computer must be running" });
         }
+        if (!(await botComputerCapabilities(deps, bot)).control) {
+          throw new ORPCError("BAD_REQUEST", { message: COMPUTER_SCREEN_UNAVAILABLE });
+        }
+        const checkedComputer = bot.computer;
         if (hasActiveComputerControl(bot.computer) && bot.computer.controlBotId === bot.id) {
           await bindWaitingTakeoverToControl(deps, {
             spaceId: context.actor.spaceId,
@@ -377,6 +385,13 @@ export function computerRoutes(ctx: RouterContext) {
         if (!bot.computer.providerRef || bot.computer.state !== "running") {
           throw new ORPCError("BAD_REQUEST", { message: "computer must be running" });
         }
+        if (
+          (bot.computer.kind !== checkedComputer.kind ||
+            bot.computer.providerRef !== checkedComputer.providerRef) &&
+          !(await botComputerCapabilities(deps, bot)).control
+        ) {
+          throw new ORPCError("BAD_REQUEST", { message: COMPUTER_SCREEN_UNAVAILABLE });
+        }
 
         const executionLease = await deps.prisma.computerExecutionLease.findUnique({
           where: { computerId_botId: { computerId: bot.computer.id, botId: bot.id } },
@@ -409,6 +424,8 @@ export function computerRoutes(ctx: RouterContext) {
         const granted = await deps.prisma.computer.updateMany({
           where: {
             id: bot.computer.id,
+            kind: bot.computer.kind,
+            providerRef: bot.computer.providerRef,
             state: "running",
             maintenanceId: null,
             controlHolder: { not: "user" },
@@ -725,6 +742,7 @@ export function computerRoutes(ctx: RouterContext) {
         ) {
           return { url: null };
         }
+        if (!(await botComputerCapabilities(deps, bot)).terminal) return { url: null };
         // Same rule as the interactive screen: only the user holding this bot's control lease.
         if (
           !hasActiveComputerControl(computer) ||
@@ -780,6 +798,7 @@ export function computerRoutes(ctx: RouterContext) {
           return { url: null };
         }
         const computer = bot.computer;
+        if (!(await botComputerCapabilities(deps, bot)).screen) return { url: null };
         const session = await deps.sandbox
           .connectScreen(
             toComputerRef(computer),
@@ -899,7 +918,12 @@ async function computerStatus(
     botId,
     botName: bot.name,
   });
-  return toComputerStatus(botId, bot.computer, busyBotName);
+  return toComputerStatus(
+    botId,
+    bot.computer,
+    busyBotName,
+    await botComputerCapabilities(deps, bot),
+  );
 }
 
 /** Hand the user's screen control for this bot back, continuing any run waiting on it. */

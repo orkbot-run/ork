@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
@@ -11,8 +15,7 @@ import type {
   ScreenRequest,
 } from "@orkbot/adapter-kit";
 
-export const NO_SANDBOX_MESSAGE =
-  "Computers unavailable. Set SANDBOX_PROVIDER=docker with SANDBOX_SUPERVISOR_TOKEN, or use e2b, novita, daytona, or boat with its API key.";
+export const NO_SANDBOX_MESSAGE = "Computers unavailable";
 
 /** Boots the API without a computer host. Provision and runtime calls fail closed. */
 export class NoneSandboxProvider implements SandboxProvider {
@@ -24,6 +27,7 @@ export class NoneSandboxProvider implements SandboxProvider {
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {
+        provisioning: false,
         graphical: false,
         pty: false,
         snapshots: false,

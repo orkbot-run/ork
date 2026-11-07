@@ -1311,6 +1311,14 @@ export const ComputerUpdateSchema = z.object({
 });
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
+export const ComputerCapabilitiesSchema = z.object({
+  start: z.boolean(),
+  screen: z.boolean(),
+  control: z.boolean(),
+  terminal: z.boolean(),
+});
+export type ComputerCapabilities = z.infer<typeof ComputerCapabilitiesSchema>;
+
 export const ComputerStatusSchema = z.object({
   botId: Id,
   mode: ComputerModeSchema,
@@ -1326,6 +1334,8 @@ export const ComputerStatusSchema = z.object({
   busyBotName: z.string().nullable(),
   canUpdate: z.boolean(),
   terminalAvailable: z.boolean(),
+  /** Target for the next start and the currently attached computer's interfaces. */
+  capabilities: ComputerCapabilitiesSchema.optional(),
   /** Set only while the user should see that the disk is nearly full. */
   diskFullPercent: z.number().int().min(0).max(100).optional(),
 });
@@ -2005,6 +2015,9 @@ export const MeSchema = z.object({
   computerHost: z.enum(["docker", "this-mac"]).nullable(),
   canChooseHostComputer: z.boolean(),
   sandboxProvider: z.string(),
+  /** Absent from older servers; clients must not infer capabilities from provider identifiers. */
+  computerCapabilities: ComputerCapabilitiesSchema.optional(),
+  canConfigureAccountComputers: z.boolean().optional(),
   /** Whether this account can add stdio MCP servers here. Absent from older servers. */
   mcpStdioEnabled: z.boolean().default(false),
   avatarStyle: AvatarStyleSchema,

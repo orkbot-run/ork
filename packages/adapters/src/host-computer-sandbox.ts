@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Capability changes follow LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
@@ -29,7 +33,14 @@ export class HostComputerSandbox implements SandboxProvider {
     private readonly token: string,
   ) {}
   describe() {
-    return describeDesktopSandbox();
+    const descriptor = describeDesktopSandbox();
+    return {
+      ...descriptor,
+      capabilities: {
+        ...descriptor.capabilities,
+        provisioning: Boolean(this.url && this.token),
+      },
+    };
   }
 
   private async *request<T>(input: HostComputerRequest, context: AdapterContext): AsyncIterable<T> {
