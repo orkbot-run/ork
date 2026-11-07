@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import * as z from "zod";
 import { AgentImportSetupItemSchema } from "./agent-import-setup.js";
 import { botSecretDestinationSchema, LoginFieldLabels, OneTimeCodeTarget } from "./bot-secrets.js";
+import { ApprovalReasonSchema } from "./decision-card.js";
 import { Id, ThinkingLevelSchema } from "./ids.js";
 import { McpTransportSchema } from "./mcp.js";
 import { PAGE_TITLE_MAX_LENGTH } from "./pages.js";
@@ -115,6 +120,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("ask"),
     text: z.string(),
     approvalEffectId: Id.optional(),
+    approvalReason: ApprovalReasonSchema.optional(),
+    /** Whether this persisted approval can create a lasting rule; absent on legacy cards. */
+    allowRule: z.boolean().optional(),
     instructionUpdate: z
       .object({
         botId: Id,

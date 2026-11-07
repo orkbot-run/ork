@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited thread events remain Apache-2.0; Space work admission guards are Ork additions.
+// Inherited thread events remain Apache-2.0; Space work admission and decision-card guards are Ork additions.
 
 import type { ProductAnalytics, RealtimeFanout } from "@orkbot/adapter-kit";
 import type {
@@ -25,8 +25,10 @@ import {
 } from "@orkbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
+  approvalCanCreateRule,
   blocksToAgentHistoryText,
   callIdFromClientNonce,
+  decisionDetailContext,
   instructionUpdateDiff,
   isApprovalAskBlock,
   isConversationalRun,
@@ -257,6 +259,24 @@ function resumeChoiceLabel(
   }
 }
 
+function canSaveApprovalRule(
+  effect: { kind: string; request: unknown },
+  ask: Extract<MessageBlock, { kind: "ask" }>,
+  trigger: string,
+): boolean {
+  const args =
+    effect.request && typeof effect.request === "object" && !Array.isArray(effect.request)
+      ? (effect.request as Record<string, unknown>)
+      : {};
+  return approvalCanCreateRule({
+    toolName: effect.kind,
+    args,
+    trigger,
+    allowRule: ask.allowRule,
+    reason: ask.approvalReason,
+  });
+}
+
 /**
  * A conversational run's request and earlier answers stay in thread history, so its resumed
  * attempt gets just the answer. A background run's prompt never reaches the thread, so it keeps
@@ -266,9 +286,15 @@ function resumePrompt(
   run: { trigger: string; task?: { prompt: string } | null },
   question: string,
   answer: string,
+  detail?: string,
 ): string {
   if (isConversationalRun(run.trigger)) return answer;
-  return [run.task?.prompt.trim(), `${question.trim()}\nAnswer: ${answer}`]
+  return [
+    run.task?.prompt.trim(),
+    [question.trim(), decisionDetailContext(detail), `Answer: ${answer}`]
+      .filter(Boolean)
+      .join("\n"),
+  ]
     .filter(Boolean)
     .join("\n\n");
 }
@@ -966,6 +992,8 @@ async function commitAnswerRunInput(
       },
     });
     if (!approvalEffect) return null;
+    if (input.answer === "always" && !canSaveApprovalRule(approvalEffect, pendingAsk, run.trigger))
+      return null;
     if (pendingAsk.instructionUpdate) {
       if (
         approvalEffect.kind !== "update_bot" ||
@@ -1114,6 +1142,7 @@ async function commitAnswerRunInput(
           { ...run, trigger: resumedTrigger },
           pendingAsk.text,
           selectedChoice ? `Selected choice ${selectedChoice.id}: ${resumeLabel}` : input.answer,
+          secretAsk ? undefined : pendingAsk.detail,
         ),
       },
     });

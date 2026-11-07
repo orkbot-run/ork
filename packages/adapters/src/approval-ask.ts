@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import type { ToolBatch } from "@orkbot/adapter-kit";
-import type { MessageBlock } from "@orkbot/contracts";
+import type { ApprovalReason, MessageBlock } from "@orkbot/contracts";
 import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@orkbot/contracts";
 import {
   batchActions,
@@ -33,12 +37,39 @@ export function approvalDetailLength(toolName: string): number {
     : MAX_APPROVAL_DETAIL_LENGTH;
 }
 
+type ApprovalAskOptions = {
+  reviewReason?: string;
+  summary?: FleetCardSummary;
+  batch?: ToolBatch;
+  mandatoryReason?: ApprovalReason;
+};
+
 export function buildApprovalAskBlock(
   effectId: string,
   toolName: string,
   args: Record<string, unknown>,
   secrets: string[],
-  options?: { reviewReason?: string; summary?: FleetCardSummary; batch?: ToolBatch },
+  options?: ApprovalAskOptions,
+): MessageBlock {
+  const block = approvalAskBlock(effectId, toolName, args, secrets, options);
+  if (block.kind !== "ask") return block;
+  const actions = options?.mandatoryReason
+    ? block.actions?.filter((action) => action.id !== "always")
+    : block.actions;
+  return {
+    ...block,
+    actions,
+    allowRule: actions?.some((action) => action.id === "always") ?? false,
+    ...(options?.mandatoryReason ? { approvalReason: options.mandatoryReason } : {}),
+  };
+}
+
+function approvalAskBlock(
+  effectId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  secrets: string[],
+  options?: ApprovalAskOptions,
 ): MessageBlock {
   if (options?.summary) {
     // Built from what was resolved before the effect was recorded, not from what the model typed.

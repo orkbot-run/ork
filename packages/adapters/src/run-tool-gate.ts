@@ -10,6 +10,7 @@ import type {
   ToolBatch,
 } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
+import type { ApprovalReason } from "@orkbot/contracts";
 import { READ_ONLY_AGENT_TOOLS } from "@orkbot/contracts";
 import {
   applyJudgeDecision,
@@ -28,6 +29,7 @@ import {
   repeatsDeniedAction,
   resolveActionApprovalForTools,
   SITE_SENDING_TOOLS,
+  scheduledCommandNeedsApproval,
   toolRequiresApproval,
   toolRequiresExplicitApproval,
   unattendedTriggerToolRequiresApproval,
@@ -88,6 +90,7 @@ import { watchFromTool } from "./schedule-tools.js";
 export type AppliedEffect = Awaited<ReturnType<typeof recordEffect>>;
 
 type ApprovalCard = {
+  mandatoryReason?: ApprovalReason;
   reviewReason: string | undefined;
   summary: FleetCardSummary | undefined;
   batch: ToolBatch | undefined;
@@ -245,7 +248,7 @@ export async function gateToolCall(
     });
   // This schedules unattended shell execution; require a person to approve
   // the command once, rather than letting an allow rule or reviewer schedule it.
-  const commandWatch = watch?.kind === "command";
+  const commandWatch = scheduledCommandNeedsApproval(name, args);
   // A routine's prompt counts as the owner's words when it runs, so the sites it names are
   // ones its runs may fetch. Once outside content entered this run, a routine naming a
   // site this run was not given needs a person: a reviewer would judge it on this run's
@@ -279,6 +282,13 @@ export async function gateToolCall(
     scheduleNamesNewSite ||
     requiresUnattendedApproval ||
     toolRequiresExplicitApproval(name);
+  const mandatoryReason: ApprovalReason | undefined = commandWatch
+    ? "scheduled_command"
+    : scheduleNamesNewSite
+      ? "outside_content_schedule"
+      : requiresUnattendedApproval
+        ? "webhook_trigger"
+        : undefined;
   // Never ask runs everything else: only another owner's connection could have been steered into it.
   const guardedInNeverAsk = name === "respond_agent_connection";
   const resolvedRules = resolveActionApprovalForTools({
@@ -531,7 +541,12 @@ export async function gateToolCall(
     nextApprovedTool,
     bypassApproval: gateDecision === "allow" && gated,
   });
-  const card = { reviewReason, summary: request.fleetSummary, batch: connectorTool?.batch };
+  const card = {
+    reviewReason,
+    summary: request.fleetSummary,
+    batch: connectorTool?.batch,
+    mandatoryReason,
+  };
 
   if (applied?.duplicate) {
     const gate = resolveDuplicateEffectGate(applied.effect, name);

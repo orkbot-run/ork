@@ -1,8 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import { ChatMarkdown, MarkdownLongPressContext, withBlockMentions } from "@orkbot/chat-ui/native";
 import type { LoginFieldInput, MessageBlock } from "@orkbot/contracts";
 import { artifactPreviewKind, isAttachmentAudioMimeType } from "@orkbot/contracts";
 import type { ChildBotBlock, PeerExchange } from "@orkbot/core";
 import {
+  approvalReasonText,
+  effectiveApprovalActions,
   formatFileSize,
   isApprovalAskBlock,
   memberName,
@@ -405,6 +411,13 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
                     : plainAskTitle(askBlock.text)}
                 </Text>
               ) : null}
+              {askBlock.approvalReason ? (
+                <Text
+                  style={{ color: tokens.mutedForeground, marginTop: 8, ...typeScale.secondary }}
+                >
+                  {t(approvalReasonText(askBlock.approvalReason))}
+                </Text>
+              ) : null}
               {askBlock.detail ? (
                 <Text
                   {...(askBlock.text ? {} : actionProps)}
@@ -443,7 +456,7 @@ const MessageBubbleContent = memo(function MessageBubbleContent({
                 </Text>
               ) : canAnswer && onAnswer ? (
                 <AskActions
-                  actions={askBlock.actions}
+                  actions={effectiveApprovalActions(askBlock) ?? []}
                   site={askBlock.site}
                   approval={isApprovalAskBlock(askBlock)}
                   instructions={askBlock.instructionUpdate?.after}

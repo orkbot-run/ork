@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import type { AgentRuntimeEvent, ConnectorTool } from "@orkbot/adapter-kit";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fakeAgentState = vi.hoisted(() => ({
+  detail: undefined as unknown,
   options: ["Berlin", "Seoul", "Toronto"],
   tools: [] as Array<{
     name: string;
@@ -27,6 +32,7 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       await askUser.execute("call-choice-1", {
         question: "Which city should I use?",
         options: fakeAgentState.options,
+        detail: fakeAgentState.detail,
       });
     }
 
@@ -93,6 +99,7 @@ const runRequest = {
 describe("Pi choice asks", () => {
   beforeEach(() => {
     fakeAgentState.tools = [];
+    fakeAgentState.detail = undefined;
     fakeAgentState.options = ["Berlin", "Seoul", "Toronto"];
   });
 
@@ -126,4 +133,25 @@ describe("Pi choice asks", () => {
     }).rejects.toThrow("ask_user requires two to four unique, non-empty options");
     expect(events.some((event) => event.type === "ask")).toBe(false);
   });
+  it("retains an optional proposal in the emitted choice card", async () => {
+    fakeAgentState.detail = "Draft: visit Berlin for two days.";
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of new PiAgentRuntime().run(runRequest, runContext)) events.push(event);
+    expect(events).toContainEqual(
+      expect.objectContaining({ type: "ask", detail: fakeAgentState.detail }),
+    );
+  });
+
+  it.each(["x".repeat(4_001), { proposal: "invalid" }])(
+    "rejects invalid proposal detail before emitting a card",
+    async (detail) => {
+      fakeAgentState.detail = detail;
+      const events: AgentRuntimeEvent[] = [];
+      await expect(async () => {
+        for await (const event of new PiAgentRuntime().run(runRequest, runContext))
+          events.push(event);
+      }).rejects.toThrow("ask_user detail must be text of at most 4000 characters");
+      expect(events.some((event) => event.type === "ask")).toBe(false);
+    },
+  );
 });

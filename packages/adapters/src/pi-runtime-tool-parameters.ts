@@ -1,6 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import { Type } from "@earendil-works/pi-ai";
 import type { ConnectorTool } from "@orkbot/adapter-kit";
-import { BOT_INSTRUCTIONS_MAX_LENGTH, ThinkingLevelSchema } from "@orkbot/contracts";
+import {
+  ASK_DECISION_DETAIL_MAX_LENGTH,
+  BOT_INSTRUCTIONS_MAX_LENGTH,
+  ThinkingLevelSchema,
+} from "@orkbot/contracts";
 import { getLogger } from "@orkbot/logging";
 import {
   normalizeOpenAiToolParameters,
@@ -67,6 +75,7 @@ function builtinParameters(tool: ConnectorTool) {
   if (tool.name === "ask_user") {
     return Type.Object({
       question: Type.String({ maxLength: 240 }),
+      detail: Type.Optional(Type.String({ maxLength: ASK_DECISION_DETAIL_MAX_LENGTH })),
       options: Type.Array(Type.String({ minLength: 1, maxLength: 80 }), {
         minItems: 2,
         maxItems: 4,

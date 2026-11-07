@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import {
   DEFAULT_CONTEXT_STRATEGY,
@@ -9,6 +13,7 @@ import {
   SandboxRateLimitError,
   TransientModelError,
 } from "@orkbot/adapter-kit";
+import { ASK_DECISION_DETAIL_MAX_LENGTH } from "@orkbot/contracts";
 import {
   containsSecret,
   displayName,
@@ -389,11 +394,19 @@ async function onSteered(ctx: RunContext, event: RuntimeEvent<"steered">) {
 }
 
 async function pauseForAnswer(ctx: RunContext, event: RuntimeEvent<"ask">) {
+  if (
+    event.detail !== undefined &&
+    (typeof event.detail !== "string" || event.detail.length > ASK_DECISION_DETAIL_MAX_LENGTH)
+  ) {
+    throw new ModelOutputError("The question detail is too large to review.");
+  }
   const { deps, run, runId, bot, thread, workerId, fence } = ctx;
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
   await publishNarrationBeforeAsk(ctx);
   const safeText = redactSecrets(event.text, ctx.secrets);
-  const safeDetail = event.detail ? redactSecrets(event.detail, ctx.secrets) : event.detail;
+  const safeDetail = event.detail
+    ? redactSecrets(event.detail, ctx.secrets).slice(0, ASK_DECISION_DETAIL_MAX_LENGTH)
+    : event.detail;
   const safeActions = event.actions?.map((action) => ({
     id: action.id,
     label: redactSecrets(action.label, ctx.secrets),
@@ -414,6 +427,7 @@ async function pauseForAnswer(ctx: RunContext, event: RuntimeEvent<"ask">) {
         kind: "ask",
         text: safeText,
         detail: safeDetail,
+        ...(safeDetail ? { detailFormat: "text" as const } : {}),
         status: "pending",
         actions: safeActions,
       },

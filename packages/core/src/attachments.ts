@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import type { AttachmentMimeType, MessageBlock } from "@orkbot/contracts";
 import {
   ATTACHMENT_COUNT_CEILING,
@@ -7,6 +11,7 @@ import {
   isAllowedAttachmentMimeType,
   isAttachmentImageMimeType,
 } from "@orkbot/contracts";
+import { decisionDetailContext } from "./decision-card.js";
 
 export class AttachmentValidationError extends Error {
   constructor(message: string) {
@@ -186,9 +191,17 @@ export function blocksToAgentHistoryText(blocks: MessageBlock[]): string {
       }
       // Without the answer a later turn sees the question as still open and asks it again.
       if (block.kind === "ask") {
-        if (block.status !== "answered" || !block.answer) return block.text;
+        const question = [
+          block.text,
+          !block.approvalEffectId && block.input !== "secret"
+            ? decisionDetailContext(block.detail)
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+        if (block.status !== "answered" || !block.answer) return question;
         const choice = block.actions?.find((action) => action.id === block.answer);
-        return `${block.text}\nAnswer: ${choice?.label ?? block.answer}`;
+        return `${question}\nAnswer: ${choice?.label ?? block.answer}`;
       }
       // The bot needs the outcome of its own call: a missed call is its cue to follow up.
       if (block.kind === "call_request") {

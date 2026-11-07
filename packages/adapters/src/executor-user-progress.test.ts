@@ -1904,3 +1904,43 @@ describe("a group member the message named nobody for", () => {
     expect(result.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ markUnread: true }));
   });
 });
+
+it("persists a bounded redacted choice proposal for both clients", async () => {
+  const { pauseRunForInput } = await runTurn("", false, "", ["fake-secret-value"], "fyi", {
+    runtimeEvents: [
+      {
+        type: "ask",
+        text: "Review?",
+        detail: "Draft fake-secret-value",
+        actions: [{ id: "choice-1", label: "Revise" }],
+      },
+    ],
+  });
+  expect(pauseRunForInput).toHaveBeenCalledWith(
+    expect.objectContaining({
+      blocks: [
+        expect.objectContaining({ kind: "ask", detail: "Draft [redacted]", detailFormat: "text" }),
+      ],
+    }),
+  );
+});
+
+it("rejects oversized decision detail before publishing a question", async () => {
+  const { pauseRunForInput } = await runTurn("", false, "", [], "fyi", {
+    runtimeFailure: true,
+    runtimeEvents: [{ type: "ask", text: "Review?", detail: "x".repeat(4_001) }],
+  });
+  expect(pauseRunForInput).not.toHaveBeenCalled();
+});
+
+it("keeps the saved proposal bounded after redaction expands repeated secrets", async () => {
+  const { pauseRunForInput } = await runTurn("", false, "", ["test-token"], "fyi", {
+    runtimeEvents: [{ type: "ask", text: "Review?", detail: "test-token ".repeat(360) }],
+  });
+  const [paused] = pauseRunForInput.mock.calls[0] as unknown as [{ blocks: MessageBlock[] }];
+  const block = paused.blocks[0];
+  expect(block?.kind).toBe("ask");
+  if (block?.kind !== "ask") throw new Error("Expected ask");
+  expect(block.detail?.length).toBeLessThanOrEqual(4_000);
+  expect(block.detail).not.toContain("test-token");
+});

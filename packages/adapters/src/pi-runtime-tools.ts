@@ -16,6 +16,7 @@ import type {
 } from "@orkbot/adapter-kit";
 import { DEFAULT_CONTEXT_STRATEGY } from "@orkbot/adapter-kit";
 import {
+  ASK_DECISION_DETAIL_MAX_LENGTH,
   FLEET_TOOL_NAMES,
   HistoryReadInputSchema,
   HistorySearchInputSchema,
@@ -548,6 +549,15 @@ function toAgentTool(
                 };
               }
               if (tool.name === "ask_user") {
+                const detail = args.detail ?? undefined;
+                if (
+                  detail !== undefined &&
+                  (typeof detail !== "string" || detail.length > ASK_DECISION_DETAIL_MAX_LENGTH)
+                ) {
+                  throw new Error(
+                    `ask_user detail must be text of at most ${ASK_DECISION_DETAIL_MAX_LENGTH} characters`,
+                  );
+                }
                 const options = Array.isArray(args.options)
                   ? args.options.map((option) => String(option).trim())
                   : [];
@@ -564,6 +574,7 @@ function toAgentTool(
                   type: "ask",
                   ...(host.request.onCheckpoint ? { executionId } : {}),
                   text: String(args.question ?? "What should I use?"),
+                  ...(detail ? { detail } : {}),
                   actions: options.map((label, index) => ({
                     id: `choice-${index + 1}`,
                     label,

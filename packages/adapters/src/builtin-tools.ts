@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
+  ASK_DECISION_DETAIL_MAX_LENGTH,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_INSTRUCTIONS_MAX_LENGTH,
   BOT_MEMORY_MAX_BYTES,
@@ -594,6 +599,11 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         question: { type: "string", maxLength: 240 },
+        detail: {
+          type: "string",
+          maxLength: ASK_DECISION_DETAIL_MAX_LENGTH,
+          description: "Optional draft or proposal the user needs to review before choosing.",
+        },
         options: {
           type: "array",
           items: { type: "string", minLength: 1, maxLength: 80 },

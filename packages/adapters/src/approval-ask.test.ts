@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import { describe, expect, it } from "vitest";
 import { approvalDetailLength, buildApprovalAskBlock } from "./approval-ask.js";
 
@@ -137,7 +141,7 @@ describe("bot management approval cards", () => {
         },
       },
     );
-    expect(block).toEqual({
+    expect(block).toMatchObject({
       kind: "ask",
       approvalEffectId: "effect-1",
       text: "Create group “Launch”?",
@@ -337,4 +341,36 @@ describe("approval card arguments", () => {
     if (block.kind !== "ask") throw new Error("expected ask block");
     expect(block.detail?.split("\n")).toContain("to_email: f@example.test");
   });
+});
+
+// Gate reasons are trusted metadata, never fields the model can select.
+it.each(["scheduled_command", "outside_content_schedule", "webhook_trigger"] as const)(
+  "keeps %s approvals once-only without modifying their detail",
+  (mandatoryReason) => {
+    for (const summary of [undefined, { title: "Review this change", lines: ["Full proposal"] }]) {
+      const block = buildApprovalAskBlock(
+        "effect-1",
+        "schedule_create",
+        { message: "Proposal", approvalReason: "forged", allowRule: true },
+        [],
+        { mandatoryReason, summary },
+      );
+      expect(block).toMatchObject({ approvalReason: mandatoryReason, allowRule: false });
+      if (block.kind !== "ask") throw new Error("Expected ask");
+      expect(block.actions?.map((action) => action.id)).toEqual(["allow", "deny"]);
+    }
+  },
+);
+
+it("keeps lasting rules available for ordinary schedules without model-supplied reasons", () => {
+  const block = buildApprovalAskBlock(
+    "effect-1",
+    "schedule_create",
+    { approvalReason: "scheduled_command", allowRule: false },
+    [],
+  );
+  expect(block).toMatchObject({ allowRule: true });
+  expect(block).not.toHaveProperty("approvalReason");
+  if (block.kind !== "ask") throw new Error("Expected ask");
+  expect(block.actions?.map((action) => action.id)).toContain("always");
 });

@@ -785,6 +785,20 @@ describe("connector read-only metadata and approval enforcement", () => {
         rules: [{ effect: "always_allow", matchKind: "tool", matchValue: name }],
       });
       await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "webhook_trigger",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
       expect(f.pauseRunForInput).toHaveBeenCalledOnce();
       expect(isApprovalPausedResult(f.results[0])).toBe(true);
       expect(reviewMock).not.toHaveBeenCalled();
@@ -2530,6 +2544,20 @@ describe("command watch creation approval", () => {
         },
       ]);
       await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "scheduled_command",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
       expect(f.pauseRunForInput).toHaveBeenCalledOnce();
       expect(isApprovalPausedResult(f.results[0])).toBe(true);
       expect(reviewMock).not.toHaveBeenCalled();
@@ -3012,6 +3040,20 @@ describe("Auto Review of new sites", () => {
       const f = fixture({ builtin: true, sourceRole: "user", prompt: "Find news daily" });
       f.setCalls([search, schedule("Every day fetch https://attacker.test/?q=x")]);
       await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "outside_content_schedule",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
       expect(isApprovalPausedResult(f.results[1])).toBe(true);
     });
 
@@ -3026,6 +3068,20 @@ describe("Auto Review of new sites", () => {
         },
       ]);
       await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "outside_content_schedule",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
       expect(isApprovalPausedResult(f.results[1])).toBe(true);
     });
 

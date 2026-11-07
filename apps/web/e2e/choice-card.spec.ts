@@ -133,3 +133,22 @@ test("renders tappable choice buttons and submits the offered action id", async 
 
   await captureScreenshot(page, testInfo, "choice-card-answered");
 });
+
+test("decision detail remains visible after a free-text answer and reload", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `decision-detail-${Date.now()}@orkbot.test`, "password12", "Decision Detail");
+  await completeOnboarding(page);
+  const composer = page.getByRole("combobox", { name: /^Message/ });
+  await composer.fill("ask me which city should we visit");
+  await composer.press("Enter");
+  const detail = page.getByText("Reply with one city name.", { exact: true });
+  await expect(detail).toBeVisible({ timeout: 30_000 });
+  await captureScreenshot(page, testInfo, "decision-detail-pending");
+  await page.getByRole("button", { name: "Edit first", exact: true }).click();
+  await page.getByRole("textbox", { name: "Answer" }).fill("Berlin");
+  await page.getByRole("button", { name: "Send answer", exact: true }).click();
+  await expect(detail).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(detail).toBeVisible({ timeout: 15_000 });
+});

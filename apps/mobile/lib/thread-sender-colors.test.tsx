@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; mobile decision-card checks are Ork additions.
+
 import { resolvePersonaColorDef, shouldShowBotSenderName } from "@orkbot/core";
 import { botColors, darkTokens } from "@orkbot/ui-tokens";
 import type { ComponentProps } from "react";
@@ -50,7 +54,17 @@ vi.mock("../components/ComputerCard", () => ({
 }));
 // Cards this file doesn't exercise; each has its own tests.
 vi.mock("../components/thread/ask-block", () => ({ AskBlock: () => null }));
-vi.mock("../components/AskActions", () => ({ AskActions: () => null }));
+vi.mock("../components/AskActions", () => ({
+  AskActions: ({ actions }: { actions: Array<{ id: string; label: string }> }) => (
+    <>
+      {actions.map((action) => (
+        <button type="button" key={action.id}>
+          {action.label}
+        </button>
+      ))}
+    </>
+  ),
+}));
 vi.mock("../components/AppConnectCard", () => ({ AppConnectCard: () => null }));
 vi.mock("../components/audio-attachment", () => ({ AudioAttachment: () => null }));
 vi.mock("../components/bot-avatar", () => ({ BotAvatar: () => null }));
@@ -186,3 +200,41 @@ it("keeps the bot name when opening a computer without a sender label", () => {
   );
   expect(opened).toEqual([["bot-a", "Sender"]]);
 });
+
+it.each([undefined, false, true])(
+  "keeps pending mobile legacy approvals once-only with eligibility %s",
+  (allowRule) => {
+    const ask = {
+      kind: "ask" as const,
+      text: "Review?",
+      detail: "Draft proposal",
+      status: "pending" as const,
+      approvalEffectId: "effect-1",
+      ...(allowRule === undefined ? {} : { allowRule }),
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "always", label: "Always allow this tool" },
+        { id: "deny", label: "Deny" },
+      ],
+    };
+    const message = { id: "decision", role: "bot" as const, blocks: [ask] };
+    const pending = renderToStaticMarkup(<Bubble message={message} canAnswer />);
+    expect(pending.includes("Always allow this tool")).toBe(allowRule === true);
+    expect(pending).toContain("Allow once");
+    expect(pending).toContain("Deny");
+    expect(pending).toContain("Draft proposal");
+    const answered = renderToStaticMarkup(
+      <Bubble
+        message={{
+          ...message,
+          blocks: [
+            { ...ask, status: "answered", answer: "always", approvalReason: "scheduled_command" },
+          ],
+        }}
+      />,
+    );
+    expect(answered).toContain("Always allowed");
+    expect(answered).toContain("Scheduling a command requires approval.");
+    expect(answered).toContain("Draft proposal");
+  },
+);

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 // @vitest-environment jsdom
 
 import type { LoginFieldInput } from "@orkbot/contracts";
@@ -10,6 +14,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({
+    i18n: { _: ({ message }: { message: string }) => message },
     t: (parts: TemplateStringsArray, ...values: unknown[]) => String.raw(parts, ...values),
   }),
 }));
@@ -837,3 +842,72 @@ it("sends Undo to the chat's space, not the one selected in another tab", async 
   expect(rpc.bots.restoreInstructions).not.toHaveBeenCalled();
   expect(rpc.bots.update).not.toHaveBeenCalled();
 });
+
+it.each(["pending", "answered"] as const)(
+  "retains the trusted once-only reason on a %s approval",
+  async (status) => {
+    await render({
+      kind: "ask",
+      text: "Review command?",
+      status,
+      ...(status === "answered" ? { answer: "allow" } : {}),
+      approvalEffectId: "effect-1",
+      approvalReason: "scheduled_command",
+      allowRule: false,
+      detail: "date",
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "deny", label: "Deny" },
+      ],
+    });
+    expect(container.textContent).toContain("Scheduling a command requires approval.");
+    expect(container.textContent).toContain("date");
+    expect(button("Always allow this tool")).toBeUndefined();
+  },
+);
+
+it.each(["pending", "answered"] as const)(
+  "shows the proposal on a %s choice card",
+  async (status) => {
+    await render({
+      kind: "ask",
+      text: "Review draft?",
+      detail: "Draft proposal",
+      detailFormat: "text",
+      status,
+      ...(status === "answered" ? { answer: "choice-1" } : {}),
+      actions: [
+        { id: "choice-1", label: "Revise" },
+        { id: "choice-2", label: "Accept" },
+      ],
+    });
+    expect(container.textContent).toContain("Draft proposal");
+    expect(
+      container.querySelector("[data-testid=ask-detail]")?.classList.contains("font-sans"),
+    ).toBe(true);
+  },
+);
+
+it.each([undefined, false, true])(
+  "shows lasting approval controls only with trusted eligibility: %s",
+  async (allowRule) => {
+    const block: AskBlock = {
+      kind: "ask",
+      text: "Review?",
+      status: "pending",
+      approvalEffectId: "effect-1",
+      ...(allowRule === undefined ? {} : { allowRule }),
+      actions: [
+        { id: "allow", label: "Allow once" },
+        { id: "always", label: "Always allow this tool" },
+        { id: "deny", label: "Deny" },
+      ],
+    };
+    await render(block);
+    expect(Boolean(button("Always allow this tool"))).toBe(allowRule === true);
+    expect(button("Allow once")).toBeDefined();
+    expect(button("Deny")).toBeDefined();
+    await render({ ...block, status: "answered", answer: "always" });
+    expect(container.textContent).toContain("Always allowed");
+  },
+);

@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@orkbot/chat-ui/web";
 import type { LoginFieldInput, ThreadMessage } from "@orkbot/contracts";
 import { BOT_INSTRUCTIONS_MAX_LENGTH } from "@orkbot/contracts";
 import {
+  approvalReasonText,
+  effectiveApprovalActions,
   isApprovalAskBlock,
   isSecretAskBlock,
   resolveAskChoice,
@@ -83,7 +89,7 @@ export function AskCard(props: AskCardProps) {
 }
 
 function PromptAskCard({ block, canAnswer, onAnswer, rpc = selectedSpaceRpc }: AskCardProps) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const [editing, setEditing] = useState(false);
   const [answer, setAnswer] = useState(block.instructionUpdate?.after ?? "");
   const [acceptedAnswer, setAcceptedAnswer] = useState<string>();
@@ -93,8 +99,8 @@ function PromptAskCard({ block, canAnswer, onAnswer, rpc = selectedSpaceRpc }: A
   const submitting = pendingAction !== null;
   const answered = block.status === "answered" || acceptedAnswer !== undefined;
   const displayedAnswer = block.status === "answered" ? block.answer : acceptedAnswer;
-  const approvalActions = isApprovalAskBlock(block) ? block.actions : undefined;
-  const askActions = block.actions;
+  const askActions = effectiveApprovalActions(block);
+  const approvalActions = isApprovalAskBlock(block) ? askActions : undefined;
   const displayActions = block.instructionUpdate
     ? askActions?.flatMap((action) =>
         action.id === "allow" ? [action, { id: "edit", label: t`Edit` }] : [action],
@@ -192,6 +198,14 @@ function PromptAskCard({ block, canAnswer, onAnswer, rpc = selectedSpaceRpc }: A
           <ChatMarkdown>{block.text}</ChatMarkdown>
         )}
       </div>
+      {block.approvalReason ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {i18n._({
+            id: approvalReasonText(block.approvalReason),
+            message: approvalReasonText(block.approvalReason),
+          })}
+        </p>
+      ) : null}
       {block.detail ? (
         <pre
           data-testid="ask-detail"

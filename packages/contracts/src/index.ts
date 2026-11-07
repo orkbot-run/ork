@@ -20,6 +20,7 @@ export * from "./client-build.js";
 export * from "./client-protocol.js";
 export * from "./cloudflare-ai-gateway.js";
 export * from "./connector-errors.js";
+export * from "./decision-card.js";
 export * from "./desktop.js";
 export * from "./domain.js";
 export * from "./events.js";
