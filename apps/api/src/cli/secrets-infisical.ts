@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 migration behavior is preserved. Bounded interruption handling is an Ork addition.
+
 import {
   ComposedSecretStore,
   contentKeyProviderFromEnv,
@@ -12,6 +16,8 @@ import { resolveEncryptionKey } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { createDb, runAsSystem } from "@orkbot/db";
 import { createSecretMigrationRepository } from "#modules/security/secret-migration";
+
+import { migrationSignals } from "./migration-signals.js";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
@@ -40,9 +46,7 @@ const infisical = new ComposedSecretStore(
   new InfisicalSecretStore(options),
   realtime,
 );
-const controller = new AbortController();
-process.once("SIGINT", () => controller.abort());
-process.once("SIGTERM", () => controller.abort());
+const shutdown = migrationSignals();
 const repository = createSecretMigrationRepository(prisma);
 try {
   await encrypted.start();
@@ -58,7 +62,7 @@ try {
         traceId: "secret-migration",
         userId: "migration",
         spaceId: "migration",
-        signal: controller.signal,
+        signal: shutdown.signal,
       },
       {
         direction: args.includes("--reverse") ? "reverse" : "forward",
@@ -67,14 +71,19 @@ try {
       },
     ),
   );
-  if (result.failed || controller.signal.aborted) process.exitCode = 1;
+  if (result.failed || shutdown.signal.aborted) process.exitCode = 1;
 } catch {
   process.stderr.write("Secret migration failed\n");
   process.exitCode = 1;
 } finally {
-  await infisical.close();
-  await encrypted.close();
+  await infisical.close().catch(() => {
+    process.exitCode = 1;
+  });
+  await encrypted.close().catch(() => {
+    process.exitCode = 1;
+  });
   await realtime.close().catch(() => undefined);
   await prisma.$disconnect().catch(() => undefined);
   await pool.end().catch(() => undefined);
+  shutdown.finish();
 }

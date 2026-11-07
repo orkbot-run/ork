@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 migration behavior is preserved. Bounded interruption handling is an Ork addition.
+
 import { parseArgs } from "node:util";
 import {
   contentKeyProviderFromEnv,
@@ -7,6 +11,8 @@ import {
 } from "@orkbot/adapters";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { createDb } from "@orkbot/db";
+
+import { migrationSignals } from "./migration-signals.js";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
@@ -42,9 +48,7 @@ const { prisma, pool } = createDb(process.env.DATABASE_URL, {
   keyProvider: contentKeyProviderFromEnv(),
 });
 const write = (line: string) => process.stdout.write(`${line}\n`);
-let stopping = false;
-process.once("SIGINT", () => (stopping = true));
-process.once("SIGTERM", () => (stopping = true));
+const shutdown = migrationSignals();
 
 try {
   const home = createAgentHomeStore(process.env.DATA_DIR ?? "./data", prisma);
@@ -52,7 +56,7 @@ try {
     throw new Error("Set OBJECT_STORAGE_BUCKET and its credentials first");
   const counts = { uploaded: 0, "would-upload": 0, stored: 0, "no-computer": 0, failed: 0 };
   for (const homeKey of await home.localHomes()) {
-    if (stopping) break;
+    if (shutdown.signal.aborted) break;
     try {
       const status = await home.migrateLocal(homeKey, { dryRun: parsed.dryRun });
       counts[status] += 1;
@@ -68,7 +72,7 @@ try {
   write(
     `homes: ${counts.uploaded} uploaded and verified, ${counts["would-upload"]} to upload, ${counts.stored} already stored, ${counts["no-computer"]} without a computer (left alone), ${counts.failed} failed`,
   );
-  if (stopping) write("stopped early; run it again to continue");
+  if (shutdown.signal.aborted) write("stopped early; run it again to continue");
 } catch (error) {
   process.stderr.write(
     `home-storage migrate failed: ${error instanceof Error ? error.message : "unknown error"}\n`,
@@ -77,4 +81,5 @@ try {
 } finally {
   await prisma.$disconnect().catch(() => undefined);
   await pool.end().catch(() => undefined);
+  shutdown.finish();
 }

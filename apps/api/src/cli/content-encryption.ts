@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 migration behavior is preserved. Bounded interruption handling is an Ork addition.
+
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { parseArgs } from "node:util";
@@ -24,6 +28,8 @@ import {
 } from "@orkbot/db";
 import { moveMcpArgsIntoSecrets } from "#modules/mcp/mcp-args-migration";
 import { createSecretMigrationRepository } from "#modules/security/secret-migration";
+
+import { migrationSignals } from "./migration-signals.js";
 
 loadRootEnv();
 await unwrapEnvFromKeyManager();
@@ -92,9 +98,7 @@ const { prisma, pool, contentKeys } = createDb(process.env.DATABASE_URL, {
   ...(encrypting ? { encryptContent: true } : {}),
 });
 const artifacts = new LocalArtifactStore(process.env.DATA_DIR ?? "./data", contentKeys);
-const controller = new AbortController();
-process.once("SIGINT", () => controller.abort());
-process.once("SIGTERM", () => controller.abort());
+const shutdown = migrationSignals();
 const write = (line: string) => process.stdout.write(`${line}\n`);
 
 /** JSON lines to stdout, or to a new owner-only file; the export holds plaintext. */
@@ -104,7 +108,7 @@ async function exportJsonLines() {
     for await (const record of exportContent(
       prisma,
       { spaceId: flags.space, threadId: flags.thread, botId: flags.bot },
-      { signal: controller.signal },
+      { signal: shutdown.signal },
     )) {
       records += 1;
       yield `${JSON.stringify(record)}\n`;
@@ -130,7 +134,7 @@ async function rewriteContent(mode: ContentMigrationMode) {
   for (const table of await migrateContent(prisma, {
     mode,
     dryRun,
-    signal: controller.signal,
+    signal: shutdown.signal,
   }))
     write(
       `${table.table}: ${table.updated} of ${table.scanned} ${dryRun ? "to rewrite" : "rewritten"}`,
@@ -138,7 +142,7 @@ async function rewriteContent(mode: ContentMigrationMode) {
   let files = 0;
   let rewritten = 0;
   for await (const file of artifacts.files()) {
-    controller.signal.throwIfAborted();
+    shutdown.signal.throwIfAborted();
     files += 1;
     try {
       if (dryRun) continue;
@@ -161,7 +165,7 @@ async function upgradeCredentials() {
       traceId: "content-encryption",
       userId: "migration",
       spaceId: "migration",
-      signal: controller.signal,
+      signal: shutdown.signal,
     },
     { dryRun, report: (row, status) => write(`credential ${row.label} ${row.id}: ${status}`) },
   );
@@ -177,7 +181,7 @@ async function moveMcpArgs() {
   try {
     const counts = await moveMcpArgsIntoSecrets(withSecretPersistence(prisma, secrets), secrets, {
       dryRun,
-      signal: controller.signal,
+      signal: shutdown.signal,
     });
     write(
       `mcp server arguments: ${counts.moved} encrypted, ${counts.planned} planned, ${counts.concurrent} changed concurrently, ${counts.failed} failed`,
@@ -217,12 +221,12 @@ try {
     } else if (command === "rotate") {
       const keys = await rewrapSpaceKeys(prisma, contentKeys, {
         dryRun,
-        signal: controller.signal,
+        signal: shutdown.signal,
       });
       write(`space keys: ${keys.rewrapped} re-wrapped, ${keys.current} already current`);
       if (flags.reencrypt && !dryRun) {
         write(
-          `data keys: ${await rotateSpaceDataKeys(prisma, contentKeys, { signal: controller.signal })} spaces rotated`,
+          `data keys: ${await rotateSpaceDataKeys(prisma, contentKeys, { signal: shutdown.signal })} spaces rotated`,
         );
         await rewriteContent("reencrypt");
       }
@@ -242,4 +246,5 @@ try {
 } finally {
   await prisma.$disconnect().catch(() => undefined);
   await pool.end().catch(() => undefined);
+  shutdown.finish();
 }
