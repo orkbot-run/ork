@@ -63,6 +63,7 @@
     "@orkbot/core": "workspace:*",
     "@orkbot/db": "workspace:*",
     "@orkbot/logging": "workspace:*",
+    "@orkbot/memory": "workspace:*",
     "@orkbot/page-kit": "workspace:*",
     "@stripe/link-sdk": "0.15.0",
     "chat": "4.44.0",

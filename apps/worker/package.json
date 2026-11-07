@@ -1,7 +1,7 @@
 {
   "name": "@orkbot/worker",
   "version": "0.1.0",
-  "license": "Apache-2.0",
+  "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "scripts": {
     "dev": "node ../../scripts/dev-watch.mjs src/index.ts",
@@ -15,8 +15,7 @@
     "@orkbot/adapters": "workspace:*",
     "@orkbot/core": "workspace:*",
     "@orkbot/db": "workspace:*",
-    "@orkbot/logging": "workspace:*",
-    "@orkbot/memory": "workspace:*"
+    "@orkbot/logging": "workspace:*"
   },
   "devDependencies": {
     "typescript": "7.0.2",

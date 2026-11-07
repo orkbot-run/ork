@@ -517,9 +517,6 @@ importers:
       '@orkbot/logging':
         specifier: workspace:*
         version: link:../../packages/logging
-      '@orkbot/memory':
-        specifier: workspace:*
-        version: link:../../packages/memory
     devDependencies:
       typescript:
         specifier: 7.0.2
@@ -777,6 +774,9 @@ importers:
       '@orkbot/logging':
         specifier: workspace:*
         version: link:../logging
+      '@orkbot/memory':
+        specifier: workspace:*
+        version: link:../memory
       '@orkbot/page-kit':
         specifier: workspace:*
         version: link:../page-kit

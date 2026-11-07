@@ -38,19 +38,15 @@ import {
   applyMessagingOutboundStatus,
   auditLogConfig,
   ChatSdkMessagingSurface,
-  CodexCatalogCache,
   ComposioConnector,
   contentKeyProviderFromEnv,
-  createAgentHomeStore,
   createApnsVoipProvider,
-  createArtifactStore,
   createAuditLogReconciler,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
   createConnectorStack,
   createIdleComputerSweeper,
   createJobReconciler,
-  createMediaGenerationProvider,
   createMessagingContextLoader,
   createMessagingTeamChatHistory,
   createMessagingTeamChatSender,
@@ -58,7 +54,7 @@ import {
   createPaymentWalletProvider,
   createProductAnalytics,
   createRunExecutor,
-  createRunSandbox,
+  createRunResources,
   createRunSecretWriter,
   createSecretStore,
   createStrategicInitiativeReconciler,
@@ -80,7 +76,6 @@ import {
   McpOAuthBroker,
   messagingPlatformsFromEnv,
   ObjectAgentHomeStore,
-  PiAgentRuntime,
   PiOAuthLogins,
   PipedreamConnector,
   PostgresRealtimeFanout,
@@ -95,8 +90,6 @@ import {
   reconcilePurchases,
   removePiUserSessions,
   resolveDeploymentModel,
-  ScriptedAgentRuntime,
-  SpaceMemoryProviderResolver,
   StripeBillingProvider,
   sandboxProviderOptionsFromEnv,
   stripeBillingConfigFromEnv,
@@ -148,7 +141,6 @@ import {
   SERVICE_NAMES,
 } from "@orkbot/logging";
 import { markExpectedFailure, requestLogging } from "@orkbot/logging/hono";
-import { MarkdownMemoryStore } from "@orkbot/memory";
 import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
@@ -422,36 +414,48 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     prisma,
     ticketBoardEnabled,
   });
-  const sandbox: SandboxProvider =
-    sandboxOverride ??
-    (await createRunSandbox(env.sandboxProvider, {
-      ...sandboxProviderOptionsFromEnv(),
-      supervisorUrl: env.sandboxSupervisorUrl,
-      supervisorToken: env.sandboxSupervisorToken,
-      e2bApiKey: env.e2bApiKey,
-      novitaApiKey: env.novitaApiKey,
-      sandboxTemplate: env.sandboxTemplate,
-      daytonaApiKey: env.daytonaApiKey,
-      daytonaApiUrl: env.daytonaApiUrl,
-      daytonaTarget: env.daytonaTarget,
-      boatApiKey: env.boatApiKey,
-      boatApiUrl: env.boatApiUrl,
-      dataDir: env.dataDir,
-      prisma,
-      secrets,
-    }));
+  const {
+    runtime,
+    sandbox,
+    memory,
+    memoryProviders,
+    home,
+    artifacts,
+    codexCatalog,
+    mediaGeneration,
+  } = await createRunResources({
+    prisma,
+    secrets,
+    dataDir: env.dataDir,
+    runtimeKind: env.agentRuntime,
+    sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
+    runtime: runtimeOverride,
+    sandbox: sandboxOverride,
+    sandboxKind: env.sandboxProvider,
+    sandboxOptions: sandboxOverride
+      ? {}
+      : {
+          ...sandboxProviderOptionsFromEnv(),
+          supervisorUrl: env.sandboxSupervisorUrl,
+          supervisorToken: env.sandboxSupervisorToken,
+          e2bApiKey: env.e2bApiKey,
+          novitaApiKey: env.novitaApiKey,
+          sandboxTemplate: env.sandboxTemplate,
+          daytonaApiKey: env.daytonaApiKey,
+          daytonaApiUrl: env.daytonaApiUrl,
+          daytonaTarget: env.daytonaTarget,
+          boatApiKey: env.boatApiKey,
+          boatApiUrl: env.boatApiUrl,
+        },
+  });
   const mcpOAuth = new McpOAuthBroker(
     prisma,
     secrets,
     remoteConnectors,
     env.mcpAllowPrivateEndpoint,
   );
-  const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
   const oauthLogins = new PiOAuthLogins(undefined, { prisma, secrets });
-  const home = createAgentHomeStore(env.dataDir, prisma);
   void home.removeStaleStaging().catch((error) => getLogger().error("home staging cleanup", error));
-  const artifacts = createArtifactStore(env.dataDir, prisma);
-  const memory = new MarkdownMemoryStore(prisma);
   const mcp = new McpConnector(
     prisma,
     secrets,
@@ -544,13 +548,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ...connectorOverrides,
   ]);
   integrationSettings.warmDirectories();
-  const runtime =
-    runtimeOverride ??
-    (env.agentRuntime === "scripted"
-      ? new ScriptedAgentRuntime()
-      : new PiAgentRuntime({
-          sessionRoot: env.piSessionRecording ? piSessionsRoot(env.dataDir) : undefined,
-        }));
   if (env.passwordAuth === false && (env.oidc || env.accountsEnabled)) {
     await expireNonOidcSessions(
       prisma,
@@ -679,11 +676,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     PAYMENT_WALLET_PROVIDER: env.paymentWalletProvider,
     PAYMENT_WALLET_CLIENT_ID: env.paymentWalletClientId,
   });
-  // One cache serves models.list, selection validation, and run-time model
-  // resolution alike, so a list call warms the run path in this process.
-  const codexCatalog = new CodexCatalogCache();
-  // One instance: chat runs submit videos and, in single-process mode, background polls finish them.
-  const mediaGeneration = createMediaGenerationProvider();
   const executor = createRunExecutor({
     billingEnabled: modelCreditsEnabled,
     maxUploadSizeBytes: env.maxUploadSizeBytes,

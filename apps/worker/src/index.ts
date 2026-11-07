@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 worker composition is preserved. Shared resource wiring is an Ork addition.
+
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { JobPublisher, JobWorkerHost } from "@orkbot/adapter-kit";
@@ -19,11 +24,8 @@ import {
   apnsVoipConfig,
   auditLogConfig,
   ChatSdkMessagingSurface,
-  CodexCatalogCache,
   contentKeyProviderFromEnv,
-  createAgentHomeStore,
   createApnsVoipProvider,
-  createArtifactStore,
   createAuditLogReconciler,
   createBackgroundJobHandlers,
   createCloudAgentConnection,
@@ -31,7 +33,6 @@ import {
   createDeadJobPruner,
   createIdleComputerSweeper,
   createJobReconciler,
-  createMediaGenerationProvider,
   createMessagingContextLoader,
   createModelCreditReconciler,
   createPaymentWalletProvider,
@@ -40,7 +41,7 @@ import {
   createReservedGraphileJobWorkerHost,
   createRoutineRetryNoticeReconciler,
   createRunExecutor,
-  createRunSandbox,
+  createRunResources,
   createRunSecretWriter,
   createStrategicInitiativeReconciler,
   createTicketChangeNotifier,
@@ -61,7 +62,6 @@ import {
   mcpStdioOptionsFromEnv,
   messagingEnvFromProcess,
   messagingPlatformsFromEnv,
-  PiAgentRuntime,
   PipedreamConnector,
   PostgresRealtimeFanout,
   PrismaPushTokenStore,
@@ -76,8 +76,6 @@ import {
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
-  ScriptedAgentRuntime,
-  SpaceMemoryProviderResolver,
   sandboxProviderOptionsFromEnv,
   shutdownPiTelemetry,
   UserDevices,
@@ -105,7 +103,6 @@ import {
 } from "@orkbot/db";
 import { SERVICE_NAMES } from "@orkbot/logging";
 import { createRootLogger } from "@orkbot/logging/axiom";
-import { MarkdownMemoryStore } from "@orkbot/memory";
 
 const logger = await createRootLogger(SERVICE_NAMES.worker);
 
@@ -153,21 +150,32 @@ async function main() {
   const ticketBoardEnabled = process.env.TICKET_BOARD_ENABLED === "true";
   const boardEvents = createBoardEvents(realtime);
   const dataDir = process.env.DATA_DIR ?? "./data";
-  const runtime =
-    process.env.AGENT_RUNTIME === "scripted"
-      ? new ScriptedAgentRuntime()
-      : new PiAgentRuntime({ sessionRoot: resolvePiSessionRoot(dataDir) });
   // Same resolver the API uses, so both processes agree on provider, model and key.
   const { key: deploymentModelKey, configured: deploymentModelConfigured } =
     resolveDeploymentModel();
   const sandboxProvider = resolveSandboxProvider(process.env);
-  const sandbox = await createRunSandbox(sandboxProvider, {
-    ...sandboxProviderOptionsFromEnv(process.env),
-    supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
-    supervisorToken: sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
-    dataDir,
+  const {
+    runtime,
+    sandbox,
+    memory,
+    memoryProviders,
+    home,
+    artifacts,
+    codexCatalog,
+    mediaGeneration,
+  } = await createRunResources({
     prisma,
     secrets,
+    dataDir,
+    runtimeKind: process.env.AGENT_RUNTIME ?? "pi",
+    sessionRoot: resolvePiSessionRoot(dataDir),
+    sandboxKind: sandboxProvider,
+    sandboxOptions: {
+      ...sandboxProviderOptionsFromEnv(process.env),
+      supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
+      supervisorToken:
+        sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
+    },
   });
   const allowPrivateEndpoint = process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true";
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, {}, allowPrivateEndpoint);
@@ -233,10 +241,7 @@ async function main() {
     mcp,
   ]);
   integrationSettings.warmDirectories();
-  const memoryProviders = new SpaceMemoryProviderResolver(prisma, secrets);
-  const home = createAgentHomeStore(dataDir, prisma);
   void home.removeStaleStaging().catch((error) => logger.error("home staging cleanup", error));
-  const artifacts = createArtifactStore(dataDir, prisma);
   const shutdown = new AbortController();
   const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
   const runs = new RunStarter(realtime, { signal: shutdown.signal });
@@ -263,8 +268,6 @@ async function main() {
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
   const paymentWallet = await createPaymentWalletProvider();
-  // One instance: the executor submits videos and background polls finish them.
-  const mediaGeneration = createMediaGenerationProvider();
   const maxUploadSizeBytes = uploadSizeFromEnv(process.env);
   // Shared with the reconciler so a stuck wait uses the same push path as a finish notice.
   const pushTokens = new PrismaPushTokenStore(prisma, resolveEncryptionKey(process.env));
@@ -279,10 +282,9 @@ async function main() {
     mediaGeneration,
     prisma,
     runtime,
-    // Live per-account Codex catalog; never refreshes or writes credentials.
-    codexCatalog: new CodexCatalogCache(),
+    codexCatalog,
     sandbox,
-    memory: new MarkdownMemoryStore(prisma),
+    memory,
     memoryProviders,
     home,
     artifacts,
