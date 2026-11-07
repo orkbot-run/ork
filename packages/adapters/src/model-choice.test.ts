@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 selection tests are preserved; synthetic version fixtures follow LICENSE.md.
+
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import type { ModelChoice } from "./model-choice.js";
@@ -60,6 +64,86 @@ describe("matchModelChoice", () => {
 
   it("matches nothing for an unknown name", () => {
     expect(matchModelChoice(choices, "llama").ranked).toEqual([]);
+  });
+});
+
+describe("synthetic model versions", () => {
+  const synthetic = (id: string, label = id, provider = "example") =>
+    choice(provider, provider, id, label);
+
+  it("recognizes hyphenated label versions in dotted and spoken queries", () => {
+    const older = synthetic("fiction-3-1", "Fiction 3-1");
+    const newer = synthetic("fiction-3-2", "Fiction 3-2");
+    for (const query of ["Fiction", "Fiction 3.2", "Fiction 3-2"])
+      expect(matchModelChoice([older, newer], query).match).toEqual(newer);
+    expect(matchModelChoice([older, newer], "Fiction 3.1").match).toEqual(older);
+  });
+
+  it("compares every component of a hyphenated patch version", () => {
+    const older = synthetic("fiction-1-5-0", "Fiction 1-5-0");
+    const newer = synthetic("fiction-1-5-1", "Fiction 1-5-1");
+    expect(matchModelChoice([older, newer], "Fiction").match).toEqual(newer);
+    expect(matchModelChoice([older, newer], "Fiction 1.5.0").match).toEqual(older);
+  });
+
+  it.each([
+    ["70B", "8B"],
+    ["135M", "1.5M"],
+    ["4x8B", "3x70B"],
+    ["2025-10-08", "2026-11-07"],
+    ["20251008", "20261107"],
+  ])("does not rank unversioned sizes or dated builds as a newer version: %s / %s", (a, b) => {
+    const candidates = [
+      synthetic(`fiction-${a}`, `Fiction ${a}`),
+      synthetic(`fiction-${b}`, `Fiction ${b}`),
+    ];
+    const result = matchModelChoice(candidates, "Fiction");
+    expect(result.ranked).toHaveLength(2);
+    expect(result.match).toBeUndefined();
+  });
+
+  it.each([
+    ["70B", "8B"],
+    ["135M", "1.5M"],
+    ["4x8B", "3x70B"],
+    ["2025-10-08", "2026-11-07"],
+    ["20251008", "20261107"],
+  ])("keeps version 3-2 separate from size/date suffixes: %s / %s", (a, b) => {
+    const candidates = [
+      synthetic(`fiction-3-2-${a}`, `Fiction 3-2-${a}`),
+      synthetic(`fiction-3-2-${b}`, `Fiction 3-2-${b}`),
+    ];
+    const result = matchModelChoice(candidates, "Fiction 3.2");
+    expect(result.ranked).toHaveLength(2);
+    expect(result.match).toBeUndefined();
+    expect(matchModelChoice(candidates, `example/${candidates[0]!.id}`).match).toEqual(
+      candidates[0],
+    );
+  });
+
+  it("keeps an explicit size and the preferred provider as meaningful disambiguation", () => {
+    const small = synthetic("fiction-3-2-8b", "Fiction 3-2-8B");
+    const large = synthetic("fiction-3-2-70b", "Fiction 3-2-70B");
+    expect(matchModelChoice([small, large], "Fiction 3.2 70B").match).toEqual(large);
+    const other = synthetic("fiction-3.2-70b", "Fiction 3.2 70B", "other");
+    expect(matchModelChoice([large, other], "Fiction 3.2 70B").match).toBeUndefined();
+    expect(matchModelChoice([large, other], "Fiction 3.2 70B", "other").match).toEqual(other);
+  });
+
+  it("recognizes a dated build independently when a version and size also exist", () => {
+    const first = synthetic("fiction-3-2-2025-10-08-70b", "Fiction 3-2-2025-10-08-70B");
+    const second = synthetic("fiction-3-2-20261107-8b", "Fiction 3-2-20261107-8B");
+    expect(matchModelChoice([first, second], "Fiction 3.2").match).toBeUndefined();
+    expect(matchModelChoice([first, second], "Fiction 3.2 20251008").match).toEqual(first);
+  });
+
+  it("retains family M and v prefixes when they introduce a version", () => {
+    for (const prefix of ["M", "v"]) {
+      const older = synthetic(`fiction-${prefix}3-1`, `Fiction ${prefix}3-1`);
+      const newer = synthetic(`fiction-${prefix}3-2`, `Fiction ${prefix}3-2`);
+      expect(matchModelChoice([older, newer], `Fiction ${prefix}`).match).toEqual(newer);
+      expect(matchModelChoice([older, newer], `Fiction ${prefix}3.1`).match).toEqual(older);
+    }
   });
 });
 

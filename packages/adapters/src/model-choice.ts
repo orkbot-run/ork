@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 selection is preserved; structured version tokenization follows LICENSE.md.
+
 import type { Actor } from "@orkbot/contracts";
 import { canonicalPiProviderId } from "@orkbot/contracts";
 import type { BotModelChangeDeps } from "./model-selection.js";
@@ -36,12 +40,46 @@ export async function connectedModelChoices(
   });
 }
 
-/** Words and version numbers: "Gemini 3.8 Flash" is gemini, 3.8, flash. */
-export function words(text: string): string[] {
-  return text.toLowerCase().match(/\p{L}+|\d+(?:\.\d+)*/gu) ?? [];
+function calendarDate(value: string): string | undefined {
+  const digits = value.replace(/[.-]/g, "");
+  if (!/^\d{8}$/.test(digits)) return undefined;
+  const year = Number(digits.slice(0, 4));
+  const month = Number(digits.slice(4, 6));
+  const day = Number(digits.slice(6, 8));
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    year < 1000 ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  )
+    return undefined;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
 }
 
-const isVersion = (word: string) => /^\d/.test(word);
+/** Separate marked sizes and calendar builds before canonicalizing version separators. */
+function numericWords(word: string): string[] {
+  const suffixes: string[] = [];
+  while (word) {
+    const size = word.match(/(?:^|-)(\d+(?:\.\d+)?(?:x\d+(?:\.\d+)?)?[mb])$/);
+    const date = word.match(/(?:^|[.-])(\d{4}[.-]\d{2}[.-]\d{2}|\d{8})$/);
+    const day = date ? calendarDate(date[1]!) : undefined;
+    const suffix = size ?? (day ? date : undefined);
+    if (!suffix) break;
+    suffixes.push(size ? size[1]! : day!);
+    word = word.slice(0, suffix.index);
+  }
+  return [...(word ? [word.replaceAll("-", ".")] : []), ...suffixes.reverse()];
+}
+
+/** Words and versions: "Fiction 3-2 70B" is fiction, 3.2, 70b. */
+export function words(text: string): string[] {
+  return (
+    text.toLowerCase().match(/\p{L}+|\d+(?:[.-]\d+)*(?:x\d+(?:\.\d+)*)?(?:[mb](?!\p{L}))?/gu) ?? []
+  ).flatMap((word) => (/^\d/.test(word) ? numericWords(word) : [word]));
+}
+
+const isVersion = (word: string) => /^\d+(?:\.\d+)*$/.test(word);
 
 function compareVersions(left: string | undefined, right: string | undefined): number {
   const a = (left ?? "").split(".").map(Number);
