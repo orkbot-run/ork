@@ -47,6 +47,119 @@ function stubRecorderFallback(fetchMock: ReturnType<typeof vi.fn>) {
 }
 
 describe("Dictation recorder fallback", () => {
+  it("uploads when the audio context suspends after a quiet sample", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const fetchMock = vi.fn(async () => Response.json({ text: "recognized" }));
+    stubRecorderFallback(fetchMock);
+    let context: { state: string } | undefined;
+    vi.stubGlobal(
+      "AudioContext",
+      class {
+        state = "running";
+        constructor() {
+          context = this;
+        }
+        createMediaStreamSource() {
+          return { connect() {} };
+        }
+        createAnalyser() {
+          return {
+            fftSize: 2048,
+            getByteTimeDomainData(data: Uint8Array) {
+              data.fill(128);
+            },
+          };
+        }
+        close() {
+          return Promise.resolve();
+        }
+      },
+    );
+    const dictation = new Dictation();
+    await dictation.listen({ mode: "hold", transcribe: true, onFinal: vi.fn() });
+    await vi.advanceTimersByTimeAsync(80);
+    context!.state = "suspended";
+    dictation.submitHold();
+    vi.useRealTimers();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  });
+  it.each(["speech", "no samples", "suspended", "analyser error", "setup error"] as const)(
+    "uploads the recording when silence is not established: %s",
+    async (scenario) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const fetchMock = vi.fn(async () => Response.json({ text: "recognized" }));
+      const close = vi.fn(async () => undefined);
+      stubRecorderFallback(fetchMock);
+      vi.stubGlobal(
+        "AudioContext",
+        class {
+          state = scenario === "suspended" ? "suspended" : "running";
+          createMediaStreamSource() {
+            return { connect() {} };
+          }
+          createAnalyser() {
+            if (scenario === "setup error") throw new Error("analyser unavailable");
+            return {
+              fftSize: 2048,
+              getByteTimeDomainData(data: Uint8Array) {
+                if (scenario === "analyser error") throw new Error("measurement failed");
+                data.fill(scenario === "speech" ? 200 : 128);
+              },
+            };
+          }
+          close() {
+            return close();
+          }
+          resume() {
+            return Promise.reject(new Error("resume failed"));
+          }
+        },
+      );
+      const dictation = new Dictation();
+      await dictation.listen({ mode: "hold", transcribe: true, onFinal: vi.fn() });
+      if (scenario !== "no samples") await vi.advanceTimersByTimeAsync(160);
+      dictation.submitHold();
+      vi.useRealTimers();
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+      if (scenario === "setup error") expect(close).toHaveBeenCalledOnce();
+    },
+  );
+  it.each(["hold", "endpoint"] as const)(
+    "does not upload measured silence in %s mode",
+    async (mode) => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      const fetchMock = vi.fn(async () => Response.json({ text: "unexpected" }));
+      stubRecorderFallback(fetchMock);
+      vi.stubGlobal(
+        "AudioContext",
+        class {
+          state = "running";
+          createMediaStreamSource() {
+            return { connect() {} };
+          }
+          createAnalyser() {
+            return {
+              fftSize: 2048,
+              getByteTimeDomainData(data: Uint8Array) {
+                data.fill(128);
+              },
+            };
+          }
+          close() {
+            return Promise.resolve();
+          }
+        },
+      );
+      const dictation = new Dictation();
+      const onFinal = vi.fn();
+      await dictation.listen({ mode, transcribe: true, onFinal });
+      await vi.advanceTimersByTimeAsync(160);
+      dictation.submitHold();
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(dictation.state.status).toBe("idle");
+      if (mode === "endpoint") expect(onFinal).toHaveBeenCalledWith("");
+    },
+  );
   it("stops tracks if hold-to-talk is cancelled while the mic prompt is open", async () => {
     const track = { stop: vi.fn() };
     let grant!: (stream: { getTracks: () => Array<{ stop: () => void }> }) => void;

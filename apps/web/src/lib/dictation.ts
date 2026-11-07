@@ -461,7 +461,9 @@ export class Dictation {
       return;
     }
     const keptSpeech = this.snapshot.transcript.trim().length > 0;
-    if (mode === "endpoint" && !this.armSilence(stream, mine, endpointMs, keptSpeech)) {
+    const measurement = { samples: 0, heardSpeech: keptSpeech, reliable: true };
+    const listening = this.armSilence(stream, mine, endpointMs, measurement, mode === "endpoint");
+    if (mode === "endpoint" && !listening) {
       for (const track of stream.getTracks()) track.stop();
       this.failListening(
         mine,
@@ -481,8 +483,14 @@ export class Dictation {
       media.onstop = () => {
         for (const track of stream.getTracks()) track.stop();
         if (this.token !== mine) return;
+        if (this.audioContext?.state !== "running") measurement.reliable = false;
         this.stopVad();
-        void this.transcribeChunks(mine, spaceId);
+        if (measurement.reliable && measurement.samples > 0 && !measurement.heardSpeech) {
+          this.chunks = [];
+          this.finish(normalizedTranscript(this.snapshot.transcript), mine);
+        } else {
+          void this.transcribeChunks(mine, spaceId);
+        }
       };
       media.start(mode === "endpoint" ? 250 : undefined);
     } catch (error) {
@@ -502,25 +510,38 @@ export class Dictation {
     stream: MediaStream,
     mine: number,
     endpointMs: number,
-    alreadyHeard = false,
+    measurement: { samples: number; heardSpeech: boolean; reliable: boolean },
+    endpoint: boolean,
   ): boolean {
     const Ctor = audioContextCtor();
     if (!Ctor) return false;
     try {
       const ctx = new Ctor();
+      this.audioContext = ctx;
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
       source.connect(analyser);
-      this.audioContext = ctx;
-      if (ctx.state === "suspended") void ctx.resume();
+      if (ctx.state === "suspended")
+        void ctx.resume().catch(() => {
+          measurement.reliable = false;
+        });
       const data = new Uint8Array(analyser.fftSize);
-      let heardSpeech = alreadyHeard;
       let silentFor = 0;
       this.vadTimer = setInterval(() => {
         const media = this.media;
         if (this.token !== mine || !media || media.state === "inactive") return;
-        analyser.getByteTimeDomainData(data);
+        if (ctx.state !== "running") {
+          measurement.reliable = false;
+          return;
+        }
+        try {
+          analyser.getByteTimeDomainData(data);
+        } catch {
+          measurement.reliable = false;
+          return;
+        }
+        measurement.samples++;
         let sum = 0;
         for (const sample of data) {
           const n = (sample - 128) / 128;
@@ -528,17 +549,19 @@ export class Dictation {
         }
         const rms = Math.sqrt(sum / data.length);
         if (rms > SILENCE_RMS) {
-          heardSpeech = true;
+          measurement.heardSpeech = true;
           silentFor = 0;
           return;
         }
-        if (!heardSpeech) return;
+        if (!endpoint || !measurement.heardSpeech) return;
         silentFor += ENDPOINT_TICK_MS;
         if (silentFor < endpointMs) return;
-        this.stopVad();
+        clearInterval(this.vadTimer);
+        this.vadTimer = undefined;
         try {
           media.stop();
         } catch {
+          this.stopVad();
           // already stopped
         }
       }, ENDPOINT_TICK_MS);
