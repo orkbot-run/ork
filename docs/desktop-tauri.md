@@ -12,7 +12,10 @@ Tauri profiles remain usable.
 ## Run and check locally
 
 Install the repository's Node and pnpm prerequisites, Rust through `rustup`, and the
-native build dependencies for your platform. After `pnpm install`, run from the root:
+native build dependencies for your platform. Desktop sign-in needs the Accounts build
+settings used by CI. Export `ORK_ACCOUNTS_ISSUER` and the registered public
+`ORK_ACCOUNTS_DESKTOP_CLIENT_ID` in your terminal before building. After `pnpm install`,
+run from the root:
 
 ```sh
 pnpm --filter @orkbot/desktop dev

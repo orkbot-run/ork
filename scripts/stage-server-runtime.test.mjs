@@ -56,6 +56,8 @@ test("stages the server and proxy without native clients or product renderer sou
       write(`packages/${directory}/package.json`);
     for (const directory of ["compose", "railway", "sandboxes/supervisor"])
       write(`infra/${directory}/package.json`);
+    const computerHelpers = ["orkbot-page-browser", "install-agent-browser.sh", "page_secrets.py"];
+    for (const file of computerHelpers) write(`infra/sandboxes/computer/${file}`, file);
     write("scripts/pnpm.mjs");
     write("apps/web/package.json");
     write("apps/web/vite.config.ts");
@@ -86,6 +88,12 @@ test("stages the server and proxy without native clients or product renderer sou
     write("apps/web/src/pages/shell/index.tsx");
 
     stageServerRuntime(source, destination);
+
+    for (const file of computerHelpers)
+      assert.equal(
+        readFileSync(path.join(destination, "infra/sandboxes/computer", file), "utf8"),
+        file,
+      );
 
     assert.equal(
       readFileSync(path.join(destination, "apps/web/dist/index.html"), "utf8"),

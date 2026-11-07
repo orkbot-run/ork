@@ -45,6 +45,7 @@ const runtimePaths = [
   "packages/ui-web",
   "infra/compose",
   "infra/railway",
+  "infra/sandboxes/computer",
   "infra/sandboxes/supervisor",
   "scripts",
 ];
