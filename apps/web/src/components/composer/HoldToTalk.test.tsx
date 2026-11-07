@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -23,13 +27,18 @@ vi.mock("@lingui/react/macro", () => {
 const watchers = new Set<(snapshot: DictationSnapshot) => void>();
 let onFinal: ((text: string) => void) | null = null;
 let transcript = "";
+let latestSnapshot: DictationSnapshot = { status: "idle", transcript: "" };
 
 function emit(snapshot: DictationSnapshot) {
+  latestSnapshot = snapshot;
   for (const watcher of [...watchers]) watcher(snapshot);
 }
 
-vi.mock("../../lib/dictation", () => ({
-  dictation: {
+vi.mock("../../lib/dictation", () => {
+  const instance = {
+    get state() {
+      return latestSnapshot;
+    },
     subscribe: vi.fn((watcher: (snapshot: DictationSnapshot) => void) => {
       watchers.add(watcher);
       watcher({ status: "idle", transcript: "" });
@@ -49,8 +58,20 @@ vi.mock("../../lib/dictation", () => ({
       onFinal = null;
       emit({ status: "idle", transcript: "" });
     }),
-  },
-}));
+  };
+  return {
+    dictation: instance,
+    Dictation: class {
+      get state() {
+        return instance.state;
+      }
+      subscribe = instance.subscribe;
+      listen = instance.listen;
+      submitHold = instance.submitHold;
+      stop = instance.stop;
+    },
+  };
+});
 
 function Harness({ onText }: { onText: (text: string) => void }) {
   const talk = useHoldToTalk({ transcribe: false, onText });
@@ -72,6 +93,7 @@ describe("hold to talk", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.clearAllMocks();
     transcript = "";
+    latestSnapshot = { status: "idle", transcript: "" };
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -154,6 +176,25 @@ describe("hold to talk", () => {
     expect(dictation.stop).toHaveBeenCalledWith("cancel");
     expect(onText).not.toHaveBeenCalled();
     expect(container?.querySelector('[data-testid="hold-to-talk-strip"]')).toBeNull();
+  });
+
+  it("keeps a dispatched transcription alive on unmount, while cancelling an active microphone", () => {
+    pointer(button("Hold to talk"), "pointerdown", 400);
+    act(() => emit({ status: "transcribing", transcript: "" }));
+    vi.mocked(dictation.stop).mockClear();
+    act(() => root?.unmount());
+    root = undefined;
+    expect(dictation.stop).not.toHaveBeenCalled();
+  });
+
+  it("keeps the recording's original callback when the component rerenders", () => {
+    pointer(button("Hold to talk"), "pointerdown", 400);
+    const sourceFinal = onFinal!;
+    const replacement = vi.fn();
+    act(() => root?.render(<Harness onText={replacement} />));
+    act(() => sourceFinal("original source"));
+    expect(onText).toHaveBeenCalledWith("original source");
+    expect(replacement).not.toHaveBeenCalled();
   });
 
   it("starts locked from the keyboard, since a key cannot be held and slid", () => {

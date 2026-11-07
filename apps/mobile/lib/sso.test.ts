@@ -5,7 +5,11 @@
 import { openAuthSessionAsync, WebBrowserResultType } from "expo-web-browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { authHeaders, clearSpace, currentApiBase, fetchMobileJson } from "./api";
-import { currentSessionGeneration, replaceSessionTokenIfCurrent } from "./session";
+import {
+  currentSessionGeneration,
+  replaceSessionTokenIfCurrent,
+  rotateSessionTokenIfCurrent,
+} from "./session";
 import { continueWithSso } from "./sso";
 
 vi.mock("expo-web-browser", () => ({
@@ -21,6 +25,7 @@ vi.mock("./api", () => ({
 vi.mock("./session", () => ({
   currentSessionGeneration: vi.fn(() => 1),
   replaceSessionTokenIfCurrent: vi.fn(async () => true),
+  rotateSessionTokenIfCurrent: vi.fn(async () => true),
   tokenFromAuthResponse: (response: Response) =>
     response.headers.get("set-cookie")?.match(/session_token=([^;]+)/)?.[1] ?? "",
 }));
@@ -29,6 +34,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(fetchMobileJson).mockReset();
   vi.mocked(replaceSessionTokenIfCurrent).mockReset().mockResolvedValue(true);
+  vi.mocked(rotateSessionTokenIfCurrent).mockReset().mockResolvedValue(true);
+  vi.mocked(authHeaders).mockResolvedValue({ authorization: "Bearer old-session" });
   vi.mocked(currentApiBase).mockReturnValue("https://orkbot.example.test");
   vi.mocked(currentSessionGeneration).mockReturnValue(1);
   vi.mocked(clearSpace).mockResolvedValue(true);
@@ -105,6 +112,7 @@ it("requires reauthentication to return the same account", async () => {
   await expect(continueWithSso("reauthenticate")).rejects.toThrow();
   expect(authHeaders).toHaveBeenCalled();
   expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
 });
 it("starts authenticated linking without replacing the session", async () => {
   vi.mocked(openAuthSessionAsync).mockResolvedValue({ type: "success", url: "orkbot://account" });
@@ -114,6 +122,7 @@ it("starts authenticated linking without replacing the session", async () => {
     authorization: "Bearer old-session",
   });
   expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
 });
 
 it("does not send a different server's token during authenticated linking", async () => {
@@ -138,4 +147,117 @@ it("maps an unavailable session endpoint", async () => {
     body: {},
   });
   await expect(continueWithSso()).rejects.toThrow("Could not reach the server");
+});
+
+function sameAccountReauthentication() {
+  vi.mocked(fetchMobileJson).mockReset();
+  vi.mocked(fetchMobileJson)
+    .mockResolvedValueOnce({ response: Response.json({}), body: { user: { id: "user-1" } } })
+    .mockResolvedValueOnce({
+      response: Response.json({}),
+      body: { url: "https://identity.example.test/authorize?state=test-state" },
+    })
+    .mockResolvedValueOnce({ response: Response.json({}), body: { user: { id: "user-1" } } });
+  vi.mocked(openAuthSessionAsync).mockResolvedValue({
+    type: "success",
+    url: `orkbot://account?cookie=${encodeURIComponent("better-auth.session_token=new-session; Path=/; HttpOnly")}`,
+  });
+}
+it("rotates a verified same-account SSO token using the bearer that established its previous identity", async () => {
+  sameAccountReauthentication();
+  await expect(continueWithSso("reauthenticate")).resolves.toBe(true);
+  expect(rotateSessionTokenIfCurrent).toHaveBeenCalledExactlyOnceWith(
+    1,
+    "old-session",
+    "new-session",
+    "reauthentication",
+  );
+  expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(clearSpace).not.toHaveBeenCalled();
+  expect(vi.mocked(fetchMobileJson).mock.calls[0]?.[1]?.headers).toMatchObject({
+    authorization: "Bearer old-session",
+  });
+  expect(vi.mocked(fetchMobileJson).mock.calls[2]?.[1]?.headers).toMatchObject({
+    authorization: "Bearer new-session",
+  });
+});
+it.each([
+  {},
+  { authorization: "" },
+  { authorization: "Bearer " },
+  { authorization: "Basic old-session" },
+])("does not preserve data without a previous bearer (%j)", async (headers) => {
+  sameAccountReauthentication();
+  vi.mocked(authHeaders).mockResolvedValue(headers as Record<string, string>);
+  await expect(continueWithSso("reauthenticate")).rejects.toThrow("Could not continue");
+  expect(fetchMobileJson).not.toHaveBeenCalled();
+  expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+});
+it.each(["logout", "account", "server", "server-roundtrip"])(
+  "cannot rotate after a %s change during reauthentication",
+  async (change) => {
+    sameAccountReauthentication();
+    vi.mocked(openAuthSessionAsync).mockImplementation(async () => {
+      if (change === "server")
+        vi.mocked(currentApiBase).mockReturnValue("https://other.example.test");
+      else vi.mocked(currentSessionGeneration).mockReturnValue(2);
+      return {
+        type: "success",
+        url: `orkbot://account?cookie=${encodeURIComponent("better-auth.session_token=new-session; Path=/; HttpOnly")}`,
+      };
+    });
+    await expect(continueWithSso("reauthenticate")).rejects.toThrow("Could not continue");
+    expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
+    expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  },
+);
+it("checks session ownership again after validation of the returned account", async () => {
+  sameAccountReauthentication();
+  // The first two reads identify the old account and start OAuth; only the final read stalls.
+  vi.mocked(fetchMobileJson)
+    .mockReset()
+    .mockResolvedValueOnce({ response: Response.json({}), body: { user: { id: "user-1" } } })
+    .mockResolvedValueOnce({
+      response: Response.json({}),
+      body: { url: "https://identity.example.test/authorize?state=test-state" },
+    });
+  let finish!: (result: { response: Response; body: { user: { id: string } } }) => void;
+  vi.mocked(fetchMobileJson).mockReturnValueOnce(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const result = continueWithSso("reauthenticate").catch((error: unknown) => error);
+  await vi.waitFor(() => expect(fetchMobileJson).toHaveBeenCalledTimes(3));
+  vi.mocked(currentSessionGeneration).mockReturnValue(2);
+  finish({ response: Response.json({}), body: { user: { id: "user-1" } } });
+  expect(await result).toBeInstanceOf(Error);
+  expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
+});
+it("returns a refused late rotation without falling back to destructive replacement", async () => {
+  sameAccountReauthentication();
+  vi.mocked(rotateSessionTokenIfCurrent).mockResolvedValue(false);
+  await expect(continueWithSso("reauthenticate")).resolves.toBe(false);
+  expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+});
+it("reports a failed reauthentication save without replacing the preserved namespace", async () => {
+  sameAccountReauthentication();
+  vi.mocked(rotateSessionTokenIfCurrent).mockRejectedValue(new Error("SecureStoreException"));
+  await expect(continueWithSso("reauthenticate")).rejects.toThrow(
+    "Could not save your sign-in on this device. Try again.",
+  );
+  expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(clearSpace).not.toHaveBeenCalled();
+});
+
+it("does not replace or rotate an authenticated link after logout wins", async () => {
+  vi.mocked(openAuthSessionAsync).mockImplementation(async () => {
+    vi.mocked(currentSessionGeneration).mockReturnValue(2);
+    return { type: "success", url: "orkbot://account" };
+  });
+  await expect(continueWithSso("link")).rejects.toThrow("Could not continue");
+  expect(replaceSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(rotateSessionTokenIfCurrent).not.toHaveBeenCalled();
+  expect(clearSpace).not.toHaveBeenCalled();
 });

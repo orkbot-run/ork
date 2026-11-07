@@ -1939,3 +1939,42 @@ describe("transcriptionLanguage", () => {
     expect(transcriptionLanguage()).toBe("es");
   });
 });
+
+it("lets a source transcription finish without changing another recorder's live session", async () => {
+  let finish!: (response: Response) => void;
+  const fetchMock = vi.fn(
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  stubRecorderFallback(fetchMock);
+  const source = new Dictation();
+  const destination = new Dictation();
+  const sourceFinal = vi.fn();
+  const destinationFinal = vi.fn();
+  await source.listen({ mode: "hold", transcribe: true, onFinal: sourceFinal });
+  source.submitHold();
+  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+  expect(source.state.status).toBe("transcribing");
+  await destination.listen({ mode: "hold", transcribe: true, onFinal: destinationFinal });
+  finish(Response.json({ text: "Source words" }));
+  await vi.waitFor(() => expect(sourceFinal).toHaveBeenCalledWith("Source words"));
+  expect(destination.state.status).toBe("listening");
+  expect(destinationFinal).not.toHaveBeenCalled();
+  destination.stop("cancel");
+});
+
+it("does not dispatch recorded audio after its captured login scope is retired", async () => {
+  const fetchMock = vi.fn();
+  stubRecorderFallback(fetchMock);
+  let current = true;
+  const onFinal = vi.fn();
+  const recording = new Dictation();
+  await recording.listen({ mode: "hold", transcribe: true, onFinal, isCurrent: () => current });
+  recording.submitHold();
+  current = false;
+  await vi.waitFor(() => expect(recording.state.status).toBe("idle"));
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(onFinal).not.toHaveBeenCalled();
+});

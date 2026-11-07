@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 route tests are preserved. Verified draft ownership regression follows LICENSE.md.
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -8,6 +11,10 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   selected: "space-1" as string | null,
+  generation: 1,
+  ready: 1,
+  verify: vi.fn(),
+  listeners: new Set<() => void>(),
   selectSpace: vi.fn(),
   replace: vi.fn(),
   params: {} as { spaceId?: string },
@@ -33,7 +40,8 @@ vi.mock("react-native", () => ({
   View: element("div"),
 }));
 vi.mock("../components/thread/thread-screen", () => ({
-  Thread: ({ userId }: { userId: string }) => createElement("main", null, `thread:${userId}`),
+  Thread: ({ userId, sessionEpoch }: { userId: string; sessionEpoch: number }) =>
+    createElement("main", { "data-owner-generation": sessionEpoch }, `thread:${userId}`),
 }));
 vi.mock("./api", () => ({
   currentApiBase: () => "https://app.example.test",
@@ -47,13 +55,15 @@ vi.mock("./i18n", () => {
 vi.mock("./integrations-cache", () => ({ integrationsCacheScope: () => null }));
 vi.mock("./native", () => ({ useMobileTokens: () => ({}) }));
 vi.mock("./session", () => ({
-  currentReadySessionGeneration: () => 1,
-  currentSessionGeneration: () => 1,
-  subscribeSessionGeneration: () => () => undefined,
-  loadVerifiedIntegrationsScope: async () => ({
-    apiBase: "https://app.example.test",
-    userId: "user-1",
-  }),
+  currentReadySessionGeneration: () => state.ready,
+  currentSessionGeneration: () => state.generation,
+  subscribeSessionGeneration: (listener: () => void) => {
+    state.listeners.add(listener);
+    return () => {
+      state.listeners.delete(listener);
+    };
+  },
+  loadVerifiedIntegrationsScope: state.verify,
 }));
 vi.mock("./user-error", () => ({ errorText: () => "error" }));
 
@@ -65,6 +75,11 @@ let container: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   state.selected = "space-1";
+  state.generation = 1;
+  state.ready = 1;
+  state.verify
+    .mockReset()
+    .mockResolvedValue({ apiBase: "https://app.example.test", userId: "user-1" });
   state.params = {};
   state.selectSpace.mockReset();
   state.replace.mockReset();
@@ -105,4 +120,25 @@ it("shows the thread without switching when no space is requested", async () => 
   await render();
   expect(state.selectSpace).not.toHaveBeenCalled();
   expect(container.textContent).toBe("thread:user-1");
+});
+
+it("keeps the hidden old user's verified generation until the replacement identity is confirmed", async () => {
+  await render();
+  expect(container.querySelector("main")?.getAttribute("data-owner-generation")).toBe("1");
+  let confirm!: (scope: { apiBase: string; userId: string }) => void;
+  state.verify.mockReturnValueOnce(
+    new Promise((resolve) => {
+      confirm = resolve;
+    }),
+  );
+  state.generation = 2;
+  state.ready = 2;
+  await act(async () => {
+    for (const listener of state.listeners) listener();
+  });
+  expect(container.textContent).toBe("thread:user-1");
+  expect(container.querySelector("main")?.getAttribute("data-owner-generation")).toBe("1");
+  await act(async () => confirm({ apiBase: "https://app.example.test", userId: "user-2" }));
+  expect(container.textContent).toBe("thread:user-2");
+  expect(container.querySelector("main")?.getAttribute("data-owner-generation")).toBe("2");
 });

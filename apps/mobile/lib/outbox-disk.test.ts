@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Verified handoff failure cases follow LICENSE.md.
+
 import { resolveComposerSendPlan } from "@orkbot/core";
 import { beforeEach, expect, it, vi } from "vitest";
 import { OUTBOX_MAX_BYTES, outboxDisk } from "./outbox-disk";
@@ -80,6 +84,9 @@ vi.mock("expo-file-system", () => {
     get size() {
       return Buffer.byteLength(files.get(this.uri) ?? "");
     }
+    base64Sync() {
+      return files.get(this.uri) ?? "";
+    }
     async base64() {
       return files.get(this.uri) ?? "";
     }
@@ -100,7 +107,7 @@ vi.mock("expo-file-system", () => {
     }
     write(text: string) {
       if (fails("write", this.uri)) throw new Error("No space left on device");
-      files.set(this.uri, text);
+      files.set(this.uri, fails("silent-write", this.uri) ? text.slice(0, text.length / 2) : text);
     }
     // Like the device, overwriting deletes the destination before the move itself, and a move
     // points the source object at the destination.
@@ -113,7 +120,7 @@ vi.mock("expo-file-system", () => {
         files.set(destination.uri, text.slice(0, text.length / 2));
         throw new Error("Copy failed");
       }
-      files.set(destination.uri, text);
+      files.set(destination.uri, fails("silent-move", destination.uri) ? "[]" : text);
       if (fails("keep-source", this.uri)) throw new Error("Failed to delete source after move");
       files.delete(this.uri);
       this.uri = destination.uri;
@@ -431,3 +438,25 @@ it.each([
   expect(loaded()).toEqual([]);
   expect(stored()).toEqual([]);
 });
+
+it("does not transfer bytes from the source draft when native attachment write silently truncates", () => {
+  const source = attempt();
+  disk.failAt = ["silent-write:nonce-a/0"];
+  expect(() => outboxDisk.admit(source)).toThrow("OUTBOX_STORAGE_UNAVAILABLE");
+  expect(source.payload.attachments[0]!.contentBase64).toBe("aGVsbG8=");
+  expect(files.has("document/outbox/nonce-a/0")).toBe(false);
+});
+
+it.each(["silent-write:sends-v4.json.tmp", "silent-move:sends-v4.json"])(
+  "preserves the committed queue across a silent native index failure at %s",
+  (step) => {
+    const [first] = saved("nonce-a");
+    const committed = files.get("document/outbox/sends-v4.json");
+    const pending = attempt("nonce-b");
+    outboxDisk.admit(pending);
+    disk.failAt = [step];
+    expect(() => outboxDisk.save([first!, pending])).toThrow("OUTBOX_STORAGE_UNAVAILABLE");
+    expect(outboxDisk.load(2, scope).map((item) => item.clientNonce)).toEqual(["nonce-a"]);
+    expect(files.get("document/outbox/sends-v4.json")).toBe(committed);
+  },
+);

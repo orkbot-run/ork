@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 session storage is preserved. Hydrated draft ownership follows LICENSE.md.
+
 import * as SecureStore from "expo-secure-store";
 
 const KEY = "orkbot.artifact-cache-session";
@@ -16,6 +20,11 @@ type Entry = {
   retired?: string;
 };
 let active: Entry | undefined;
+
+/** A hydrated login lifetime, without exposing credentials to draft storage or file paths. */
+export function currentArtifactCacheSession(): string | undefined {
+  return active?.token ? active.namespace : undefined;
+}
 
 function enqueue<T>(task: () => Promise<T>): Promise<T> {
   const next = writes.then(task, task);
@@ -46,10 +55,11 @@ function newNamespace(): string {
 }
 
 /** The saved entry, for `token` only when one is given. */
-async function storedEntry(token?: string): Promise<Entry | undefined> {
+async function storedEntry(token?: string, requireReadable = false): Promise<Entry | undefined> {
   try {
     return parseEntry(await SecureStore.getItemAsync(KEY), token);
-  } catch {
+  } catch (error) {
+    if (requireReadable) throw error;
     // Missing or invalid metadata is a cold cache.
     return undefined;
   }
@@ -104,9 +114,10 @@ export function rotateArtifactCacheSession(previous: string, token: string): Pro
   if (previous !== token) revision += 1;
   const version = revision;
   return enqueue(async () => {
-    let entry = active ?? (await storedEntry(previous));
+    let entry = active ?? (await storedEntry(previous, true));
     if (version !== revision) throw new Error("Artifact session changed");
-    if (entry?.token !== previous) entry = undefined;
+    if (entry?.token !== previous && !(entry?.token === token && entry?.retired === previous))
+      entry = undefined;
     const next: Entry = {
       token,
       namespace: entry?.namespace ?? newNamespace(),

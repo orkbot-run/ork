@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import type { AgentSkillCatalogEntry, RpcPath } from "@orkbot/contracts";
 import type { ComposerMention, resolveComposerSendPlan } from "@orkbot/core";
 import {
@@ -146,6 +150,7 @@ let running: Promise<void> | undefined;
 let pendingForce: boolean | null = null;
 const watchers = new Set<() => void>();
 const deliveredListeners = new Set<(attempt: SendAttempt) => void>();
+const releasedListeners = new Set<(attempt: SendAttempt) => void>();
 const echoes = new Map<string, Set<number>>();
 const screens = new Map<string, number>();
 /** Removed sends whose files wait for a saved index that no longer lists them. */
@@ -226,6 +231,7 @@ function remove(attempt: SendAttempt) {
   // A saved index may still list the message, so its files go only after the index drops it.
   removed.add(attempt);
   changed();
+  for (const listener of releasedListeners) listener(attempt);
 }
 export function configureUnsentSends(next: Config) {
   config = next;
@@ -250,6 +256,7 @@ export function restoreUnsentSends() {
   changed();
 }
 export function clearUnsentSends() {
+  for (const attempt of unsentSends) for (const listener of releasedListeners) listener(attempt);
   sessionCount += 1;
   restored = false;
   unsentSends = [];
@@ -282,6 +289,18 @@ export function confirmEchoes(threadKey: string, seqs: Iterable<number>) {
       remove(attempt);
   }
 }
+/** The pending draft can release its copy only after the outbox verified and saved its own. */
+export function isUnsentSendDurable(attempt: SendAttempt): boolean {
+  return inScope(attempt) && !memoryOnly.has(attempt) && !removed.has(attempt);
+}
+
+export function subscribeSendReleased(listener: (attempt: SendAttempt) => void) {
+  releasedListeners.add(listener);
+  return () => {
+    releasedListeners.delete(listener);
+  };
+}
+
 export function subscribeDelivered(listener: (attempt: SendAttempt) => void) {
   deliveredListeners.add(listener);
   return () => {

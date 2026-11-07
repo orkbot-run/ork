@@ -7,6 +7,7 @@ import { t } from "./i18n";
 import {
   currentSessionGeneration,
   replaceSessionTokenIfCurrent,
+  rotateSessionTokenIfCurrent,
   tokenFromAuthResponse,
 } from "./session";
 import { authErrorText, authResponseErrorText, sessionSaveErrorText } from "./user-error";
@@ -29,6 +30,13 @@ export async function continueWithSso(
     const callbackURL = action === "sign-in" ? "orkbot://sign-in" : "orkbot://account";
     const headers = action === "sign-in" ? {} : await authHeaders();
     requireCurrentSession();
+    const previousBearer =
+      "authorization" in headers &&
+      typeof headers.authorization === "string" &&
+      headers.authorization.startsWith("Bearer ")
+        ? headers.authorization.slice("Bearer ".length)
+        : "";
+    if (action === "reauthenticate" && !previousBearer) throw new Error(t("Could not continue"));
     const previous = action === "reauthenticate" ? await sessionUser(apiBase, headers) : undefined;
     requireCurrentSession();
     const { response, body, invalidJson } = await fetchMobileJson<{ url?: string; code?: string }>(
@@ -95,11 +103,9 @@ export async function continueWithSso(
     try {
       if (action === "sign-in" && !(await clearSpace()))
         throw new Error(t("Could not save your sign-in on this device. Try again."));
-      return await replaceSessionTokenIfCurrent(
-        generation,
-        token,
-        action === "reauthenticate" ? "reauthentication" : "sign_in",
-      );
+      return action === "reauthenticate"
+        ? await rotateSessionTokenIfCurrent(generation, previousBearer, token, "reauthentication")
+        : await replaceSessionTokenIfCurrent(generation, token, "sign_in");
     } catch (error) {
       throw new Error(sessionSaveErrorText(error));
     }

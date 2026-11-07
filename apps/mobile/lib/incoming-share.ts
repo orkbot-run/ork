@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 share handling is preserved. Source and URI ownership follow LICENSE.md.
+
 import type { Directory } from "expo-file-system";
 import { File, Paths } from "expo-file-system";
 import type { SharePayload } from "expo-sharing";
@@ -9,6 +13,7 @@ export type IncomingShare = {
   files: Array<{ uri: string; name: string; mimeType: string | null }>;
   arrivedAt: number;
   generation: number;
+  destination?: string;
 };
 
 const MAX_AGE_MS = 5 * 60 * 1000;
@@ -17,6 +22,7 @@ let copyId = 0;
 let pending: IncomingShare | null = null;
 let expiry: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
+const reading = new Map<string, number>();
 
 /** The app group in app.json where the iOS share extension copies shared files. */
 export const IOS_SHARE_APP_GROUP = "group.run.orkbot.app";
@@ -43,7 +49,7 @@ export function releaseIncomingShareFiles(files: IncomingShare["files"]) {
   // A file a newer share still needs stays; the extension reuses a file's name for its copy.
   const kept = new Set(pending?.files.map((file) => file.uri));
   for (const { uri } of files) {
-    if (kept.has(uri) || !uri.startsWith(container.uri)) continue;
+    if (kept.has(uri) || reading.has(uri) || !uri.startsWith(container.uri)) continue;
     try {
       const file = new File(uri);
       if (file.exists) file.delete();
@@ -142,15 +148,33 @@ export function receiveIncomingShare(isShare: boolean, initial: boolean) {
 }
 
 /** Claim synchronously: a second chat/effect cannot take the same share. */
-export function takeIncomingShare(): IncomingShare | null {
+export function takeIncomingShare(destination?: string): IncomingShare | null {
   if (!supported()) return null;
+  if (pending?.destination && pending.destination !== destination) return null;
   const share = pending;
   clearSharedPayloads();
   publish(null);
   if (!share) return null;
-  if (Date.now() - share.arrivedAt < MAX_AGE_MS) return share;
+  if (Date.now() - share.arrivedAt < MAX_AGE_MS)
+    return destination ? { ...share, destination } : share;
   releaseIncomingShareFiles(share.files);
   return null;
+}
+
+/** Only the original reader can release its URI lease; a newer share may reuse that URI. */
+export function retainIncomingShareFiles(files: IncomingShare["files"]): () => void {
+  for (const file of files) reading.set(file.uri, (reading.get(file.uri) ?? 0) + 1);
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    for (const file of files) {
+      const count = (reading.get(file.uri) ?? 1) - 1;
+      if (count) reading.set(file.uri, count);
+      else reading.delete(file.uri);
+    }
+    releaseIncomingShareFiles(files);
+  };
 }
 
 export function isIncomingShareCurrent(share: IncomingShare) {

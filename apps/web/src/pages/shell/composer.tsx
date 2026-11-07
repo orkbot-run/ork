@@ -1,6 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import { useLingui } from "@lingui/react/macro";
 import type { AgentSkillCatalogEntry, ThreadMessage } from "@orkbot/contracts";
-import type { ComposerMention, ComposerMentionRange, SlashActionId } from "@orkbot/core";
+import type {
+  ComposerDraftContent,
+  ComposerMention,
+  ComposerMentionRange,
+  SlashActionId,
+} from "@orkbot/core";
 import {
   bindComposerMention,
   clampMentionHighlightIndex,
@@ -8,6 +17,7 @@ import {
   composerMentionsForPrompt,
   composerSelectedMentions,
   mentionChipKey,
+  mergeComposerDraftContent,
   newClientId,
   replyAttachment,
   resolveComposerMentionEdit,
@@ -39,13 +49,17 @@ import {
 import { recordMessageSent } from "../../components/GitHubStarPrompt";
 import type { ArtifactTarget } from "../../lib/artifact-open";
 import { attachmentPickerAccept } from "../../lib/attachment-picker-accept";
-import { useCallSession } from "../../lib/call-session";
+import { isLeavingSession, sessionChangedUnderPage, useCallSession } from "../../lib/call-session";
 import {
+  appendComposerDraftText,
   beginComposerDraftSubmission,
+  captureComposerDraftSource,
+  isComposerDraftMemorySourceCurrent,
+  isComposerDraftSourceCurrent,
   readComposerDraft,
   readComposerDraftBindings,
   settleComposerDraftSubmission,
-  subscribeComposerDraftAccepted,
+  subscribeComposerDraft,
   writeComposerDraft,
 } from "../../lib/composer-draft";
 import { hasOpenDialog } from "../../lib/has-open-dialog";
@@ -170,11 +184,21 @@ const ComposerBody = memo(function Composer({
     editSelections.current = [];
     if (persist) writeComposerDraft(draftKey, next.text, undefined, next.bindings);
   }
+  const draftSource = useMemo(() => captureComposerDraftSource(draftKey), [draftKey]);
+  const sourceIsCurrent = () =>
+    isComposerDraftSourceCurrent(draftSource) && !isLeavingSession() && !sessionChangedUnderPage();
+  const memorySourceIsCurrent = () =>
+    isComposerDraftMemorySourceCurrent(draftSource) &&
+    mountedRef.current &&
+    draftKeyRef.current === draftKey &&
+    !isLeavingSession() &&
+    !sessionChangedUnderPage();
   function appendDictation(text: string) {
-    if (!mountedRef.current || draftKeyRef.current !== draftKey) return;
-    const current = compositionRef.current.text;
-    editSelections.current = [{ start: current.length, end: current.length }];
-    updateDraft(current ? `${current} ${text}` : text);
+    if (sourceIsCurrent()) appendComposerDraftText(draftSource, text);
+    else if (memorySourceIsCurrent())
+      externalDraft.current(
+        mergeComposerDraftContent(compositionRef.current, { text, bindings: [] }),
+      );
   }
   const [mentionQuery, setMentionQuery] = useState<string | null>(
     () =>
@@ -189,9 +213,16 @@ const ComposerBody = memo(function Composer({
   const onCall = useCallSession() !== null;
   const talk = useHoldToTalk({
     transcribe: dictationTranscribe,
+    sourceKey: draftKey,
+    isCurrent: () => sourceIsCurrent() || memorySourceIsCurrent(),
     disabled: disabled || onCall || !phoneCallsEnabled,
     onText: (text) => {
-      // A refused send keeps the words: they land in the field to edit or retry.
+      if (!sourceIsCurrent() && !memorySourceIsCurrent()) return;
+      if (!mountedRef.current || draftKeyRef.current !== draftKey) {
+        appendDictation(text);
+        return;
+      }
+      // A refused send recovers into its immutable source, including after navigation.
       void onSend(text, [], newClientId())
         .then((accepted) => {
           if (accepted === false) appendDictation(text);
@@ -202,14 +233,16 @@ const ComposerBody = memo(function Composer({
   });
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
   const editRevision = useRef(0);
+  const externalDraft = useRef<(next: ComposerDraftContent) => void>(() => {});
+  externalDraft.current = (next) => {
+    if (!mountedRef.current || draftKeyRef.current !== draftKey) return;
+    commitComposition({ text: next.text, bindings: [...next.bindings] }, false);
+    pendingCaret.current = { start: next.text.length, end: next.text.length };
+    setMentionHighlightKey(null);
+    refreshDraftPickers(next.text, next.bindings, next.text.length);
+  };
   useEffect(
-    () =>
-      subscribeComposerDraftAccepted(draftKey, (text) => {
-        if (compositionRef.current.text === text)
-          commitComposition({ text: "", bindings: [] }, false);
-        setMentionQuery(null);
-        setSlashQuery(null);
-      }),
+    () => subscribeComposerDraft(draftKey, (next) => externalDraft.current(next)),
     [draftKey],
   );
   const retryNonce = useRef<string | null>(null);
@@ -381,8 +414,17 @@ const ComposerBody = memo(function Composer({
     const end = edit.caret ?? nativeEnd;
     if (edit.caret !== null) pendingCaret.current = { start: caret, end };
     commitComposition({ text: value, bindings: edit.bindings });
+    refreshDraftPickers(value, edit.bindings, caret, end);
+  }
+
+  function refreshDraftPickers(
+    value: string,
+    bindings: ComposerDraftContent["bindings"],
+    caret: number,
+    end = caret,
+  ) {
     setMentionQuery(
-      composerMentionQuery(value, caret, end, knownMentions, edit.bindings)?.query ?? null,
+      composerMentionQuery(value, caret, end, knownMentions, bindings)?.query ?? null,
     );
     // `/` only at the start of the draft so forced skills expand (`Use skill:` / `/Name` prefix).
     const slashMatch = selectedSkill === null ? /^\/([^\n]*)$/.exec(value) : null;
@@ -485,7 +527,21 @@ const ComposerBody = memo(function Composer({
     const submitted = compositionRef.current;
     const text = serializeComposerPrompt(submitted.text, selectedSkill);
     const mentions = composerMentionsForPrompt(submitted.text, selectedSkill, submitted.bindings);
-    const submission = beginComposerDraftSubmission(draftKey, draft);
+    const skillPrefix = selectedSkill ? `/${selectedSkill.name}\n` : "";
+    const submission = beginComposerDraftSubmission(
+      draftKey,
+      draft,
+      skillPrefix
+        ? {
+            text: skillPrefix + submitted.text,
+            bindings: submitted.bindings.map((binding) => ({
+              ...binding,
+              start: binding.start + skillPrefix.length,
+              end: binding.end + skillPrefix.length,
+            })),
+          }
+        : undefined,
+    );
     commitComposition({ text: "", bindings: [] }, false);
     setMentionQuery(null);
     setMentionHighlightKey(null);
@@ -502,12 +558,37 @@ const ComposerBody = memo(function Composer({
         return;
       }
     } catch {
-      settleComposerDraftSubmission(draftKey, submission, false);
-      // A rejected callback leaves acceptance unknown; do not restore a possible send.
+      settleComposerDraftSubmission(draftKey, submission, undefined);
+      // An exceptional callback may have sent; keep its source copy off the editable field.
+      return;
+    }
+    if (memorySourceIsCurrent()) {
+      const recovered =
+        editRevision.current === revision || !skillPrefix
+          ? submitted
+          : {
+              text: skillPrefix + submitted.text,
+              bindings: submitted.bindings.map((binding) => ({
+                ...binding,
+                start: binding.start + skillPrefix.length,
+                end: binding.end + skillPrefix.length,
+              })),
+            };
+      externalDraft.current(mergeComposerDraftContent(recovered, compositionRef.current));
+      if (editRevision.current === revision) {
+        retryNonce.current = clientNonce;
+        setSelectedSkill(selectedSkill);
+      }
       return;
     }
     // Restore only an untouched draft, retaining its nonce for an unchanged retry.
-    if (editRevision.current !== revision) return;
+    if (
+      !sourceIsCurrent() ||
+      !mountedRef.current ||
+      draftKeyRef.current !== draftKey ||
+      editRevision.current !== revision
+    )
+      return;
     retryNonce.current = clientNonce;
     commitComposition(submitted, false);
     setSelectedSkill(selectedSkill);

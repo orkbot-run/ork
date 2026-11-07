@@ -31,6 +31,7 @@ export * from "./call-session.js";
 export * from "./client-id.js";
 export * from "./cloud-agent.js";
 export * from "./compose-update.js";
+export * from "./composer-draft-merge.js";
 export * from "./composer-mention-bindings.js";
 export * from "./composer-mention-picker.js";
 export * from "./composer-mentions.js";

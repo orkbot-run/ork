@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 outbox storage is preserved. Verified draft handoff follows LICENSE.md.
+
 import { Directory, File, Paths } from "expo-file-system";
 import type { SendAttempt, UnsentDisk } from "./thread-feedback";
 import { OUTBOX_MAX_ENTRIES } from "./thread-feedback";
@@ -140,6 +144,8 @@ export const outboxDisk: UnsentDisk = {
         const target = attachmentFile(attempt.clientNonce, index);
         target.create();
         target.write(attachment.contentBase64, { encoding: "base64" });
+        if (!target.exists || target.base64Sync() !== attachment.contentBase64)
+          throw new Error("OUTBOX_STORAGE_UNAVAILABLE");
         attachment.previewUri = attachment.mimeType.startsWith("image/") ? target.uri : undefined;
       });
       for (const attachment of attempt.payload.attachments) attachment.contentBase64 = "";
@@ -162,6 +168,7 @@ export const outboxDisk: UnsentDisk = {
       if (backup().exists) committedIndex();
       next.create({ overwrite: true });
       next.write(text);
+      if (!next.exists || next.textSync() !== text) throw new Error("OUTBOX_STORAGE_UNAVAILABLE");
       // Moving over a file deletes it first, so set the committed index aside until the new one is in place.
       // A move points its source object at the destination, so each move gets a fresh destination.
       if (target.exists) target.moveSync(backup(), { overwrite: true });
@@ -172,6 +179,11 @@ export const outboxDisk: UnsentDisk = {
         const index = file();
         if (!index.exists || index.textSync() !== text) throw error;
         deleteLeftover(replacement());
+      }
+      const committed = file();
+      if (!committed.exists || committed.textSync() !== text) {
+        if (committed.exists) committed.delete();
+        throw new Error("OUTBOX_STORAGE_UNAVAILABLE");
       }
     } catch {
       throw new Error("OUTBOX_STORAGE_UNAVAILABLE");

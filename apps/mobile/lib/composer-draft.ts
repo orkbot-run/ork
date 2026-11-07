@@ -1,10 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 draft storage is preserved. Verified migration and ownership follow LICENSE.md.
+
 import type { ComposerMentionBinding } from "@orkbot/core";
 import { validateComposerMentionBindings } from "@orkbot/core";
 import { Directory, File, Paths } from "expo-file-system";
 import { currentApiBase } from "./api";
+import { currentArtifactCacheSession } from "./artifact-cache-session";
 
 /** One unsent composer text per server, account, and conversation. */
-export type ComposerDraftScope = { apiBase: string; userId: string; threadKey: string };
+export type ComposerDraftScope = Readonly<{
+  apiBase: string;
+  userId: string;
+  threadKey: string;
+  namespace: string;
+}>;
 
 export type ComposerDraft = { text: string; bindings: ComposerMentionBinding[] };
 
@@ -16,14 +26,29 @@ export function composerDraftScope(
 ): ComposerDraftScope | undefined {
   if (!userId || (!botId && !groupId)) return undefined;
   try {
+    const namespace = currentArtifactCacheSession();
+    if (!namespace) return undefined;
     return {
       apiBase: currentApiBase(),
       userId,
       threadKey: groupId ? `group:${groupId}` : `bot:${botId}`,
+      namespace,
     };
   } catch {
     return undefined;
   }
+}
+
+export function isComposerDraftScopeCurrent(scope: ComposerDraftScope): boolean {
+  try {
+    return scope.namespace === currentArtifactCacheSession() && scope.apiBase === currentApiBase();
+  } catch {
+    return false;
+  }
+}
+
+export function composerDraftScopeKey(scope: ComposerDraftScope): string {
+  return JSON.stringify([scope.apiBase, scope.userId, scope.threadKey, scope.namespace]);
 }
 
 // The OS may evict the cache when storage runs low, so an unsent draft lives next to
@@ -39,7 +64,13 @@ function legacyRoot() {
 function legacyDone() {
   return new File(Paths.document, "composer-drafts-legacy-done");
 }
-function draftFolder(scope: ComposerDraftScope): Directory {
+
+/** Explicit retirement removes both generations; stale callbacks still fail the namespace fence. */
+export function clearComposerDrafts(): void {
+  deleteLeftover(root());
+  deleteLeftover(legacyRoot());
+}
+export function draftFolder(scope: ComposerDraftScope): Directory {
   return new Directory(
     root(),
     encodeURIComponent(scope.apiBase),
@@ -109,13 +140,37 @@ function migrateLegacyDrafts(): void {
     return;
   }
   if (!legacyDone().exists) {
-    if (root().exists) root().delete();
-    legacyRoot().copySync(root());
+    copyVerifiedDrafts(legacyRoot(), root());
     legacyDone().create();
     // iOS can fail to create a file without an error; the source must stay until the marker exists.
     if (!legacyDone().exists) throw new Error("DRAFT_STORAGE_UNAVAILABLE");
   }
   deleteLeftover(legacyRoot());
+}
+
+/** Never remove a complete source until every file has an identical destination. */
+function copyVerifiedDrafts(source: Directory, target: Directory): void {
+  target.create({ intermediates: true, idempotent: true });
+  for (const entry of source.list()) {
+    if (!(entry instanceof File)) {
+      copyVerifiedDrafts(entry, new Directory(target, entry.name));
+      continue;
+    }
+    let destination = new File(target, entry.name);
+    // Preserve a newer destination and retain the identical legacy bytes alongside it.
+    if (destination.exists && destination.base64Sync() !== entry.base64Sync())
+      destination = new File(target, `${entry.name}.legacy`);
+    if (!destination.exists) {
+      const temporary = new File(target, `${entry.name}.migrating`);
+      if (temporary.exists) temporary.delete();
+      entry.copySync(temporary);
+      if (!temporary.exists || temporary.base64Sync() !== entry.base64Sync())
+        throw new Error("DRAFT_STORAGE_UNAVAILABLE");
+      temporary.moveSync(destination, { overwrite: true });
+    }
+    if (!destination.exists || destination.base64Sync() !== entry.base64Sync())
+      throw new Error("DRAFT_STORAGE_UNAVAILABLE");
+  }
 }
 
 // Moves a draft recovered from an interrupted move back to the saved name, so the next save
@@ -141,14 +196,18 @@ function readLegacyDraft(scope: ComposerDraftScope): ComposerDraft {
 
 /** Same record as the web binding record; bindings that no longer match the text are dropped. */
 export function readComposerDraft(scope: ComposerDraftScope | undefined): ComposerDraft {
-  if (!scope) return { text: "", bindings: [] };
+  if (!scope || !isComposerDraftScopeCurrent(scope)) return { text: "", bindings: [] };
   try {
     migrateLegacyDrafts();
   } catch {
     // The copy retries on the next read or write. Until it works, the draft still lives
     // where the earlier build left it; reading it there keeps the composer from starting
     // empty and saving that emptiness over the draft.
-    return readLegacyDraft(scope);
+    return (
+      readDraftRecord(draftFile(scope)) ??
+      readDraftRecord(nextDraftFile(scope)) ??
+      readLegacyDraft(scope)
+    );
   }
   try {
     try {
@@ -173,6 +232,7 @@ export function writeComposerDraft(
   bindings: readonly ComposerMentionBinding[],
 ): boolean {
   try {
+    if (!isComposerDraftScopeCurrent(scope)) return false;
     migrateLegacyDrafts();
     const file = draftFile(scope);
     const next = nextDraftFile(scope);

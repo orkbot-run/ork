@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 // @vitest-environment jsdom
 
 import { i18n } from "@lingui/core";
@@ -16,7 +20,7 @@ vi.mock("@lingui/react/macro", () => {
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
 
-import { dictation } from "../../lib/dictation";
+import { Dictation } from "../../lib/dictation";
 import { createPageSession, PagesProvider } from "../../lib/pages";
 import { Composer } from "./composer";
 
@@ -736,7 +740,7 @@ describe("Composer", () => {
     expect(skillChip()).toBe("summarize");
   });
 
-  it("keeps a newer draft when an earlier send fails", async () => {
+  it("merges a recovered send before the newer draft", async () => {
     let finishSend = (_sent: boolean) => {};
     const textarea = renderComposer(
       () =>
@@ -748,10 +752,10 @@ describe("Composer", () => {
     pressEnter(textarea);
     type(textarea, "newer");
     await act(async () => finishSend(false));
-    expect(textarea.value).toBe("newer");
+    expect(textarea.value).toBe("hello\nnewer");
   });
 
-  it("does not restore after a newer draft was typed then cleared while sending", async () => {
+  it("recovers the original when a newer draft was typed then cleared while sending", async () => {
     let finishSend = (_sent: boolean) => {};
     const textarea = renderComposer(
       () =>
@@ -764,7 +768,7 @@ describe("Composer", () => {
     type(textarea, "newer");
     type(textarea, "");
     await act(async () => finishSend(false));
-    expect(textarea.value).toBe("");
+    expect(textarea.value).toBe("hello");
   });
 
   it("reuses the nonce on an unchanged retry but renews it after an edit", async () => {
@@ -785,7 +789,7 @@ describe("Composer", () => {
     expect(onSend.mock.calls[2]?.[2]).not.toBe(firstNonce);
   });
 
-  it("does not restore after an attachment was picked while sending", async () => {
+  it("recovers the text while keeping an attachment picked during the send", async () => {
     let finishSend = (_sent: boolean) => {};
     const textarea = renderComposer(
       () =>
@@ -797,7 +801,7 @@ describe("Composer", () => {
     pressEnter(textarea);
     pickAttachment();
     await act(async () => finishSend(false));
-    expect(textarea.value).toBe("");
+    expect(textarea.value).toBe("hello");
   });
 
   it("restores after a rejected attachment pick and preserves the nonce on rejected retry picks", async () => {
@@ -848,21 +852,24 @@ describe("Composer", () => {
     expect(onSend.mock.calls[1]?.[2]).not.toBe(onSend.mock.calls[0]?.[2]);
   });
 
-  it.each(replyChanges)("does not restore after a $name while sending", async ({ props }) => {
-    let finishSend = (_sent: boolean) => {};
-    const textarea = renderComposer(
-      () =>
-        new Promise<boolean>((resolve) => {
-          finishSend = resolve;
-        }),
-      { replyTarget: reply, replyQuote: "original" },
-    );
-    type(textarea, "hello");
-    pressEnter(textarea);
-    rerenderComposer(props);
-    await act(async () => finishSend(false));
-    expect(textarea.value).toBe("");
-  });
+  it.each(replyChanges)(
+    "recovers text without replacing a newer $name while sending",
+    async ({ props }) => {
+      let finishSend = (_sent: boolean) => {};
+      const textarea = renderComposer(
+        () =>
+          new Promise<boolean>((resolve) => {
+            finishSend = resolve;
+          }),
+        { replyTarget: reply, replyQuote: "original" },
+      );
+      type(textarea, "hello");
+      pressEnter(textarea);
+      rerenderComposer(props);
+      await act(async () => finishSend(false));
+      expect(textarea.value).toBe("hello");
+    },
+  );
 
   it("preserves the retry nonce when the reply object refreshes without changing its ID or quote", async () => {
     const onSend = vi.fn().mockResolvedValue(false);
@@ -962,8 +969,9 @@ it.each([true, false])(
     pressEnter(textarea);
     type(textarea, "newer text");
     await act(async () => finishSend(accepted));
-    expect(textarea.value).toBe("newer text");
-    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe("newer text");
+    const expected = accepted ? "newer text" : "submitted text\nnewer text";
+    expect(textarea.value).toBe(expected);
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe(expected);
   },
 );
 
@@ -1044,7 +1052,7 @@ it.each([false, true])(
         }),
     );
     let onFinal!: (text: string) => void;
-    const listen = vi.spyOn(dictation, "listen").mockImplementation(async (options) => {
+    const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async (options) => {
       onFinal = options.onFinal;
     });
     try {
@@ -1058,7 +1066,7 @@ it.each([false, true])(
         if (throws) fail(new Error("offline"));
         else finish(false);
       });
-      expect(textarea.value).toBe("typed draft dictated words");
+      expect(textarea.value).toBe("typed draft\ndictated words");
     } finally {
       listen.mockRestore();
     }
@@ -1071,7 +1079,7 @@ it.each([
   [true, false],
   [true, true],
 ])(
-  "ignores a late dictation failure after remount (throws=%s, different chat=%s)",
+  "recovers dictation into its source after remount (throws=%s, different chat=%s)",
   async (throws, differentChat) => {
     let finish!: (accepted: boolean) => void;
     let fail!: (error: Error) => void;
@@ -1083,7 +1091,7 @@ it.each([
         }),
     );
     let onFinal!: (text: string) => void;
-    const listen = vi.spyOn(dictation, "listen").mockImplementation(async (options) => {
+    const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async (options) => {
       onFinal = options.onFinal;
     });
     try {
@@ -1099,21 +1107,28 @@ it.each([
       type(returned, "@Bo");
       pressEnter(returned);
       type(returned, "@Bob newer draft");
-      const saved = localStorage.getItem(`orkbot.runposerDraft.${draftKey}`);
       const bindings = localStorage.getItem(`orkbot.runposerBindings.${draftKey}`);
       await act(async () => {
         if (throws) fail(new Error("offline"));
         else finish(false);
       });
-      expect(returned.value).toBe("@Bob newer draft");
-      expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe(saved);
-      expect(localStorage.getItem(`orkbot.runposerBindings.${draftKey}`)).toBe(bindings);
+      const expected = differentChat ? "@Bob newer draft" : "@Bob newer draft\nlate dictation";
+      const storedExpected = differentChat
+        ? "@Bob newer draft"
+        : "@Bob newer draft\nlate dictation";
+      expect(returned.value).toBe(expected);
+      expect(localStorage.getItem(`orkbot.runposerDraft.${draftKey}`)).toBe(storedExpected);
+      expect(
+        JSON.parse(localStorage.getItem(`orkbot.runposerBindings.${draftKey}`)!).bindings,
+      ).toEqual(JSON.parse(bindings!).bindings);
       if (differentChat)
-        expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe("original draft");
+        expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe(
+          "original draft\nlate dictation",
+        );
       act(() => root?.unmount());
       container?.remove();
       const reloaded = renderComposer(vi.fn(), { draftKey });
-      expect(reloaded.value).toBe("@Bob newer draft");
+      expect(reloaded.value).toBe(storedExpected);
       expect(container?.querySelectorAll('[data-testid="mention-chip"]')).toHaveLength(1);
     } finally {
       listen.mockRestore();
@@ -1124,7 +1139,7 @@ it.each([
 it("ignores dictation after switching draft keys on the same instance", async () => {
   let finish!: (accepted: boolean) => void;
   let onFinal!: (text: string) => void;
-  const listen = vi.spyOn(dictation, "listen").mockImplementation(async (options) => {
+  const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async (options) => {
     onFinal = options.onFinal;
   });
   try {
@@ -1145,7 +1160,7 @@ it("ignores dictation after switching draft keys on the same instance", async ()
     await act(async () => finish(false));
     expect(textarea.value).toBe("newer draft");
     expect(localStorage.getItem("orkbot.runposerDraft.bot:other-bot")).toBe("newer draft");
-    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBeNull();
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe("late dictation");
   } finally {
     listen.mockRestore();
   }
@@ -1168,11 +1183,11 @@ it.each([false, true])(
       status: "idle" | "listening" | "transcribing";
       transcript: string;
     }) => void;
-    const subscribe = vi.spyOn(dictation, "subscribe").mockImplementation((listener) => {
+    const subscribe = vi.spyOn(Dictation.prototype, "subscribe").mockImplementation((listener) => {
       onSnapshot = listener;
       return () => {};
     });
-    const listen = vi.spyOn(dictation, "listen").mockImplementation(async (options) => {
+    const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async (options) => {
       onFinal = options.onFinal;
     });
     try {
@@ -1197,7 +1212,7 @@ it.each([false, true])(
         if (throws) fail(new Error("offline"));
         else finish(false);
       });
-      expect(textarea.value).toBe("@Bob @Bob");
+      expect(textarea.value).toBe("@Bob\n@Bob");
       const record = JSON.parse(localStorage.getItem("orkbot.runposerBindings.bot:bot-1")!);
       expect(record.bindings).toMatchObject([{ start: 0, end: 4, mention: bob }]);
       type(textarea, "@Bob ");
@@ -1492,4 +1507,140 @@ it("answers the page, not an earlier picked message, when the page's reply butto
   act(() => session.offerReply("Mark task 3 done"));
   expect(onClearReply).toHaveBeenCalledTimes(1);
   expect(container?.querySelector("textarea")?.value).toBe("Mark task 3 done");
+});
+
+it("keeps a newer skill and both mention bindings when a failed skill send is merged", async () => {
+  let finish!: (accepted: boolean) => void;
+  const onSend = vi.fn(
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const textarea = renderComposer(onSend, {
+    agentSkills: [summarize, { ...summarize, id: "rewrite", name: "rewrite" }],
+  });
+  type(textarea, "/sum");
+  act(() =>
+    container?.querySelector<HTMLButtonElement>("button[aria-label='Skill summarize']")?.click(),
+  );
+  type(textarea, "@Bo");
+  pressEnter(textarea);
+  type(textarea, "@Bob first");
+  pressEnter(textarea);
+  type(textarea, "/rew");
+  act(() =>
+    container?.querySelector<HTMLButtonElement>("button[aria-label='Skill rewrite']")?.click(),
+  );
+  type(textarea, "@Bo");
+  pressEnter(textarea);
+  type(textarea, "@Bob new");
+  await act(async () => finish(false));
+  expect(textarea.value).toBe("/summarize\n@Bob first\n@Bob new");
+  expect(container?.querySelector('[data-testid="skill-chip"]')?.textContent).toBe("rewrite");
+  const saved = JSON.parse(localStorage.getItem("orkbot.runposerBindings.bot:bot-1")!);
+  expect(
+    saved.bindings.map((binding: { start: number; end: number }) => [binding.start, binding.end]),
+  ).toEqual([
+    [11, 15],
+    [22, 26],
+  ]);
+});
+
+it("cannot recreate an old recording draft after another window changes the login namespace", async () => {
+  let finish!: (accepted: boolean) => void;
+  let final!: (text: string) => void;
+  const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async (options) => {
+    final = options.onFinal;
+  });
+  try {
+    renderComposer(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+      { phoneCallsEnabled: true },
+    );
+    act(() =>
+      container
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Hold to talk"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })),
+    );
+    act(() => final("old private words"));
+    localStorage.setItem("orkbot.composerDraftNamespace", "replacement-login");
+    window.dispatchEvent(
+      new StorageEvent("storage", {
+        key: "orkbot.composerDraftNamespace",
+        newValue: "replacement-login",
+      }),
+    );
+    await act(async () => finish(false));
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBeNull();
+  } finally {
+    listen.mockRestore();
+  }
+});
+
+it("finishes an in-flight transcription into its original draft after navigation without sending in the new chat", async () => {
+  let final!: (text: string) => void;
+  const listen = vi.spyOn(Dictation.prototype, "listen").mockImplementation(async function (
+    this: Dictation,
+    options,
+  ) {
+    final = options.onFinal;
+    Object.defineProperty(this, "state", {
+      configurable: true,
+      get: () => ({ status: "transcribing", transcript: "" }),
+    });
+  });
+  const send = vi.fn();
+  try {
+    const source = renderComposer(send, { phoneCallsEnabled: true });
+    act(() =>
+      container
+        ?.querySelector<HTMLButtonElement>('button[aria-label="Hold to talk"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 0 })),
+    );
+    type(source, "original draft");
+    act(() => root?.unmount());
+    container?.remove();
+    const destination = renderComposer(send, { draftKey: "bot:destination" });
+    type(destination, "new chat words");
+    await act(async () => final("source transcription"));
+    expect(send).not.toHaveBeenCalled();
+    expect(destination.value).toBe("new chat words");
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:bot-1")).toBe(
+      "original draft\nsource transcription",
+    );
+    expect(localStorage.getItem("orkbot.runposerDraft.bot:destination")).toBe("new chat words");
+  } finally {
+    listen.mockRestore();
+  }
+});
+
+it("keeps newer text and mention identities in memory when the login namespace cannot be saved", async () => {
+  let finish!: (accepted: boolean) => void;
+  const unavailable = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("Storage full");
+  });
+  try {
+    const textarea = renderComposer(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    type(textarea, "@Bo");
+    pressEnter(textarea);
+    type(textarea, "@Bob old");
+    pressEnter(textarea);
+    type(textarea, "@Bo");
+    pressEnter(textarea);
+    type(textarea, "@Bob new");
+    await act(async () => finish(false));
+    expect(textarea.value).toBe("@Bob old\n@Bob new");
+    expect(container?.querySelectorAll('[data-testid="mention-chip"]')).toHaveLength(2);
+  } finally {
+    unavailable.mockRestore();
+  }
 });

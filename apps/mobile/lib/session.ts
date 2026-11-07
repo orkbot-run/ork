@@ -16,12 +16,13 @@ import { rememberSignedIn } from "./returning-user";
 import { clearFailedSends } from "./thread-feedback";
 
 type SessionClearReason = "session_rejected" | "logout" | "account_switch";
-type SessionSaveReason = "sign_in" | "reauthentication";
-type SessionChangeReason =
+type SessionSaveReason = "sign_in";
+type SessionRotationReason = "reauthentication" | "password_change";
+export type SessionChangeReason =
   | SessionClearReason
   | SessionSaveReason
   | "session_restore"
-  | "password_change";
+  | SessionRotationReason;
 
 const SESSION_KEY = "orkbot.session_token";
 const INTEGRATIONS_SCOPE_KEY = "orkbot.integrations-scope";
@@ -44,34 +45,37 @@ function enqueueScopeWrite<T>(task: () => Promise<T>): Promise<T> {
   return next;
 }
 
-const sessionDiskCaches = new Set<(sameAccount: boolean) => void | Promise<void>>();
+const sessionDiskCaches = new Set<
+  (sameAccount: boolean, reason: SessionChangeReason) => void | Promise<void>
+>();
 
 /** Registers a cache wipe; a verified same-account replacement can keep account-scoped data. */
 export function registerSessionDiskCache(
-  clear: (sameAccount: boolean) => void | Promise<void>,
-): void {
+  clear: (sameAccount: boolean, reason: SessionChangeReason) => void | Promise<void>,
+): () => void {
   sessionDiskCaches.add(clear);
+  return () => {
+    sessionDiskCaches.delete(clear);
+  };
 }
 
 function invalidateSessionCaches(reason: SessionChangeReason): Promise<void> {
   void clearNotificationSessionScope().catch(() => undefined);
   scopeInvalidated = true;
-  if (reason !== "session_rejected" && reason !== "password_change") clearFailedSends();
+  const sameAccount = reason === "reauthentication" || reason === "password_change";
+  if (reason !== "session_rejected" && !sameAccount) clearFailedSends();
   clearNetworkCache();
   // Another account must never see, or share, the previous owner's invite link.
   forgetReferrals();
   for (const clear of sessionDiskCaches) {
     try {
       // Optional caches must never hold up credential writes, even if their storage stalls.
-      void Promise.resolve(
-        clear(reason === "reauthentication" || reason === "password_change"),
-      ).catch(() => undefined);
+      void Promise.resolve(clear(sameAccount, reason)).catch(() => undefined);
     } catch {
       // A failed disk wipe must not block the session change or the other wipes.
     }
   }
-  const clearingArtifacts =
-    reason === "password_change" ? undefined : invalidateArtifactCacheSession();
+  const clearingArtifacts = sameAccount ? undefined : invalidateArtifactCacheSession();
   return enqueueScopeWrite(async () => {
     await clearingArtifacts;
     try {
@@ -150,6 +154,8 @@ let sessionInvalidated = false;
 let sessionFallback: string | undefined;
 /** Bumped by every session change, so a late response can tell it no longer owns the session. */
 let sessionGeneration = 0;
+/** A successful read/write already bound this bearer to the unchanged local credential slot. */
+let confirmedSessionToken: { generation: number; token: string } | undefined;
 
 let readySessionGeneration = 0;
 export function currentReadySessionGeneration() {
@@ -182,12 +188,13 @@ export async function loadSessionToken() {
   return snapshot.ok ? snapshot.value : "";
 }
 
-/** Reauthentication requires a verified replacement on the current server for the same account. */
+/** Saves a replacement login; verified same-account changes use the guarded rotation path. */
 export async function saveSessionToken(token: string, reason: SessionSaveReason = "sign_in") {
   const generation = ++sessionGeneration;
-  publishSessionGeneration(false);
+  confirmedSessionToken = undefined;
   sessionInvalidated = true;
   sessionFallback = undefined;
+  publishSessionGeneration(false);
   const clearingScope = invalidateSessionCaches(reason);
   // Marked before the token lands, so an account deletion that clears it afterwards also clears the mark.
   await rememberSignedIn();
@@ -198,6 +205,7 @@ export async function saveSessionToken(token: string, reason: SessionSaveReason 
   if (generation !== sessionGeneration) return;
   sessionInvalidated = false;
   sessionFallback = undefined;
+  confirmedSessionToken = { generation, token };
   if (generation === sessionGeneration) publishSessionGeneration();
 }
 
@@ -208,9 +216,10 @@ export async function clearSessionToken(
 ): Promise<boolean> {
   const fallback = sessionFallback;
   const generation = ++sessionGeneration;
-  publishSessionGeneration(false);
+  confirmedSessionToken = undefined;
   sessionInvalidated = true;
   sessionFallback = undefined;
+  publishSessionGeneration(false);
   const clearingScope = invalidateSessionCaches(reason);
   const clearingToken = clearStoredSessionToken(generation, retire, fallback);
   await stopLiveNotifications(true).catch(() => undefined);
@@ -257,6 +266,9 @@ async function clearStoredSessionToken(
 /** Restores the current-server session in memory even when persistence is unavailable. */
 export async function restoreSessionToken(token: string) {
   const generation = ++sessionGeneration;
+  confirmedSessionToken = undefined;
+  sessionInvalidated = true;
+  sessionFallback = undefined;
   publishSessionGeneration(false);
   const clearingScope = invalidateSessionCaches("session_restore");
   if (!token) {
@@ -303,11 +315,11 @@ export async function replaceSessionTokenIfCurrent(
   return true;
 }
 
-/** A password change's token kept only in memory until it is saved with its cache namespace. */
-let unsavedRotation: { generation: number; token: string } | undefined;
+/** A verified rotation token kept in memory until it is saved with its cache namespace. */
+let unsavedRotation: { generation: number; previous: string; token: string } | undefined;
 
 /**
- * Replaces the token the server reissued for the same account after a password change. Unlike
+ * Replaces the token reissued for a verified same account after reauthentication or a password change. Unlike
  * `replaceSessionTokenIfCurrent`, it keeps unsent messages and the cache namespace they live in.
  * The token is saved only after that namespace, which also records it as the revoked token's
  * replacement; a restart between the two saves adopts it. If a save fails, the token stays in
@@ -317,14 +329,23 @@ export async function rotateSessionTokenIfCurrent(
   generation: number,
   previous: string,
   token: string,
+  reason: SessionRotationReason = "password_change",
 ): Promise<boolean> {
-  if (generation !== sessionGeneration) return false;
+  if (!previous || !token || generation !== sessionGeneration) return false;
+  const confirmed = confirmedSessionToken;
+  if (confirmed?.generation === generation) {
+    if (confirmed.token !== previous) return false;
+  } else {
+    const current = await snapshotSessionToken();
+    if (!current.ok || current.value !== previous || generation !== sessionGeneration) return false;
+  }
   const rotation = ++sessionGeneration;
-  publishSessionGeneration(false);
+  confirmedSessionToken = undefined;
   sessionInvalidated = true;
   sessionFallback = undefined;
+  publishSessionGeneration(false);
   unsavedRotation = undefined;
-  const clearingScope = invalidateSessionCaches("password_change");
+  const clearingScope = invalidateSessionCaches(reason);
   try {
     await rotateArtifactCacheSession(previous, token);
     await saveRotatedToken(rotation, token);
@@ -332,7 +353,7 @@ export async function rotateSessionTokenIfCurrent(
     if (rotation === sessionGeneration) {
       sessionInvalidated = false;
       sessionFallback = token;
-      unsavedRotation = { generation: rotation, token };
+      unsavedRotation = { generation: rotation, previous, token };
       publishSessionGeneration();
     }
     throw error;
@@ -340,16 +361,17 @@ export async function rotateSessionTokenIfCurrent(
   await clearingScope;
   if (rotation === sessionGeneration) {
     sessionInvalidated = false;
+    confirmedSessionToken = { generation: rotation, token };
     publishSessionGeneration();
   }
-  return true;
+  return rotation === sessionGeneration;
 }
 
-/** Retries saving a password change's token kept in memory; true when it saved one. */
+/** Retries saving a verified rotation token kept in memory; true when it saved one. */
 export async function saveRotatedSessionToken(): Promise<boolean> {
   const pending = unsavedRotation;
   if (pending?.generation !== sessionGeneration) return false;
-  await rotateArtifactCacheSession(pending.token, pending.token);
+  await rotateArtifactCacheSession(pending.previous, pending.token);
   await saveRotatedToken(pending.generation, pending.token);
   if (unsavedRotation !== pending || pending.generation !== sessionGeneration) return false;
   unsavedRotation = undefined;
@@ -361,7 +383,7 @@ export async function saveRotatedSessionToken(): Promise<boolean> {
 let recovery: Promise<boolean> | undefined;
 
 /**
- * Adopts the token of a password change that stopped after its namespace was saved. False when
+ * Adopts the token of a verified rotation that stopped after its namespace was saved. False when
  * the store could not be read, so it is unknown whether the saved token was revoked.
  */
 async function recoverRotatedToken(): Promise<boolean> {
@@ -382,7 +404,8 @@ async function recoverRotatedToken(): Promise<boolean> {
   } catch {
     if (generation !== sessionGeneration) return true;
     sessionFallback = token;
-    unsavedRotation = { generation, token };
+    // Recovery already read a committed replacement namespace, so retry from that token.
+    unsavedRotation = { generation, previous: token, token };
   }
   return true;
 }
@@ -403,15 +426,17 @@ export async function snapshotSessionToken(): Promise<{ ok: true; value: string 
     if (recovery === attempt) recovery = undefined;
     return { ok: false };
   }
-  if (sessionFallback !== undefined) return { ok: true, value: sessionFallback };
+  if (sessionFallback !== undefined) {
+    confirmedSessionToken = { generation: sessionGeneration, token: sessionFallback };
+    return { ok: true, value: sessionFallback };
+  }
   if (sessionInvalidated) return { ok: true, value: "" };
   const generation = sessionGeneration;
   try {
     const value = (await SecureStore.getItemAsync(SESSION_KEY)) ?? "";
-    return {
-      ok: true,
-      value: generation === sessionGeneration && !sessionInvalidated ? value : "",
-    };
+    const current = generation === sessionGeneration && !sessionInvalidated;
+    if (current) confirmedSessionToken = value ? { generation, token: value } : undefined;
+    return { ok: true, value: current ? value : "" };
   } catch {
     return { ok: false };
   }

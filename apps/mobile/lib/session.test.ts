@@ -110,6 +110,33 @@ describe("mobile session storage", () => {
     expect(clear.mock.calls.length).toBeGreaterThan(2);
   });
 
+  it("stops invoking a disposed disk cache without removing other owners", async () => {
+    const clear = vi.fn();
+    const other = vi.fn();
+    const dispose = registerSessionDiskCache(clear);
+    const disposeOther = registerSessionDiskCache(other);
+    try {
+      const rejected = clearSessionToken("session_rejected");
+      expect(clear).toHaveBeenCalledExactlyOnceWith(false, "session_rejected");
+      await rejected;
+      dispose();
+      dispose();
+
+      await clearSessionToken();
+      await restoreSessionToken("fake-replacement");
+      expect(clear).toHaveBeenCalledOnce();
+      expect(other.mock.calls.map(([, reason]) => reason)).toEqual([
+        "session_rejected",
+        "logout",
+        "session_restore",
+        "sign_in",
+      ]);
+    } finally {
+      dispose();
+      disposeOther();
+    }
+  });
+
   it("clears the icon badge on sign-out and server-session restoration", async () => {
     registerSessionDiskCache(() => void clearAppBadge());
     await syncAppBadge(3);
@@ -262,7 +289,225 @@ describe("password change token rotation", () => {
     expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
   });
 
-  it("still wipes unsent messages and the namespace for a sign-in, SSO or passkey session", async () => {
+  it("preserves the verified login namespace and reports reauthentication to disk owners", async () => {
+    const clear = vi.fn();
+    registerSessionDiskCache(clear);
+    expect(
+      await rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).toBe(true);
+    expect(clear).toHaveBeenCalledExactlyOnceWith(true, "reauthentication");
+    expect(clearFailedSends).not.toHaveBeenCalled();
+    expect(await artifactCacheSession("fake-new")).toBe(namespace);
+    expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
+  });
+
+  it.each([
+    ["wrong-previous", "fake-new"],
+    ["", "fake-new"],
+    ["fake-old", ""],
+  ])(
+    "refuses an unowned or missing bearer pair (%s, %s) without retaining any new session",
+    async (previous, token) => {
+      const generation = currentSessionGeneration();
+      expect(
+        await rotateSessionTokenIfCurrent(generation, previous, token, "reauthentication"),
+      ).toBe(false);
+      expect(currentSessionGeneration()).toBe(generation);
+      expect(await loadSessionToken()).toBe("fake-old");
+      expect(stored()).toEqual({ token: "fake-old", namespace });
+      expect(clearFailedSends).not.toHaveBeenCalled();
+    },
+  );
+
+  it("refuses preservation if the previous bearer cannot be read", async () => {
+    const next = await restart();
+    const generation = next.currentSessionGeneration();
+    vi.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error("store unavailable"));
+    expect(
+      await next.rotateSessionTokenIfCurrent(
+        generation,
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).toBe(false);
+    expect(next.currentSessionGeneration()).toBe(generation);
+    expect(await next.loadSessionToken()).toBe("fake-old");
+    expect(stored()).toEqual({ token: "fake-old", namespace });
+  });
+
+  it("cannot revive a rotation whose previous-bearer read finishes after logout", async () => {
+    const next = await restart();
+    let release!: () => void;
+    vi.mocked(SecureStore.getItemAsync).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve("fake-old");
+        }),
+    );
+    const rotating = next.rotateSessionTokenIfCurrent(
+      next.currentSessionGeneration(),
+      "fake-old",
+      "fake-new",
+      "reauthentication",
+    );
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await next.clearSessionToken();
+    release();
+    expect(await rotating).toBe(false);
+    expect(await next.loadSessionToken()).toBe("");
+    expect(disk.has(NAMESPACE_KEY)).toBe(false);
+    expect(disk.has("orkbot.session_token")).toBe(false);
+  });
+
+  it.each(["logout", "account", "server"] as const)(
+    "a late namespace write cannot resurrect state after %s",
+    async (change) => {
+      let release!: () => void;
+      vi.mocked(SecureStore.setItemAsync).mockImplementationOnce(
+        (key, value) =>
+          new Promise<void>((resolve) => {
+            release = () => {
+              disk.set(key, value);
+              resolve();
+            };
+          }),
+      );
+      const rotating = rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      );
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      const changed =
+        change === "logout"
+          ? clearSessionToken()
+          : change === "account"
+            ? saveSessionToken("another-account")
+            : restoreSessionToken("another-server");
+      release();
+      await changed;
+      expect(await rotating).toBe(false);
+      expect(await loadSessionToken()).toBe(
+        change === "logout" ? "" : change === "account" ? "another-account" : "another-server",
+      );
+      if (change === "logout") expect(disk.has(NAMESPACE_KEY)).toBe(false);
+      else expect(await artifactCacheSession(await loadSessionToken())).not.toBe(namespace);
+      expect(await saveRotatedSessionToken()).toBe(false);
+    },
+  );
+
+  it("does not re-tag a failed-save fallback while restoring an empty session", async () => {
+    failNamespaceWrite();
+    await expect(
+      rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).rejects.toThrow();
+    // A successful snapshot of the generation-owned fallback is authoritative even while disk differs.
+    expect(await snapshotSessionToken()).toEqual({ ok: true, value: "fake-new" });
+    disk.delete("orkbot.session_token");
+    let release!: () => void;
+    vi.mocked(SecureStore.deleteItemAsync).mockImplementation(async (key) => {
+      if (key === NAMESPACE_KEY)
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      disk.delete(key);
+    });
+    const restoring = restoreSessionToken("");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    expect(await snapshotSessionToken()).toEqual({ ok: true, value: "" });
+    expect(
+      await rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-new",
+        "late-token",
+        "reauthentication",
+      ),
+    ).toBe(false);
+    release();
+    await restoring;
+    expect(await loadSessionToken()).toBe("");
+    expect(await saveRotatedSessionToken()).toBe(false);
+    expect(disk.has("orkbot.session_token")).toBe(false);
+  });
+
+  it("a delayed old-token snapshot cannot prove ownership in a replacement generation", async () => {
+    let release!: () => void;
+    vi.mocked(SecureStore.getItemAsync).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve("fake-old");
+        }),
+    );
+    const snapshot = snapshotSessionToken();
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await saveSessionToken("another-account");
+    release();
+    expect(await snapshot).toEqual({ ok: true, value: "" });
+    const generation = currentSessionGeneration();
+    expect(
+      await rotateSessionTokenIfCurrent(generation, "fake-old", "late-token", "reauthentication"),
+    ).toBe(false);
+    expect(currentSessionGeneration()).toBe(generation);
+    expect(await loadSessionToken()).toBe("another-account");
+  });
+
+  it("a delayed token write cannot reauthorize its bearer after logout", async () => {
+    let release!: () => void;
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      if (key === "orkbot.session_token")
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+      disk.set(key, value);
+    });
+    const saving = saveSessionToken("delayed-account");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const clearing = clearSessionToken();
+    release();
+    await Promise.all([saving, clearing]);
+    expect(await loadSessionToken()).toBe("");
+    expect(
+      await rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "delayed-account",
+        "late-token",
+        "reauthentication",
+      ),
+    ).toBe(false);
+    expect(disk.has("orkbot.session_token")).toBe(false);
+    expect(disk.has(NAMESPACE_KEY)).toBe(false);
+  });
+
+  it("cannot restore a retired login namespace when the same bearer is signed in again", async () => {
+    await clearSessionToken();
+    await saveSessionToken("fake-old");
+    const nextLogin = await artifactCacheSession("fake-old");
+    expect(nextLogin).not.toBe(namespace);
+    expect(
+      await rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).toBe(true);
+    expect(await artifactCacheSession("fake-new")).toBe(nextLogin);
+    expect(await artifactCacheSession("fake-new")).not.toBe(namespace);
+  });
+
+  it("still wipes unsent messages and the namespace for a replacement sign-in or passkey session", async () => {
     await replaceSessionTokenIfCurrent(currentSessionGeneration(), "fake-new");
 
     expect(clearFailedSends).toHaveBeenCalledOnce();
@@ -296,6 +541,30 @@ describe("password change token rotation", () => {
     await saveRotatedSessionToken();
     expect(disk.get("orkbot.session_token")).toBe("fake-new");
     expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
+  });
+
+  it("retains the exact namespace when retrying after only the token-slot write failed", async () => {
+    let failTokenWrite = true;
+    vi.mocked(SecureStore.setItemAsync).mockImplementation(async (key, value) => {
+      if (key === "orkbot.session_token" && failTokenWrite) throw new Error("token write failed");
+      disk.set(key, value);
+    });
+    await expect(
+      rotateSessionTokenIfCurrent(
+        currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).rejects.toThrow("token write failed");
+    expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
+    expect(disk.get("orkbot.session_token")).toBe("fake-old");
+    expect(await artifactCacheSession("fake-new")).toBe(namespace);
+    failTokenWrite = false;
+    expect(await saveRotatedSessionToken()).toBe(true);
+    expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
+    expect(disk.get("orkbot.session_token")).toBe("fake-new");
+    expect(await artifactCacheSession("fake-new")).toBe(namespace);
   });
 
   it("does not save a failed rotation after another session change", async () => {
@@ -333,6 +602,32 @@ describe("password change token rotation", () => {
 
     const next = await restart();
     await expect(next.loadSessionToken()).resolves.toBe("fake-new");
+    expect(disk.get("orkbot.session_token")).toBe("fake-new");
+    expect(await next.artifactCacheSession("fake-new")).toBe(namespace);
+  });
+
+  it("retries a cold rotation after an unreadable namespace without replacing its last complete owner", async () => {
+    const next = await restart();
+    expect(await next.loadSessionToken()).toBe("fake-old");
+    let unreadable = true;
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) => {
+      if (unreadable && key === NAMESPACE_KEY) throw new Error("namespace unreadable");
+      return disk.get(key) ?? null;
+    });
+    await expect(
+      next.rotateSessionTokenIfCurrent(
+        next.currentSessionGeneration(),
+        "fake-old",
+        "fake-new",
+        "reauthentication",
+      ),
+    ).rejects.toThrow("namespace unreadable");
+    expect(stored()).toEqual({ token: "fake-old", namespace });
+    expect(disk.get("orkbot.session_token")).toBe("fake-old");
+    expect(await next.snapshotSessionToken()).toEqual({ ok: true, value: "fake-new" });
+    unreadable = false;
+    expect(await next.saveRotatedSessionToken()).toBe(true);
+    expect(stored()).toEqual({ token: "fake-new", namespace, previous: "fake-old" });
     expect(disk.get("orkbot.session_token")).toBe("fake-new");
     expect(await next.artifactCacheSession("fake-new")).toBe(namespace);
   });

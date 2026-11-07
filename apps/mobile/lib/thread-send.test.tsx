@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 // @vitest-environment jsdom
 import type { MessageBlock } from "@orkbot/contracts";
 import { act, createElement } from "react";
@@ -42,7 +46,12 @@ const said = (id: string, text: string) => ({
 });
 
 /** The chat's sender with `messages` loaded, a composer holding what replies add to it. */
-async function chat(messages: object[]) {
+async function chat(
+  messages: object[],
+  delivery: () => Promise<boolean | undefined> = async () => undefined,
+) {
+  const releaseAttachments = vi.fn();
+  const captureForSend = vi.fn(() => releaseAttachments);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const payloads: unknown[] = [];
   let sender!: Sender;
@@ -53,7 +62,7 @@ async function chat(messages: object[]) {
       payloads.push(payload);
       return { payload, clientNonce: "n1", artifactIds: new Map(), state: "queued" };
     },
-    send: async () => undefined,
+    send: delivery,
   };
   function Harness() {
     sender = useThreadSend({
@@ -69,6 +78,7 @@ async function chat(messages: object[]) {
       feedback,
       attachments: {
         pendingAttachments: [],
+        captureForSend,
         setPendingAttachments: () => undefined,
         setAttachmentNotice: () => undefined,
         importingShare: { current: false },
@@ -116,6 +126,9 @@ async function chat(messages: object[]) {
   };
   return {
     sender: () => sender,
+    captureForSend,
+    releaseAttachments,
+    payloads,
     root,
     sent,
     tapOnPage: (pageId: string, title: string, text: string) =>
@@ -187,4 +200,51 @@ it("forgets the page once the user clears its reply from the composer", async ()
   await act(async () => cleared.sender().composerRef.current?.addReply("now"));
   expect(await cleared.sent()).toMatchObject({ replyToMessageId: "m1", fromPage: true });
   await act(async () => cleared.root.unmount());
+});
+
+it.each([true, false])(
+  "releases the source attachment hold only for verified durable outbox admission: %s",
+  async (durable) => {
+    const feedbackModule = await import("./thread-feedback");
+    const knownDurable = vi.spyOn(feedbackModule, "isUnsentSendDurable").mockReturnValue(durable);
+    const fixture = await chat([]);
+    try {
+      await fixture.tapOnPage("page-1", "Plan", "keep this draft");
+      await act(async () => fixture.sender().send());
+      expect(fixture.captureForSend).toHaveBeenCalledOnce();
+      expect(fixture.releaseAttachments).toHaveBeenCalledTimes(durable ? 1 : 0);
+    } finally {
+      await act(async () => fixture.root.unmount());
+      knownDurable.mockRestore();
+    }
+  },
+);
+
+it("keeps newer mobile text separate when an earlier send remains in its outbox", async () => {
+  let finish!: (accepted: boolean) => void;
+  const fixture = await chat(
+    [],
+    () =>
+      new Promise<boolean>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  try {
+    await fixture.tapOnPage("source-page", "Plan", "original words");
+    let sending!: Promise<void>;
+    await act(async () => {
+      sending = fixture.sender().send();
+    });
+    await fixture.tapOnPage("new-page", "Next", "newer words");
+    await act(async () => {
+      finish(false);
+      await sending;
+    });
+    expect(fixture.sender().composerRef.current?.snapshot().promptText).toBe("newer words");
+    expect(JSON.stringify(fixture.payloads[0])).toContain("original words");
+    expect(JSON.stringify(fixture.payloads[0])).not.toContain("newer words");
+    expect(fixture.releaseAttachments).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => fixture.root.unmount());
+  }
 });

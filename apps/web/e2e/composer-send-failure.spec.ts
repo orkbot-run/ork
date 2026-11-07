@@ -5,7 +5,14 @@
 
 import type { Routine } from "@orkbot/contracts";
 import type { Locator, Page } from "@playwright/test";
-import { activeBotId, completeOnboarding, createNamedBot, rpc, signup } from "./helpers";
+import {
+  activeBotId,
+  captureScreenshot,
+  completeOnboarding,
+  createNamedBot,
+  rpc,
+  signup,
+} from "./helpers";
 import { expect, test } from "./renderer-test";
 
 async function openComposer(page: Page, prefix: string) {
@@ -80,6 +87,54 @@ test("a failed send with routines gives back the message and its routines", {
   await expect(page.getByTestId("composer-error")).toBeVisible();
   await expect(page.getByTestId("mention-chip")).toHaveCount(2);
   await expect(composer).toHaveValue(draft);
+});
+
+test("a rejected send merges source mentions after leaving and returning", async ({
+  page,
+}, testInfo) => {
+  await openComposer(page, "source-draft-recovery");
+  await createRoutine(page, "daily-digest");
+  await createRoutine(page, "weekly-review");
+  await createNamedBot(page, "Destination");
+  await page.reload();
+  const sidebar = page.locator("aside").first();
+  await sidebar.getByRole("button", { name: /^Chief/ }).click();
+  const source = page.getByRole("combobox", { name: "Message Chief", exact: true });
+  await mentionRoutine(page, source, "daily-digest");
+  await source.pressSequentially("original notes");
+  const submitted = await source.inputValue();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/rpc/threads/sendWithRoutines", async (route) => {
+    await held;
+    await route.abort("internetdisconnected");
+  });
+  try {
+    const request = page.waitForRequest("**/rpc/threads/sendWithRoutines");
+    await source.press("Enter");
+    await request;
+    await sidebar.getByRole("button", { name: /^Destination/ }).click();
+    const destination = page.getByRole("combobox", { name: "Message Destination", exact: true });
+    await destination.fill("Destination draft stays here");
+    await sidebar.getByRole("button", { name: /^Chief/ }).click();
+    await source.fill("");
+    await mentionRoutine(page, source, "weekly-review");
+    await source.pressSequentially("newer notes");
+    const newer = await source.inputValue();
+    release();
+    await expect(source).toHaveValue(`${submitted}\n${newer}`);
+    await expect(page.getByTestId("mention-chip")).toHaveText(["@daily-digest", "@weekly-review"]);
+    await captureScreenshot(page, testInfo, "source-draft-keeps-both-mentions");
+    await page.reload();
+    await expect(source).toHaveValue(`${submitted}\n${newer}`);
+    await expect(page.getByTestId("mention-chip")).toHaveText(["@daily-digest", "@weekly-review"]);
+    await sidebar.getByRole("button", { name: /^Destination/ }).click();
+    await expect(destination).toHaveValue("Destination draft stays here");
+  } finally {
+    release();
+  }
 });
 
 test("an unchanged routine retry after a lost response reuses the run", {

@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import { useLingui } from "@lingui/react/macro";
 import { Button, cn } from "@orkbot/ui-web";
 import { ArrowUp, ChevronUp, Lock, Mic, Trash2 } from "lucide-react";
 import type { PointerEvent } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { dictation } from "../../lib/dictation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Dictation } from "../../lib/dictation";
 import { IconTooltip } from "../IconTooltip";
 
 /** How far the finger travels up before the recording locks hands-free. */
@@ -23,12 +27,17 @@ export function useHoldToTalk({
   transcribe,
   disabled,
   onText,
+  sourceKey,
+  isCurrent,
 }: {
   transcribe?: boolean;
   disabled?: boolean;
   onText: (text: string) => void;
+  sourceKey?: string;
+  isCurrent?: () => boolean;
 }) {
   const { t } = useLingui();
+  const dictation = useMemo(() => new Dictation(), [sourceKey]);
   const [recording, setRecording] = useState<Recording>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
@@ -36,6 +45,8 @@ export function useHoldToTalk({
   const [notice, setNotice] = useState<string | null>(null);
   const recordingRef = useRef(recording);
   const onTextRef = useRef(onText);
+  const isCurrentRef = useRef(isCurrent);
+  isCurrentRef.current = isCurrent;
   useEffect(() => {
     onTextRef.current = onText;
   }, [onText]);
@@ -65,16 +76,18 @@ export function useHoldToTalk({
         setLift(0);
         if (snapshot.error) showNotice(snapshot.error);
       }),
-    [showNotice],
+    [dictation, showNotice],
   );
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    setRecording(null);
+    setTranscribing(false);
+    return () => {
       if (noticeTimer.current) clearTimeout(noticeTimer.current);
-      if (recordingRef.current) dictation.stop("cancel");
-    },
-    [],
-  );
+      if (dictation.state.status !== "transcribing") dictation.stop("cancel");
+      recordingRef.current = null;
+    };
+  }, [dictation, sourceKey]);
 
   const start = useCallback(
     (locked: boolean) => {
@@ -87,16 +100,17 @@ export function useHoldToTalk({
       void dictation.listen({
         mode: "hold",
         transcribe,
-        onFinal: (text) => onTextRef.current(text),
+        onFinal: onTextRef.current,
+        isCurrent: isCurrentRef.current,
       });
     },
-    [transcribe],
+    [dictation, transcribe],
   );
 
   const submit = useCallback(() => {
     if (!recordingRef.current) return;
     dictation.submitHold();
-  }, []);
+  }, [dictation]);
 
   const cancel = useCallback(() => {
     gesture.current = null;
@@ -106,7 +120,11 @@ export function useHoldToTalk({
     setTranscribing(false);
     setLift(0);
     dictation.stop("cancel");
-  }, []);
+  }, [dictation]);
+
+  useEffect(() => {
+    if (disabled && dictation.state.status === "listening") cancel();
+  }, [cancel, dictation, disabled]);
 
   const lock = useCallback(() => {
     gesture.current = null;

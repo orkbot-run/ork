@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import type { LoginFieldInput, MessageReaction } from "@orkbot/contracts";
 import type { SlashActionId } from "@orkbot/core";
 import {
@@ -23,12 +27,20 @@ import { currentSessionGeneration } from "./session";
 import { answerThreadMessage } from "./thread-answer";
 import type { useThreadAttachments } from "./thread-attachments";
 import type { SendAttempt, useThreadFeedback } from "./thread-feedback";
-import { subscribeDelivered } from "./thread-feedback";
+import { isUnsentSendDurable, subscribeDelivered, subscribeSendReleased } from "./thread-feedback";
 import type { ThreadHistory } from "./thread-history";
 import type { ThreadListScroll } from "./thread-list-scroll";
 import { previewMessageText } from "./thread-message-text";
 import { prepareUnsentSends } from "./unsent-sends";
 import { errorText } from "./user-error";
+
+const capturedAttachments = new WeakMap<SendAttempt, () => void>();
+function releaseCapturedAttachments(attempt: SendAttempt) {
+  capturedAttachments.get(attempt)?.();
+  capturedAttachments.delete(attempt);
+}
+subscribeDelivered(releaseCapturedAttachments);
+subscribeSendReleased(releaseCapturedAttachments);
 
 /**
  * What the chat sends: composer messages with their reply and attachments, retries, stopping
@@ -73,8 +85,13 @@ export function useThreadSend({
   const { t } = useI18n();
   const router = useRouter();
   const navigation = useNavigation();
-  const { pendingAttachments, setPendingAttachments, setAttachmentNotice, importingShare } =
-    attachments;
+  const {
+    pendingAttachments,
+    setPendingAttachments,
+    setAttachmentNotice,
+    importingShare,
+    captureForSend,
+  } = attachments;
   const { setError } = feedback;
   const composerRef = useRef<ThreadComposerHandle>(null);
   const [replyTarget, setReplyTarget] = useState<MobileMessage | null>(null);
@@ -85,7 +102,6 @@ export function useThreadSend({
   const preparingSend = useRef(false);
 
   useEffect(() => {
-    setPendingAttachments((current) => attachmentsForThread(current, threadKey));
     setReplyTarget(null);
     setReplyQuote(null);
     setQuoteTarget(null);
@@ -199,10 +215,13 @@ export function useThreadSend({
       Alert.alert(t("Failed to send message"), errorText(error));
       return;
     }
+    const release = captureForSend(submitted.attachmentIds);
+    capturedAttachments.set(attempt, release);
     composerRef.current?.reset();
     setPendingAttachments((current) =>
       current.filter((attachment) => !submitted.attachmentIds.includes(attachment.id)),
     );
+    if (isUnsentSendDurable(attempt)) releaseCapturedAttachments(attempt);
     setReplyTarget(null);
     setReplyQuote(null);
     replyPage.current = null;

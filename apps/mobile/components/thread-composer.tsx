@@ -21,11 +21,13 @@ import {
   composerSelectedMentions,
   filterComposerMentionTargets,
   mentionChipKey,
+  mergeComposerDraftContent,
   resolveComposerMentionBackspace,
   resolveComposerMentionEdit,
   SLASH_ACTIONS,
   serializeComposerPrompt,
   truncateSlashDescription,
+  validateComposerMentionBindings,
 } from "@orkbot/core";
 import { MAX_FONT_SCALE } from "@orkbot/ui-tokens";
 import type { Ref } from "react";
@@ -41,9 +43,15 @@ import {
   View,
 } from "react-native";
 import type { ComposerDraftScope } from "../lib/composer-draft";
-import { readComposerDraft, writeComposerDraft } from "../lib/composer-draft";
+import {
+  composerDraftScopeKey,
+  isComposerDraftScopeCurrent,
+  readComposerDraft,
+  writeComposerDraft,
+} from "../lib/composer-draft";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
+import { registerSessionDiskCache } from "../lib/session";
 import type { ComposerSnapshot } from "../lib/thread-feedback";
 import { BotAvatar } from "./bot-avatar";
 import { GlassSurface } from "./glass-surface";
@@ -152,28 +160,59 @@ export function ThreadComposer({
     selectedMentionRef.current = start;
     setSelectedMention(start);
   }
-  function updateBindings(next: ComposerMentionBinding[]) {
-    bindingsRef.current = next;
-    setMentionBindings(next);
-  }
   const [selectedSkill, setSelectedSkill] = useState<AgentSkillCatalogEntry | null>(null);
   // Saving waits for a pause in typing; closing the conversation or leaving the app saves at once.
   // Set while the composer holds text that storage does not have yet.
   const pendingSave = useRef<(() => boolean) | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const loadedScopeKey = useRef(draftScope ? composerDraftScopeKey(draftScope) : undefined);
   function flushDraftSave() {
     clearTimeout(saveTimer.current);
     // A failed save stays pending, so the next flush retries it.
     if (pendingSave.current?.()) pendingSave.current = null;
   }
-  useEffect(() => {
-    if (!draftScope) return;
-    pendingSave.current = () => writeComposerDraft(draftScope, draft, mentionBindings);
+  function stageDraftSave() {
+    if (!draftScope || !isComposerDraftScopeCurrent(draftScope)) return;
+    const text = draftRef.current;
+    const bindings = bindingsRef.current;
+    pendingSave.current = () => writeComposerDraft(draftScope, text, bindings);
     clearTimeout(saveTimer.current);
-    // An emptied composer, such as after a send, forgets the draft right away.
-    if (!draft) flushDraftSave();
+    if (!text) flushDraftSave();
     else saveTimer.current = setTimeout(flushDraftSave, DRAFT_SAVE_DELAY_MS);
+  }
+  function commitDraft(text: string, bindings: ComposerMentionBinding[]) {
+    draftRef.current = text;
+    bindingsRef.current = bindings;
+    stageDraftSave();
+    setDraft(text);
+    setMentionBindings(bindings);
+  }
+  useEffect(() => {
+    if (!draftScope || !isComposerDraftScopeCurrent(draftScope)) return;
+    const key = composerDraftScopeKey(draftScope);
+    if (loadedScopeKey.current !== key) {
+      const stored = readComposerDraft(draftScope);
+      const next =
+        loadedScopeKey.current === undefined
+          ? mergeComposerDraftContent(stored, {
+              text: draftRef.current,
+              bindings: bindingsRef.current,
+            })
+          : stored;
+      loadedScopeKey.current = key;
+      replaceDraft(next);
+      return;
+    }
+    stageDraftSave();
   }, [draftScope, draft, mentionBindings]);
+  useEffect(
+    () =>
+      registerSessionDiskCache((_sameAccount, reason) => {
+        // Save the live field before rejected-session retirement invalidates its captured source.
+        if (reason === "session_rejected") flushDraftSave();
+      }),
+    [],
+  );
   useEffect(() => {
     if (!draft) onEmptied?.();
   }, [draft, onEmptied]);
@@ -196,35 +235,23 @@ export function ThreadComposer({
       attachmentIds,
     }),
     reset: () => {
-      draftRef.current = "";
-      setDraft("");
-      nativeSelection.current = { start: 0, end: 0 };
-      completedSelection.current = null;
-      setSelection({ start: 0, end: 0 });
-      setMentionQuery(null);
-      setSlashQuery(null);
       setSelectedSkill(null);
-      updateBindings([]);
-      selectMention(null);
-      selectionHistory.current = [];
-      pendingNativeEdit.current = null;
+      replaceDraft({ text: "", bindings: [] });
     },
     insert: (text) => {
-      const current = draftRef.current;
-      draftRef.current = current ? `${current}\n${text}` : text;
-      setDraft(draftRef.current);
+      replaceDraft(
+        mergeComposerDraftContent(
+          { text: draftRef.current, bindings: bindingsRef.current },
+          { text, bindings: [] },
+        ),
+      );
     },
     addReply: (text) => {
       const current = draftRef.current;
-      draftRef.current = current.trim() ? `${current.trimEnd()} ${text}` : text;
-      setDraft(draftRef.current);
-      // Typing continues after the reply, not where the caret was left earlier.
-      const end = draftRef.current.length;
-      pendingNativeEdit.current = null;
-      nativeSelection.current = { start: end, end };
-      selectionHistory.current = [nativeSelection.current];
-      completedSelection.current = null;
-      setSelection(nativeSelection.current);
+      replaceDraft({
+        text: current.trim() ? `${current.trimEnd()} ${text}` : text,
+        bindings: bindingsRef.current,
+      });
     },
   }));
   const mentionOptions = useMemo(() => {
@@ -275,6 +302,24 @@ export function ThreadComposer({
     setMentionQuery(query);
   }
 
+  function refreshDraftPickers(value: string, caret: number, end = caret) {
+    updateMentionQuery(value, caret, end);
+    const slashMatch = selectedSkill === null ? /^\/([^\n]*)$/.exec(value) : null;
+    setSlashQuery(slashMatch ? (slashMatch[1] ?? "") : null);
+  }
+
+  function replaceDraft(next: { text: string; bindings: readonly ComposerMentionBinding[] }) {
+    pendingNativeEdit.current = null;
+    selectionHistory.current = [];
+    completedSelection.current = null;
+    commitDraft(next.text, validateComposerMentionBindings(next.text, next.bindings));
+    selectMention(null);
+    const end = next.text.length;
+    nativeSelection.current = { start: end, end };
+    setSelection(nativeSelection.current);
+    refreshDraftPickers(next.text, end);
+  }
+
   function updateDraft(nativeValue: string) {
     // Native text changes can arrive before their selection event. Infer the end
     // of the changed span so the picker never reads the previous caret position.
@@ -311,9 +356,7 @@ export function ThreadComposer({
     const caret = widenedCaret ?? nativeValue.length - suffix;
     if (widenedCaret !== null) nativeSelection.current = { start: caret, end: caret };
     setSelection(widenedCaret === null ? undefined : nativeSelection.current);
-    updateMentionQuery(value, caret);
-    const slashMatch = selectedSkill === null ? /^\/([^\n]*)$/.exec(value) : null;
-    setSlashQuery(slashMatch ? (slashMatch[1] ?? "") : null);
+    refreshDraftPickers(value, caret);
   }
 
   function applyNativeEdit(edit: NativeEdit, after: ComposerMentionRange) {
@@ -328,10 +371,8 @@ export function ThreadComposer({
       ...resolveComposerMentionEdit(edit.beforeText, edit.afterText, edit.bindings, hints),
       selected: null,
     };
+    commitDraft(resolved.text, resolved.bindings);
     selectMention(resolved.selected);
-    updateBindings(resolved.bindings);
-    draftRef.current = resolved.text;
-    setDraft(resolved.text);
     completedSelection.current = null;
     return resolved;
   }
@@ -340,10 +381,8 @@ export function ThreadComposer({
     if (!mentionQuery) return;
     const next = bindComposerMention(draftRef.current, mentionQuery, mention, bindingsRef.current);
     pendingNativeEdit.current = null;
-    updateBindings(next.bindings);
+    commitDraft(next.text, next.bindings);
     selectMention(null);
-    draftRef.current = next.text;
-    setDraft(next.text);
     nativeSelection.current = { start: next.caret, end: next.caret };
     selectionHistory.current = [nativeSelection.current];
     completedSelection.current = next.caret;
@@ -354,29 +393,11 @@ export function ThreadComposer({
 
   function insertSkill(skill: AgentSkillCatalogEntry) {
     setSelectedSkill(skill);
-    draftRef.current = "";
-    setDraft("");
-    nativeSelection.current = { start: 0, end: 0 };
-    completedSelection.current = null;
-    setSelection(nativeSelection.current);
-    updateBindings([]);
-    selectMention(null);
-    selectionHistory.current = [];
-    pendingNativeEdit.current = null;
-    setSlashQuery(null);
+    replaceDraft({ text: "", bindings: [] });
   }
 
   function runSlashAction(action: SlashActionId) {
-    draftRef.current = "";
-    setDraft("");
-    nativeSelection.current = { start: 0, end: 0 };
-    completedSelection.current = null;
-    setSelection(nativeSelection.current);
-    updateBindings([]);
-    selectMention(null);
-    selectionHistory.current = [];
-    pendingNativeEdit.current = null;
-    setSlashQuery(null);
+    replaceDraft({ text: "", bindings: [] });
     onSlashAction(action);
   }
 

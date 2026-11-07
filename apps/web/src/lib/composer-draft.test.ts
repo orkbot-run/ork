@@ -1,7 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  appendComposerDraftText,
   beginComposerDraftSubmission,
+  captureComposerDraftSource,
+  clearComposerDrafts,
   composerDraftBindingsKey,
   composerDraftStorageKey,
   readComposerDraft,
@@ -13,6 +20,10 @@ import {
 function memoryStorage(initial: Record<string, string> = {}) {
   const map = new Map<string, string>(Object.entries(initial));
   return {
+    get length() {
+      return map.size;
+    },
+    key: (index: number) => [...map.keys()][index] ?? null,
     getItem: (key: string) => map.get(key) ?? null,
     setItem: (key: string, value: string) => {
       map.set(key, value);
@@ -101,3 +112,91 @@ describe("composer drafts", () => {
     }
   });
 });
+
+it("merges failed source text with newer occurrence bindings and clears only the exact accepted version", () => {
+  const storage = memoryStorage();
+  vi.stubGlobal("localStorage", storage);
+  try {
+    const bob = { kind: "bot" as const, id: "original", name: "Bob" };
+    const group = { kind: "group" as const, id: "newer", name: "Bob" };
+    writeComposerDraft("source", "@Bob old", storage, [{ start: 0, end: 4, mention: bob }]);
+    const attempt = beginComposerDraftSubmission("source", "@Bob old");
+    writeComposerDraft("source", "@Bob new", storage, [{ start: 0, end: 4, mention: group }]);
+    settleComposerDraftSubmission("source", attempt, false);
+    expect(readComposerDraft("source", storage)).toBe("@Bob old\n@Bob new");
+    expect(readComposerDraftBindings("source", storage)).toEqual([
+      { start: 0, end: 4, mention: bob },
+      { start: 9, end: 13, mention: group },
+    ]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("retires source callbacks before wiping drafts, including a later login to the same thread", () => {
+  const storage = memoryStorage();
+  vi.stubGlobal("localStorage", storage);
+  try {
+    const source = captureComposerDraftSource("thread");
+    const submission = beginComposerDraftSubmission("thread", "old login");
+    clearComposerDrafts();
+    writeComposerDraft("thread", "new login");
+    appendComposerDraftText(source, "private late transcript");
+    settleComposerDraftSubmission("thread", submission, false);
+    expect(readComposerDraft("thread")).toBe("new login");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("refuses another window's retired namespace without refreshing a missing nonce", () => {
+  const storage = memoryStorage();
+  vi.stubGlobal("localStorage", storage);
+  try {
+    const source = captureComposerDraftSource("source");
+    storage.removeItem("orkbot.composerDraftNamespace");
+    appendComposerDraftText(source, "late private text");
+    expect(storage.getItem("orkbot.composerDraftNamespace")).toBeNull();
+    expect(readComposerDraft("source")).toBe("");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it("retires the durable namespace even if persisting its replacement fails", () => {
+  const storage = memoryStorage();
+  vi.stubGlobal("localStorage", storage);
+  try {
+    const source = captureComposerDraftSource("source");
+    const set = vi.spyOn(storage, "setItem").mockImplementation(() => {
+      throw new Error("storage full");
+    });
+    clearComposerDrafts();
+    expect(storage.getItem("orkbot.composerDraftNamespace")).toBeNull();
+    set.mockRestore();
+    appendComposerDraftText(source, "late private text");
+    expect(readComposerDraft("source")).toBe("");
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([true, false])(
+  "keeps appended dictation separate from the optimistic pending send (accepted=%s)",
+  (accepted) => {
+    const storage = memoryStorage();
+    vi.stubGlobal("localStorage", storage);
+    try {
+      const source = captureComposerDraftSource("source");
+      const attempt = beginComposerDraftSubmission("source", "original submission");
+      appendComposerDraftText(source, "new dictation");
+      expect(readComposerDraft("source")).toBe("new dictation");
+      settleComposerDraftSubmission("source", attempt, accepted);
+      expect(readComposerDraft("source")).toBe(
+        accepted ? "new dictation" : "original submission\nnew dictation",
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

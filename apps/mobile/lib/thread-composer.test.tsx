@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 // @vitest-environment jsdom
 
 import { buildComposerMentionOptions } from "@orkbot/core";
@@ -12,6 +16,14 @@ import { ThreadComposer } from "../components/thread-composer";
 import { settleComposer } from "./thread-feedback";
 import { useThreadMentionCatalog } from "./thread-mention-catalog";
 
+const draftOwner = vi.hoisted(() => ({ namespace: "test-login", apiBase: "https://api.test" }));
+const retirementCallbacks = vi.hoisted(
+  () => new Set<(sameAccount: boolean, reason: string) => void>(),
+);
+vi.mock("./artifact-cache-session", () => ({
+  currentArtifactCacheSession: () => draftOwner.namespace,
+}));
+
 const dimensions = vi.hoisted(() => ({ fontScale: 1 }));
 
 const input = vi.hoisted(() => ({
@@ -23,7 +35,7 @@ const mentionApi = vi.hoisted(() => ({ rpc: vi.fn(), capture: vi.fn(), generatio
 vi.mock("./api", () => ({
   rpc: mentionApi.rpc,
   captureApiRequestContext: mentionApi.capture,
-  currentApiBase: () => "https://api.test",
+  currentApiBase: () => draftOwner.apiBase,
   selectedSpaceId: () => "space-a",
 }));
 const files = vi.hoisted(() => new Map<string, string>());
@@ -74,11 +86,17 @@ vi.mock("expo-file-system", () => {
       files.delete(this.uri);
     }
   }
-  return { Directory, File, Paths: { cache: "cache" } };
+  return { Directory, File, Paths: { cache: "cache", document: "document" } };
 });
 vi.mock("./session", () => ({
   currentSessionGeneration: () => mentionApi.generation,
   subscribeSessionGeneration: () => () => {},
+  registerSessionDiskCache: (listener: (sameAccount: boolean, reason: string) => void) => {
+    retirementCallbacks.add(listener);
+    return () => {
+      retirementCallbacks.delete(listener);
+    };
+  },
 }));
 function nativeText(node: ReactNode): string {
   if (typeof node === "string") return node;
@@ -257,8 +275,9 @@ describe("thread composer isolation", () => {
     ...changes
   }: HarnessProps) {
     threadRenders += 1;
+    draftOwner.apiBase = apiBase;
     const draftScope = useMemo(
-      () => ({ apiBase, userId, threadKey: `bot:${threadKey}` }),
+      () => ({ apiBase, userId, threadKey: `bot:${threadKey}`, namespace: draftOwner.namespace }),
       [apiBase, userId, threadKey],
     );
     return (
@@ -305,6 +324,9 @@ describe("thread composer isolation", () => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.clearAllMocks();
     dimensions.fontScale = 1;
+    retirementCallbacks.clear();
+    draftOwner.namespace = "test-login";
+    draftOwner.apiBase = "https://api.test";
     threadRenders = 0;
     files.clear();
     disk.writes = 0;
@@ -460,6 +482,84 @@ describe("thread composer isolation", () => {
     expect(pickerRows().map((row) => row.textContent)).toEqual(["everyone"]);
     type("@zzz");
     expect(container.querySelector('[data-testid="mention-picker"]')).toBeNull();
+  });
+
+  it("recomputes mention and slash pickers and caret after external text insertion", () => {
+    act(() => composer.current!.insert("@He"));
+    expect(pickerRows()).toHaveLength(1);
+    expect(JSON.parse(field().dataset.selection!)).toEqual({ start: 3, end: 3 });
+    act(() => composer.current!.addReply("now"));
+    expect(container.querySelector('[data-testid="mention-picker"]')).toBeNull();
+    act(() => composer.current!.reset());
+    act(() => composer.current!.insert("/W"));
+    expect(container.querySelector('[data-testid="slash-picker"]')).not.toBeNull();
+    expect(JSON.parse(field().dataset.selection!)).toEqual({ start: 2, end: 2 });
+    act(() => composer.current!.reset());
+    expect(container.querySelector('[data-testid="slash-picker"]')).toBeNull();
+  });
+
+  it("merges hydrated source text with edits made before its namespace was ready", () => {
+    type("stored draft");
+    act(() => root.unmount());
+    root = createRoot(container);
+    render({ draftScope: undefined });
+    type("@He");
+    render();
+    expect(composer.current!.snapshot().promptText).toBe("stored draft\n@He");
+    expect(pickerRows()).toHaveLength(1);
+    expect(JSON.parse(field().dataset.selection!)).toEqual({ start: 16, end: 16 });
+  });
+
+  it.each(["insert", "addReply", "typing"] as const)(
+    "flushes the source after %s and unmount in the same React batch",
+    (change) => {
+      type("original");
+      act(() => {
+        if (change === "typing") input.change("latest typed text");
+        else composer.current![change]("latest imported text");
+        root.unmount();
+      });
+      root = createRoot(container);
+      render();
+      expect(composer.current!.snapshot().promptText).toBe(
+        change === "typing"
+          ? "latest typed text"
+          : change === "insert"
+            ? "original\nlatest imported text"
+            : "original latest imported text",
+      );
+    },
+  );
+
+  it("flushes the latest text and bindings before rejected-session namespace retirement and unmount", () => {
+    type("saved text");
+    render({ threadKey: "bot-2" });
+    render();
+    type("@He");
+    press("@{name}");
+    type("@Helper latest");
+    act(() => {
+      for (const retire of retirementCallbacks) retire(false, "session_rejected");
+      draftOwner.namespace = "replacement-login";
+      root.unmount();
+    });
+    root = createRoot(container);
+    render();
+    expect(composer.current!.snapshot().promptText).toBe("@Helper latest");
+    expect(composer.current!.snapshot().mentions).toEqual([bot]);
+  });
+
+  it("does not flush or revive a retired live field after explicit logout", () => {
+    type("private latest words");
+    act(() => {
+      for (const retire of retirementCallbacks) retire(false, "logout");
+      draftOwner.namespace = "new-login";
+      files.clear();
+      root.unmount();
+    });
+    root = createRoot(container);
+    render();
+    expect(composer.current!.snapshot().promptText).toBe("");
   });
 
   it("adds a page's reply on the same line as the draft, without sending it", () => {

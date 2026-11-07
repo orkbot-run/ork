@@ -1,38 +1,164 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
+
 import type { ComposerMentionBinding } from "@orkbot/core";
-import { validateComposerMentionBindings } from "@orkbot/core";
+import {
+  mergeComposerDraftContent,
+  newClientId,
+  validateComposerMentionBindings,
+} from "@orkbot/core";
 
 export const COMPOSER_DRAFT_STORAGE_PREFIX = "orkbot.runposerDraft.";
 const COMPOSER_BINDINGS_STORAGE_PREFIX = "orkbot.runposerBindings.";
+const COMPOSER_NAMESPACE_STORAGE_KEY = "orkbot.composerDraftNamespace";
 
-type ComposerDraftSubmission = { text: string; bindingRecord: string | null };
-const pendingSubmissions = new Map<string, ComposerDraftSubmission>();
-const acceptedListeners = new Map<string, Set<(text: string) => void>>();
+export type ComposerDraftSource = {
+  readonly threadKey: string;
+  readonly namespace: string | null;
+  readonly lifetime: object;
+  readonly origin: string;
+};
+type DraftContent = { text: string; bindings: ComposerMentionBinding[] };
+type ComposerDraftSubmission = {
+  source: ComposerDraftSource;
+  content: DraftContent;
+  recovery: DraftContent;
+  revision: number;
+  bindingRecord: string | null;
+};
+let lifetime = {};
+const draftRevisions = new Map<string, number>();
+const pendingSubmissions = new Set<ComposerDraftSubmission>();
+const draftListeners = new Map<string, Set<(draft: DraftContent) => void>>();
+
+/** A login's source survives chat navigation and token rotation, but never an explicit wipe. */
+export function captureComposerDraftSource(threadKey: string): ComposerDraftSource {
+  let namespace: string | null = null;
+  try {
+    const storage = getLocalStorage();
+    namespace = storage?.getItem(COMPOSER_NAMESPACE_STORAGE_KEY) ?? null;
+    if (storage && !namespace) {
+      namespace = newClientId();
+      storage.setItem(COMPOSER_NAMESPACE_STORAGE_KEY, namespace);
+    }
+  } catch {
+    namespace = null;
+    /* A missing durable namespace fails closed for asynchronous writes. */
+  }
+  return {
+    threadKey,
+    namespace,
+    lifetime,
+    origin: typeof window === "undefined" ? "" : window.location.origin,
+  };
+}
+
+/** Without durable ownership, recovery is limited to the same live composer instance. */
+export function isComposerDraftMemorySourceCurrent(source: ComposerDraftSource): boolean {
+  if (
+    source.namespace !== null ||
+    source.lifetime !== lifetime ||
+    source.origin !== (typeof window === "undefined" ? "" : window.location.origin)
+  )
+    return false;
+  try {
+    return (getLocalStorage()?.getItem(COMPOSER_NAMESPACE_STORAGE_KEY) ?? null) === null;
+  } catch {
+    return false;
+  }
+}
+
+export function isComposerDraftSourceCurrent(source: ComposerDraftSource): boolean {
+  if (
+    source.lifetime !== lifetime ||
+    source.origin !== (typeof window === "undefined" ? "" : window.location.origin)
+  )
+    return false;
+  try {
+    const storage = getLocalStorage();
+    return storage
+      ? !!source.namespace && storage.getItem(COMPOSER_NAMESPACE_STORAGE_KEY) === source.namespace
+      : source.namespace === null;
+  } catch {
+    return false;
+  }
+}
+
+function publishDraft(threadKey: string, draft: DraftContent) {
+  for (const listener of draftListeners.get(threadKey) ?? []) listener(draft);
+}
+
+export function appendComposerDraftText(source: ComposerDraftSource, text: string): void {
+  if (!text || !isComposerDraftSourceCurrent(source)) return;
+  let current = {
+    text: readComposerDraft(source.threadKey),
+    bindings: readComposerDraftBindings(source.threadKey),
+  };
+  // A submitted version stays on disk for recovery, but is no longer the editable draft.
+  if (
+    [...pendingSubmissions].some(
+      (submission) =>
+        submission.source.threadKey === source.threadKey &&
+        submission.revision === draftRevisions.get(source.threadKey) &&
+        submission.content.text === current.text &&
+        submission.bindingRecord === readBindingRecord(source.threadKey),
+    )
+  )
+    current = { text: "", bindings: [] };
+  const next = mergeComposerDraftContent(current, { text, bindings: [] });
+  writeComposerDraft(source.threadKey, next.text, undefined, next.bindings);
+  publishDraft(source.threadKey, next);
+}
 
 export function beginComposerDraftSubmission(
   threadKey: string,
   text: string,
+  recovery?: DraftContent,
 ): ComposerDraftSubmission {
   writeComposerDraft(threadKey, text);
-  const submission = { text, bindingRecord: readBindingRecord(threadKey) };
-  pendingSubmissions.set(threadKey, submission);
+  const submission = {
+    source: captureComposerDraftSource(threadKey),
+    content: { text, bindings: readComposerDraftBindings(threadKey) },
+    recovery: recovery ?? { text, bindings: readComposerDraftBindings(threadKey) },
+    revision: draftRevisions.get(threadKey) ?? 0,
+    bindingRecord: readBindingRecord(threadKey),
+  };
+  pendingSubmissions.add(submission);
   return submission;
 }
 
 export function settleComposerDraftSubmission(
   threadKey: string,
   submission: ComposerDraftSubmission,
-  accepted: boolean,
+  accepted: boolean | undefined,
 ): void {
-  if (pendingSubmissions.get(threadKey) !== submission) return;
-  pendingSubmissions.delete(threadKey);
   if (
-    !accepted ||
-    readComposerDraft(threadKey) !== submission.text ||
-    readBindingRecord(threadKey) !== submission.bindingRecord
+    !pendingSubmissions.delete(submission) ||
+    threadKey !== submission.source.threadKey ||
+    !isComposerDraftSourceCurrent(submission.source)
   )
     return;
-  writeComposerDraft(threadKey, "");
-  for (const listener of acceptedListeners.get(threadKey) ?? []) listener(submission.text);
+  // An exceptional callback leaves acceptance unknown; it must not expose a new retry.
+  if (accepted === undefined) return;
+  const unchanged =
+    draftRevisions.get(threadKey) === submission.revision &&
+    readComposerDraft(threadKey) === submission.content.text &&
+    readBindingRecord(threadKey) === submission.bindingRecord;
+  if (accepted) {
+    if (!unchanged) return;
+    writeComposerDraft(threadKey, "");
+    publishDraft(threadKey, { text: "", bindings: [] });
+    return;
+  }
+  const next = unchanged
+    ? submission.content
+    : mergeComposerDraftContent(submission.recovery, {
+        text: readComposerDraft(threadKey),
+        bindings: readComposerDraftBindings(threadKey),
+      });
+  writeComposerDraft(threadKey, next.text, undefined, next.bindings);
+  publishDraft(threadKey, next);
 }
 
 let sendingWork = false;
@@ -75,6 +201,14 @@ export function hasUnsentComposerDraft(storage: Storage | null = null): boolean 
 
 /** Signing out leaves no saved draft, or its mentions, for whoever uses this browser next. */
 export function clearComposerDrafts(): void {
+  lifetime = {};
+  try {
+    const storage = getLocalStorage();
+    storage?.removeItem(COMPOSER_NAMESPACE_STORAGE_KEY);
+    storage?.setItem(COMPOSER_NAMESPACE_STORAGE_KEY, newClientId());
+  } catch {}
+  pendingSubmissions.clear();
+  draftRevisions.clear();
   try {
     const keys = Array.from({ length: localStorage.length }, (_, index) => localStorage.key(index));
     for (const key of keys) {
@@ -89,19 +223,19 @@ export function clearComposerDrafts(): void {
   }
 }
 
-export function subscribeComposerDraftAccepted(
+export function subscribeComposerDraft(
   threadKey: string,
-  listener: (text: string) => void,
+  listener: (draft: DraftContent) => void,
 ): () => void {
-  let listeners = acceptedListeners.get(threadKey);
+  let listeners = draftListeners.get(threadKey);
   if (!listeners) {
     listeners = new Set();
-    acceptedListeners.set(threadKey, listeners);
+    draftListeners.set(threadKey, listeners);
   }
   listeners.add(listener);
   return () => {
     listeners.delete(listener);
-    if (listeners.size === 0) acceptedListeners.delete(threadKey);
+    if (listeners.size === 0) draftListeners.delete(threadKey);
   };
 }
 
@@ -176,7 +310,7 @@ export function writeComposerDraft(
   storage: DraftStorage | null = getLocalStorage(),
   bindings?: readonly ComposerMentionBinding[],
 ): void {
-  pendingSubmissions.delete(threadKey);
+  draftRevisions.set(threadKey, (draftRevisions.get(threadKey) ?? 0) + 1);
   if (!storage || !threadKey) return;
   try {
     // Plain-text callers preserve bindings only when they are resubmitting the

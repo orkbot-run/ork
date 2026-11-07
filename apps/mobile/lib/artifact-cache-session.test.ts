@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Hydrated draft ownership regressions follow LICENSE.md.
+
 import * as SecureStore from "expo-secure-store";
 import { beforeEach, expect, it, vi } from "vitest";
 
@@ -132,4 +136,33 @@ it("keeps the namespace of a finished rotation when a later metadata write fails
   expect(await cache.artifactCacheSession("fake-b")).toBe(namespace);
   vi.resetModules();
   expect(await (await load()).artifactCacheSession("fake-b")).toBe(namespace);
+});
+
+it("exposes only the hydrated credential-free login lifetime and preserves verified rotation", async () => {
+  const cache = await load();
+  expect(cache.currentArtifactCacheSession()).toBeUndefined();
+  const namespace = await cache.artifactCacheSession("fake-a");
+  expect(cache.currentArtifactCacheSession()).toBe(namespace);
+  await cache.rotateArtifactCacheSession("fake-a", "fake-b");
+  expect(cache.currentArtifactCacheSession()).toBe(namespace);
+  const clearing = cache.invalidateArtifactCacheSession();
+  expect(cache.currentArtifactCacheSession()).toBeUndefined();
+  await clearing;
+});
+
+it("preserves the last stored namespace when a cold verified rotation cannot read it", async () => {
+  const first = await load();
+  const namespace = await first.artifactCacheSession("fake-old");
+  const committed = disk.get("orkbot.artifact-cache-session");
+  vi.resetModules();
+  const cold = await load();
+  vi.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error("temporarily locked"));
+  vi.mocked(SecureStore.setItemAsync).mockClear();
+  await expect(cold.rotateArtifactCacheSession("fake-old", "fake-new")).rejects.toThrow(
+    "temporarily locked",
+  );
+  expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+  expect(disk.get("orkbot.artifact-cache-session")).toBe(committed);
+  await cold.rotateArtifactCacheSession("fake-old", "fake-new");
+  expect(await cold.artifactCacheSession("fake-new")).toBe(namespace);
 });

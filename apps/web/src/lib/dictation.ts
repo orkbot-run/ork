@@ -177,6 +177,7 @@ export class Dictation {
   private audioContext: AudioContext | null = null;
   private vadTimer: ReturnType<typeof setInterval> | undefined;
   private onFinal: ((text: string) => void) | null = null;
+  private isCurrent: () => boolean = () => true;
   /** Mode of the running session: an endpoint turn reports back even without words. */
   private mode: DictationMode | null = null;
 
@@ -239,11 +240,17 @@ export class Dictation {
     transcribe?: boolean;
     endpointMs?: number;
     onFinal: (text: string) => void;
+    isCurrent?: () => boolean;
   }): Promise<void> {
     this.stop("replace");
     const mine = this.token;
     const spaceId = selectedSpaceId();
     this.onFinal = opts.onFinal;
+    this.isCurrent = opts.isCurrent ?? (() => true);
+    if (!this.isCurrent()) {
+      this.stop("cancel");
+      return;
+    }
     this.mode = opts.mode;
     this.set({ status: "listening", transcript: "" });
     const transcribe = Boolean(opts.transcribe);
@@ -448,8 +455,9 @@ export class Dictation {
       this.failListening(mine, errorText(error, t`Microphone failed`));
       return;
     }
-    if (this.token !== mine) {
+    if (this.token !== mine || !this.isCurrent()) {
       for (const track of stream.getTracks()) track.stop();
+      if (this.token === mine) this.stop("cancel");
       return;
     }
     const keptSpeech = this.snapshot.transcript.trim().length > 0;
@@ -569,6 +577,10 @@ export class Dictation {
     try {
       const audioBase64 = await blobToBase64(blob);
       if (this.token !== mine) return;
+      if (!this.isCurrent()) {
+        this.stop("cancel");
+        return;
+      }
       const res = await withAbort(
         fetch("/api/voice/transcribe", {
           method: "POST",
@@ -636,6 +648,10 @@ export class Dictation {
 
   private finish(text: string, mine: number, error?: string) {
     if (this.token !== mine) return;
+    if (!this.isCurrent()) {
+      this.stop("cancel");
+      return;
+    }
     const trimmed = text.trim();
     const onFinal = this.onFinal;
     const mode = this.mode;

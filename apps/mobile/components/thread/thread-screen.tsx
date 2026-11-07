@@ -28,7 +28,7 @@ import { useAppForeground } from "../../lib/app-foreground";
 import { mobileTokens } from "../../lib/appearance";
 import type { MobileArtifactTarget } from "../../lib/artifact-open";
 import { useCallSession } from "../../lib/call-session";
-import { composerDraftScope } from "../../lib/composer-draft";
+import { useComposerDraftScope } from "../../lib/composer-draft-scope";
 import { cronLabels } from "../../lib/cron";
 import { useI18n } from "../../lib/i18n";
 import { useThemedStyles } from "../../lib/native";
@@ -192,11 +192,8 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     JSON.stringify([userId, sessionEpoch, botId, groupId, requestedThreadId]),
     mentionBots,
   );
-  const attachments = useThreadAttachments({ botId, groupId, readOnly, uploadConfig });
-  const draftScope = useMemo(
-    () => composerDraftScope(userId, botId, groupId),
-    [userId, botId, groupId],
-  );
+  const draftScope = useComposerDraftScope(userId, botId, groupId, sessionEpoch);
+  const attachments = useThreadAttachments({ botId, groupId, readOnly, uploadConfig, draftScope });
   const echoed = useMemo(
     () =>
       snap && (snap.groupId ?? snap.botId) === threadKey

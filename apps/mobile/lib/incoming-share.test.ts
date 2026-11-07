@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Share source and URI lease regressions follow LICENSE.md.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -71,6 +75,7 @@ const {
   readIncomingShareFile,
   releaseIncomingShareFiles,
   retryIncomingShare,
+  retainIncomingShareFiles,
 } = await import("./incoming-share");
 
 beforeEach(() => {
@@ -250,4 +255,33 @@ describe("incoming share on iOS", () => {
     receiveIos(["new.png"]);
     expect(state.remove).not.toHaveBeenCalled();
   });
+});
+
+it("keeps an interrupted share bound to its original immutable destination", () => {
+  receive();
+  const original = takeIncomingShare("server/account/login/chat-a")!;
+  retryIncomingShare(original);
+  expect(takeIncomingShare("server/account/login/chat-b")).toBeNull();
+  expect(hasIncomingShare()).toBe(true);
+  expect(takeIncomingShare("server/account/login/chat-a")?.text).toBe(original.text);
+});
+
+it("releases a reused iOS URI only after every in-flight reader and pending owner is done", () => {
+  state.os = "ios";
+  state.container = { uri: GROUP, files: [] };
+  receiveIos(["shared.png"]);
+  const old = takeIncomingShare()!;
+  const releaseOld = retainIncomingShareFiles(old.files);
+  receiveIos(["shared.png"]);
+  const newer = takeIncomingShare()!;
+  const releaseNew = retainIncomingShareFiles(newer.files);
+  releaseIncomingShareFiles(old.files);
+  releaseOld();
+  releaseOld();
+  expect(state.remove).not.toHaveBeenCalled();
+  retryIncomingShare(newer);
+  releaseNew();
+  expect(state.remove).not.toHaveBeenCalled();
+  cancelIncomingShare();
+  expect(state.remove.mock.calls).toEqual([[`${GROUP}shared.png`]]);
 });
