@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited behavior remains Apache-2.0; Space work admission guards are Ork additions.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
@@ -18,6 +19,7 @@ import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
   crossSpaceCommunicationAllowed,
+  isUniqueViolation,
   lockSpaceForWork,
   runAsSystem,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -160,7 +162,7 @@ async function requestConnection(
           // Two first-time connects can both miss the pre-read; the unique key
           // serializes them. PostgreSQL aborts the interactive transaction on
           // P2002, so recovery must happen outside — rethrow a marker.
-          if (!isUniqueConstraintError(error)) throw error;
+          if (!isUniqueViolation(error)) throw error;
           throw new ConnectCreateRaceError();
         }
       }
@@ -463,7 +465,7 @@ async function deliverToConnectedAgent(
   } catch (error) {
     // Two concurrent retries can both miss the in-transaction lookup; the
     // loser hits the unique key. Treat that as a successful replay.
-    if (deliveryKey && isUniqueConstraintError(error)) {
+    if (deliveryKey && isUniqueViolation(error)) {
       const winner = await deps.prisma.message.findUnique({
         where: { threadId_clientNonce: { threadId: targetThreadId, clientNonce: deliveryKey } },
         select: { id: true },
@@ -503,10 +505,6 @@ async function deliverToConnectedAgent(
     name: target.name,
     note: `Sent to ${target.name}. Delivery is async; a reply wakes you later as a new message.`,
   };
-}
-
-function isUniqueConstraintError(error: unknown) {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
 
 /** Marker: unique create raced; recover outside the aborted PG transaction. */

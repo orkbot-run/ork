@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { createHash } from "node:crypto";
 import type { SecretStore } from "@orkbot/adapter-kit";
@@ -17,6 +18,7 @@ import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   AVAILABILITY_SELECT,
   availableInSpace,
+  isUniqueViolation,
   runAsSystemInTransaction,
   spaceAvailability,
 } from "@orkbot/db";
@@ -259,10 +261,6 @@ function installDto(row: {
   };
 }
 
-function uniqueViolation(error: unknown) {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
-}
-
 export async function installPlugin(
   deps: PluginInstallDeps,
   actor: Actor,
@@ -338,7 +336,7 @@ export async function installPlugin(
       });
       return installDto(row);
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new ORPCError("CONFLICT", { message: "Plugin or skill is already installed" });
       }
       throw error;
@@ -426,7 +424,7 @@ export async function setPluginParts(
       });
       return installDto(row);
     } catch (error) {
-      if (uniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new ORPCError("CONFLICT", { message: "A plugin skill name is already in use" });
       }
       throw error;

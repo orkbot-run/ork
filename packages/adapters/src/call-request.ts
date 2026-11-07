@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
 // Ork thread-lock budget coverage is PolyForm-covered.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import { randomUUID } from "node:crypto";
 import type { JobPublisher, NotificationProvider } from "@orkbot/adapter-kit";
@@ -23,12 +24,13 @@ import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
+  isUniqueViolation,
   runAsSystem,
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { ExecutorDeps } from "./executor-deps.js";
-import { isUniqueViolation, publishMessage, runLeaseFor } from "./run-messages.js";
+import { publishMessage, runLeaseFor } from "./run-messages.js";
 
 const REASON_MAX = 120;
 const OPENING_MAX = 240;

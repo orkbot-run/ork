@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited routes remain Apache-2.0; Space work admission guards are Ork additions.
 // Ork thread-lock budget and stream-lifetime changes are PolyForm-covered.
 
@@ -22,6 +23,7 @@ import {
   createExternalConversationRepos,
   createThreadMessageInTransaction,
   IsolationError,
+  isUniqueViolation,
   lockOwnedGroup,
   lockSpaceForWork,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -38,7 +40,6 @@ import type { RouterContext } from "#modules/platform/routes/context";
 import {
   botsRunOwnModels,
   computerContext,
-  isUniqueViolation,
   modelSetup,
   THREAD_MESSAGE_PAGE_SIZE,
 } from "#modules/platform/routes/shared";

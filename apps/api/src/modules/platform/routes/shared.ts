@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import {
@@ -189,11 +190,3 @@ export const HEARTBEAT_MS = 20_000;
 
 /** A thread stream re-checks its session at least this often while it delivers. */
 export const SESSION_RECHECK_MS = 10_000;
-
-export function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
-}
-
-export function isRecordNotFound(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2025");
-}

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { createHash } from "node:crypto";
 import type { SecretStore } from "@orkbot/adapter-kit";
@@ -45,6 +46,7 @@ import {
   appendEventInTransaction,
   availableInSpace,
   createThreadMessageInTransaction,
+  isUniqueViolation,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
@@ -785,8 +787,4 @@ function freeSlug(slug: string, used: Set<string>): string {
 /** Daily logs and other notes first (in plan order, oldest first), then USER.md, then MEMORY.md. */
 function curatedRank(path: string): number {
   return path === MEMORY_INDEX_PATH ? 2 : path === "USER.md" ? 1 : 0;
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }

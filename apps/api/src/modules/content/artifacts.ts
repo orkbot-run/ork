@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { createHash } from "node:crypto";
 import type { ArtifactStore, MessagingInboundAttachment } from "@orkbot/adapter-kit";
@@ -22,7 +23,7 @@ import {
   validateAttachmentMimeType,
 } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
-import { IsolationError, Prisma, withResolvedArtifactVersion } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma, withResolvedArtifactVersion } from "@orkbot/db";
 
 export async function createOwnedArtifact(
   deps: {
@@ -542,7 +543,7 @@ async function deleteArtifactRootIfChildless(
     try {
       await tx.artifact.delete({ where: { id: root.id } });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error)) {
         outcome = "gone";
         return;
       }
@@ -589,7 +590,7 @@ async function deleteArtifactRowIfPresent(
   try {
     await prisma.artifact.delete({ where: { id } });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error)) return;
     throw error;
   }
 }

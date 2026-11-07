@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; shared-page approval fencing is an Ork addition.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import { createHash } from "node:crypto";
 import type { MessageBlock } from "@orkbot/contracts";
 import { PAGE_TITLE_MAX_LENGTH, PageTitleSchema } from "@orkbot/contracts";
 import { containsSecret, instructionUpdateDiff, redactSecrets } from "@orkbot/core";
+import { isUniqueViolation } from "@orkbot/db";
 import { checkPageSource, PAGE_KIT_GUIDE } from "@orkbot/page-kit/validate";
 import type { FleetCardSummary } from "./approval-ask.js";
 import { MAX_APPROVAL_DETAIL_LENGTH } from "./approval-ask.js";
 import type { RunContext } from "./run-context.js";
-import { isUniqueViolation, publishMessage } from "./run-messages.js";
+import { publishMessage } from "./run-messages.js";
 import type { ToolCall, ToolHandlers } from "./run-tool-gate.js";
 import { argumentGiven } from "./update-bot-patch.js";
 

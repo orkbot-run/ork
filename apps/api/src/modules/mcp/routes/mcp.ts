@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { createHash } from "node:crypto";
@@ -30,6 +31,7 @@ import {
   AVAILABILITY_SELECT,
   availableInSpace,
   IsolationError,
+  isUniqueViolation,
   itemSecretIn,
   spaceAvailability,
 } from "@orkbot/db";
@@ -57,7 +59,7 @@ import {
   reviewPluginSubmission,
 } from "#modules/integrations/plugin-submissions";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { computerContext, isUniqueViolation, meDto } from "#modules/platform/routes/shared";
+import { computerContext, meDto } from "#modules/platform/routes/shared";
 import {
   assertNameFreeWhereAvailable,
   lockOwner,

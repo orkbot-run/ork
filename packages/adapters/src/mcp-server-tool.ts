@@ -2,17 +2,18 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type { McpTransport, MessageBlock } from "@orkbot/contracts";
 import { McpRemoteEndpointSchema, McpTransportSchema } from "@orkbot/contracts";
 import { deriveMcpSlug } from "@orkbot/core";
 import type { McpServer } from "@orkbot/db";
-import { THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
+import { isUniqueViolation, THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { toStringRecord } from "./memory-provider-factory.js";
 import { assertNoMcpEndpointCredential, assertSafeRemoteUrl } from "./remote-mcp.js";
-import { isUniqueViolation, persistMessageInTransaction, runLeaseFor } from "./run-messages.js";
+import { persistMessageInTransaction, runLeaseFor } from "./run-messages.js";
 
 export { deriveMcpSlug } from "@orkbot/core";
 

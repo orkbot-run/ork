@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { createHash, randomBytes } from "node:crypto";
 import type { SecretStore } from "@orkbot/adapter-kit";
@@ -8,7 +9,7 @@ import { forgetPageShareSecrets } from "@orkbot/adapters";
 import type { Actor, PageDetail, PageSummary, PageVisibility, SharedPage } from "@orkbot/contracts";
 import { pageShareTokenFromSlug, pageShareUrl } from "@orkbot/contracts";
 import type { PageShareSecret, PrismaClient } from "@orkbot/db";
-import { IsolationError, Prisma, runAsSystem } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma, runAsSystem } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 
 const PAGE_SHARE_SECRET_KIND = "page_share";
@@ -53,7 +54,7 @@ async function stillThere<T>(write: Promise<T>): Promise<T> {
   try {
     return await write;
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error)) {
       throw new IsolationError();
     }
     throw error;

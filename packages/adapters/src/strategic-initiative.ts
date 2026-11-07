@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited behavior remains Apache-2.0; Space work admission guards are Ork additions.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -13,6 +14,7 @@ import {
 } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
+  isUniqueViolation,
   lockSpaceForWork,
   SpaceDeletionInProgressError,
   STRATEGIC_INITIATIVE_NONCE_PREFIX,
@@ -20,7 +22,6 @@ import {
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import { isUniqueViolation } from "./run-messages.js";
 import { modelCreditBillingEnabled } from "./run-model.js";
 
 const STRATEGIC_INITIATIVE_INTERVAL_MS = 24 * 60 * 60 * 1000;

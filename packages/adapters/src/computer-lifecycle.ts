@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited computer lifecycle remains Apache-2.0; Space work admission guards are Ork additions.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import { mkdir } from "node:fs/promises";
 import type {
@@ -30,6 +31,7 @@ import {
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   expireComputerExecutionLeases,
+  isUniqueViolation,
   lockSpaceForWork,
   parseComputerMode,
   planComputerSize,
@@ -818,7 +820,7 @@ export async function acquireDedicatedScreenLeaseFence(
         fence: created.fence,
       };
     } catch (error) {
-      if (isUniqueConstraintError(error)) throw new ComputerBusyError();
+      if (isUniqueViolation(error)) throw new ComputerBusyError();
       throw error;
     }
   });
@@ -900,7 +902,7 @@ export async function acquireComputerExecutionLease(
         fence: created.fence,
       });
     } catch (error) {
-      if (isUniqueConstraintError(error)) throw new ComputerBusyError();
+      if (isUniqueViolation(error)) throw new ComputerBusyError();
       throw error;
     }
   });
@@ -974,10 +976,6 @@ export async function releaseComputerExecutionLease(
     runId: lease.runId,
     fence: lease.fence,
   });
-}
-
-function isUniqueConstraintError(error: unknown) {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
 
 export type ComputerReplaceMode = "recover" | "reset" | "update";

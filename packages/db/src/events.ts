@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited thread events remain Apache-2.0; Space work admission and decision-card guards are Ork additions.
 // Ork thread-lock budget coverage is PolyForm-covered.
 
@@ -59,6 +60,7 @@ import {
   CrossSpaceCommunicationBlockedError,
   crossSpaceCommunicationAllowed,
 } from "./cross-space-communication.js";
+import { isRecordNotFound } from "./database-errors.js";
 import type { RunLease } from "./messages.js";
 import {
   assertRunCanWriteHistory,
@@ -2208,10 +2210,6 @@ export async function appendEventInTransaction(
       ).count === 1,
   );
   return { ...event, firstResponse };
-}
-
-function isRecordNotFound(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2025");
 }
 
 /** Timing metadata is returned by the transaction that recorded first output. */

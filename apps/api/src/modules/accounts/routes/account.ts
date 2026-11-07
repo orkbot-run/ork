@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited Apache material is preserved; Ork additions cover session-scoped push removal and stream ownership.
 
 import {
@@ -29,6 +30,7 @@ import {
   findDefaultVoiceCredential,
   findModelCredential,
   findModelCredentialById,
+  isRecordNotFound,
   listApprovalRules,
   listAuditEvents,
   listVoicePreferences,
@@ -223,7 +225,7 @@ export function accountRoutes(ctx: RouterContext) {
               }),
             ).catch((error) => {
               if (
-                !(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025")
+                !(error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error))
               )
                 getLogger().error("bot style restyle", error);
             });

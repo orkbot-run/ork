@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type {
   AdapterContext,
@@ -13,7 +14,7 @@ import { MediaGenerationError } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { messageBlockForArtifact } from "@orkbot/core";
 import type { ExternalEffect, Prisma, PrismaClient } from "@orkbot/db";
-import { THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
+import { isUniqueViolation, THREAD_LOCK_TRANSACTION_OPTIONS } from "@orkbot/db";
 import { z } from "zod";
 import { mediaPromptSchema, validateGeneratedMedia } from "./media-generation-provider.js";
 
@@ -136,8 +137,7 @@ export async function generateMediaFromTool(options: {
             });
             break;
           } catch (error) {
-            if (!(error && typeof error === "object" && "code" in error && error.code === "P2002"))
-              throw error;
+            if (!isUniqueViolation(error)) throw error;
           }
         }
         if (!reservation)

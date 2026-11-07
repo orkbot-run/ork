@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited routine execution remains Apache-2.0; Space work admission guards are Ork additions.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type { JobPublisher } from "@orkbot/adapter-kit";
 import {
@@ -17,7 +18,7 @@ import {
   isOneShotRoutineCrons,
   nextRoutineRunDateAcross,
 } from "@orkbot/core";
-import { lockSpaceForWork, SpaceDeletionInProgressError } from "@orkbot/db";
+import { isUniqueViolation, lockSpaceForWork, SpaceDeletionInProgressError } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizedError } from "@orkbot/logging/monitoring";
 import { protectedComputerLifecycleRefusal } from "./desktop-command-guard.js";
@@ -25,7 +26,6 @@ import type { ExecutorDeps } from "./executor-deps.js";
 import { routineRunModelPin } from "./model-selection.js";
 import { findPendingRoutineTick, routineTimerNonce } from "./routine-coalescing.js";
 import { tickRoutineWatch } from "./routine-watch.js";
-import { isUniqueViolation } from "./run-messages.js";
 import { notifyRun } from "./run-notifications.js";
 import { listAgentSkillRecords } from "./skill-tools.js";
 

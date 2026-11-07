@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited material remains Apache-2.0; Ork atomic trial reservation changes are PolyForm-covered.
 
 import { randomUUID } from "node:crypto";
@@ -8,6 +9,7 @@ import type { BillingSubscriptionSnapshot } from "@orkbot/adapter-kit";
 import { BYOK_TIERS } from "@orkbot/contracts";
 import type { BillingAccount, PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
+import { isUniqueViolation } from "./database-errors.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const ACCESS_STATUSES = new Set(["trialing", "active", "past_due"]);
@@ -240,7 +242,7 @@ export async function createBillingAccount(
     });
   } catch (error) {
     // An empty update is not a native upsert, so a concurrent create can still collide.
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && isUniqueViolation(error))) {
       throw error;
     }
     const existing = await billingAccountForOrganization(prisma, input.organizationId);

@@ -1,5 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
+
 import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
+import { isUniqueViolation } from "./database-errors.js";
 
 export async function resolveNextArtifactVersion(
   prisma: Pick<PrismaClient, "artifact">,
@@ -84,5 +90,5 @@ function artifactVersionLockKey(params: {
 }
 
 function isArtifactVersionConflict(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+  return error instanceof Prisma.PrismaClientKnownRequestError && isUniqueViolation(error);
 }

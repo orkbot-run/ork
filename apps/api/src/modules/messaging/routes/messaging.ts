@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { messagingDeliverJob } from "@orkbot/adapter-kit";
 import { displayName } from "@orkbot/core";
@@ -9,12 +10,12 @@ import {
   crossSpaceCommunicationAllowed,
   formatMessagingLinkCode,
   issueMessagingLinkCode,
+  isUniqueViolation,
   runAsSystem,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { isUniqueViolation } from "#modules/platform/routes/shared";
 
 export function messagingRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;
