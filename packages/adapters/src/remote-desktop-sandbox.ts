@@ -54,6 +54,7 @@ export interface RemoteDesktop {
   readonly sandboxId: string;
   setTimeout(timeoutMs: number): Promise<void>;
   getHost(port: number): string;
+  portHeaders?(port: number): Record<string, string> | undefined;
   commands: {
     run(
       command: string,
@@ -63,7 +64,6 @@ export interface RemoteDesktop {
   files: {
     makeDir(path: string): Promise<boolean>;
     list(path: string, options: { signal?: AbortSignal }): Promise<EntryInfo[]>;
-  portHeaders?(port: number): Record<string, string> | undefined;
     getInfo(path: string, options: { signal?: AbortSignal }): Promise<EntryInfo>;
     read(path: string, options: { format: "bytes"; signal?: AbortSignal }): Promise<Uint8Array>;
     write(
