@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 encryption is preserved. Bounded derivation caching follows LICENSE.md.
+
 import type { ScryptOptions } from "node:crypto";
 import {
   createCipheriv,
@@ -22,6 +26,7 @@ const VERSION_PREFIX = "v2:";
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
+const DERIVATION_CACHE_ENTRIES = 64;
 
 function legacyKeyFrom(secret: string): Buffer {
   return createHash("sha256").update(secret).digest();
@@ -65,6 +70,7 @@ function openSealed(sealed: SealedSecret, key: Buffer, recordId: string): string
 
 export class EncryptedSecretStore extends SecretChanges implements SecretStore {
   private warnedRemoteRef = false;
+  private derivedKeys: Map<string, Promise<Buffer>> | undefined = new Map();
 
   constructor(private readonly encryptionKey: string) {
     super();
@@ -114,6 +120,25 @@ export class EncryptedSecretStore extends SecretChanges implements SecretStore {
     return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
   }
 
+  private derivedKey(salt: Buffer): Promise<Buffer> {
+    const cache = this.derivedKeys;
+    if (!cache) return keyFromAsync(this.encryptionKey, salt);
+    const id = salt.toString("hex");
+    const cached = cache.get(id);
+    if (cached) {
+      cache.delete(id);
+      cache.set(id, cached);
+      return cached;
+    }
+    const pending = keyFromAsync(this.encryptionKey, salt).catch((error: unknown) => {
+      if (cache.get(id) === pending) cache.delete(id);
+      throw error;
+    });
+    cache.set(id, pending);
+    if (cache.size > DERIVATION_CACHE_ENTRIES) cache.delete(cache.keys().next().value!);
+    return pending;
+  }
+
   /** Derive the v2 key in the threadpool so reads leave the event loop free. */
   async load(ciphertext: string, context: SecretContext): Promise<string> {
     const recordId = typeof context === "string" ? context : context.recordId;
@@ -129,13 +154,17 @@ export class EncryptedSecretStore extends SecretChanges implements SecretStore {
     }
     if (!ciphertext.startsWith(VERSION_PREFIX)) return this.loadLegacy(ciphertext);
     const sealed = parseSealed(ciphertext);
-    const key = await keyFromAsync(this.encryptionKey, sealed.salt);
+    const key = await this.derivedKey(sealed.salt);
     if (typeof context !== "string") context.signal?.throwIfAborted();
     return openSealed(sealed, key, recordId);
   }
 
-  async start(): Promise<void> {}
+  async start(): Promise<void> {
+    this.derivedKeys ??= new Map();
+  }
   async close(): Promise<void> {
+    this.derivedKeys?.clear();
+    this.derivedKeys = undefined;
     this.clearListeners();
   }
   async delete(ref: string, _context: SecretContext): Promise<void> {
