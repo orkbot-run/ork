@@ -14,6 +14,7 @@ import {
   ThirdPartyConnectorEmulator,
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
+import type { CapabilityInstall, ConnectionCatalogSnapshot, SourcePreset } from "@orkbot/contracts";
 import { appliedModelRole, runAsSystem, runAsTenant, updateModelRole } from "@orkbot/db";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
@@ -147,6 +148,92 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     await Promise.all([replace(owner, first), replace(owner, second)]);
     expect([first, second]).toContainEqual(await backups(owner));
     expect(await backups(other)).toEqual(first);
+  });
+
+  it("installs advertised preset intent with adapter-owned protocol and encrypted credentials", async () => {
+    const cookie = await signup(app, `source-preset-${stamp}@orkbot.test`, "Source Preset");
+    const actor = await rpc<Actor>(app, cookie, "me");
+    const presets = await rpc<SourcePreset[]>(app, cookie, "capabilities/sourcePresets");
+    const template = presets.find((preset) => preset.endpoint === "input" && preset.kind === "mcp");
+    const fixed = presets.find((preset) => preset.endpoint === "fixed");
+    if (!template || !fixed) throw new Error("Missing source preset fixtures");
+    expect(
+      presets.every((preset) => !Object.hasOwn(preset, "source") && !Object.hasOwn(preset, "auth")),
+    ).toBe(true);
+    const installed = await rpc<CapabilityInstall>(app, cookie, "capabilities/install", {
+      presetId: template.id,
+      name: "Fixture source",
+      endpoint: "https://executor.example.test/mcp",
+      credential: "fake-executor-credential-value",
+    });
+    expect(installed).toMatchObject({
+      kind: "mcp",
+      source: "https://executor.example.test/mcp",
+      secretConfigured: true,
+      config: { preset: "custom", auth: { type: "bearer" } },
+    });
+    expect(JSON.stringify(installed)).not.toContain("fake-executor-credential-value");
+    const system = asSystem(handles.prisma);
+    const before = await system.capabilityInstall.count({ where: { userId: actor.userId } });
+    for (const input of [
+      { presetId: "removed-preset", name: "Rejected" },
+      {
+        presetId: fixed.id,
+        name: "Rejected",
+        endpoint: "https://override.example.test/mcp",
+        credential: "fake-token",
+      },
+      {
+        presetId: template.id,
+        name: "Rejected",
+        endpoint: "http://127.0.0.1/private",
+        credential: "fake-token",
+      },
+      {
+        presetId: template.id,
+        name: "Rejected",
+        endpoint: "https://executor.example.test/mcp",
+        config: { auth: { type: "none" } },
+      },
+    ]) {
+      const response = await app.request("/rpc/capabilities/install", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+        body: JSON.stringify({ json: input }),
+      });
+      expect(response.status).toBe(400);
+      expect(await system.capabilityInstall.count({ where: { userId: actor.userId } })).toBe(
+        before,
+      );
+    }
+  });
+
+  it("reports configured catalog failures without dropping healthy providers or leaking their errors", async () => {
+    const cookie = await signup(app, `catalog-status-${stamp}@orkbot.test`, "Catalog Status");
+    const complete = await rpc<ConnectionCatalogSnapshot>(
+      app,
+      cookie,
+      "connections/catalogSnapshot",
+    );
+    expect(complete.providers).toEqual([
+      { id: "composio", status: "ready" },
+      { id: "pipedream", status: "ready" },
+    ]);
+    expect(await rpc(app, cookie, "connections/catalog")).toEqual(complete.items);
+    vi.spyOn(composio, "catalog").mockRejectedValueOnce(new Error("fake-private-catalog-token"));
+    const partial = await rpc<ConnectionCatalogSnapshot>(
+      app,
+      cookie,
+      "connections/catalogSnapshot",
+    );
+    expect(partial.providers).toEqual([
+      { id: "composio", status: "unavailable" },
+      { id: "pipedream", status: "ready" },
+    ]);
+    expect(partial.items).toEqual(
+      complete.items.filter((item) => item.connectorId === "pipedream"),
+    );
+    expect(JSON.stringify(partial)).not.toContain("fake-private");
   });
 
   it("reconciles one scoped row per provider under concurrent catalog fetches", async () => {

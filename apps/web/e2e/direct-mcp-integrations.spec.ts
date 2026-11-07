@@ -37,7 +37,13 @@ test("shows directly registered MCP servers in Integrations without catalog conn
     });
     await expect(server.getByText("Credential saved", { exact: true })).toBeVisible();
     await expect(server.getByText(name.charAt(0), { exact: true })).toBeVisible();
-    await expect(server.getByRole("button")).toHaveCount(0);
+    // These offline fixture endpoints fail probing; only their collapsed health details are actionable.
+    await expect(server.getByTestId("mcp-health")).toHaveAttribute("data-status", "error");
+    await expect(server.getByRole("button")).toHaveCount(1);
+    await expect(server.getByTestId("mcp-health-details").getByRole("button")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
   }
   await expect(servers).not.toContainText("fake-mcp-credential");
   await captureScreenshot(page, testInfo, "integrations-direct-mcp-servers");

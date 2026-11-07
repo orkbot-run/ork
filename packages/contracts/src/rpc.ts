@@ -89,6 +89,7 @@ import {
   ComputerStatusSchema,
   ComputerUpdateSchema,
   ConnectionCatalogItemSchema,
+  ConnectionCatalogSnapshotSchema,
   ConnectionSchema,
   CreateAgentSkillInput,
   CreateBotInput,
@@ -197,6 +198,7 @@ import {
   ServerUpdatesStatusSchema,
 } from "./server-updates.js";
 import { SettingsScopeSchema, SpaceSettingSchema, settingsScopeInput } from "./settings-scope.js";
+import { SourcePresetInstallSchema, SourcePresetSchema } from "./source-presets.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -1038,6 +1040,7 @@ export const appContract = {
     review: oc.input(PluginSubmissionReviewSchema).output(PluginSubmissionSchema),
   },
   capabilities: {
+    sourcePresets: oc.output(z.array(SourcePresetSchema).max(64)),
     list: oc.output(z.array(CapabilityInstallSchema)),
     catalogSearch: oc
       .input(
@@ -1054,20 +1057,24 @@ export const appContract = {
       ),
     install: oc
       .input(
-        z.object({
-          kind: z.enum(["skill", "plugin", "mcp", "api", "graphql"]),
-          name: z.string().min(1).max(120),
-          source: z.string().min(1).max(2048),
-          config: z.record(z.string(), z.unknown()).default({}),
-          credential: z.string().max(16_384).optional(),
-          /** Required for plugins: confirms the exact previewed package content. */
-          pluginDigest: z
-            .string()
-            .regex(/^sha256:[a-f0-9]{64}$/)
-            .optional(),
-          /** Plugins only: which parts to add; all supported parts when omitted. */
-          pluginParts: z.array(PluginPartSchema).min(1).max(2).optional(),
-        }),
+        z.union([
+          SourcePresetInstallSchema,
+          z.object({
+            presetId: z.never().optional(),
+            kind: z.enum(["skill", "plugin", "mcp", "api", "graphql"]),
+            name: z.string().min(1).max(120),
+            source: z.string().min(1).max(2048),
+            config: z.record(z.string(), z.unknown()).default({}),
+            credential: z.string().max(16_384).optional(),
+            /** Required for plugins: confirms the exact previewed package content. */
+            pluginDigest: z
+              .string()
+              .regex(/^sha256:[a-f0-9]{64}$/)
+              .optional(),
+            /** Plugins only: which parts to add; all supported parts when omitted. */
+            pluginParts: z.array(PluginPartSchema).min(1).max(2).optional(),
+          }),
+        ]),
       )
       .output(CapabilityInstallSchema),
     /** Add or remove parts of an installed plugin at its pinned version; no parts removes it. */
@@ -1186,6 +1193,14 @@ export const appContract = {
         }),
       )
       .output(z.array(ConnectionCatalogItemSchema)),
+    catalogSnapshot: oc
+      .input(
+        z.object({
+          query: z.string().optional(),
+          connectorId: IntegrationProviderIdSchema.optional(),
+        }),
+      )
+      .output(ConnectionCatalogSnapshotSchema),
     list: oc.output(z.array(ConnectionSchema)),
     begin: oc
       .input(

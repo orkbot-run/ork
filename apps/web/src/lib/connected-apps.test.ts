@@ -1,4 +1,8 @@
-import type { ConnectionCatalogItem } from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
+import type { Connection, ConnectionCatalogItem } from "@orkbot/contracts";
 import { expect, it } from "vitest";
 import { connectedAppMarks } from "./connected-apps";
 
@@ -94,3 +98,23 @@ for (const connected of [false, true]) {
     ]);
   });
 }
+
+it.each(["error", "revoked"] as const)(
+  "does not promote stale connected artwork over a fresh %s row",
+  (status) => {
+    const stale = catalog.slice(0, 2).map((item) => ({ ...item, connected: true }));
+    const rows = stale.map(
+      (item, index) =>
+        ({
+          id: `account-${index}`,
+          connectorId: item.connectorId,
+          provider: item.slug.toUpperCase(),
+          status: index === 0 ? status : "connected",
+          displayName: item.name,
+          capabilities: [],
+          createdAt: "2026-01-01",
+        }) as Connection,
+    );
+    expect(connectedAppMarks(stale, rows)).toEqual([{ name: "Beta", logo: null }]);
+  },
+);

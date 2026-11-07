@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { McpServerHealth } from "@orkbot/contracts";
@@ -32,6 +36,13 @@ const render = (health: Partial<McpServerHealth>) =>
 describe("McpServerHealthLine", () => {
   it("shows nothing when the server works", () => {
     expect(render({ status: "ok", toolCount: 12 })).toBe("");
+  });
+
+  it("shows a non-blocking partial catalog warning without treating the server as broken", () => {
+    const html = render({ status: "ok", toolCount: 12, message: "Fixture catalog is incomplete." });
+    expect(html).toContain('data-status="ok"');
+    expect(visibleText(html)).toBe("Fixture catalog is incomplete.");
+    expect(html).not.toContain("Not working");
   });
 
   it("says a test is checking the connection until the server reports installing", () => {

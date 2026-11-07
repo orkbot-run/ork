@@ -13,23 +13,26 @@ test("a failed integrations load offers Retry instead of an empty catalog", asyn
 
   // A 502 is what the proxy answers while the API restarts.
   let failCatalog = true;
-  await page.route("**/rpc/connections/catalog", async (route) => {
+  await page.route("**/rpc/connections/catalogSnapshot", async (route) => {
     if (failCatalog) {
       await route.fulfill({ status: 502 });
       return;
     }
     await route.fulfill({
       json: {
-        json: [
-          {
-            connectorId: "demo",
-            slug: "slack",
-            name: "Slack",
-            logo: null,
-            connected: false,
-            noAuth: false,
-          },
-        ],
+        json: {
+          items: [
+            {
+              connectorId: "demo",
+              slug: "slack",
+              name: "Slack",
+              logo: null,
+              connected: false,
+              noAuth: false,
+            },
+          ],
+          providers: [{ id: "demo", status: "ready" }],
+        },
       },
     });
   });

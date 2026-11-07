@@ -200,6 +200,7 @@ export { SerenityMemoryProvider } from "./serenity-memory-provider.js";
 export * from "./skill-tools.js";
 export * from "./slack-install-provider.js";
 export * from "./smtp-email.js";
+export * from "./source-presets.js";
 export * from "./storage-migration.js";
 export * from "./strategic-initiative.js";
 export * from "./stripe-billing.js";

@@ -1,5 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { Connection, ConnectionCatalogItem } from "@orkbot/contracts";
-import { matchFeaturedConnectorId } from "@orkbot/core";
+import { isCatalogItemConnected, matchFeaturedConnectorId } from "@orkbot/core";
 
 function isFamiliarApp(item: ConnectionCatalogItem) {
   return (
@@ -14,16 +18,7 @@ export function connectedAppMarks(
   catalog: readonly ConnectionCatalogItem[],
   connections: readonly Connection[],
 ) {
-  const connected = catalog.filter(
-    (item) =>
-      item.connected ||
-      connections.some(
-        (row) =>
-          row.status === "connected" &&
-          row.connectorId === item.connectorId &&
-          row.provider.toLowerCase() === item.slug.toLowerCase(),
-      ),
-  );
+  const connected = catalog.filter((item) => isCatalogItemConnected(connections, item));
   const apps = [...(connected.length ? connected : catalog)]
     .sort(
       (a, b) =>

@@ -13,7 +13,7 @@ import {
   resolveConfiguredConnector,
   sanitizeConnectorError,
 } from "@orkbot/adapters";
-import type { Actor } from "@orkbot/contracts";
+import type { Actor, ConnectionCatalogSnapshot } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   IsolationError,
@@ -225,48 +225,59 @@ function connectionContext(
 
 export function connectionsRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;
+  async function catalogSnapshot(
+    actor: Actor,
+    input: { query?: string; connectorId?: string },
+    signal?: AbortSignal,
+  ): Promise<ConnectionCatalogSnapshot> {
+    const adapterContext = connectionContext(actor, "connections.catalog", signal);
+    const selected = input.connectorId
+      ? await resolveConfiguredConnector(deps.connectors, input.connectorId)
+      : undefined;
+    if (input.connectorId && !selected)
+      throw new ORPCError("BAD_REQUEST", { message: "Connector is not configured" });
+    const configured = input.connectorId
+      ? [{ id: input.connectorId }]
+      : await deps.connectors.configuredProviders();
+    const catalogs = await Promise.all(
+      configured.map(async ({ id }) => {
+        const provider = selected ?? deps.connectors.managed(id);
+        try {
+          if (!provider) throw new Error("Connector is not configured");
+          const [items, reconnectRefs] = await Promise.all([
+            provider.catalog(adapterContext, input.query),
+            provider.listReconnectRefs?.(adapterContext).catch(() => []) ?? [],
+          ]);
+          const nowConnected = items.filter((item) => item.connected).map((item) => item.slug);
+          if (nowConnected.length > 0 || reconnectRefs.length > 0) {
+            await reconcileConnections(deps.prisma, actor, id, nowConnected, reconnectRefs).catch(
+              (error) =>
+                getLogger().error("Connection reconciliation failed", error, { connectorId: id }),
+            );
+          }
+          return { items, provider: { id, status: "ready" as const } };
+        } catch {
+          return {
+            items: [] as ConnectorCatalogItem[],
+            provider: { id, status: "unavailable" as const },
+          };
+        }
+      }),
+    );
+    return {
+      items: catalogs.flatMap((catalog) => catalog.items),
+      providers: catalogs.map((catalog) => catalog.provider),
+    };
+  }
   return {
     connections: {
-      catalog: authed.connections.catalog.handler(async ({ context, input }) => {
-        const adapterContext = connectionContext(
-          context.actor,
-          "connections.catalog",
-          context.signal,
-        );
-        const selected = input.connectorId ? deps.connectors.managed(input.connectorId) : undefined;
-        if (input.connectorId && !selected)
-          throw new ORPCError("BAD_REQUEST", { message: "Connector is not configured" });
-        const providers = selected ? [selected] : deps.connectors.managedProviders();
-        const catalogs = await Promise.all(
-          providers.map(async (provider): Promise<ConnectorCatalogItem[]> => {
-            try {
-              const [items, reconnectRefs] = await Promise.all([
-                provider.catalog(adapterContext, input.query),
-                provider.listReconnectRefs?.(adapterContext).catch(() => []) ?? [],
-              ]);
-              const nowConnected = items.filter((item) => item.connected).map((item) => item.slug);
-              if (nowConnected.length > 0 || reconnectRefs.length > 0) {
-                await reconcileConnections(
-                  deps.prisma,
-                  context.actor,
-                  provider.describe().id,
-                  nowConnected,
-                  reconnectRefs,
-                ).catch((error) => {
-                  getLogger().error(
-                    `${provider.describe().id} connection reconciliation failed`,
-                    error,
-                  );
-                });
-              }
-              return items;
-            } catch {
-              return [];
-            }
-          }),
-        );
-        return catalogs.flat();
-      }),
+      catalog: authed.connections.catalog.handler(
+        async ({ context, input }) =>
+          (await catalogSnapshot(context.actor, input, context.signal)).items,
+      ),
+      catalogSnapshot: authed.connections.catalogSnapshot.handler(async ({ context, input }) =>
+        catalogSnapshot(context.actor, input, context.signal),
+      ),
       list: authed.connections.list.handler(async ({ context }) => {
         const rows = await deps.prisma.connection.findMany({
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId },

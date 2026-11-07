@@ -2567,6 +2567,10 @@ msgstr "Cron-Ausdruck"
 msgid "Current password"
 msgstr "Aktuelles Passwort"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Custom connector"
+msgstr "Eigener Connector"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "Custom header"
 msgstr ""
@@ -3103,10 +3107,6 @@ msgstr "Jeden Monat"
 #: src/pages/RoutineSchedule.tsx
 msgid "Every week"
 msgstr "Jede Woche"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Executor token"
-msgstr "Executor-Token"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
@@ -4886,6 +4886,7 @@ msgstr ""
 
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Pending"
 msgstr ""
@@ -5107,6 +5108,7 @@ msgid "Recommended"
 msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr ""
@@ -6699,10 +6701,6 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr ""
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Treg token"
-msgstr "Treg-Token"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Trial"

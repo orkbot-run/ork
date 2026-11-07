@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 // @vitest-environment jsdom
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import type { ReactNode } from "react";
@@ -16,6 +20,7 @@ const state = vi.hoisted(() => ({
   read: vi.fn(),
   write: vi.fn(),
   current: true,
+  contextGeneration: 0,
   scope: vi.fn(),
   persisted: vi.fn(),
   focused: true,
@@ -33,9 +38,26 @@ vi.mock("expo-router", () => ({
   },
 }));
 // The plugin catalog has its own seam so app-catalog tests keep their own rpc fakes.
-vi.mock("./api", () => ({
-  rpc: (proc: string, ...args: unknown[]) =>
-    proc === "marketplace/catalog" ? state.marketplace() : state.rpc(proc, ...args),
+const sendFixture = (proc: string, ...args: unknown[]) => {
+  const result = proc === "marketplace/catalog" ? state.marketplace() : state.rpc(proc, ...args);
+  return proc === "connections/catalogSnapshot"
+    ? Promise.resolve(result).then((value) =>
+        Array.isArray(value)
+          ? { items: value, providers: [{ id: "test", status: "ready" }] }
+          : value,
+      )
+    : result;
+};
+vi.mock("./api", () => ({ rpc: (proc: string, ...args: unknown[]) => sendFixture(proc, ...args) }));
+vi.mock("./settings-target", () => ({
+  ACCOUNT_SETTINGS: { scope: "account" },
+  captureSettingsContext: () => {
+    const generation = state.contextGeneration;
+    return {
+      send: (proc: string, ...args: unknown[]) => sendFixture(proc, ...args),
+      isCurrent: () => state.current && generation === state.contextGeneration,
+    };
+  },
 }));
 vi.mock("../components/plugin-icon", () => ({
   PluginIcon: ({ name }: { name: string }) => <span>{name[0]}</span>,
@@ -110,12 +132,14 @@ vi.mock("../components/native-action-button", () => ({
     label,
     onPress,
     disabled,
+    busy,
   }: {
     label: string;
     onPress: () => void;
     disabled?: boolean;
+    busy?: boolean;
   }) => (
-    <button type="button" disabled={disabled} onClick={onPress}>
+    <button type="button" disabled={disabled || busy} onClick={onPress}>
       {label}
     </button>
   ),
@@ -200,6 +224,7 @@ let rejectCatalog: (error: Error) => void;
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
   state.current = true;
+  state.contextGeneration = 0;
   state.focused = true;
   state.appStateChange = null;
   state.scope.mockReset().mockResolvedValue({ userId: "user-a", spaceId: "space-a" });
@@ -217,7 +242,7 @@ beforeEach(() => {
   state.rpc
     .mockReset()
     .mockImplementation((proc: string) =>
-      proc === "connections/catalog"
+      proc === "connections/catalogSnapshot"
         ? pending
         : Promise.resolve(proc === "connections/list" ? [account] : []),
     );
@@ -264,7 +289,11 @@ it("keeps cached rows after a refresh failure and offers Retry", async () => {
   expect(retry).toBeDefined();
   state.rpc.mockImplementation((proc: string) =>
     Promise.resolve(
-      proc === "connections/catalog" ? [item] : proc === "connections/list" ? [account] : [],
+      proc === "connections/catalogSnapshot"
+        ? [item]
+        : proc === "connections/list"
+          ? [account]
+          : [],
     ),
   );
   await act(async () => retry?.click());
@@ -369,7 +398,7 @@ it.each(["Remove", "Uninstall"])(
     );
     await act(async () => added?.click());
     state.rpc.mockImplementation((proc: string) =>
-      proc === "connections/catalog"
+      proc === "connections/catalogSnapshot"
         ? Promise.reject(new Error("Unavailable"))
         : Promise.resolve([]),
     );
@@ -391,7 +420,7 @@ it("persists a completed connection before refreshing", async () => {
     if (proc === "connections/begin")
       return Promise.resolve({ connectionId: account.id, authorizationUrl: null });
     if (proc === "connections/complete") return Promise.resolve(account);
-    if (proc === "connections/catalog") return Promise.reject(new Error("Unavailable"));
+    if (proc === "connections/catalogSnapshot") return Promise.reject(new Error("Unavailable"));
     return Promise.resolve([]);
   });
   const add = [...container.querySelectorAll("button")].find(
@@ -433,7 +462,9 @@ it("rebuilds a stale space and continues refreshing while the screen stays open"
   state.read.mockReturnValue(null);
   state.rpc.mockImplementation((proc: string) =>
     Promise.resolve(
-      proc === "connections/catalog" ? [{ ...item, name: "Recovered app", connected: false }] : [],
+      proc === "connections/catalogSnapshot"
+        ? [{ ...item, name: "Recovered app", connected: false }]
+        : [],
     ),
   );
   await act(async () => resolveCatalog([item]));
@@ -512,7 +543,7 @@ it("refreshes a different space on focus return and rejects the blurred refresh"
     resolveNew = resolve;
   });
   state.rpc.mockImplementation((proc: string) =>
-    proc === "connections/catalog" ? pending : Promise.resolve([]),
+    proc === "connections/catalogSnapshot" ? pending : Promise.resolve([]),
   );
   state.focused = true;
   await render();
@@ -580,7 +611,7 @@ it.each(["rename", "revoke", "uninstall", "connect"])(
     state.read.mockReturnValue(null);
     state.rpc.mockImplementation((proc: string) =>
       Promise.resolve(
-        proc === "connections/catalog"
+        proc === "connections/catalogSnapshot"
           ? [{ ...item, name: "New space app", connected: false }]
           : [],
       ),
@@ -613,7 +644,9 @@ it("ignores an old focus identity error after the new focus succeeds", async () 
   state.scope.mockResolvedValue({ userId: "user-a", spaceId: "space-b" });
   state.rpc.mockImplementation((proc: string) =>
     Promise.resolve(
-      proc === "connections/catalog" ? [{ ...item, name: "New space app", connected: false }] : [],
+      proc === "connections/catalogSnapshot"
+        ? [{ ...item, name: "New space app", connected: false }]
+        : [],
     ),
   );
   state.focused = true;
@@ -889,3 +922,265 @@ it("registers an OAuth MCP server and starts the existing browser callback flow"
     state.rpc.mock.calls.filter(([proc]) => proc === "mcp/servers/list").length,
   ).toBeGreaterThan(initialReads);
 });
+
+const fixedPreset = {
+  id: "fixture-preset",
+  label: "Fixture source",
+  kind: "mcp",
+  endpoint: "fixed",
+  credential: "required",
+};
+async function clickLabel(label: string) {
+  const button = [...container.querySelectorAll("button")].find(
+    (node) => node.textContent === label,
+  );
+  if (!button) throw new Error(`Missing fixture action ${label}`);
+  await act(async () => button.click());
+}
+async function setSourceInput(placeholder: string, value: string) {
+  const input = container.querySelector(`input[placeholder="${placeholder}"]`);
+  if (!(input instanceof HTMLInputElement)) throw new Error("Missing source input");
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+function withPreset() {
+  const fallback = state.rpc.getMockImplementation()!;
+  state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+    proc === "capabilities/sourcePresets"
+      ? Promise.resolve([fixedPreset])
+      : fallback(proc, ...args),
+  );
+}
+it("submits a fetched fixed preset without a client endpoint or authentication override", async () => {
+  withPreset();
+  await render();
+  await act(async () => resolveCatalog([]));
+  await clickLabel("Fixture source");
+  expect(container.querySelector('input[placeholder="https://example.com/mcp"]')).toBeNull();
+  expect(container.textContent).not.toContain("Authentication");
+  await setSourceInput("Credential", "fake-preset-token");
+  await clickLabel("Verify and add");
+  expect(state.rpc).toHaveBeenCalledWith("capabilities/install", {
+    presetId: fixedPreset.id,
+    name: fixedPreset.label,
+    credential: "fake-preset-token",
+  });
+});
+it.each(["resolve", "reject"])(
+  "retires canceled source busy state and ignores its late %s while the replacement verifies",
+  async (outcome) => {
+    withPreset();
+    const fallback = state.rpc.getMockImplementation()!;
+    let complete!: (value: unknown) => void;
+    let reject!: (error: Error) => void;
+    const pending = new Promise((resolve, fail) => {
+      complete = resolve;
+      reject = fail;
+    });
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "capabilities/install" ? pending : fallback(proc, ...args),
+    );
+    await render();
+    await act(async () => resolveCatalog([]));
+    await clickLabel("Fixture source");
+    await setSourceInput("Credential", "fake-first-token");
+    await clickLabel("Verify and add");
+    expect(
+      [...container.querySelectorAll("button")].find(
+        (node) => node.textContent === "Verify and add",
+      )?.disabled,
+    ).toBe(true);
+    await clickLabel("Cancel");
+    await clickLabel("Fixture source");
+    expect(
+      [...container.querySelectorAll("button")].find(
+        (node) => node.textContent === "Verify and add",
+      )?.disabled,
+    ).toBe(false);
+    await setSourceInput("Credential", "fake-second-token");
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "capabilities/install" ? new Promise(() => {}) : fallback(proc, ...args),
+    );
+    await clickLabel("Verify and add");
+    await act(async () =>
+      outcome === "resolve"
+        ? complete({ id: "retired-source" })
+        : reject(new Error("Retired source failure")),
+    );
+    expect(
+      [...container.querySelectorAll("button")].find(
+        (node) => node.textContent === "Verify and add",
+      )?.disabled,
+    ).toBe(true);
+    expect(container.textContent).not.toContain("Retired source failure");
+    expect(container.querySelector('input[placeholder="Credential"]')?.getAttribute("value")).toBe(
+      "fake-second-token",
+    );
+  },
+);
+it.each(["account", "server", "space"])(
+  "rejects a preset completion after a %s scope change",
+  async () => {
+    withPreset();
+    const fallback = state.rpc.getMockImplementation()!;
+    let complete!: (value: unknown) => void;
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "capabilities/install"
+        ? new Promise((resolve) => {
+            complete = resolve;
+          })
+        : fallback(proc, ...args),
+    );
+    await render();
+    await act(async () => resolveCatalog([]));
+    await clickLabel("Fixture source");
+    await setSourceInput("Credential", "fake-old-token");
+    await clickLabel("Verify and add");
+    const calls = state.rpc.mock.calls.length;
+    state.contextGeneration += 1;
+    await render();
+    await act(async () => complete({ id: "retired-source" }));
+    expect(state.rpc).toHaveBeenCalledTimes(calls);
+    expect(container.querySelector('input[placeholder="Credential"]')).toBeNull();
+    expect(container.textContent).not.toContain("Fixture source");
+  },
+);
+it("clears removed preset metadata after a failed refresh while retaining cached accounts", async () => {
+  withPreset();
+  state.read.mockReturnValue({ catalog: [item], connections: [account] });
+  await render();
+  await act(async () => resolveCatalog([item]));
+  await clickLabel("Fixture source");
+  const fallback = state.rpc.getMockImplementation()!;
+  state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+    proc === "capabilities/sourcePresets"
+      ? Promise.reject(new Error("Preset catalog unavailable"))
+      : fallback(proc, ...args),
+  );
+  state.focused = false;
+  await render();
+  state.focused = true;
+  await render();
+  expect(container.textContent).not.toContain("Fixture source");
+  expect(container.textContent).toContain("Example appAdded");
+  expect(container.textContent).toContain("Retry");
+  expect(container.querySelector('input[placeholder="Credential"]')).toBeNull();
+});
+it.each(["error", "revoked"])(
+  "uses fresh %s account state instead of cached connected after a provider failure",
+  async (status) => {
+    state.read.mockReturnValue({ catalog: [item], connections: [account] });
+    const fallback = state.rpc.getMockImplementation()!;
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "connections/catalogSnapshot"
+        ? Promise.resolve({
+            items: [],
+            providers: [{ id: item.connectorId, status: "unavailable" }],
+          })
+        : proc === "connections/list"
+          ? Promise.resolve([{ ...account, status }])
+          : fallback(proc, ...args),
+    );
+    await render();
+    expect(container.textContent).toContain("Example app");
+    expect(container.textContent).not.toContain("Example appAdded");
+    expect(container.textContent).toContain(status === "error" ? "Reconnect" : "Add");
+    expect(container.textContent).toContain("Retry");
+  },
+);
+it("shows a working MCP server's partial catalog warning without hiding its auth status", async () => {
+  const fallback = state.rpc.getMockImplementation()!;
+  state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+    proc === "mcp/servers/list"
+      ? Promise.resolve([
+          {
+            id: "fixture-server",
+            name: "Fixture MCP",
+            enabled: true,
+            hasSecret: false,
+            oauthStatus: "none",
+            health: { status: "ok", message: "Fixture catalog is incomplete." },
+          },
+        ])
+      : fallback(proc, ...args),
+  );
+  await render();
+  await act(async () => resolveCatalog([]));
+  expect(container.textContent).toContain("Fixture catalog is incomplete.");
+  expect(container.textContent).toContain("No auth");
+  expect(container.textContent).not.toContain("Not working");
+});
+
+it.each(["resolve", "reject"])(
+  "keeps an edited source draft after its earlier save %s and releases only its busy flag",
+  async (outcome) => {
+    withPreset();
+    const fallback = state.rpc.getMockImplementation()!;
+    let complete!: (value: unknown) => void;
+    let fail!: (error: Error) => void;
+    const pending = new Promise((resolve, reject) => {
+      complete = resolve;
+      fail = reject;
+    });
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "capabilities/install" ? pending : fallback(proc, ...args),
+    );
+    await render();
+    await act(async () => resolveCatalog([]));
+    await clickLabel("Fixture source");
+    await setSourceInput("Credential", "fake-original-token");
+    await clickLabel("Verify and add");
+    await setSourceInput("Credential", "fake-edited-token");
+    await act(async () =>
+      outcome === "resolve"
+        ? complete({ id: "accepted-source" })
+        : fail(new Error("Earlier save failure")),
+    );
+    expect(
+      (container.querySelector('input[placeholder="Credential"]') as HTMLInputElement).value,
+    ).toBe("fake-edited-token");
+    expect(
+      [...container.querySelectorAll("button")].find(
+        (node) => node.textContent === "Verify and add",
+      )?.disabled,
+    ).toBe(false);
+    expect(container.textContent).not.toContain("Earlier save failure");
+  },
+);
+it("does not publish a preset catalog response owned by a retired context", async () => {
+  const fallback = state.rpc.getMockImplementation()!;
+  let complete!: (value: unknown) => void;
+  state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+    proc === "capabilities/sourcePresets"
+      ? new Promise((resolve) => {
+          complete = resolve;
+        })
+      : fallback(proc, ...args),
+  );
+  await render();
+  state.contextGeneration += 1;
+  await render();
+  await act(async () => complete([fixedPreset]));
+  expect(container.textContent).not.toContain("Fixture source");
+  expect(state.rpc.mock.calls.filter(([proc]) => proc === "capabilities/install")).toHaveLength(0);
+});
+it.each(["ready", "unavailable", "unconfigured"])(
+  "distinguishes a cold %s catalog outcome",
+  async (status) => {
+    const fallback = state.rpc.getMockImplementation()!;
+    state.rpc.mockImplementation((proc: string, ...args: unknown[]) =>
+      proc === "connections/catalogSnapshot"
+        ? Promise.resolve({
+            items: [],
+            providers: status === "unconfigured" ? [] : [{ id: "test", status }],
+          })
+        : fallback(proc, ...args),
+    );
+    await render();
+    expect(container.querySelector('[data-testid="integrations-loading"]')).toBeNull();
+    expect(container.textContent?.includes("No results")).toBe(status === "ready");
+    expect(container.textContent?.includes("Retry")).toBe(status === "unavailable");
+  },
+);

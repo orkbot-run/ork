@@ -2567,6 +2567,10 @@ msgstr "ביטוי Cron"
 msgid "Current password"
 msgstr "סיסמה נוכחית"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Custom connector"
+msgstr "Custom connector"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "Custom header"
 msgstr "כותרת מותאמת אישית"
@@ -3103,10 +3107,6 @@ msgstr "כל חודש"
 #: src/pages/RoutineSchedule.tsx
 msgid "Every week"
 msgstr "כל שבוע"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Executor token"
-msgstr "טוקן Executor"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
@@ -4886,6 +4886,7 @@ msgstr "מושהה"
 
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Pending"
 msgstr ""
@@ -5107,6 +5108,7 @@ msgid "Recommended"
 msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "חיבור מחדש"
@@ -6699,10 +6701,6 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "התייחסות כמו לאדם"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Treg token"
-msgstr "טוקן Treg"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Trial"

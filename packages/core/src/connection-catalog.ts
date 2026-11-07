@@ -1,7 +1,58 @@
-import type { Connection, ConnectionCatalogItem } from "@orkbot/contracts";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral catalog state follows LICENSE.md.
+
+import type {
+  Connection,
+  ConnectionCatalogItem,
+  ConnectionCatalogSnapshot,
+} from "@orkbot/contracts";
 import { abortableDelay } from "./async.js";
 
 type CatalogRef = Pick<ConnectionCatalogItem, "connectorId" | "slug">;
+
+export function connectionCatalogState(snapshot: ConnectionCatalogSnapshot) {
+  if (snapshot.providers.length === 0) return "unconfigured";
+  const unavailable = snapshot.providers.filter(
+    (provider) => provider.status === "unavailable",
+  ).length;
+  if (unavailable === snapshot.providers.length) return "error";
+  if (unavailable > 0) return "partial";
+  return snapshot.items.length === 0 ? "empty" : "ready";
+}
+
+/** Keep last-known apps only for providers whose current refresh failed. */
+export function mergeConnectionCatalog(
+  previous: readonly ConnectionCatalogItem[],
+  snapshot: ConnectionCatalogSnapshot,
+) {
+  const unavailable = new Set(
+    snapshot.providers
+      .filter((provider) => provider.status === "unavailable")
+      .map((provider) => provider.id),
+  );
+  const keys = new Set(snapshot.items.map(catalogItemKey));
+  return [
+    ...snapshot.items,
+    ...previous
+      .filter((item) => unavailable.has(item.connectorId) && !keys.has(catalogItemKey(item)))
+      .map((item) => ({ ...item, connected: false })),
+  ];
+}
+
+export function catalogItemConnectionState(
+  connections: readonly Connection[],
+  item: ConnectionCatalogItem,
+) {
+  if (isCatalogItemConnected(connections, item)) return "connected";
+  const accounts = connections.filter(
+    (row) =>
+      row.connectorId === item.connectorId &&
+      row.provider.toLowerCase() === item.slug.toLowerCase(),
+  );
+  if (accounts.some((row) => row.status === "pending")) return "pending";
+  return accounts.some((row) => row.status === "error") ? "reconnect" : "disconnected";
+}
 
 export function catalogItemKey(item: CatalogRef) {
   return `${item.connectorId}:${item.slug}`;
@@ -12,7 +63,7 @@ export function catalogItemAccounts(connections: readonly Connection[], item: Ca
   return connections.filter(
     (row) =>
       row.connectorId === item.connectorId &&
-      row.provider === item.slug &&
+      row.provider.toLowerCase() === item.slug.toLowerCase() &&
       (row.status === "connected" || row.status === "pending"),
   );
 }
@@ -21,10 +72,12 @@ export function isCatalogItemConnected(
   connections: readonly Connection[],
   item: ConnectionCatalogItem,
 ) {
-  return (
-    item.connected ||
-    catalogItemAccounts(connections, item).some((row) => row.status === "connected")
+  const rows = connections.filter(
+    (row) =>
+      row.connectorId === item.connectorId &&
+      row.provider.toLowerCase() === item.slug.toLowerCase(),
   );
+  return rows.length > 0 ? rows.some((row) => row.status === "connected") : item.connected;
 }
 
 /** "Gmail", then numbered accounts, skipping names already connected or authorizing. */

@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; scope freshness follows LICENSE.md.
+
 import type { Connection, ConnectionCatalogItem, Me } from "@orkbot/contracts";
 import { ConnectionCatalogItemSchema, ConnectionSchema } from "@orkbot/contracts";
 import { Directory, File, Paths } from "expo-file-system";
-import { currentApiBase, rpc, selectedSpaceId } from "./api";
+import { currentApiBase, rpc, selectedSpaceId, spaceSelectionSeq } from "./api";
 import { t } from "./i18n";
 import {
   currentSessionGeneration,
@@ -19,6 +23,7 @@ export type IntegrationsCacheScope = {
   spaceId: string;
   sessionGeneration: number;
   selectionId: string | null;
+  selectionGeneration?: number;
 };
 
 // Reuse verified identity within this session, never across sign-out or server changes.
@@ -27,15 +32,21 @@ let identity:
       apiBase: string;
       generation: number;
       selectionId: string | null;
+      selectionGeneration: number;
       user: Promise<Pick<Me, "userId" | "spaceId">>;
     }
   | undefined;
 
 export async function persistedIntegrationsCacheScope(): Promise<IntegrationsCacheScope | null> {
   const generation = currentSessionGeneration();
+  const selectionGeneration = spaceSelectionSeq();
   const saved = await loadVerifiedIntegrationsScope();
   if (!saved) return null;
-  const scope = { ...saved, sessionGeneration: generation };
+  const scope = {
+    ...saved,
+    sessionGeneration: generation,
+    selectionGeneration,
+  };
   return isIntegrationsScopeCurrent(scope) ? scope : null;
 }
 
@@ -43,14 +54,16 @@ export async function integrationsCacheScope(): Promise<IntegrationsCacheScope> 
   const apiBase = currentApiBase();
   const generation = currentSessionGeneration();
   const spaceId = selectedSpaceId();
+  const selectionGeneration = spaceSelectionSeq();
   if (
     !identity ||
     identity.apiBase !== apiBase ||
     identity.generation !== generation ||
-    identity.selectionId !== spaceId
+    identity.selectionId !== spaceId ||
+    identity.selectionGeneration !== selectionGeneration
   ) {
     const user = rpc("me");
-    const entry = { apiBase, generation, selectionId: spaceId, user };
+    const entry = { apiBase, generation, selectionId: spaceId, selectionGeneration, user };
     identity = entry;
     void user.catch(() => {
       if (identity === entry) identity = undefined;
@@ -60,7 +73,8 @@ export async function integrationsCacheScope(): Promise<IntegrationsCacheScope> 
   if (
     apiBase !== currentApiBase() ||
     generation !== currentSessionGeneration() ||
-    spaceId !== selectedSpaceId()
+    spaceId !== selectedSpaceId() ||
+    selectionGeneration !== spaceSelectionSeq()
   )
     throw new Error(t("Could not load integrations"));
   if (!me.userId || !(spaceId || me.spaceId)) throw new Error(t("Could not load integrations"));
@@ -70,8 +84,14 @@ export async function integrationsCacheScope(): Promise<IntegrationsCacheScope> 
     spaceId: spaceId || me.spaceId,
     sessionGeneration: generation,
     selectionId: spaceId,
+    selectionGeneration,
   };
-  void saveVerifiedIntegrationsScope(generation, scope);
+  void saveVerifiedIntegrationsScope(generation, {
+    apiBase,
+    userId: scope.userId,
+    spaceId: scope.spaceId,
+    selectionId: spaceId,
+  });
   return scope;
 }
 
@@ -79,7 +99,8 @@ export function isIntegrationsScopeCurrent(scope: IntegrationsCacheScope): boole
   return (
     scope.apiBase === currentApiBase() &&
     scope.sessionGeneration === currentSessionGeneration() &&
-    scope.selectionId === selectedSpaceId()
+    scope.selectionId === selectedSpaceId() &&
+    (scope.selectionGeneration === undefined || scope.selectionGeneration === spaceSelectionSeq())
   );
 }
 

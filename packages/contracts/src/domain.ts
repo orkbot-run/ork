@@ -832,6 +832,17 @@ export const ConnectionCatalogItemSchema = z.object({
 });
 export type ConnectionCatalogItem = z.infer<typeof ConnectionCatalogItemSchema>;
 
+export const ConnectionCatalogSnapshotSchema = z.object({
+  items: z.array(ConnectionCatalogItemSchema),
+  providers: z.array(
+    z.object({
+      id: IntegrationProviderIdSchema,
+      status: z.enum(["ready", "unavailable"]),
+    }),
+  ),
+});
+export type ConnectionCatalogSnapshot = z.infer<typeof ConnectionCatalogSnapshotSchema>;
+
 export const ActionApprovalRuleSchema = z.object({
   id: Id,
   effect: z.enum(["always_allow", "require_approval", "deny"]),

@@ -1,9 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import type { Connection, ConnectionCatalogItem } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import {
   catalogItemAccounts,
+  catalogItemConnectionState,
   connectCatalogItem,
+  connectionCatalogState,
   isCatalogItemConnected,
+  mergeConnectionCatalog,
   nextCatalogAccountLabel,
   waitForConnection,
 } from "./connection-catalog.js";
@@ -22,6 +29,61 @@ function account(id: string, status: Connection["status"], provider = "gmail") {
 }
 
 describe("connection catalog", () => {
+  it("distinguishes configured empty, partial, failed and absent catalogs", () => {
+    expect(connectionCatalogState({ items: [], providers: [] })).toBe("unconfigured");
+    expect(
+      connectionCatalogState({ items: [], providers: [{ id: "fixture", status: "ready" }] }),
+    ).toBe("empty");
+    expect(
+      connectionCatalogState({ items: [], providers: [{ id: "fixture", status: "unavailable" }] }),
+    ).toBe("error");
+    expect(
+      connectionCatalogState({
+        items: [item],
+        providers: [
+          { id: item.connectorId, status: "ready" },
+          { id: "other", status: "unavailable" },
+        ],
+      }),
+    ).toBe("partial");
+  });
+  it("retains cached rows only for unavailable providers and never for a successful empty refresh", () => {
+    const other = { ...item, connectorId: "other", name: "Other" };
+    expect(
+      mergeConnectionCatalog([item, other], {
+        items: [],
+        providers: [
+          { id: item.connectorId, status: "unavailable" },
+          { id: "other", status: "ready" },
+        ],
+      }),
+    ).toEqual([item]);
+    expect(
+      mergeConnectionCatalog([item], {
+        items: [],
+        providers: [{ id: item.connectorId, status: "ready" }],
+      }),
+    ).toEqual([]);
+    expect(mergeConnectionCatalog([item], { items: [], providers: [] })).toEqual([]);
+  });
+  it("uses connected, pending and reconnect account state without confusing revoked or unrelated rows", () => {
+    expect(
+      catalogItemConnectionState([account("upper", "error", "GMAIL")], {
+        ...item,
+        connected: true,
+      }),
+    ).toBe("reconnect");
+    expect(catalogItemConnectionState([account("a", "error")], item)).toBe("reconnect");
+    expect(catalogItemConnectionState([account("a", "error"), account("b", "pending")], item)).toBe(
+      "pending",
+    );
+    expect(
+      catalogItemConnectionState([account("a", "connected"), account("b", "pending")], item),
+    ).toBe("connected");
+    expect(
+      catalogItemConnectionState([account("a", "revoked"), account("b", "error", "other")], item),
+    ).toBe("disconnected");
+  });
   it("counts only this app's live accounts", () => {
     const rows = [
       account("a", "connected"),

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration settings follow LICENSE.md.
+
 import { MenuView } from "@expo/ui/community/menu";
 import type {
   CapabilityInstall,
@@ -6,26 +10,31 @@ import type {
   McpServer,
   PluginMarketplaceEntry,
   RpcOutput,
+  SourcePreset,
 } from "@orkbot/contracts";
 import {
   CONNECTION_LABEL_MAX_LENGTH,
   MCP_OAUTH_CLIENT_REQUIRED,
   SUBMIT_PLUGIN_URL,
 } from "@orkbot/contracts";
-import type { PluginCategory } from "@orkbot/core";
+import type { PluginCategory, SourceKind } from "@orkbot/core";
 import {
   buildFeaturedConnectorTiles,
   CONNECTION_CATALOG_PAGE_SIZE,
   catalogItemAccounts,
+  catalogItemConnectionState,
   catalogItemKey,
   connectCatalogItem,
+  connectionCatalogState,
   EMPTY_PLUGIN_CATALOG_MESSAGE,
   filterConnectionCatalogItems,
   humanizeToolName,
   isCatalogItemConnected,
   matchesWordPrefixes,
+  mergeConnectionCatalog,
   newClientId,
   OTHER_PLUGINS,
+  sourceInstallIntent,
 } from "@orkbot/core";
 import type { NativeStackNavigationOptions } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -50,7 +59,7 @@ import { NativeActionButton } from "../../components/native-action-button";
 import { NativeSymbol } from "../../components/native-symbol";
 import { PluginIcon } from "../../components/plugin-icon";
 import { Chevron } from "../../components/row-accessories";
-import { rpc } from "../../lib/api";
+import type { rpc } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import type { IntegrationsCacheScope, IntegrationsSnapshot } from "../../lib/integrations-cache";
@@ -76,11 +85,11 @@ import {
   pluginParams,
   pluginSite,
 } from "../../lib/plugin-marketplace";
+import { ACCOUNT_SETTINGS, captureSettingsContext } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
 import { errorText } from "../../lib/user-error";
 
 type SourceAuth = "none" | "bearer" | "header" | "oauth";
-type SourceKind = "treg" | "executor" | "mcp" | "api" | "graphql";
 type ConnectionTool = RpcOutput<"connections/tools">[number];
 
 const LOGO_SIZE = 32;
@@ -124,6 +133,29 @@ export default function Integrations() {
   const [category, setCategory] = useState("");
   const [pluginCount, setPluginCount] = useState(PLUGIN_PAGE_SIZE);
   const [gitUrl, setGitUrl] = useState("");
+  const [presets, setPresets] = useState<SourcePreset[]>([]);
+  const [presetsReady, setPresetsReady] = useState(false);
+  const [sourcePresetId, setSourcePresetId] = useState<string | null>(null);
+  const sourceFormGeneration = useRef(0);
+  const sourceRevision = useRef(0);
+  const sourceOwner = useRef<ReturnType<typeof captureSettingsContext> | null>(null);
+  const presetsOwner = useRef<ReturnType<typeof captureSettingsContext> | null>(null);
+  const [sourceLoadError, setSourceLoadError] = useState<string | null>(null);
+  const [catalogState, setCatalogState] = useState<ReturnType<
+    typeof connectionCatalogState
+  > | null>(null);
+  const selectedPreset = presets.find((preset) => preset.id === sourcePresetId);
+  useEffect(() => {
+    if (sourcePresetId !== null && presetsReady && !selectedPreset) {
+      sourceFormGeneration.current += 1;
+      setPending((current) => (current === "source" ? null : current));
+      setSourcePresetId(null);
+      setSourceKind(null);
+      setAdding(null);
+      setCredential("");
+      setSourceError(null);
+    }
+  }, [presetsReady, selectedPreset, sourcePresetId]);
   const [sourceKind, setSourceKind] = useState<SourceKind | null>(null);
   const [adding, setAdding] = useState<"github" | "source" | null>(null);
   const [name, setName] = useState("");
@@ -152,6 +184,28 @@ export default function Integrations() {
   const focusGeneration = useRef(0);
   const refreshGeneration = useRef(0);
   const sourcesGeneration = useRef(0);
+
+  useEffect(() => {
+    if (presetsOwner.current && !presetsOwner.current.isCurrent()) {
+      presetsOwner.current = null;
+      setPresets([]);
+      setPresetsReady(false);
+      setSourceLoadError(null);
+    }
+    if (cacheScope.current && !isIntegrationsScopeCurrent(cacheScope.current)) clearStaleScope();
+    if (sourceOwner.current && !sourceOwner.current.isCurrent()) {
+      sourceOwner.current = null;
+      sourceFormGeneration.current += 1;
+      setPending((current) => (current === "source" ? null : current));
+      setPresets([]);
+      setPresetsReady(false);
+      setSourcePresetId(null);
+      setSourceKind(null);
+      setAdding(null);
+      setCredential("");
+      setSourceError(null);
+    }
+  });
 
   function applySnapshot(next: IntegrationsSnapshot) {
     snapshot.current = next;
@@ -191,6 +245,12 @@ export default function Integrations() {
         scope.spaceId === current.spaceId
       );
     };
+  }
+
+  function captureConnectionRequest() {
+    const ownsScope = captureConnectionScope();
+    const origin = captureSettingsContext(ACCOUNT_SETTINGS);
+    return { send: origin.send, isCurrent: () => ownsScope() && origin.isCurrent() };
   }
 
   function updateAccount(row: Connection) {
@@ -267,6 +327,16 @@ export default function Integrations() {
     applySnapshot({ catalog: [], connections: [] });
     setCatalogReady(false);
     setSources([]);
+    setPresets([]);
+    setPresetsReady(false);
+    setSourcePresetId(null);
+    sourceFormGeneration.current += 1;
+    setPending((current) => (current === "source" ? null : current));
+    setSourceKind(null);
+    setCredential("");
+    setSourceError(null);
+    setSourceLoadError(null);
+    setCatalogState(null);
     setPluginInstalls([]);
     setMcpServers([]);
     setMcpError(null);
@@ -277,6 +347,8 @@ export default function Integrations() {
   }
 
   async function refresh() {
+    const origin = captureSettingsContext(ACCOUNT_SETTINGS);
+    const send = origin.send;
     const focus = focusGeneration.current;
     clearStaleScope();
     let scope: IntegrationsCacheScope;
@@ -313,7 +385,7 @@ export default function Integrations() {
     }
     const generation = ++refreshGeneration.current;
     const sourceGeneration = ++sourcesGeneration.current;
-    void rpc("mcp/servers/list")
+    void send("mcp/servers/list")
       .then((servers) => {
         if (
           mounted.current &&
@@ -334,10 +406,12 @@ export default function Integrations() {
         )
           setMcpError(errorText(reason, t("Could not load MCP servers")));
       });
-    void rpc("capabilities/list")
-      .then((installs) => {
+    void Promise.all([send("capabilities/list"), send("capabilities/sourcePresets")])
+      .then(([installs, metadata]) => {
         if (
           mounted.current &&
+          focus === focusGeneration.current &&
+          origin.isCurrent() &&
           isIntegrationsScopeCurrent(scope) &&
           sourceGeneration === sourcesGeneration.current
         ) {
@@ -347,10 +421,27 @@ export default function Integrations() {
             ),
           );
           setPluginInstalls(installs.filter((item) => item.kind === "plugin"));
+          presetsOwner.current = origin;
+          setPresets(metadata);
+          setPresetsReady(true);
+          setSourceLoadError(null);
         }
       })
-      .catch(() => undefined);
-    void rpc("marketplace/catalog", { query: "" })
+      .catch((reason) => {
+        if (
+          mounted.current &&
+          focus === focusGeneration.current &&
+          origin.isCurrent() &&
+          isIntegrationsScopeCurrent(scope) &&
+          sourceGeneration === sourcesGeneration.current
+        ) {
+          presetsOwner.current = origin;
+          setPresets([]);
+          setPresetsReady(true);
+          setSourceLoadError(errorText(reason, t("Could not load integrations")));
+        }
+      });
+    void send("marketplace/catalog", { query: "" })
       .then((result) => {
         if (
           mounted.current &&
@@ -362,16 +453,27 @@ export default function Integrations() {
         }
       })
       .catch(() => {
-        if (mounted.current && sourceGeneration === sourcesGeneration.current)
+        if (
+          mounted.current &&
+          origin.isCurrent() &&
+          isIntegrationsScopeCurrent(scope) &&
+          sourceGeneration === sourcesGeneration.current
+        )
           setPluginsState("partial");
       });
     setCatalogError(null);
     let next: IntegrationsSnapshot;
     try {
       // The catalog call reconciles connection rows, so list them after it.
-      const catalog = await rpc("connections/catalog");
-      const connections = await rpc("connections/list");
-      next = { catalog, connections };
+      const catalog = await send("connections/catalogSnapshot");
+      if (!mounted.current || focus !== focusGeneration.current) return;
+      if (!isIntegrationsScopeCurrent(scope) || !origin.isCurrent()) return refresh();
+      const connections = await send("connections/list");
+      if (!mounted.current || focus !== focusGeneration.current) return;
+      if (!isIntegrationsScopeCurrent(scope) || !origin.isCurrent()) return refresh();
+      if (generation !== refreshGeneration.current) return;
+      setCatalogState(connectionCatalogState(catalog));
+      next = { catalog: mergeConnectionCatalog(snapshot.current.catalog, catalog), connections };
     } catch (reason) {
       if (!mounted.current || focus !== focusGeneration.current) return;
       if (!isIntegrationsScopeCurrent(scope)) return refresh();
@@ -449,18 +551,19 @@ export default function Integrations() {
     }
     let cancelled = false;
     setToolsLoading(true);
-    void rpc("connections/tools", {
+    const { send, isCurrent } = captureConnectionRequest();
+    void send("connections/tools", {
       connectorId: detailKey.connectorId,
       provider: detailKey.slug,
     })
       .then((list) => {
-        if (!cancelled) setTools(list);
+        if (!cancelled && isCurrent()) setTools(list);
       })
       .catch(() => {
-        if (!cancelled) setTools([]);
+        if (!cancelled && isCurrent()) setTools([]);
       })
       .finally(() => {
-        if (!cancelled) setToolsLoading(false);
+        if (!cancelled && isCurrent()) setToolsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -523,15 +626,17 @@ export default function Integrations() {
   function serverStatus(server: McpServer) {
     return !server.enabled
       ? t("Disabled")
-      : server.health.code === MCP_OAUTH_CLIENT_REQUIRED && !server.oauthClientId
-        ? t("Needs an OAuth client ID")
-        : server.oauthStatus === "reconnect"
-          ? t("OAuth expired")
-          : server.oauthStatus === "connected"
-            ? t("OAuth connected")
-            : server.hasSecret
-              ? t("Credential saved")
-              : t("No auth");
+      : server.health.status === "error" && server.health.code !== MCP_OAUTH_CLIENT_REQUIRED
+        ? t("Not working")
+        : server.health.code === MCP_OAUTH_CLIENT_REQUIRED && !server.oauthClientId
+          ? t("Needs an OAuth client ID")
+          : server.oauthStatus === "reconnect"
+            ? t("OAuth expired")
+            : server.oauthStatus === "connected"
+              ? t("OAuth connected")
+              : server.hasSecret
+                ? t("Credential saved")
+                : t("No auth");
   }
 
   function renderInstalledPlugin(install: CapabilityInstall, summary: string, signIn: boolean) {
@@ -571,9 +676,14 @@ export default function Integrations() {
     return (
       <View key={server.id} testID="registered-mcp-server" style={styles.row}>
         <ConnectorIcon name={server.name} size={LOGO_SIZE} />
-        <Text numberOfLines={1} style={[styles.title, styles.grow]}>
-          {server.name}
-        </Text>
+        <View style={styles.grow}>
+          <Text numberOfLines={1} style={styles.title}>
+            {server.name}
+          </Text>
+          {server.health.status === "ok" && server.health.message ? (
+            <Text style={styles.secondary}>{server.health.message}</Text>
+          ) : null}
+        </View>
         <Text style={styles.secondary}>{serverStatus(server)}</Text>
         {server.enabled && (server.oauthStatus === "reconnect" || server.id === oauthServerId) ? (
           <NativeActionButton
@@ -732,6 +842,9 @@ export default function Integrations() {
   }
 
   function closeAdding() {
+    sourceFormGeneration.current += 1;
+    setPending((current) => (current === "source" ? null : current));
+    setSourcePresetId(null);
     setAdding(null);
     setSourceKind(null);
     setSourceError(null);
@@ -759,11 +872,15 @@ export default function Integrations() {
     return isCatalogItemConnected(connections, item);
   }
 
-  async function notifyAppConnected(item: ConnectionCatalogItem, isCurrent: () => boolean) {
+  async function notifyAppConnected(
+    item: ConnectionCatalogItem,
+    isCurrent: () => boolean,
+    send: typeof rpc,
+  ) {
     const botId = lastBotId || (await loadLastBotId());
     if (!botId || !isCurrent()) return;
     if (botId !== lastBotId) setLastBotId(botId);
-    void rpc("onboarding/appConnected", {
+    void send("onboarding/appConnected", {
       botId,
       provider: item.slug,
       connectorId: item.connectorId,
@@ -771,7 +888,7 @@ export default function Integrations() {
   }
 
   async function connect(item: ConnectionCatalogItem) {
-    const isCurrent = captureConnectionScope();
+    const { send, isCurrent } = captureConnectionRequest();
     if (!isCurrent()) return;
     connectionAttempt.current?.abort();
     const controller = new AbortController();
@@ -781,8 +898,8 @@ export default function Integrations() {
     setCatalogError(null);
     try {
       const result = await connectCatalogItem(item, connections, {
-        begin: (input) => rpc("connections/begin", input),
-        complete: (input) => rpc("connections/complete", input),
+        begin: (input) => send("connections/begin", input),
+        complete: (input) => send("connections/complete", input),
         openUrl: (url) => Linking.openURL(url),
         signal: controller.signal,
         isCurrent,
@@ -790,7 +907,7 @@ export default function Integrations() {
       if (result.status === "aborted") return;
       if (result.status === "connected") {
         if (result.row) updateAccount(result.row);
-        void notifyAppConnected(item, isCurrent);
+        void notifyAppConnected(item, isCurrent, send);
         await refresh();
         if (isCurrent()) setToolsTick((tick) => tick + 1);
         return;
@@ -811,12 +928,12 @@ export default function Integrations() {
   }
 
   async function revokeAccount(row: Connection) {
-    const isCurrent = captureConnectionScope();
+    const { send, isCurrent } = captureConnectionRequest();
     if (!isCurrent()) return;
     setPending(row.id);
     setCatalogError(null);
     try {
-      await rpc("connections/revoke", { connectionId: row.id });
+      await send("connections/revoke", { connectionId: row.id });
       if (!isCurrent()) return;
       updateAccount({ ...row, status: "revoked" });
       await refresh();
@@ -832,12 +949,12 @@ export default function Integrations() {
   async function renameAccount(row: Connection) {
     const displayName = (labelDrafts[row.id] ?? row.displayName).trim();
     if (!displayName || displayName === row.displayName) return;
-    const isCurrent = captureConnectionScope();
+    const { send, isCurrent } = captureConnectionRequest();
     if (!isCurrent()) return;
     setPending(`rename:${row.id}`);
     setCatalogError(null);
     try {
-      const updated = await rpc("connections/rename", {
+      const updated = await send("connections/rename", {
         connectionId: row.id,
         displayName,
       });
@@ -853,7 +970,7 @@ export default function Integrations() {
   }
 
   async function uninstall(item: ConnectionCatalogItem) {
-    const isCurrent = captureConnectionScope();
+    const { send, isCurrent } = captureConnectionRequest();
     if (!isCurrent()) return;
     const matches = accountsFor(item);
     const key = catalogItemKey(item);
@@ -865,7 +982,7 @@ export default function Integrations() {
     setCatalogError(null);
     try {
       for (const row of matches) {
-        await rpc("connections/revoke", { connectionId: row.id });
+        await send("connections/revoke", { connectionId: row.id });
         if (!isCurrent()) return;
         updateAccount({ ...row, status: "revoked" });
       }
@@ -880,25 +997,39 @@ export default function Integrations() {
     }
   }
 
-  function beginSource(kind: SourceKind) {
+  function beginSource(kind: SourceKind, preset?: SourcePreset) {
+    const origin = preset ? presetsOwner.current : captureSettingsContext(ACCOUNT_SETTINGS);
+    if (!origin?.isCurrent()) {
+      presetsOwner.current = null;
+      setPresets([]);
+      return;
+    }
+    if (cacheScope.current && !isIntegrationsScopeCurrent(cacheScope.current)) {
+      clearStaleScope();
+      return;
+    }
+    sourceOwner.current = origin;
+    sourceFormGeneration.current += 1;
+    setPending((current) => (current === "source" ? null : current));
+    setSourcePresetId(preset?.id ?? null);
     setAdding("source");
     setSourceKind(kind);
     setSourceError(null);
-    setName(kind === "treg" ? "Treg" : kind === "executor" ? "Executor" : "");
-    setUrl(kind === "treg" ? "https://treg.to/mcp/" : "");
+    setName(preset?.label ?? "");
+    setUrl("");
     setCredential("");
-    setSourceAuth(kind === "treg" || kind === "executor" ? "bearer" : "none");
+    setSourceAuth("none");
     setAuthHeader("x-api-key");
   }
 
   async function authorizeMcp(serverId: string) {
-    const isCurrent = captureConnectionScope();
+    const { send, isCurrent } = captureConnectionRequest();
     if (!isCurrent()) return;
     setPending(`oauth:${serverId}`);
     setMcpError(null);
     try {
       // The API picks the registered web callback; native clients cannot supply one.
-      const result = await rpc("mcp/oauth/begin", { serverId });
+      const result = await send("mcp/oauth/begin", { serverId });
       if (!isCurrent()) return;
       if (result.status === "authorization_required") {
         oauthBrowserOpen.current = true;
@@ -915,73 +1046,76 @@ export default function Integrations() {
 
   async function addSource() {
     if (!sourceKind) return;
-    const isCurrent = captureConnectionScope();
+    const scopeCurrent = captureConnectionScope();
+    const origin = sourceOwner.current;
+    if (!origin) return;
+    const generation = sourceFormGeneration.current;
+    const revision = sourceRevision.current;
+    const isCurrent = () =>
+      scopeCurrent() && origin.isCurrent() && generation === sourceFormGeneration.current;
     if (!isCurrent()) return;
     setPending("source");
     setSourceError(null);
-    const displayName =
-      name.trim() ||
-      (sourceKind === "treg"
-        ? "Treg"
-        : sourceKind === "executor"
-          ? "Executor"
-          : sourceKind === "graphql"
-            ? "GraphQL"
-            : t("Custom connector"));
-    const auth =
-      sourceAuth === "header"
-        ? { type: "header", name: authHeader.trim() }
-        : { type: sourceAuth === "bearer" ? "bearer" : "none" };
     let created: McpServer | null = null;
     try {
-      if (sourceAuth === "oauth") {
-        created = await rpc("mcp/servers/create", {
+      if (sourcePresetId === null && sourceAuth === "oauth") {
+        created = await origin.send("mcp/servers/create", {
           slug: `integration-${newClientId().slice(0, 8)}`,
-          name: displayName,
+          name: name.trim() || t("Custom connector"),
           transport: "streamable_http",
           endpoint: url.trim(),
         });
         if (!isCurrent()) return;
         setOauthServerId(created.id);
       } else {
-        await rpc("capabilities/install", {
-          kind: sourceKind === "treg" || sourceKind === "executor" ? "mcp" : sourceKind,
-          name: displayName,
-          source: url.trim(),
-          credential: (sourceAuth !== "none" && credential.trim()) || undefined,
-          config:
-            sourceKind === "treg"
-              ? { preset: "treg", auth: { type: "bearer" } }
-              : sourceKind === "api"
-                ? { openApi: true, auth }
-                : sourceKind === "graphql"
-                  ? { auth }
-                  : { preset: "custom", auth },
-        });
+        await origin.send(
+          "capabilities/install",
+          sourceInstallIntent({
+            kind: sourceKind,
+            presetId: sourcePresetId,
+            presets,
+            name:
+              name.trim() ||
+              selectedPreset?.label ||
+              (sourceKind === "graphql" ? "GraphQL" : t("Custom connector")),
+            endpoint: url,
+            credential,
+            auth: { type: sourceAuth === "oauth" ? "none" : sourceAuth, name: authHeader },
+          }),
+        );
         if (!isCurrent()) return;
+      }
+      if (revision !== sourceRevision.current) {
+        await refresh();
+        return;
       }
       setCredential("");
       setSourceKind(null);
+      setSourcePresetId(null);
       setAdding(null);
       await refresh();
-      if (created) await authorizeMcp(created.id);
+      if (created && isCurrent()) await authorizeMcp(created.id);
     } catch (reason) {
-      if (isCurrent()) setSourceError(errorText(reason, t("Could not add source")));
+      if (isCurrent() && revision === sourceRevision.current)
+        setSourceError(errorText(reason, t("Could not add source")));
     } finally {
       if (isCurrent()) setPending(null);
     }
   }
 
   async function removeSource(source: CapabilityInstall) {
+    const { send, isCurrent } = captureConnectionRequest();
+    if (!isCurrent()) return;
     setPending(source.id);
     setSourceError(null);
     try {
-      await rpc("capabilities/remove", { id: source.id });
+      await send("capabilities/remove", { id: source.id });
+      if (!isCurrent()) return;
       setSources((current) => current.filter((item) => item.id !== source.id));
     } catch (reason) {
-      setSourceError(errorText(reason, t("Could not remove source")));
+      if (isCurrent()) setSourceError(errorText(reason, t("Could not remove source")));
     } finally {
-      setPending(null);
+      if (isCurrent()) setPending(null);
     }
   }
 
@@ -1006,7 +1140,15 @@ export default function Integrations() {
         accessibilityLabel={t("Add {name}", { name: label })}
         disabled={connecting}
         fill={false}
-        label={connecting ? t("Working…") : t("Add")}
+        label={
+          connecting
+            ? t("Working…")
+            : catalogItemConnectionState(connections, item) === "pending"
+              ? t("Pending")
+              : catalogItemConnectionState(connections, item) === "reconnect"
+                ? t("Reconnect")
+                : t("Add")
+        }
         onPress={() => void connect(item)}
         prominence="secondary"
       />
@@ -1155,22 +1297,25 @@ export default function Integrations() {
     );
   }
 
-  const addOptions: Array<{ id: "github" | SourceKind; label: string }> = [
+  const addOptions: Array<{ id: string; label: string }> = [
     { id: "github", label: t("From GitHub") },
     { id: "mcp", label: t("MCP server") },
     { id: "api", label: "OpenAPI" },
     { id: "graphql", label: "GraphQL" },
-    { id: "executor", label: "Executor" },
-    { id: "treg", label: "Treg" },
+    ...presets.map((preset) => ({ id: `preset:${preset.id}`, label: preset.label })),
   ];
 
-  function startAdding(id: "github" | SourceKind) {
+  function startAdding(id: string) {
     closeDetail();
     setSourceError(null);
     if (id === "github") {
       setSourceKind(null);
       setAdding("github");
-    } else beginSource(id);
+    } else if (id === "mcp" || id === "api" || id === "graphql") beginSource(id);
+    else {
+      const preset = presets.find((candidate) => `preset:${candidate.id}` === id);
+      if (preset) beginSource(preset.kind, preset);
+    }
   }
 
   useLayoutEffect(() => {
@@ -1192,7 +1337,7 @@ export default function Integrations() {
         },
       ],
     } satisfies NativeStackNavigationOptions);
-  }, [navigation, t]);
+  }, [navigation, t, presets]);
 
   function renderAddMenuFallback() {
     if (iosAtLeast(26)) return null;
@@ -1201,7 +1346,7 @@ export default function Integrations() {
         colorScheme={scheme}
         title={t("Add custom")}
         actions={addOptions.map((option) => ({ id: option.id, title: option.label }))}
-        onPressAction={({ nativeEvent }) => startAdding(nativeEvent.event as "github" | SourceKind)}
+        onPressAction={({ nativeEvent }) => startAdding(nativeEvent.event)}
       >
         {/* A plain view: on Android the menu opens from its own Pressable, which a
             nested Pressable would take the touch from. */}
@@ -1252,43 +1397,45 @@ export default function Integrations() {
         {adding === "source" && sourceKind ? (
           <View style={styles.card}>
             <Text style={styles.title}>
-              {sourceKind === "treg"
-                ? t("Connect Treg")
-                : sourceKind === "executor"
-                  ? t("Connect Executor")
-                  : sourceKind === "mcp"
-                    ? t("Remote MCP server")
-                    : sourceKind === "graphql"
-                      ? t("GraphQL endpoint")
-                      : t("OpenAPI JSON")}
+              {selectedPreset
+                ? selectedPreset.label
+                : sourceKind === "mcp"
+                  ? t("Remote MCP server")
+                  : sourceKind === "graphql"
+                    ? t("GraphQL endpoint")
+                    : t("OpenAPI JSON")}
             </Text>
             <TextInput
               value={name}
-              onChangeText={setName}
+              onChangeText={(value) => {
+                sourceRevision.current += 1;
+                setName(value);
+              }}
               placeholder={t("Display name")}
               placeholderTextColor={native.tertiaryLabel}
               style={styles.input}
             />
-            {sourceKind !== "treg" ? (
+            {sourcePresetId === null || selectedPreset?.endpoint === "input" ? (
               <TextInput
                 value={url}
-                onChangeText={setUrl}
+                onChangeText={(value) => {
+                  sourceRevision.current += 1;
+                  setUrl(value);
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder={
                   sourceKind === "mcp"
                     ? t("https://example.com/mcp")
-                    : sourceKind === "executor"
-                      ? t("https://executor.example/mcp")
-                      : sourceKind === "graphql"
-                        ? t("https://example.com/graphql")
-                        : t("https://example.com/openapi.json")
+                    : sourceKind === "graphql"
+                      ? t("https://example.com/graphql")
+                      : t("https://example.com/openapi.json")
                 }
                 placeholderTextColor={native.tertiaryLabel}
                 style={styles.input}
               />
             ) : null}
-            {sourceKind !== "treg" && sourceKind !== "executor" ? (
+            {sourcePresetId === null ? (
               <MenuPicker
                 label={t("Authentication")}
                 plain
@@ -1299,13 +1446,19 @@ export default function Integrations() {
                   { key: "header", label: t("API key") },
                   ...(sourceKind === "mcp" ? [{ key: "oauth", label: t("OAuth") }] : []),
                 ]}
-                onChange={(key) => setSourceAuth(key as SourceAuth)}
+                onChange={(key) => {
+                  sourceRevision.current += 1;
+                  setSourceAuth(key as SourceAuth);
+                }}
               />
             ) : null}
-            {sourceAuth === "header" ? (
+            {sourcePresetId === null && sourceAuth === "header" ? (
               <TextInput
                 value={authHeader}
-                onChangeText={setAuthHeader}
+                onChangeText={(value) => {
+                  sourceRevision.current += 1;
+                  setAuthHeader(value);
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
                 accessibilityLabel={t("API key header name")}
@@ -1314,21 +1467,26 @@ export default function Integrations() {
                 style={styles.input}
               />
             ) : null}
-            {sourceAuth === "bearer" || sourceAuth === "header" ? (
+            {(
+              selectedPreset
+                ? selectedPreset.credential !== "none"
+                : sourceAuth === "bearer" || sourceAuth === "header"
+            ) ? (
               <TextInput
                 value={credential}
-                onChangeText={setCredential}
+                onChangeText={(value) => {
+                  sourceRevision.current += 1;
+                  setCredential(value);
+                }}
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder={
-                  sourceKind === "treg"
-                    ? t("Treg token")
-                    : sourceKind === "executor"
-                      ? t("Executor token")
-                      : sourceAuth === "header"
-                        ? t("API key")
-                        : t("Bearer token")
+                  sourcePresetId !== null
+                    ? t("Credential")
+                    : sourceAuth === "header"
+                      ? t("API key")
+                      : t("Bearer token")
                 }
                 placeholderTextColor={native.tertiaryLabel}
                 style={styles.input}
@@ -1410,9 +1568,14 @@ export default function Integrations() {
               </View>
             ) : null}
 
-            {catalogError ? (
+            {catalogError ||
+            sourceLoadError ||
+            catalogState === "error" ||
+            catalogState === "partial" ? (
               <View style={styles.catalogStack}>
-                <Text style={styles.error}>{catalogError}</Text>
+                <Text style={styles.error}>
+                  {catalogError ?? sourceLoadError ?? t("Could not load integrations")}
+                </Text>
                 <NativeActionButton
                   label={t("Retry")}
                   fill={false}
@@ -1448,7 +1611,15 @@ export default function Integrations() {
                   </View>
                 ) : null}
 
-                {catalogReady && catalog.length === 0 ? (
+                {catalogReady &&
+                catalogState === "empty" &&
+                !pluginEntries.length &&
+                !sources.length &&
+                !mcpServers.length &&
+                !query.trim() ? (
+                  <Text style={styles.secondary}>{t("No results")}</Text>
+                ) : null}
+                {catalogReady && catalog.length === 0 && catalogState === "unconfigured" ? (
                   <Text style={styles.secondary}>{t(EMPTY_PLUGIN_CATALOG_MESSAGE)}</Text>
                 ) : null}
 

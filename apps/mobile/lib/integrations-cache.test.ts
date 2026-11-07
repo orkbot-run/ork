@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; neutral integration changes follow LICENSE.md.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IntegrationsCacheScope } from "./integrations-cache";
 import {
@@ -13,6 +17,7 @@ const state = vi.hoisted(() => ({
   base: "https://api.example.test",
   space: "space-a",
   generation: 0,
+  selectionGeneration: 0,
   rpc: vi.fn(),
   broken: false,
   saved: vi.fn(),
@@ -21,6 +26,7 @@ const state = vi.hoisted(() => ({
 vi.mock("./api", () => ({
   currentApiBase: () => state.base,
   selectedSpaceId: () => state.space,
+  spaceSelectionSeq: () => state.selectionGeneration,
   rpc: state.rpc,
 }));
 vi.mock("./session", () => ({
@@ -61,6 +67,7 @@ const scope: IntegrationsCacheScope = {
   spaceId: "space-a",
   sessionGeneration: 0,
   selectionId: "space-a",
+  selectionGeneration: 0,
 };
 const snapshot = {
   catalog: [
@@ -92,6 +99,7 @@ beforeEach(() => {
   state.space = scope.spaceId;
   state.generation += 1;
   state.broken = false;
+  state.selectionGeneration = 0;
   state.saved.mockReset().mockResolvedValue(null);
   state.save.mockReset().mockResolvedValue(undefined);
   state.rpc.mockReset().mockResolvedValue({ userId: "user-a", spaceId: "space-a" });
@@ -189,9 +197,46 @@ it.each(["server", "space", "session"])(
 );
 it("persists a scope only after successful identity verification", async () => {
   const verified = await integrationsCacheScope();
-  expect(state.save).toHaveBeenCalledWith(state.generation, verified);
+  const { selectionGeneration: _selection, sessionGeneration: _session, ...persisted } = verified;
+  expect(state.save).toHaveBeenCalledWith(state.generation, persisted);
   state.generation += 1;
   state.rpc.mockRejectedValue(new Error("offline"));
   await expect(integrationsCacheScope()).rejects.toThrow("offline");
   expect(state.save).toHaveBeenCalledTimes(1);
+});
+
+it("rejects an ABA Space selection while identity verification is pending", async () => {
+  let complete!: (value: unknown) => void;
+  state.rpc.mockReturnValue(
+    new Promise((resolve) => {
+      complete = resolve;
+    }),
+  );
+  const pending = integrationsCacheScope();
+  state.space = "space-b";
+  state.selectionGeneration += 1;
+  state.space = "space-a";
+  state.selectionGeneration += 1;
+  complete({ userId: "user-a", spaceId: "space-a" });
+  await expect(pending).rejects.toThrow("Could not load integrations");
+  expect(state.save).not.toHaveBeenCalled();
+});
+it("retires an issued integration scope after leaving and reselecting the same Space", async () => {
+  const issued = await integrationsCacheScope();
+  state.selectionGeneration += 2;
+  expect(isIntegrationsScopeCurrent(issued)).toBe(false);
+  expect((await integrationsCacheScope()).selectionGeneration).toBe(state.selectionGeneration);
+});
+
+it("rejects a persisted scope read that completes after an ABA Space selection", async () => {
+  let complete!: (value: typeof scope) => void;
+  state.saved.mockReturnValue(
+    new Promise((resolve) => {
+      complete = resolve;
+    }),
+  );
+  const pending = persistedIntegrationsCacheScope();
+  state.selectionGeneration += 2;
+  complete(scope);
+  expect(await pending).toBeNull();
 });

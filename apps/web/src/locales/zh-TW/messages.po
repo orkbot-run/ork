@@ -2568,6 +2568,10 @@ msgstr "Cron 表示式"
 msgid "Current password"
 msgstr "目前密碼"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Custom connector"
+msgstr "自訂連接器"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "Custom header"
 msgstr "自訂標頭"
@@ -3104,10 +3108,6 @@ msgstr "每月"
 #: src/pages/RoutineSchedule.tsx
 msgid "Every week"
 msgstr "每週"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Executor token"
-msgstr "Executor 權杖"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
@@ -4887,6 +4887,7 @@ msgstr "已暫停"
 
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Pending"
 msgstr "待處理"
@@ -5108,6 +5109,7 @@ msgid "Recommended"
 msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "重新連線"
@@ -6700,10 +6702,6 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "視為真人"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Treg token"
-msgstr "Treg 權杖"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Trial"

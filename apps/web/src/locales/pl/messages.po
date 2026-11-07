@@ -2567,6 +2567,10 @@ msgstr "Wyrażenie cron"
 msgid "Current password"
 msgstr "Bieżące hasło"
 
+#: src/pages/PluginsOverlay.tsx
+msgid "Custom connector"
+msgstr "Własne połączenie"
+
 #: src/components/vault/VaultItemEditor.tsx
 msgid "Custom header"
 msgstr "Własny nagłówek"
@@ -3103,10 +3107,6 @@ msgstr "Co miesiąc"
 #: src/pages/RoutineSchedule.tsx
 msgid "Every week"
 msgstr "Co tydzień"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Executor token"
-msgstr "Token wykonawcy"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
@@ -4886,6 +4886,7 @@ msgstr "Wstrzymano"
 
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/MessagingSettingsPanel.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Pending"
 msgstr "Oczekuje"
@@ -5107,6 +5108,7 @@ msgid "Recommended"
 msgstr "Zalecane"
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/pages/PluginsOverlay.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "Połącz ponownie"
@@ -6699,10 +6701,6 @@ msgstr "Odpowiedź transkrypcji jest zbyt duża."
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Treat like a person"
 msgstr "Traktuj jak osobę"
-
-#: src/pages/PluginsOverlay.tsx
-msgid "Treg token"
-msgstr "Token Treg"
 
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Trial"

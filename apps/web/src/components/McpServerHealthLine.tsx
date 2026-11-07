@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; partial catalog warnings follow LICENSE.md.
+
 import { Trans } from "@lingui/react/macro";
 import type { McpServerHealth } from "@orkbot/contracts";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
@@ -49,7 +53,18 @@ export function McpServerHealthLine({
     );
   }
 
-  if (health.status === "ok") return null;
+  if (health.status === "ok")
+    return health.message ? (
+      <p
+        role="status"
+        data-testid="mcp-health"
+        data-status="ok"
+        className="flex items-center gap-1.5 text-xs text-warning"
+      >
+        <TriangleAlert aria-hidden="true" className="size-3.5 shrink-0" />
+        <span>{health.message}</span>
+      </p>
+    ) : null;
 
   if (health.status === "error") {
     const summary = (

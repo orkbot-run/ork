@@ -104,6 +104,7 @@ export * from "./secrets-guard.js";
 export * from "./self-update.js";
 export * from "./server-updates.js";
 export * from "./signup-policy.js";
+export * from "./source-settings.js";
 export * from "./speech-locale.js";
 export * from "./speech-text.js";
 export * from "./stuck-work.js";

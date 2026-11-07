@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
+import type { SourcePreset } from "@orkbot/contracts";
 import { CONNECTION_LABEL_MAX_LENGTH } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
 import {
@@ -129,7 +130,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   const catalogGate = new Promise<void>((resolve) => {
     releaseCatalog = resolve;
   });
-  await page.route("**/rpc/connections/catalog", async (route) => {
+  await page.route("**/rpc/connections/catalogSnapshot", async (route) => {
     await catalogGate;
     await route.continue();
   });
@@ -241,7 +242,8 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await expect(page.getByTestId("connection-detail")).toHaveCount(0);
   await expect(linearRow.getByRole("button", { name: "Add", exact: true })).toBeVisible();
 
-  // Custom sources live behind one menu: GitHub, then MCP → OpenAPI → GraphQL → Executor → Treg.
+  // Generic protocols precede source presets advertised by this server.
+  const presets = await rpc<SourcePreset[]>(page, "capabilities/sourcePresets", undefined);
   await page.getByRole("button", { name: "Add custom", exact: true }).click();
   const addItems = page.getByRole("menuitem");
   await expect(addItems).toHaveText([
@@ -249,8 +251,7 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
     "MCP server",
     "OpenAPI",
     "GraphQL",
-    "Executor",
-    "Treg",
+    ...presets.map((preset) => preset.label),
     "Browse MCP servers",
     "Search by domain",
     "Manage MCP servers",
@@ -292,9 +293,22 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   };
   const toolSources = page.getByTestId("tool-sources");
 
-  await addSource("Treg");
-  await form.getByLabel("Treg token", { exact: true }).fill("fake-treg-browser-credential");
+  const fixedPreset = presets.find((preset) => preset.endpoint === "fixed");
+  if (!fixedPreset) throw new Error("Missing fixed source fixture");
+  await addSource(fixedPreset.label);
+  await expect(form.getByLabel("URL", { exact: true })).toHaveCount(0);
+  await expect(form.getByLabel("Authentication", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "11c1-server-source-preset");
+  await form.getByLabel("Credential", { exact: true }).fill("fake-treg-browser-credential");
+  const fixedInstall = page.waitForRequest((request) =>
+    request.url().includes("/rpc/capabilities/install"),
+  );
   await form.getByRole("button", { name: "Verify and add", exact: true }).click();
+  expect((await fixedInstall).postDataJSON().json).toEqual({
+    presetId: fixedPreset.id,
+    name: fixedPreset.label,
+    credential: "fake-treg-browser-credential",
+  });
   await expect(toolSources.getByText(/MCP\s*https:\/\/treg\.to\/mcp\//)).toBeVisible();
 
   await addSource("MCP server");
@@ -311,10 +325,12 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
   await form.getByRole("button", { name: "Verify and add", exact: true }).click();
   await expect(toolSources.getByText(/OpenAPI\s*https:\/\/api\.example\.test\/v1/)).toBeVisible();
 
-  await addSource("Executor");
-  await expect(form.getByLabel("Name", { exact: true })).toHaveValue("Executor");
+  const endpointPreset = presets.find((preset) => preset.endpoint === "input");
+  if (!endpointPreset) throw new Error("Missing endpoint source fixture");
+  await addSource(endpointPreset.label);
+  await expect(form.getByLabel("Name", { exact: true })).toHaveValue(endpointPreset.label);
   await form.getByLabel("URL", { exact: true }).fill("https://executor.example.test/mcp");
-  await form.getByLabel("Executor token", { exact: true }).fill("fake-executor-browser-credential");
+  await form.getByLabel("Credential", { exact: true }).fill("fake-executor-browser-credential");
   await form.getByRole("button", { name: "Verify and add", exact: true }).click();
   await expect(toolSources.getByText(/MCP\s*https:\/\/executor\.example\.test\/mcp/)).toBeVisible();
   await captureScreenshot(page, testInfo, "11d-provider-emulators");

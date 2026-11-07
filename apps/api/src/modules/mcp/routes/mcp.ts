@@ -16,7 +16,10 @@ import {
   prepareGraphqlInstall,
   previewPluginInstall,
   recordMcpServerHealth,
+  resolveLegacySourceConfig,
+  resolveSourcePresetInstall,
   sanitizeConnectorError,
+  sourcePresets,
   verifyMcpInstall,
 } from "@orkbot/adapters";
 import type { Actor } from "@orkbot/contracts";
@@ -155,6 +158,7 @@ export function mcpRoutes(ctx: RouterContext) {
       }),
     },
     capabilities: {
+      sourcePresets: authed.capabilities.sourcePresets.handler(() => sourcePresets()),
       list: authed.capabilities.list.handler(async ({ context }) => {
         const rows = await deps.prisma.capabilityInstall.findMany({
           where: availableInSpace(context.actor),
@@ -192,7 +196,14 @@ export function mcpRoutes(ctx: RouterContext) {
           });
         }
       }),
-      install: authed.capabilities.install.handler(async ({ context, input }) => {
+      install: authed.capabilities.install.handler(async ({ context, input: request }) => {
+        const input = (() => {
+          try {
+            return request.presetId === undefined ? request : resolveSourcePresetInstall(request);
+          } catch (error) {
+            throw new ORPCError("BAD_REQUEST", { message: sanitizeConnectorError(error) });
+          }
+        })();
         if (input.kind === "plugin") {
           return installPlugin(
             {
@@ -206,8 +217,11 @@ export function mcpRoutes(ctx: RouterContext) {
             context.signal,
           );
         }
-        let source = input.source.trim();
-        let config = input.config;
+        let { source, config } = resolveLegacySourceConfig(
+          input.kind,
+          input.source.trim(),
+          input.config,
+        );
         const credential = input.credential?.trim() || undefined;
         if (
           credential &&
@@ -233,10 +247,6 @@ export function mcpRoutes(ctx: RouterContext) {
         }
         try {
           if (input.kind === "mcp") {
-            if (config.preset === "treg") {
-              source = "https://treg.to/mcp/";
-              config = { ...config, preset: "treg", auth: { type: "bearer" } };
-            }
             const verified = await verifyMcpInstall({
               source,
               config,

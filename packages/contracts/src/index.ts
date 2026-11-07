@@ -50,6 +50,7 @@ export * from "./server-headers.js";
 export * from "./server-pairing.js";
 export * from "./server-updates.js";
 export * from "./settings-scope.js";
+export * from "./source-presets.js";
 export * from "./terminal.js";
 export * from "./user-devices.js";
 export * from "./vault-items.js";
