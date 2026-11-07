@@ -3,20 +3,27 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Apache-2.0 covers imported tests; Ork's stale native-action regressions are PolyForm-covered.
 // Modified by Ork contributors to verify pending actions cannot cross feed or session changes.
+// Modified by Ork contributors for bounded caller resolution and native presentation ownership.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   generation: 1,
   locked: false,
+  platform: "android",
+  appState: "active",
   onAppState: undefined as undefined | ((state: string) => void),
+  onNative: undefined as undefined | (() => void),
   onEvent: undefined as undefined | ((event: unknown) => void),
   onResponse: undefined as undefined | ((response: unknown) => void),
   lastResponse: null as unknown,
   actions: [] as Record<string, string>[],
   native: {
     incomingState: vi.fn(),
-    addListener: () => ({ remove() {} }),
+    addListener: (_name: string, callback: () => void) => {
+      fake.onNative = callback;
+      return { remove() {} };
+    },
     endIncomingCall: vi.fn(async () => {}),
     finishAnswer: vi.fn(async () => {}),
     clearIncomingCalls: vi.fn(async () => {}),
@@ -38,9 +45,15 @@ vi.mock("expo-notifications", () => ({
   addNotificationReceivedListener: () => ({ remove() {} }),
 }));
 vi.mock("react-native", () => ({
-  Platform: { OS: "android" },
+  Platform: {
+    get OS() {
+      return fake.platform;
+    },
+  },
   AppState: {
-    currentState: "active",
+    get currentState() {
+      return fake.appState;
+    },
     addEventListener: (_event: string, callback: (state: string) => void) => {
       fake.onAppState = callback;
       return { remove() {} };
@@ -105,9 +118,12 @@ beforeEach(() => {
   vi.useFakeTimers();
   fake.generation = 1;
   fake.locked = false;
+  fake.platform = "android";
+  fake.appState = "active";
   fake.onAppState = undefined;
   fake.onEvent = undefined;
   fake.onResponse = undefined;
+  fake.onNative = undefined;
   fake.lastResponse = null;
   fake.call = null;
   vi.clearAllMocks();
@@ -133,7 +149,387 @@ async function ring() {
   fake.onEvent?.([{ ...bot, incomingCall: block() }]);
   return getIncomingCall()!;
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+function nativeAction(action: "answer" | "end", callId = "call-1", botId = bot.id) {
+  return { action, callId, botId, expiresAt: block().expiresAt };
+}
+function notification(botId: string, callId = "call-1") {
+  return {
+    actionIdentifier: "answer",
+    notification: {
+      request: { content: { data: { ...block(), callId, kind: "incoming_call", botId } } },
+    },
+  };
+}
 describe("mobile incoming calls", () => {
+  it.each(["pending", "failed"] as const)(
+    "answers from the stream while the roster is %s without delaying native action admission",
+    async (state) => {
+      const roster = deferred<unknown>();
+      fake.rpc.mockImplementation(async (path: string) => {
+        if (path === "spaces/list") {
+          if (state === "failed") throw new Error("offline roster");
+          return roster.promise;
+        }
+        if (path === "threads/answerCall") return { opening: "Hello" };
+        return { transcribe: true };
+      });
+      fake.native.incomingState.mockResolvedValueOnce({
+        token: "",
+        actions: [nativeAction("answer")],
+      });
+      stop = startIncomingCalls();
+      await tick();
+      fake.onEvent?.([{ ...bot, incomingCall: block() }]);
+      await tick();
+      expect(fake.startCall).toHaveBeenCalledOnce();
+      expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-1", true);
+      roster.resolve({ current: { bots: [bot] }, spaces: [] });
+      await tick();
+      expect(fake.startCall).toHaveBeenCalledOnce();
+    },
+  );
+  it("uses one total caller deadline even when roster loading never settles", async () => {
+    fake.rpc.mockImplementation(async (path: string) => {
+      if (path === "spaces/list") return new Promise(() => {});
+      return {};
+    });
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [nativeAction("answer")],
+    });
+    stop = startIncomingCalls();
+    await tick();
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(fake.native.finishAnswer).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fake.native.finishAnswer).toHaveBeenCalledExactlyOnceWith("call-1", false);
+    expect(fake.startCall).not.toHaveBeenCalled();
+  });
+  it("continues waiting after an unrelated first stream snapshot", async () => {
+    fake.lastResponse = notification("bot-late");
+    stop = startIncomingCalls();
+    await tick();
+    fake.onEvent?.([]);
+    await tick();
+    await vi.advanceTimersByTimeAsync(2_000);
+    fake.onEvent?.([{ ...bot, id: "bot-late", incomingCall: block() }]);
+    await tick();
+    expect(fake.startCall).toHaveBeenCalledWith(expect.objectContaining({ botId: "bot-late" }));
+  });
+  it("shares one pending roster read across foreground and native triggers", async () => {
+    const roster = deferred<unknown>();
+    fake.rpc.mockImplementation(async () => roster.promise);
+    stop = startIncomingCalls();
+    await tick();
+    for (let i = 0; i < 8; i++) {
+      fake.onAppState?.("active");
+      fake.onNative?.();
+    }
+    await tick();
+    expect(fake.rpc.mock.calls.filter(([path]) => path === "spaces/list")).toHaveLength(1);
+    roster.resolve({ current: { bots: [] }, spaces: [] });
+    await tick();
+  });
+  it("retries roster reads after a failed read instead of caching its rejection", async () => {
+    const original = fake.rpc.getMockImplementation()!;
+    fake.rpc.mockRejectedValueOnce(new Error("temporary roster failure"));
+    stop = startIncomingCalls();
+    await tick();
+    fake.rpc.mockImplementation(original);
+    fake.onResponse?.(notification(bot.id));
+    await tick();
+    expect(fake.startCall).toHaveBeenCalledOnce();
+    expect(fake.rpc.mock.calls.filter(([path]) => path === "spaces/list")).toHaveLength(2);
+  });
+  it.each([false, true])(
+    "does not publish a retired roster into a replacement feed (new session: %s)",
+    async (newSession) => {
+      const oldRoster = deferred<unknown>();
+      fake.rpc.mockImplementationOnce(async () => oldRoster.promise);
+      stop = startIncomingCalls();
+      await tick();
+      const oldEvent = fake.onEvent;
+      stop();
+      if (newSession) fake.generation++;
+      fake.rpc.mockImplementation(async (path: string) => {
+        if (path === "spaces/list") return { current: { bots: [] }, spaces: [] };
+        return { transcribe: true, opening: "Hello" };
+      });
+      stop = startIncomingCalls();
+      await tick();
+      oldRoster.resolve({ current: { bots: [bot] }, spaces: [] });
+      oldEvent?.([{ ...bot, incomingCall: block() }]);
+      await tick();
+      fake.onResponse?.(notification(bot.id));
+      await tick();
+      expect(fake.startCall).not.toHaveBeenCalled();
+      expect(getIncomingCall()).toBeNull();
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(fake.startCall).not.toHaveBeenCalled();
+    },
+  );
+  it("ignores callbacks from the feed after its session generation changes", async () => {
+    stop = startIncomingCalls();
+    await tick();
+    fake.generation++;
+    fake.onEvent?.([{ ...bot, incomingCall: block() }]);
+    fake.onNative?.();
+    fake.onAppState?.("active");
+    await tick();
+    expect(getIncomingCall()).toBeNull();
+    expect(fake.native.incomingState).toHaveBeenCalledOnce();
+    expect(fake.native.configureIncomingSession).toHaveBeenCalledOnce();
+  });
+  it("does not let retired native listeners or cleanup touch a replacement feed", async () => {
+    await ring();
+    const oldNative = fake.onNative;
+    const oldAppState = fake.onAppState;
+    const oldResponse = fake.onResponse;
+    const oldStop = stop!;
+    oldStop();
+    fake.generation++;
+    stop = startIncomingCalls();
+    await tick();
+    fake.onEvent?.([{ ...bot, incomingCall: { ...block(), callId: "new-call" } }]);
+    fake.native.incomingState.mockClear();
+    fake.native.endIncomingCall.mockClear();
+    oldNative?.();
+    oldAppState?.("active");
+    oldResponse?.(notification(bot.id, "new-call"));
+    oldStop();
+    await tick();
+    expect(getIncomingCall()?.incomingCall.callId).toBe("new-call");
+    expect(fake.native.incomingState).not.toHaveBeenCalled();
+    expect(fake.native.endIncomingCall).not.toHaveBeenCalled();
+    expect(fake.startCall).not.toHaveBeenCalled();
+  });
+  it.each([false, true])(
+    "does not let an old join block or finish a new feed's answer (new session: %s)",
+    async (newSession) => {
+      const oldVoice = deferred<unknown>();
+      const call = await ring();
+      const original = fake.rpc.getMockImplementation()!;
+      fake.rpc.mockImplementationOnce(original).mockImplementationOnce(() => oldVoice.promise);
+      const oldAnswer = respondToMobileCall(call, "answer");
+      try {
+        await tick();
+        expect(fake.startCall).not.toHaveBeenCalled();
+        stop!();
+        if (newSession) fake.generation++;
+        stop = startIncomingCalls();
+        await tick();
+        fake.onEvent?.([{ ...bot, incomingCall: block() }]);
+        await respondToMobileCall(getIncomingCall()!, "answer");
+        expect(fake.startCall).toHaveBeenCalledOnce();
+        fake.native.finishAnswer.mockClear();
+      } finally {
+        // A RED assertion must still settle the baseline module's in-flight response lock.
+        oldVoice.resolve({ transcribe: true });
+        await oldAnswer.catch(() => undefined);
+      }
+      await expect(oldAnswer).rejects.toThrow();
+      expect(fake.startCall).toHaveBeenCalledOnce();
+      expect(fake.native.finishAnswer).not.toHaveBeenCalled();
+      if (!newSession)
+        expect(fake.rpc.mock.calls.filter(([path]) => path === "threads/endCall")).toHaveLength(0);
+    },
+  );
+  it("answers before resolving an unrelated native ring", async () => {
+    await ring();
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [nativeAction("answer")],
+      ringing: [{ ...nativeAction("answer", "other-call", "unknown-bot"), action: undefined }],
+    });
+    fake.onNative?.();
+    await tick();
+    expect(fake.startCall).toHaveBeenCalledOnce();
+    expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-1", true);
+  });
+  it("processes ends before answers and never republishes an ended native ring", async () => {
+    fake.platform = "ios";
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [nativeAction("answer"), nativeAction("end")],
+      ringing: [nativeAction("answer")],
+    });
+    stop = startIncomingCalls();
+    await tick();
+    fake.onEvent?.([{ ...bot, incomingCall: block() }]);
+    await tick();
+    expect(fake.startCall).not.toHaveBeenCalled();
+    expect(fake.rpc.mock.calls.filter(([path]) => path === "threads/answerCall")).toHaveLength(0);
+    expect(fake.native.reportIncomingCall).not.toHaveBeenCalled();
+    expect(getIncomingCall()).toBeNull();
+  });
+  it("ignores a repeated answer without failing the native call that already joined", async () => {
+    await respondToMobileCall(await ring(), "answer");
+    fake.native.finishAnswer.mockClear();
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [nativeAction("answer")],
+    });
+    fake.onNative?.();
+    await tick();
+    expect(fake.startCall).toHaveBeenCalledOnce();
+    expect(fake.native.finishAnswer).not.toHaveBeenCalled();
+  });
+  it("observes an end arriving while an answer is still joining", async () => {
+    const voice = deferred<unknown>();
+    const original = fake.rpc.getMockImplementation()!;
+    fake.rpc.mockImplementation((path: string) =>
+      path === "voice/status" ? voice.promise : original(path),
+    );
+    await ring();
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [nativeAction("answer")],
+    });
+    fake.onNative?.();
+    await tick();
+    expect(fake.rpc).toHaveBeenCalledWith("voice/status", {}, expect.anything());
+    fake.native.incomingState.mockResolvedValueOnce({ token: "", actions: [nativeAction("end")] });
+    fake.onNative?.();
+    await tick();
+    voice.resolve({ transcribe: true });
+    await tick();
+    expect(fake.startCall).not.toHaveBeenCalled();
+    expect(fake.rpc).toHaveBeenCalledWith(
+      "threads/endCall",
+      { botId: bot.id, callId: "call-1" },
+      expect.anything(),
+    );
+  });
+  it("keeps an in-flight answer cancelled after its ended-call tombstone expires", async () => {
+    const voice = deferred<unknown>();
+    const original = fake.rpc.getMockImplementation()!;
+    fake.rpc.mockImplementation((path: string) =>
+      path === "voice/status" ? voice.promise : original(path),
+    );
+    await ring();
+    const answer = {
+      ...nativeAction("answer"),
+      expiresAt: new Date(Date.now() + 2_000).toISOString(),
+    };
+    fake.native.incomingState.mockResolvedValueOnce({ token: "", actions: [answer] });
+    fake.onNative?.();
+    await tick();
+    expect(fake.rpc).toHaveBeenCalledWith("voice/status", {}, expect.anything());
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [{ ...answer, action: "end" }],
+    });
+    fake.onNative?.();
+    await tick();
+    await vi.advanceTimersByTimeAsync(6_000);
+    voice.resolve({ transcribe: true });
+    await tick();
+    expect(fake.startCall).not.toHaveBeenCalled();
+    expect(fake.native.finishAnswer).not.toHaveBeenCalledWith("call-1", true);
+  });
+  it.each(["answer", "end"] as const)(
+    "does not delay native %s behind push registration",
+    async (action) => {
+      await ring();
+      if (action === "end") {
+        await respondToMobileCall(getIncomingCall()!, "answer");
+        fake.call = { botId: bot.id };
+        vi.mocked(endCall).mockClear();
+      }
+      const registration = deferred<void>();
+      vi.mocked(registerCallPushToken).mockReturnValueOnce(registration.promise);
+      fake.native.incomingState.mockResolvedValueOnce({
+        token: "voip-token",
+        actions: [nativeAction(action)],
+      });
+      fake.onNative?.();
+      try {
+        await tick();
+        expect(registerCallPushToken).toHaveBeenCalled();
+        if (action === "answer") expect(fake.startCall).toHaveBeenCalledOnce();
+        else expect(endCall).toHaveBeenCalledOnce();
+      } finally {
+        registration.resolve();
+        await tick();
+      }
+    },
+  );
+  it("expires ended-call tombstones without extending duplicate ends", async () => {
+    stop = startIncomingCalls();
+    await tick();
+    const end = { ...nativeAction("end"), expiresAt: new Date(Date.now() + 10_000).toISOString() };
+    fake.native.incomingState.mockResolvedValueOnce({ token: "", actions: [end] });
+    fake.onNative?.();
+    await tick();
+    await vi.advanceTimersByTimeAsync(5_000);
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [{ ...end, expiresAt: block().expiresAt }],
+    });
+    fake.onNative?.();
+    await tick();
+    await vi.advanceTimersByTimeAsync(5_001);
+    fake.onEvent?.([{ ...bot, incomingCall: block() }]);
+    expect(getIncomingCall()?.incomingCall.callId).toBe("call-1");
+  });
+  it("bounds ended-call retention and count", async () => {
+    stop = startIncomingCalls();
+    await tick();
+    const expiresAt = new Date(Date.now() + 3_600_000).toISOString();
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: Array.from({ length: 257 }, (_, i) => ({
+        ...nativeAction("end", `ended-${i}`),
+        expiresAt,
+      })),
+    });
+    fake.onNative?.();
+    await tick();
+    fake.onEvent?.([{ ...bot, incomingCall: { ...block(), callId: "ended-0" } }]);
+    expect(getIncomingCall()?.incomingCall.callId).toBe("ended-0");
+    fake.onEvent?.([{ ...bot, incomingCall: { ...block(), callId: "ended-256" } }]);
+    expect(getIncomingCall()).toBeNull();
+    await vi.advanceTimersByTimeAsync(300_001);
+    fake.onEvent?.([{ ...bot, incomingCall: { ...block(), callId: "ended-256" } }]);
+    expect(getIncomingCall()?.incomingCall.callId).toBe("ended-256");
+  });
+  it("cancels Android native rings that arrive after the foreground transition", async () => {
+    fake.appState = "background";
+    await ring();
+    expect(fake.native.reportIncomingCall).toHaveBeenCalledWith(
+      expect.objectContaining({ callId: "call-1" }),
+    );
+    fake.appState = "active";
+    fake.onAppState?.("active");
+    await tick();
+    fake.native.endIncomingCall.mockClear();
+    fake.native.incomingState.mockResolvedValueOnce({
+      token: "",
+      actions: [],
+      ringing: [nativeAction("answer", "call-late")],
+    });
+    fake.onNative?.();
+    await tick();
+    expect(fake.native.endIncomingCall).toHaveBeenCalledWith("call-late");
+    expect(getIncomingCall()?.incomingCall.callId).toBe("call-late");
+    expect(
+      fake.rpc.mock.calls.filter(([path]) => /answerCall|declineIncomingCall|endCall/.test(path)),
+    ).toHaveLength(0);
+  });
+  it.each(["ios", "android"])("preserves %s background native ringing", async (platform) => {
+    fake.platform = platform;
+    fake.appState = "background";
+    await ring();
+    expect(fake.native.reportIncomingCall).toHaveBeenCalledOnce();
+    expect(fake.native.endIncomingCall).not.toHaveBeenCalled();
+  });
   it("waits for unlock before configuring credentials and opening the account stream", async () => {
     fake.locked = true;
     stop = startIncomingCalls();
@@ -185,7 +581,7 @@ describe("mobile incoming calls", () => {
     expect(fake.native.finishAnswer).toHaveBeenCalledWith("call-1", true);
   });
   it.each([false, true])(
-    "abandons native actions if push registration outlives its feed (session changes: %s)",
+    "abandons waiting native actions if push registration outlives its feed (session changes: %s)",
     async (sessionChanges) => {
       stop = startIncomingCalls();
       await tick();
@@ -196,12 +592,20 @@ describe("mobile incoming calls", () => {
       fake.native.incomingState.mockResolvedValueOnce({
         token: "voip-token",
         actions: [
-          { action: "answer", callId: "call-old", botId: bot.id, expiresAt: block().expiresAt },
+          {
+            action: "answer",
+            callId: "call-old",
+            botId: "old-unknown",
+            expiresAt: block().expiresAt,
+          },
         ],
       });
       fake.onAppState?.("active");
       await tick();
-      expect(registerCallPushToken).toHaveBeenCalledWith({ voipToken: "voip-token" });
+      expect(registerCallPushToken).toHaveBeenCalledWith(
+        { voipToken: "voip-token" },
+        expect.objectContaining({ sessionGeneration: fake.generation }),
+      );
       stop?.();
       if (sessionChanges) fake.generation++;
       stop = startIncomingCalls();

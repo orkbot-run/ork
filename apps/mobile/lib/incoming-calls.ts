@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Apache-2.0 covers the imported implementation; Ork changes are PolyForm-covered.
 // Modified by Ork contributors to keep native actions with their originating feed and session.
+// Modified by Ork contributors for bounded caller resolution and native presentation ownership.
 
 import type { IncomingBotCall, SpaceBot, SpaceNavigation } from "@orkbot/contracts";
 import type { ringingCall } from "@orkbot/core";
@@ -55,22 +56,59 @@ const native = module?.incomingState ? module : null;
 const listeners = new Set<() => void>();
 let calls: IncomingBotCall[] = [];
 let roster = new Map<string, SpaceBot>();
-let feed: AbortController | undefined;
-let handled = new Set<string>();
+type CallFeed = {
+  controller: AbortController;
+  generation: number;
+  roster?: Promise<void>;
+  responding?: { callId: string; ended: boolean };
+};
+let feed: CallFeed | undefined;
 let expiry: ReturnType<typeof setTimeout> | undefined;
 let snapshot: IncomingBotCall | null = null;
-let running = false;
-let responding = false;
 let activeNativeCall: string | undefined;
-/** Native calls that ended while their answer was still joining. */
-let nativeEnded = new Set<string>();
-/** Resolves when the account stream has delivered its first snapshot, which covers every organization. */
-let streamSnapshot: Promise<void> | undefined;
-let snapshotArrived: (() => void) | undefined;
-/** Cold-start waits for that snapshot, cancelled by stopIncomingCalls so none outlives its feed. */
-const snapshotWaiters = new Set<() => void>();
-/** How long a native or notification answer waits for that snapshot on a cold start. */
+/** Ended or handled calls cannot ring again while their native handoff is still in flight. */
+const retiredCalls = new Map<string, number>();
+const RETIRED_CALL_LIMIT = 256;
+const RETIRED_CALL_RETENTION_MS = 5 * 60_000;
+/** Each lookup observes every snapshot and is cancelled with its captured feed. */
+const callerWaiters = new Set<() => void>();
+/** One deadline covers roster loading and stream discovery together. */
 const SNAPSHOT_WAIT_MS = 5_000;
+function currentFeed(owner: CallFeed | undefined): owner is CallFeed {
+  return (
+    owner !== undefined &&
+    feed === owner &&
+    !owner.controller.signal.aborted &&
+    owner.generation === currentSessionGeneration()
+  );
+}
+
+function pruneRetiredCalls() {
+  for (const [id, expiresAt] of retiredCalls) if (expiresAt <= Date.now()) retiredCalls.delete(id);
+}
+function retired(callId: string) {
+  pruneRetiredCalls();
+  return retiredCalls.has(callId);
+}
+function retire(call: { callId: string; expiresAt: string }) {
+  pruneRetiredCalls();
+  if (!retiredCalls.has(call.callId)) {
+    retiredCalls.set(
+      call.callId,
+      Math.min(
+        Math.max(Date.parse(call.expiresAt) || 0, Date.now() + SNAPSHOT_WAIT_MS),
+        Date.now() + RETIRED_CALL_RETENTION_MS,
+      ),
+    );
+    if (retiredCalls.size > RETIRED_CALL_LIMIT)
+      retiredCalls.delete(retiredCalls.keys().next().value!);
+  }
+  calls = calls.filter((entry) => entry.incomingCall.callId !== call.callId);
+}
+
+function notifyCallers() {
+  for (const check of callerWaiters) check();
+}
 
 export function subscribeIncomingCalls(listener: () => void) {
   listeners.add(listener);
@@ -83,7 +121,8 @@ export function getIncomingCall() {
 }
 function emit() {
   clearTimeout(expiry);
-  snapshot = nextIncomingCall(calls, handled) ?? null;
+  pruneRetiredCalls();
+  snapshot = nextIncomingCall(calls, new Set(retiredCalls.keys())) ?? null;
   for (const listener of listeners) listener();
   if (snapshot)
     expiry = setTimeout(
@@ -100,14 +139,15 @@ function update(
   if (
     previous &&
     previous.incomingCall.callId !== call?.callId &&
-    !responding &&
+    !feed?.responding &&
     activeNativeCall !== previous.incomingCall.callId
   )
     void native?.endIncomingCall(previous.incomingCall.callId);
-  if (call && callIsRinging(call) && !handled.has(call.callId)) {
+  if (call && callIsRinging(call) && !retired(call.callId)) {
     calls.push({ ...bot, incomingCall: call });
     if (Platform.OS === "ios" || AppState.currentState !== "active")
       reportNativeCall({ ...bot, incomingCall: call });
+    else void native?.endIncomingCall(call.callId);
   }
   emit();
 }
@@ -122,21 +162,21 @@ function reportNativeCall(call: IncomingBotCall) {
 }
 
 /** Follows the account call stream; every frame is a full snapshot, so reconnects need no replay. */
-async function follow(controller: AbortController) {
-  const generation = currentSessionGeneration();
+async function follow(owner: CallFeed) {
+  const { controller } = owner;
   let retry = 250;
   let failure: unknown;
-  while (!controller.signal.aborted && generation === currentSessionGeneration()) {
+  while (currentFeed(owner)) {
     try {
       await subscribeIncomingCallEvents((incoming) => {
         // Ignore events from an aborted feed so a late callback cannot resolve a newer wait.
-        if (controller.signal.aborted || feed !== controller) return;
-        snapshotArrived?.();
+        if (!currentFeed(owner)) return;
         for (const previous of calls) {
           if (!incoming.some((call) => call.incomingCall.callId === previous.incomingCall.callId))
             update(previous, null);
         }
         for (const call of incoming) update(call, call.incomingCall);
+        notifyCallers();
       }, controller.signal);
       retry = 250;
       failure = undefined;
@@ -150,22 +190,32 @@ async function follow(controller: AbortController) {
 }
 
 function setIncomingCallRoster(navigation: SpaceNavigation) {
-  if (!running) return;
   const bots = [...navigation.spaces.flatMap((space) => space.bots), ...navigation.current.bots];
   roster = new Map(bots.map((bot) => [bot.id, bot]));
 }
-async function loadRoster() {
-  const generation = currentSessionGeneration();
-  if (!(await loadSessionToken())) return;
-  const navigation = await rpc("spaces/list");
-  if (running && generation === currentSessionGeneration()) setIncomingCallRoster(navigation);
+function loadRoster(owner = feed): Promise<void> {
+  if (!currentFeed(owner)) return Promise.resolve();
+  if (owner.roster) return owner.roster;
+  const promise = (async () => {
+    if (!(await loadSessionToken()) || !currentFeed(owner)) return;
+    const navigation = await rpc("spaces/list", undefined, { signal: owner.controller.signal });
+    if (!currentFeed(owner)) return;
+    setIncomingCallRoster(navigation);
+    notifyCallers();
+  })();
+  owner.roster = promise;
+  const clear = () => {
+    if (owner.roster === promise) owner.roster = undefined;
+  };
+  void promise.then(clear, clear);
+  return promise;
 }
 
 /**
  * Resolves the caller for a native or notification answer. The account stream knows callers
  * across every organization; the roster covers only the active one. Return a roster hit without
- * waiting on the stream so same-organization answers are not delayed on a cold start. Wait briefly
- * for the stream's first snapshot only when the roster does not know the caller. Returns undefined
+ * waiting on the stream so same-organization answers are not delayed on a cold start. A pending or
+ * failed roster cannot block an available stream result. Returns undefined
  * when the lookup's feed or session is gone: the answer belongs to neither, so its caller abandons
  * it without answering or completing the native action.
  */
@@ -173,53 +223,52 @@ async function callerFor(
   botId: string,
   callId: string,
 ): Promise<Pick<SpaceBot, "id" | "spaceId" | "name" | "color" | "avatarSet"> | null | undefined> {
-  const generation = currentSessionGeneration();
-  const startedFeed = feed;
-  const stale = () => feed !== startedFeed || !running || generation !== currentSessionGeneration();
-  const fromStream = () =>
-    calls.find((entry) => entry.id === botId && entry.incomingCall.callId === callId) ?? null;
-  const streamed = fromStream();
-  if (streamed) return streamed;
-  // Active-organization callers do not need the stream; answer them before any snapshot wait.
-  if (!roster.has(botId)) await loadRoster();
+  const owner = feed;
+  const stale = () => !currentFeed(owner);
+  const available = () =>
+    calls.find((entry) => entry.id === botId && entry.incomingCall.callId === callId) ??
+    roster.get(botId);
   if (stale()) return undefined;
-  const known = roster.get(botId);
+  if (retired(callId)) return null;
+  const known = available();
   if (known) return known;
-  if (streamSnapshot) {
-    let stopWaiting: (() => void) | undefined;
-    let giveUp: ReturnType<typeof setTimeout> | undefined;
-    const stopped = new Promise<void>((resolve) => {
-      stopWaiting = () => resolve();
-      snapshotWaiters.add(stopWaiting);
-    });
-    try {
-      await Promise.race([
-        streamSnapshot,
-        stopped,
-        new Promise<void>((resolve) => {
-          giveUp = setTimeout(resolve, SNAPSHOT_WAIT_MS);
-        }),
-      ]);
-    } finally {
-      clearTimeout(giveUp);
-      if (stopWaiting) snapshotWaiters.delete(stopWaiting);
-    }
-    if (stale()) return undefined;
-    const late = fromStream();
-    if (late) return late;
-  }
-  return null;
+  return new Promise((resolve) => {
+    const finish = (
+      value: Pick<SpaceBot, "id" | "spaceId" | "name" | "color" | "avatarSet"> | null | undefined,
+    ) => {
+      clearTimeout(deadline);
+      callerWaiters.delete(check);
+      resolve(value);
+    };
+    const check = () => {
+      if (stale()) finish(undefined);
+      else if (retired(callId)) finish(null);
+      else {
+        const caller = available();
+        if (caller) finish(caller);
+      }
+    };
+    const deadline = setTimeout(() => finish(stale() ? undefined : null), SNAPSHOT_WAIT_MS);
+    callerWaiters.add(check);
+    void loadRoster(owner).then(check, check);
+  });
 }
 
 export async function respondToMobileCall(call: IncomingBotCall, action: "answer" | "decline") {
-  if (responding) return;
-  responding = true;
-  const generation = currentSessionGeneration();
+  const owner = feed;
+  if (!currentFeed(owner) || owner.responding || retired(call.incomingCall.callId)) return;
+  const response = { callId: call.incomingCall.callId, ended: false };
+  owner.responding = response;
+  const generation = owner.generation;
+  const current = () => currentFeed(owner);
   let context: ApiRequestContext | undefined;
   let answered = false;
   try {
     context = await captureApiRequestContext(call.spaceId);
+    if (!current()) return;
     const target = { botId: call.id, callId: call.incomingCall.callId };
+    if (response.ended || retired(target.callId))
+      throw new Error(t("This call is no longer ringing."));
     if (action === "decline")
       await respondToIncomingCall(call.incomingCall, () =>
         rpc(
@@ -235,12 +284,11 @@ export async function respondToMobileCall(call: IncomingBotCall, action: "answer
       answered = true;
       // The session changed mid-answer: rpc drops the hang-up below locally, because its
       // context belongs to the old generation, so the server keeps the call answered.
-      if (generation !== currentSessionGeneration())
-        throw new Error(t("Something went wrong. Try again."));
+      if (!current()) throw new Error(t("Something went wrong. Try again."));
       const voice = await rpc("voice/status", {}, { requestContext: context });
-      if (generation !== currentSessionGeneration())
-        throw new Error(t("Something went wrong. Try again."));
-      if (nativeEnded.has(target.callId)) throw new Error(t("This call is no longer ringing."));
+      if (!current()) throw new Error(t("Something went wrong. Try again."));
+      if (response.ended || retired(target.callId))
+        throw new Error(t("This call is no longer ringing."));
       // Answering during a call replaces it, like a phone's end-and-accept.
       if (getSnapshot()) endCall();
       activeNativeCall = target.callId;
@@ -258,60 +306,67 @@ export async function respondToMobileCall(call: IncomingBotCall, action: "answer
       });
       await native?.finishAnswer(target.callId, true);
     }
-    handled.add(target.callId);
+    if (!current()) return;
+    retire(call.incomingCall);
     if (action === "decline") await native?.endIncomingCall(target.callId);
   } catch (error) {
     // Answered elsewhere or rung out: there is nothing left to decline.
     if (action === "decline" && (error as { code?: string } | null)?.code === "CONFLICT") {
-      handled.add(call.incomingCall.callId);
-      await native?.endIncomingCall(call.incomingCall.callId);
+      if (current()) {
+        retire(call.incomingCall);
+        await native?.endIncomingCall(call.incomingCall.callId);
+      }
       return;
     }
-    if (answered && context) {
+    if (answered && context && (current() || generation !== currentSessionGeneration())) {
       await rpc(
         "threads/endCall",
         { botId: call.id, callId: call.incomingCall.callId },
         { requestContext: context },
       ).catch(() => undefined);
     }
-    await native?.finishAnswer(call.incomingCall.callId, false);
+    if (current()) await native?.finishAnswer(call.incomingCall.callId, false);
     throw error;
   } finally {
-    responding = false;
-    emit();
+    if (owner.responding === response) owner.responding = undefined;
+    if (current()) emit();
   }
 }
 
 async function drainNative() {
-  const generation = currentSessionGeneration();
-  const startedFeed = feed;
-  const current = () =>
-    running && feed === startedFeed && generation === currentSessionGeneration();
+  const owner = feed;
+  const current = () => currentFeed(owner);
+  if (!current()) return;
   const state = await native?.incomingState();
   // A sign-out during the read belongs to the old session; the new one drains for itself.
   if (!state || !current()) return;
-  if (state.token) await registerCallPushToken({ voipToken: state.token }).catch(() => undefined);
+  if (state.token)
+    void captureApiRequestContext(null)
+      .then((context) => {
+        if (current()) return registerCallPushToken({ voipToken: state.token }, context);
+      })
+      .catch(() => undefined);
   if (!current()) return;
-  for (const ring of state.ringing ?? []) {
-    if (!callIsRinging(ring)) continue;
-    if (!roster.has(ring.botId)) await loadRoster();
-    if (!current()) return;
-    const bot = roster.get(ring.botId);
-    if (bot) update(bot, { ...ring, reason: "", opening: "" });
+  // End intent wins even when the same native snapshot lists its earlier answer first.
+  for (const action of state.actions) {
+    if (action.action !== "end") continue;
+    if (owner?.responding?.callId === action.callId) owner.responding.ended = true;
+    retire(action);
+    if (activeNativeCall === action.callId) endCall();
   }
+  emit();
+  notifyCallers();
   for (const action of state.actions) {
     if (!current()) return;
-    if (action.action === "end") {
-      nativeEnded.add(action.callId);
-      if (activeNativeCall === action.callId) endCall();
-      continue;
-    }
+    if (action.action === "end") continue;
+    if (retired(action.callId)) continue;
     if (!callIsRinging(action)) {
       await native?.finishAnswer(action.callId, false);
       continue;
     }
     const bot = await callerFor(action.botId, action.callId);
     if (!current()) return;
+    if (retired(action.callId)) continue;
     // A stale lookup answers nothing and completes no native action: a newer feed owns it.
     if (bot === undefined) continue;
     if (!bot) {
@@ -323,15 +378,25 @@ async function drainNative() {
       "answer",
     ).catch(() => undefined);
   }
+  // Present other rings only after explicit native actions have been admitted.
+  for (const ring of state.ringing ?? []) {
+    if (!current()) return;
+    if (!callIsRinging(ring) || retired(ring.callId)) continue;
+    if (Platform.OS === "android" && AppState.currentState === "active")
+      void native?.endIncomingCall(ring.callId);
+    void callerFor(ring.botId, ring.callId).then((bot) => {
+      if (current() && bot && !retired(ring.callId))
+        update(bot, { ...ring, reason: "", opening: "" });
+    });
+  }
 }
 
 const notificationActions = new Set<string>();
 async function notificationResponse(response: Notifications.NotificationResponse | null) {
   if (!response) return;
-  const generation = currentSessionGeneration();
-  const startedFeed = feed;
-  const current = () =>
-    running && feed === startedFeed && generation === currentSessionGeneration();
+  const owner = feed;
+  const current = () => currentFeed(owner);
+  if (!current()) return;
   const data = response.notification.request.content.data;
   if (
     data?.kind !== "incoming_call" ||
@@ -358,26 +423,22 @@ async function notificationResponse(response: Notifications.NotificationResponse
       },
       response.actionIdentifier,
     );
-  } catch (error) {
+  } finally {
+    // Completed intent is deduplicated by the bounded retired-call record, not an eternal key.
     if (current()) notificationActions.delete(key);
-    throw error;
   }
 }
 
 export function stopIncomingCalls() {
-  running = false;
-  feed?.abort();
+  feed?.controller.abort();
   feed = undefined;
-  streamSnapshot = undefined;
-  snapshotArrived = undefined;
   // Cancel cold-start waits now; a continuation from this feed must not resume later.
-  for (const stopWaiting of snapshotWaiters) stopWaiting();
-  snapshotWaiters.clear();
+  notifyCallers();
+  callerWaiters.clear();
   roster.clear();
   notificationActions.clear();
   calls = [];
-  handled = new Set();
-  nativeEnded = new Set();
+  retiredCalls.clear();
   clearTimeout(expiry);
   snapshot = null;
   activeNativeCall = undefined;
@@ -390,12 +451,11 @@ subscribeCall(() => {
 });
 
 export function startIncomingCalls() {
-  running = true;
-  const controller = new AbortController();
-  feed = controller;
-  streamSnapshot = new Promise((resolve) => {
-    snapshotArrived = resolve;
-  });
+  const owner: CallFeed = {
+    controller: new AbortController(),
+    generation: currentSessionGeneration(),
+  };
+  feed = owner;
   let started = false;
   void Notifications.setNotificationCategoryAsync?.("incoming-call", [
     {
@@ -406,32 +466,25 @@ export function startIncomingCalls() {
     { identifier: "answer", buttonTitle: t("Answer"), options: { opensAppToForeground: true } },
   ]).catch(() => undefined);
   const refresh = () => {
-    const generation = currentSessionGeneration();
     void captureApiRequestContext(null)
       .then(async (context) => {
         // SecureStore may still be locked after a cold PushKit launch. Retry on foreground.
-        if (
-          !context.headers.authorization ||
-          !running ||
-          feed !== controller ||
-          generation !== currentSessionGeneration()
-        )
-          return;
+        if (!context.headers.authorization || !currentFeed(owner)) return;
         await native?.configureIncomingSession?.(context.apiBase, {
           ...serverHeaders(context.apiBase),
           ...context.headers,
         });
-        if (!running || feed !== controller || generation !== currentSessionGeneration()) return;
+        if (!currentFeed(owner)) return;
         if (!started) {
           started = true;
-          void follow(controller)
+          void follow(owner)
             .catch(() => undefined)
             .finally(() => {
               started = false;
             });
         }
-        await loadRoster();
-        if (!running || feed !== controller || generation !== currentSessionGeneration()) return;
+        void loadRoster(owner).catch(() => undefined);
+        if (!currentFeed(owner)) return;
         await drainNative();
       })
       .catch(() => undefined);
@@ -441,9 +494,10 @@ export function startIncomingCalls() {
     () => undefined,
   );
   const response = Notifications.addNotificationResponseReceivedListener?.((response) => {
-    void notificationResponse(response).catch(() => undefined);
+    if (currentFeed(owner)) void notificationResponse(response).catch(() => undefined);
   });
   const app = AppState.addEventListener("change", (state) => {
+    if (!currentFeed(owner)) return;
     if (state === "active") {
       // Android's in-app screen takes over the ring from the native notification.
       if (Platform.OS === "android")
@@ -452,15 +506,17 @@ export function startIncomingCalls() {
     } else for (const call of calls) reportNativeCall(call);
   });
   const events = native?.addListener("onIncomingCallChanged", () => {
-    void drainNative().catch(() => undefined);
+    if (currentFeed(owner)) void drainNative().catch(() => undefined);
   });
-  const push = Notifications.addNotificationReceivedListener(() => refresh());
+  const push = Notifications.addNotificationReceivedListener(() => {
+    if (currentFeed(owner)) refresh();
+  });
   return () => {
     app.remove();
     events?.remove();
     push.remove();
     response?.remove();
-    stopIncomingCalls();
+    if (feed === owner) stopIncomingCalls();
   };
 }
 
