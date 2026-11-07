@@ -1,4 +1,7 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# Inherited Apache-2.0 installer is preserved; bounded download recovery follows LICENSE.md.
 # Installs the pinned agent-browser release into the given folder, checked against its sha256.
 # The computer image, hosted computers and CI's page-browser tests all use it, so they run the
 # same binary. A folder that already holds that binary is left as it is.
@@ -16,7 +19,11 @@ if echo "$sha256  $dest/agent-browser" | sha256sum -c --status 2>/dev/null; then
 mkdir -p "$dest"
 binary="$(mktemp)"
 trap 'rm -f "$binary"' EXIT
-curl -fsSL "https://github.com/vercel-labs/agent-browser/releases/download/v${version}/agent-browser-linux-${arch}" -o "$binary"
+# Curl retries only its transient HTTP/timeouts plus explicitly refused connections.
+# Verify each successful transfer once before replacing an existing binary.
+curl -fsSL --retry 2 --retry-connrefused --retry-max-time 180 \
+  --connect-timeout 10 --max-time 60 \
+  "https://github.com/vercel-labs/agent-browser/releases/download/v${version}/agent-browser-linux-${arch}" -o "$binary"
 echo "$sha256  $binary" | sha256sum -c -
 install -m 755 "$binary" "$dest/agent-browser"
 "$dest/agent-browser" --version
