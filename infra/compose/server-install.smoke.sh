@@ -40,6 +40,9 @@ case "$1" in
   context) echo unix:///var/run/docker.sock; exit 0 ;;
   ps|volume) exit 0 ;;
 esac
+if [[ -f docker-compose.override.yml && ( " $* " == *' pull '* || " $* " == *' up '* ) && " $* " != *' --help '* && " $* " != *' -f docker-compose.override.yml '* ]]; then
+  echo 'operator override omitted' >&2; exit 1
+fi
 case " $* " in
   *' --help '*) echo '--pull --wait-timeout'; exit 0 ;;
   *' version '*) exit 0 ;;
@@ -48,7 +51,13 @@ case " $* " in
     "$STUB_PYTHON" -c 'from pathlib import Path; print("\n".join(line.split("=",1)[0]+"="+line.split("=",1)[1].strip("\047\042") for line in Path(".env").read_text().splitlines() if "=" in line and not line.startswith("#")))'
     exit 0 ;;
   *' pull '*) echo pull >> "$STUB_EVENTS"; exit "${STUB_PULL_FAIL:-0}" ;;
-  *' up '*) echo up >> "$STUB_EVENTS"; exit 0 ;;
+  *' up '*)
+    echo up >> "$STUB_EVENTS"
+    if [[ "${STUB_UP_FAIL:-0}" != 0 ]]; then
+      printf '%s\n' "${STUB_UP_PHASE:-services} failed" >&2
+      exit "$STUB_UP_FAIL"
+    fi
+    exit 0 ;;
 esac
 exit 1
 STUB
@@ -133,6 +142,24 @@ grep -q '^progress-failed$' "$tmp/pull-fails/events"
 run_case pull-fails || { cat "$tmp/pull-fails/output"; exit 1; }
 ! grep -q '^redeem$' "$tmp/pull-fails/events"
 grep -q '^progress-ready$' "$tmp/pull-fails/events"
+# Compose reports migration failure or unhealthy services through the same nonzero boundary.
+for phase in migration health; do
+  if STUB_UP_FAIL=1 STUB_UP_PHASE="$phase" run_case "$phase-fails" --code "$code"; then
+    echo "$phase failure accepted" >&2; exit 1
+  fi
+  grep -q '^up$' "$tmp/$phase-fails/events"
+  grep -q '^progress-failed$' "$tmp/$phase-fails/events"
+  ! grep -q -e '^progress-ready$' -e '^health$' "$tmp/$phase-fails/events"
+  ! grep -q 'Ork is ready' "$tmp/$phase-fails/output"
+  grep -q 'Rerun the same command without --code' "$tmp/$phase-fails/output"
+  before=$(cksum "$tmp/$phase-fails/.env")
+  state_before=$(cksum "$tmp/$phase-fails/.orkbot-server.json")
+  run_case "$phase-fails" || { cat "$tmp/$phase-fails/output"; exit 1; }
+  ! grep -q '^redeem$' "$tmp/$phase-fails/events"
+  [[ "$(cksum "$tmp/$phase-fails/.env")" == "$before" ]]
+  [[ "$(cksum "$tmp/$phase-fails/.orkbot-server.json")" == "$state_before" ]]
+  grep -q '^progress-ready$' "$tmp/$phase-fails/events"
+done
 if STUB_EGRESS_FAIL=1 run_case firewall-fails --code "$code"; then echo 'firewall failure accepted' >&2; exit 1; fi
 ! grep -q -e '^pull$' -e '^redeem$' -e '^up$' "$tmp/firewall-fails/events"
 if STUB_BAD_SSO=1 run_case sso-fails --code "$code"; then echo 'unavailable Accounts accepted' >&2; exit 1; fi
@@ -142,6 +169,22 @@ printf '%s\n' "$code" | run_case stdin --code-stdin || { cat "$tmp/stdin/output"
 grep -q '^redeem$' "$tmp/stdin/events"
 run_case external --external-proxy --code "$code" || { cat "$tmp/external/output"; exit 1; }
 [[ ! -e "$tmp/external/docker-compose.https.yml" ]]
+# Saved external-proxy mode and operator files survive an unattended rerun.
+printf '# operator override\nservices: {}\n' > "$tmp/external/docker-compose.override.yml"
+printf 'operator data sentinel\n' > "$tmp/external/data-sentinel"
+external_before=$(cksum "$tmp/external/.env")
+external_state_before=$(cksum "$tmp/external/.orkbot-server.json")
+external_override_before=$(cksum "$tmp/external/docker-compose.override.yml")
+external_compose_before=$(cksum "$tmp/external/docker-compose.images.yml")
+STUB_SERVER_PROMPT=1 run_case external || { cat "$tmp/external/output"; exit 1; }
+! grep -q '^redeem$' "$tmp/external/events"
+[[ "$(cksum "$tmp/external/.env")" == "$external_before" ]]
+[[ "$(cksum "$tmp/external/.orkbot-server.json")" == "$external_state_before" ]]
+[[ "$(cksum "$tmp/external/docker-compose.override.yml")" == "$external_override_before" ]]
+[[ "$(cksum "$tmp/external/docker-compose.images.yml")" == "$external_compose_before" ]]
+[[ ! -e "$tmp/external/docker-compose.https.yml" ]]
+grep -q '^operator data sentinel$' "$tmp/external/data-sentinel"
+grep -q '^progress-ready$' "$tmp/external/events"
 run_case cached --pull-never --code "$code" || { cat "$tmp/cached/output"; exit 1; }
 ! grep -q '^pull$' "$tmp/cached/events"
 STUB_SERVER_PROMPT=1 run_case server-domain --code "$code" || { cat "$tmp/server-domain/output"; exit 1; }

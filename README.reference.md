@@ -1,5 +1,5 @@
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
-<!-- Modified by Ork contributors for the licensing transition. See LICENSE.md. -->
+<!-- Modified by Ork contributors for licensing and native self-host instructions. Inherited Apache-2.0 material is preserved. See LICENSE.md. -->
 
 # Ork reference
 
@@ -12,7 +12,7 @@ Adapted feature and deployment reference. Use [README.md](./README.md) for the c
 ![Ork - AI teammates you actually own](./docs/readme-hero.png)
 
 Ork is a source-available AI agent for persistent teammates, and a self-hosted AI assistant you
-can run on your own machine. It is available on the web, as a Tauri desktop app, and on
+can run on your own machine. Use the Tauri desktop app or the apps for
 [iPhone](https://ork.run/download/) and [Android](https://ork.run/download/). Bring your own model
 and computer provider, or run the complete stack locally.
 
@@ -65,13 +65,14 @@ You need Docker Engine, the Compose plugin, curl, and OpenSSL. No clone or Node 
 ```bash
 mkdir -p orkbot && cd orkbot &&
 curl -fsSLO https://raw.githubusercontent.com/orkbot-run/ork/main/infra/compose/install-images.sh &&
-bash install-images.sh
+bash install-images.sh --prepare-only
 ```
 
-The installer downloads the Compose files, creates `.env` with random secrets, and starts Ork.
-It preserves an existing `.env` when rerun.
+The installer downloads the Compose files and creates `.env` with random secrets.
+Configure your registered Accounts client in `.env` using [Accounts sign-in](./docs/self-host-accounts.md),
+then run `bash install-images.sh`. Reruns preserve existing settings.
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173), create an account, and connect a model.
+Connect the desktop or mobile app to `http://127.0.0.1:5173`, sign in with Accounts and add a model connection.
 Local Docker computers are on by default. Optional remote providers: `e2b`, `novita`, `daytona`, `createos`, `boat`, `boxd`, or `railway`
 with the matching API key.
 
@@ -88,7 +89,7 @@ For an agent-assisted install, use [SETUP_PROMPT.md](./SETUP_PROMPT.md).
 ## Run on a server
 
 Bots stay on when the backend runs on a server. Use the same installer on a VPS, then connect from
-the desktop app, the mobile app, or a browser.
+the desktop or mobile app.
 
 ```bash
 bash install-images.sh --prepare-only
@@ -97,8 +98,7 @@ bash install-images.sh
 ```
 
 Put HTTPS in front of port 5173; [docs/self-host-production.md](./docs/self-host-production.md#public-single-vm-deployment)
-covers the Caddy setup and host hardening. In the desktop app choose **Existing instance** and enter
-the `https://` address.
+covers the Caddy setup and host hardening. Connect the desktop or mobile app to the server's `https://` address.
 
 Or [deploy on Railway](./infra/railway/README.md); see the [Railway setup guide](./infra/railway/README.md).
 

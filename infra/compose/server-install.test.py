@@ -3,12 +3,16 @@
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 """Offline server installer tests. No host packages, Docker daemon or credentials."""
 
+import http.server
 import importlib.util
 import io
 import json
 import os
 from pathlib import Path
 import socket
+import ssl
+import subprocess
+import threading
 import tempfile
 import unittest
 import urllib.error
@@ -325,6 +329,74 @@ class InstallerTests(unittest.TestCase):
             self.assertNotIn("secret-body", str(raised.exception))
             self.assertNotIn(CODE, str(raised.exception))
             self.assertEqual(factory.return_value.open.call_count, 1)
+
+    def test_local_https_verifies_trust_and_hostname_without_following_redirects(self):
+        key, certificate = Path("tls-key.pem"), Path("tls-cert.pem")
+        # This temporary self-signed fixture is never an installer trust override.
+        subprocess.run([
+            "openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
+            "-keyout", str(key), "-out", str(certificate), "-subj", "/CN=localhost",
+            "-addext", "subjectAltName=DNS:localhost",
+        ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=10)
+        key.chmod(0o600)
+        requests = []
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                if self.path == "/redirect":
+                    self.send_response(302)
+                    self.send_header("Location", "/must-not-follow")
+                    body = b""
+                else:
+                    self.send_response(200)
+                    body = b'{"ok":true}' if self.path == "/health" else b"<html>Proxy login</html>"
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(str(certificate), str(key))
+        server.socket = tls.wrap_socket(server.socket, server_side=True)
+        thread = threading.Thread(target=lambda: server.serve_forever(poll_interval=0.01), daemon=True)
+        thread.start()
+        endpoint = "https://localhost:" + str(server.server_port)
+        trusted = ssl.create_default_context(cafile=str(certificate))
+        untrusted = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        build_opener = installer.urllib.request.build_opener
+        settings = {
+            "http_proxy": "", "HTTP_PROXY": "", "https_proxy": "", "HTTPS_PROXY": "",
+            "all_proxy": "", "ALL_PROXY": "", "no_proxy": "localhost,127.0.0.1", "NO_PROXY": "localhost,127.0.0.1",
+        }
+        try:
+            with patch.dict(os.environ, settings), patch.object(
+                installer.urllib.request, "build_opener",
+                side_effect=lambda *handlers: build_opener(*handlers, installer.urllib.request.HTTPSHandler(context=trusted)),
+            ):
+                self.assertEqual(installer.request_json(endpoint + "/health"), {"ok": True})
+                for path in ("/redirect", "/html"):
+                    with self.subTest(path=path), self.assertRaises(installer.SetupError):
+                        installer.request_json(endpoint + path)
+                self.assertEqual(requests, ["/health", "/redirect", "/html"])
+                # The trusted certificate still cannot authenticate another hostname.
+                with self.assertRaises(installer.SetupError):
+                    installer.request_json(endpoint.replace("localhost", "127.0.0.1") + "/health")
+            with patch.dict(os.environ, settings), patch.object(
+                installer.urllib.request, "build_opener",
+                side_effect=lambda *handlers: build_opener(*handlers, installer.urllib.request.HTTPSHandler(context=untrusted)),
+            ):
+                with self.assertRaises(installer.SetupError):
+                    installer.request_json(endpoint + "/health")
+            self.assertEqual(requests, ["/health", "/redirect", "/html"])
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+            self.assertFalse(thread.is_alive())
 
 
 if __name__ == "__main__":
