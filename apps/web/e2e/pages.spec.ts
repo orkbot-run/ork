@@ -59,7 +59,21 @@ async function send(page: Page, text: string) {
 test("a bot's page shows in its reply, opens full screen and updates", async ({
   page,
 }, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem("orkbot.uiAppearance", "dark"));
+  await page.addInitScript(() => {
+    localStorage.setItem("orkbot.uiAppearance", "dark");
+    Object.defineProperty(window, "orkbotDesktop", {
+      value: {
+        platform: "darwin",
+        nativeWindowFrame: true,
+        window: {
+          close: async () => {},
+          minimize: async () => {},
+          toggleMaximize: async () => {},
+          state: async () => ({ minimized: false, maximized: false, fullScreen: false }),
+        },
+      },
+    });
+  });
   await page.setViewportSize({ width: 1280, height: 860 });
   await signup(page, `pages-${Date.now()}@orkbot.test`, "password12", "Page Owner");
   await completeOnboarding(page);
@@ -86,6 +100,19 @@ test("a bot's page shows in its reply, opens full screen and updates", async ({
   await expect(
     pageFrame(page, title).getByRole("heading", { name: "Test dashboard", level: 1 }),
   ).toBeVisible();
+  // The macOS titlebar owns the top band, before any page-control interaction.
+  for (const control of [
+    view.getByRole("button", { name: "Close page" }),
+    view.getByRole("button", { name: title }),
+    view.getByRole("button", { name: "Download PDF" }),
+  ]) {
+    expect((await control.boundingBox())!.y).toBeGreaterThanOrEqual(40);
+    expect(
+      await control.evaluate((node) =>
+        getComputedStyle(node).getPropertyValue("-webkit-app-region"),
+      ),
+    ).toBe("no-drag");
+  }
   await captureScreenshot(page, testInfo, "page-full-screen");
   // Opening lands on Close, and Tab reaches the title and Download PDF before the page.
   await expect(view.getByRole("button", { name: "Close page" })).toBeFocused();
@@ -173,7 +200,36 @@ test("a bot's page shows in its reply, opens full screen and updates", async ({
 
   // The docked composer talks to the same chat, naming the page.
   await send(page, "make the churn tile red");
-  await page.keyboard.press("Escape");
+  const closing = await view.evaluate(
+    (popup) =>
+      new Promise<Array<{ duration: number; opacity: number; connected: boolean }>>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (!popup.hasAttribute("data-closed")) return;
+          observer.disconnect();
+          const backdrop = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')!;
+          const layers = [popup, backdrop];
+          const animations = layers.flatMap((layer) => layer.getAnimations());
+          for (const animation of animations) {
+            animation.pause();
+            animation.currentTime = 112.5;
+          }
+          const snapshot = layers.map((layer) => ({
+            duration: Number.parseFloat(getComputedStyle(layer).animationDuration) * 1000,
+            opacity: Number(getComputedStyle(layer).opacity),
+            connected: layer.isConnected,
+          }));
+          for (const animation of animations) animation.finish();
+          resolve(snapshot);
+        });
+        observer.observe(popup, { attributes: true, attributeFilter: ["data-closed"] });
+        popup.querySelector<HTMLButtonElement>('[aria-label="Close page"]')!.click();
+      }),
+  );
+  expect(closing.map((layer) => layer.duration)).toEqual([150, 150]);
+  for (const layer of closing) {
+    expect(layer.connected).toBe(true);
+    expect(layer.opacity).toBeGreaterThan(0);
+  }
   await expect(view).toBeHidden();
   await expect(page).not.toHaveURL(/[?&]page=/);
   await expect(card).not.toContainText("Shared");
@@ -221,7 +277,12 @@ test("a bot's page shows in its reply, opens full screen and updates", async ({
   await card.first().getByRole("button", { name: "Open Signups dashboard" }).click();
   await expect(view).toBeVisible();
   await expect(pageFrame(page, "Signups dashboard").getByText("1.9%")).toBeVisible();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(view).toHaveCSS("animation-name", "none");
+  await expect(page.locator('[data-slot="dialog-overlay"]')).toHaveCSS("animation-name", "none");
   await page.keyboard.press("Escape");
+  await expect(view).toBeHidden();
+  await page.emulateMedia({ reducedMotion: "no-preference" });
 
   await openBotPanelTab(page, "Pages");
   await page

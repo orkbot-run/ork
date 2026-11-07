@@ -5,6 +5,7 @@
 
 // @vitest-environment jsdom
 
+import type { OrkDesktop } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -27,17 +28,29 @@ vi.mock("./PageFrame", () => ({
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  delete window.orkbotDesktop;
   document.body.replaceChildren();
 });
 
-function mount(props: { document: string; onOpenChange?: (open: boolean) => void }) {
+type ViewProps = {
+  document: string;
+  open?: boolean;
+  compact?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  returnFocus?: () => boolean;
+};
+
+function mount(props: ViewProps) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   const render = (next: typeof props) =>
     act(async () =>
       root.render(
         <PageView
-          open
+          open={next.open ?? true}
+          compact={next.compact}
+          returnFocus={next.returnFocus}
+          onRename={() => {}}
           onOpenChange={next.onOpenChange ?? (() => {})}
           title="Plan"
           document={next.document}
@@ -80,4 +93,114 @@ it("closes on Escape unless the key landed in a popup", async () => {
   await press(item);
   expect(onOpenChange).not.toHaveBeenCalled();
   await view.unmount();
+});
+
+it.each([
+  ["darwin", false, true],
+  ["darwin", true, true],
+  ["win32", true, false],
+  ["linux", true, false],
+  [undefined, false, false],
+] as const)(
+  "reserves native chrome on the first %s render (frame %s)",
+  async (platform, nativeWindowFrame, inset) => {
+    if (platform) window.orkbotDesktop = { platform, nativeWindowFrame } as OrkDesktop;
+    const view = mount({ document: "<p>v1</p>" });
+    await view.render({ document: "<p>v1</p>" });
+    const close = document.querySelector('[aria-label="Close page"]')!;
+    expect(close.parentElement!.classList.contains("top-10")).toBe(inset);
+    for (const control of [
+      close,
+      document.querySelector('[data-slot="dialog-title"]')!,
+      document.querySelector("iframe")!.parentElement!.parentElement!,
+    ]) {
+      expect(control.closest(".app-no-drag")).not.toBeNull();
+    }
+    expect(
+      [...document.querySelectorAll("button")]
+        .find((node) => node.textContent === "Stop sharing")!
+        .closest(".app-no-drag"),
+    ).not.toBeNull();
+    await view.unmount();
+  },
+);
+
+it("keeps the backdrop through the page exit and disables both animations for reduced motion", async () => {
+  const view = mount({ document: "<p>v1</p>" });
+  await view.render({ document: "<p>v1</p>" });
+  const popup = document.querySelector('[data-testid="page-view"]')!;
+  const backdrop = document.querySelector('[data-slot="dialog-overlay"]')!;
+  expect(popup.classList.contains("data-closed:duration-150")).toBe(true);
+  expect(backdrop.classList.contains("data-closed:duration-150")).toBe(true);
+  for (const layer of [popup, backdrop]) {
+    for (const state of ["open", "closed"]) {
+      expect(layer.classList.contains(`motion-reduce:data-${state}:animate-none`)).toBe(true);
+    }
+  }
+  await view.unmount();
+});
+
+it.each(["button", "Escape"])("returns focus to its caller when closed by %s", async (method) => {
+  const caller = document.body.appendChild(document.createElement("button"));
+  const restore = vi.fn(() => {
+    caller.focus();
+    return false;
+  });
+  const view = mount({ document: "<p>v1</p>" });
+  const props = { document: "<p>v1</p>", returnFocus: restore };
+  const onOpenChange = vi.fn();
+  await view.render({ ...props, onOpenChange });
+  await act(async () => {
+    const close = document.querySelector<HTMLButtonElement>('[aria-label="Close page"]')!;
+    if (method === "button") close.click();
+    else close.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  await view.render({ ...props, open: false });
+  expect(restore).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(caller);
+  await view.unmount();
+});
+
+it("keeps a reopened page when the previous exit finishes, and waits for its new document", async () => {
+  vi.useFakeTimers();
+  let finishExit!: () => void;
+  const finished = new Promise<void>((resolve) => {
+    finishExit = resolve;
+  });
+  const previous = Object.getOwnPropertyDescriptor(Element.prototype, "getAnimations");
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value(this: Element) {
+      return this.hasAttribute("data-closed") ? [{ finished }] : [];
+    },
+  });
+  const view = mount({ document: "<p>v1</p>" });
+  try {
+    await view.render({ document: "<p>v1</p>" });
+    await act(async () => frame.drawn?.());
+    await act(async () => vi.advanceTimersByTimeAsync(50));
+    await view.render({ document: "<p>v1</p>", open: false });
+    await act(async () => vi.advanceTimersByTimeAsync(50));
+    expect(document.querySelector('[data-testid="page-view"][data-closed]')).not.toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).not.toBeNull();
+
+    await view.render({ document: "<p>v2</p>" });
+    await act(async () => {
+      finishExit();
+      await vi.advanceTimersByTimeAsync(50);
+    });
+    expect(document.querySelector('[data-testid="page-view"][data-open]')).not.toBeNull();
+    expect(document.querySelector("iframe")!.parentElement!.classList.contains("opacity-0")).toBe(
+      true,
+    );
+    await act(async () => frame.drawn?.());
+    expect(document.querySelector("iframe")!.parentElement!.classList.contains("opacity-100")).toBe(
+      true,
+    );
+  } finally {
+    await view.unmount();
+    if (previous) Object.defineProperty(Element.prototype, "getAnimations", previous);
+    else Reflect.deleteProperty(Element.prototype, "getAnimations");
+  }
 });

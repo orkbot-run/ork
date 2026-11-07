@@ -10,6 +10,7 @@ import { Dialog, DialogClose, DialogContent, DialogTitle } from "@orkbot/ui-web"
 import { Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { desktopBridge, windowChromeKind } from "../../lib/desktop";
 import { DownloadPdfButton } from "./DownloadPdfButton";
 import { PageFrame } from "./PageFrame";
 import { PageLoading, PageNotice } from "./PageNotice";
@@ -56,6 +57,7 @@ export function PageView({
 }) {
   const { t } = useLingui();
   const closeButton = useRef<HTMLButtonElement>(null);
+  const macChrome = windowChromeKind(desktopBridge()) === "darwin";
   // The frame stays hidden until the page inside reports it has drawn, so neither a blank
   // frame nor a browser error page shows; a page that never draws gets a way to try again.
   const [drawn, setDrawn] = useState(false);
@@ -75,7 +77,7 @@ export function PageView({
     return () => window.clearTimeout(timer);
   }, [waiting, attempt]);
   const onDrawn = useCallback(() => setDrawn(true), []);
-  const control = `grid place-items-center rounded-full p-0 border border-foreground/[0.06] text-foreground outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring ${compact ? "size-11" : "size-[35px]"}`;
+  const control = `app-no-drag grid place-items-center rounded-full p-0 border border-foreground/[0.06] text-foreground outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring ${compact ? "size-11" : "size-[35px]"}`;
   return (
     <Dialog
       open={open}
@@ -97,17 +99,18 @@ export function PageView({
     >
       <DialogContent
         showCloseButton={false}
+        overlayClassName="data-closed:duration-150 motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none"
         initialFocus={closeButton}
         finalFocus={returnFocus}
         data-testid="page-view"
         data-page-print
-        className={`print:static print:h-auto print:overflow-visible print:bg-transparent print:animate-none top-0 left-0 block h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-card p-0 ring-0 sm:max-w-none ease-[cubic-bezier(0.16,1,0.3,1)] data-open:duration-[260ms] data-open:zoom-in-[0.98] data-open:slide-in-from-bottom-3 data-closed:duration-150 data-closed:zoom-out-100 motion-reduce:data-open:zoom-in-100 motion-reduce:data-open:slide-in-from-bottom-0 ${
+        className={`print:static print:h-auto print:overflow-visible print:bg-transparent print:animate-none motion-reduce:data-open:animate-none motion-reduce:data-closed:animate-none top-0 left-0 block h-dvh w-screen max-w-none translate-x-0 translate-y-0 gap-0 overflow-hidden rounded-none bg-card p-0 ring-0 sm:max-w-none ease-[cubic-bezier(0.16,1,0.3,1)] data-open:duration-[260ms] data-open:zoom-in-[0.98] data-open:slide-in-from-bottom-3 data-closed:duration-150 data-closed:zoom-out-100 motion-reduce:data-open:zoom-in-100 motion-reduce:data-open:slide-in-from-bottom-0 ${
           compact ? "min-[900px]:bg-transparent" : ""
         }`}
       >
         {/* On a tablet the page is a sheet over the chat, covering all but the chat's edges. */}
         <div
-          className={`absolute inset-0 overflow-hidden print:static print:overflow-visible print:bg-transparent ${
+          className={`app-no-drag absolute inset-x-0 bottom-0 overflow-hidden print:static print:overflow-visible print:bg-transparent ${macChrome ? "top-10" : "top-0"} ${
             compact
               ? "min-[900px]:inset-x-[70px] min-[900px]:bottom-[33px] min-[900px]:rounded-[28px] min-[900px]:bg-background"
               : ""
@@ -116,7 +119,7 @@ export function PageView({
           <DialogClose
             ref={closeButton}
             aria-label={t`Close page`}
-            className={`absolute z-10 grid place-items-center print:hidden ${compact ? "top-[6px] left-[6px] size-11" : "top-[6px] left-[11px] size-9"} rounded-full border border-foreground/[0.06] text-foreground/90 outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring`}
+            className={`app-no-drag absolute z-10 grid place-items-center print:hidden ${compact ? "top-[6px] left-[6px] size-11" : "top-[6px] left-[11px] size-9"} rounded-full border border-foreground/[0.06] text-foreground/90 outline-none hover:bg-foreground/[0.06] focus-visible:ring-2 focus-visible:ring-ring`}
           >
             <X className={compact ? "size-6" : "size-[18px]"} strokeWidth={compact ? 2.2 : 1.7} />
           </DialogClose>
@@ -138,7 +141,7 @@ export function PageView({
           </div>
           {/* Touch controls sit 6px in from the sheet's 28px corners: 22px round plus 6 is 28. */}
           <div
-            className={`absolute z-10 flex items-center gap-1.5 print:hidden ${compact ? "top-[6px] right-[6px]" : "top-[6.5px] right-3"}`}
+            className={`app-no-drag absolute z-10 flex items-center gap-1.5 print:hidden ${compact ? "top-[6px] right-[6px]" : "top-[6.5px] right-3"}`}
           >
             {drawn && !stalled && notice === null ? (
               <DownloadPdfButton
@@ -188,7 +191,7 @@ export function PageView({
           </section>
         </div>
         {composer ? (
-          <div className="absolute inset-x-0 bottom-[12.5px] flex justify-center px-3 print:hidden">
+          <div className="app-no-drag absolute inset-x-0 bottom-[12.5px] flex justify-center px-3 print:hidden">
             <div className="w-full max-w-[551px]">{composer}</div>
           </div>
         ) : null}
@@ -202,7 +205,7 @@ function TitlePill({ title, onRename }: { title: string; onRename?: (title: stri
   const [draft, setDraft] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const pill =
-    "pointer-events-auto flex h-11 max-w-full min-w-0 items-center gap-3 rounded-full ring-[0.5px] ring-foreground/[0.06] pr-[15px] pl-[11px] text-[14px] leading-5 font-medium text-foreground";
+    "app-no-drag pointer-events-auto flex h-11 max-w-full min-w-0 items-center gap-3 rounded-full ring-[0.5px] ring-foreground/[0.06] pr-[15px] pl-[11px] text-[14px] leading-5 font-medium text-foreground";
 
   function commit() {
     const next = draft?.trim() ?? "";
