@@ -29,6 +29,7 @@ interface NovitaEntry {
 /** The part of a Novita desktop handle the adapter uses. */
 export interface NovitaDesktop {
   readonly sandboxId: string;
+  readonly trafficAccessToken?: string;
   getHost(port: number): string;
   setTimeout(timeoutMs: number): Promise<void>;
   commands: {
@@ -175,6 +176,10 @@ export function novitaDesktop(desktop: NovitaDesktop, pause: () => Promise<void>
   return {
     sandboxId: desktop.sandboxId,
     getHost: (port) => desktop.getHost(port),
+    portHeaders: () =>
+      desktop.trafficAccessToken
+        ? { "E2B-Traffic-Access-Token": desktop.trafficAccessToken }
+        : undefined,
     setTimeout: (timeoutMs) => desktop.setTimeout(timeoutMs),
     commands: { run: (command, options) => runNovitaCommand(desktop, command, options, pause) },
     files: {

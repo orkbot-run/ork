@@ -63,6 +63,7 @@ export interface RemoteDesktop {
   files: {
     makeDir(path: string): Promise<boolean>;
     list(path: string, options: { signal?: AbortSignal }): Promise<EntryInfo[]>;
+  portHeaders?(port: number): Record<string, string> | undefined;
     getInfo(path: string, options: { signal?: AbortSignal }): Promise<EntryInfo>;
     read(path: string, options: { format: "bytes"; signal?: AbortSignal }): Promise<Uint8Array>;
     write(
@@ -141,8 +142,10 @@ export class RemoteDesktopSandboxProvider implements SandboxProvider {
       const result = await this.runSetupCommand(computer, command, context.signal);
       return { code: result.exitCode, stdout: result.stdout, stderr: result.stderr };
     },
-    screenUrl: async (computer, port) =>
-      `https://${(await this.box(computer)).getHost(port)}/vnc.html`,
+    screenUrl: async (computer, port) => {
+      const box = await this.box(computer);
+      return { url: `https://${box.getHost(port)}/vnc.html`, headers: box.portHeaders?.(port) };
+    },
   });
   private readonly boxes = new Map<string, RemoteDesktop>();
   private readonly connections = new Map<string, Promise<RemoteDesktop>>();

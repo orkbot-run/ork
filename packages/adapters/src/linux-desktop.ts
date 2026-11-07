@@ -54,7 +54,11 @@ export interface LinuxDesktopHost {
     command: string,
     context: AdapterContext,
   ): Promise<{ code: number; stdout: string; stderr?: string }>;
-  screenUrl(computer: ComputerRef, port: number, context: AdapterContext): Promise<string>;
+  screenUrl(
+    computer: ComputerRef,
+    port: number,
+    context: AdapterContext,
+  ): Promise<string | { url: string; headers?: Record<string, string> }>;
   /**
    * Runs a command with `input` on its stdin, never in its command line, which other processes
    * and the provider's logs can read. Providers with the page browser installed implement it.
@@ -146,12 +150,18 @@ export class LinuxDesktop {
         context,
       );
     }
-    const url = await this.host.screenUrl(
+    const target = await this.host.screenUrl(
       computer,
       request.interactive ? screen.layout.controlPort : screen.layout.viewPort,
       context,
     );
-    return { url: desktopUrl(url, token), mimeType: "text/html", close: async () => undefined };
+    const { url, headers } = typeof target === "string" ? { url: target } : target;
+    return {
+      url: desktopUrl(url, token),
+      headers,
+      mimeType: "text/html",
+      close: async () => undefined,
+    };
   }
 
   async connectTerminal(computer: ComputerRef, request: TerminalRequest, context: AdapterContext) {
@@ -169,8 +179,9 @@ export class LinuxDesktop {
       ),
       context,
     );
-    const url = await this.host.screenUrl(computer, screen.layout.controlPort, context);
-    return { url: desktopUrl(url, terminalToken) };
+    const target = await this.host.screenUrl(computer, screen.layout.controlPort, context);
+    const { url, headers } = typeof target === "string" ? { url: target } : target;
+    return { url: desktopUrl(url, terminalToken), headers };
   }
 
   async setScreenControl(
