@@ -28,6 +28,7 @@ COPY --chmod=755 packages/adapters/package.json packages/adapters/
 COPY --chmod=755 packages/auth/package.json packages/auth/
 COPY --chmod=755 packages/avatar/package.json packages/avatar/
 COPY --chmod=755 packages/chat-ui/package.json packages/chat-ui/
+COPY --chmod=755 packages/client-transport/package.json packages/client-transport/
 COPY --chmod=755 packages/contracts/package.json packages/contracts/
 COPY --chmod=755 packages/core/package.json packages/core/
 COPY --chmod=755 packages/db/package.json packages/db/

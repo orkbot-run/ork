@@ -22,6 +22,7 @@
     "@orpc/contract": "1.16.1",
     "@orpc/tanstack-query": "1.16.1",
     "@orkbot/chat-ui": "workspace:*",
+    "@orkbot/client-transport": "workspace:*",
     "@orkbot/contracts": "workspace:*",
     "@orkbot/core": "workspace:*",
     "@orkbot/ui-tokens": "workspace:*",

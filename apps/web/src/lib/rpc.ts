@@ -1,9 +1,9 @@
+import { createRpcLink } from "@orkbot/client-transport";
 import type { AppContract, ProductEvent } from "@orkbot/contracts";
 import { CLIENT_BUILD_HEADER, formatClientBuild } from "@orkbot/contracts";
 import { displayIdentityEvent, displayIdentityResult } from "@orkbot/core";
 import { clientCorrelationHeaders, responseCorrelation } from "@orkbot/logging/monitoring";
 import { createORPCClient } from "@orpc/client";
-import { RPCLink } from "@orpc/client/fetch";
 import type { ContractRouterClient } from "@orpc/contract";
 import { authClient } from "./auth";
 import { CLIENT_BUILD } from "./client-build";
@@ -75,36 +75,42 @@ export function onRpcResponse(listener: (response: Response) => void): () => voi
   };
 }
 
-const link = new RPCLink<RpcClientContext>({
+const link = createRpcLink<RpcClientContext>({
   url: () =>
     typeof window === "undefined" ? "http://127.0.0.1:5173/rpc" : `${window.location.origin}/rpc`,
-  fetch: async (input, init, options) => {
-    const request = new Request(input, init);
+  headers: (options) => {
     const spaceId =
       options.context.spaceId === undefined ? selectedSpaceId() : options.context.spaceId;
     const correlation = clientCorrelationHeaders();
-    const headers = withSpaceHeaders(request.headers, spaceId);
+    const headers = withSpaceHeaders(undefined, spaceId);
     if (CLIENT_BUILD) headers.set(CLIENT_BUILD_HEADER, formatClientBuild("web", CLIENT_BUILD));
     for (const [key, value] of Object.entries(correlation)) headers.set(key, value);
+    return headers;
+  },
+  fetch: async (input, init, options) => {
+    const request = new Request(input, init);
+    const spaceId = request.headers.get("x-orkbot-space-id");
     let response: Response;
     try {
       response = await fetch(request, {
-        headers,
+        ...init,
         credentials: "include",
         // Keep cancellation attached directly to fetch rather than only a cloned Request.
         signal: options.signal,
       });
     } catch (error) {
       if (!options.signal?.aborted)
-        reportClientError(error, "rpc.transport", responseCorrelation(new Headers(correlation)));
+        reportClientError(error, "rpc.transport", responseCorrelation(request.headers));
       throw error;
     }
     // Server exceptions are reported by the API; do not report every HTTP failure twice.
     recheckSessionOnUnauthorized(response.status);
     if (response.status === 401 && spaceId && spaceId === selectedSpaceId())
       void leaveUnavailableSpace(spaceId);
-    for (const listener of responseListeners) listener(response);
     return response;
+  },
+  onResponse: (response) => {
+    for (const listener of responseListeners) listener(response);
   },
 });
 

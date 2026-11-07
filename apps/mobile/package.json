@@ -25,6 +25,7 @@
     "@expo/metro-runtime": "57.0.18",
     "@expo/ui": "57.0.26",
     "@orkbot/chat-ui": "workspace:*",
+    "@orkbot/client-transport": "workspace:*",
     "@orkbot/contracts": "workspace:*",
     "@orkbot/core": "workspace:*",
     "@orkbot/logging": "workspace:*",

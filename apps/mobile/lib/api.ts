@@ -4,6 +4,13 @@
 // Apache-2.0 covers the imported implementation; Ork changes are PolyForm-covered.
 // Modified by Ork contributors to keep stale Space selections from stopping current playback.
 
+import {
+  decodeRpcJson,
+  encodeRpcJson,
+  readRpcEvents,
+  requestSignal,
+  rpcHttpError,
+} from "@orkbot/client-transport";
 import type {
   AccountSecurity,
   AuthCapabilities,
@@ -50,7 +57,6 @@ import {
   isUnreachableStatus,
   mergeThreadHistory,
   messagingProviderLabel,
-  parseRetryAfter,
   prependThreadHistoryPage,
   progressMessageId,
   readBoundedJsonResponse,
@@ -1056,86 +1062,85 @@ async function request(
       ),
     coalesceKey: consentContext ? aiConsentCoalesceKey(consentContext) : undefined,
   });
-  // Abort with an explicit reason so every consumer of the signal (the fetch, the bounded body
-  // read, and nested recovery calls that share this signal) reports the same cause.
-  const controller = new AbortController();
-  const cancel = () => controller.abort(options.signal?.reason ?? new Error("Request canceled"));
-  if (options.signal?.aborted) cancel();
-  else options.signal?.addEventListener("abort", cancel, { once: true });
-  const timer =
-    options.timeoutMs === null
-      ? undefined
-      : setTimeout(
-          () =>
-            controller.abort(
-              Object.defineProperty(new Error("Request timed out"), "name", {
-                value: "TimeoutError",
-              }),
-            ),
-          options.timeoutMs ?? RPC_TIMEOUT_MS,
-        );
+  const deadline = requestSignal(
+    options.signal,
+    options.timeoutMs === null ? null : (options.timeoutMs ?? RPC_TIMEOUT_MS),
+  );
   // Bind recovery to the Space + selection epoch this request was sent with:
   // a 401 arriving after the user switched Spaces — including A → B → A —
   // belongs to a stale request and must not touch the current selection.
-  const requestHeaders = consentContext?.headers ?? (await authHeaders());
-  const requestSpaceId = requestHeaders["x-orkbot-space-id"];
   try {
+    const requestHeaders = consentContext?.headers ?? (await authHeaders());
+    const requestSpaceId = requestHeaders["x-orkbot-space-id"];
+    if (requestApiBase !== currentApiBase())
+      throw new Error(t("The server changed while starting the request"));
+    if (requestSessionGeneration !== currentSessionGeneration())
+      throw new Error(t("Something went wrong. Try again."));
     if (
       consentContext?.sessionGeneration !== undefined &&
       consentContext.sessionGeneration !== currentSessionGeneration()
     )
       throw new Error(t("Something went wrong. Try again."));
+    deadline.signal.throwIfAborted();
     let res: Response;
     const correlation = clientCorrelationHeaders();
     try {
-      res = await fetchServer(
-        `${consentContext?.apiBase ?? currentApiBase()}/rpc/${proc}`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            origin: "orkbot://",
-            ...requestHeaders,
-            ...correlation,
+      res = await withAbort(
+        fetchServer(
+          `${requestApiBase}/rpc/${proc}`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              origin: "orkbot://",
+              ...requestHeaders,
+              ...correlation,
+            },
+            body: JSON.stringify(encodeRpcJson(body)),
+            signal: deadline.signal,
           },
-          body: JSON.stringify({ json: body }),
-          signal: controller.signal,
-        },
-        consentContext?.apiBase ?? currentApiBase(),
+          requestApiBase,
+        ).then((response) => {
+          if (deadline.signal.aborted) cancelResponseBody(response);
+          return response;
+        }),
+        deadline.signal,
+        "Request timed out",
       );
     } catch (error) {
       // The native fetch reports an aborted request with an implementation detail
       // ("FetchRequestCanceledException") and an unreachable server with a native stack
       // location; say what happened instead.
-      if (!controller.signal.aborted)
+      if (!deadline.signal.aborted)
         reportMobileError(error, "rpc.transport", responseCorrelation(new Headers(correlation)));
-      throw requestError(error, controller.signal);
+      throw requestError(error, deadline.signal);
     }
     if (
       requestSessionGeneration === currentSessionGeneration() &&
       requestApiBase === currentApiBase()
-    )
+    ) {
       noteServerReachable(!isUnreachableStatus(res.status));
+      if (res.status === CLIENT_UPDATE_REQUIRED_STATUS) clientBuild.onUpdateRequired();
+    }
     if (proc === "aiConsent/status" && res.status === 404) {
       cancelResponseBody(res);
       throw new Error(t("Update your server to use AI data sharing in this mobile version."));
     }
-    const parsed: { json?: unknown } = await readBoundedJsonResponse<{ json?: unknown }>(
+    const parsed = await readBoundedJsonResponse<unknown>(
       res,
       MAX_MOBILE_RPC_RESPONSE_BYTES,
-      controller.signal,
+      deadline.signal,
     ).catch((error: unknown) => {
       // A proxy, or a server without this procedure, can fail with a body that is not JSON.
       if (!res.ok && error instanceof SyntaxError) return {};
-      throw requestError(error, controller.signal);
+      throw requestError(error, deadline.signal);
     });
     if (!res.ok) {
       // oRPC sends a failure as `{ json: { code, status, message } }`; the message is the
       // server's user-facing copy.
-      const error = parsed.json as
-        | { message?: unknown; code?: unknown; data?: unknown }
-        | undefined;
-      const message = errorText(typeof error?.message === "string" ? error.message : "");
+      const failure = rpcHttpError(res, parsed, { fallbackMessage: errorText("") });
+      const message = errorText(failure.message);
+      failure.message = message;
       const unauthorized = res.status === 401;
       // Without a Space header a 401 means the server no longer accepts the
       // session itself; Space recovery below probes the same way. Clearing it
@@ -1195,7 +1200,7 @@ async function request(
         const recoveryOptions: RpcOptions = {
           ...options,
           timeoutMs: null,
-          signal: controller.signal,
+          signal: deadline.signal,
           skipSpaceAuthRecovery: true,
         };
         try {
@@ -1217,12 +1222,10 @@ async function request(
         if (!selectedSpaceId()) await clearStaleSpaceSelection();
         throw new Error(message);
       }
-      throw Object.assign(
-        httpError(message, res, typeof error?.code === "string" ? error.code : undefined),
-        { data: error?.data },
-      );
+      throw failure;
     }
-    const verifiedUser = parsed.json as { userId?: unknown; spaceId?: unknown } | null;
+    const result = decodeRpcJson(parsed);
+    const verifiedUser = result as { userId?: unknown; spaceId?: unknown } | null;
     if (
       proc === "me" &&
       typeof verifiedUser?.userId === "string" &&
@@ -1240,11 +1243,11 @@ async function request(
       requestSessionGeneration === currentSessionGeneration() &&
       requestApiBase === currentApiBase()
     ) {
-      const snapshot = parsed.json as ThreadSnapshot;
+      const snapshot = result as ThreadSnapshot;
       if (typeof snapshot?.threadId === "string" && typeof snapshot.cursor === "number")
         rememberMobileAvatarSnapshot(snapshot, avatarSnapshotOrder);
     }
-    return displayIdentityResult(proc.split("/"), parsed.json, identityLabels());
+    return displayIdentityResult(proc.split("/"), result, identityLabels());
   } catch (error) {
     if (
       requestSessionGeneration === currentSessionGeneration() &&
@@ -1254,8 +1257,7 @@ async function request(
       noteServerReachable(false);
     throw error;
   } finally {
-    if (timer) clearTimeout(timer);
-    options.signal?.removeEventListener("abort", cancel);
+    deadline.dispose();
   }
 }
 
@@ -1492,14 +1494,12 @@ export const IDLE_TIMEOUT_MS = 45_000;
  * A failed response as an error the shared retry policy can read: its status, oRPC code, and any
  * Retry-After. A 426 also asks the user to update, from whichever request noticed it.
  */
-function httpError(message: string, res: Response, code?: string): Error {
+function httpError(message: string, res: Response): Error {
   if (res.status === CLIENT_UPDATE_REQUIRED_STATUS) clientBuild.onUpdateRequired();
-  return Object.defineProperties(new Error(message), {
-    status: { value: res.status },
-    // oRPC's error code; a proxy's bare 404 has none.
-    code: { value: code },
-    retryAfterMs: { value: parseRetryAfter(res.headers.get("retry-after")) },
-  });
+  if (res.ok) return Object.assign(new Error(message), { status: res.status });
+  const error = rpcHttpError(res);
+  error.message = message;
+  return error;
 }
 
 export async function subscribeThread(
@@ -1577,7 +1577,7 @@ async function subscribeRpcEvents(
         origin: "orkbot://",
         ...context.headers,
       },
-      body: JSON.stringify({ json: input }),
+      body: JSON.stringify(encodeRpcJson(input)),
       signal,
     },
     context.apiBase,
@@ -1586,114 +1586,44 @@ async function subscribeRpcEvents(
     if (current() && !signal.aborted && isServerUnreachable(error)) noteServerReachable(false);
     throw error;
   });
+  if (!current()) {
+    cancelResponseBody(res);
+    onClose();
+    return;
+  }
   if (current()) noteServerReachable(!isUnreachableStatus(res.status));
   if (!res.ok || !res.body) {
     onClose();
     cancelResponseBody(res);
     throw httpError(`rpc ${procedure} failed (${res.status})`, res);
   }
-  const reader = res.body.getReader();
-  let finished = false;
   try {
-    const decoder = new TextDecoder();
-    let scratch: Uint8Array | undefined;
-    let used = 0;
-    let previousLf = false;
-    const appendFrameBytes = (bytes: Uint8Array) => {
-      const required = used + bytes.byteLength;
-      if (!scratch || scratch.byteLength < required) {
-        const capacity = Math.min(
-          MAX_MOBILE_RPC_RESPONSE_BYTES,
-          Math.max(required, scratch ? scratch.byteLength * 2 : 1024),
-        );
-        const grown = new Uint8Array(capacity);
-        if (scratch && used) grown.set(scratch.subarray(0, used));
-        scratch = grown;
-      }
-      scratch.set(bytes, used);
-      used = required;
-    };
-    const emitFrame = (bytes: Uint8Array) => {
-      const data = decoder
-        .decode(bytes)
-        .split("\n")
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim())
-        .join("");
-      if (!data || data === "[DONE]") return;
+    for await (const value of readRpcEvents(res, {
+      signal,
+      maxFrameBytes: MAX_MOBILE_RPC_RESPONSE_BYTES,
+      idleTimeoutMs: IDLE_TIMEOUT_MS,
+      ignoreMalformed: true,
+    })) {
+      if (
+        !value ||
+        typeof value !== "object" ||
+        !("type" in value) ||
+        !value.type ||
+        value.type === "heartbeat"
+      )
+        continue;
+      if (!current()) return;
       try {
-        const parsed = JSON.parse(data) as { json?: ThreadEvent; error?: { message?: string } };
-        // Heartbeats prove liveness only; forwarding one would advance the caller's cursor.
-        if (parsed.json?.type && parsed.json.type !== "heartbeat") {
-          if (!current()) {
-            onClose();
-            return;
-          }
-          const event = parsed.json;
-          onEvent(event);
-        }
+        onEvent(value as ThreadEvent);
       } catch {
-        // Malformed frames and callback errors do not interrupt the subscription.
+        // One subscriber must not interrupt delivery of later events.
       }
-    };
-    while (!signal.aborted) {
-      // A half-open socket never reports done, so let the caller reconnect after silence.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      let onAbort: (() => void) | undefined;
-      const read = await Promise.race([
-        reader.read().catch((error) => {
-          if (current() && !signal.aborted && isServerUnreachable(error))
-            noteServerReachable(false);
-          throw error;
-        }),
-        new Promise<"idle" | "aborted">((resolve) => {
-          timer = setTimeout(() => resolve("idle"), IDLE_TIMEOUT_MS);
-          onAbort = () => resolve("aborted");
-          signal.addEventListener("abort", onAbort, { once: true });
-          if (signal.aborted) onAbort();
-        }),
-      ]).finally(() => {
-        clearTimeout(timer);
-        if (onAbort) signal.removeEventListener("abort", onAbort);
-      });
-      if (read === "idle" || read === "aborted") return;
-      const { done, value } = read;
-      if (done) {
-        finished = true;
-        break;
-      }
-      let start = 0;
-      for (let index = 0; index < value.byteLength; index += 1) {
-        if (used + index - start >= MAX_MOBILE_RPC_RESPONSE_BYTES) {
-          throw new RangeError(`Thread SSE frame exceeds ${MAX_MOBILE_RPC_RESPONSE_BYTES} bytes`);
-        }
-        const isLf = value[index] === 10;
-        if (previousLf && isLf) {
-          let frame: Uint8Array = value.subarray(start, index + 1);
-          if (used) {
-            appendFrameBytes(frame);
-            frame = scratch!.subarray(0, used);
-          }
-          emitFrame(frame);
-          used = 0;
-          previousLf = false;
-          start = index + 1;
-        } else {
-          previousLf = isLf;
-        }
-      }
-      if (start < value.byteLength) appendFrameBytes(value.subarray(start));
     }
+  } catch (error) {
+    if (current() && !signal.aborted && isServerUnreachable(error)) noteServerReachable(false);
+    throw error;
   } finally {
     onClose();
-    if (!finished) {
-      try {
-        void Promise.resolve(reader.cancel()).catch(() => undefined);
-      } catch {
-        // Cancellation is best-effort and must not delay releasing the reader.
-      }
-    }
-    reader.releaseLock();
   }
 }
 

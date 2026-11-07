@@ -1,8 +1,10 @@
+import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearSpaceSelection,
   createSpaceRpc,
   leaveUnavailableSpace,
+  onRpcResponse,
   rpc,
   rpcForSpace,
   SPACE_SELECTED_EVENT,
@@ -19,6 +21,51 @@ afterEach(() => {
 });
 
 describe("signed-out responses", () => {
+  it("preserves cookie authentication, oRPC error identity and server error data", async () => {
+    const fetch = vi.fn(async (_request: Request, _init: RequestInit) =>
+      Response.json(
+        {
+          json: {
+            defined: true,
+            code: "CONFLICT",
+            status: 409,
+            message: "Changed",
+            data: { revision: 3 },
+          },
+        },
+        { status: 409 },
+      ),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const error = await rpc.me().catch((failure: unknown) => failure);
+    expect(error).toBeInstanceOf(ORPCError);
+    expect(error).toMatchObject({ code: "CONFLICT", status: 409, data: { revision: 3 } });
+    expect(fetch.mock.calls[0]?.[1].credentials).toBe("include");
+  });
+
+  it("exposes compatibility headers before an invalid response body is decoded", async () => {
+    const seen = vi.fn();
+    const stop = onRpcResponse((response) =>
+      seen(response.status, response.headers.get("x-orkbot-build")),
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("not-json", {
+            status: 426,
+            headers: { "x-orkbot-build": "20261107000000" },
+          }),
+      ),
+    );
+    try {
+      await expect(rpc.me()).rejects.toMatchObject({ status: 426 });
+      expect(seen).toHaveBeenCalledWith(426, "20261107000000");
+    } finally {
+      stop();
+    }
+  });
+
   it("rechecks the session when the server answers 401, and only then", async () => {
     const fetch = vi.fn(async () =>
       Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 }),

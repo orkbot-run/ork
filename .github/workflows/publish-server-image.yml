@@ -36,6 +36,7 @@ on:
       - "packages/adapters/package.json"
       - "packages/auth/package.json"
       - "packages/chat-ui/package.json"
+      - "packages/client-transport/package.json"
       - "packages/contracts/package.json"
       - "packages/core/package.json"
       - "packages/db/package.json"

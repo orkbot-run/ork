@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // Inherited Apache-2.0 material; new Ork changes are PolyForm-Noncommercial-1.0.0.
 
+import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import { getArtifactById } from "./artifacts";
 
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
@@ -25,6 +27,7 @@ import {
   captureApiRequestContext,
   changePassword,
   clearSpace,
+  configureClientBuild,
   currentApiBase,
   deleteAccount,
   fetchAccountSecurity,
@@ -110,6 +113,224 @@ describe("mobile API authentication", () => {
     vi.mocked(SecureStore.deleteItemAsync).mockReset();
     vi.mocked(resumeLiveNotifications).mockClear();
     await restoreSessionToken("");
+  });
+
+  it("does not send a stored bearer to a different server after an asynchronous credential read", async () => {
+    let resolveToken!: (value: string) => void;
+    let readStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      readStarted = resolve;
+    });
+    vi.mocked(SecureStore.getItemAsync).mockImplementation((key) => {
+      if (key !== "orkbot.session_token") return Promise.resolve(null);
+      return new Promise((resolve) => {
+        resolveToken = resolve;
+        readStarted();
+      });
+    });
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const pending = rpc("bots/list");
+    const rejected = expect(pending).rejects.toThrow(
+      "The server changed while starting the request",
+    );
+    await started;
+    vi.mocked(SecureStore.getItemAsync).mockImplementation(async (key) =>
+      key === "orkbot.api_base" ? "https://different-server.example.test" : null,
+    );
+    try {
+      await loadApiBase();
+      resolveToken("previous-server-token");
+      await rejected;
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await resetApiBase();
+    }
+  });
+
+  it.each(["cancellation", "timeout"])(
+    "starts no network request after %s during a stored-credential read",
+    async (reason) => {
+      vi.useFakeTimers();
+      let resolveToken!: (value: string) => void;
+      let readStarted!: () => void;
+      const started = new Promise<void>((resolve) => {
+        readStarted = resolve;
+      });
+      vi.mocked(SecureStore.getItemAsync).mockImplementation((key) => {
+        if (key !== "orkbot.session_token") return Promise.resolve(null);
+        return new Promise((resolve) => {
+          resolveToken = resolve;
+          readStarted();
+        });
+      });
+      const fetch = vi.fn();
+      vi.stubGlobal("fetch", fetch);
+      const abort = new AbortController();
+      const pending = rpc("bots/list", {}, { signal: abort.signal });
+      const rejected = expect(pending).rejects.toThrow(
+        reason === "timeout" ? "Request timed out" : "caller canceled",
+      );
+      await started;
+      if (reason === "timeout") await vi.advanceTimersByTimeAsync(8_000);
+      else abort.abort(new Error("caller canceled"));
+      resolveToken("stored-token");
+      await rejected;
+      expect(fetch).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("enforces the request deadline even if native fetch ignores its signal and cancels a late response", async () => {
+    vi.useFakeTimers();
+    const { fetchMock, fetchStarted, resolveFetch } = deferredFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const pending = rpc("bots/list");
+    const rejected = expect(pending).rejects.toThrow("Request timed out");
+    await fetchStarted;
+    await vi.advanceTimersByTimeAsync(8_000);
+    await rejected;
+    const cancel = vi.fn();
+    resolveFetch(new Response(new ReadableStream({ cancel })));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("notifies about an incompatible build before a stalled error body reaches its deadline", async () => {
+    vi.useFakeTimers();
+    const updateRequired = vi.fn();
+    const cancel = vi.fn();
+    configureClientBuild({ headers: () => ({}), onUpdateRequired: updateRequired });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(new ReadableStream({ cancel }), { status: 426 })),
+    );
+    try {
+      const pending = rpc("bots/list");
+      const rejected = expect(pending).rejects.toThrow("Request timed out");
+      await vi.advanceTimersByTimeAsync(0);
+      expect(updateRequired).toHaveBeenCalledOnce();
+      await vi.advanceTimersByTimeAsync(8_000);
+      await rejected;
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      configureClientBuild({ headers: () => ({}), onUpdateRequired: () => {} });
+    }
+  });
+
+  it("keeps a stale server's rejected build scoped to its own unary request", async () => {
+    mockSecureStore(new Map());
+    const updateRequired = vi.fn();
+    configureClientBuild({ headers: () => ({}), onUpdateRequired: updateRequired });
+    const { fetchMock, fetchStarted, resolveFetch } = deferredFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const pending = rpc("bots/list");
+      const rejected = expect(pending).rejects.toMatchObject({
+        status: 426,
+        code: "CLIENT_UPDATE_REQUIRED",
+        message: "Update the client",
+      });
+      await fetchStarted;
+      expect(await saveApiBase("https://new-response-server.example.test")).toMatchObject({
+        ok: true,
+      });
+      resolveFetch(rpcErrorResponse(426, "CLIENT_UPDATE_REQUIRED", "Update the client"));
+      await rejected;
+      expect(updateRequired).not.toHaveBeenCalled();
+    } finally {
+      configureClientBuild({ headers: () => ({}), onUpdateRequired: () => {} });
+      await resetApiBase();
+    }
+  });
+
+  it("cancels a stale server's stream response before applying its rejected-build policy", async () => {
+    mockSecureStore(new Map());
+    const updateRequired = vi.fn();
+    const cancel = vi.fn();
+    const events = vi.fn();
+    configureClientBuild({ headers: () => ({}), onUpdateRequired: updateRequired });
+    const { fetchMock, fetchStarted, resolveFetch } = deferredFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const pending = subscribeThread(
+        { botId: "fixture-bot" },
+        0,
+        events,
+        new AbortController().signal,
+      );
+      await fetchStarted;
+      expect(await saveApiBase("https://new-response-server.example.test")).toMatchObject({
+        ok: true,
+      });
+      const response = new Response(new ReadableStream({ cancel }), { status: 426 });
+      resolveFetch(response);
+      await pending;
+      expect(updateRequired).not.toHaveBeenCalled();
+      expect(events).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(response.body?.locked).toBe(false);
+    } finally {
+      configureClientBuild({ headers: () => ({}), onUpdateRequired: () => {} });
+      await resetApiBase();
+    }
+  });
+
+  it("decodes native unary and subscription responses emitted by the real oRPC server", async () => {
+    mockSecureStore(new Map());
+    const dependencies = createRequire(
+      new URL("../../../packages/client-transport/package.json", import.meta.url),
+    );
+    const { os } = await import(pathToFileURL(dependencies.resolve("@orpc/server")).href);
+    const { RPCHandler } = await import(
+      pathToFileURL(dependencies.resolve("@orpc/server/fetch")).href
+    );
+    const createdAt = new Date("2026-01-01T12:00:00.000Z");
+    const handler = new RPCHandler({
+      bots: {
+        get: os.handler(({ input }: { input: { botId: string } }) => ({
+          id: input.botId,
+          name: "Fixture bot",
+          createdAt,
+          count: 12n,
+        })),
+      },
+      threads: {
+        subscribe: os.handler(async function* () {
+          yield { type: "thread.progress", seq: 1, payload: { createdAt, count: 13n } };
+        }),
+      },
+    });
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const { response } = await handler.handle(new Request(input, init), { prefix: "/rpc" });
+      if (!response) throw new Error("The real RPC handler did not match the request");
+      return response;
+    });
+    vi.stubGlobal("fetch", fetch);
+    await saveSessionToken("fixture-native-bearer");
+    const result = (await rpc("bots/get", { botId: "fixture-bot" })) as unknown as {
+      id: string;
+      createdAt: Date;
+      count: bigint;
+    };
+    expect(result.id).toBe("fixture-bot");
+    expect(result.createdAt).toEqual(createdAt);
+    expect(result.count).toBe(12n);
+    const events = vi.fn();
+    await subscribeThread({ botId: "fixture-bot" }, 0, events, new AbortController().signal);
+    expect(events).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "thread.progress",
+        seq: 1,
+        payload: { createdAt, count: 13n },
+      }),
+    );
+    expect(fetch.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer fixture-native-bearer",
+      origin: "orkbot://",
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   describe.each([signIn, signUp])("email auth errors", (authenticate) => {
@@ -1364,9 +1585,13 @@ describe("mobile API authentication", () => {
       vi.fn(async () => rpcErrorResponse(400, "BAD_REQUEST", "Connect a model to start a run.")),
     );
 
-    await expect(rpc("bots/create", { name: "Ada" })).rejects.toThrow(
-      new Error("Connect a model to start a run."),
-    );
+    const failure = await rpc("bots/create", { name: "Ada" }).catch((error) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toMatchObject({
+      message: "Connect a model to start a run.",
+      status: 400,
+      code: "BAD_REQUEST",
+    });
   });
 
   it.each([
@@ -1385,7 +1610,7 @@ describe("mobile API authentication", () => {
     );
 
     await expect(rpc("bots/create", { name: "Ada" })).rejects.toThrow(
-      new Error("Something went wrong. Try again."),
+      "Something went wrong. Try again.",
     );
   });
 

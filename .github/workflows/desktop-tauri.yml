@@ -18,6 +18,7 @@ on:
       - "packages/avatar/**"
       - "packages/core/**"
       - "packages/chat-ui/**"
+      - "packages/client-transport/**"
       - "packages/ui-web/**"
       - "packages/logging/**"
       - "scripts/pnpm.mjs"
