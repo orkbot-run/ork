@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Ork Preview",
+  "productName": "Ork",
   "version": "../package.json",
   "identifier": "run.orkbot.desktop.preview",
   "build": {

@@ -120,9 +120,9 @@ async function publish() {
       "--prerelease",
       "--latest=false",
       "--title",
-      `Ork Preview ${version}`,
+      `Ork ${version}`,
       "--notes",
-      "Automated Preview build from main.",
+      "Automated desktop build from main.",
     );
   // Reruns reuse existing immutable assets and only fill an interrupted upload.
   const uploaded = existing?.assets ?? [];
@@ -186,7 +186,7 @@ async function publish() {
       "--prerelease",
       "--latest=false",
       "--title",
-      "Ork Preview",
+      "Ork",
       "--notes",
       "Automatic desktop updates from verified main builds.",
     );
@@ -196,8 +196,8 @@ async function publish() {
   if (!current()) return console.log("Desktop channel promotion skipped: main has advanced.");
   gh("release", "upload", "desktop-preview", output, "--clobber");
   if (!current()) return console.log("Desktop channel activation skipped: main has advanced.");
-  gh("release", "edit", "desktop-preview", "--draft=false", "--latest=false");
-  console.log(`Published Ork Preview ${version} for ${entries.length} platforms.`);
+  gh("release", "edit", "desktop-preview", "--draft=false", "--latest=false", "--title", "Ork");
+  console.log(`Published Ork ${version} for ${entries.length} platforms.`);
 }
 
 await publish();

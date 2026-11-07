@@ -123,7 +123,7 @@ afterEach(() => {
 });
 
 describe("bundled desktop setup", () => {
-  it("reveals welcome without requesting stored credentials until the user continues", async () => {
+  it("restores a stored session on startup without opening browser sign-in", async () => {
     const check = deferred<unknown>();
     const { invoke } = await setup({
       invoke: async (name) => {
@@ -132,11 +132,12 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    expect(screen()).toBe("welcome");
-    expect(node("get-started").disabled).toBe(false);
-    expect(invoke.mock.calls.map(([name]) => name)).toEqual(["setup_state"]);
-    node("get-started").click();
-    await flush();
+    expect(screen()).toBe("checking");
+    expect(node("get-started").disabled).toBe(true);
+    expect(invoke.mock.calls.map(([name]) => name)).toEqual([
+      "setup_state",
+      "setup_accounts_session",
+    ]);
     expect(invoke).toHaveBeenCalledWith("setup_accounts_session");
     expect(node("browser-hint").hidden).toBe(true);
     expect(invoke).not.toHaveBeenCalledWith("setup_accounts_sign_in", expect.anything());
@@ -191,6 +192,62 @@ describe("bundled desktop setup", () => {
       "list_servers",
     ]);
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+
+  it("opens the default server after restoring login without requiring a click", async () => {
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [saved[0], { ...saved[1], isDefault: true }];
+        return undefined;
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke.mock.calls.filter(([name]) => name === "connect_saved_server")).toHaveLength(1);
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
+  });
+
+  it.each(["local", "selfhosted"])("opens a sole %s server after restoring login", async (kind) => {
+    const connection = deferred<unknown>();
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [{ ...saved[0], kind }];
+        if (name === "connect_saved_server") return connection.promise;
+        return undefined;
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    expect(screen()).toBe(kind === "local" ? "local" : "opening");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
+    connection.resolve(undefined);
+    await flush();
+  });
+
+  it("prioritizes a cold server link over the restored account's default", async () => {
+    const { invoke } = await setup({
+      pendingServer: saved[1]!.url,
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [{ ...saved[0], isDefault: true }, saved[1]];
+        return undefined;
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
+  });
+
+  it("discards a restored session returned after its setup document was disposed", async () => {
+    const session = deferred<unknown>();
+    const { invoke, dispose } = await setup({
+      invoke: async (name) => (name === "setup_accounts_session" ? session.promise : []),
+    });
+    dispose();
+    session.resolve(account);
+    await flush();
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("list_servers");
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_saved_server");
   });
 
   it("retains a cold-start server link through Accounts sign-in without opening a saved default", async () => {
@@ -508,21 +565,17 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it("keeps credential checks behind Continue and allows cancellation while they wait", async () => {
+  it("shows welcome without interactive sign-in when there is no saved session", async () => {
     const check = deferred<unknown>();
-    await setup({
+    const { invoke } = await setup({
       invoke: async (name) => (name === "setup_accounts_session" ? check.promise : []),
     });
-    expect(screen()).toBe("welcome");
-    expect(node("get-started").disabled).toBe(false);
-    node("get-started").click();
-    await flush();
-    expect(screen()).toBe("accounts");
-    node("cancel-sign-in").click();
-    await flush();
+    expect(screen()).toBe("checking");
     check.resolve(null);
     await flush();
     expect(screen()).toBe("welcome");
+    expect(node("get-started").disabled).toBe(false);
+    expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
   });
 
   it("ignores a completed sign-in after cancellation and allows retry", async () => {

@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 use std::{
-    collections::HashMap,
     fs,
     path::{Path, PathBuf},
     sync::Mutex,
@@ -12,59 +11,54 @@ use sha2::{Digest, Sha256};
 
 use super::{CredentialStore, STORAGE_ERROR};
 
-const BLOCKED: &[u8] = b"1\n";
+const MAX_BYTES: u64 = 1024 * 1024;
 
-#[derive(Debug, PartialEq, Eq)]
-enum BackendError {
-    Unavailable,
-    Failed,
+/// macOS sessions use account-private files without invoking Keychain or prompting.
+/// Other processes running as the same OS user can access this directory.
+struct FileStore {
+    directory: PathBuf,
+    operation: Mutex<()>,
 }
 
-/// This boundary keeps all regression tests independent of the real keychain.
-trait Backend: Send + Sync {
-    fn get(&self, key: &str) -> Result<Option<String>, BackendError>;
-    fn set(&self, key: &str, value: &str) -> Result<(), BackendError>;
-    fn delete(&self, key: &str) -> Result<(), BackendError>;
-}
-
-/// Sync each newly created directory entry before any credential can be retired.
-fn prepare_directory(directory: &Path) -> Result<(), String> {
-    match fs::symlink_metadata(directory) {
-        Ok(metadata) if metadata.is_dir() && !crate::local_stack::reparse_point(&metadata) => {}
-        Ok(_) => return Err(STORAGE_ERROR.into()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            prepare_directory(directory.parent().ok_or(STORAGE_ERROR)?)?;
-            crate::local_stack::private_directory(directory).map_err(|_| STORAGE_ERROR)?;
-        }
-        Err(_) => return Err(STORAGE_ERROR.into()),
-    }
-    fs::File::open(directory.parent().ok_or(STORAGE_ERROR)?)
-        .and_then(|parent| parent.sync_all())
-        .map_err(|_| STORAGE_ERROR.into())
-}
-
-struct Tombstones(PathBuf);
-
-impl Tombstones {
+impl FileStore {
     fn new(directory: &Path) -> Result<Self, String> {
-        prepare_directory(directory)?;
-        let directory = directory.join("credential-state");
-        prepare_directory(&directory)?;
-        let state = Self(directory);
-        state.validate()?;
-        Ok(state)
+        crate::local_stack::private_directory(directory).map_err(|_| STORAGE_ERROR)?;
+        let directory = directory.join("credentials");
+        crate::local_stack::private_directory(&directory).map_err(|_| STORAGE_ERROR)?;
+        let store = Self {
+            directory,
+            operation: Mutex::new(()),
+        };
+        store.validate()?;
+        // Persist both newly created directory entries before accepting any session writes.
+        for directory in [
+            store.directory.parent().ok_or(STORAGE_ERROR)?,
+            store
+                .directory
+                .parent()
+                .and_then(Path::parent)
+                .ok_or(STORAGE_ERROR)?,
+        ] {
+            fs::File::open(directory)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|_| STORAGE_ERROR)?;
+        }
+        Ok(store)
     }
 
     fn validate(&self) -> Result<(), String> {
-        let metadata = fs::symlink_metadata(&self.0).map_err(|_| STORAGE_ERROR)?;
-        if !metadata.is_dir() || crate::local_stack::reparse_point(&metadata) {
-            return Err(STORAGE_ERROR.into());
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::MetadataExt;
+        use std::os::unix::fs::MetadataExt;
+        for (directory, mask) in [
+            (self.directory.parent().ok_or(STORAGE_ERROR)?, 0o022),
+            (self.directory.as_path(), 0o077),
+        ] {
+            let metadata = fs::symlink_metadata(directory).map_err(|_| STORAGE_ERROR)?;
             // SAFETY: geteuid only reads the process identity.
-            if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o077 != 0 {
+            if !metadata.is_dir()
+                || crate::local_stack::reparse_point(&metadata)
+                || metadata.uid() != unsafe { libc::geteuid() }
+                || metadata.mode() & mask != 0
+            {
                 return Err(STORAGE_ERROR.into());
             }
         }
@@ -74,200 +68,63 @@ impl Tombstones {
     fn path(&self, key: &str) -> PathBuf {
         let hash = Sha256::digest(key.as_bytes());
         let name: String = hash.iter().map(|byte| format!("{byte:02x}")).collect();
-        self.0.join(name)
+        self.directory.join(name)
     }
 
-    fn blocked(&self, key: &str) -> Result<bool, String> {
+    fn read(&self, key: &str) -> Result<Option<String>, String> {
         self.validate()?;
         let path = self.path(key);
         match fs::symlink_metadata(&path) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(_) => Err(STORAGE_ERROR.into()),
             Ok(_) => {
-                if crate::local_stack::read_owned_private(&path, BLOCKED.len() as u64).as_deref()
-                    != Some(BLOCKED)
-                {
-                    return Err(STORAGE_ERROR.into());
+                let bytes = crate::local_stack::read_owned_private(&path, MAX_BYTES)
+                    .ok_or(STORAGE_ERROR)?;
+                if bytes.is_empty() {
+                    return Ok(None);
                 }
-                Ok(true)
+                String::from_utf8(bytes)
+                    .map(Some)
+                    .map_err(|_| STORAGE_ERROR.into())
             }
         }
     }
 
-    fn mark(&self, key: &str) -> Result<(), String> {
-        if !self.blocked(key)? {
-            crate::local_stack::write_private(&self.path(key), BLOCKED)
-                .map_err(|_| STORAGE_ERROR)?;
-        }
-        self.sync()
-    }
-
-    fn clear(&self, key: &str) -> Result<(), String> {
-        if self.blocked(key)? {
-            fs::remove_file(self.path(key)).map_err(|_| STORAGE_ERROR)?;
-            self.sync()?;
-        }
-        Ok(())
-    }
-
-    fn sync(&self) -> Result<(), String> {
-        fs::File::open(&self.0)
+    fn write(&self, key: &str, bytes: &[u8]) -> Result<(), String> {
+        // Validate any predecessor before replacing it; never follow an untrusted file.
+        self.read(key)?;
+        crate::local_stack::write_private(&self.path(key), bytes).map_err(|_| STORAGE_ERROR)?;
+        fs::File::open(&self.directory)
             .and_then(|directory| directory.sync_all())
             .map_err(|_| STORAGE_ERROR.into())
     }
 }
 
-struct QuietStore<B> {
-    backend: B,
-    tombstones: Tombstones,
-    memory: Mutex<HashMap<String, String>>,
-}
-
-impl<B: Backend> QuietStore<B> {
-    fn new(directory: &Path, backend: B) -> Result<Self, String> {
-        Ok(Self {
-            backend,
-            tombstones: Tombstones::new(directory)?,
-            memory: Mutex::new(HashMap::new()),
-        })
-    }
-}
-
-impl<B: Backend> CredentialStore for QuietStore<B> {
+impl CredentialStore for FileStore {
     fn get(&self, key: &str) -> Result<Option<String>, String> {
-        let mut memory = self.memory.lock().map_err(|_| STORAGE_ERROR)?;
-        let blocked = self.tombstones.blocked(key)?;
-        if let Some(value) = memory.get(key) {
-            return Ok(Some(value.clone()));
-        }
-        if blocked {
-            return Ok(None);
-        }
-        match self.backend.get(key) {
-            Ok(value) => {
-                if let Some(value) = &value {
-                    memory.insert(key.into(), value.clone());
-                }
-                Ok(value)
-            }
-            Err(BackendError::Unavailable) => {
-                self.tombstones.mark(key)?;
-                Ok(None)
-            }
-            Err(BackendError::Failed) => Err(STORAGE_ERROR.into()),
-        }
+        let _operation = self.operation.lock().map_err(|_| STORAGE_ERROR)?;
+        self.read(key)
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), String> {
-        let mut memory = self.memory.lock().map_err(|_| STORAGE_ERROR)?;
-        // Retire any predecessor before an OS call or a crash can interrupt replacement.
-        self.tombstones.mark(key)?;
-        memory.remove(key);
-        match self.backend.set(key, value) {
-            Ok(()) => {
-                self.tombstones.clear(key)?;
-                memory.insert(key.into(), value.into());
-                Ok(())
-            }
-            Err(BackendError::Unavailable) => {
-                memory.insert(key.into(), value.into());
-                Ok(())
-            }
-            Err(BackendError::Failed) => Err(STORAGE_ERROR.into()),
+        let _operation = self.operation.lock().map_err(|_| STORAGE_ERROR)?;
+        if value.is_empty() || value.len() as u64 > MAX_BYTES {
+            return Err(STORAGE_ERROR.into());
         }
+        self.write(key, value.as_bytes())
     }
 
     fn delete(&self, key: &str) -> Result<(), String> {
-        let mut memory = self.memory.lock().map_err(|_| STORAGE_ERROR)?;
-        // The durable marker makes logical logout authoritative even when the OS refuses deletion.
-        self.tombstones.mark(key)?;
-        memory.remove(key);
-        match self.backend.delete(key) {
-            Ok(()) | Err(BackendError::Unavailable) => Ok(()),
-            Err(BackendError::Failed) => Err(STORAGE_ERROR.into()),
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-struct SystemBackend;
-
-#[cfg(target_os = "macos")]
-fn no_interaction() -> Result<(), BackendError> {
-    use security_framework::os::macos::keychain::{KeychainUserInteractionLock, SecKeychain};
-    use std::sync::OnceLock;
-    // This process-wide guard is never dropped or toggled by concurrent operations.
-    static POLICY: OnceLock<Result<KeychainUserInteractionLock, ()>> = OnceLock::new();
-    POLICY
-        .get_or_init(|| SecKeychain::disable_user_interaction().map_err(|_| ()))
-        .as_ref()
-        .map(|_| ())
-        .map_err(|_| BackendError::Failed)
-}
-
-#[cfg(target_os = "macos")]
-fn backend_error(error: security_framework::base::Error) -> BackendError {
-    match error.code() {
-        // Locked storage, denied ACL, or absent keychain are optional persistence failures.
-        -25308 | -25293 | -25291 | -25292 | -25307 => BackendError::Unavailable,
-        _ => BackendError::Failed,
-    }
-}
-
-#[cfg(target_os = "macos")]
-fn legacy_options(key: &str) -> security_framework::passwords::PasswordOptions {
-    use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
-    use security_framework::passwords::PasswordOptions;
-    use security_framework_sys::item::kSecUseDataProtectionKeychain;
-    let mut options = PasswordOptions::new_generic_password(super::SERVICE, key);
-    // Version 3.7 has no setter for selecting the legacy store; never search a different store.
-    #[allow(deprecated)]
-    options.query.push((
-        // SAFETY: this is a static Security.framework CFString constant.
-        unsafe { CFString::wrap_under_get_rule(kSecUseDataProtectionKeychain) },
-        CFBoolean::false_value().into_CFType(),
-    ));
-    options
-}
-
-#[cfg(target_os = "macos")]
-impl Backend for SystemBackend {
-    fn get(&self, key: &str) -> Result<Option<String>, BackendError> {
-        use security_framework::passwords::generic_password;
-        no_interaction()?;
-        match generic_password(legacy_options(key)) {
-            Ok(bytes) => String::from_utf8(bytes)
-                .map(Some)
-                .map_err(|_| BackendError::Failed),
-            Err(error) if error.code() == -25300 => Ok(None),
-            Err(error) => Err(backend_error(error)),
-        }
-    }
-
-    fn set(&self, key: &str, value: &str) -> Result<(), BackendError> {
-        no_interaction()?;
-        security_framework::passwords::set_generic_password_options(
-            value.as_bytes(),
-            legacy_options(key),
-        )
-        .map_err(backend_error)
-    }
-
-    fn delete(&self, key: &str) -> Result<(), BackendError> {
-        no_interaction()?;
-        match security_framework::passwords::delete_generic_password_options(legacy_options(key)) {
-            Ok(()) => Ok(()),
-            Err(error) if error.code() == -25300 => Ok(()),
-            Err(error) => Err(backend_error(error)),
-        }
+        let _operation = self.operation.lock().map_err(|_| STORAGE_ERROR)?;
+        // An atomic empty replacement durably retires a token before logout succeeds.
+        self.write(key, b"")
     }
 }
 
 #[cfg(target_os = "macos")]
 pub(super) fn system(directory: &Path) -> Result<super::Store, String> {
-    Ok(super::Store(std::sync::Arc::new(QuietStore::new(
+    Ok(super::Store(std::sync::Arc::new(FileStore::new(
         directory,
-        SystemBackend,
     )?)))
 }
 
@@ -289,346 +146,249 @@ impl CredentialStore for UnconfiguredStore {
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+
     use super::*;
-    use std::sync::{mpsc, Arc};
 
-    #[derive(Default)]
-    struct FakeBackend {
-        values: Mutex<HashMap<String, String>>,
-        failure: Mutex<Option<BackendError>>,
-        calls: Mutex<Vec<&'static str>>,
-        markers: Option<PathBuf>,
-        block_set: Mutex<Option<(mpsc::Sender<()>, mpsc::Receiver<()>)>>,
-    }
-
-    impl FakeBackend {
-        fn result(&self, operation: &'static str) -> Result<(), BackendError> {
-            self.calls.lock().unwrap().push(operation);
-            match self.failure.lock().unwrap().as_ref() {
-                Some(BackendError::Unavailable) => Err(BackendError::Unavailable),
-                Some(BackendError::Failed) => Err(BackendError::Failed),
-                None => Ok(()),
-            }
-        }
-
-        fn assert_marked(&self, key: &str) {
-            if let Some(directory) = &self.markers {
-                assert!(Tombstones(directory.clone()).blocked(key).unwrap());
-            }
-        }
-    }
-
-    impl Backend for Arc<FakeBackend> {
-        fn get(&self, key: &str) -> Result<Option<String>, BackendError> {
-            self.result("get")?;
-            Ok(self.values.lock().unwrap().get(key).cloned())
-        }
-
-        fn set(&self, key: &str, value: &str) -> Result<(), BackendError> {
-            self.assert_marked(key);
-            if let Some((entered, release)) = self.block_set.lock().unwrap().take() {
-                entered.send(()).unwrap();
-                release.recv().unwrap();
-            }
-            self.result("set")?;
-            self.values.lock().unwrap().insert(key.into(), value.into());
-            Ok(())
-        }
-
-        fn delete(&self, key: &str) -> Result<(), BackendError> {
-            self.assert_marked(key);
-            self.result("delete")?;
-            self.values.lock().unwrap().remove(key);
-            Ok(())
-        }
-    }
-
-    fn backend(directory: &Path) -> Arc<FakeBackend> {
-        Arc::new(FakeBackend {
-            markers: Some(directory.join("credential-state")),
-            ..Default::default()
-        })
+    fn permissions(path: &Path, mode: u32) {
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
     }
 
     #[test]
-    fn construction_never_accesses_system_credentials() {
+    fn a_new_store_recovers_the_saved_session_and_its_rotation_after_restart() {
         let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert!(backend.calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn fresh_install_prepares_an_absent_application_directory_without_os_access() {
-        let directory = tempfile::tempdir().unwrap();
-        let application = directory.path().join("fresh").join("application");
-        let backend = backend(&application);
-        let store = QuietStore::new(&application, backend.clone()).unwrap();
-        assert!(store.tombstones.0.is_dir());
-        store.tombstones.validate().unwrap();
-        assert!(backend.calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn denied_read_is_absent_and_cannot_resurrect_after_restart() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        backend
-            .values
-            .lock()
-            .unwrap()
-            .insert("account".into(), "old-token".into());
-        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert_eq!(store.get("account").unwrap(), None);
-        assert!(store.tombstones.blocked("account").unwrap());
-        drop(store);
-        *backend.failure.lock().unwrap() = None;
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert_eq!(restarted.get("account").unwrap(), None);
-        assert_eq!(*backend.calls.lock().unwrap(), ["get"]);
-        assert_eq!(backend.values.lock().unwrap()["account"], "old-token");
-    }
-
-    #[test]
-    fn denied_write_uses_only_memory_until_a_successful_persistent_replacement() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        backend
-            .values
-            .lock()
-            .unwrap()
-            .insert("account".into(), "old-token".into());
-        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        store.set("account", "session-token").unwrap();
-        assert_eq!(
-            store.get("account").unwrap().as_deref(),
-            Some("session-token")
-        );
-        assert_eq!(fs::read(store.tombstones.path("account")).unwrap(), BLOCKED);
-        assert_eq!(backend.values.lock().unwrap()["account"], "old-token");
-        drop(store);
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert_eq!(restarted.get("account").unwrap(), None);
-        *backend.failure.lock().unwrap() = None;
-        restarted.set("account", "new-token").unwrap();
-        assert!(!restarted.tombstones.blocked("account").unwrap());
-        drop(restarted);
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
+        {
+            let store = FileStore::new(directory.path()).unwrap();
+            assert_eq!(store.get("account").unwrap(), None);
+            store.set("account", "initial-refresh-token").unwrap();
+            store.set("other-account", "another-refresh-token").unwrap();
+        }
+        {
+            let store = FileStore::new(directory.path()).unwrap();
+            assert_eq!(
+                store.get("account").unwrap().as_deref(),
+                Some("initial-refresh-token")
+            );
+            store.set("account", "rotated-refresh-token").unwrap();
+        }
+        let restarted = FileStore::new(directory.path()).unwrap();
         assert_eq!(
             restarted.get("account").unwrap().as_deref(),
-            Some("new-token")
+            Some("rotated-refresh-token")
         );
-    }
-
-    #[test]
-    fn successful_write_keeps_the_process_session_when_further_reads_are_denied() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        store.set("account", "new-token").unwrap();
-        assert!(!store.tombstones.blocked("account").unwrap());
-        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
-        assert_eq!(store.get("account").unwrap().as_deref(), Some("new-token"));
-        assert_eq!(*backend.calls.lock().unwrap(), ["set"]);
-        store.delete("account").unwrap();
-        assert_eq!(store.get("account").unwrap(), None);
-        assert!(store.tombstones.blocked("account").unwrap());
-        drop(store);
-        *backend.failure.lock().unwrap() = None;
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert_eq!(restarted.get("account").unwrap(), None);
-        assert_eq!(*backend.calls.lock().unwrap(), ["set", "delete"]);
-    }
-
-    #[test]
-    fn restored_session_remains_available_only_until_delete_or_process_restart() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        backend
-            .values
-            .lock()
-            .unwrap()
-            .insert("account".into(), "restored-token".into());
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
         assert_eq!(
-            store.get("account").unwrap().as_deref(),
-            Some("restored-token")
+            restarted.get("other-account").unwrap().as_deref(),
+            Some("another-refresh-token")
         );
-        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
-        assert_eq!(
-            store.get("account").unwrap().as_deref(),
-            Some("restored-token")
-        );
-        assert_eq!(*backend.calls.lock().unwrap(), ["get"]);
-        drop(store);
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        assert_eq!(restarted.get("account").unwrap(), None);
-        assert!(restarted.tombstones.blocked("account").unwrap());
-        assert_eq!(*backend.calls.lock().unwrap(), ["get", "get"]);
     }
 
     #[test]
-    fn denied_delete_clears_memory_and_durably_blocks_only_the_selected_key() {
+    fn logout_survives_restart_and_later_sign_in_can_replace_the_retired_value() {
         let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        backend.values.lock().unwrap().extend([
-            ("account".into(), "old-token".into()),
-            ("other".into(), "other-token".into()),
-        ]);
-        *backend.failure.lock().unwrap() = Some(BackendError::Unavailable);
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        store.set("account", "session-token").unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        store.set("account", "refresh-before-logout").unwrap();
+        store.set("other", "other-session").unwrap();
         store.delete("account").unwrap();
-        assert_eq!(store.get("account").unwrap(), None);
+        assert!(fs::read(store.path("account")).unwrap().is_empty());
         drop(store);
-        *backend.failure.lock().unwrap() = None;
-        let restarted = QuietStore::new(directory.path(), backend.clone()).unwrap();
+
+        let restarted = FileStore::new(directory.path()).unwrap();
         assert_eq!(restarted.get("account").unwrap(), None);
         assert_eq!(
             restarted.get("other").unwrap().as_deref(),
-            Some("other-token")
+            Some("other-session")
         );
-        assert_eq!(backend.values.lock().unwrap()["account"], "old-token");
-    }
-
-    #[test]
-    fn successful_delete_still_leaves_a_safe_marker_until_the_next_write() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        store.set("account", "token").unwrap();
-        store.delete("account").unwrap();
-        assert!(backend.values.lock().unwrap().is_empty());
-        assert!(store.tombstones.blocked("account").unwrap());
-        store.set("account", "replacement").unwrap();
-        assert!(!store.tombstones.blocked("account").unwrap());
-    }
-
-    #[test]
-    fn unexpected_backend_errors_fail_closed_instead_of_becoming_sessions() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        *backend.failure.lock().unwrap() = Some(BackendError::Failed);
-        let store = QuietStore::new(directory.path(), backend).unwrap();
-        assert_eq!(store.get("read").unwrap_err(), STORAGE_ERROR);
-        assert_eq!(store.set("write", "token").unwrap_err(), STORAGE_ERROR);
-        assert_eq!(store.delete("delete").unwrap_err(), STORAGE_ERROR);
-        assert!(store.memory.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn marker_io_failure_prevents_os_writes_and_deletes() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        fs::remove_dir(&store.tombstones.0).unwrap();
-        fs::write(&store.tombstones.0, b"invalid directory").unwrap();
-        assert_eq!(store.get("account").unwrap_err(), STORAGE_ERROR);
-        assert_eq!(store.set("account", "token").unwrap_err(), STORAGE_ERROR);
-        assert_eq!(store.delete("account").unwrap_err(), STORAGE_ERROR);
-        assert!(backend.calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn symlink_or_corrupt_marker_is_never_treated_as_absent() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        let store = QuietStore::new(directory.path(), backend.clone()).unwrap();
-        let path = store.tombstones.path("account");
-        fs::write(&path, b"invalid").unwrap();
-        assert!(store.get("account").is_err());
-        fs::remove_file(&path).unwrap();
-        let target = directory.path().join("unrelated");
-        fs::write(&target, b"unrelated contents").unwrap();
-        std::os::unix::fs::symlink(&target, &path).unwrap();
-        assert!(store.get("account").is_err());
-        assert!(store.set("account", "token").is_err());
-        assert!(store.delete("account").is_err());
-        assert_eq!(fs::read(&target).unwrap(), b"unrelated contents");
-        assert!(backend.calls.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn concurrent_delete_cannot_be_undone_by_an_older_inflight_write() {
-        let directory = tempfile::tempdir().unwrap();
-        let backend = backend(directory.path());
-        let (entered_tx, entered_rx) = mpsc::channel();
-        let (release_tx, release_rx) = mpsc::channel();
-        *backend.block_set.lock().unwrap() = Some((entered_tx, release_rx));
-        let store = Arc::new(QuietStore::new(directory.path(), backend.clone()).unwrap());
-        let writer = store.clone();
-        let writing = std::thread::spawn(move || writer.set("account", "new-token"));
-        entered_rx
-            .recv_timeout(std::time::Duration::from_secs(2))
-            .unwrap();
-        let deleting = store.clone();
-        let deletion = std::thread::spawn(move || deleting.delete("account"));
-        release_tx.send(()).unwrap();
-        writing.join().unwrap().unwrap();
-        deletion.join().unwrap().unwrap();
-        assert_eq!(store.get("account").unwrap(), None);
-        assert!(backend.values.lock().unwrap().is_empty());
-        assert!(store.tombstones.blocked("account").unwrap());
-        assert_eq!(*backend.calls.lock().unwrap(), ["set", "delete"]);
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn native_process_policy_disallows_interaction_without_accessing_credentials() {
-        no_interaction().unwrap();
-        assert!(
-            !security_framework::os::macos::keychain::SecKeychain::user_interaction_allowed()
+        restarted.delete("account").unwrap();
+        restarted.set("account", "new-refresh-token").unwrap();
+        drop(restarted);
+        assert_eq!(
+            FileStore::new(directory.path())
                 .unwrap()
+                .get("account")
+                .unwrap()
+                .as_deref(),
+            Some("new-refresh-token")
         );
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    #[allow(deprecated)]
-    fn native_query_preserves_service_key_and_never_searches_the_dp_store() {
-        use core_foundation::{base::TCFType, boolean::CFBoolean, string::CFString};
-        let options = legacy_options("credential-key");
-        let fields: HashMap<String, _> = options
-            .query
-            .into_iter()
-            .map(|(key, value)| (key.to_string(), value))
-            .collect();
-        assert_eq!(fields.len(), 4);
+    fn created_directories_and_replaced_files_remain_private() {
+        let temporary = tempfile::tempdir().unwrap();
+        let directory = temporary.path().join("application");
+        let store = FileStore::new(&directory).unwrap();
+        assert_eq!(fs::metadata(&directory).unwrap().mode() & 0o777, 0o700);
         assert_eq!(
-            fields["svce"].downcast::<CFString>().unwrap().to_string(),
-            super::super::SERVICE
+            fs::metadata(&store.directory).unwrap().mode() & 0o777,
+            0o700
         );
+        for value in [Some("first-token"), Some("rotated-token"), None] {
+            match value {
+                Some(value) => store.set("account", value).unwrap(),
+                None => store.delete("account").unwrap(),
+            }
+            let metadata = fs::metadata(store.path("account")).unwrap();
+            assert_eq!(metadata.mode() & 0o777, 0o600);
+            // SAFETY: geteuid only reads the process identity.
+            assert_eq!(metadata.uid(), unsafe { libc::geteuid() });
+        }
+    }
+
+    #[test]
+    fn directory_symlinks_cannot_redirect_new_or_existing_stores() {
+        let directory = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let linked_app = directory.path().join("linked-app");
+        symlink(outside.path(), &linked_app).unwrap();
+        assert!(FileStore::new(&linked_app).is_err());
+        assert!(!outside.path().join("credentials").exists());
+
+        let application = directory.path().join("application");
+        let store = FileStore::new(&application).unwrap();
+        fs::remove_dir(&store.directory).unwrap();
+        symlink(outside.path(), &store.directory).unwrap();
+        assert!(FileStore::new(&application).is_err());
+        assert!(store.get("account").is_err());
+        assert!(store.set("account", "must-not-leak").is_err());
+        assert!(store.delete("account").is_err());
+        assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn a_symlink_at_a_credential_path_is_never_read_replaced_or_deleted() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        let outside = directory.path().join("outside-secret");
+        crate::local_stack::write_private(&outside, b"outside-value").unwrap();
+        symlink(&outside, store.path("account")).unwrap();
+        assert!(store.get("account").is_err());
+        assert!(store.set("account", "replacement").is_err());
+        assert!(store.delete("account").is_err());
+        assert_eq!(fs::read(&outside).unwrap(), b"outside-value");
+        assert!(fs::symlink_metadata(store.path("account"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+    }
+
+    #[test]
+    fn public_permissions_fail_closed_without_changing_the_saved_value() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        store.set("account", "private-value").unwrap();
+        for (path, public_mode, restored_mode) in [
+            (directory.path().to_path_buf(), 0o777, 0o700),
+            (store.directory.clone(), 0o755, 0o700),
+            (store.path("account"), 0o644, 0o600),
+        ] {
+            permissions(&path, public_mode);
+            assert!(store.get("account").is_err());
+            assert!(store.set("account", "must-not-persist").is_err());
+            assert!(store.delete("account").is_err());
+            permissions(&path, restored_mode);
+            assert_eq!(
+                FileStore::new(directory.path())
+                    .unwrap()
+                    .get("account")
+                    .unwrap()
+                    .as_deref(),
+                Some("private-value")
+            );
+        }
+    }
+
+    #[test]
+    fn existing_public_credential_directory_is_rejected_without_chmod() {
+        let directory = tempfile::tempdir().unwrap();
+        let credentials = directory.path().join("credentials");
+        fs::create_dir(&credentials).unwrap();
+        permissions(&credentials, 0o755);
+        assert!(FileStore::new(directory.path()).is_err());
+        assert_eq!(fs::metadata(&credentials).unwrap().mode() & 0o777, 0o755);
+    }
+
+    #[test]
+    fn arbitrary_keys_stay_bounded_to_opaque_files_in_the_private_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        let keys = [
+            "../../escaped",
+            "/absolute/path",
+            "nested/key",
+            "",
+            "different-account",
+        ];
+        for (index, key) in keys.iter().enumerate() {
+            store.set(key, &format!("fixture-session-{index}")).unwrap();
+        }
+        let restarted = FileStore::new(directory.path()).unwrap();
+        for (index, key) in keys.iter().enumerate() {
+            assert_eq!(
+                restarted.get(key).unwrap(),
+                Some(format!("fixture-session-{index}"))
+            );
+        }
+        let entries = fs::read_dir(&store.directory)
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(entries.len(), keys.len());
+        for entry in entries {
+            assert!(entry.file_type().unwrap().is_file());
+            let name = entry.file_name().into_string().unwrap();
+            assert_eq!(name.len(), 64);
+            assert!(name
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)));
+        }
+        assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn malformed_existing_values_fail_without_erasing_or_overwriting_the_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        for bytes in [vec![0xff, 0xfe], vec![b'x'; MAX_BYTES as usize + 1]] {
+            crate::local_stack::write_private(&store.path("account"), &bytes).unwrap();
+            assert!(store.get("account").is_err());
+            assert!(store.set("account", "must-not-overwrite").is_err());
+            assert!(store.delete("account").is_err());
+            assert_eq!(fs::read(store.path("account")).unwrap(), bytes);
+        }
+    }
+
+    #[test]
+    fn rejected_new_values_preserve_the_last_persisted_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        let largest = "t".repeat(MAX_BYTES as usize);
+        store.set("account", &largest).unwrap();
+        assert!(store.set("account", "").is_err());
+        assert!(store
+            .set("account", &"t".repeat(MAX_BYTES as usize + 1))
+            .is_err());
         assert_eq!(
-            fields["acct"].downcast::<CFString>().unwrap().to_string(),
-            "credential-key"
-        );
-        let selector = unsafe {
-            CFString::wrap_under_get_rule(
-                security_framework_sys::item::kSecUseDataProtectionKeychain,
-            )
-        };
-        assert_eq!(
-            fields[&selector.to_string()],
-            CFBoolean::false_value().into_CFType()
+            FileStore::new(directory.path())
+                .unwrap()
+                .get("account")
+                .unwrap(),
+            Some(largest)
         );
     }
 
-    #[cfg(target_os = "macos")]
     #[test]
-    fn native_statuses_distinguish_denied_access_from_corruption() {
-        for code in [-25308, -25293, -25291, -25292, -25307] {
-            assert_eq!(
-                backend_error(security_framework::base::Error::from_code(code)),
-                BackendError::Unavailable
-            );
-        }
-        for code in [-50, -25295, -26275] {
-            assert_eq!(
-                backend_error(security_framework::base::Error::from_code(code)),
-                BackendError::Failed
-            );
-        }
+    fn failed_persistence_never_becomes_a_successful_memory_only_session() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileStore::new(directory.path()).unwrap();
+        fs::create_dir(store.path("account")).unwrap();
+        assert!(store.set("account", "must-not-live-in-memory").is_err());
+        assert!(store.get("account").is_err());
+        assert!(store.delete("account").is_err());
+        assert!(FileStore::new(directory.path())
+            .unwrap()
+            .get("account")
+            .is_err());
+        assert_eq!(fs::read_dir(store.path("account")).unwrap().count(), 0);
+        fs::remove_dir(store.path("account")).unwrap();
+        assert_eq!(store.get("account").unwrap(), None);
     }
 }

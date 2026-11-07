@@ -332,7 +332,7 @@ impl Pairings {
             .post(origin.join("/api/devices/pair").map_err(|_| PAIR_ERROR)?)
             .header(header::COOKIE, cookies)
             .header(header::CACHE_CONTROL, "no-store")
-            .json(&serde_json::json!({"name":"Ork Preview", "platform":platform()}))
+            .json(&serde_json::json!({"name":"Ork", "platform":platform()}))
             .send()
             .await
             .map_err(|_| PAIR_ERROR)?;

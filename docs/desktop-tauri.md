@@ -6,7 +6,7 @@
 `apps/desktop` uses Tauri 2 and carries the React renderer in its application bundle.
 The WebView keeps the selected server's origin for API requests and session cookies,
 then starts the packaged renderer on the server's minimal HTML document. The bundle
-keeps the **Ork Preview** name and `run.orkbot.desktop.preview` identifier so existing
+is named **Ork**. It keeps the `run.orkbot.desktop.preview` identifier so existing
 Tauri profiles remain usable.
 
 ## Run and check locally
@@ -41,8 +41,14 @@ and window intact.
 
 Windows and Linux use separate WebView data directories for each complete server
 origin, including its port. macOS 14 and later use a stable store per origin. Older
-supported macOS versions use incognito WebViews, so login sessions end on exit or
-reconnect. The selected address is still saved.
+supported macOS versions use incognito WebViews, so WebView cookies are cleared on
+exit or reconnect. The selected address is still saved.
+
+macOS stores account sessions and device credentials in the app's private data directory,
+using mode `0700` for the directory and `0600` for credential files. The files are
+unencrypted. OS user permissions control access, so software running as the same user
+can read them. This storage avoids Keychain prompts. Sign in once after upgrading from
+a build that used Keychain. Windows and Linux use their system credential stores.
 
 The native bridge belongs to the selected server's top-level document. Rust checks its
 window, origin and private document proof before running a command, and checks again

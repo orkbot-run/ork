@@ -368,6 +368,12 @@ mod tests {
     fn only_a_packaged_macos_executable_can_read_the_profile() {
         assert_eq!(
             bundle_contents(Path::new(
+                "/Applications/Ork.app/Contents/MacOS/orkbot-desktop-preview"
+            )),
+            Some(Path::new("/Applications/Ork.app/Contents"))
+        );
+        assert_eq!(
+            bundle_contents(Path::new(
                 "/Applications/Ork Preview.app/Contents/MacOS/orkbot-desktop-preview"
             )),
             Some(Path::new("/Applications/Ork Preview.app/Contents"))

@@ -11,9 +11,9 @@ use sha2::{Digest, Sha256};
 use url::Url;
 
 const SERVICE: &str = "run.orkbot.desktop.preview.pairing.v1";
-pub const STORAGE_ERROR: &str = "Could not access the system credential store.";
+pub const STORAGE_ERROR: &str = "Could not access saved sign-in.";
 
-/// Tokens persist only in the system store; denied macOS access uses process memory.
+/// Persistent token storage is platform-specific; failed writes must fail sign-in.
 pub trait CredentialStore: Send + Sync {
     fn get(&self, key: &str) -> Result<Option<String>, String>;
     fn set(&self, key: &str, value: &str) -> Result<(), String>;
@@ -76,7 +76,7 @@ impl Default for Store {
 }
 
 impl Store {
-    /// Configure nonsecret credential state without reading any system credentials.
+    /// Configure persistent sign-in storage without reading existing credentials.
     pub fn system(directory: &Path) -> Result<Self, String> {
         #[cfg(target_os = "macos")]
         {

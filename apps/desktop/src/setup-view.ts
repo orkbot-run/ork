@@ -734,6 +734,37 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     target.addEventListener(event, listener);
     cleanups.push(() => target.removeEventListener(event, listener));
   };
+  async function continueAccount(version: number, value: Account) {
+    if (!current(version)) return;
+    account = value;
+    renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
+    if (pendingServer) {
+      showPendingServer();
+      return;
+    }
+    if (startup.phase !== "idle") {
+      startupScreen();
+      if (startup.phase === "failed") await loadServers(version);
+      return;
+    }
+    const entries = await loadServers(version);
+    if (!current(version)) return;
+    if (pendingServer) {
+      showPendingServer();
+      return;
+    }
+    const selected =
+      entries.find((entry) => entry.isDefault) ?? (entries.length === 1 ? entries[0] : undefined);
+    if (selected)
+      await openServer(
+        version,
+        "connect_saved_server",
+        { id: selected.id },
+        selected.kind === "local",
+      );
+    else show("servers");
+  }
+
   async function signIn(restoreSession = false) {
     if (operation || disposed) return;
     show("accounts");
@@ -753,40 +784,15 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
           });
         }
         if (!current(version)) return;
-        account = value;
         if (!restored) startup = { phase: "idle" };
-        renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
-        if (pendingServer) {
-          showPendingServer();
-          return;
-        }
-        if (startup.phase !== "idle") {
-          startupScreen();
-          if (startup.phase === "failed") await loadServers(version);
-          return;
-        }
-        const entries = await loadServers(version);
-        if (!current(version)) return;
-        if (pendingServer) {
-          showPendingServer();
-          return;
-        }
-        const selected =
-          entries.find((entry) => entry.isDefault) ??
-          (entries.length === 1 ? entries[0] : undefined);
-        if (selected)
-          await openServer(
-            version,
-            "connect_saved_server",
-            { id: selected.id },
-            selected.kind === "local",
-          );
-        else show("servers");
+        await continueAccount(version, value);
       },
       "accounts",
     );
   }
-  on("get-started", "click", () => void signIn(true));
+  on("get-started", "click", () => {
+    if (!account) void signIn(true);
+  });
   on("sign-in", "click", () => void signIn());
   on("back", "click", () => {
     if (
@@ -926,7 +932,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       });
   });
 
-  show("welcome", false);
+  show("checking", false);
   void run(
     "session",
     async (version) => {
@@ -1009,7 +1015,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         initialize: state?.initializingServer === state?.pendingServer,
       });
       startup = state?.startup ?? { phase: "idle" };
-      show("welcome", false);
+      // Restoring a verified session never opens browser sign-in. New users continue explicitly.
+      const restored = await transport.invoke<Account | null>("setup_accounts_session");
+      if (!current(version)) return;
+      if (restored) await continueAccount(version, restored);
+      else show("welcome", false);
     },
     "welcome",
   );

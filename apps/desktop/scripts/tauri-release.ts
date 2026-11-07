@@ -166,7 +166,7 @@ export function releaseManifest(
     };
   }
   if (!Number.isFinite(Date.parse(options.date))) throw new Error("Invalid publication date.");
-  return { version: options.version, notes: "Ork Preview", pub_date: options.date, platforms };
+  return { version: options.version, notes: "Ork", pub_date: options.date, platforms };
 }
 
 function main() {

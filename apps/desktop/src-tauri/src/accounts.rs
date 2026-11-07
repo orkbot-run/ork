@@ -605,7 +605,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn credentials_fail_closed_without_a_file_fallback() {
+    async fn credentials_fail_closed_when_storage_is_unavailable() {
         struct Unavailable;
         impl CredentialStore for Unavailable {
             fn get(&self, _: &str) -> Result<Option<String>, String> {

@@ -88,7 +88,7 @@ describe("signed desktop releases", () => {
   it("stages a signed updater with a platform-qualified name and refuses unsigned output", () => {
     const bundle = temporary();
     const output = temporary();
-    writeFileSync(path.join(bundle, "Ork Preview.app.tar.gz"), "fixture archive");
+    writeFileSync(path.join(bundle, "Ork.app.tar.gz"), "fixture archive");
     expect(() =>
       stageArtifacts(bundle, output, {
         platform: "darwin-aarch64",
@@ -97,19 +97,20 @@ describe("signed desktop releases", () => {
         key,
       }),
     ).toThrow();
-    writeFileSync(path.join(bundle, "Ork Preview.app.tar.gz.sig"), "signature\n");
+    writeFileSync(path.join(bundle, "Ork.app.tar.gz.sig"), "signature\n");
     const staged = stageArtifacts(bundle, output, {
       platform: "darwin-aarch64",
       version: options.version,
       revision,
       key,
     });
-    expect(staged.archive).toBe("darwin-aarch64-Ork_Preview.app.tar.gz");
+    expect(staged.archive).toBe("darwin-aarch64-Ork.app.tar.gz");
     expect(readFileSync(path.join(output, staged.archive), "utf8")).toBe("fixture archive");
     expect(staged.signature).toBe("signature");
   });
   it("promotes only a complete same-revision, same-key release with immutable HTTPS URLs", () => {
     const manifest = releaseManifest(entries(), options);
+    expect(manifest.notes).toBe("Ork");
     expect(Object.keys(manifest.platforms)).toEqual([...PLATFORMS]);
     expect(manifest.platforms["darwin-aarch64"]?.url).toBe(
       "https://github.com/example/desktop/releases/download/desktop-preview-1.1.42/darwin-aarch64-app.tar.gz",
@@ -198,7 +199,7 @@ else process.exit(2);
         },
         encoding: "utf8",
       });
-    expect(run()).toContain("Published Ork Preview 1.1.42");
+    expect(run()).toContain("Published Ork 1.1.42");
     expect(
       JSON.parse(readFileSync(path.join(directory, "promoted.json"), "utf8")).platforms,
     ).toHaveProperty("darwin-aarch64");
@@ -212,6 +213,7 @@ else process.exit(2);
     const calls = readFileSync(path.join(directory, "calls.jsonl"), "utf8");
     expect(calls).toContain("Accept: application/octet-stream");
     expect(calls).toContain("--draft=false");
+    expect(calls).toContain('"--title","Ork"');
     writeFileSync(
       path.join(directory, "context.json"),
       JSON.stringify({ ...context, withdrawn: true }),

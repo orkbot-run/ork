@@ -1835,7 +1835,7 @@ async fn open_server(
         .hidden_title(true)
         .traffic_light_position(tauri::LogicalPosition::new(16.0, 16.0));
     let next = builder
-        .title("Ork Preview")
+        .title("Ork")
         .inner_size(1100.0, 760.0)
         .min_inner_size(640.0, 480.0)
         .visible(false)
@@ -2160,7 +2160,7 @@ fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewW
             .setup_ready
             .store(false, Ordering::SeqCst);
         let window = WebviewWindowBuilder::new(app, "setup", WebviewUrl::App("index.html".into()))
-            .title("Ork Preview")
+            .title("Ork")
             .inner_size(580.0, 640.0)
             .resizable(false)
             .visible(false)
@@ -2175,7 +2175,11 @@ fn setup_window(app: &tauri::AppHandle, visible: bool) -> tauri::Result<WebviewW
                         .setup_ready
                         .swap(true, Ordering::SeqCst);
                     if !visible && first {
-                        show_active_or_setup(window.app_handle());
+                        // A newly loaded setup document restores its session and selected server.
+                        // Starting a second native restore here races its asynchronous session check.
+                        if !focus_active(window.app_handle()) {
+                            let _ = show_setup(window.app_handle());
+                        }
                     }
                 }
             })
@@ -2452,7 +2456,7 @@ fn show_active_or_setup(app: &tauri::AppHandle) {
         return;
     }
     if app.get_webview_window("setup").is_none() {
-        // The first completed bundled document starts restoration, before any URL getter is used.
+        // The new bundled document restores its session before selecting a server.
         let _ = setup_window(app, false);
         return;
     }
@@ -2699,7 +2703,7 @@ fn main() {
                 restoring: std::sync::atomic::AtomicBool::new(false),
                 restore_intent: AtomicU64::new(0),
                 setup_ready: std::sync::atomic::AtomicBool::new(false),
-                startup: Mutex::new(Startup::checking()),
+                startup: Mutex::new(Startup::idle()),
                 speech: speech::SpeechManager::new(speech_helper),
                 pairings: pairing::Pairings::new(credential_store),
                 warm_generation: AtomicU64::new(0),
@@ -2788,7 +2792,7 @@ fn main() {
             }
         })
         .build(app_context())
-        .expect("could not build Ork Preview")
+        .expect("could not build Ork")
         .run(|app, event| {
             #[cfg(target_os = "macos")]
             if matches!(event, tauri::RunEvent::Reopen { .. }) {
@@ -2831,7 +2835,7 @@ mod tests {
             restoring: std::sync::atomic::AtomicBool::new(false),
             restore_intent: AtomicU64::new(0),
             setup_ready: std::sync::atomic::AtomicBool::new(false),
-            startup: Mutex::new(Startup::checking()),
+            startup: Mutex::new(Startup::idle()),
             speech: speech::SpeechManager::new(PathBuf::new()),
             pairings: pairing::Pairings::default(),
             warm_generation: AtomicU64::new(0),
@@ -3062,6 +3066,7 @@ mod tests {
             account: Some("a".repeat(64)),
         });
         assert!(!state.accounts_have_started());
+        assert_eq!(state.startup.lock().unwrap().phase, "idle");
         assert_eq!(begin_restore(&state), None);
         assert!(!state.restoring.load(Ordering::SeqCst));
         state
@@ -3095,6 +3100,24 @@ mod tests {
             .unwrap();
         assert!(state.accounts_have_started());
         state.reset_accounts_started().unwrap();
+        assert!(!state.accounts_have_started());
+    }
+
+    #[test]
+    fn logout_during_cold_session_restore_cannot_unlock_automatic_startup() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        state.setup_ready.store(true, Ordering::SeqCst);
+        let pending = state.accounts_started.lock().unwrap().generation;
+        let logout = begin_accounts_logout(&state).unwrap();
+        assert!(state
+            .accounts_started
+            .lock()
+            .unwrap()
+            .complete(pending, true)
+            .is_err());
+        assert!(logout.is_current(&state));
+        assert_eq!(begin_restore(&state), None);
         assert!(!state.accounts_have_started());
     }
 
@@ -3406,7 +3429,7 @@ mod tests {
             &setup,
             request("setup_state", local),
             Ok(
-                serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "checking"}, "pendingServer": null}),
+                serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
             ),
         );
         for (window, origin) in [
