@@ -495,7 +495,7 @@ postgres("send consent acceptance (PostgreSQL)", () => {
       }
     },
   );
-  it("accepts a group send during a finite burst of real worker event writes", async () => {
+  it("retries a group send after a finite burst of real worker event writes", async () => {
     const group = await prisma.chatGroup.create({
       data: {
         spaceId: actor.spaceId,
@@ -517,10 +517,6 @@ postgres("send consent acceptance (PostgreSQL)", () => {
     const beginning = new Promise<void>((resolve) => {
       begin = resolve;
     });
-    let committed!: () => void;
-    const firstCommit = new Promise<void>((resolve) => {
-      committed = resolve;
-    });
     const workerEvents = createThreadEvents(prisma);
     const workers = Promise.all(
       Array.from({ length: 4 }, async (_, worker) => {
@@ -533,7 +529,6 @@ postgres("send consent acceptance (PostgreSQL)", () => {
             type: "agent.tool.called",
             payload: { name: "fixture", executionId: `${worker}:${event}` },
           });
-          committed();
         }
       }),
     );
@@ -544,7 +539,8 @@ postgres("send consent acceptance (PostgreSQL)", () => {
         attempts += 1;
         if (attempts === 1) {
           begin();
-          await firstCommit;
+          // Finish the real competing commits before the stale lock, without a host-speed budget.
+          await workers;
         }
       }
       try {
@@ -559,14 +555,17 @@ postgres("send consent acceptance (PostgreSQL)", () => {
         text: "Send while workers publish",
         clientNonce: randomUUID(),
       }),
-    ).then(
-      () => undefined,
-      (failure: unknown) => failure,
-    );
-    await workers;
+    )
+      .then(
+        () => undefined,
+        (failure: unknown) => failure,
+      )
+      .finally(async () => {
+        begin();
+        await workers;
+      });
     expect(error, JSON.stringify({ attempts, failedQueries })).toBeUndefined();
-    expect(attempts).toBeGreaterThanOrEqual(2);
-    expect(attempts).toBeLessThanOrEqual(3);
+    expect(attempts).toBe(2);
     expect(failedQueries[0]).toContain("FROM threads WHERE id =");
     expect(
       await prisma.event.count({
