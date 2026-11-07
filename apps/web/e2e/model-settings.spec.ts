@@ -5,8 +5,9 @@
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Route } from "@playwright/test";
+import type { AiConsentStatus } from "@orkbot/contracts";
 import {
+  activeBotId,
   captureScreenshot,
   completeOnboarding,
   manageModelConnection,
@@ -134,12 +135,6 @@ function readJsonBody(request: IncomingMessage): Promise<Record<string, unknown>
   });
 }
 
-async function fulfillWithoutModelStep(route: Route) {
-  const response = await route.fetch();
-  const body = (await response.json()) as { json: Record<string, unknown> };
-  await route.fulfill({ response, json: { ...body, json: { ...body.json, needsModel: false } } });
-}
-
 test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page }, testInfo) => {
   let expandedModels = false;
   const completionBodies: Array<Record<string, unknown>> = [];
@@ -219,13 +214,40 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
     const baseUrl = process.env.E2E_COMPATIBLE_FIXTURE_URL ?? `http://127.0.0.1:${address.port}/v1`;
     const stamp = Date.now();
     const userName = `Local model ${stamp}`;
-    // The pi runtime asks for a model before onboarding finishes; this test connects
-    // the fake endpoint from settings instead, so skip that step on the client.
-    const skipModelStep = process.env.AGENT_RUNTIME === "pi";
-    if (skipModelStep) await page.route("**/rpc/me", fulfillWithoutModelStep);
+    const pi = process.env.AGENT_RUNTIME === "pi";
     await signup(page, `local-model-${stamp}@orkbot.test`, "password12", userName);
+    if (pi) {
+      // Configure the real local connection before the backend provisions the first bot.
+      await expect(
+        page.getByRole("heading", { name: "Connect a model", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("combobox", { name: "Provider", exact: true }).click();
+      await page.getByRole("option", { name: "OpenAI-compatible", exact: true }).click();
+      await page.getByLabel("OpenAI-compatible server URL").fill(baseUrl);
+      await page.getByRole("button", { name: "Find models", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Models from server" })).toHaveText(
+        LOCAL_MODEL_ID,
+      );
+      await captureScreenshot(page, testInfo, "openai-compatible-onboarding");
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+    }
     await completeOnboarding(page);
-    if (skipModelStep) await page.unroute("**/rpc/me", fulfillWithoutModelStep);
+    if (pi) {
+      await expect(page.getByTestId("transcript").getByText(LOCAL_MODEL_REPLY).last()).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect
+        .poll(
+          async () => {
+            const snapshot = await rpc<{ run: { status: string } | null }>(page, "threads/get", {
+              botId: activeBotId(page),
+            });
+            return snapshot.run;
+          },
+          { timeout: 30_000 },
+        )
+        .toBeNull();
+    }
 
     await openUserSettings(page, "models");
     await page.getByRole("button", { name: "Add provider", exact: true }).click();
@@ -234,7 +256,10 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
     await providerSearch.fill("compatible");
     await captureScreenshot(page, testInfo, "add-provider-list-search");
     await providerSearch.press("Escape");
-    await openModelConnection(page, "OpenAI-compatible");
+    if (pi) {
+      await manageModelConnection(page, "OpenAI-compatible");
+      await page.getByRole("combobox", { name: "Models from server" }).selectOption("");
+    } else await openModelConnection(page, "OpenAI-compatible");
     await expect(
       page.getByText("Paste the OpenAI-compatible address", { exact: false }),
     ).toBeHidden();
@@ -286,7 +311,7 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
 
     await page.getByRole("button", { name: "Save", exact: true }).click();
     await expect(modelConnectionDialog(page, "OpenAI-compatible")).toBeHidden();
-    await pickReopenedModel(page);
+    if (!pi) await pickReopenedModel(page);
     await expect(page.getByText("Saved.", { exact: true })).toBeVisible();
     await expect(page.getByTestId("model-role-main").getByTestId("model-role-row-1")).toContainText(
       LOCAL_MODEL_ID,
@@ -353,13 +378,27 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
     await settings.getByRole("button", { name: "Save", exact: true }).click();
     await botSaved;
 
-    if (process.env.AGENT_RUNTIME === "pi") {
+    if (pi) {
+      const replies = page.getByTestId("transcript").getByText(LOCAL_MODEL_REPLY, { exact: true });
+      const previousReplies = await replies.count();
+      const consent = await rpc<AiConsentStatus>(page, "aiConsent/status", {
+        botId: activeBotId(page),
+        uses: ["model", "memory"],
+      });
       const composer = page.getByPlaceholder(/Message/);
       await composer.fill("Reply with the endpoint verification message.");
       await page.keyboard.press("Enter");
-      await expect(page.getByTestId("transcript").getByText(LOCAL_MODEL_REPLY)).toBeVisible({
-        timeout: 30_000,
-      });
+      // Review actual recipients through the existing UI rather than bypassing consent.
+      for (const recipient of consent.recipients.filter((recipient) => !recipient.allowed)) {
+        const dialog = page.getByRole("alertdialog");
+        await expect(
+          dialog.getByRole("heading", { name: `Share data with ${recipient.name}?`, exact: true }),
+        ).toBeVisible();
+        if (recipient.detail) await expect(dialog).toContainText(recipient.detail);
+        await dialog.getByRole("button", { name: "Allow", exact: true }).click();
+      }
+      await expect(replies).toHaveCount(previousReplies + 1, { timeout: 30_000 });
+      await expect(replies.last()).toBeVisible();
       await captureScreenshot(page, testInfo, "openai-compatible-response");
       expect(completionBodies.length).toBeGreaterThan(0);
       expect(completionHeaders.at(-1)).toBe("fake-session-secret");
