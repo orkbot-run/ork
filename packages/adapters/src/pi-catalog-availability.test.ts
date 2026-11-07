@@ -1,12 +1,24 @@
-import { describe, expect, it } from "vitest";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 availability assertions are preserved; catalog isolation follows LICENSE.md.
+
+import { describe, expect, it, vi } from "vitest";
 import {
   catalogModelAvailableForAuth,
   listAvailablePiCatalog,
   modelCredentialAuthKindFromPlaintext,
   OPENAI_CODEX_CHATGPT_SUBSCRIPTION_EXCLUDED_MODEL_IDS,
 } from "./pi-catalog-availability.js";
-import { listPiCatalog } from "./pi-models.js";
 import { CHATGPT_OAUTH_PROVIDER } from "./pi-oauth.js";
+
+// Auth policy must also work for stored models that disappear from a newer bundled catalog.
+vi.mock("./pi-models.js", () => ({
+  listPiCatalog: () => [
+    { provider: "openai-codex", id: "gpt-5.3-codex-spark", auth: "oauth" },
+    { provider: "openai-codex", id: "fixture-available", auth: "oauth" },
+    { provider: "openai", id: "gpt-5.3-codex-spark", auth: "api-key" },
+  ],
+}));
 
 describe("openai-codex catalog availability", () => {
   const spark = "gpt-5.3-codex-spark";
@@ -22,7 +34,7 @@ describe("openai-codex catalog availability", () => {
     ).toBe(false);
     expect(
       oauthCatalog.some(
-        (entry) => entry.provider === CHATGPT_OAUTH_PROVIDER && entry.id === "gpt-6-luna",
+        (entry) => entry.provider === CHATGPT_OAUTH_PROVIDER && entry.id === "fixture-available",
       ),
     ).toBe(true);
   });
@@ -68,7 +80,7 @@ describe("openai-codex catalog availability", () => {
   });
 
   it("still lists Spark on the OpenAI API key provider", () => {
-    const catalog = listPiCatalog();
+    const catalog = listAvailablePiCatalog({ [CHATGPT_OAUTH_PROVIDER]: "api_key" });
     expect(catalog.some((entry) => entry.provider === "openai" && entry.id === spark)).toBe(true);
     expect(
       catalog.some((entry) => entry.provider === CHATGPT_OAUTH_PROVIDER && entry.id === spark),

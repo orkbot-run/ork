@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 exporter assertions are preserved; Pi version accuracy follows LICENSE.md.
+
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { PI_AI_VERSION } from "@earendil-works/pi-ai";
 import { afterEach, expect, it, vi } from "vitest";
 import { createPiTelemetryExporter } from "./pi-telemetry-otel.js";
 
@@ -43,6 +48,7 @@ it("exports OTLP/HTTP with standard endpoint, headers and service name on shutdo
     expect(received[0]?.url).toBe("/v1/traces");
     expect(received[0]?.authorization).toBe("Bearer fake-fixture-token");
     const payload = JSON.parse(received[0]!.body);
+    expect(payload.resourceSpans[0].scopeSpans[0].scope.version).toBe(PI_AI_VERSION);
     expect(payload.resourceSpans[0].resource.attributes).toContainEqual({
       key: "service.name",
       value: { stringValue: "fixture-worker" },

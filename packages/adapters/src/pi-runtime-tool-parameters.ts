@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
 
-import { Type } from "@earendil-works/pi-ai";
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
   ASK_DECISION_DETAIL_MAX_LENGTH,
@@ -10,6 +9,7 @@ import {
   ThinkingLevelSchema,
 } from "@orkbot/contracts";
 import { getLogger } from "@orkbot/logging";
+import { Type } from "typebox";
 import {
   normalizeOpenAiToolParameters,
   openAiToolParametersNeedNormalization,

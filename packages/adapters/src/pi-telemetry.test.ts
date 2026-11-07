@@ -1,8 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tracing assertions are preserved; Pi upgrade regressions follow LICENSE.md.
+
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import type { TelemetrySpan } from "@earendil-works/pi-telemetry";
+import { NOOP_TELEMETRY_CONTEXT } from "@earendil-works/pi-telemetry";
 import { SpanStatusCode } from "@opentelemetry/api";
 import {
   InMemorySpanExporter,
@@ -47,6 +53,65 @@ afterEach(async () => {
 });
 
 describe("Pi OpenTelemetry", () => {
+  it.each([false, true])(
+    "maps initial and late links to settled spans without leaking metadata (capture=%s)",
+    async (capture) => {
+      const output = new InMemorySpanExporter();
+      const provider = new NodeTracerProvider({
+        spanProcessors: [new SimpleSpanProcessor(output)],
+      });
+      try {
+        const first = otelPiContext(provider.getTracer("first"), capture);
+        const second = otelPiContext(provider.getTracer("second"), capture);
+        let target: TelemetrySpan | undefined;
+        await first.startSpan({ name: "target" }, (span) => {
+          target = span;
+        });
+        await second.startSpan(
+          {
+            name: "linked",
+            links: [
+              {
+                context: target!,
+                attributes: { "pi.ai.model": "fixture", authorization: "private-key" },
+              },
+            ],
+          },
+          async (span) => {
+            span.addLink({
+              context: target!,
+              attributes: {
+                "pi.agent.tool.result": "private result",
+                "unknown.content": "private",
+              },
+            });
+            span.addLink({
+              context: NOOP_TELEMETRY_CONTEXT,
+              attributes: { authorization: "private-key" },
+            });
+            await span.startSpan({ name: "child" }, async () => {});
+          },
+        );
+        await provider.forceFlush();
+        const spans = output.getFinishedSpans();
+        const targetSpan = spans.find((span) => span.name === "target")!;
+        const linked = spans.find((span) => span.name === "linked")!;
+        const child = spans.find((span) => span.name === "child")!;
+        expect(linked.links).toEqual([
+          { context: targetSpan.spanContext(), attributes: { "pi.ai.model": "fixture" } },
+          {
+            context: targetSpan.spanContext(),
+            ...(capture ? { attributes: { "pi.agent.tool.result": "private result" } } : {}),
+          },
+        ]);
+        expect(child.parentSpanContext?.spanId).toBe(linked.spanContext().spanId);
+        expect(JSON.stringify(linked.links)).not.toMatch(/private-key|unknown.content/);
+      } finally {
+        await provider.shutdown();
+      }
+    },
+  );
+
   it("continues the request/job trace instead of starting an unrelated trace", async () => {
     const { output, provider } = setup();
     await runWithLogContext({ "trace.id": "a".repeat(32), "span.id": "b".repeat(16) }, () =>

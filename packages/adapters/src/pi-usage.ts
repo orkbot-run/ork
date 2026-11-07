@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 accounting is preserved; Pi upgrade compatibility follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import type {
   Api,
@@ -8,7 +12,7 @@ import type {
   SimpleStreamOptions,
   Usage,
 } from "@earendil-works/pi-ai";
-import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { createAssistantMessageEventStream, PI_AI_VERSION } from "@earendil-works/pi-ai";
 import type {
   AgentRuntimeEvent,
   AgentUsage,
@@ -70,7 +74,13 @@ export function normalizePiUsage(
     (model.cost.cacheRead === 0 || cacheReadTokens !== null) &&
     (model.cost.cacheWrite === 0 || cacheWriteTokens !== null);
   const rejected = rejectedRequests.has(reported);
-  const providerCost = reportedCosts.get(reported);
+  const providerCost =
+    reportedCosts.get(reported) ??
+    (usage?.cost?.totalFromProvider === true &&
+    Number.isFinite(usage.cost.total) &&
+    usage.cost.total >= 0
+      ? usage.cost.total
+      : undefined);
   return {
     providerRequestId: reportedRequestIds.get(reported) ?? null,
     inputTokens,
@@ -93,7 +103,7 @@ export function normalizePiUsage(
           ? "pi-catalog-estimate"
           : null,
     pricingSnapshot: model.cost ? JSON.parse(JSON.stringify(model.cost)) : null,
-    pricingVersion: providerCost !== undefined ? null : costKnown ? "pi-ai-1.3.0" : null,
+    pricingVersion: providerCost !== undefined ? null : costKnown ? `pi-ai-${PI_AI_VERSION}` : null,
     usageSource: rejected
       ? "provider-rejected"
       : reported.size

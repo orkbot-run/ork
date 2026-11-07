@@ -1,6 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 accounting assertions are preserved; Pi upgrade regressions follow LICENSE.md.
+
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { Api, Context, Model } from "@earendil-works/pi-ai";
+import { PI_AI_VERSION } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { AgentRuntimeEvent, AgentUsage } from "@orkbot/adapter-kit";
 import { Agent } from "undici";
@@ -59,6 +64,109 @@ async function run(usage?: object) {
 }
 
 describe("Pi usage accounting", () => {
+  it.each([0, 0.125])(
+    "keeps Pi's reported billed total %s authoritative without inventing token counts",
+    (total) => {
+      expect(
+        normalizePiUsage(
+          {
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total,
+              totalFromProvider: true,
+            },
+          },
+          model,
+        ),
+      ).toMatchObject({
+        costUsd: total,
+        costSource: "provider-reported",
+        pricingVersion: null,
+        inputTokens: null,
+        outputTokens: null,
+        totalTokens: null,
+      });
+    },
+  );
+
+  it.each([undefined, false])(
+    "labels catalog estimates with the installed Pi version (reported=%s)",
+    (totalFromProvider) => {
+      expect(
+        normalizePiUsage(
+          {
+            input: 10,
+            output: 2,
+            cacheRead: 1,
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total: 0.25,
+              totalFromProvider,
+            },
+          },
+          model,
+        ),
+      ).toMatchObject({
+        costUsd: 0.25,
+        costSource: "pi-catalog-estimate",
+        pricingVersion: `pi-ai-${PI_AI_VERSION}`,
+      });
+    },
+  );
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects an invalid reported total %s",
+    (total) => {
+      expect(
+        normalizePiUsage(
+          {
+            cost: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              total,
+              totalFromProvider: true,
+            },
+          },
+          model,
+        ),
+      ).toMatchObject({ costUsd: null, costSource: null });
+    },
+  );
+
+  it("prefers directly observed billing over a conflicting Pi total", async () => {
+    const reported = new Set<keyof AgentUsage>();
+    const response = await usageReportingFetch(
+      async () =>
+        new Response(sse({ cost: 0.125 }), { headers: { "content-type": "text/event-stream" } }),
+      reported,
+    )("https://models.example.test/v1/chat/completions");
+    await response.text();
+    expect(
+      normalizePiUsage(
+        {
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 1,
+            totalFromProvider: true,
+          },
+        },
+        model,
+        reported,
+      ),
+    ).toMatchObject({ costUsd: 0.125, costSource: "provider-reported" });
+  });
+
   it.each([false, true])(
     "acknowledges a producer sink only after successful accounting (fails=%s)",
     async (fails) => {

@@ -1,5 +1,15 @@
-import type { SpanAttributes, TelemetryContext, TelemetrySpan } from "@earendil-works/pi-telemetry";
-import type { Attributes, Context, Span, Tracer } from "@opentelemetry/api";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tracing is preserved; Pi upgrade compatibility follows LICENSE.md.
+
+import { PI_AI_VERSION } from "@earendil-works/pi-ai";
+import type {
+  SpanAttributes,
+  SpanLink,
+  TelemetryContext,
+  TelemetrySpan,
+} from "@earendil-works/pi-telemetry";
+import type { Attributes, Context, Link, Span, SpanContext, Tracer } from "@opentelemetry/api";
 import { ROOT_CONTEXT, SpanStatusCode, trace } from "@opentelemetry/api";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { resourceFromAttributes } from "@opentelemetry/resources";
@@ -34,6 +44,13 @@ const contentAttributes = new Set([
   "pi.agent.tool.result",
 ]);
 
+const spanContexts = new WeakMap<TelemetryContext, SpanContext>();
+
+function spanLink(link: SpanLink, captureContent: boolean): Link | undefined {
+  const context = spanContexts.get(link.context);
+  return context ? { context, attributes: attributes(link.attributes, captureContent) } : undefined;
+}
+
 function attributes(values: SpanAttributes = {}, captureContent: boolean): Attributes {
   return Object.fromEntries(
     Object.entries(values)
@@ -64,7 +81,13 @@ export function otelPiContext(
       const parentContext = parent ?? correlatedLogContext();
       const span: Span = tracer.startSpan(
         options.name,
-        { attributes: attributes({ ...options.attributes, ...correlation }, captureContent) },
+        {
+          attributes: attributes({ ...options.attributes, ...correlation }, captureContent),
+          links: options.links?.flatMap((link) => {
+            const mapped = spanLink(link, captureContent);
+            return mapped ? [mapped] : [];
+          }),
+        },
         parentContext,
       );
       const child = otelPiContext(
@@ -75,6 +98,10 @@ export function otelPiContext(
       );
       const bridge: TelemetrySpan = {
         ...child,
+        addLink: (link) => {
+          const mapped = spanLink(link, captureContent);
+          if (mapped) span.addLink(mapped);
+        },
         addEvent: (name, values) => {
           span.addEvent(name, attributes(values, captureContent));
         },
@@ -87,6 +114,7 @@ export function otelPiContext(
           });
         },
       };
+      spanContexts.set(bridge, span.spanContext());
       try {
         return await callback(bridge);
       } catch (error) {
@@ -112,7 +140,7 @@ export function createPiTelemetryExporter() {
   });
   return {
     context: otelPiContext(
-      provider.getTracer("orkbot.pi", "0.87.1"),
+      provider.getTracer("orkbot.pi", PI_AI_VERSION),
       process.env.OTEL_CAPTURE_CONTENT === "true",
     ),
     shutdown: () => provider.shutdown(),

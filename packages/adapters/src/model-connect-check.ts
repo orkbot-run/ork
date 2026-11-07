@@ -1,7 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 preflight is preserved; Pi schema import compatibility follows LICENSE.md.
+
 import type { Context } from "@earendil-works/pi-ai";
-import { Type } from "@earendil-works/pi-ai";
 import type { AgentRunModel } from "@orkbot/adapter-kit";
 import { MODEL_REQUEST_LIMIT_ERROR, normalizeRunError } from "@orkbot/core";
+import { Type } from "typebox";
 import { withChatCompletionsCompatibility } from "./chat-completions-compat.js";
 import { withCloudflareAuth } from "./cloudflare-ai-gateway.js";
 import { resolveRuntimeModel } from "./pi-runtime-models.js";
