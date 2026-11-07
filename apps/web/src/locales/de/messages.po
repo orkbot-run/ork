@@ -468,11 +468,6 @@ msgstr "Konto"
 msgid "Account default"
 msgstr "Kontostandard"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Account ID"
-msgstr "Konto-ID"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
 msgstr ""
@@ -810,10 +805,6 @@ msgstr "Beantwortet"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "Beantwortet: {answer}"
-
-#: src/pages/Onboarding.tsx
-msgid "Anthropic API"
-msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Anthropic Messages"
@@ -1311,6 +1302,7 @@ msgid "Chat"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Chat Completions"
 msgstr ""
 
@@ -2156,6 +2148,7 @@ msgid "Could not load MCP servers"
 msgstr "MCP-Server konnten nicht geladen werden"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/Onboarding.tsx
 msgid "Could not load model settings"
 msgstr "Modelleinstellungen konnten nicht geladen werden"
 
@@ -3327,11 +3320,6 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "Vollbild"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Gateway ID"
-msgstr "Gateway-ID"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Gateway token"
 msgstr ""
@@ -4081,6 +4069,10 @@ msgstr "Nachricht…"
 msgid "Messaged {peer}"
 msgstr "Nachricht an {peer} gesendet"
 
+#: src/pages/Onboarding.tsx
+msgid "Messages"
+msgstr "Nachrichten"
+
 #. js-lingui-explicit-id
 #: src/lib/approval-messages.ts
 msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
@@ -4625,16 +4617,6 @@ msgstr "OAuth abgelaufen"
 msgid "Offline"
 msgstr ""
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama API key"
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama Cloud"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
 msgstr ""
@@ -4716,10 +4698,6 @@ msgstr "Navigation öffnen"
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
 msgstr "Offene Arbeit"
-
-#: src/pages/Onboarding.tsx
-msgid "OpenAI API"
-msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -5061,6 +5039,7 @@ msgid "Protected input"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Protocol"
 msgstr ""
 
@@ -5443,6 +5422,7 @@ msgid "Resize panel"
 msgstr "Panelgröße ändern"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Responses"
 msgstr ""
 

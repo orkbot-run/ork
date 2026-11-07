@@ -1,10 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 auth tests are preserved; canonical routing tests follow LICENSE.md.
+
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
+import { describe, expect, it } from "vitest";
+import { cloudflareProviderEnv, withCloudflareAuth } from "./cloudflare-ai-gateway.js";
 import {
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-} from "@orkbot/contracts";
-import { describe, expect, it } from "vitest";
-import { cloudflareProviderEnv, withCloudflareAuth } from "./cloudflare-ai-gateway.js";
+} from "./cloudflare-model-config.js";
 import { buildModelConnectPlaintext } from "./model-connect.js";
 import { parseModelSecret } from "./pi-oauth.js";
 
@@ -57,6 +61,22 @@ describe("Cloudflare Workers AI auth", () => {
 });
 
 describe("Cloudflare AI Gateway auth", () => {
+  it("uses the canonical map over legacy aliases and never completes a partial map from them", () => {
+    const config = {
+      provider: CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
+      routing: { account: "canonical-account", gateway: "canonical-gateway" },
+      accountId: "old-account",
+      gatewayId: "old-gateway",
+    };
+    expect(cloudflareProviderEnv(config)).toEqual({
+      CLOUDFLARE_ACCOUNT_ID: "canonical-account",
+      CLOUDFLARE_GATEWAY_ID: "canonical-gateway",
+    });
+    expect(() =>
+      cloudflareProviderEnv({ ...config, routing: { account: "canonical-account" } }),
+    ).toThrow(CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE);
+  });
+
   it("resolves a saved credential into gateway auth and a routed base URL", async () => {
     const secret = parseModelSecret(
       buildModelConnectPlaintext({

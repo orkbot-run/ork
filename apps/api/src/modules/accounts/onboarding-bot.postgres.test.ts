@@ -11,10 +11,14 @@ import {
   createOrganizationForUser,
   createRepos,
   createSpaceForMember,
+  createThreadEvents,
   runAsSystem,
   runAsTenant,
 } from "@orkbot/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { RPCHandler } from "@orpc/server/fetch";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { RouterDeps } from "#modules/platform/router";
+import { createRouter } from "#modules/platform/router";
 import { ensureOnboardingBot } from "./onboarding-bot.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -79,6 +83,61 @@ describePostgres("onboarding bots across Spaces (PostgreSQL)", () => {
   function ensure(actor: Actor, ready = true, client = prisma) {
     return runAsTenant(actor, () => ensureOnboardingBot(client, createRepos(client), actor, ready));
   }
+
+  it("requires authoritative model readiness at the API boundary and provisions once after configuration", async () => {
+    const { actor } = await signup();
+    const enqueue = vi.fn(async () => undefined);
+    const deps = {
+      prisma,
+      events: createThreadEvents(prisma),
+      jobs: { enqueue, cancel: vi.fn(), close: async () => undefined },
+      secrets: { load: vi.fn(async () => "fixture-secret") },
+      sandbox: {},
+      env: {
+        agentRuntime: "pi",
+        defaultProvider: "fixture-provider",
+        defaultModel: "fixture-model",
+        deploymentModelConfigured: false,
+      },
+    } as unknown as RouterDeps;
+    const handler = new RPCHandler(createRouter(deps));
+    const call = async () => {
+      const { response } = await runAsTenant(actor, () =>
+        handler.handle(
+          new Request("http://127.0.0.1/rpc/onboarding/ensureFirstBot", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ json: {} }),
+          }),
+          { prefix: "/rpc", context: { actor } },
+        ),
+      );
+      expect(response?.status).toBe(200);
+      return (await response!.json()).json as { id: string } | null;
+    };
+    expect(await call()).toBeNull();
+    await system.userModelCredential.create({
+      data: {
+        userId: actor.userId,
+        provider: "fixture-provider",
+        label: "Unused connection",
+        secretId: "fixture-secret",
+      },
+    });
+    // A stored key without an active usable main model cannot satisfy readiness.
+    expect(await call()).toBeNull();
+    expect(await system.bot.count({ where: { userId: actor.userId } })).toBe(0);
+    expect(await system.thread.count({ where: { userId: actor.userId } })).toBe(0);
+    expect(enqueue).not.toHaveBeenCalled();
+    deps.env.deploymentModelConfigured = true;
+    const first = await call();
+    expect(first?.id).toBeTruthy();
+    expect(await call()).toMatchObject({ id: first!.id });
+    expect(await system.bot.count({ where: { userId: actor.userId } })).toBe(1);
+    await system.bot.update({ where: { id: first!.id }, data: { archivedAt: new Date() } });
+    expect(await call()).toBeNull();
+    expect(await system.bot.count({ where: { userId: actor.userId } })).toBe(1);
+  });
 
   it("keeps the account's personal Ork unique on repeated visits", async () => {
     const { actor, seed } = await signup();

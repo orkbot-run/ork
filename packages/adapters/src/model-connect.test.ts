@@ -1,11 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; Ork connection validation and legacy routing compatibility tests follow LICENSE.md.
+
+import { MODEL_KEY_FORMAT_ERROR, ModelConnectInputSchema } from "@orkbot/contracts";
+import { canUseCompatibleModelAsDefault } from "@orkbot/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
   CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-  MODEL_KEY_FORMAT_ERROR,
-  ModelConnectInputSchema,
-} from "@orkbot/contracts";
-import { canUseCompatibleModelAsDefault } from "@orkbot/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+} from "./cloudflare-model-config.js";
 import {
   buildModelConnectPlaintext,
   modelCredentialDto,
@@ -278,7 +281,12 @@ describe("openai-codex API key guard", () => {
       apiKey: "cf-test-key-value",
       accountId: "account-fixture",
     });
-    const saved = { kind: "api_key", key: "cf-test-key-value", accountId: "account-fixture" };
+    const saved = {
+      kind: "api_key",
+      key: "cf-test-key-value",
+      accountId: "account-fixture",
+      routing: { account: "account-fixture" },
+    };
     expect(parseModelSecret(plaintext)).toEqual(saved);
     expect(parseModelSecret(connectAsOwner({ provider, maxTokens: 2048 }, plaintext))).toEqual({
       ...saved,
@@ -286,7 +294,7 @@ describe("openai-codex API key guard", () => {
     });
     expect(
       parseModelSecret(connectAsOwner({ provider, accountId: "account-updated" }, plaintext)),
-    ).toEqual({ ...saved, accountId: "account-updated" });
+    ).toEqual({ ...saved, accountId: "account-updated", routing: { account: "account-updated" } });
     expect(() => connectAsOwner({ provider, apiKey: "cf-test-key-value" })).toThrow(
       "Cloudflare Workers AI needs an account ID.",
     );
@@ -308,6 +316,7 @@ describe("openai-codex API key guard", () => {
       key: "cf-test-key-value",
       accountId: "acct1234",
       gatewayId: "gateway-1",
+      routing: { account: "acct1234", gateway: "gateway-1" },
     });
     expect(
       parseModelSecret(
@@ -319,6 +328,7 @@ describe("openai-codex API key guard", () => {
       maxTokens: 4096,
       accountId: "acct1234",
       gatewayId: "gateway-1",
+      routing: { account: "acct1234", gateway: "gateway-1" },
     });
     expect(
       modelCredentialDto(
@@ -349,6 +359,7 @@ describe("openai-codex API key guard", () => {
       key: "cf-test-key-value",
       accountId: "acct9999",
       gatewayId: "gateway-1",
+      routing: { account: "acct9999", gateway: "gateway-1" },
     });
     expect(
       parseModelSecret(
@@ -362,6 +373,7 @@ describe("openai-codex API key guard", () => {
       key: "cf-test-key-value",
       accountId: "acct1234",
       gatewayId: "gateway-2",
+      routing: { account: "acct1234", gateway: "gateway-2" },
     });
     expect(() =>
       connectAsOwner(
@@ -947,4 +959,40 @@ it("requires HTTPS when saving new or inherited headers on public HTTP", () => {
   } finally {
     vi.unstubAllEnvs();
   }
+});
+
+describe("authoritative generic routing", () => {
+  it.each([{}, { account: "new-account" }] as Record<string, string>[])(
+    "does not fill an explicitly incomplete map from legacy aliases: %j",
+    (routing) => {
+      expect(() =>
+        connectAsOwner({
+          provider: CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
+          apiKey: "fake-valid-key",
+          accountId: "legacy-account",
+          gatewayId: "legacy-gateway",
+          routing,
+        }),
+      ).toThrow();
+    },
+  );
+  it("rejects undeclared routing even when ordinary connection fields are valid", () => {
+    expect(() =>
+      connectAsOwner({
+        provider: "openai",
+        apiKey: "fake-valid-key",
+        routing: { segment: "unexpected" },
+      }),
+    ).toThrow();
+  });
+  it("enforces known endpoint key policy without trusting the form", () => {
+    expect(() =>
+      connectAsOwner({
+        provider: "openai-compatible",
+        baseUrl: "https://ollama.com",
+        modelId: "fixture-model",
+        reasoning: false,
+      }),
+    ).toThrow("This endpoint requires an API key.");
+  });
 });

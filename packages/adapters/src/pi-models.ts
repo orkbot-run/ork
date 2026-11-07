@@ -1,12 +1,21 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; Ork neutral connection catalog metadata follows LICENSE.md.
+
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
-import type { ModelOAuthSignInMode, ThinkingLevel } from "@orkbot/contracts";
+import type {
+  ModelConnectionMetadata,
+  ModelOAuthSignInMode,
+  ThinkingLevel,
+} from "@orkbot/contracts";
 import {
   assertHeaderSafeApiKey,
   canonicalPiProviderId,
   MODEL_KEY_REJECTED_ERROR,
 } from "@orkbot/contracts";
+import { modelConnectionMetadata } from "./model-connection-metadata.js";
 import { LOCAL_PROVIDER_ID, registerLocalProvider } from "./pi-local-provider.js";
 import { applyPiModelCompatibility } from "./pi-model-compat.js";
 import { loadProviderOAuth, SUBSCRIPTION_SIGN_IN_PROVIDERS } from "./pi-oauth.js";
@@ -20,6 +29,7 @@ import { MODEL_CONNECT_TIMEOUT_MS } from "./pi-runtime-limits.js";
 export type PiCatalogAuth = "api-key" | "oauth" | "both";
 
 export type PiCatalogEntry = {
+  connection?: ModelConnectionMetadata;
   recommended?: boolean;
   provider: string;
   providerName: string;
@@ -274,6 +284,7 @@ function buildPiCatalog(): PiCatalogEntry[] {
   const entries: PiCatalogEntry[] = [];
   for (const provider of models.getProviders()) {
     const providerName = PROVIDER_DISPLAY_NAMES[provider.id] ?? provider.name;
+    const connection = modelConnectionMetadata(provider.id);
     const apiKey = Boolean(provider.auth.apiKey);
     const oauthAuth = loadProviderOAuth(provider.id);
     const oauth = Boolean(oauthAuth);
@@ -299,6 +310,7 @@ function buildPiCatalog(): PiCatalogEntry[] {
       if (!catalogModelServesAgents(model)) hiddenCatalogKeys.add(`${provider.id}:${model.id}`);
       const thinkingLevels = getSupportedThinkingLevels(model) as ThinkingLevel[];
       entries.push({
+        ...(connection ? { connection } : {}),
         provider: provider.id,
         providerName,
         id: model.id,

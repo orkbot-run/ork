@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { SettingsScope } from "@orkbot/contracts";
 import {
-  compatibleConnectionName,
+  compatibleEndpointPreset,
   connectionDisplayName,
-  isOllamaCloudBaseUrl,
-  OLLAMA_CLOUD_BASE_URL,
-  OPENAI_COMPATIBLE_PROVIDER_ID,
   savedCompatibleEndpointMatches,
 } from "@orkbot/contracts";
-import { popularModelProvidersFirst } from "@orkbot/core";
+import { hasModelConnection, modelConnectionOptions } from "@orkbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,7 +60,6 @@ export function ModelSettingsOverlay({
     baseUrl,
     busy,
     catalog,
-    cancelOAuthAttempt,
     confirmDisconnect,
     connectKey,
     credential,
@@ -97,41 +97,24 @@ export function ModelSettingsOverlay({
   }, [connectionAt]);
 
   // Adding another account is open to every provider, connected or not.
-  const allProviders = popularModelProvidersFirst<ConnectableProvider>(
-    [
-      ...groups.map((group) => ({ id: group.id, name: group.name })),
-      ...(groups.some((group) => group.id === OPENAI_COMPATIBLE_PROVIDER_ID)
-        ? [
-            {
-              id: OPENAI_COMPATIBLE_PROVIDER_ID,
-              name: t`Ollama Cloud`,
-              baseUrl: OLLAMA_CLOUD_BASE_URL,
-            },
-          ]
-        : []),
-    ],
-    (entry) => entry.id,
-    (entry) => entry.name,
-  );
-  const providers = allProviders.filter((entry) =>
-    entry.baseUrl
-      ? !isOllamaCloudBaseUrl(credentialByProvider.get(OPENAI_COMPATIBLE_PROVIDER_ID)?.baseUrl)
-      : !credentialByProvider.has(entry.id),
-  );
+  const allProviders = modelConnectionOptions(catalog);
+  const providers = allProviders.filter((option) => !hasModelConnection(option, credentials));
   const connectionName = (entry: ModelCredential) => {
     const group = groups.find((item) => item.id === entry.provider);
     return connectionDisplayName(
       entry,
       group?.name ?? entry.provider,
       group?.entries[0]?.providerName ? [group.entries[0].providerName] : [],
+      group?.entries[0]?.connection?.presets,
     );
   };
   const providerLabel = (id: string) =>
-    compatibleConnectionName(
-      credentialByProvider.get(id)?.baseUrl,
-      groups.find((group) => group.id === id)?.name ?? id,
-    );
-  // The Ollama Cloud preset shares the compatible provider id with a saved local server.
+    compatibleEndpointPreset(
+      credentialByProvider.get(id)?.baseUrl ?? "",
+      catalog.find((entry) => entry.provider === id)?.connection?.presets,
+    )?.label ??
+    groups.find((group) => group.id === id)?.name ??
+    id;
   const connected = Boolean(
     credential &&
       (!isOpenAiCompatible || savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)),
@@ -144,7 +127,7 @@ export function ModelSettingsOverlay({
     credentialId: string | null,
     at: string,
   ) {
-    model.chooseProvider(next.id, next.baseUrl, credentialId);
+    model.chooseProvider(next.id, next.baseUrl, credentialId, next.apiProtocol);
     intentRef.current = {
       makeDefault: intent?.makeDefault ?? false,
       onConnected: async (choice) => {
@@ -157,7 +140,7 @@ export function ModelSettingsOverlay({
   }
 
   function closeConnection() {
-    cancelOAuthAttempt();
+    model.dismissConnection();
     intentRef.current = null;
     setConnectionAt(null);
   }
@@ -267,6 +250,8 @@ export function ModelSettingsOverlay({
           <ConnectionNameField
             key={credential.id}
             credential={credential}
+            client={model.rpc}
+            isCurrent={model.isCurrent}
             // A rename touches only the label; keep any unsaved form fields.
             onRenamed={() => void refresh({ keepForm: true })}
           />
@@ -317,6 +302,7 @@ export function ModelSettingsOverlay({
             spaceId={me.spaceId}
             scope={scope}
             credentials={credentials}
+            progressive
             modelRole="approval"
             title={t`Approval model`}
             defaultLabel={t`Choose a model`}
@@ -333,6 +319,7 @@ export function ModelSettingsOverlay({
             spaceId={me.spaceId}
             scope={scope}
             credentials={credentials}
+            progressive
             modelRole="computer"
             title={t`Computer-use model`}
             defaultLabel={t`Same as main model`}

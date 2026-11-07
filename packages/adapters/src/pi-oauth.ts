@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for coordinated OAuth refreshes and neutral model routing. See LICENSE.md.
 
 import { randomBytes, randomUUID } from "node:crypto";
 import type {
@@ -19,6 +20,7 @@ import type {
   ModelContextLimits,
   ModelOAuthBegin,
   ModelOAuthSignInMode,
+  ModelRoutingValues,
   SettingsScope,
   ThinkingLevel,
 } from "@orkbot/contracts";
@@ -28,6 +30,7 @@ import {
   MAX_MODEL_MAX_TOKENS,
   ModelApiProtocolSchema,
   ModelContextLimitsSchema,
+  ModelRoutingValuesSchema,
   parseModelHeaders,
   ThinkingLevelSchema,
 } from "@orkbot/contracts";
@@ -274,6 +277,7 @@ export type StoredModelSecret =
       maxTokens?: number;
       accountId?: string;
       gatewayId?: string;
+      routing?: ModelRoutingValues;
     } & StoredModelLimits)
   | { kind: "oauth"; reconnectRequired: true; maxTokens?: number }
   | { kind: "oauth"; reconnectRequired?: false; credential: OAuthCredential; maxTokens?: number }
@@ -410,6 +414,13 @@ function readOAuthCredential(value: unknown): OAuthCredential | undefined {
   return undefined;
 }
 
+function parsedRoutingValues(value: unknown): ModelRoutingValues | undefined {
+  if (value === undefined) return undefined;
+  const parsed = ModelRoutingValuesSchema.safeParse(value);
+  if (!parsed.success) throw new Error(CORRUPT_MODEL_SECRET_MESSAGE);
+  return parsed.data;
+}
+
 function parsedRoutingId(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
   const trimmed = value.trim();
@@ -495,12 +506,14 @@ export function parseModelSecret(plaintext: string): StoredModelSecret {
     const maxTokens = parsedMaxTokens(parsed.maxTokens);
     const accountId = parsedRoutingId(parsed.accountId);
     const gatewayId = parsedRoutingId(parsed.gatewayId);
+    const routing = parsedRoutingValues(parsed.routing);
     return {
       kind: "api_key",
       key: parsed.key,
       ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(accountId ? { accountId } : {}),
       ...(gatewayId ? { gatewayId } : {}),
+      ...(routing !== undefined ? { routing } : {}),
       ...modelLimits(parsed),
     };
   }
@@ -565,6 +578,7 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
     secret.maxTokens === undefined &&
     secret.accountId === undefined &&
     secret.gatewayId === undefined &&
+    secret.routing === undefined &&
     secret.contextWindow === undefined &&
     secret.cacheCapabilities === undefined
   ) {
@@ -576,6 +590,7 @@ export function serializeModelSecret(secret: StoredModelSecret): string {
     ...(secret.maxTokens !== undefined ? { maxTokens: secret.maxTokens } : {}),
     ...(secret.accountId ? { accountId: secret.accountId } : {}),
     ...(secret.gatewayId ? { gatewayId: secret.gatewayId } : {}),
+    ...(secret.routing !== undefined ? { routing: parsedRoutingValues(secret.routing) } : {}),
     ...modelLimits(secret as unknown as Record<string, unknown>),
   });
 }

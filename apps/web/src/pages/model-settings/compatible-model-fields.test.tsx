@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
 
 import type { ReactNode } from "react";
 import { act, useState } from "react";
@@ -75,6 +78,7 @@ function props(compatibleRows: string[], enabledModelIds: string[], modelId = ""
     thinkingLevel: null,
     updateBaseUrl: () => {},
     apiProtocol: "chat-completions" as const,
+    endpointPreset: undefined,
     updateApiProtocol: () => {},
   };
 }

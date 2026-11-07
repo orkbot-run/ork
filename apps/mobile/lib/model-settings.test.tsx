@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
 
 import { MAX_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "@orkbot/contracts";
 import { notifyManager } from "@tanstack/react-query";
@@ -20,7 +23,8 @@ import { modelPickerRequest } from "./model-picker-selection";
 import { queryClient } from "./query";
 
 const savedEndpoint = "https://models.example.test/v1";
-const { push, back, params, rpcCalls, saved } = vi.hoisted(() => ({
+const { push, back, params, rpcCalls, saved, authScope } = vi.hoisted(() => ({
+  authScope: { generation: 1, server: "https://app.example.test", selection: 0 },
   push: vi.fn(),
   back: vi.fn(),
   params: {} as { requestId?: string; spaceId?: string },
@@ -48,17 +52,19 @@ const { push, back, params, rpcCalls, saved } = vi.hoisted(() => ({
     // A failed save either keeps the bot's own model or finds it already cleared elsewhere.
     failBotUpdates: {} as Record<string, "kept" | "changed elsewhere">,
     needsModel: false,
+    offerSignIn: false,
   },
 }));
 
-vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
+vi.mock("./session", () => ({ currentSessionGeneration: () => authScope.generation }));
 vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("./api", () => ({
-  currentApiBase: () => "https://app.example.test",
+  currentApiBase: () => authScope.server,
   captureApiRequestContext: async (spaceId = "space-fixture") => ({
     headers: { "x-orkbot-space-id": spaceId },
   }),
   selectedSpaceId: () => "space-fixture",
+  spaceSelectionSeq: () => authScope.selection,
   rpc: async (
     procedure: string,
     input?: unknown,
@@ -92,12 +98,29 @@ vi.mock("./api", () => ({
       if (failure) throw new Error("offline");
       return {};
     }
+    if (procedure === "models/beginOAuth" && saved.offerSignIn)
+      throw new Error("Fixture sign-in failure");
     if (procedure === "models/connect") return { id: "credential-new" };
     if (procedure === "models/forRole") return [];
     if (procedure === "models/list")
       return [
-        { provider: "openai-compatible", id: "model-fixture", label: "Fixture" },
-        { provider: "anthropic", providerName: "Anthropic", id: "claude-fixture", label: "Claude" },
+        {
+          provider: "openai-compatible",
+          connection: {
+            presets: [
+              { label: "Ollama Cloud", baseUrl: "https://ollama.com/v1", apiKeyRequired: true },
+            ],
+          },
+          id: "model-fixture",
+          label: "Fixture",
+        },
+        {
+          provider: "anthropic",
+          providerName: "Anthropic",
+          id: "claude-fixture",
+          label: "Claude",
+          ...(saved.offerSignIn ? { auth: "both", signIn: "device-code" } : {}),
+        },
         // Deployment-funded models still leave room for a personal key.
         {
           provider: "openrouter",
@@ -233,8 +256,27 @@ vi.mock("react-native", () => {
     ScrollView: view,
     View: view,
     Text: view,
-    Pressable: ({ children, onPress }: { children?: ReactNode; onPress: () => void }) =>
-      createElement("button", { type: "button", onClick: onPress }, children),
+    Pressable: ({
+      children,
+      onPress,
+      disabled,
+      accessibilityState,
+    }: {
+      children?: ReactNode;
+      onPress: () => void;
+      disabled?: boolean;
+      accessibilityState?: { expanded?: boolean };
+    }) =>
+      createElement(
+        "button",
+        {
+          type: "button",
+          onClick: onPress,
+          disabled,
+          "aria-expanded": accessibilityState?.expanded,
+        },
+        children,
+      ),
     TextInput: ({
       accessibilityLabel,
       placeholder,
@@ -284,6 +326,7 @@ async function renderConnection(request: Partial<ModelConnectionRequest> = {}) {
 
 beforeEach(async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  Object.assign(authScope, { generation: 1, server: "https://app.example.test", selection: 0 });
   queryClient.clear();
   rpcCalls.length = 0;
   delete params.spaceId;
@@ -372,8 +415,8 @@ async function notConnectedChoices() {
 it("offers deployment-funded providers and Ollama Cloud once among providers to connect", async () => {
   expect((await notConnectedChoices()).map((choice) => choice.label)).toEqual([
     "Anthropic",
-    "OpenRouter",
     "Ollama Cloud",
+    "OpenRouter",
   ]);
 });
 
@@ -392,7 +435,7 @@ it("does not offer Ollama Cloud again once it is the saved connection", async ()
 it("opens the Ollama preset through the compatible form with a visible key field", async () => {
   await remount(() => renderConnection({ baseUrl: "https://ollama.com/v1", credentialId: null }));
   expect(field("OpenAI-compatible server URL")?.value).toBe("https://ollama.com/v1");
-  expect(field("API key")?.placeholder).toBe("Ollama API key");
+  expect(field("API key")?.placeholder).toBe("");
   expect(field("API key")?.type).toBe("password");
   expect(
     [...container.querySelectorAll("button")].filter((button) =>
@@ -431,7 +474,7 @@ describe("a Space's model override", () => {
     expect(rpcCalls).toContainEqual([
       "models/role",
       { role: "main", expectedUserId: "user-fixture", scope: "space" },
-      { requestContext: otherSpace },
+      { requestContext: otherSpace, skipSpaceAuthRecovery: true },
     ]);
     expect(container.textContent).not.toContain("Add provider");
     const picker = modelPickerRequest(
@@ -464,6 +507,7 @@ describe("a Space's model override", () => {
     expect(connect?.[2]).toEqual({
       requestContext: otherSpace,
       timeoutMs: MODEL_CONNECT_TIMEOUT_MS,
+      skipSpaceAuthRecovery: true,
     });
   });
 
@@ -786,3 +830,102 @@ it("searches discovered models without losing the selected default", async () =>
   expect(field("found-0")?.checked).toBe(true);
   expect(field("found-1")?.checked).toBe(true);
 });
+
+it("keeps unused advanced model roles collapsed until the native control is opened", async () => {
+  await remount(async () => {
+    await act(async () => root.render(createElement(Models)));
+  });
+  const buttons = [...container.querySelectorAll("button")];
+  const optional = buttons.find((button) => button.textContent?.includes("Computer-use model"))!;
+  expect(optional.getAttribute("aria-expanded")).toBe("false");
+  await act(async () => optional.click());
+  expect(container.textContent).toContain("Same as main model");
+});
+
+it.each(["generation", "server", "space"])(
+  "does not navigate or continue a native save after its %s changes",
+  async (boundary) => {
+    let release!: () => void;
+    const onConnected = vi.fn(async () => undefined);
+    await remount(() => renderConnection({ onConnected, makeDefault: true }));
+    saved.held = new Promise<void>((done) => {
+      release = done;
+    });
+    try {
+      const save = [...container.querySelectorAll("button")].find(
+        (button) => button.textContent === "Save",
+      )!;
+      await act(async () => save.click());
+      if (boundary === "generation") authScope.generation++;
+      else if (boundary === "server") authScope.server = "https://other.example.test";
+      else authScope.selection++;
+      await act(async () => {
+        release();
+      });
+      expect(onConnected).not.toHaveBeenCalled();
+      expect(back).not.toHaveBeenCalled();
+      expect(container.textContent).not.toContain("Saved.");
+    } finally {
+      saved.held = null;
+      release();
+    }
+  },
+);
+
+it("preserves a newer draft and clears busy for the completed original form", async () => {
+  let release!: () => void;
+  await act(async () =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "API key")!
+      .click(),
+  );
+  await change("API key", "fixture-key-before");
+  saved.held = new Promise<void>((done) => {
+    release = done;
+  });
+  try {
+    const save = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Save",
+    )!;
+    await act(async () => save.click());
+    // A queued native edit may arrive after the save's validated snapshot was accepted.
+    await change("API key", "fixture-key-newer");
+    await act(async () => release());
+    expect(field("API key")?.value).toBe("fixture-key-newer");
+    expect(
+      [...container.querySelectorAll("button")].find((button) => button.textContent === "Save")
+        ?.disabled,
+    ).toBe(false);
+    expect(container.textContent).not.toContain("Saved.");
+  } finally {
+    saved.held = null;
+    release();
+  }
+});
+
+it.each([false, true])(
+  "keeps a native OAuth error attached to its original form (%s)",
+  async (edited) => {
+    let release!: () => void;
+    saved.offerSignIn = true;
+    try {
+      await remount(() => renderConnection({ provider: "anthropic", credentialId: null }));
+      saved.held = new Promise<void>((done) => {
+        release = done;
+      });
+      await act(async () =>
+        [...container.querySelectorAll("button")]
+          .find((button) => button.textContent === "Sign in")!
+          .click(),
+      );
+      if (edited) await change("API key", "newer-key-draft");
+      await act(async () => release());
+      expect(container.textContent?.includes("Could not start sign-in")).toBe(!edited);
+      if (edited) expect(field("API key")?.value).toBe("newer-key-draft");
+    } finally {
+      saved.held = null;
+      saved.offerSignIn = false;
+      release?.();
+    }
+  },
+);

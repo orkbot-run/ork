@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 choices tests are preserved; neutral preset tests follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import type { ModelBackupChoice, ModelCatalogEntry, ModelCredential } from "./domain.js";
 import {
@@ -69,6 +73,29 @@ const choices: ModelBackupChoice[] = [
 ];
 
 describe("connected backup model choices", () => {
+  it("uses supplied compatible preset metadata even when a saved model has no catalog row", () => {
+    const preset = { label: "Example service", baseUrl: "https://models.example.test/v1" };
+    const connection = {
+      ...credentials[1]!,
+      label: "openai-compatible",
+      baseUrl: "HTTPS://MODELS.EXAMPLE.TEST:443/v1/",
+    };
+    const entry = { ...catalog[4]!, connection: { presets: [preset] } };
+    expect(connectedBackupOptions([entry], [connection])[0]?.connectionName).toBe(preset.label);
+    expect(connectionDisplayName(connection, "Compatible", [], [preset])).toBe(preset.label);
+    expect(
+      connectionDisplayName({ ...connection, label: preset.label }, "Compatible", [], [preset]),
+    ).toBe(preset.label);
+    expect(
+      connectionDisplayName(
+        { ...connection, label: `${preset.label} 2` },
+        "Compatible",
+        [],
+        [preset],
+      ),
+    ).toBe(`${preset.label} 2`);
+    expect(connectionDisplayName(connection, "Compatible")).toBe("Compatible");
+  });
   it("treats the catalog's provider name as a default label", () => {
     const credential = { provider: "anthropic", label: "Anthropic", baseUrl: undefined };
     expect(connectionDisplayName(credential, "Claude subscription", ["Anthropic"])).toBe(

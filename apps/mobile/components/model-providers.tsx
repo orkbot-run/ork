@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type { MenuAction } from "@expo/ui/community/menu";
 import type { ModelCatalogEntry, ModelCredential } from "@orkbot/contracts";
 import {
@@ -35,7 +39,12 @@ export function ModelProviders({
   const rows = credentials
     .map((credential) => {
       const provider = providerName(credential);
-      const name = connectionDisplayName(credential, provider);
+      const name = connectionDisplayName(
+        credential,
+        provider,
+        [],
+        catalog.find((entry) => entry.provider === credential.provider)?.connection?.presets,
+      );
       return {
         credential,
         name,

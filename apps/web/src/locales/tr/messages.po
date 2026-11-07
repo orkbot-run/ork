@@ -468,11 +468,6 @@ msgstr "Hesap"
 msgid "Account default"
 msgstr "Hesap varsayılanı"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Account ID"
-msgstr "Hesap kimliği"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
 msgstr "Hesap etiketi"
@@ -810,10 +805,6 @@ msgstr "Yanıtlandı"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "Yanıtlandı: {answer}"
-
-#: src/pages/Onboarding.tsx
-msgid "Anthropic API"
-msgstr "Anthropic API"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Anthropic Messages"
@@ -1311,6 +1302,7 @@ msgid "Chat"
 msgstr "Sohbet"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Chat Completions"
 msgstr "Chat Completions"
 
@@ -2156,6 +2148,7 @@ msgid "Could not load MCP servers"
 msgstr "MCP sunucuları yüklenemedi"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/Onboarding.tsx
 msgid "Could not load model settings"
 msgstr "Model ayarları yüklenemedi"
 
@@ -3327,11 +3320,6 @@ msgstr "Ad soyad"
 msgid "Fullscreen"
 msgstr "Tam ekran"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Gateway ID"
-msgstr "Ağ geçidi kimliği"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Gateway token"
 msgstr "Ağ geçidi belirteci"
@@ -4081,6 +4069,10 @@ msgstr "Mesaj…"
 msgid "Messaged {peer}"
 msgstr "{peer} botuna mesaj gönderildi"
 
+#: src/pages/Onboarding.tsx
+msgid "Messages"
+msgstr "Mesajlar"
+
 #. js-lingui-explicit-id
 #: src/lib/approval-messages.ts
 msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
@@ -4625,16 +4617,6 @@ msgstr "OAuth süresi doldu"
 msgid "Offline"
 msgstr "Çevrimdışı"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama API key"
-msgstr "Ollama API anahtarı"
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama Cloud"
-msgstr "Ollama Cloud"
-
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
 msgstr "Zamanlamayla"
@@ -4716,10 +4698,6 @@ msgstr "Gezinmeyi aç"
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
 msgstr "Açık işler"
-
-#: src/pages/Onboarding.tsx
-msgid "OpenAI API"
-msgstr "OpenAI API"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -5061,6 +5039,7 @@ msgid "Protected input"
 msgstr "Korumalı giriş"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Protocol"
 msgstr "Protokol"
 
@@ -5443,6 +5422,7 @@ msgid "Resize panel"
 msgstr "Paneli yeniden boyutlandır"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Responses"
 msgstr "Yanıtlar"
 

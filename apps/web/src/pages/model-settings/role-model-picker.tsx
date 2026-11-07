@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
+import type { ModelConnectionOption } from "@orkbot/core";
 import { modelCatalogSearchText } from "@orkbot/core";
 import {
   Command,
@@ -18,8 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ModelCatalogEntry } from "../../lib/model-auth";
 import { useListSearch } from "../../lib/use-list-search";
 
-/** `baseUrl` presets an OpenAI-compatible server, such as Ollama Cloud. */
-export type ConnectableProvider = { id: string; name: string; baseUrl?: string };
+export type ConnectableProvider = ModelConnectionOption;
 
 /** A model on one connection; `providerName` is that connection's name. */
 export type RoleModelOption = ModelCatalogEntry & { credentialId?: string };

@@ -1,8 +1,13 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type { ModelOAuthBegin, SettingsScope, ThinkingLevel } from "@orkbot/contracts";
 import { cancelModelOAuthAttempt, finishModelOAuthAttempt } from "@orkbot/core";
 import { useEffect, useRef, useState } from "react";
 import { desktopBridge, oauthStateOf, onDesktopOAuthCallback } from "./desktop";
 import { waitForModelOAuth } from "./model-auth";
+import type { RpcClient } from "./rpc";
 import { useSpaceRpc } from "./space-rpc";
 import { errorText } from "./user-error";
 
@@ -24,12 +29,16 @@ export type ModelOAuthSignInBegin = {
  * guards so cancel-and-retry cannot drop a newer callback.
  */
 export function useModelOAuthSignIn(options: {
+  client?: RpcClient;
+  isCurrent?: () => boolean;
   /** `credentialId` is the connection the sign-in saved. */
   onFinished: (controller: AbortController, credentialId: string) => void | Promise<void>;
   onError: (message: string) => void;
   onClearError?: () => void;
 }) {
-  const rpc = useSpaceRpc();
+  const defaultRpc = useSpaceRpc();
+  const rpc = options.client ?? defaultRpc;
+  const isCurrent = options.isCurrent ?? (() => true);
   const { onFinished, onError, onClearError } = options;
   const [oauth, setOauth] = useState<ModelOAuthBegin | null>(null);
   const [pasteCode, setPasteCode] = useState("");
@@ -69,9 +78,9 @@ export function useModelOAuthSignIn(options: {
 
   async function finishSubscriptionSignIn(loginId: string, controller: AbortController) {
     await waitForModelOAuth(loginId, controller.signal, rpc);
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !isCurrent()) return;
     const saved = await rpc.models.finishOAuth({ loginId }, { signal: controller.signal });
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !isCurrent()) return;
     oauthLoginIdRef.current = null;
     setOauth(null);
     // Keep post-connect UI work outside the OAuth try/catch so a refresh failure
@@ -79,7 +88,7 @@ export function useModelOAuthSignIn(options: {
     try {
       await onFinishedRef.current(controller, saved.id);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isCurrent()) return;
       onErrorRef.current(errorText(err, "Connected, but could not refresh"));
     }
   }
@@ -104,7 +113,7 @@ export function useModelOAuthSignIn(options: {
       submitted = true;
       await finishSubscriptionSignIn(attempt.loginId, controller);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isCurrent()) return;
       if (submitted) {
         oauthLoginIdRef.current = null;
         setOauth(null);
@@ -129,6 +138,7 @@ export function useModelOAuthSignIn(options: {
   }
 
   async function startSubscriptionSignIn(begin: ModelOAuthSignInBegin) {
+    if (!isCurrent()) return;
     onClearErrorRef.current?.();
     setOauthPending(true);
     setPopupBlocked(false);
@@ -150,7 +160,7 @@ export function useModelOAuthSignIn(options: {
         },
         { signal: controller.signal },
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isCurrent()) return;
       oauthLoginIdRef.current = started.loginId;
       setPasteCode("");
       setOauth(started);
@@ -175,7 +185,7 @@ export function useModelOAuthSignIn(options: {
           cancelBrowser();
         };
         await browserAuth.open(started.verificationUri);
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
       } else {
         // noopener returns null even when the tab opens. Detach a blank tab
         // before navigating so the handle can distinguish a blocked popup.
@@ -195,7 +205,7 @@ export function useModelOAuthSignIn(options: {
       waitingForCode = started.mode === "auth-url";
       if (!waitingForCode) await finishSubscriptionSignIn(started.loginId, controller);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !isCurrent()) return;
       const loginId = oauthLoginIdRef.current;
       oauthLoginIdRef.current = null;
       if (loginId) void rpc.models.cancelOAuth({ loginId }).catch(() => undefined);
@@ -209,7 +219,7 @@ export function useModelOAuthSignIn(options: {
     }
   }
 
-  useEffect(() => () => cancelOAuthAttempt(false), []);
+  useEffect(() => () => cancelOAuthAttempt(false), [rpc]);
 
   return {
     oauth,

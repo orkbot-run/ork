@@ -1,7 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 contract tests are preserved; neutral routing tests follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
-  CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
-  CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
   CreateBotInput,
   CreateGroupInput,
   CreateRoutineInput,
@@ -137,77 +139,37 @@ describe("contracts", () => {
     expect(valid.success).toBe(true);
   });
 
-  it("validates Workers AI account routing without requiring a gateway", () => {
-    const provider = "cloudflare-workers-ai";
+  it("carries previous-release routing aliases for adapter validation", () => {
+    const provider = "synthetic";
     expect(
-      ModelConnectInputSchema.safeParse({
+      ModelConnectInputSchema.parse({
         provider,
-        accountId: "account-fixture",
         apiKey: "fixture-key",
-      }).success,
+        accountId: "tenant",
+        gatewayId: "route",
+      }),
+    ).toMatchObject({ accountId: "tenant", gatewayId: "route" });
+    expect(
+      ModelConnectInputSchema.safeParse({ provider, maxTokens: 1024, accountId: "new-tenant" })
+        .success,
     ).toBe(true);
-    expect(ModelConnectInputSchema.safeParse({ provider, maxTokens: 2048 }).success).toBe(true);
-    for (const accountId of ["", "../account", "account/other", "a".repeat(65)]) {
-      expect(ModelConnectInputSchema.safeParse({ provider, accountId }).success).toBe(false);
-    }
+    expect(
+      ModelConnectInputSchema.safeParse({ provider, maxTokens: 1024, gatewayId: "new-route" })
+        .success,
+    ).toBe(true);
   });
 
-  it("validates each Cloudflare routing id and allows an update to send only one", () => {
-    const provider = CLOUDFLARE_AI_GATEWAY_PROVIDER_ID;
-    expect(
-      ModelConnectInputSchema.safeParse({
-        provider,
-        apiKey: "cf-test-key-value",
-      }).success,
-    ).toBe(true);
-    expect(
-      ModelConnectInputSchema.safeParse({
-        provider,
-        maxTokens: 1024,
-        accountId: "acct9999",
-      }).success,
-    ).toBe(true);
-    expect(
-      ModelConnectInputSchema.safeParse({
-        provider,
-        maxTokens: 1024,
-        gatewayId: "gateway-2",
-      }).success,
-    ).toBe(true);
-    const unsafeAccount = ModelConnectInputSchema.safeParse({
-      provider,
-      apiKey: "cf-test-key-value",
-      accountId: "../account",
-      gatewayId: "gateway-1",
-    });
-    expect(unsafeAccount.success).toBe(false);
-    if (!unsafeAccount.success) {
-      expect(unsafeAccount.error.issues.some((issue) => issue.path[0] === "accountId")).toBe(true);
+  it("validates generic routing segments independently of the adapter identity", () => {
+    for (const tenant of ["", "../account", "account/other", "a".repeat(65)]) {
       expect(
-        unsafeAccount.error.issues.some(
-          (issue) => issue.message === CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
-        ),
-      ).toBe(true);
-    }
-    const unsafeGateway = ModelConnectInputSchema.safeParse({
-      provider,
-      maxTokens: 1024,
-      gatewayId: "gateway/1",
-    });
-    expect(unsafeGateway.success).toBe(false);
-    if (!unsafeGateway.success) {
-      expect(unsafeGateway.error.issues.some((issue) => issue.path[0] === "gatewayId")).toBe(true);
+        ModelConnectInputSchema.safeParse({ provider: "synthetic", routing: { tenant } }).success,
+      ).toBe(false);
     }
     expect(
       ModelConnectInputSchema.safeParse({
-        provider,
-        apiKey: "cf-test-key-value",
-        accountId: "acct1234",
-        gatewayId: "gateway-1",
+        provider: "synthetic",
+        routing: { tenant: "account-fixture" },
       }).success,
-    ).toBe(true);
-    expect(
-      ModelConnectInputSchema.safeParse({ provider: "openai", apiKey: "sk-test-key-123" }).success,
     ).toBe(true);
   });
 

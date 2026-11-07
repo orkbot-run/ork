@@ -468,11 +468,6 @@ msgstr "账户"
 msgid "Account default"
 msgstr "账户默认"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Account ID"
-msgstr "账户 ID"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
 msgstr "账户名称"
@@ -810,10 +805,6 @@ msgstr "已回答"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "已回答：{answer}"
-
-#: src/pages/Onboarding.tsx
-msgid "Anthropic API"
-msgstr "Anthropic API"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Anthropic Messages"
@@ -1311,6 +1302,7 @@ msgid "Chat"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Chat Completions"
 msgstr ""
 
@@ -2156,6 +2148,7 @@ msgid "Could not load MCP servers"
 msgstr "无法加载 MCP 服务器"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/Onboarding.tsx
 msgid "Could not load model settings"
 msgstr "无法加载模型设置"
 
@@ -3327,11 +3320,6 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "全屏"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Gateway ID"
-msgstr "网关 ID"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Gateway token"
 msgstr ""
@@ -4081,6 +4069,10 @@ msgstr "消息…"
 msgid "Messaged {peer}"
 msgstr "已发给 {peer}"
 
+#: src/pages/Onboarding.tsx
+msgid "Messages"
+msgstr "消息"
+
 #. js-lingui-explicit-id
 #: src/lib/approval-messages.ts
 msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
@@ -4625,16 +4617,6 @@ msgstr "OAuth 已过期"
 msgid "Offline"
 msgstr "离线"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama API key"
-msgstr "Ollama API 密钥"
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama Cloud"
-msgstr "Ollama Cloud"
-
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
 msgstr "按计划"
@@ -4716,10 +4698,6 @@ msgstr "打开导航"
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
 msgstr "待办"
-
-#: src/pages/Onboarding.tsx
-msgid "OpenAI API"
-msgstr "OpenAI API"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -5061,6 +5039,7 @@ msgid "Protected input"
 msgstr "受保护输入"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Protocol"
 msgstr ""
 
@@ -5443,6 +5422,7 @@ msgid "Resize panel"
 msgstr "调整面板大小"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Responses"
 msgstr ""
 

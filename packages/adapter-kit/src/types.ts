@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for coordinated OAuth refreshes and neutral model routing. See LICENSE.md.
 
 import type {
   BillingCancellationReason,
@@ -7,6 +8,7 @@ import type {
   CacheCapabilities as ConnectionCacheCapabilities,
   ConnectionCatalogItem,
   ModelApiProtocol,
+  ModelRoutingValues,
   PurchaseCardField,
   SandboxKind,
 } from "@orkbot/contracts";
@@ -486,9 +488,11 @@ export interface AgentRunModel {
   /** Opaque id of the stored connection serving it, so a model can fall back to another account. */
   connectionId?: string;
   apiKey?: string;
-  /** Cloudflare account id stored with a gateway BYOK credential. */
+  /** Validated adapter-defined route segments stored with the connection. */
+  routing?: ModelRoutingValues;
+  /** Legacy account routing retained for already running processes. */
   accountId?: string;
-  /** Cloudflare AI Gateway id stored with a gateway BYOK credential. */
+  /** Legacy gateway routing retained for already running processes. */
   gatewayId?: string;
   baseUrl?: string;
   apiProtocol?: ModelApiProtocol;

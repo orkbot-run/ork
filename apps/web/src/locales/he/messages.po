@@ -468,11 +468,6 @@ msgstr "חשבון"
 msgid "Account default"
 msgstr "ברירת המחדל של החשבון"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Account ID"
-msgstr "מזהה חשבון"
-
 #: src/pages/PluginsOverlay.tsx
 msgid "Account label"
 msgstr "תווית חשבון"
@@ -810,10 +805,6 @@ msgstr "נענה"
 #: src/components/AskCard.tsx
 msgid "Answered: {answer}"
 msgstr "נענה: {answer}"
-
-#: src/pages/Onboarding.tsx
-msgid "Anthropic API"
-msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Anthropic Messages"
@@ -1311,6 +1302,7 @@ msgid "Chat"
 msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Chat Completions"
 msgstr ""
 
@@ -2156,6 +2148,7 @@ msgid "Could not load MCP servers"
 msgstr "לא ניתן לטעון את שרתי ה-MCP"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/Onboarding.tsx
 msgid "Could not load model settings"
 msgstr "לא ניתן לטעון את הגדרות המודל"
 
@@ -3327,11 +3320,6 @@ msgstr ""
 msgid "Fullscreen"
 msgstr "מסך מלא"
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Gateway ID"
-msgstr "Gateway ID"
-
 #: src/components/ComputerProviderSettings.tsx
 msgid "Gateway token"
 msgstr ""
@@ -4081,6 +4069,10 @@ msgstr "הודעה…"
 msgid "Messaged {peer}"
 msgstr "נשלחה הודעה אל {peer}"
 
+#: src/pages/Onboarding.tsx
+msgid "Messages"
+msgstr "הודעות"
+
 #. js-lingui-explicit-id
 #: src/lib/approval-messages.ts
 msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
@@ -4625,16 +4617,6 @@ msgstr "תוקף OAuth פג"
 msgid "Offline"
 msgstr ""
 
-#: src/pages/model-settings/connection-controls.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama API key"
-msgstr ""
-
-#: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/Onboarding.tsx
-msgid "Ollama Cloud"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "On a schedule"
 msgstr "לפי תזמון"
@@ -4716,10 +4698,6 @@ msgstr "פתיחת הניווט"
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
 msgstr "עבודה פתוחה"
-
-#: src/pages/Onboarding.tsx
-msgid "OpenAI API"
-msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -5061,6 +5039,7 @@ msgid "Protected input"
 msgstr "קלט מוגן"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Protocol"
 msgstr ""
 
@@ -5443,6 +5422,7 @@ msgid "Resize panel"
 msgstr "שינוי גודל החלונית"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
+#: src/pages/Onboarding.tsx
 msgid "Responses"
 msgstr ""
 

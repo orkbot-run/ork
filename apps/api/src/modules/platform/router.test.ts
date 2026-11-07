@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
-// Ork thread-lock budget coverage is PolyForm-covered.
+// Ork thread-lock budget and neutral routing preflight coverage are PolyForm-covered.
 
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -5489,6 +5489,58 @@ describe("model credential persistence", () => {
       json: { message: MODEL_KEY_FORMAT_ERROR },
     });
     expect(check).not.toHaveBeenCalled();
+    expect(deps.secrets.put).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      apiKey: "fixture-gateway-key",
+      accountId: "legacy-account",
+      gatewayId: "legacy-gateway",
+      routing: {},
+    },
+    { routing: { account: "account", gateway: "gateway" } },
+    {
+      apiKey: "fixture-gateway-key",
+      routing: { account: "account", gateway: "gateway", extra: "unexpected" },
+    },
+  ])(
+    "rejects invalid routing or a missing new key before checking or persisting a connection: %j",
+    async (input) => {
+      const { deps, handler } = persistDeps();
+      const check = vi.fn(async () => undefined);
+      Object.assign(deps, { modelConnectionCheck: check });
+      const response = await call(handler, "models/connect", {
+        provider: "cloudflare-ai-gateway",
+        ...input,
+      });
+      expect(response.status).toBe(400);
+      expect(check).not.toHaveBeenCalled();
+      expect(deps.secrets.put).not.toHaveBeenCalled();
+    },
+  );
+
+  it("checks canonical adapter routing with matching legacy aliases before saving", async () => {
+    const { deps, handler } = persistDeps();
+    const check = vi.fn(async () => {
+      throw new Error("Fixture provider rejected this key");
+    });
+    Object.assign(deps, { modelConnectionCheck: check });
+    const response = await call(handler, "models/connect", {
+      provider: "cloudflare-workers-ai",
+      apiKey: "fixture-worker-key",
+      routing: { account: "canonical-account" },
+    });
+    expect(response.status).toBe(400);
+    expect(check).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "cloudflare-workers-ai",
+        apiKey: "fixture-worker-key",
+        routing: { account: "canonical-account" },
+        accountId: "canonical-account",
+      }),
+      expect.any(Object),
+    );
     expect(deps.secrets.put).not.toHaveBeenCalled();
   });
 

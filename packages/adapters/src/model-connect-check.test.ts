@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 preflight tests are preserved; canonical routing tests follow LICENSE.md.
+
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { verifyModelServesAgents } from "./model-connect-check.js";
 
@@ -37,6 +42,29 @@ function requestBody(fetchImpl: typeof fetch): Record<string, unknown> {
 
 describe("connect-time model check", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it("uses the same canonical route as runtime instead of stale compatibility aliases", async () => {
+    const provider = "cloudflare-workers-ai";
+    const model = builtinModels().getProvider(provider)?.getModels()[0];
+    expect(model).toBeDefined();
+    const fetchImpl = rejection(401, { error: { message: "Invalid API key" } });
+    await expect(
+      verifyModelServesAgents(
+        {
+          provider,
+          id: model!.id,
+          apiKey,
+          routing: { account: "canonical-account" },
+          accountId: "old-account",
+        },
+        { fetch: fetchImpl },
+      ),
+    ).rejects.toThrow();
+    const input = vi.mocked(fetchImpl).mock.calls[0]?.[0];
+    const url = input instanceof Request ? input.url : String(input);
+    expect(url).toContain("/accounts/canonical-account/ai/");
+    expect(url).not.toContain("old-account");
+  });
 
   it("accepts a model as soon as the provider starts answering a request with a tool", async () => {
     const fetchImpl = acceptedStream();

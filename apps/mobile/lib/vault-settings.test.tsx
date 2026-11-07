@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; captured settings context fixtures follow LICENSE.md.
 
 import type { ReactNode } from "react";
 import { act, createElement, useEffect, useState } from "react";
@@ -48,6 +51,7 @@ vi.mock("./i18n", () => {
   return { t, useI18n: () => ({ t }) };
 });
 vi.mock("./user-error", () => ({ errorText: (_: unknown, fallback: string) => fallback }));
+vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
 vi.mock("./api", () => ({
   rpc: state.rpc,
   captureApiRequestContext: async (spaceId: string) => ({ headers: { space: spaceId } }),

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
 
 export * from "./agent-connections.js";
@@ -131,6 +132,7 @@ export * from "./messaging-team-chat-emulator.js";
 export * from "./model-catalog-reads.js";
 export * from "./model-connect.js";
 export * from "./model-connect-check.js";
+export * from "./model-connection-metadata.js";
 export { hostedModelCreditObserver } from "./model-credit-observer.js";
 export * from "./model-credit-reconciler.js";
 export * from "./model-roles.js";

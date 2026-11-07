@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type { MenuAction } from "@expo/ui/community/menu";
 import { MenuView } from "@expo/ui/community/menu";
 import type {
@@ -5,8 +9,6 @@ import type {
   ModelCredential,
   ModelRole,
   ModelRoleChoice,
-  RpcInput,
-  RpcPath,
   ModelRoleSettings as Settings,
   SettingsScope,
   ThinkingLevel,
@@ -21,21 +23,22 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   withConnectionName,
 } from "@orkbot/contracts";
-import { createModelRoleSettings, modelRoleListPatch } from "@orkbot/core";
+import type { ModelConnectionOption } from "@orkbot/core";
+import { createModelRoleSettings, modelRoleListPatch, showModelRole } from "@orkbot/core";
 import type { Href } from "expo-router";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { AccessibilityInfo, StyleSheet, Text, View } from "react-native";
-import type { RpcArgs } from "../lib/api";
-import { captureApiRequestContext, currentApiBase, rpc } from "../lib/api";
+import { currentApiBase } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import type { ModelPickerRequest } from "../lib/model-picker-selection";
 import { native, useResolvedAppearance, useThemedStyles } from "../lib/native";
+import { captureSettingsContext } from "../lib/settings-target";
 import { thinkingLevelLabel } from "../lib/thinking-level";
 import { SettingsGroup, SettingsRow } from "./settings-group";
 
-export type ConnectableProvider = { id: string; name: string; baseUrl?: string };
+export type ConnectableProvider = ModelConnectionOption;
 
 export type ModelConnectIntent = {
   /** Only the main model's empty first slot takes the new connection's model on connect. */
@@ -69,6 +72,7 @@ export function ModelRoleSettings({
   connectRoute,
   onManage,
   onChanged,
+  progressive = false,
 }: {
   userId: string;
   /** The Space the calls go to; a Space scope edits its override. */
@@ -85,19 +89,19 @@ export function ModelRoleSettings({
   /** Registers a picker that continues from another screen and returns its route. */
   pickerRoute: (request: ModelPickerRequest) => Href;
   /** Registers a connect flow and returns the screen that runs it. */
-  connectRoute: (provider: ConnectableProvider, intent: ModelConnectIntent) => Href;
+  connectRoute: (provider: ConnectableProvider, intent: ModelConnectIntent) => Href | undefined;
   /** Opens one connection's screen. */
   onManage: (credential: ModelCredential) => void;
   /** The main model's first slot is the space default, which other settings read. */
   onChanged?: () => void;
+  progressive?: boolean;
 }) {
   const { t } = useI18n();
   const styles = useThemedStyles(createStyles);
   const apiBase = currentApiBase();
   const { controller, send } = useMemo(() => {
-    const requestContext = captureApiRequestContext(spaceId);
-    const send = async <P extends RpcPath>(proc: P, input: RpcInput<P>) =>
-      rpc(proc, ...([input, { requestContext: await requestContext }] as RpcArgs<P>));
+    const context = captureSettingsContext({ scope: "space", spaceId });
+    const send = context.send;
     const target = { role, expectedUserId: userId };
     return {
       send,
@@ -111,6 +115,7 @@ export function ModelRoleSettings({
       ),
     };
   }, [apiBase, userId, spaceId, scope, role]);
+  const [expanded, setExpanded] = useState(false);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
   useEffect(() => {
     void controller.load();
@@ -155,7 +160,12 @@ export function ModelRoleSettings({
   const connectionName = (choice: ModelRoleChoice) => {
     const connection = choice.credentialId ? connectionFor(choice) : undefined;
     return connection
-      ? connectionDisplayName(connection, providerName(choice))
+      ? connectionDisplayName(
+          connection,
+          providerName(choice),
+          [],
+          state.catalog.find((entry) => entry.provider === choice.provider)?.connection?.presets,
+        )
       : providerName(choice);
   };
   const isPrimarySlot = (slot: Slot) => slot === "empty" || (slot === 0 && primary !== null);
@@ -351,6 +361,19 @@ export function ModelRoleSettings({
       {index + 1}
     </Text>
   );
+  if (progressive && !showModelRole(role, settings, expanded) && !error) {
+    return (
+      <SettingsGroup>
+        <SettingsRow
+          title={title}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: false }}
+          chevron="right"
+          onPress={() => setExpanded(true)}
+        />
+      </SettingsGroup>
+    );
+  }
   return (
     <SettingsGroup accessibilityLabel={title} label={title}>
       {primary || !settings ? null : (

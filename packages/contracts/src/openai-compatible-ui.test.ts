@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 URL tests are preserved; neutral preset tests follow LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   compatibleConnectionName,
-  isOllamaCloudBaseUrl,
   normalizeOpenAiCompatibleBaseUrl,
-  OLLAMA_CLOUD_BASE_URL,
   openAiCompatibleConnectReady,
   savedCompatibleEndpointMatches,
 } from "./openai-compatible-ui.js";
@@ -61,48 +63,35 @@ describe("normalizeOpenAiCompatibleBaseUrl", () => {
   });
 });
 
-it("uses an ordinary compatible connection for the Ollama preset and requires its key", () => {
-  expect(OLLAMA_CLOUD_BASE_URL).toBe("https://ollama.com/v1");
-  expect(compatibleConnectionName(OLLAMA_CLOUD_BASE_URL, "OpenAI-compatible")).toBe("Ollama Cloud");
-  expect(compatibleConnectionName("https://other.test/v1", "OpenAI-compatible")).toBe(
-    "OpenAI-compatible",
+it("names and validates an ordinary compatible preset using only catalog metadata", () => {
+  const preset = {
+    label: "Example service",
+    baseUrl: "https://models.example.test/v1",
+    apiKeyRequired: true,
+  };
+  expect(compatibleConnectionName(preset.baseUrl, "Compatible", [preset])).toBe(preset.label);
+  expect(compatibleConnectionName("https://other.test/v1", "Compatible", [preset])).toBe(
+    "Compatible",
   );
-  const input = { baseUrl: OLLAMA_CLOUD_BASE_URL, modelId: "example-model" };
+  expect(compatibleConnectionName(preset.baseUrl, "Compatible")).toBe("Compatible");
+  const input = { baseUrl: preset.baseUrl, modelId: "example-model", presets: [preset] };
   expect(openAiCompatibleConnectReady(input)).toBe(false);
   expect(openAiCompatibleConnectReady({ ...input, apiKey: "fake-key" })).toBe(true);
+  expect(openAiCompatibleConnectReady({ ...input, presets: [] })).toBe(true);
 });
 
-it.each([
-  "https://ollama.com",
-  "https://ollama.com/",
-  "https://ollama.com/v1/",
-  " HTTPS://OLLAMA.COM:443/?q=x ",
-])("recognizes normalized Ollama URL %s", (url) => {
-  expect(isOllamaCloudBaseUrl(url)).toBe(true);
-});
-it.each([
-  undefined,
-  "invalid",
-  "https://ollama.com.evil.test",
-  "https://ollama.com/v2",
-  "http://ollama.com",
-  "https://user:pass@ollama.com",
-])("rejects non-preset URL %s", (url) => {
-  expect(isOllamaCloudBaseUrl(url)).toBe(false);
-});
-
-it.each(["https://ollama.com", "https://ollama.com/v1/"])(
+it.each(["https://models.example.test", "https://models.example.test/v1/"])(
   "matches equivalent saved endpoints: %s",
   (baseUrl) => {
-    expect(savedCompatibleEndpointMatches(baseUrl, OLLAMA_CLOUD_BASE_URL)).toBe(true);
+    expect(savedCompatibleEndpointMatches(baseUrl, "https://models.example.test/v1")).toBe(true);
   },
 );
-it.each(["", "https://", "https://other.test", "https://ollama.com/v2"])(
+it.each(["", "https://", "https://other.test", "https://models.example.test/v2"])(
   "does not inherit credentials for %s",
   (baseUrl) => {
-    expect(savedCompatibleEndpointMatches(baseUrl, OLLAMA_CLOUD_BASE_URL)).toBe(false);
+    expect(savedCompatibleEndpointMatches(baseUrl, "https://models.example.test/v1")).toBe(false);
   },
 );
 it("does not match a missing saved endpoint", () => {
-  expect(savedCompatibleEndpointMatches(OLLAMA_CLOUD_BASE_URL, undefined)).toBe(false);
+  expect(savedCompatibleEndpointMatches("https://models.example.test/v1", undefined)).toBe(false);
 });

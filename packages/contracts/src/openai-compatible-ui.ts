@@ -1,16 +1,15 @@
-/** UI preset only; saved connections use the OpenAI-compatible provider. */
-export const OLLAMA_CLOUD_BASE_URL = "https://ollama.com/v1";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; Ork neutral connection metadata helpers follow LICENSE.md.
 
-export function isOllamaCloudBaseUrl(baseUrl: string | undefined): boolean {
-  try {
-    return normalizeOpenAiCompatibleBaseUrl(baseUrl ?? "") === OLLAMA_CLOUD_BASE_URL;
-  } catch {
-    return false;
-  }
-}
+import type { ModelConnectionPreset } from "./domain.js";
 
-export function compatibleConnectionName(baseUrl: string | undefined, fallback: string): string {
-  return isOllamaCloudBaseUrl(baseUrl) ? "Ollama Cloud" : fallback;
+export function compatibleConnectionName(
+  baseUrl: string | undefined,
+  fallback: string,
+  presets: readonly ModelConnectionPreset[] = [],
+): string {
+  return compatibleEndpointPreset(baseUrl ?? "", presets)?.label ?? fallback;
 }
 
 export const OPENAI_COMPATIBLE_BASE_URL_HINT =
@@ -21,11 +20,13 @@ export function openAiCompatibleConnectReady(input: {
   baseUrl: string;
   modelId: string;
   apiKey?: string;
+  presets?: readonly ModelConnectionPreset[];
 }): boolean {
   return Boolean(
     input.baseUrl.trim() &&
       input.modelId.trim() &&
-      (!isOllamaCloudBaseUrl(input.baseUrl) || input.apiKey?.trim()),
+      (!compatibleEndpointPreset(input.baseUrl, input.presets)?.apiKeyRequired ||
+        input.apiKey?.trim()),
   );
 }
 
@@ -58,6 +59,25 @@ export function normalizeOpenAiCompatibleBaseUrl(raw: string): string {
     path = path ? `${path}/v1` : "/v1";
   }
   return `${url.origin}${path}`;
+}
+
+/** Endpoint identity for presets: retain query semantics while normalizing the connection path. */
+export function modelEndpointIdentity(raw: string): string {
+  const normalized = normalizeOpenAiCompatibleBaseUrl(raw);
+  const query = new URL(raw.trim()).search;
+  return `${normalized}${query}`;
+}
+
+export function compatibleEndpointPreset(
+  baseUrl: string,
+  presets: readonly ModelConnectionPreset[] = [],
+): ModelConnectionPreset | undefined {
+  try {
+    const identity = modelEndpointIdentity(baseUrl);
+    return presets.find((preset) => modelEndpointIdentity(preset.baseUrl) === identity);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Self-hosted voice defaults: Kokoro and Whisper as mlx-audio names them. */

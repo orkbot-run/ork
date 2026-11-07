@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 preflight is preserved; Pi schema import compatibility follows LICENSE.md.
+// Inherited Apache-2.0 preflight is preserved; Pi schema import and neutral routing changes follow LICENSE.md.
 
 import type { Context } from "@earendil-works/pi-ai";
 import type { AgentRunModel } from "@orkbot/adapter-kit";
@@ -40,7 +40,7 @@ const BLOCKING_KINDS = new Set(["auth", "access", "model", "key", "credit", "spe
 export async function verifyModelServesAgents(
   config: Pick<
     AgentRunModel,
-    "provider" | "id" | "apiKey" | "accountId" | "gatewayId" | "maxTokens"
+    "provider" | "id" | "apiKey" | "routing" | "accountId" | "gatewayId" | "maxTokens"
   >,
   options: { fetch?: typeof globalThis.fetch; signal?: AbortSignal } = {},
 ): Promise<void> {

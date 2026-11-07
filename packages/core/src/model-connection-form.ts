@@ -1,7 +1,12 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type {
   ModelApiProtocol,
   ModelCatalogEntry,
   ModelConnectInput,
+  ModelConnectionMetadata,
   ModelCredential,
   ModelHeaderRow,
   SettingsScope,
@@ -9,9 +14,10 @@ import type {
 } from "@orkbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
-  isCloudflareModelProvider,
   ModelHeaderRowsSchema,
+  modelEndpointIdentity,
   modelHeadersInput,
+  normalizeModelRouting,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   openAiCompatibleConnectReady,
   parseModelContextWindow,
@@ -26,8 +32,87 @@ import {
   pickCatalogModelId,
 } from "./model-providers.js";
 
-type CatalogModel = Pick<ModelCatalogEntry, "provider" | "id" | "recommended" | "thinkingLevels">;
+type CatalogModel = Pick<
+  ModelCatalogEntry,
+  "provider" | "id" | "recommended" | "thinkingLevels" | "connection"
+>;
 type DefaultModel = { defaultProvider: string | null; defaultModel: string | null };
+
+export type ModelConnectionOption = {
+  id: string;
+  name: string;
+  baseUrl?: string;
+  apiProtocol?: ModelApiProtocol;
+};
+
+/** Provider rows and endpoint presets come from the same server-owned catalog. */
+export function modelConnectionOptions(
+  catalog: readonly ModelCatalogEntry[],
+): ModelConnectionOption[] {
+  const options = new Map<string, ModelConnectionOption>();
+  for (const entry of catalog) {
+    if (!options.has(entry.provider))
+      options.set(entry.provider, {
+        id: entry.provider,
+        name: entry.providerName ?? entry.provider,
+      });
+    for (const preset of entry.connection?.presets ?? []) {
+      try {
+        const key = JSON.stringify([entry.provider, modelEndpointIdentity(preset.baseUrl)]);
+        if (!options.has(key))
+          options.set(key, {
+            id: entry.provider,
+            name: preset.label,
+            baseUrl: preset.baseUrl,
+            ...(preset.apiProtocol ? { apiProtocol: preset.apiProtocol } : {}),
+          });
+      } catch {
+        // An invalid optional preset never hides the provider's generic form.
+      }
+    }
+  }
+  return [...options.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+export function hasModelConnection(
+  option: ModelConnectionOption,
+  credentials: readonly Pick<ModelCredential, "provider" | "baseUrl">[],
+): boolean {
+  return credentials.some((credential) => {
+    if (credential.provider !== option.id) return false;
+    if (!option.baseUrl) return true;
+    try {
+      return (
+        modelEndpointIdentity(option.baseUrl) === modelEndpointIdentity(credential.baseUrl ?? "")
+      );
+    } catch {
+      return false;
+    }
+  });
+}
+
+/** Separate edited fields from switching forms, while every continuation retains its owner. */
+export function createConnectionFormState(isActive: () => boolean) {
+  let form = 0;
+  let edit = 0;
+  return {
+    invalidate() {
+      edit += 1;
+    },
+    select() {
+      form += 1;
+      edit += 1;
+    },
+    capture() {
+      const selected = form;
+      const revision = edit;
+      return {
+        isSelected: () => isActive() && selected === form,
+        isCurrent: () => isActive() && selected === form && revision === edit,
+      };
+    },
+  };
+}
 
 /** What a connection form edits, as the strings and toggles its fields hold. */
 export type ConnectionFormFields = {
@@ -40,8 +125,7 @@ export type ConnectionFormFields = {
   contextWindow: string;
   supportsImages: boolean;
   maxImagesPerPrompt: string;
-  accountId: string;
-  gatewayId: string;
+  routing: Record<string, string>;
 };
 
 /**
@@ -89,11 +173,11 @@ export function connectionFormFields(input: {
     | "contextWindow"
     | "supportsImages"
     | "maxImagesPerPrompt"
-    | "accountId"
-    | "gatewayId"
+    | "routing"
   >;
-  /** Prefills a new OpenAI-compatible connection, such as the Ollama Cloud preset. */
+  /** Prefills a new compatible connection from catalog metadata. */
   presetBaseUrl?: string;
+  presetApiProtocol?: ModelApiProtocol;
 }): ConnectionFormFields {
   const { catalog, provider, modelId, credential, presetBaseUrl } = input;
   const compatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
@@ -105,7 +189,7 @@ export function connectionFormFields(input: {
   return {
     enabledModelIds: credential?.enabledModelIds ?? [],
     baseUrl: compatible ? (credential?.baseUrl ?? presetBaseUrl ?? "") : "",
-    apiProtocol: credential?.apiProtocol ?? "chat-completions",
+    apiProtocol: credential?.apiProtocol ?? input.presetApiProtocol ?? "chat-completions",
     reasoning: credential?.reasoning ?? false,
     thinkingLevel: clampCatalogThinkingLevel(
       credential?.modelId === modelId ? credential.thinkingLevel : null,
@@ -115,8 +199,7 @@ export function connectionFormFields(input: {
     contextWindow: String(credential?.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW),
     supportsImages: credential?.supportsImages ?? false,
     maxImagesPerPrompt: String(credential?.maxImagesPerPrompt ?? ""),
-    accountId: credential?.accountId ?? "",
-    gatewayId: credential?.gatewayId ?? "",
+    routing: credential?.routing ?? {},
   };
 }
 
@@ -127,19 +210,24 @@ export function compatibleConnectionReady(input: {
   modelId: string;
   headerRows: ModelHeaderRow[] | null;
   credential?: Pick<ModelCredential, "hasKey" | "baseUrl">;
+  connection?: ModelConnectionMetadata;
 }): boolean {
   const { apiKey, credential, headerRows, modelId } = input;
   const baseUrl = input.baseUrl.trim();
-  return openAiCompatibleConnectReady({
-    apiKey:
-      apiKey ||
-      (credential?.hasKey && savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)
-        ? "stored"
-        : ""),
-    baseUrl,
-    modelId:
-      headerRows !== null && !ModelHeaderRowsSchema.safeParse(headerRows).success ? "" : modelId,
-  });
+  const key =
+    apiKey ||
+    (credential?.hasKey && savedCompatibleEndpointMatches(baseUrl, credential.baseUrl)
+      ? "stored"
+      : "");
+  return Boolean(
+    (headerRows === null || ModelHeaderRowsSchema.safeParse(headerRows).success) &&
+      openAiCompatibleConnectReady({
+        baseUrl,
+        modelId,
+        apiKey: key,
+        presets: input.connection?.presets,
+      }),
+  );
 }
 
 export type ConnectionFormDraft = Omit<ConnectionFormFields, "enabledModelIds"> & {
@@ -170,8 +258,11 @@ export type ModelConnectRequest =
  */
 export function modelConnectRequest(input: {
   form: ConnectionFormDraft;
-  selected: Pick<ModelCatalogEntry, "provider" | "providerName" | "id" | "thinkingLevels">;
-  credential?: Pick<ModelCredential, "modelId" | "thinkingLevel">;
+  selected: Pick<
+    ModelCatalogEntry,
+    "provider" | "providerName" | "id" | "thinkingLevels" | "connection"
+  >;
+  credential?: Pick<ModelCredential, "modelId" | "thinkingLevel" | "hasKey" | "baseUrl">;
   credentialId: string | null;
   settingsOnly?: boolean;
   makeDefault?: { makeDefault: boolean; scope: SettingsScope };
@@ -183,8 +274,15 @@ export function modelConnectRequest(input: {
   const newKey = settingsOnly ? "" : form.apiKey.trim();
   const savingLimitOnly = !compatible && !newKey;
   const activeModelId = compatible ? modelId : selected.id;
+  const routing = normalizeModelRouting(selected.connection?.routingFields ?? [], form.routing);
+  if (
+    !routing ||
+    (form.headerRows !== null && !ModelHeaderRowsSchema.safeParse(form.headerRows).success)
+  )
+    return { status: "incomplete" };
   if (compatible) {
-    if (!baseUrl || !modelId) return { status: "incomplete" };
+    if (!compatibleConnectionReady({ ...form, credential, connection: selected.connection }))
+      return { status: "incomplete" };
   } else if (savingLimitOnly) {
     if (!credential) return { status: "incomplete" };
   } else if (newKey.length < 8) {
@@ -244,6 +342,7 @@ export function modelConnectRequest(input: {
         apiKey: form.apiKey.trim() || undefined,
         label,
         credentialId,
+        ...(selected.connection?.routingFields?.length ? { routing } : {}),
       },
     };
   }
@@ -257,9 +356,7 @@ export function modelConnectRequest(input: {
     input: {
       provider: selected.provider,
       ...(newKey ? { apiKey: newKey } : {}),
-      ...(isCloudflareModelProvider(selected.provider)
-        ? { accountId: form.accountId.trim(), gatewayId: form.gatewayId.trim() }
-        : {}),
+      ...(selected.connection?.routingFields?.length ? { routing } : {}),
       modelId: selected.id,
       // A limits-only save leaves the stored effort alone while the model and effort stay
       // put. Changing either sends the clamped level, including null, so the previous

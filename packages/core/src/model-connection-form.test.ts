@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type { ModelCredential } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import type { ConnectionFormDraft } from "./model-connection-form.js";
@@ -5,6 +9,9 @@ import {
   compatibleConnectionReady,
   connectionFormFields,
   connectionFormModelId,
+  createConnectionFormState,
+  hasModelConnection,
+  modelConnectionOptions,
   modelConnectRequest,
 } from "./model-connection-form.js";
 
@@ -44,8 +51,7 @@ function draft(overrides: Partial<ConnectionFormDraft> = {}): ConnectionFormDraf
     contextWindow: "262144",
     supportsImages: false,
     maxImagesPerPrompt: "",
-    accountId: "",
-    gatewayId: "",
+    routing: {},
     ...overrides,
   };
 }
@@ -117,8 +123,7 @@ describe("connectionFormFields", () => {
       contextWindow: "262144",
       supportsImages: false,
       maxImagesPerPrompt: "",
-      accountId: "",
-      gatewayId: "",
+      routing: {},
     });
   });
 
@@ -334,15 +339,23 @@ describe("modelConnectRequest", () => {
     expect(model.status === "ready" && "thinkingLevel" in model.input).toBe(true);
   });
 
-  it("sends Cloudflare routing ids trimmed", () => {
+  it("sends metadata-defined routing segments trimmed", () => {
     const request = modelConnectRequest({
-      form: draft({ apiKey: "cf-long-enough", accountId: " acct ", gatewayId: " gw " }),
-      selected: { provider: "cloudflare-ai-gateway", id: "model" },
+      form: draft({ apiKey: "fixture-long-enough", routing: { tenant: " acct ", route: " gw " } }),
+      selected: {
+        provider: "routed-fixture",
+        id: "model",
+        connection: {
+          routingFields: [
+            { key: "tenant", label: "Tenant", required: true },
+            { key: "route", label: "Route", required: true },
+          ],
+        },
+      },
       credentialId: null,
     });
     expect(request.status === "ready" && request.input).toMatchObject({
-      accountId: "acct",
-      gatewayId: "gw",
+      routing: { tenant: "acct", route: "gw" },
     });
   });
 
@@ -389,4 +402,142 @@ describe("modelConnectRequest", () => {
       },
     });
   });
+});
+
+describe("connection catalog and attempt ownership", () => {
+  it("uses server presets, normalizes endpoint identity and preserves query distinctions", () => {
+    const entry = {
+      provider: COMPATIBLE,
+      providerName: "Compatible",
+      id: "",
+      label: "Custom",
+      billing: "API key",
+      connection: {
+        presets: [
+          {
+            label: "Remote",
+            baseUrl: "https://models.example.test/v1",
+            apiProtocol: "responses" as const,
+          },
+          { label: "Duplicate", baseUrl: "https://MODELS.example.test:443/v1/" },
+          { label: "Other tenant", baseUrl: "https://models.example.test/v1?tenant=other" },
+        ],
+      },
+    };
+    const options = modelConnectionOptions([entry, { ...entry, id: "another" }]);
+    expect(options).toHaveLength(3);
+    const preset = options.find((option) => option.name === "Remote")!;
+    expect(preset.apiProtocol).toBe("responses");
+    expect(
+      hasModelConnection(preset, [
+        { provider: COMPATIBLE, baseUrl: "https://models.example.test/v1/" },
+      ]),
+    ).toBe(true);
+    expect(
+      hasModelConnection(preset, [
+        { provider: COMPATIBLE, baseUrl: "https://models.example.test/v1?tenant=other" },
+      ]),
+    ).toBe(false);
+    expect(hasModelConnection(preset, [{ provider: "other", baseUrl: preset.baseUrl }])).toBe(
+      false,
+    );
+  });
+
+  it("keeps an edited selected form owned but retires every previous selection permanently", () => {
+    let active = true;
+    const form = createConnectionFormState(() => active);
+    const accepted = form.capture();
+    form.invalidate();
+    expect(accepted.isSelected()).toBe(true);
+    expect(accepted.isCurrent()).toBe(false);
+    form.select();
+    const next = form.capture();
+    expect(accepted.isSelected()).toBe(false);
+    expect(next.isCurrent()).toBe(true);
+    active = false;
+    expect(next.isSelected()).toBe(false);
+  });
+
+  it.each(["chat-completions", "responses", "anthropic-messages"] as const)(
+    "preserves %s in the same native connection payload",
+    (apiProtocol) => {
+      const result = modelConnectRequest({
+        form: draft({
+          apiKey: "fixture-key",
+          modelId: "model-x",
+          baseUrl: "https://models.example.test/v1",
+          apiProtocol,
+          maxTokens: "1000",
+        }),
+        selected: { provider: COMPATIBLE, id: "", providerName: "Compatible" },
+        credentialId: null,
+        makeDefault: { makeDefault: true, scope: "account" },
+      });
+      expect(result.status).toBe("ready");
+      if (result.status === "ready")
+        expect(result.input).toMatchObject({
+          apiProtocol,
+          modelId: "model-x",
+          makeDefault: true,
+          scope: "account",
+        });
+    },
+  );
+});
+
+const invalidRoutingValues: Record<string, string>[] = [
+  {},
+  { tenant: "one" },
+  { tenant: "one", route: "two", unknown: "three" },
+  { tenant: "one/other", route: "two" },
+];
+it.each(invalidRoutingValues)(
+  "refuses incomplete or unsafe adapter routing before a connection can be submitted: %j",
+  (routing) => {
+    expect(
+      modelConnectRequest({
+        form: draft({ apiKey: "fixture-key", routing }),
+        selected: {
+          provider: "routed-fixture",
+          id: "model",
+          connection: {
+            routingFields: [
+              { key: "tenant", label: "Tenant", required: true },
+              { key: "route", label: "Route", required: true },
+            ],
+          },
+        },
+        credentialId: null,
+      }),
+    ).toEqual({ status: "incomplete" });
+  },
+);
+
+it("renders required-key policy entirely from catalog metadata and only reuses a key at its saved endpoint", () => {
+  const connection = {
+    presets: [
+      { label: "Remote fixture", baseUrl: "https://remote.example.test/v1", apiKeyRequired: true },
+    ],
+  };
+  const input = {
+    apiKey: "",
+    baseUrl: "https://REMOTE.example.test:443/v1/",
+    modelId: "model",
+    headerRows: null,
+    connection,
+  };
+  expect(compatibleConnectionReady(input)).toBe(false);
+  expect(
+    compatibleConnectionReady({
+      ...input,
+      credential: { hasKey: true, baseUrl: "https://remote.example.test/v1" },
+    }),
+  ).toBe(true);
+  expect(
+    compatibleConnectionReady({
+      ...input,
+      credential: { hasKey: true, baseUrl: "https://other.example.test/v1" },
+    }),
+  ).toBe(false);
+  expect(compatibleConnectionReady({ ...input, baseUrl: "http://127.0.0.1:8080/v1" })).toBe(true);
 });

@@ -1,6 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type { ModelRoleSettings } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
-import { createModelRoleSettings, modelRoleListPatch } from "./model-role-settings.js";
+import {
+  createModelRoleSettings,
+  modelRoleListPatch,
+  showModelRole,
+} from "./model-role-settings.js";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -175,4 +183,23 @@ describe("modelRoleListPatch", () => {
       backups: [],
     });
   });
+});
+
+it("reveals optional model roles only for saved choices or explicit expansion", () => {
+  expect(showModelRole("main", null, false)).toBe(true);
+  expect(showModelRole("approval", { primary: null, backups: [] }, false)).toBe(false);
+  expect(showModelRole("computer", { primary: null, backups: [] }, true)).toBe(true);
+  const choice = { provider: "fixture", modelId: "fixture-model" };
+  expect(showModelRole("approval", { primary: choice, backups: [] }, false)).toBe(true);
+  expect(showModelRole("computer", { primary: null, backups: [choice] }, false)).toBe(true);
+});
+
+it("reveals an explicitly configured deployment checker while keeping an empty computer fallback compact", () => {
+  const checker = { provider: "fixture", modelId: "checker" };
+  expect(
+    showModelRole("approval", { primary: null, backups: [], deploymentPrimary: checker }, false),
+  ).toBe(true);
+  expect(
+    showModelRole("computer", { primary: null, backups: [], deploymentPrimary: null }, false),
+  ).toBe(false);
 });

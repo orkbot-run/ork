@@ -1,4 +1,13 @@
-import type { ModelBackupChoice, ModelCatalogEntry, ModelCredential } from "./domain.js";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 choices are preserved; metadata-based names follow LICENSE.md.
+
+import type {
+  ModelBackupChoice,
+  ModelCatalogEntry,
+  ModelConnectionPreset,
+  ModelCredential,
+} from "./domain.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./domain.js";
 import { canonicalPiProviderId } from "./model-provider.js";
 import { compatibleConnectionName } from "./openai-compatible-ui.js";
@@ -37,20 +46,23 @@ export function connectionDisplayName(
   providerName: string,
   /** Other names a default label may carry, such as the catalog's "Anthropic" for "Claude subscription". */
   defaultNames: readonly string[] = [],
+  presets: readonly ModelConnectionPreset[] = [],
 ): string {
   const provider =
     credential.provider === OPENAI_COMPATIBLE_PROVIDER_ID
-      ? compatibleConnectionName(credential.baseUrl, providerName)
+      ? compatibleConnectionName(credential.baseUrl, providerName, presets)
       : providerName;
   const label = credential.label.trim();
   if (
     !label ||
     label === credential.provider ||
+    label === provider ||
     label === providerName ||
     defaultNames.includes(label)
   )
     return provider;
-  if (label.toLowerCase().startsWith(providerName.toLowerCase())) return label;
+  if ([provider, providerName].some((name) => label.toLowerCase().startsWith(name.toLowerCase())))
+    return label;
   return `${provider} (${label})`;
 }
 
@@ -85,6 +97,9 @@ export function connectedBackupOptions(
     entries.set(provider, [...(entries.get(provider) ?? []), entry]);
   }
   const options: ConnectedBackupOption[] = [];
+  const compatiblePresets = catalog.find(
+    (entry) => entry.provider === OPENAI_COMPATIBLE_PROVIDER_ID && entry.connection?.presets,
+  )?.connection?.presets;
   for (const [provider, models] of entries) {
     const owners = connections.get(provider) ?? [];
     const option = (entry: ModelCatalogEntry, connection?: ModelCredential) => {
@@ -129,7 +144,12 @@ export function connectedBackupOptions(
         label: entry?.label ?? modelId,
         providerName,
         credentialId: credential.id,
-        connectionName: connectionDisplayName(credential, providerName),
+        connectionName: connectionDisplayName(
+          credential,
+          providerName,
+          [],
+          entry?.connection?.presets ?? compatiblePresets,
+        ),
       });
     }
   }

@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; captured settings context fixtures follow LICENSE.md.
 
 import { notifyManager } from "@tanstack/react-query";
 import type { CSSProperties, ReactNode, Ref } from "react";
@@ -101,14 +104,30 @@ vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
 notifyManager.setScheduler((callback) => callback());
 vi.mock("./api", () => ({
   currentApiBase: () => "https://app.example.test",
+  spaceSelectionSeq: () => 0,
   loadSessionToken: async () => "token",
   captureApiRequestContext: async () => ({ headers: {} }),
   selectedSpaceId: () => "space-fixture",
   rpc: async (procedure: string, input?: unknown, options?: { signal?: AbortSignal }) => {
     const cloudflare = mocks.gateway
-      ? { provider: "cloudflare-ai-gateway", providerName: "Cloudflare AI Gateway" }
+      ? {
+          provider: "cloudflare-ai-gateway",
+          providerName: "Cloudflare AI Gateway",
+          connection: {
+            routingFields: [
+              { key: "account", label: "Account ID", required: true },
+              { key: "gateway", label: "Gateway ID", required: true },
+            ],
+          },
+        }
       : mocks.workers
-        ? { provider: "cloudflare-workers-ai", providerName: "Cloudflare Workers AI" }
+        ? {
+            provider: "cloudflare-workers-ai",
+            providerName: "Cloudflare Workers AI",
+            connection: {
+              routingFields: [{ key: "account", label: "Account ID", required: true }],
+            },
+          }
         : undefined;
     const result = mocks.rpc(procedure, input);
     if (procedure === "models/connect") {
@@ -117,11 +136,14 @@ vi.mock("./api", () => ({
         maxTokens?: number | null;
         accountId?: string;
         gatewayId?: string;
+        routing?: Record<string, string>;
       };
       // A null limit clears it, as the server does.
       mocks.savedMaxTokens = saved.maxTokens ?? undefined;
-      if (saved.accountId) mocks.savedAccountId = saved.accountId;
-      if (saved.gatewayId) mocks.savedGatewayId = saved.gatewayId;
+      if (saved.routing?.account || saved.accountId)
+        mocks.savedAccountId = saved.routing?.account ?? saved.accountId!;
+      if (saved.routing?.gateway || saved.gatewayId)
+        mocks.savedGatewayId = saved.routing?.gateway ?? saved.gatewayId!;
       return { id: CREDENTIAL_ID };
     }
     if (procedure === "models/beginOAuth")
@@ -192,6 +214,7 @@ vi.mock("./api", () => ({
                   ...entry,
                   provider: cloudflare?.provider ?? entry.provider,
                   providerName: cloudflare?.providerName ?? entry.providerName,
+                  ...(cloudflare ? { connection: cloudflare.connection } : {}),
                 })),
                 ...(mocks.extraProviders
                   ? ["Anthropic", "Google", "OpenAI", "Other", "Last"].map((name) => ({
@@ -210,9 +233,13 @@ vi.mock("./api", () => ({
               label: cloudflare?.providerName ?? "OpenRouter",
               maxTokens: mocks.savedMaxTokens,
               ...(mocks.gateway
-                ? { accountId: mocks.savedAccountId, gatewayId: mocks.savedGatewayId }
+                ? {
+                    accountId: mocks.savedAccountId,
+                    gatewayId: mocks.savedGatewayId,
+                    routing: { account: mocks.savedAccountId, gateway: mocks.savedGatewayId },
+                  }
                 : mocks.workers
-                  ? { accountId: mocks.savedAccountId }
+                  ? { accountId: mocks.savedAccountId, routing: { account: mocks.savedAccountId } }
                   : {}),
               modelId: "vendor/model-1",
               isDefault: true,
@@ -897,6 +924,10 @@ describe("provider connection screen", () => {
     expect(signal.aborted).toBe(false);
     act(() => root.render(null));
     expect(signal.aborted).toBe(true);
+    // Native cancellation stays synchronous; its bound-context RPC dispatch awaits capture.
+    await act(async () => {
+      await Promise.resolve();
+    });
     expect(mocks.rpc).toHaveBeenCalledWith("models/cancelOAuth", { loginId: "login-fixture" });
     await act(async () => completeSignIn({ status: "ready" }));
     expect(mocks.rpc).not.toHaveBeenCalledWith("models/finishOAuth", expect.anything());
@@ -979,7 +1010,10 @@ describe("provider connection limit saves", () => {
     await act(async () => buttonWithText("Save")!.click());
     expect(mocks.rpc).toHaveBeenCalledWith(
       "models/connect",
-      expect.objectContaining({ provider: "cloudflare-workers-ai", accountId: "account-updated" }),
+      expect.objectContaining({
+        provider: "cloudflare-workers-ai",
+        routing: { account: "account-updated" },
+      }),
     );
     expect(
       mocks.rpc.mock.calls.find(([procedure]) => procedure === "models/connect")?.[1].apiKey,
@@ -997,8 +1031,7 @@ describe("provider connection limit saves", () => {
       "models/connect",
       expect.objectContaining({
         provider: "cloudflare-ai-gateway",
-        accountId: "account-updated",
-        gatewayId: "gateway-fixture",
+        routing: { account: "account-updated", gateway: "gateway-fixture" },
       }),
     );
     expect(buttonWithText("Save")?.disabled).toBe(true);

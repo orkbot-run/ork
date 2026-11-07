@@ -1,6 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import type { ThinkingLevel } from "@orkbot/contracts";
-import { isOllamaCloudBaseUrl } from "@orkbot/contracts";
 import { compatibleThinkingLevels, toggleEnabledModelId } from "@orkbot/core";
 import {
   Button,
@@ -26,6 +29,7 @@ export function CompatibleModelFields({
   savedHeaderEndpointMatches,
   credential,
   apiProtocol,
+  endpointPreset,
   baseUrl,
   busy,
   cancelOAuthAttempt,
@@ -67,6 +71,7 @@ export function CompatibleModelFields({
   | "savedHeaderEndpointMatches"
   | "credential"
   | "apiProtocol"
+  | "endpointPreset"
   | "baseUrl"
   | "busy"
   | "cancelOAuthAttempt"
@@ -147,7 +152,7 @@ export function CompatibleModelFields({
           {probing ? <Trans>Finding…</Trans> : <Trans>Find models</Trans>}
         </Button>
       </div>
-      {!isOllamaCloudBaseUrl(baseUrl) ? (
+      {!endpointPreset ? (
         <Disclosure
           className="mt-3 text-[13.5px] text-muted-foreground"
           summary={<Trans>Setup help</Trans>}

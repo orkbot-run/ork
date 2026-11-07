@@ -1,5 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import { isOllamaCloudBaseUrl } from "@orkbot/contracts";
 import { Button, Disclosure, Input } from "@orkbot/ui-web";
 import { Check, Copy } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -13,19 +16,19 @@ import type { ModelSettingsState } from "./use-model-settings";
 
 export function ConnectionControls({
   acceptsKey,
-  accountId,
+  routing,
+  routingFields,
+  setRouting,
+  invalidatePreflight,
   apiKey,
   beginSelectedSubscriptionSignIn,
   busy,
   cancelOAuthAttempt,
-  cloudflareRoutingReady,
+  routingReady,
   codeCopied,
   connectKey,
   copyOAuthCode,
   credential,
-  gatewayId,
-  isCloudflare,
-  isCloudflareGateway,
   isOpenAiCompatible,
   oauth,
   oauthPending,
@@ -37,8 +40,6 @@ export function ConnectionControls({
   preflightTarget,
   preflightTesting,
   selected,
-  setAccountId,
-  setGatewayId,
   setPasteCode,
   submitOAuthCode,
   subscriptionSignIn,
@@ -48,19 +49,19 @@ export function ConnectionControls({
 }: Pick<
   ModelSettingsState,
   | "acceptsKey"
-  | "accountId"
+  | "routing"
+  | "routingFields"
+  | "setRouting"
+  | "invalidatePreflight"
   | "apiKey"
   | "beginSelectedSubscriptionSignIn"
   | "busy"
   | "cancelOAuthAttempt"
-  | "cloudflareRoutingReady"
+  | "routingReady"
   | "codeCopied"
   | "connectKey"
   | "copyOAuthCode"
   | "credential"
-  | "gatewayId"
-  | "isCloudflare"
-  | "isCloudflareGateway"
   | "isOpenAiCompatible"
   | "oauth"
   | "oauthPending"
@@ -72,8 +73,6 @@ export function ConnectionControls({
   | "preflightTarget"
   | "preflightTesting"
   | "selected"
-  | "setAccountId"
-  | "setGatewayId"
   | "setPasteCode"
   | "submitOAuthCode"
   | "subscriptionSignIn"
@@ -258,63 +257,49 @@ export function ConnectionControls({
         </Disclosure>
       ) : acceptsKey ? (
         <div className="mt-5 first:mt-0">
-          {isCloudflare ? (
-            <>
-              <label
-                className="block text-[13.5px] text-muted-foreground"
-                htmlFor="cloudflare-account-id"
-              >
-                <Trans>Account ID</Trans>
-                <Input
-                  id="cloudflare-account-id"
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="mt-2 h-10 text-foreground"
-                />
-              </label>
-              {isCloudflareGateway ? (
-                <label
-                  className="mt-4 block text-[13.5px] text-muted-foreground"
-                  htmlFor="cloudflare-gateway-id"
-                >
-                  <Trans>Gateway ID</Trans>
-                  <Input
-                    id="cloudflare-gateway-id"
-                    value={gatewayId}
-                    onChange={(event) => setGatewayId(event.target.value)}
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="mt-2 h-10 text-foreground"
-                  />
-                </label>
-              ) : null}
-            </>
-          ) : null}
-          {acceptsKey ? (
+          {routingFields.map((field) => (
             <label
-              className={`block text-[13.5px] text-muted-foreground ${isCloudflare ? "mt-4" : ""}`}
-              htmlFor="model-api-key"
+              key={field.key}
+              className="mb-4 block text-[13.5px] text-muted-foreground"
+              htmlFor={`model-routing-${field.key}`}
             >
-              {credential?.hasKey ? (
-                <Trans>Replace API key</Trans>
-              ) : subscriptionSignIn ? (
-                <Trans>Or paste an API key</Trans>
-              ) : (
-                <Trans>API key</Trans>
-              )}
+              {field.label}
               <Input
-                id="model-api-key"
-                value={apiKey}
-                onChange={(event) => updateApiKey(event.target.value)}
-                placeholder={credential?.hasKey ? t`Paste a replacement key` : "sk-…"}
-                type="password"
-                autoComplete="new-password"
+                id={`model-routing-${field.key}`}
+                value={routing[field.key] ?? ""}
+                required={field.required}
+                disabled={busy}
+                onChange={(event) => {
+                  setRouting((current) => ({ ...current, [field.key]: event.target.value }));
+                  invalidatePreflight();
+                }}
+                autoComplete="off"
+                spellCheck={false}
                 className="mt-2 h-10 text-foreground"
               />
             </label>
-          ) : null}
+          ))}
+          <label
+            className={`block text-[13.5px] text-muted-foreground ${routingFields.length ? "mt-4" : ""}`}
+            htmlFor="model-api-key"
+          >
+            {credential?.hasKey ? (
+              <Trans>Replace API key</Trans>
+            ) : subscriptionSignIn ? (
+              <Trans>Or paste an API key</Trans>
+            ) : (
+              <Trans>API key</Trans>
+            )}
+            <Input
+              id="model-api-key"
+              value={apiKey}
+              onChange={(event) => updateApiKey(event.target.value)}
+              placeholder={credential?.hasKey ? t`Paste a replacement key` : "sk-…"}
+              type="password"
+              autoComplete="new-password"
+              className="mt-2 h-10 text-foreground"
+            />
+          </label>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {acceptsKey && selected?.catalogProbe ? (
               <Button
@@ -334,7 +319,7 @@ export function ConnectionControls({
               type="button"
               variant="secondary"
               size="sm"
-              disabled={busy || !cloudflareRoutingReady || apiKey.trim().length < 8}
+              disabled={busy || !routingReady || apiKey.trim().length < 8}
               onClick={() => void connectKey()}
             >
               {pending === "connect" ? (
@@ -366,7 +351,7 @@ export function ConnectionControls({
 
 export function CompatibleKeyControls({
   apiKey,
-  baseUrl,
+  requiresApiKey,
   busy,
   connectKey,
   credential,
@@ -376,7 +361,7 @@ export function CompatibleKeyControls({
   updateApiKey,
 }: Pick<
   ModelSettingsState,
-  | "baseUrl"
+  | "requiresApiKey"
   | "apiKey"
   | "busy"
   | "connectKey"
@@ -389,18 +374,17 @@ export function CompatibleKeyControls({
   const { t } = useLingui();
   return isOpenAiCompatible ? (
     <div className="mt-5">
-      <CompatibleKeyField baseUrl={baseUrl} className="block text-[13.5px] text-muted-foreground">
+      <CompatibleKeyField
+        required={requiresApiKey}
+        className="block text-[13.5px] text-muted-foreground"
+      >
         <Input
           aria-label={t`API key`}
           value={apiKey}
           onChange={(event) => updateApiKey(event.target.value)}
-          required={isOllamaCloudBaseUrl(baseUrl)}
+          required={requiresApiKey}
           placeholder={
-            isOllamaCloudBaseUrl(baseUrl)
-              ? t`Ollama API key`
-              : credential?.hasKey
-                ? t`Paste a replacement key`
-                : t`Optional`
+            requiresApiKey ? "" : credential?.hasKey ? t`Paste a replacement key` : t`Optional`
           }
           type="password"
           autoComplete="new-password"

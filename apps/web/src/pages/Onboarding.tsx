@@ -3,38 +3,35 @@
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import type { ModelHeaderRow, ThinkingLevel } from "@orkbot/contracts";
+import type { ModelApiProtocol, ModelHeaderRow, ThinkingLevel } from "@orkbot/contracts";
 import {
-  CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-  cloudflareModelRouting,
+  compatibleEndpointPreset,
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
-  isCloudflareModelProvider,
-  isOllamaCloudBaseUrl,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
-  ModelHeaderRowsSchema,
   modelHeadersInput,
-  OLLAMA_CLOUD_BASE_URL,
   OPENAI_COMPATIBLE_PROVIDER_ID,
-  openAiCompatibleConnectReady,
   openAiCompatibleProbeSuccessMessage,
-  parseModelContextWindow,
-  parseModelMaxImagesPerPrompt,
-  parseModelMaxTokens,
 } from "@orkbot/contracts";
 import {
-  COMPATIBLE_THINKING_LEVELS,
   clampCatalogThinkingLevel,
+  compatibleThinkingLevels,
+  connectionFormFields,
+  createConnectionFormState,
   createModelProbe,
+  hasModelConnection,
   initialModelProbeState,
+  modelConnectionOptions,
+  modelConnectRequest,
   pickCatalogModelId,
-  popularModelProvidersFirst,
 } from "@orkbot/core";
 import {
   Button,
   Input,
   ModelThinkingOptions,
+  NativeSelect,
+  NativeSelectOption,
   Select,
   SelectContent,
   SelectGroup,
@@ -56,7 +53,6 @@ import { ModelHeadersEditor } from "../components/ModelHeadersEditor";
 import { PageLoading } from "../components/PageLoading";
 import { SignupSurvey } from "../components/SignupSurvey";
 import { useCopyText } from "../lib/copy-text";
-import { providerDisplayName } from "../lib/localized-provider-hint";
 import type { ModelCatalogEntry } from "../lib/model-auth";
 import type { ModelPreflightFailure } from "../lib/model-connection-preflight";
 import {
@@ -65,7 +61,7 @@ import {
   runModelConnectionPreflight,
   unavailableSelectedModel,
 } from "../lib/model-connection-preflight";
-import { rpc } from "../lib/rpc";
+import { captureRpcContext } from "../lib/rpc";
 import { useSignOut } from "../lib/sign-out";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 import { errorText } from "../lib/user-error";
@@ -77,21 +73,17 @@ const CREDITS_OPTION = "__orkbot_credits__";
 /** A provider whose catalog entry offers both sign-in and a key appears once per way to connect. */
 type ProviderAuth = "sign-in" | "key";
 
-const MAIN_PROVIDER_OPTIONS: ReadonlyArray<{ provider: string; auth?: ProviderAuth }> = [
-  { provider: "openai-codex" },
-  { provider: "anthropic", auth: "sign-in" },
-  { provider: "openai" },
-  { provider: "anthropic", auth: "key" },
-  { provider: "openrouter" },
-  { provider: "google" },
-];
-
-function providerOptionValue(provider: string, auth?: ProviderAuth): string {
-  return auth ? `${provider}:${auth}` : provider;
-}
 export function OnboardingPage() {
   const { t } = useLingui();
   const navigate = useNavigate();
+  const [owner] = useState(() => captureRpcContext());
+  const rpc = owner.client;
+  const mounted = useRef(true);
+  const [formState] = useState(() =>
+    createConnectionFormState(() => mounted.current && owner.isCurrent()),
+  );
+  const [saving, setSaving] = useState(false);
+  const oauthForm = useRef<ReturnType<typeof formState.capture> | null>(null);
   const fieldId = useId();
   // The URL holds the survey and model steps, so /onboarding/survey and /onboarding/model open directly.
   const { step: routeStep } = useParams();
@@ -110,8 +102,8 @@ export function OnboardingPage() {
   const modelIdRef = useRef(modelId);
   modelIdRef.current = modelId;
   const [apiKey, setApiKey] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [gatewayId, setGatewayId] = useState("");
+  const [routing, setRouting] = useState<Record<string, string>>({});
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [baseUrl, setBaseUrl] = useState("");
   const [headerRows, setHeaderRows] = useState<ModelHeaderRow[] | null>(null);
   const [reasoning, setReasoning] = useState(false);
@@ -146,27 +138,35 @@ export function OnboardingPage() {
     startSubscriptionSignIn,
     submitOAuthCode,
   } = useModelOAuthSignIn({
+    client: rpc,
+    isCurrent: () => mounted.current && owner.isCurrent(),
     onClearError: () => setError(null),
-    onError: setError,
+    onError: (message) => {
+      if (oauthForm.current?.isCurrent()) setError(message);
+    },
     onFinished: async () => {
-      goTo("bot");
+      const form = oauthForm.current;
+      if (form?.isCurrent()) await continueAfterModel(form.isCurrent);
     },
   });
 
   useEffect(() => {
+    mounted.current = true;
+    const form = formState.capture();
     void Promise.all([rpc.me(), rpc.models.list().catch(() => [])])
       .then(([me, models]) => {
+        if (!form.isSelected()) return;
         setBillingEnabled(me.billingEnabled);
         setCatalog(models);
         const next = me.needsModel ? "model" : "bot";
         setAfterSurvey(next);
         if (!linkedStep) goTo(me.needsSignupSurvey ? "survey" : next);
       })
-      .catch(() => {
-        setAfterSurvey("bot");
-        if (!linkedStep) goTo("bot");
+      .catch((err: unknown) => {
+        if (form.isSelected()) setError(errorText(err, t`Could not load model settings`));
       });
     return () => {
+      mounted.current = false;
       modelProbe.invalidate();
     };
   }, []);
@@ -178,21 +178,10 @@ export function OnboardingPage() {
   }, [surveyDone, afterSurvey]);
 
   function goTo(next: "survey" | "model" | "bot") {
+    if (!mounted.current || !owner.isCurrent()) return;
     if (next === "bot") setCreatingBot(true);
     navigate(next === "bot" ? "/onboarding" : `/onboarding/${next}`, { replace: true });
   }
-
-  const providers = useMemo(() => {
-    const seen = new Map<string, ModelCatalogEntry>();
-    for (const entry of catalog) {
-      if (!seen.has(entry.provider)) seen.set(entry.provider, entry);
-    }
-    return popularModelProvidersFirst(
-      [...seen.values()],
-      (entry) => entry.provider,
-      (entry) => entry.providerName ?? entry.provider,
-    );
-  }, [catalog]);
 
   const modelsForProvider = useMemo(
     () => catalog.filter((entry) => entry.provider === provider),
@@ -201,62 +190,69 @@ export function OnboardingPage() {
 
   const selected = modelsForProvider.find((entry) => entry.id === modelId) ?? modelsForProvider[0];
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
-  const isCloudflareGateway = provider === CLOUDFLARE_AI_GATEWAY_PROVIDER_ID;
-  const isCloudflare = isCloudflareModelProvider(provider);
-  const cloudflareRoutingReady =
-    !isCloudflare || cloudflareModelRouting({ provider, accountId, gatewayId }) !== undefined;
+  const routingFields = selected?.connection?.routingFields ?? [];
+  const endpointPreset = compatibleEndpointPreset(baseUrl, selected?.connection?.presets);
+  const requiresApiKey = endpointPreset?.apiKeyRequired === true;
   const subscriptionSignIn = selected?.signIn !== undefined && providerAuth !== "key";
   const acceptsKey = selected?.auth !== "oauth" && providerAuth !== "sign-in";
   const signInLabel = selected?.oauthLabel ?? t`Sign in`;
-  const openAiCompatibleReady = openAiCompatibleConnectReady({
-    apiKey,
-    baseUrl,
-    modelId:
-      headerRows !== null && !ModelHeaderRowsSchema.safeParse(headerRows).success ? "" : modelId,
-  });
+  const connectionRequest = selected
+    ? modelConnectRequest({
+        form: {
+          apiKey,
+          modelId,
+          enabledModelIds: [],
+          baseUrl,
+          apiProtocol,
+          headerRows,
+          reasoning,
+          thinkingLevel,
+          maxTokens,
+          contextWindow,
+          supportsImages,
+          maxImagesPerPrompt,
+          routing,
+        },
+        selected,
+        credentialId: null,
+        makeDefault: { makeDefault: true, scope: "account" },
+      })
+    : null;
   const canSaveModel = Boolean(
-    selected &&
-      modelId.trim() &&
+    connectionRequest &&
+      connectionRequest.status !== "incomplete" &&
       !oauthPending &&
-      cloudflareRoutingReady &&
-      (isOpenAiCompatible ? openAiCompatibleReady : acceptsKey && apiKey.trim()),
+      (isOpenAiCompatible || acceptsKey),
   );
-  // Subscriptions and the common API providers first; every other provider follows by name.
   const providerOptions = useMemo(() => {
-    const byId = new Map(providers.map((entry) => [entry.provider, entry]));
-    // Beside the subscriptions, the key-based options say API.
-    const optionLabel = (id: string, auth?: ProviderAuth) => {
-      if (id === "anthropic" && auth === "key") return t`Anthropic API`;
-      if (id === "openai") return t`OpenAI API`;
-      return providerDisplayName(id, byId.get(id)?.providerName ?? id, auth);
-    };
-    const main = [
-      ...(billingEnabled ? [{ value: CREDITS_OPTION, label: t`Ork credits` }] : []),
-      ...MAIN_PROVIDER_OPTIONS.filter((option) => byId.has(option.provider)).map((option) => ({
-        value: providerOptionValue(option.provider, option.auth),
-        label: optionLabel(option.provider, option.auth),
-      })),
-    ];
-    const rest = popularModelProvidersFirst(
-      providers
-        .filter(
-          (entry) => !MAIN_PROVIDER_OPTIONS.some((option) => option.provider === entry.provider),
-        )
-        .flatMap((entry) => {
-          const item = { value: entry.provider, label: entry.providerName ?? entry.provider };
-          return entry.provider === OPENAI_COMPATIBLE_PROVIDER_ID
-            ? [item, { value: "ollama-preset", label: t`Ollama Cloud` }]
-            : [item];
-        }),
-      (option) => option.value,
-      (option) => option.label,
-    );
-    return { main, rest };
-  }, [billingEnabled, providers, t]);
-  // Base UI Select.Value only resolves labels when Root gets `items`.
+    const main = modelConnectionOptions(catalog).flatMap((option, index) => {
+      const entry = catalog.find((item) => item.provider === option.id)!;
+      const modes: Array<ProviderAuth | undefined> =
+        !option.baseUrl && entry.auth === "both" && entry.signIn ? ["sign-in", "key"] : [undefined];
+      return modes.map((auth) => ({
+        ...option,
+        provider: option.id,
+        auth,
+        value: `provider:${index}:${auth ?? "default"}`,
+        label: auth
+          ? `${option.name} (${auth === "key" ? t`API key` : (entry.oauthLabel ?? t`Sign in`)})`
+          : option.name,
+      }));
+    });
+    return { main, rest: [] as typeof main };
+  }, [catalog, t]);
   const providerItems = useMemo(
-    () => [...providerOptions.main, ...providerOptions.rest],
-    [providerOptions],
+    () => [
+      ...(billingEnabled ? [{ value: CREDITS_OPTION, label: t`Ork credits` }] : []),
+      ...providerOptions.main,
+    ],
+    [billingEnabled, providerOptions, t],
+  );
+  const selectedProviderOption = providerOptions.main.find(
+    (option) =>
+      option.provider === provider &&
+      option.auth === providerAuth &&
+      (option.baseUrl ? hasModelConnection(option, [{ provider, baseUrl }]) : !endpointPreset),
   );
   const modelItems = useMemo(
     () => modelsForProvider.map((entry) => ({ value: entry.id, label: entry.label })),
@@ -264,6 +260,7 @@ export function OnboardingPage() {
   );
 
   function invalidatePreflight() {
+    formState.invalidate();
     preflightRevisionRef.current += 1;
     setPreflightTesting(false);
     setPreflightTarget(null);
@@ -287,34 +284,39 @@ export function OnboardingPage() {
     invalidatePreflight();
   }
 
-  function selectProvider(option: string, presetBaseUrl?: string) {
-    if (
-      option === providerOptionValue(provider, providerAuth) &&
-      !presetBaseUrl &&
-      !isOllamaCloudBaseUrl(baseUrl)
-    )
-      return;
-    const [nextProvider = option, auth] = option.split(":") as [string, ProviderAuth?];
+  function selectProvider(
+    nextProvider: string,
+    auth?: ProviderAuth,
+    presetBaseUrl?: string,
+    presetApiProtocol?: ModelApiProtocol,
+  ) {
     cancelOAuthAttempt();
     setProvider(nextProvider);
     setProviderAuth(auth);
     setApiKey("");
     setHeaderRows(null);
-    setAccountId("");
-    setGatewayId("");
-    setModelId(
+    const nextModel =
       nextProvider === OPENAI_COMPATIBLE_PROVIDER_ID
         ? ""
-        : pickCatalogModelId(catalog, nextProvider),
-    );
-    setBaseUrl(presetBaseUrl ?? "");
-    setReasoning(false);
-    setThinkingLevel(null);
+        : pickCatalogModelId(catalog, nextProvider);
+    const fields = connectionFormFields({
+      catalog,
+      provider: nextProvider,
+      modelId: nextModel,
+      presetBaseUrl,
+      presetApiProtocol,
+    });
+    setModelId(nextModel);
+    setRouting(fields.routing);
+    setApiProtocol(fields.apiProtocol);
+    setBaseUrl(fields.baseUrl);
+    setReasoning(fields.reasoning);
+    setThinkingLevel(fields.thinkingLevel);
     setManualModelId(false);
-    setSupportsImages(false);
-    setMaxTokens(String(DEFAULT_MODEL_MAX_TOKENS));
-    setContextWindow(String(DEFAULT_MODEL_CONTEXT_WINDOW));
-    setMaxImagesPerPrompt("");
+    setSupportsImages(fields.supportsImages);
+    setMaxTokens(fields.maxTokens);
+    setContextWindow(fields.contextWindow);
+    setMaxImagesPerPrompt(fields.maxImagesPerPrompt);
     resetOpenAiCompatibleProbe();
     invalidatePreflight();
     setError(null);
@@ -322,7 +324,7 @@ export function OnboardingPage() {
   }
 
   function preflightStillCurrent(revision: number): boolean {
-    return revision === preflightRevisionRef.current;
+    return mounted.current && owner.isCurrent() && revision === preflightRevisionRef.current;
   }
 
   async function probeServerModels() {
@@ -337,7 +339,11 @@ export function OnboardingPage() {
       baseUrl,
       apiKey,
       request: (input) =>
-        rpc.models.probeOpenAiCompatible({ ...input, headers: modelHeadersInput(headerRows) }),
+        rpc.models.probeOpenAiCompatible({
+          ...input,
+          apiProtocol,
+          headers: modelHeadersInput(headerRows),
+        }),
       onSuccess: (models) => {
         if (!preflightStillCurrent(revision)) return;
         const trimmed = modelIdRef.current.trim();
@@ -393,69 +399,37 @@ export function OnboardingPage() {
     setPreflightFailure(result.failure);
   }
 
-  function stagedThinkingLevel(): ThinkingLevel | null {
-    return clampCatalogThinkingLevel(
-      thinkingLevel,
-      reasoning ? COMPATIBLE_THINKING_LEVELS : [],
-    ) as ThinkingLevel | null;
+  async function continueAfterModel(stillCurrent: () => boolean) {
+    const me = await rpc.me();
+    if (!mounted.current || !owner.isCurrent() || !stillCurrent()) return;
+    goTo(me.needsSignupSurvey ? "survey" : me.needsModel ? "model" : "bot");
   }
 
   async function saveModel() {
-    if (!canSaveModel) return;
+    if (!canSaveModel || saving) return;
+    const form = formState.capture();
+    if (!form.isSelected()) return;
     setError(null);
     try {
-      if (isOpenAiCompatible) {
-        const parsedMaxImagesPerPrompt = parseModelMaxImagesPerPrompt(
-          maxImagesPerPrompt,
-          supportsImages,
+      const request = connectionRequest;
+      if (!request || request.status === "incomplete") return;
+      if (request.status === "invalid") {
+        setError(
+          request.field === "maxTokens"
+            ? t`Enter a whole number from 1 to ${MAX_MODEL_MAX_TOKENS} for maximum output tokens.`
+            : request.field === "maxImagesPerPrompt"
+              ? t`Enter a whole number from 1 to 1000 for the image limit.`
+              : t`Enter a whole number from 1 to ${MAX_MODEL_CONTEXT_WINDOW} for the context limit.`,
         );
-        if (supportsImages && maxImagesPerPrompt.trim() && parsedMaxImagesPerPrompt === undefined) {
-          setError(t`Enter a whole number from 1 to 1000 for the image limit.`);
-          return;
-        }
-        const maxImagesPerPromptInput =
-          supportsImages && !maxImagesPerPrompt.trim() ? null : parsedMaxImagesPerPrompt;
-
-        const parsedMaxTokens = parseModelMaxTokens(maxTokens);
-        if (parsedMaxTokens === undefined) {
-          setError(
-            t`Enter a whole number from 1 to ${MAX_MODEL_MAX_TOKENS} for maximum output tokens.`,
-          );
-          return;
-        }
-        const parsedContextWindow = parseModelContextWindow(contextWindow);
-        if (parsedContextWindow === undefined) {
-          setError(
-            t`Enter a whole number from 1 to ${MAX_MODEL_CONTEXT_WINDOW} for the context limit.`,
-          );
-          return;
-        }
-        await rpc.models.connect({
-          provider,
-          baseUrl: baseUrl.trim(),
-          headers: modelHeadersInput(headerRows),
-          modelId: modelId.trim(),
-          reasoning,
-          thinkingLevel: stagedThinkingLevel(),
-          maxTokens: parsedMaxTokens,
-          contextWindow: parsedContextWindow,
-          supportsImages,
-          maxImagesPerPrompt: maxImagesPerPromptInput,
-          apiKey: apiKey.trim() || undefined,
-          label: selected?.providerName ?? provider,
-        });
-      } else if (apiKey) {
-        await rpc.models.connect({
-          provider,
-          apiKey,
-          ...(isCloudflare ? { accountId: accountId.trim(), gatewayId: gatewayId.trim() } : {}),
-          modelId,
-          label: selected?.providerName ?? provider,
-        });
+        return;
       }
-      goTo("bot");
+      setSaving(true);
+      await rpc.models.connect(request.input);
+      if (form.isCurrent()) await continueAfterModel(form.isCurrent);
     } catch (err) {
-      setError(errorText(err, t`Could not save model`));
+      if (form.isCurrent()) setError(errorText(err, t`Could not save model`));
+    } finally {
+      if (form.isSelected()) setSaving(false);
     }
   }
 
@@ -463,14 +437,15 @@ export function OnboardingPage() {
     setError(null);
     try {
       await rpc.billing.selectFunding({ funding: "credits" });
-      window.location.assign("/onboarding");
+      if (mounted.current && owner.isCurrent()) window.location.assign("/onboarding");
     } catch {
-      setError(t`Could not open billing`);
+      if (mounted.current && owner.isCurrent()) setError(t`Could not open billing`);
     }
   }
 
   function beginSelectedSubscriptionSignIn() {
     if (!selected?.id) return;
+    oauthForm.current = formState.capture();
     void startSubscriptionSignIn({
       provider: selected.provider,
       modelId: selected.id,
@@ -479,13 +454,13 @@ export function OnboardingPage() {
   }
 
   async function createFirstBot() {
-    if (createStartedRef.current) return;
+    if (createStartedRef.current || !mounted.current || !owner.isCurrent()) return;
     createStartedRef.current = true;
     const attempt = ++createAttemptRef.current;
     setError(null);
     try {
       const bot = await rpc.onboarding.ensureFirstBot();
-      if (attempt !== createAttemptRef.current) return;
+      if (attempt !== createAttemptRef.current || !mounted.current || !owner.isCurrent()) return;
       if (!bot) {
         navigate("/app", { replace: true });
         return;
@@ -496,14 +471,14 @@ export function OnboardingPage() {
         .start({ botId: bot.id })
         .then(() => true)
         .catch(() => false);
-      if (attempt !== createAttemptRef.current) return;
+      if (attempt !== createAttemptRef.current || !mounted.current || !owner.isCurrent()) return;
       if (started) {
         await rpc.onboarding.promptFocus({ botId: bot.id }).catch(() => undefined);
       }
-      if (attempt !== createAttemptRef.current) return;
+      if (attempt !== createAttemptRef.current || !mounted.current || !owner.isCurrent()) return;
       navigate(`/app/${bot.id}`);
     } catch (err) {
-      if (attempt !== createAttemptRef.current) return;
+      if (attempt !== createAttemptRef.current || !mounted.current || !owner.isCurrent()) return;
       createStartedRef.current = false;
       setError(errorText(err, t`Could not create your bot`));
     }
@@ -519,12 +494,17 @@ export function OnboardingPage() {
   }, [step]);
 
   // Loading, and creating the first bot, both wait on one spinner until the chat opens.
-  if (step === "loading" || (step === "bot" && !error)) return <PageLoading />;
+  if ((step === "loading" && !error) || (step === "bot" && !error)) return <PageLoading />;
 
   return (
     <div className="min-h-full bg-background px-6 py-12" data-orkbot-surface="onboarding">
       <AccountMenu signingOut={signingOut} onLogOut={() => void logOut()} />
       <div className="mx-auto w-full max-w-[560px]">
+        {step === "loading" && error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
         {step === "survey" ? <SignupSurvey onDone={() => setSurveyDone(true)} /> : null}
         {step === "model" ? (
           <div>
@@ -536,15 +516,7 @@ export function OnboardingPage() {
                 <Trans>Provider</Trans>
               </span>
               <Select
-                value={
-                  credits
-                    ? CREDITS_OPTION
-                    : isOpenAiCompatible && isOllamaCloudBaseUrl(baseUrl)
-                      ? "ollama-preset"
-                      : provider
-                        ? providerOptionValue(provider, providerAuth)
-                        : null
-                }
+                value={credits ? CREDITS_OPTION : (selectedProviderOption?.value ?? null)}
                 onValueChange={(value) => {
                   if (typeof value !== "string" || !value) return;
                   if (value === CREDITS_OPTION) {
@@ -556,9 +528,14 @@ export function OnboardingPage() {
                     return;
                   }
                   setCredits(false);
-                  if (value === "ollama-preset")
-                    selectProvider(OPENAI_COMPATIBLE_PROVIDER_ID, OLLAMA_CLOUD_BASE_URL);
-                  else selectProvider(value);
+                  const option = providerOptions.main.find((item) => item.value === value);
+                  if (option)
+                    selectProvider(
+                      option.provider,
+                      option.auth,
+                      option.baseUrl,
+                      option.apiProtocol,
+                    );
                 }}
                 items={providerItems}
               >
@@ -567,6 +544,11 @@ export function OnboardingPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
+                    {billingEnabled ? (
+                      <SelectItem value={CREDITS_OPTION}>
+                        <Trans>Ork credits</Trans>
+                      </SelectItem>
+                    ) : null}
                     {providerOptions.main.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -657,18 +639,53 @@ export function OnboardingPage() {
                         </Button>
                       ) : null}
                     </div>
+                    <label
+                      className="mb-4 block text-sm font-medium text-foreground"
+                      htmlFor={`${fieldId}-protocol`}
+                    >
+                      <Trans>Protocol</Trans>
+                      <NativeSelect
+                        id={`${fieldId}-protocol`}
+                        value={apiProtocol}
+                        className="mt-2 w-full"
+                        onChange={(event) => {
+                          const protocol = event.target.value as ModelApiProtocol;
+                          setApiProtocol(protocol);
+                          setThinkingLevel(
+                            clampCatalogThinkingLevel(
+                              thinkingLevel,
+                              reasoning ? compatibleThinkingLevels(protocol) : [],
+                            ) as ThinkingLevel | null,
+                          );
+                          resetOpenAiCompatibleProbe();
+                          invalidatePreflight();
+                        }}
+                      >
+                        <NativeSelectOption value="chat-completions">
+                          <Trans>Chat Completions</Trans>
+                        </NativeSelectOption>
+                        <NativeSelectOption value="responses">
+                          <Trans>Responses</Trans>
+                        </NativeSelectOption>
+                        <NativeSelectOption value="anthropic-messages">
+                          <Trans>Messages</Trans>
+                        </NativeSelectOption>
+                      </NativeSelect>
+                    </label>
                     <ModelThinkingOptions
                       reasoning={reasoning}
                       onReasoningChange={(value) => {
+                        invalidatePreflight();
                         setReasoning(value);
                         if (!value) setThinkingLevel(null);
                       }}
                       advancedLabel={t`Advanced`}
                       thinkingLabel={t`Supports thinking`}
                       thinkingLevel={thinkingLevel}
-                      onThinkingLevelChange={(value) =>
-                        setThinkingLevel(value as ThinkingLevel | null)
-                      }
+                      onThinkingLevelChange={(value) => {
+                        invalidatePreflight();
+                        setThinkingLevel(value as ThinkingLevel | null);
+                      }}
                       thinkingLevelOptions={[
                         { value: "minimal", label: t`Minimal` },
                         { value: "low", label: t`Low` },
@@ -676,20 +693,36 @@ export function OnboardingPage() {
                         { value: "high", label: t`High` },
                         { value: "xhigh", label: t`Extra high` },
                         { value: "max", label: t`Max` },
-                      ]}
+                      ].filter((option) =>
+                        compatibleThinkingLevels(apiProtocol).some(
+                          (level) => level === option.value,
+                        ),
+                      )}
                       thinkingLevelLabel={t`Reasoning effort`}
                       thinkingLevelDefaultLabel={t`Default`}
                       maxTokens={maxTokens}
-                      onMaxTokensChange={setMaxTokens}
+                      onMaxTokensChange={(value) => {
+                        invalidatePreflight();
+                        setMaxTokens(value);
+                      }}
                       maxTokensLabel={t`Maximum output tokens`}
                       contextWindow={contextWindow}
-                      onContextWindowChange={setContextWindow}
+                      onContextWindowChange={(value) => {
+                        invalidatePreflight();
+                        setContextWindow(value);
+                      }}
                       contextWindowLabel={t`Context limit`}
                       supportsImages={supportsImages}
-                      onSupportsImagesChange={setSupportsImages}
+                      onSupportsImagesChange={(value) => {
+                        invalidatePreflight();
+                        setSupportsImages(value);
+                      }}
                       imagesLabel={t`Supports images`}
                       maxImagesPerPrompt={maxImagesPerPrompt}
-                      onMaxImagesPerPromptChange={setMaxImagesPerPrompt}
+                      onMaxImagesPerPromptChange={(value) => {
+                        invalidatePreflight();
+                        setMaxImagesPerPrompt(value);
+                      }}
                       maxImagesLabel={t`Maximum images per request`}
                     >
                       <ModelHeadersEditor
@@ -822,54 +855,44 @@ export function OnboardingPage() {
                     )}
                   </div>
                 ) : null}
-                {isCloudflare && acceptsKey ? (
-                  <div className="mt-4 grid gap-4">
-                    <label
-                      htmlFor={`${fieldId}-account-id`}
-                      className="block text-sm font-medium text-foreground"
-                    >
-                      <Trans>Account ID</Trans>
-                      <Input
-                        id={`${fieldId}-account-id`}
-                        value={accountId}
-                        onChange={(event) => setAccountId(event.target.value)}
-                        autoComplete="off"
-                        spellCheck={false}
-                        className="mt-2"
-                      />
-                    </label>
-                    {isCloudflareGateway ? (
+                {acceptsKey
+                  ? routingFields.map((field) => (
                       <label
-                        htmlFor={`${fieldId}-gateway-id`}
-                        className="block text-sm font-medium text-foreground"
+                        key={field.key}
+                        htmlFor={`${fieldId}-route-${field.key}`}
+                        className="mt-4 block text-sm font-medium text-foreground"
                       >
-                        <Trans>Gateway ID</Trans>
+                        {field.label}
                         <Input
-                          id={`${fieldId}-gateway-id`}
-                          value={gatewayId}
-                          onChange={(event) => setGatewayId(event.target.value)}
+                          id={`${fieldId}-route-${field.key}`}
+                          value={routing[field.key] ?? ""}
+                          required={field.required}
+                          onChange={(event) => {
+                            setRouting((current) => ({
+                              ...current,
+                              [field.key]: event.target.value,
+                            }));
+                            invalidatePreflight();
+                          }}
                           autoComplete="off"
                           spellCheck={false}
                           className="mt-2"
                         />
                       </label>
-                    ) : null}
-                  </div>
-                ) : null}
+                    ))
+                  : null}
                 {acceptsKey ? (
                   isOpenAiCompatible ? (
                     <CompatibleKeyField
                       className="mt-4 block text-sm text-muted-foreground"
-                      baseUrl={baseUrl}
+                      required={requiresApiKey}
                     >
                       <Input
                         aria-label={t`API key`}
                         value={apiKey}
                         onChange={(e) => updateApiKey(e.target.value)}
-                        required={isOllamaCloudBaseUrl(baseUrl)}
-                        placeholder={
-                          isOllamaCloudBaseUrl(baseUrl) ? t`Ollama API key` : t`Optional`
-                        }
+                        required={requiresApiKey}
+                        placeholder={requiresApiKey ? "" : t`Optional`}
                         type="password"
                         autoComplete="new-password"
                         className="mt-2"
@@ -962,7 +985,7 @@ export function OnboardingPage() {
             {error ? <p className="mt-3 text-sm text-destructive">{error}</p> : null}
             <Button
               className="mt-6"
-              disabled={!credits && !canSaveModel}
+              disabled={saving || (!credits && !canSaveModel)}
               onClick={() => void (credits ? fundWithCredits() : saveModel())}
             >
               <Trans>Continue</Trans>

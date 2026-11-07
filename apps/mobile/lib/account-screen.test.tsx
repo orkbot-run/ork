@@ -178,6 +178,7 @@ vi.mock("../components/settings-group", () => ({
     createElement("button", { type: "button" }, title),
   useStackedSettings: () => false,
 }));
+vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
 vi.mock("./api", () => ({
   currentApiBase: () => "http://127.0.0.1:3100",
   deleteAccount: vi.fn(),

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import { MAX_MODEL_CONNECTION_LABEL } from "@orkbot/contracts";
 import {
@@ -16,9 +20,9 @@ import {
 } from "@orkbot/ui-web";
 import { ChevronRight, Plus } from "lucide-react";
 import type { ReactNode } from "react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ModelCredential } from "../../lib/model-auth";
-import { useSpaceRpc } from "../../lib/space-rpc";
+import type { RpcClient } from "../../lib/rpc";
 import { useListSearch } from "../../lib/use-list-search";
 import { errorText } from "../../lib/user-error";
 import type { ConnectableProvider } from "./role-model-picker";
@@ -93,11 +97,22 @@ export function ProvidersSection({
 export function ConnectionNameField({
   credential,
   onRenamed,
+  client: rpc,
+  isCurrent,
 }: {
+  client: RpcClient;
+  isCurrent: () => boolean;
   credential: ModelCredential;
   onRenamed: () => void;
 }) {
-  const rpc = useSpaceRpc();
+  const mounted = useRef(true);
+  const edit = useRef(0);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const { t } = useLingui();
   const nameId = useId();
   const [name, setName] = useState(credential.label);
@@ -109,15 +124,25 @@ export function ConnectionNameField({
       className="mb-6"
       onSubmit={(event) => {
         event.preventDefault();
-        if (!trimmed || saving || trimmed === credential.label) return;
+        if (!isCurrent() || !trimmed || saving || trimmed === credential.label) return;
+        const revision = edit.current;
+        const active = () => mounted.current && isCurrent();
         setSaving(true);
         setError(null);
         rpc.models
           .rename({ credentialId: credential.id, label: trimmed })
-          .then(onRenamed, (err: unknown) =>
-            setError(errorText(err, t`Could not rename connection`)),
+          .then(
+            () => {
+              if (active()) onRenamed();
+            },
+            (err: unknown) => {
+              if (active() && edit.current === revision)
+                setError(errorText(err, t`Could not rename connection`));
+            },
           )
-          .finally(() => setSaving(false));
+          .finally(() => {
+            if (active()) setSaving(false);
+          });
       }}
     >
       <label htmlFor={nameId} className="block text-[13.5px] text-muted-foreground">
@@ -128,7 +153,10 @@ export function ConnectionNameField({
           id={nameId}
           maxLength={MAX_MODEL_CONNECTION_LABEL}
           value={name}
-          onChange={(event) => setName(event.target.value)}
+          onChange={(event) => {
+            edit.current++;
+            setName(event.target.value);
+          }}
           className="h-10 text-foreground"
         />
         {trimmed && trimmed !== credential.label ? (

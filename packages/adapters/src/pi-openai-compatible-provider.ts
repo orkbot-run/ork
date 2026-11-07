@@ -1,10 +1,27 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 protocol transport is preserved; known-model thinking shape follows LICENSE.md.
+
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
-import type { Model, MutableModels, Provider, ProviderStreams } from "@earendil-works/pi-ai";
-import { createProvider } from "@earendil-works/pi-ai";
+import { isDeepStrictEqual } from "node:util";
+import type {
+  ChatTemplateKwargValue,
+  Model,
+  Models,
+  MutableModels,
+  Provider,
+  ProviderStreams,
+} from "@earendil-works/pi-ai";
+import {
+  clampThinkingLevel,
+  createProvider,
+  getSupportedThinkingLevels,
+} from "@earendil-works/pi-ai";
 import { anthropicMessagesApi } from "@earendil-works/pi-ai/api/anthropic-messages.lazy";
 import { openAICompletionsApi } from "@earendil-works/pi-ai/api/openai-completions.lazy";
 import { openAIResponsesApi } from "@earendil-works/pi-ai/api/openai-responses.lazy";
+import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { ModelApiProtocol } from "@orkbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
@@ -15,6 +32,7 @@ import {
   isNonPublicAddress,
   MODEL_KEY_REJECTED_ERROR,
   parseModelHeaders,
+  ThinkingLevelSchema,
 } from "@orkbot/contracts";
 import { Agent } from "undici";
 import { declaredVisionModelIds, inputModalities } from "./model-modalities.js";
@@ -66,6 +84,79 @@ const ANTHROPIC_MESSAGES_VERSION = "2023-06-01";
 const resolveHostname: ResolveHostname = (hostname) =>
   lookup(hostname, { all: true, verbatim: true });
 
+type CompatibleApi = "openai-completions" | "openai-responses" | "anthropic-messages";
+type ThinkingShape = Pick<Model<CompatibleApi>, "thinkingLevelMap" | "compat">;
+let thinkingCatalog: Models | undefined;
+
+/** Only typed thinking variables belong to the model's thinking transport. */
+function thinkingTemplateValues(values: Record<string, ChatTemplateKwargValue> | undefined) {
+  const entries = Object.entries(values ?? {}).flatMap<[string, ChatTemplateKwargValue]>(
+    ([key, value]) =>
+      value !== null && typeof value === "object"
+        ? [
+            [
+              key,
+              {
+                $var: value.$var,
+                ...(value.omitWhenOff !== undefined ? { omitWhenOff: value.omitWhenOff } : {}),
+              },
+            ],
+          ]
+        : [],
+  );
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function thinkingShape(model: Model<CompatibleApi>): ThinkingShape {
+  const thinkingLevelMap = model.thinkingLevelMap ? { ...model.thinkingLevelMap } : undefined;
+  if (model.api === "anthropic-messages") {
+    const adaptive = (model as Model<"anthropic-messages">).compat?.forceAdaptiveThinking;
+    return {
+      thinkingLevelMap,
+      ...(adaptive !== undefined ? { compat: { forceAdaptiveThinking: adaptive } } : {}),
+    };
+  }
+  if (model.api === "openai-responses")
+    return { thinkingLevelMap, compat: { supportsDeveloperRole: false } };
+  const compat = (model as Model<"openai-completions">).compat;
+  return {
+    thinkingLevelMap,
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: compat?.supportsReasoningEffort ?? true,
+      thinkingFormat: compat?.thinkingFormat ?? "openai",
+      requiresThinkingAsText: compat?.requiresThinkingAsText,
+      requiresReasoningContentOnAssistantMessages:
+        compat?.requiresReasoningContentOnAssistantMessages,
+      supportsThinkingTokenBudget: compat?.supportsThinkingTokenBudget,
+      thinkingTokenBudgetField: compat?.thinkingTokenBudgetField,
+      chatTemplateKwargs: thinkingTemplateValues(compat?.chatTemplateKwargs),
+      chatTemplateArgs: thinkingTemplateValues(compat?.chatTemplateArgs),
+    },
+  };
+}
+
+/** An exact id can exist in several catalogs; only an agreed thinking shape is portable. */
+function knownThinkingShape(
+  models: Models | undefined,
+  id: string,
+  api: CompatibleApi,
+): ThinkingShape | undefined {
+  if (!models) {
+    thinkingCatalog ??= builtinModels();
+    models = thinkingCatalog;
+  }
+  const shapes = models
+    .getProviders()
+    .filter((provider) => provider.id !== OPENAI_COMPATIBLE_PROVIDER_ID)
+    .flatMap((provider) => provider.getModels())
+    .filter((model) => model.id === id && model.api === api)
+    .map((model) => thinkingShape(model as Model<CompatibleApi>));
+  const first = shapes[0];
+  return first && shapes.every((shape) => isDeepStrictEqual(shape, first)) ? first : undefined;
+}
+
 export function openAiCompatibleModel(
   id: string,
   baseUrl: string,
@@ -74,39 +165,70 @@ export function openAiCompatibleModel(
   maxTokens = DEFAULT_MODEL_MAX_TOKENS,
   contextWindow = DEFAULT_MODEL_CONTEXT_WINDOW,
   apiProtocol: ModelApiProtocol = "chat-completions",
-): Model<"openai-completions" | "openai-responses" | "anthropic-messages"> {
+  models?: Models,
+): Model<CompatibleApi> {
+  const api =
+    apiProtocol === "responses"
+      ? "openai-responses"
+      : apiProtocol === "anthropic-messages"
+        ? "anthropic-messages"
+        : "openai-completions";
+  const known = reasoning ? knownThinkingShape(models, id, api) : undefined;
   return {
     id,
     name: id,
-    api:
-      apiProtocol === "responses"
-        ? "openai-responses"
-        : apiProtocol === "anthropic-messages"
-          ? "anthropic-messages"
-          : "openai-completions",
+    api,
     provider: OPENAI_COMPATIBLE_PROVIDER_ID,
     baseUrl: apiProtocol === "anthropic-messages" ? anthropicMessagesBaseUrl(baseUrl) : baseUrl,
     reasoning,
-    ...(apiProtocol === "anthropic-messages"
-      ? // The built-in Anthropic provider passes no level map either: pi-ai derives
-        // budget-based thinking from `reasoning` alone.
-        {}
-      : {
-          compat: {
-            // `store: false` is already the default, and Google's endpoint rejects the field.
-            supportsStore: false,
-            supportsDeveloperRole: false,
-            supportsReasoningEffort: reasoning,
-            thinkingFormat: "openai",
-          },
-          thinkingLevelMap: reasoning
-            ? { off: "none", xhigh: "xhigh", max: "max" }
-            : { off: "none" },
-        }),
+    ...(known ??
+      (apiProtocol === "anthropic-messages"
+        ? // The built-in Anthropic provider passes no level map either: pi-ai derives
+          // budget-based thinking from `reasoning` alone.
+          {}
+        : {
+            compat: {
+              // `store: false` is already the default, and Google's endpoint rejects the field.
+              supportsStore: false,
+              supportsDeveloperRole: false,
+              supportsReasoningEffort: reasoning,
+              thinkingFormat: "openai",
+            },
+            thinkingLevelMap: reasoning
+              ? { off: "none", xhigh: "xhigh", max: "max" }
+              : { off: "none" },
+          })),
     input: inputModalities(acceptsImages),
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     contextWindow,
     maxTokens,
+  };
+}
+
+/** Keep saved choices, credential views and execution aligned with the same model capability. */
+export function compatibleModelThinking(
+  modelId: string,
+  connection: { baseUrl: string; apiProtocol?: ModelApiProtocol; reasoning?: boolean },
+  preferred: string | null | undefined,
+) {
+  const model = openAiCompatibleModel(
+    modelId.trim(),
+    connection.baseUrl,
+    connection.reasoning,
+    false,
+    undefined,
+    undefined,
+    connection.apiProtocol,
+  );
+  const parsed = ThinkingLevelSchema.safeParse(preferred);
+  return {
+    allowed: getSupportedThinkingLevels(model),
+    level:
+      preferred === undefined || preferred === null
+        ? preferred
+        : parsed.success
+          ? clampThinkingLevel(model, parsed.data)
+          : null,
   };
 }
 

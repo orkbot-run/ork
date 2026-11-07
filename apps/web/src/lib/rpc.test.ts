@@ -6,6 +6,7 @@ import { ORPCError } from "@orpc/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { answerAiConsent, currentAiConsentPrompt, subscribeAiConsent } from "./ai-consent";
 import {
+  captureRpcContext,
   clearSpaceSelection,
   createSpaceRpc,
   leaveUnavailableSpace,
@@ -514,4 +515,163 @@ describe("send disclosure boundaries", () => {
       }
     },
   );
+});
+
+describe("captured model configuration context", () => {
+  function setup() {
+    const items = new Map<string, string>();
+    vi.stubGlobal("window", {
+      location: { origin: "https://app.example.test" },
+      dispatchEvent: vi.fn(),
+      localStorage: {
+        getItem: (key: string) => items.get(key) ?? null,
+        setItem: (key: string, value: string) => items.set(key, value),
+        removeItem: (key: string) => items.delete(key),
+      },
+    });
+    selectSpace("source");
+    const fetch = vi.fn(async (_request: Request) => Response.json({ json: {} }));
+    vi.stubGlobal("fetch", fetch);
+    return fetch;
+  }
+  it("binds all stages to the explicit originating Space", async () => {
+    const fetch = setup();
+    const scope = captureRpcContext("edited-space");
+    await scope.client.me();
+    await scope.client.models.list();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    for (const [request] of fetch.mock.calls)
+      expect((request as unknown as Request).headers.get("x-orkbot-space-id")).toBe("edited-space");
+  });
+  it.each(["session", "server", "space-roundtrip"])(
+    "rejects late results and follow-ups after %s changes",
+    async (boundary) => {
+      const fetch = setup();
+      let resolve!: (value: Response) => void;
+      fetch.mockImplementationOnce(
+        () =>
+          new Promise<Response>((done) => {
+            resolve = done;
+          }),
+      );
+      const scope = captureRpcContext();
+      const result = scope.client.me().catch((error: unknown) => error);
+      await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+      if (boundary === "session") authState.sessionId = "new-session";
+      else if (boundary === "server")
+        vi.stubGlobal("window", { ...window, location: { origin: "https://other.example.test" } });
+      else {
+        selectSpace("other");
+        selectSpace("source");
+      }
+      resolve(Response.json({ json: {} }));
+      expect(await result).toBeInstanceOf(Error);
+      await expect(scope.client.models.list()).rejects.toMatchObject({ name: "AbortError" });
+      expect(fetch).toHaveBeenCalledOnce();
+    },
+  );
+});
+
+it.each(["account", "server", "space-roundtrip"])(
+  "a retired captured context cannot clear replacement scope on a late 401 after %s changes",
+  async (boundary) => {
+    const items = new Map<string, string>([["orkbot:space-id", "shared-space"]]);
+    const reload = vi.fn();
+    vi.stubGlobal("window", {
+      location: { origin: "https://app.example.test", reload },
+      dispatchEvent: vi.fn(),
+      localStorage: {
+        getItem: (key: string) => items.get(key) ?? null,
+        setItem: (key: string, value: string) => items.set(key, value),
+        removeItem: (key: string) => items.delete(key),
+      },
+    });
+    let resolve!: (response: Response) => void;
+    const fetch = vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    const owner = captureRpcContext();
+    const result = owner.client.me().catch((error: unknown) => error);
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    if (boundary === "account") authState.sessionId = "replacement-session";
+    else if (boundary === "server")
+      vi.stubGlobal("window", {
+        ...window,
+        location: { ...window.location, origin: "https://other.example.test" },
+      });
+    else {
+      selectSpace("other");
+      selectSpace("shared-space");
+    }
+    resolve(Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 }));
+    expect(await result).toMatchObject({ name: "AbortError" });
+    await expect(owner.client.models.list()).rejects.toMatchObject({ name: "AbortError" });
+    expect(notify).not.toHaveBeenCalled();
+    expect(reload).not.toHaveBeenCalled();
+    expect(items.get("orkbot:space-id")).toBe("shared-space");
+    expect(fetch).toHaveBeenCalledOnce();
+  },
+);
+
+it("rejects a captured result when ownership changes while its response body is still parsing", async () => {
+  vi.stubGlobal("window", {
+    location: { origin: "https://app.example.test" },
+    localStorage: { getItem: () => null },
+  });
+  let stream!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      stream = controller;
+    },
+  });
+  const fetch = vi.fn(
+    async () => new Response(body, { headers: { "content-type": "application/json" } }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const scope = captureRpcContext();
+  const result = scope.client.me().catch((error: unknown) => error);
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+  authState.sessionId = "other-session";
+  stream.enqueue(
+    new TextEncoder().encode(JSON.stringify({ json: { userId: "previous-account" } })),
+  );
+  stream.close();
+  expect(await result).toMatchObject({ name: "AbortError" });
+  await expect(scope.client.models.list()).rejects.toMatchObject({ name: "AbortError" });
+  expect(fetch).toHaveBeenCalledOnce();
+});
+
+it("does not leave the replacement Space when an old 401 recovery's membership read resolves late", async () => {
+  const items = new Map<string, string>([["orkbot:space-id", "shared-space"]]);
+  const reload = vi.fn();
+  vi.stubGlobal("window", {
+    location: { origin: "https://app.example.test", reload },
+    localStorage: {
+      getItem: (key: string) => items.get(key) ?? null,
+      removeItem: (key: string) => items.delete(key),
+    },
+  });
+  let release!: (response: Response) => void;
+  const fetch = vi.fn(async (request: Request) =>
+    new URL(request.url).pathname.endsWith("/organizations/list")
+      ? new Promise<Response>((done) => {
+          release = done;
+        })
+      : Response.json({ json: { code: "UNAUTHORIZED", status: 401 } }, { status: 401 }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const scope = captureRpcContext();
+  const result = scope.client.me().catch((error: unknown) => error);
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+  authState.sessionId = "other-session";
+  release(Response.json({ json: { organizations: [] } }));
+  await result;
+  await new Promise<void>((done) => setTimeout(done, 0));
+  expect(items.get("orkbot:space-id")).toBe("shared-space");
+  expect(reload).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(2);
 });

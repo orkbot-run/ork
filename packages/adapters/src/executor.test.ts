@@ -5,18 +5,18 @@
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
-import {
-  CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
-  CLOUDFLARE_WORKERS_AI_PROVIDER_ID,
-  cloudflareModelConfigMessage,
-  FLEET_TOOL_NAMES,
-} from "@orkbot/contracts";
+import { FLEET_TOOL_NAMES } from "@orkbot/contracts";
 import { isOwnerStartedRun, ONCE_ROUTINE_CRON } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { RunHistoryWriteError } from "@orkbot/db";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
 import { describe, expect, it, vi } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
+import {
+  CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
+  CLOUDFLARE_WORKERS_AI_PROVIDER_ID,
+  cloudflareModelConfigMessage,
+} from "./cloudflare-model-config.js";
 import { createRunExecutor as createExecutor } from "./executor.js";
 import { UnavailableModelForAuthError, validateConnectedModelChoice } from "./model-selection.js";
 import {

@@ -1,18 +1,21 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Trans } from "@lingui/react/macro";
-import { isOllamaCloudBaseUrl } from "@orkbot/contracts";
 import { Disclosure } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 
 export function CompatibleKeyField({
-  baseUrl,
+  required = false,
   className,
   children,
 }: {
-  baseUrl: string;
+  required?: boolean;
   className?: string;
   children: ReactNode;
 }) {
-  return isOllamaCloudBaseUrl(baseUrl) ? (
+  return required ? (
     <div className={className}>
       <span>
         <Trans>API key</Trans>

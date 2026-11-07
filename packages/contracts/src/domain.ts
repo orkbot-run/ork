@@ -6,12 +6,6 @@ import * as z from "zod";
 import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { BotAvatarSetSchema, BotAvatarValueSchema } from "./bot-avatar.js";
 import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
-import {
-  cloudflareGatewayRoutingId,
-  cloudflareModelConfigMessage,
-  isCloudflareAiGatewayProvider,
-  isCloudflareModelProvider,
-} from "./cloudflare-ai-gateway.js";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "./connector-errors.js";
 import { BotSettingsValuesSchema, ThreadMessageSchema } from "./events.js";
 import { Id, MemoryScope, RunStatus, SandboxKind, ThinkingLevelSchema } from "./ids.js";
@@ -1511,6 +1505,63 @@ export const ModelApiProtocolSchema = z.enum([
 ]);
 export type ModelApiProtocol = z.infer<typeof ModelApiProtocolSchema>;
 
+export const ModelRoutingKeySchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z][a-z0-9_-]*$/);
+/** Routing values are single URL path segments, never templates or URLs. */
+export const ModelRoutingValueSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/);
+export const ModelRoutingValuesSchema = z
+  .custom<Record<string, string>>((value) =>
+    Boolean(
+      value &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        !Object.hasOwn(value, "__proto__"),
+    ),
+  )
+  .pipe(
+    z
+      .record(ModelRoutingKeySchema, ModelRoutingValueSchema)
+      .refine((values) => Object.keys(values).length <= 8),
+  );
+export type ModelRoutingValues = z.infer<typeof ModelRoutingValuesSchema>;
+export const ModelRoutingFieldSchema = z.object({
+  key: ModelRoutingKeySchema,
+  label: z.string().trim().min(1).max(80),
+  required: z.boolean(),
+});
+export type ModelRoutingField = z.infer<typeof ModelRoutingFieldSchema>;
+export const ModelConnectionPresetSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  baseUrl: z
+    .string()
+    .trim()
+    .max(2048)
+    .url()
+    .refine((value) => {
+      const url = new URL(value);
+      return (
+        (url.protocol === "http:" || url.protocol === "https:") && !url.username && !url.password
+      );
+    }),
+  apiProtocol: ModelApiProtocolSchema.optional(),
+  apiKeyRequired: z.boolean().optional(),
+});
+export type ModelConnectionPreset = z.infer<typeof ModelConnectionPresetSchema>;
+export const ModelConnectionMetadataSchema = z.object({
+  routingFields: z
+    .array(ModelRoutingFieldSchema)
+    .max(8)
+    .refine((fields) => new Set(fields.map((field) => field.key)).size === fields.length)
+    .optional(),
+  presets: z.array(ModelConnectionPresetSchema).max(16).optional(),
+});
+export type ModelConnectionMetadata = z.infer<typeof ModelConnectionMetadataSchema>;
+
 export const ModelCredentialSchema = z.object({
   /** Computed space preference order; credentials themselves remain newest first. */
   preferenceRank: z.number().int().nonnegative().optional(),
@@ -1525,6 +1576,7 @@ export const ModelCredentialSchema = z.object({
   apiProtocol: ModelApiProtocolSchema.optional(),
   accountId: z.string().optional(),
   gatewayId: z.string().optional(),
+  routing: ModelRoutingValuesSchema.optional(),
   modelId: z.string().optional(),
   reasoning: z.boolean().optional(),
   thinkingLevel: ThinkingLevelSchema.nullable().optional(),
@@ -1595,6 +1647,7 @@ export const ModelConnectInputSchema = z
     apiKey: z.string().optional(),
     accountId: z.string().optional(),
     gatewayId: z.string().optional(),
+    routing: ModelRoutingValuesSchema.optional(),
     headers: ModelHeadersSchema.optional(),
     baseUrl: z.string().optional(),
     apiProtocol: ModelApiProtocolSchema.optional(),
@@ -1627,26 +1680,6 @@ export const ModelConnectInputSchema = z
         path: ["maxTokens"],
       });
     }
-    if (isCloudflareModelProvider(value.provider)) {
-      if (value.accountId !== undefined && !cloudflareGatewayRoutingId(value.accountId)) {
-        ctx.addIssue({
-          code: "custom",
-          message: cloudflareModelConfigMessage(value.provider),
-          path: ["accountId"],
-        });
-      }
-      if (
-        isCloudflareAiGatewayProvider(value.provider) &&
-        value.gatewayId !== undefined &&
-        !cloudflareGatewayRoutingId(value.gatewayId)
-      ) {
-        ctx.addIssue({
-          code: "custom",
-          message: cloudflareModelConfigMessage(value.provider),
-          path: ["gatewayId"],
-        });
-      }
-    }
     if (value.provider === OPENAI_COMPATIBLE_PROVIDER_ID) {
       if (!value.baseUrl?.trim()) {
         ctx.addIssue({
@@ -1672,8 +1705,8 @@ export const ModelConnectInputSchema = z
         path: ["apiKey"],
       });
     }
-    // An existing connection can update its output limit without a new key.
-    if (!apiKey && value.maxTokens === undefined) {
+    // An existing connection can update its output limit or routing without a new key.
+    if (!apiKey && value.maxTokens === undefined && value.routing === undefined) {
       ctx.addIssue({
         code: "custom",
         message: "API key must contain at least 8 characters",
@@ -1714,6 +1747,8 @@ export const SpaceMemoryConfigSchema = z.object({
 export type SpaceMemoryConfig = z.infer<typeof SpaceMemoryConfigSchema>;
 
 export const ModelCatalogEntrySchema = z.object({
+  /** Adapter-declared connection fields; absent on older servers and ordinary connections. */
+  connection: ModelConnectionMetadataSchema.optional(),
   /** Omitted by older servers and ordinary chat connections. */
   protocol: z.enum(["chat", "decisions"]).optional(),
   /** Preselected for a new connection when there is no saved model choice. */

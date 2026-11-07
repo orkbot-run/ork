@@ -1,4 +1,8 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { i18n } from "@lingui/core";
 import type { ModelCatalogEntry, ModelRoleView as Settings } from "@orkbot/contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,8 +20,13 @@ vi.mock("../lib/localized-provider-hint", () => ({
 }));
 vi.mock("../lib/space-rpc", () => {
   const client = { models: api };
-  return { useSpaceRpc: () => client };
+  return { useSpaceRpc: () => client, useBoundSpaceId: () => null };
 });
+vi.mock("../lib/rpc", () => ({
+  rpc: { models: api },
+  rpcForSpace: () => ({ models: api }),
+  captureRpcContext: () => ({ client: { models: api }, isCurrent: () => true }),
+}));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: string[]) =>
@@ -495,4 +504,23 @@ it("reads and saves a Space's own list without mixing it with the account's", as
 
   await render({ scope: "account" });
   await vi.waitFor(() => expect(rows()).toEqual(["ChatOpenRouter"]));
+});
+
+it("reveals an unused advanced role only on demand and keeps a saved role visible", async () => {
+  saved = { ...saved, primary: null, backups: [] };
+  await render({ modelRole: "computer", title: "Computer-use model", progressive: true });
+  expect(trigger("Change Computer-use model")).toBeNull();
+  const expand = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Computer-use model",
+  )!;
+  expect(expand.getAttribute("aria-expanded")).toBe("false");
+  await click(expand);
+  expect(trigger("Change Computer-use model")).not.toBeNull();
+});
+
+it("shows an existing advanced model immediately without changing its choices", async () => {
+  saved = { primary: mini, backups: [] };
+  await render({ modelRole: "computer", title: "Computer-use model", progressive: true });
+  expect(container.querySelector("ol")).not.toBeNull();
+  expect(api.setRole).not.toHaveBeenCalled();
 });

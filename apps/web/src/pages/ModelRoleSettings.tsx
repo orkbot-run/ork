@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
   ModelBackupChoice,
@@ -14,7 +18,7 @@ import {
   MAX_MODEL_BACKUPS,
   modelRoleChoiceKey,
 } from "@orkbot/contracts";
-import { createModelRoleSettings, modelRoleListPatch } from "@orkbot/core";
+import { createModelRoleSettings, modelRoleListPatch, showModelRole } from "@orkbot/core";
 import {
   Button,
   DropdownMenu,
@@ -35,7 +39,8 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { thinkingLevelLabel } from "../lib/model-catalog";
 import { spaceQueries } from "../lib/query";
-import { useSpaceRpc } from "../lib/space-rpc";
+import { captureRpcContext } from "../lib/rpc";
+import { useBoundSpaceId, useSpaceRpc } from "../lib/space-rpc";
 import type { ConnectableProvider, RoleModelOption } from "./model-settings/role-model-picker";
 import { RoleModelPicker } from "./model-settings/role-model-picker";
 
@@ -66,6 +71,7 @@ type Props = {
   onChanged?: () => void;
   /** The connection form, when it was opened from this list. */
   panel?: ReactNode;
+  progressive?: boolean;
 };
 
 const sameChoice = (left: ModelRoleChoice, right: ModelRoleChoice) =>
@@ -93,8 +99,15 @@ export function ModelRoleSettings({
   thinking,
   onChanged,
   panel,
+  progressive = false,
 }: Props) {
-  const rpc = useSpaceRpc();
+  const boundRpc = useSpaceRpc();
+  const spaceBinding = useBoundSpaceId();
+  const owner = useMemo(
+    () => captureRpcContext(spaceBinding ?? undefined),
+    [boundRpc, spaceBinding],
+  );
+  const rpc = owner.client;
   const queryClient = useQueryClient();
   const { t } = useLingui();
   const controller = useMemo(() => {
@@ -132,6 +145,7 @@ export function ModelRoleSettings({
     );
   }, [queryClient, rpc, userId, spaceId, scope, role]);
   const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
+  const [expanded, setExpanded] = useState(false);
   const [dragging, setDragging] = useState<number | null>(null);
   // After a connection the slot's picker reopens on that provider's models.
   const [reopen, setReopen] = useState<{
@@ -267,6 +281,20 @@ export function ModelRoleSettings({
     </button>
   );
 
+  if (progressive && !showModelRole(role, settings, expanded) && !state.error && !panel) {
+    return (
+      <section className="mb-8" data-testid={`model-role-${role}`}>
+        <Button
+          variant="ghost"
+          className="px-0"
+          aria-expanded={false}
+          onClick={() => setExpanded(true)}
+        >
+          {title}
+        </Button>
+      </section>
+    );
+  }
   return (
     <section className="mb-8" data-testid={`model-role-${role}`}>
       <h3 className="mb-2.5 text-heading3 font-medium text-foreground">{title}</h3>

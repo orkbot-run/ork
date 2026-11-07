@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 routes are preserved; metadata-based preset routing follows LICENSE.md.
 
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {
   listPiCatalog,
   ModelSignInError,
+  modelConnectionMetadata,
   modelCredentialDto,
   oauthCredentialEmail,
   prepareStoredModelAuth,
@@ -23,7 +25,8 @@ import type { ThinkingLevel } from "@orkbot/contracts";
 import {
   backupChoiceKey,
   canonicalPiProviderId,
-  isOllamaCloudBaseUrl,
+  compatibleEndpointPreset,
+  normalizeOpenAiCompatibleBaseUrl,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@orkbot/contracts";
@@ -265,7 +268,12 @@ export function modelsRoutes(ctx: RouterContext) {
           try {
             const models = await probeOpenAiCompatibleModels(
               { ...input, apiKey, headers },
-              isOllamaCloudBaseUrl(input.baseUrl) ? deps.modelConnectionFetch : undefined,
+              compatibleEndpointPreset(
+                normalizeOpenAiCompatibleBaseUrl(input.baseUrl),
+                modelConnectionMetadata(OPENAI_COMPATIBLE_PROVIDER_ID)?.presets,
+              )
+                ? deps.modelConnectionFetch
+                : undefined,
               context.signal,
               { allowPrivate: mayUsePrivateEndpoint(deps) },
             );

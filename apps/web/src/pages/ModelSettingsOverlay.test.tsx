@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
 
 import { i18n } from "@lingui/core";
 import type * as UiWeb from "@orkbot/ui-web";
@@ -40,6 +43,7 @@ vi.mock("../lib/rpc", () => {
     selectedSpaceId: () => "space-1",
     rpc,
     rpcForSpace: () => rpc,
+    captureRpcContext: () => ({ client: rpc, isCurrent: () => true }),
     createSpaceRpc: () => rpc,
   };
 });
@@ -156,6 +160,7 @@ vi.mock("@orkbot/ui-web", async (importOriginal) => {
 
 import { rpc } from "../lib/rpc";
 import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
+import { useModelSettings } from "./model-settings/use-model-settings";
 
 const STORED_PLACEHOLDER = "Paste a replacement key";
 const deepseekEntry = {
@@ -177,6 +182,9 @@ const openrouterEntry = {
   authHint: "API key",
 };
 const compatibleEntry = {
+  connection: {
+    presets: [{ label: "Ollama Cloud", baseUrl: "https://ollama.com/v1", apiKeyRequired: true }],
+  },
   provider: "openai-compatible",
   providerName: "OpenAI-compatible",
   id: "custom",
@@ -547,6 +555,8 @@ it("labels the empty main slot by what runs there", async () => {
     expect(section("main").querySelector('[data-testid="model-role-default"]')?.textContent).toBe(
       "Choose a model",
     );
+    expect(section("approval").querySelector('[data-testid="model-role-default"]')).toBeNull();
+    await click(buttons(section("approval") as HTMLElement, "Approval model")[0]);
     expect(
       section("approval").querySelector('[data-testid="model-role-default"]')?.textContent,
     ).toBe("Choose a model");
@@ -676,6 +686,12 @@ it("shows Cloudflare account and gateway fields for a new and a saved connection
   const entry = {
     provider: "cloudflare-ai-gateway",
     providerName: "Cloudflare AI Gateway",
+    connection: {
+      routingFields: [
+        { key: "account", label: "Account ID", required: true },
+        { key: "gateway", label: "Gateway ID", required: true },
+      ],
+    },
     id: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
     label: "Llama",
     billing: "API key",
@@ -689,8 +705,8 @@ it("shows Cloudflare account and gateway fields for a new and a saved connection
   const fresh = await renderSettings();
   try {
     await pick("Change Main model", "Cloudflare AI Gateway");
-    const accountId = fresh.container.querySelector("#cloudflare-account-id");
-    const gatewayId = fresh.container.querySelector("#cloudflare-gateway-id");
+    const accountId = fresh.container.querySelector("#model-routing-account");
+    const gatewayId = fresh.container.querySelector("#model-routing-gateway");
     expect(accountId).toBeInstanceOf(HTMLInputElement);
     expect(gatewayId).toBeInstanceOf(HTMLInputElement);
     expect((accountId as HTMLInputElement).value).toBe("");
@@ -708,6 +724,7 @@ it("shows Cloudflare account and gateway fields for a new and a saved connection
       label: "Cloudflare AI Gateway",
       hasKey: true,
       isDefault: true,
+      routing: { account: "acct1234", gateway: "gateway-1" },
       accountId: "acct1234",
       gatewayId: "gateway-1",
       modelId: entry.id,
@@ -717,10 +734,10 @@ it("shows Cloudflare account and gateway fields for a new and a saved connection
   try {
     await manage();
     expect(
-      (saved.container.querySelector("#cloudflare-account-id") as HTMLInputElement).value,
+      (saved.container.querySelector("#model-routing-account") as HTMLInputElement).value,
     ).toBe("acct1234");
     expect(
-      (saved.container.querySelector("#cloudflare-gateway-id") as HTMLInputElement).value,
+      (saved.container.querySelector("#model-routing-gateway") as HTMLInputElement).value,
     ).toBe("gateway-1");
   } finally {
     await saved.unmount();
@@ -1242,9 +1259,7 @@ it("opens the Ollama preset with a required key and saves a compatible connectio
     expect(
       [...view.container.querySelectorAll("button")].filter((row) => row.textContent === "API key"),
     ).toHaveLength(0);
-    const key = view.container.querySelector(
-      'input[placeholder="Ollama API key"]',
-    ) as HTMLInputElement;
+    const key = view.container.querySelector('input[aria-label="API key"]') as HTMLInputElement;
     expect(key.required).toBe(true);
     await typeInto(key, "fake-fixture-key");
     await click(buttons(view.container, "Find models")[0]);
@@ -1645,3 +1660,57 @@ it("shows what a disconnect left, not a read sent before it", async () => {
     await view.unmount();
   }
 });
+
+it.each([false, true])(
+  "keeps a pending OAuth failure attached to the original edited form (%s)",
+  async (edited) => {
+    models.list.mockResolvedValue([
+      {
+        provider: "fixture-auth",
+        providerName: "Fixture auth",
+        id: "model",
+        label: "Model",
+        billing: "",
+        auth: "both",
+        signIn: "device-code",
+      },
+    ]);
+    vi.mocked(rpc.me).mockResolvedValue(account("fixture-auth", "model"));
+    let reject!: (error: unknown) => void;
+    models.beginOAuth.mockImplementationOnce(
+      () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+    );
+    let state!: ReturnType<typeof useModelSettings>;
+    function Harness() {
+      state = useModelSettings(() => undefined, "account");
+      return null;
+    }
+    const host = document.body.appendChild(document.createElement("div"));
+    const root = createRoot(host);
+    const client = testQueryClient();
+    try {
+      await act(async () =>
+        root.render(
+          <QueryClientProvider client={client}>
+            <Harness />
+          </QueryClientProvider>,
+        ),
+      );
+      await act(async () => state.chooseProvider("fixture-auth"));
+      await act(async () => state.beginSelectedSubscriptionSignIn());
+      expect(models.beginOAuth).toHaveBeenCalledOnce();
+      if (edited) await act(async () => state.updateApiKey("newer-key-draft"));
+      await act(async () => reject(new Error("Fixture sign-in failure")));
+      expect(state.error === null).toBe(edited);
+      expect(state.oauthPending).toBe(false);
+      if (edited) expect(state.apiKey).toBe("newer-key-draft");
+    } finally {
+      await act(async () => root.unmount());
+      client.clear();
+      host.remove();
+    }
+  },
+);

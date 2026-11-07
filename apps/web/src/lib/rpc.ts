@@ -13,6 +13,7 @@ import {
   AiConsentBlocked,
   aiConsentTarget,
   aiDataUsesForProcedure,
+  cancelResponseBody,
   displayIdentityEvent,
   displayIdentityResult,
   ensureAiDataConsent,
@@ -34,7 +35,7 @@ export const ORGANIZATION_SPACES_STORAGE_KEY = "orkbot:org-spaces";
 
 let spaceSelectionGeneration = 0;
 
-type RpcClientContext = { spaceId?: string | null };
+type RpcClientContext = { spaceId?: string | null; isCurrent?: () => boolean };
 
 export function selectedSpaceId(): string | null {
   if (typeof window === "undefined") return null;
@@ -115,6 +116,13 @@ const link = createRpcLink<RpcClientContext>({
     return headers;
   },
   fetch: async (input, init, options) => {
+    const assertCurrent = (response?: Response) => {
+      if (options.context.isCurrent && !options.context.isCurrent()) {
+        if (response) cancelResponseBody(response);
+        throw new DOMException("Session changed", "AbortError");
+      }
+    };
+    assertCurrent();
     const request = new Request(input, init);
     const spaceId = request.headers.get("x-orkbot-space-id");
     let response: Response;
@@ -126,22 +134,29 @@ const link = createRpcLink<RpcClientContext>({
         signal: options.signal,
       });
     } catch (error) {
+      assertCurrent();
       if (!options.signal?.aborted)
         reportClientError(error, "rpc.transport", responseCorrelation(request.headers));
       throw error;
     }
+    assertCurrent(response);
     // Server exceptions are reported by the API; do not report every HTTP failure twice.
     recheckSessionOnUnauthorized(response.status);
     if (response.status === 401 && spaceId && spaceId === selectedSpaceId())
-      void leaveUnavailableSpace(spaceId);
+      void leaveUnavailableSpace(spaceId, options.context.isCurrent);
     return response;
   },
-  onResponse: (response) => {
+  onResponse: (response, call) => {
+    const current = () => !call.context.isCurrent || call.context.isCurrent();
+    if (!current()) throw new DOMException("Session changed", "AbortError");
     if (response.ok)
       void Promise.resolve()
-        .then(() => desktopBridge()?.accounts?.retryRevocations?.())
+        .then(() => (current() ? desktopBridge()?.accounts?.retryRevocations?.() : undefined))
         .catch(() => undefined);
-    for (const listener of responseListeners) listener(response);
+    for (const listener of responseListeners) {
+      if (!current()) break;
+      listener(response);
+    }
   },
 });
 
@@ -162,13 +177,15 @@ let leavingSpace: Promise<void> | null = null;
  * spaces the user has in any organization; if the selected one is not among them, reload into
  * their default space.
  */
-export function leaveUnavailableSpace(spaceId: string): Promise<void> {
+export function leaveUnavailableSpace(spaceId: string, isCurrent?: () => boolean): Promise<void> {
+  if (isCurrent && !isCurrent()) return Promise.resolve();
   leavingSpace ??= (async () => {
     try {
       const { organizations } = await rpc.organizations.list(undefined, {
-        context: { spaceId: null },
+        context: { spaceId: null, ...(isCurrent ? { isCurrent } : {}) },
       });
       if (
+        (isCurrent && !isCurrent()) ||
         organizations.some((organization) => organization.spaceIds.includes(spaceId)) ||
         selectedSpaceId() !== spaceId
       )
@@ -255,6 +272,39 @@ const displayLink = {
 };
 
 export const rpc: RpcClient = createORPCClient(displayLink);
+
+/** A multi-step native-renderer intent keeps its original session, server and Space. */
+export function captureRpcContext(spaceId = selectedSpaceId()) {
+  const identity = authClient.$store.atoms.session?.get().data?.session?.id;
+  const generation = spaceSelectionGeneration;
+  const origin = window.location.origin;
+  const isCurrent = () =>
+    Boolean(
+      identity &&
+        identity === authClient.$store.atoms.session?.get().data?.session?.id &&
+        generation === spaceSelectionGeneration &&
+        origin === window.location.origin &&
+        !isLeavingSession() &&
+        !sessionChangedUnderPage(),
+    );
+  const client: RpcClient = createORPCClient({
+    call: async (path, input, options) => {
+      if (!isCurrent()) throw new DOMException("Session changed", "AbortError");
+      try {
+        const result = await displayLink.call(path, input, {
+          ...options,
+          context: { ...options.context, spaceId, isCurrent },
+        });
+        if (!isCurrent()) throw new DOMException("Session changed", "AbortError");
+        return result;
+      } catch (error) {
+        if (!isCurrent()) throw new DOMException("Session changed", "AbortError");
+        throw error;
+      }
+    },
+  });
+  return { client, isCurrent };
+}
 
 /** Keep late async follow-up requests in the shell's original auth boundary. */
 export function createSpaceRpc(spaceId: string | null): typeof rpc {

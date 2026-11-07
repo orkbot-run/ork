@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
 
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { act, cloneElement, useEffect, useMemo, useState } from "react";
@@ -120,7 +123,18 @@ vi.mock("expo-router", () => {
     },
   };
 });
-vi.mock("./api", () => ({ rpc: ui.rpc }));
+vi.mock("./api", () => ({
+  rpc: ui.rpc,
+  captureApiRequestContext: async () => ({
+    apiBase: "http://api.test",
+    headers: { "x-orkbot-space-id": "space-a" },
+    sessionGeneration: 7,
+  }),
+  currentApiBase: () => "http://api.test",
+  selectedSpaceId: () => "space-a",
+  spaceSelectionSeq: () => 1,
+}));
+vi.mock("./session", () => ({ currentSessionGeneration: () => 7 }));
 vi.mock("./native", () => ({
   native: {},
   useThemedStyles: (factory: () => unknown) => useMemo(factory, [factory]),
@@ -634,11 +648,13 @@ it("adds a bot made from the inbox's Create menu to the inbox roster before open
   expect(ui.rpc).toHaveBeenCalledWith(
     "bots/create",
     expect.not.objectContaining({ avatarSet: expect.anything() }),
+    expect.objectContaining({ requestContext: expect.anything() }),
   );
   // The session is taken before the requests, so a bot that lands after a switch is dropped.
-  expect(calls.slice(0, 5)).toEqual([
+  expect(calls.slice(0, 6)).toEqual([
     "session",
     "bots/list",
+    "me",
     "bots/create",
     `roster ${JSON.stringify({ kind: "bot", bot })} ${JSON.stringify(askedIn)}`,
     `open ${JSON.stringify({ pathname: "/thread", params: { botId: bot.id, name: bot.name } })}`,

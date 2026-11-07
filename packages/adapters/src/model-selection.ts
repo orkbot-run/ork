@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
+// Ork requested-model capability validation is PolyForm-covered.
 
 import type { SecretStore } from "@orkbot/adapter-kit";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
@@ -761,7 +762,7 @@ export function compatibleThinkingLevels(
   if (plaintext !== undefined) {
     try {
       parsed = parseModelSecret(plaintext);
-      levels = modelCredentialDto(row, plaintext).thinkingLevels;
+      levels = modelCredentialDto({ ...row, defaultModel: modelId }, plaintext).thinkingLevels;
     } catch {
       // Unreadable connections must not advertise reasoning support.
     }

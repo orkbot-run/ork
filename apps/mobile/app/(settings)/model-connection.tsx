@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type {
   ModelApiProtocol,
   ModelHeaderRow,
@@ -5,17 +9,15 @@ import type {
   ThinkingLevel,
 } from "@orkbot/contracts";
 import {
-  CLOUDFLARE_AI_GATEWAY_PROVIDER_ID,
-  cloudflareModelRouting,
   compatibleConnectionName,
+  compatibleEndpointPreset,
   connectionDisplayName,
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
-  isCloudflareModelProvider,
-  isOllamaCloudBaseUrl,
   MAX_MODEL_CONTEXT_WINDOW,
   MAX_MODEL_MAX_TOKENS,
   modelHeadersInput,
+  normalizeModelRouting,
   OPENAI_COMPATIBLE_BASE_URL_HINT,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   savedCompatibleEndpointMatches,
@@ -28,6 +30,7 @@ import {
   connectionFormFields,
   connectionFormModelId,
   connectionMaxTokensField,
+  createConnectionFormState,
   createModelProbe,
   initialModelProbeState,
   modelConnectRequest,
@@ -71,7 +74,7 @@ import {
   modelConnectionRequest,
 } from "../../lib/model-connection-request";
 import { native, useThemedStyles } from "../../lib/native";
-import { ACCOUNT_SETTINGS, settingsRpc } from "../../lib/settings-target";
+import { ACCOUNT_SETTINGS, captureSettingsContext } from "../../lib/settings-target";
 import { thinkingLevelLabel } from "../../lib/thinking-level";
 import { useListSearch } from "../../lib/use-list-search";
 import { errorText } from "../../lib/user-error";
@@ -92,7 +95,19 @@ export default function ModelConnection() {
   const makeDefault = request?.makeDefault ?? false;
   const target = request?.target ?? ACCOUNT_SETTINGS;
   // A Space's override connects through that Space, where makeDefault and sign-in apply.
-  const rpc = useMemo(() => settingsRpc(target), [target]);
+  const context = useMemo(
+    () => request?.context ?? captureSettingsContext(target),
+    [request, target],
+  );
+  const rpc = context.send;
+  const mounted = useRef(true);
+  const focused = useRef(true);
+  const active = useCallback(
+    () => mounted.current && focused.current && context.isCurrent(),
+    [context],
+  );
+  const formState = useMemo(() => createConnectionFormState(active), [active]);
+  const oauthFormRef = useRef<ReturnType<typeof formState.capture> | null>(null);
   // A new connection is managed by its id once it is saved, so later saves update it.
   const [credentialId, setCredentialId] = useState(request?.credentialId ?? null);
   const credentialIdRef = useRef(credentialId);
@@ -107,8 +122,7 @@ export default function ModelConnection() {
   const [modelId, setModelId] = useState("");
   const [enabledModelIds, setEnabledModelIds] = useState<string[]>([]);
   const [apiKey, setApiKey] = useState("");
-  const [accountId, setAccountId] = useState("");
-  const [gatewayId, setGatewayId] = useState("");
+  const [routing, setRouting] = useState<Record<string, string>>({});
   const [baseUrl, setBaseUrl] = useState("");
   const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
   const [headerRows, setHeaderRows] = useState<ModelHeaderRow[] | null>(null);
@@ -156,20 +170,25 @@ export default function ModelConnection() {
   }
 
   function clearFeedback() {
+    formState.invalidate();
     setFeedbackAnchor("connection");
     setError(null);
     setSavedNotice(null);
   }
 
-  const copyOAuthCode = useCallback((code: string) => {
-    void Clipboard.setStringAsync(code)
-      .then(() => {
-        setCodeCopied(true);
-        if (codeCopiedTimerRef.current) clearTimeout(codeCopiedTimerRef.current);
-        codeCopiedTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
-      })
-      .catch(() => undefined);
-  }, []);
+  const copyOAuthCode = useCallback(
+    (code: string) => {
+      void Clipboard.setStringAsync(code)
+        .then(() => {
+          if (!active()) return;
+          setCodeCopied(true);
+          if (codeCopiedTimerRef.current) clearTimeout(codeCopiedTimerRef.current);
+          codeCopiedTimerRef.current = setTimeout(() => setCodeCopied(false), 1600);
+        })
+        .catch(() => undefined);
+    },
+    [active],
+  );
 
   const cancelOAuth = useCallback(() => {
     const loginId = oauthLoginIdRef.current;
@@ -187,15 +206,18 @@ export default function ModelConnection() {
     if (codeCopiedTimerRef.current) clearTimeout(codeCopiedTimerRef.current);
   }, [cancelOAuth, modelProbe]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       cancelInFlightWork();
-    },
-    [cancelInFlightWork],
-  );
+    };
+  }, [cancelInFlightWork]);
 
   const load = useCallback(
-    async (preferred: ModelSelection = {}) => {
+    async (preferred: ModelSelection & { keepForm?: boolean } = {}) => {
+      const form = formState.capture();
+      if (!form.isSelected()) return undefined;
       if (!request) throw new Error(t("Could not load model settings"));
       setError(null);
       const [nextMe, nextCatalog, nextCredentials] = await Promise.all([
@@ -203,6 +225,7 @@ export default function ModelConnection() {
         rpc("models/list"),
         rpc("models/credentials"),
       ]);
+      if (!form.isSelected()) return undefined;
       const nextProvider = request.provider;
       const nextCredential = nextCredentials.find((entry) => entry.id === credentialIdRef.current);
       const nextModel = connectionFormModelId({
@@ -218,11 +241,13 @@ export default function ModelConnection() {
         modelId: nextModel,
         credential: nextCredential,
         presetBaseUrl: request.baseUrl,
+        presetApiProtocol: request.apiProtocol,
       });
       meRef.current = nextMe;
       setMe(nextMe);
       setCatalog(nextCatalog);
       setCredentials(nextCredentials);
+      if (preferred.keepForm || !form.isCurrent()) return nextMe;
       resetOpenAiCompatibleProbe();
       setModelId(nextModel);
       setHeaderRows(null);
@@ -235,24 +260,33 @@ export default function ModelConnection() {
       setContextWindow(fields.contextWindow);
       setSupportsImages(fields.supportsImages);
       setMaxImagesPerPrompt(fields.maxImagesPerPrompt);
-      setAccountId(fields.accountId);
-      setGatewayId(fields.gatewayId);
+      setRouting(fields.routing);
       return nextMe;
     },
-    [request, rpc, t],
+    [request, rpc, t, formState],
   );
 
   useFocusEffect(
     useCallback(() => {
+      focused.current = true;
+      let visible = true;
       void load()
-        .catch((err: unknown) =>
-          publishFeedback("connection", {
-            error: errorText(err, t("Could not load model settings")),
-          }),
-        )
-        .finally(() => setLoading(false));
-      return cancelInFlightWork;
-    }, [cancelInFlightWork, load]),
+        .catch((err: unknown) => {
+          if (visible && active())
+            publishFeedback("connection", {
+              error: errorText(err, t("Could not load model settings")),
+            });
+        })
+        .finally(() => {
+          if (visible && active()) setLoading(false);
+        });
+      return () => {
+        visible = false;
+        focused.current = false;
+        formState.select();
+        cancelInFlightWork();
+      };
+    }, [cancelInFlightWork, load, active, formState]),
   );
 
   const modelsForProvider = catalog.filter((entry) => entry.provider === provider);
@@ -260,16 +294,16 @@ export default function ModelConnection() {
   const credential = credentials.find((entry) => entry.id === credentialId);
   const providerName = selected?.providerName ?? selected?.provider ?? "";
   const selectedProviderLabel = credential
-    ? connectionDisplayName(credential, providerName)
-    : compatibleConnectionName(baseUrl, providerName);
+    ? connectionDisplayName(credential, providerName, [], selected?.connection?.presets)
+    : compatibleConnectionName(baseUrl, providerName, selected?.connection?.presets);
   useLayoutEffect(() => {
-    if (selectedProviderLabel) navigation.setOptions({ title: selectedProviderLabel });
-  }, [navigation, selectedProviderLabel]);
+    if (active() && selectedProviderLabel) navigation.setOptions({ title: selectedProviderLabel });
+  }, [navigation, selectedProviderLabel, active]);
   const isOpenAiCompatible = provider === OPENAI_COMPATIBLE_PROVIDER_ID;
-  const isCloudflareGateway = provider === CLOUDFLARE_AI_GATEWAY_PROVIDER_ID;
-  const isCloudflare = isCloudflareModelProvider(provider);
-  const cloudflareRoutingReady =
-    !isCloudflare || cloudflareModelRouting({ provider, accountId, gatewayId }) !== undefined;
+  const routingFields = selected?.connection?.routingFields ?? [];
+  const routingReady = normalizeModelRouting(routingFields, routing) !== undefined;
+  const endpointPreset = compatibleEndpointPreset(baseUrl, selected?.connection?.presets);
+  const requiresApiKey = endpointPreset?.apiKeyRequired === true;
   const compatibleRows = compatibleModelRows(
     savedCompatibleModelIds(credential, baseUrl),
     enabledModelIds,
@@ -288,7 +322,7 @@ export default function ModelConnection() {
   const acceptsKey = selected?.auth !== "oauth";
   const subscriptionSignIn = selected?.signIn !== undefined;
   const reasoningEffortValue = thinkingLevel ? thinkingLevelLabel(thinkingLevel, t) : t("Default");
-  const busy = pending !== null || oauthPending;
+  const busy = loading || pending !== null || oauthPending;
   const effectiveBaseUrl = baseUrl.trim();
   const openAiCompatibleReady = compatibleConnectionReady({
     apiKey,
@@ -296,12 +330,13 @@ export default function ModelConnection() {
     modelId,
     headerRows,
     credential,
+    connection: selected?.connection,
   });
   const limitsDirty = maxTokens !== connectionMaxTokensField(provider, credential?.maxTokens);
-  const gatewayDirty =
-    accountId.trim() !== (credential?.accountId ?? "") ||
-    gatewayId.trim() !== (credential?.gatewayId ?? "");
-  const gatewayOnlySave = isCloudflare && Boolean(credential) && !apiKey.trim();
+  const routingDirty = routingFields.some(
+    (field) => (routing[field.key] ?? "").trim() !== (credential?.routing?.[field.key] ?? ""),
+  );
+  const routingOnlySave = routingFields.length > 0 && Boolean(credential) && !apiKey.trim();
   const protocolChoices: { key: ModelApiProtocol; label: string }[] = [
     { key: "chat-completions", label: t("Chat Completions") },
     { key: "responses", label: t("Responses") },
@@ -345,6 +380,7 @@ export default function ModelConnection() {
     if (!baseUrl.trim()) return;
     Keyboard.dismiss();
     clearFeedback();
+    const form = formState.capture();
     await modelProbe.probe({
       baseUrl,
       apiKey,
@@ -360,6 +396,7 @@ export default function ModelConnection() {
           { timeoutMs: MODEL_CONNECT_TIMEOUT_MS },
         ),
       onSuccess: (models) => {
+        if (!form.isCurrent()) return;
         const next = modelId.trim() || models[0] || "";
         if (next !== modelId) stageCompatibleModelId(next);
         else setModelId(next);
@@ -372,10 +409,12 @@ export default function ModelConnection() {
                 : t("Found {count} models.", { count: models.length }),
         });
       },
-      onError: (err) =>
-        publishFeedback("probe", {
-          error: errorText(err, t("Could not reach this model server")),
-        }),
+      onError: (err) => {
+        if (form.isCurrent())
+          publishFeedback("probe", {
+            error: errorText(err, t("Could not reach this model server")),
+          });
+      },
     });
   }
 
@@ -383,23 +422,28 @@ export default function ModelConnection() {
     if (!selected || !credential) return;
     cancelOAuth();
     clearFeedback();
+    const form = formState.capture();
+    if (!form.isSelected()) return;
     setPending("disconnect");
     try {
       await rpc("models/disconnect", { provider: selected.provider, credentialId: credential.id });
+      if (!form.isSelected()) return;
       publishFeedback("connection", {
         notice: t("Disconnected {provider}.", { provider: selectedProviderLabel }),
       });
       router.back();
     } catch (err) {
+      if (!form.isCurrent()) return;
       publishFeedback("connection", {
         error: errorText(err, t("Could not disconnect this provider")),
       });
     } finally {
-      setPending(null);
+      if (form.isSelected()) setPending(null);
     }
   }
 
   function stageCompatibleModelId(nextModelId: string) {
+    formState.invalidate();
     setModelId(nextModelId);
     setThinkingLevel(
       clampCatalogThinkingLevel(
@@ -426,8 +470,7 @@ export default function ModelConnection() {
         contextWindow,
         supportsImages,
         maxImagesPerPrompt,
-        accountId,
-        gatewayId,
+        routing,
       },
       selected,
       credential,
@@ -456,38 +499,47 @@ export default function ModelConnection() {
       return;
     }
     const { savingLimitOnly, activeModelId } = connect;
+    const form = formState.capture();
+    if (!form.isSelected()) return;
     setPending("connect");
     try {
       const saved = await rpc("models/connect", connect.input, {
         timeoutMs: MODEL_CONNECT_TIMEOUT_MS,
       });
+      if (!form.isSelected()) return;
       credentialIdRef.current = saved.id;
       setCredentialId(saved.id);
-      if (!limitsOnly) setApiKey("");
-      if (!savingLimitOnly && (await finishConnecting(activeModelId, saved.id))) return;
-      await load({ modelId });
+      if (!limitsOnly && form.isCurrent()) setApiKey("");
+      if (!savingLimitOnly && form.isCurrent() && (await finishConnecting(activeModelId, saved.id)))
+        return;
+      await load({ modelId, keepForm: !form.isCurrent() });
+      if (!form.isCurrent()) return;
       publishFeedback(anchor, { notice: t("Saved.") });
     } catch (err) {
+      if (!form.isCurrent()) return;
       publishFeedback(anchor, {
         error: errorText(err, t("Could not connect this provider")),
       });
     } finally {
-      setPending(null);
+      if (form.isSelected()) setPending(null);
     }
   }
 
   async function finishSubscriptionSignIn(loginId: string, controller: AbortController) {
     await waitForModelOAuth(loginId, controller.signal, rpc);
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !active()) return;
     const saved = await rpc("models/finishOAuth", { loginId }, { signal: controller.signal });
-    if (controller.signal.aborted) return;
+    if (controller.signal.aborted || !active()) return;
     oauthLoginIdRef.current = null;
+    const form = oauthFormRef.current;
+    if (!form?.isSelected()) return;
     credentialIdRef.current = saved.id;
     setCredentialId(saved.id);
     setOauth(null);
-    if (await finishConnecting(selected?.id ?? modelId, saved.id)) return;
-    await load({ modelId });
-    if (controller.signal.aborted) return;
+    if (form.isCurrent() && (await finishConnecting(selected?.id ?? modelId, saved.id))) return;
+    await load({ modelId, keepForm: !form.isCurrent() });
+    if (!form.isCurrent()) return;
+    if (controller.signal.aborted || !active()) return;
     publishFeedback("connection", { notice: t("Saved.") });
   }
 
@@ -496,12 +548,13 @@ export default function ModelConnection() {
     connectedModelId: string,
     connectedCredentialId: string,
   ): Promise<boolean> {
-    if (!request?.onConnected || !connectedModelId) return false;
+    if (!active() || !request?.onConnected || !connectedModelId) return false;
     const next = await request.onConnected({
       provider,
       modelId: connectedModelId,
       credentialId: connectedCredentialId,
     });
+    if (!active()) return true;
     if (next) router.replace(next);
     else router.back();
     return true;
@@ -513,6 +566,7 @@ export default function ModelConnection() {
     setOauthPending(true);
     const controller = new AbortController();
     oauthAbortRef.current = controller;
+    oauthFormRef.current = formState.capture();
     let waitingForCode = false;
     try {
       const started = await rpc(
@@ -532,7 +586,7 @@ export default function ModelConnection() {
         },
         { signal: controller.signal },
       );
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !active() || !oauthFormRef.current?.isCurrent()) return;
       oauthLoginIdRef.current = started.loginId;
       setPasteCode("");
       setOauth(started);
@@ -540,7 +594,7 @@ export default function ModelConnection() {
       waitingForCode = started.mode === "auth-url";
       if (!waitingForCode) await finishSubscriptionSignIn(started.loginId, controller);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !active() || !oauthFormRef.current?.isCurrent()) return;
       const loginId = oauthLoginIdRef.current;
       oauthLoginIdRef.current = null;
       if (loginId) void rpc("models/cancelOAuth", { loginId }).catch(() => undefined);
@@ -562,7 +616,8 @@ export default function ModelConnection() {
     if (!controller || !code) return;
     oauthCodeSubmittingRef.current = true;
     setPasteCode("");
-    clearFeedback();
+    setError(null);
+    setSavedNotice(null);
     let submitted = false;
     let retryable = false;
     try {
@@ -576,7 +631,7 @@ export default function ModelConnection() {
       submitted = true;
       await finishSubscriptionSignIn(oauth.loginId, controller);
     } catch (err) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted || !active() || !oauthFormRef.current?.isCurrent()) return;
       if (submitted) {
         oauthLoginIdRef.current = null;
         setOauth(null);
@@ -673,7 +728,7 @@ export default function ModelConnection() {
         prominence="secondary"
         style={{ marginTop: 12 }}
       />
-      {!isOllamaCloudBaseUrl(baseUrl) ? (
+      {!endpointPreset ? (
         <>
           {disclosureRow(t("Setup help"), showEndpointHelp, () =>
             setShowEndpointHelp((visible) => !visible),
@@ -732,9 +787,10 @@ export default function ModelConnection() {
               <NativeSwitch
                 accessibilityLabel={entry}
                 value={entry === modelId || enabledModelIds.includes(entry)}
-                onValueChange={(value) =>
-                  setEnabledModelIds((current) => toggleEnabledModelId(current, entry, value))
-                }
+                onValueChange={(value) => {
+                  clearFeedback();
+                  setEnabledModelIds((current) => toggleEnabledModelId(current, entry, value));
+                }}
                 disabled={busy || entry === modelId}
               />
             </View>
@@ -790,6 +846,7 @@ export default function ModelConnection() {
                 accessibilityLabel={t("Supports thinking")}
                 value={reasoning}
                 onValueChange={(value) => {
+                  clearFeedback();
                   setReasoning(value);
                   if (!value) setThinkingLevel(null);
                 }}
@@ -808,7 +865,10 @@ export default function ModelConnection() {
                 ]}
                 value={thinkingLevel ?? ""}
                 disabled={busy}
-                onChange={(value) => setThinkingLevel((value || null) as ThinkingLevel | null)}
+                onChange={(value) => {
+                  clearFeedback();
+                  setThinkingLevel((value || null) as ThinkingLevel | null);
+                }}
               >
                 <View>
                   <SettingsRow
@@ -829,7 +889,10 @@ export default function ModelConnection() {
               <NativeSwitch
                 accessibilityLabel={t("Supports images")}
                 value={supportsImages}
-                onValueChange={setSupportsImages}
+                onValueChange={(value) => {
+                  clearFeedback();
+                  setSupportsImages(value);
+                }}
                 disabled={busy}
               />
             </View>
@@ -845,7 +908,10 @@ export default function ModelConnection() {
           {limitField(
             t("Context limit"),
             contextWindow,
-            setContextWindow,
+            (value) => {
+              clearFeedback();
+              setContextWindow(value);
+            },
             String(MAX_MODEL_CONTEXT_WINDOW).length,
           )}
           {limitField(
@@ -861,7 +927,10 @@ export default function ModelConnection() {
             ? limitField(
                 t("Maximum images per request"),
                 maxImagesPerPrompt,
-                setMaxImagesPerPrompt,
+                (value) => {
+                  clearFeedback();
+                  setMaxImagesPerPrompt(value);
+                },
                 4,
               )
             : null}
@@ -882,12 +951,12 @@ export default function ModelConnection() {
   const compatKeySection =
     isOpenAiCompatible && acceptsKey ? (
       <View style={styles.keySection}>
-        {isOllamaCloudBaseUrl(baseUrl) ? (
+        {requiresApiKey ? (
           <Text style={styles.sectionTitle}>{t("API key")}</Text>
         ) : (
           disclosureRow(t("API key"), showApiKey, () => setShowApiKey((visible) => !visible))
         )}
-        {showApiKey || isOllamaCloudBaseUrl(baseUrl) ? (
+        {showApiKey || requiresApiKey ? (
           <TextInput
             accessibilityLabel={t("API key")}
             autoCapitalize="none"
@@ -897,8 +966,8 @@ export default function ModelConnection() {
             importantForAutofill="no"
             onChangeText={updateApiKey}
             placeholder={
-              isOllamaCloudBaseUrl(baseUrl)
-                ? t("Ollama API key")
+              requiresApiKey
+                ? ""
                 : credential?.hasKey
                   ? t("Paste a replacement key")
                   : t("Optional")
@@ -949,7 +1018,7 @@ export default function ModelConnection() {
             )}
             {credential && limitsDirty ? (
               <NativeActionButton
-                disabled={busy || !cloudflareRoutingReady}
+                disabled={busy || !routingReady}
                 label={
                   pending === "connect" && feedbackAnchor === "limits" ? t("Saving…") : t("Save")
                 }
@@ -1047,44 +1116,26 @@ export default function ModelConnection() {
             />
           )
         ) : null}
-        {acceptsKey || isCloudflare ? (
+        {acceptsKey || routingFields.length > 0 ? (
           <View style={styles.keySection}>
-            {isCloudflare ? (
-              <>
-                <Text style={styles.sectionTitle}>{t("Account ID")}</Text>
+            {routingFields.map((field) => (
+              <View key={field.key}>
+                <Text style={styles.sectionTitle}>{field.label}</Text>
                 <TextInput
-                  accessibilityLabel={t("Account ID")}
+                  accessibilityLabel={field.label}
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="off"
                   editable={!busy}
+                  value={routing[field.key] ?? ""}
                   onChangeText={(value) => {
-                    setAccountId(value);
+                    setRouting((current) => ({ ...current, [field.key]: value }));
                     clearFeedback();
                   }}
                   style={styles.keyInput}
-                  value={accountId}
                 />
-                {isCloudflareGateway ? (
-                  <>
-                    <Text style={styles.sectionTitle}>{t("Gateway ID")}</Text>
-                    <TextInput
-                      accessibilityLabel={t("Gateway ID")}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="off"
-                      editable={!busy}
-                      onChangeText={(value) => {
-                        setGatewayId(value);
-                        clearFeedback();
-                      }}
-                      style={styles.keyInput}
-                      value={gatewayId}
-                    />
-                  </>
-                ) : null}
-              </>
-            ) : null}
+              </View>
+            ))}
             {acceptsKey ? (
               <>
                 <Text style={styles.sectionTitle}>
@@ -1111,13 +1162,13 @@ export default function ModelConnection() {
             <NativeActionButton
               disabled={
                 busy ||
-                !cloudflareRoutingReady ||
-                (gatewayOnlySave ? !gatewayDirty : apiKey.trim().length < 8)
+                !routingReady ||
+                (routingOnlySave ? !routingDirty : apiKey.trim().length < 8)
               }
               label={
                 pending === "connect" && feedbackAnchor === "connection"
                   ? t("Saving…")
-                  : gatewayOnlySave
+                  : routingOnlySave
                     ? t("Save")
                     : credential
                       ? t("Replace API key")

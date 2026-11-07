@@ -1,10 +1,8 @@
-import {
-  canonicalPiProviderId,
-  isOllamaCloudBaseUrl,
-  OLLAMA_CLOUD_BASE_URL,
-  OPENAI_COMPATIBLE_PROVIDER_ID,
-} from "@orkbot/contracts";
-import { popularModelProvidersFirst } from "@orkbot/core";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
+import { hasModelConnection, modelConnectionOptions } from "@orkbot/core";
 import { fetchFresh } from "@orkbot/core/query";
 import { isCancelledError, useQuery } from "@tanstack/react-query";
 import type { Href } from "expo-router";
@@ -18,8 +16,6 @@ import type { ConnectableProvider, ModelConnectIntent } from "../../components/m
 import { ModelRoleSettings } from "../../components/model-role-settings";
 import { SpaceBotsModel } from "../../components/space-bots-model";
 import type { MobileBot, MobileModel, MobileModelCredential } from "../../lib/api";
-// Connections belong to the account, so renaming and removing them go to the selected Space.
-import { rpc } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import type { ModelConnectionRequest } from "../../lib/model-connection-request";
@@ -28,7 +24,7 @@ import type { ModelPickerRequest } from "../../lib/model-picker-selection";
 import { closeModelPicker, openModelPicker } from "../../lib/model-picker-selection";
 import { native, useThemedStyles } from "../../lib/native";
 import { queryClient, rpcQuery } from "../../lib/query";
-import { settingsTarget } from "../../lib/settings-target";
+import { captureSettingsContext, settingsTarget } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
 import { errorText } from "../../lib/user-error";
 
@@ -43,6 +39,10 @@ const noBots: MobileBot[] = [];
 export default function Models() {
   const params = useLocalSearchParams<{ spaceId?: string }>();
   const target = useMemo(() => settingsTarget(params.spaceId), [params.spaceId]);
+  const owner = useMemo(() => captureSettingsContext(target), [target]);
+  const rpc = owner.send;
+  const mounted = useRef(true);
+  const current = useCallback(() => mounted.current && owner.isCurrent(), [owner]);
   // A Space's override is read from that Space even when another one is selected.
   const spaceId = target.scope === "space" ? target.spaceId : undefined;
   const sideInsets = useSideInsets();
@@ -72,39 +72,44 @@ export default function Models() {
   const connectionRequestRef = useRef<string | null>(null);
   const returningFromPickerRef = useRef(false);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       if (pickerRequestRef.current) closeModelPicker(pickerRequestRef.current);
       if (connectionRequestRef.current) closeModelConnection(connectionRequestRef.current);
-    },
-    [],
-  );
+    };
+  }, [owner]);
 
   /** Opening shares a read already in flight; after a change, the answer must come from a new one. */
   const load = useCallback(
     async (reuse = false) => {
       try {
+        if (!current()) return;
+        const read = (path: "me" | "models/list" | "models/credentials" | "bots/list") =>
+          fetchFresh(
+            queryClient,
+            {
+              queryKey: rpcQuery(path, undefined, spaceId).queryKey,
+              queryFn: () => rpc(path),
+            },
+            { reuse },
+          );
         await Promise.all([
-          fetchFresh(queryClient, rpcQuery("me", undefined, spaceId), { reuse }),
-          fetchFresh(queryClient, rpcQuery("models/list", undefined, spaceId), {
-            reuse,
-          }),
-          fetchFresh(queryClient, rpcQuery("models/credentials", undefined, spaceId), {
-            reuse,
-          }),
-          // Without the bot list only the bot model notice is missing.
-          fetchFresh(queryClient, rpcQuery("bots/list", undefined, spaceId), { reuse }).catch(
-            () => undefined,
-          ),
+          read("me"),
+          read("models/list"),
+          read("models/credentials"),
+          read("bots/list").catch(() => undefined),
         ]);
+        if (!current()) return;
         setLoadError(null);
       } catch (err) {
         // A newer read replaced this one and reports for both.
-        if (!isCancelledError(err))
+        if (current() && !isCancelledError(err))
           setLoadError(errorText(err, t("Could not load model settings")));
       }
     },
-    [spaceId, t],
+    [spaceId, t, rpc, current],
   );
 
   useFocusEffect(
@@ -128,11 +133,13 @@ export default function Models() {
   }
 
   function pushModelPicker(request: ModelPickerRequest) {
+    if (!current()) return;
     router.push(pickerRoute(request));
     returningFromPickerRef.current = true;
   }
 
-  function connectionRoute(request: ModelConnectionRequest): Href {
+  function connectionRoute(request: ModelConnectionRequest): Href | undefined {
+    if (!current()) return undefined;
     if (connectionRequestRef.current) closeModelConnection(connectionRequestRef.current);
     const requestId = openModelConnection(request);
     connectionRequestRef.current = requestId;
@@ -145,55 +152,26 @@ export default function Models() {
     connectionRoute({
       provider: provider.id,
       baseUrl: provider.baseUrl,
+      apiProtocol: provider.apiProtocol,
       credentialId: null,
       target,
       ...intent,
     });
-  const manage = (credential: MobileModelCredential) =>
-    router.push(
-      connectionRoute({
-        provider: credential.provider,
-        credentialId: credential.id,
-        makeDefault: false,
-        target,
-      }),
-    );
+  const manage = (credential: MobileModelCredential) => {
+    const route = connectionRoute({
+      provider: credential.provider,
+      credentialId: credential.id,
+      makeDefault: false,
+      target,
+    });
+    if (route && current()) router.push(route);
+  };
 
-  /** Every provider, popular first, plus the Ollama Cloud preset of the compatible one. */
-  const allProviders = useMemo(() => {
-    const grouped = new Map<string, ConnectableProvider>();
-    for (const entry of catalog) {
-      if (grouped.has(entry.provider)) continue;
-      grouped.set(entry.provider, {
-        id: entry.provider,
-        name: entry.providerName ?? entry.provider,
-      });
-    }
-    const all = [...grouped.values()];
-    if (catalog.some((entry) => entry.provider === OPENAI_COMPATIBLE_PROVIDER_ID))
-      all.push({
-        id: OPENAI_COMPATIBLE_PROVIDER_ID,
-        name: t("Ollama Cloud"),
-        baseUrl: OLLAMA_CLOUD_BASE_URL,
-      });
-    return popularModelProvidersFirst(
-      all,
-      (provider) => provider.id,
-      (provider) => provider.name,
-    );
-  }, [catalog, t]);
-
-  // Deployment-funded providers stay listed so people can still add their own key.
-  const providers = useMemo(() => {
-    const connected = new Set(credentials.map((entry) => canonicalPiProviderId(entry.provider)));
-    const ollama = credentials.some(
-      (entry) =>
-        entry.provider === OPENAI_COMPATIBLE_PROVIDER_ID && isOllamaCloudBaseUrl(entry.baseUrl),
-    );
-    return allProviders.filter((provider) =>
-      provider.baseUrl ? !ollama : !connected.has(canonicalPiProviderId(provider.id)),
-    );
-  }, [allProviders, credentials]);
+  const allProviders = useMemo(() => modelConnectionOptions(catalog), [catalog]);
+  const providers = useMemo(
+    () => allProviders.filter((option) => !hasModelConnection(option, credentials)),
+    [allProviders, credentials],
+  );
 
   const providerKey = (provider: ConnectableProvider) =>
     `connect:${provider.id}:${provider.baseUrl ?? ""}`;
@@ -214,6 +192,7 @@ export default function Models() {
           ? connectionRoute({
               provider: provider.id,
               baseUrl: provider.baseUrl,
+              apiProtocol: provider.apiProtocol,
               credentialId: null,
               makeDefault: false,
               target,
@@ -225,9 +204,12 @@ export default function Models() {
 
   async function changeConnection(action: () => Promise<unknown>, failure: string) {
     try {
+      if (!current()) return;
       await action();
+      if (!current()) return;
       setError(null);
     } catch (err) {
+      if (!current()) return;
       setError(errorText(err, failure));
     }
     await load();
@@ -290,12 +272,14 @@ export default function Models() {
             )}
             <ModelRoleSettings
               {...shared}
+              progressive
               modelRole="approval"
               title={t("Approval model")}
               defaultLabel={t("Choose a model")}
             />
             <ModelRoleSettings
               {...shared}
+              progressive
               modelRole="computer"
               title={t("Computer-use model")}
               defaultLabel={t("Same as main model")}

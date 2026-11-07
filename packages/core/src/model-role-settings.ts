@@ -1,10 +1,28 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
+
 import type {
   ModelCatalogEntry,
+  ModelRole,
   ModelRoleChoice,
   ModelRoleSettings,
   ModelRoleView,
 } from "@orkbot/contracts";
 import { modelRoleChoiceKey } from "@orkbot/contracts";
+
+/** Keep optional roles compact until configured or explicitly opened. */
+export function showModelRole(
+  role: ModelRole,
+  settings: ModelRoleView | null,
+  expanded: boolean,
+): boolean {
+  return (
+    role === "main" ||
+    expanded ||
+    Boolean(settings?.primary || settings?.backups.length || settings?.deploymentPrimary)
+  );
+}
 
 export interface ModelRoleTransport {
   load(): Promise<ModelRoleView>;

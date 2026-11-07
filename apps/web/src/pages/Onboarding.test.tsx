@@ -10,7 +10,7 @@ import { createRoot } from "react-dom/client";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const account = vi.hoisted(() => ({ load: (_me: unknown) => {} }));
+const account = vi.hoisted(() => ({ generation: 1, load: (_me: unknown) => {} }));
 
 // The router has already authenticated this page; model setup must not start a real auth transport.
 vi.mock("../lib/auth", () => ({
@@ -19,9 +19,8 @@ vi.mock("../lib/auth", () => ({
   },
 }));
 
-vi.mock("../lib/rpc", () => ({
-  selectedSpaceId: () => null,
-  rpc: {
+vi.mock("../lib/rpc", () => {
+  const rpc = {
     me: vi.fn(
       () =>
         new Promise((resolve) => {
@@ -34,6 +33,7 @@ vi.mock("../lib/rpc", () => ({
       promptFocus: vi.fn(),
     },
     models: {
+      connect: vi.fn(async () => ({ id: "fixture-credential" })),
       list: vi.fn(async () => [
         {
           provider: "openai-compatible",
@@ -47,8 +47,16 @@ vi.mock("../lib/rpc", () => ({
         models: Array.from({ length: 11 }, (_, index) => `found-${index}`),
       })),
     },
-  },
-}));
+  };
+  return {
+    rpc,
+    selectedSpaceId: () => null,
+    captureRpcContext: () => {
+      const generation = account.generation;
+      return { client: rpc, isCurrent: () => generation === account.generation };
+    },
+  };
+});
 vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) => String.raw(parts, ...values);
   return {
@@ -65,6 +73,8 @@ import { OnboardingPage } from "./Onboarding";
 let host: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
+  account.generation = 1;
+  vi.mocked(rpc.models.connect).mockClear();
   vi.mocked(rpc.onboarding.ensureFirstBot).mockReset().mockResolvedValue(null);
   host = document.body.appendChild(document.createElement("div"));
   root = createRoot(host);
@@ -221,4 +231,187 @@ it("finds and searches a long custom endpoint list during onboarding", async () 
   ]);
   await act(async () => document.querySelector<HTMLElement>("[cmdk-item]")!.click());
   expect(document.querySelector('[aria-label="Models from server"]')?.textContent).toBe("found-10");
+});
+
+it("does not create or navigate from readiness resolved for a previous account scope", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+          <Route path="/app" element={<div data-testid="wrong-navigation" />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  account.generation++;
+  await act(async () =>
+    account.load({ needsModel: false, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  expect(rpc.onboarding.ensureFirstBot).not.toHaveBeenCalled();
+  expect(host.querySelector('[data-testid="wrong-navigation"]')).toBeNull();
+});
+
+it("uses the selected standard protocol for discovery and save, then rechecks authoritative readiness", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+          <Route path="/app" element={<div data-testid="ready-app" />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    account.load({ needsModel: true, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  await act(async () => document.querySelector<HTMLElement>('[aria-label="Provider"]')!.click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent === "OpenAI-compatible")!
+      .click(),
+  );
+  const change = async (element: HTMLInputElement | HTMLSelectElement, value: string) => {
+    await act(async () => {
+      const proto =
+        element instanceof HTMLSelectElement
+          ? HTMLSelectElement.prototype
+          : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(element, value);
+      element.dispatchEvent(
+        new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }),
+      );
+    });
+  };
+  await change(
+    document.querySelector<HTMLInputElement>('[aria-label="OpenAI-compatible server URL"]')!,
+    "https://models.example.test/v1",
+  );
+  await change(document.querySelector<HTMLSelectElement>("select")!, "responses");
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Find models")!
+      .click(),
+  );
+  expect(rpc.models.probeOpenAiCompatible).toHaveBeenLastCalledWith(
+    expect.objectContaining({ apiProtocol: "responses" }),
+  );
+  vi.mocked(rpc.me).mockResolvedValueOnce({ needsModel: false, needsSignupSurvey: false } as never);
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Continue")!
+      .click(),
+  );
+  expect(rpc.models.connect).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({
+      apiProtocol: "responses",
+      provider: "openai-compatible",
+      modelId: "found-0",
+      makeDefault: true,
+      scope: "account",
+    }),
+  );
+  expect(host.querySelector('[data-testid="ready-app"]')).not.toBeNull();
+});
+
+it("offers only protocol-supported effort and clamps the selected effort when protocols change", async () => {
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding/model"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    account.load({ needsModel: true, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  await act(async () => document.querySelector<HTMLElement>('[aria-label="Provider"]')!.click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent === "OpenAI-compatible")!
+      .click(),
+  );
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Advanced")!
+      .click(),
+  );
+  await act(async () => document.querySelector<HTMLElement>('[role="checkbox"]')!.click());
+  await act(async () =>
+    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
+  );
+  await act(async () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent === "Extra high")!
+      .click(),
+  );
+  const protocol = document.querySelector<HTMLSelectElement>("select")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(
+      protocol,
+      "anthropic-messages",
+    );
+    protocol.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(document.querySelector('[aria-label="Reasoning effort"]')?.textContent).toBe("High");
+  await act(async () =>
+    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
+  );
+  const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')].map(
+    (option) => option.textContent,
+  );
+  expect(options).toContain("High");
+  expect(options).not.toContain("Extra high");
+  expect(options).not.toContain("Max");
+});
+
+it("uses the shared API-key readiness check instead of enabling an incomplete save", async () => {
+  vi.mocked(rpc.models.list).mockResolvedValueOnce([
+    {
+      provider: "fixture-api",
+      providerName: "Fixture API",
+      id: "model",
+      label: "Model",
+      billing: "API key",
+      auth: "api-key",
+    },
+  ]);
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/onboarding/model"]}>
+        <Routes>
+          <Route path="/onboarding/:step?" element={<OnboardingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    ),
+  );
+  await act(async () =>
+    account.load({ needsModel: true, needsSignupSurvey: false, billingEnabled: false }),
+  );
+  await act(async () => document.querySelector<HTMLElement>('[aria-label="Provider"]')!.click());
+  await act(async () =>
+    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((option) => option.textContent === "Fixture API")!
+      .click(),
+  );
+  const key = document.querySelector<HTMLInputElement>('input[type="password"]')!;
+  const update = async (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(key, value);
+      key.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  await update("x");
+  expect(
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!
+      .disabled,
+  ).toBe(true);
+  await update("fixture-key");
+  expect(
+    [...document.querySelectorAll("button")].find((button) => button.textContent === "Continue")!
+      .disabled,
+  ).toBe(false);
+  expect(rpc.models.connect).not.toHaveBeenCalled();
 });

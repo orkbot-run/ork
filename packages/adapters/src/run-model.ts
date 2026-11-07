@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes. See LICENSE.md.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Modified by Ork contributors for coordinated OAuth refreshes, neutral routing and thinking normalization. See LICENSE.md.
 
 import type {
   AgentModelOAuthCredential,
@@ -8,17 +9,18 @@ import type {
   ModelCredentialFailedState,
   ModelCredentialRetireReason,
 } from "@orkbot/adapter-kit";
+import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
+import { MISSING_MODEL_RUN_ERROR } from "@orkbot/core";
+import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import {
   CLOUDFLARE_AI_GATEWAY_CONFIG_MESSAGE,
   CLOUDFLARE_WORKERS_AI_PROVIDER_ID,
   cloudflareModelConfigMessage,
-  OPENAI_COMPATIBLE_PROVIDER_ID,
-} from "@orkbot/contracts";
-import { MISSING_MODEL_RUN_ERROR } from "@orkbot/core";
-import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
+} from "./cloudflare-model-config.js";
 import { resolveDeploymentModel } from "./deployment-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetPrepareDeps } from "./fleet-tools.js";
+import { modelConnectionRouting } from "./model-connection-metadata.js";
 import {
   HostedModelCreditsRequiredError,
   hostedModelCreditObserver,
@@ -51,6 +53,7 @@ import {
   serializeModelSecret,
   withModelCredentialLock,
 } from "./pi-oauth.js";
+import { compatibleModelThinking } from "./pi-openai-compatible-provider.js";
 
 export function runtimeFallbackModel(runtime: AgentRuntime) {
   return runtime.describe().capabilities.scripted ? { provider: "scripted", id: "scripted" } : null;
@@ -205,6 +208,7 @@ async function resolveModelKeyMaterial(
   { requireStoredSecret = false }: { requireStoredSecret?: boolean } = {},
 ): Promise<{
   apiKey?: string;
+  routing?: AgentRunRequest["model"]["routing"];
   accountId?: string;
   gatewayId?: string;
   baseUrl?: string;
@@ -321,11 +325,16 @@ async function resolveModelKeyMaterial(
         resolved.secret.kind === "openai_compatible"
           ? compatibleModelSeesImages(credential, resolved.secret, modelId)
           : liveCodex?.supportsImages;
-      const accountId = resolved.secret.kind === "api_key" ? resolved.secret.accountId : undefined;
-      const gatewayId = resolved.secret.kind === "api_key" ? resolved.secret.gatewayId : undefined;
+      const routing =
+        resolved.secret.kind === "api_key"
+          ? modelConnectionRouting({ provider }, resolved.secret)
+          : undefined;
+      const accountId = routing?.accountId;
+      const gatewayId = routing?.gatewayId;
       cloudflareProviderEnv({ provider, accountId, gatewayId });
       return {
         apiKey: resolved.apiKey,
+        routing: routing?.routing,
         accountId,
         gatewayId,
         baseUrl,
@@ -340,7 +349,9 @@ async function resolveModelKeyMaterial(
           resolved.secret.kind === "openai_compatible" ? resolved.secret.reasoning : undefined,
         maxTokens: resolved.secret.maxTokens,
         thinkingLevel:
-          resolved.secret.kind === "openai_compatible" ? resolved.secret.thinkingLevel : undefined,
+          resolved.secret.kind === "openai_compatible"
+            ? compatibleModelThinking(modelId, resolved.secret, resolved.secret.thinkingLevel).level
+            : undefined,
         acceptsImages,
         maxImagesPerPrompt:
           resolved.secret.kind === "openai_compatible"
@@ -418,6 +429,7 @@ export function resolvedModelRunFields(
   return {
     apiKey: resolved.oauth ? undefined : resolved.apiKey,
     callObserver: resolved.callObserver,
+    ...(resolved.routing ? { routing: resolved.routing } : {}),
     ...(resolved.accountId ? { accountId: resolved.accountId } : {}),
     ...(resolved.gatewayId ? { gatewayId: resolved.gatewayId } : {}),
     baseUrl: resolved.baseUrl,
