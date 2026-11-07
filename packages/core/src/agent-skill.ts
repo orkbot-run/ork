@@ -329,7 +329,7 @@ type YamlBlockScalarHeader = {
 };
 
 function parseYamlBlockScalarHeader(raw: string): YamlBlockScalarHeader | null {
-  const match = /^([>|])(?:([1-9]\d*)([+-]?)|([+-])([1-9]\d*)?)?$/.exec(raw);
+  const match = /^([>|])(?:([1-9]\d*)([+-]?)|([+-])([1-9]\d*)?)?(?:[ \t]+#.*)?[ \t]*$/.exec(raw);
   if (!match) return null;
   const style = match[1] as "|" | ">";
   const indentToken = match[2] ?? match[5] ?? "";
@@ -449,6 +449,7 @@ function parseSimpleYamlObject(text: string): Record<string, unknown> {
       result[key] = decodeYamlBlockScalar(blockLines, blockHeader);
       continue;
     }
+    if (/^[>|]/.test(raw)) throw new Error("Invalid block scalar header.");
     if (raw === "") {
       // Nested map or list on following indented lines.
       const nested: Record<string, unknown> = {};
@@ -477,11 +478,7 @@ function parseSimpleYamlObject(text: string): Record<string, unknown> {
       continue;
     }
     if (raw.startsWith("[") && raw.endsWith("]")) {
-      result[key] = raw
-        .slice(1, -1)
-        .split(",")
-        .map((part) => parseYamlScalar(part.trim()))
-        .filter((part) => part !== "");
+      result[key] = parseYamlInlineArray(raw.slice(1, -1));
       i += 1;
       continue;
     }
@@ -489,6 +486,35 @@ function parseSimpleYamlObject(text: string): Record<string, unknown> {
     i += 1;
   }
   return result;
+}
+
+function parseYamlInlineArray(text: string): Array<string | number | boolean> {
+  const values: Array<string | number | boolean> = [];
+  let start = 0;
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (quote === '"' && char === "\\") {
+      i++;
+      continue;
+    }
+    if (quote === "'" && char === "'" && text[i + 1] === "'") {
+      i++;
+      continue;
+    }
+    if (quote && char === quote) quote = null;
+    else if (!quote && (char === "'" || char === '"') && text.slice(start, i).trim() === "")
+      quote = char;
+    else if (!quote && char === ",") {
+      const part = text.slice(start, i).trim();
+      if (part) values.push(parseYamlScalar(part));
+      start = i + 1;
+    }
+  }
+  if (quote) throw new Error("Unterminated quote in inline array.");
+  const last = text.slice(start).trim();
+  if (last) values.push(parseYamlScalar(last));
+  return values;
 }
 
 function parseYamlScalar(raw: string): string | number | boolean {
@@ -509,7 +535,10 @@ function parseYamlScalar(raw: string): string | number | boolean {
   }
   if (value === "true") return true;
   if (value === "false") return false;
-  if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  if (/^-?\d+(\.\d+)?(?:[eE][+-]?\d+)?$/.test(value)) {
+    const number = Number(value);
+    if (Number.isFinite(number)) return number;
+  }
   return value;
 }
 
@@ -556,7 +585,7 @@ function formatYamlLine(key: string, value: unknown): string {
   if (typeof value === "number" || typeof value === "boolean") return `${key}: ${value}`;
   if (Array.isArray(value)) {
     if (value.every((item) => typeof item === "string" || typeof item === "number")) {
-      return `${key}: [${value.map((item) => JSON.stringify(String(item))).join(", ")}]`;
+      return `${key}: [${value.map((item) => JSON.stringify(item)).join(", ")}]`;
     }
     const items = value
       .map((item) => `  - ${typeof item === "string" ? item : JSON.stringify(item)}`)

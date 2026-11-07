@@ -60,6 +60,70 @@ literal: |+
 `;
 
 describe("parseSkillMd", () => {
+  it("round-trips quoted commas, escapes and empty items in inline arrays", () => {
+    const parsed = parseSkillMd(
+      `---\nname: Sample\ndescription: Sample skill\ntags: ["alpha, beta", 'it''s, fine', "a\\"b, c", ""]\n---\nbody`,
+    );
+    expect("error" in parsed).toBe(false);
+    if ("error" in parsed) return;
+    expect(parsed.frontmatter.tags).toEqual(["alpha, beta", "it's, fine", 'a"b, c', ""]);
+    const rebuilt = buildSkillMd({
+      name: parsed.name,
+      description: parsed.description,
+      body: parsed.body,
+      frontmatter: parsed.frontmatter,
+    });
+    expect(parseSkillMd(rebuilt)).toMatchObject({ frontmatter: { tags: parsed.frontmatter.tags } });
+    const numbered = buildSkillMd({
+      name: "Sample",
+      description: "Sample skill",
+      body: "body",
+      frontmatter: { tags: ["one, two", 3] },
+    });
+    expect(parseSkillMd(numbered)).toMatchObject({ frontmatter: { tags: ["one, two", 3] } });
+  });
+
+  it.each(["| # comment", ">- # comment", "|2+\t# comment"])(
+    "accepts whitespace-delimited block comments: %s",
+    (header) => {
+      const parsed = parseSkillMd(`---\nname: Sample\ndescription: ${header}\n  Hello\n---\nbody`);
+      expect(parsed).toMatchObject({ description: "Hello" });
+    },
+  );
+
+  it.each([">#comment", "|-#comment", "|2+#comment"])(
+    "rejects attached block comments: %s",
+    (header) => {
+      expect(parseSkillMd(`---\nname: Sample\ndescription: ${header}\n---\nbody`)).toMatchObject({
+        error: expect.any(String),
+      });
+    },
+  );
+
+  it("rejects an unterminated quoted inline array item", () => {
+    expect(
+      parseSkillMd(
+        `---\nname: Sample\ndescription: Sample skill\ntags: ["missing, quote]\n---\nbody`,
+      ),
+    ).toMatchObject({ error: expect.any(String) });
+  });
+
+  it("keeps apostrophes inside plain array scalars", () => {
+    expect(
+      parseSkillMd(`---\nname: Sample\ndescription: Sample skill\ntags: [it's, fine]\n---\nbody`),
+    ).toMatchObject({ frontmatter: { tags: ["it's", "fine"] } });
+  });
+
+  it("round-trips numbers that serialize with an exponent", () => {
+    const values = [0.0000001, 1e21];
+    const document = buildSkillMd({
+      name: "Sample",
+      description: "Sample skill",
+      body: "body",
+      frontmatter: { values },
+    });
+    expect(parseSkillMd(document)).toMatchObject({ frontmatter: { values } });
+  });
   it("parses name, description, body, and extra frontmatter keys", () => {
     const parsed = parseSkillMd(SAMPLE);
     expect("error" in parsed).toBe(false);
