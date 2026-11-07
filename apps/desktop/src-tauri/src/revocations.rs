@@ -627,8 +627,7 @@ mod tests {
 
     #[tokio::test]
     async fn queue_bounds_retention_count_bytes_and_token_size_without_extending_duplicates() {
-        let store = Arc::new(MemoryStore::default());
-        let queue = Revocations::new(Store(store.clone()));
+        let queue = Revocations::new(Store(Arc::new(MemoryStore::default())));
         let origin = "https://server.example.test";
         let old = Pending {
             target: session(origin, "expired"),
@@ -638,11 +637,13 @@ mod tests {
             target: session(origin, "kept"),
             created_at: now() - 10,
         };
-        store
+        queue
+            .store
             .set(
-                KEY,
-                &serde_json::to_string(&vec![old, kept.clone()]).unwrap(),
+                KEY.into(),
+                serde_json::to_string(&vec![old, kept.clone()]).unwrap(),
             )
+            .await
             .unwrap();
         queue.enqueue(kept.target.clone()).await.unwrap();
         let records = queue.load().await.unwrap();
@@ -661,7 +662,7 @@ mod tests {
                 .await
                 .unwrap();
         }
-        assert!(store.get(KEY).unwrap().unwrap().len() <= MAX_BYTES);
+        assert!(queue.store.get(KEY.into()).await.unwrap().unwrap().len() <= MAX_BYTES);
         assert!(queue
             .enqueue(session(origin, &"x".repeat(MAX_TOKEN)))
             .await
