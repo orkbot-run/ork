@@ -52,6 +52,8 @@ import { createRouterClient } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { providerScopeKey } from "#modules/integrations/routes/connections";
+import type * as PiModelsModule from "../../../../../packages/adapters/src/pi-models.js";
+import type { PiCatalogEntry } from "../../../../../packages/adapters/src/pi-models.js";
 import {
   mainRole,
   withModelRoles,
@@ -64,6 +66,29 @@ import {
   HEARTBEAT_MS,
   SESSION_RECHECK_MS,
 } from "./router.js";
+
+// A saved model's auth policy must remain testable after its bundled entry is retired.
+vi.mock("../../../../../packages/adapters/src/pi-models.js", async (original) => {
+  const actual = await original<typeof PiModelsModule>();
+  const stored: PiCatalogEntry = {
+    provider: "openai-codex",
+    providerName: "Fixture subscription",
+    id: "gpt-5.3-codex-spark",
+    label: "Stored auth-restricted model",
+    auth: "oauth",
+    billing: "Fixture",
+    subscription: true,
+  };
+  return {
+    ...actual,
+    listPiCatalog: () => [
+      ...actual
+        .listPiCatalog()
+        .filter((entry) => entry.provider !== stored.provider || entry.id !== stored.id),
+      stored,
+    ],
+  };
+});
 
 const withRoleDeps = (deps: RouterDeps) => {
   withModelRoles(deps.prisma);
