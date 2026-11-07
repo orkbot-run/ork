@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
 import type { Page, Route } from "@playwright/test";
 import {
@@ -83,6 +83,7 @@ test("a retrying computer can be closed and keeps booting without a stale error 
   await held[0]!.fulfill({ response });
   await expect(preview.locator("iframe")).toHaveAttribute("src", screenUrl);
   await expect(close).toHaveCount(0);
+  await page.unrouteAll({ behavior: "wait" });
 });
 
 test("opening a computer refreshes a stale booting snapshot", async ({ page }, testInfo) => {

@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
 import type { Bot, Routine } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
@@ -35,12 +35,19 @@ test("a delayed schedule is visible only while the routine is active", async ({
     active: false,
   });
   let scheduleDelayed = true;
+  const withScheduleState = (item: Routine) =>
+    item.id === routine.id ? { ...item, active: true, scheduleDelayed } : item;
+  // Bootstrap seeds the editable draft; polling must describe that same routine.
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.json.routines = body.json.routines.map(withScheduleState);
+    await route.fulfill({ response, json: body });
+  });
   await page.route("**/rpc/routines/list", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
-    body.json = body.json.map((item: Routine) =>
-      item.id === routine.id ? { ...item, active: true, scheduleDelayed } : item,
-    );
+    body.json = body.json.map(withScheduleState);
     await route.fulfill({ response, json: body });
   });
   await page.reload();
@@ -59,6 +66,7 @@ test("a delayed schedule is visible only while the routine is active", async ({
   await expect(name).toHaveValue("Unsaved report name");
   await page.getByRole("switch", { name: "Active", exact: true }).click();
   await expect(delay).toHaveCount(0);
+  await page.unrouteAll({ behavior: "wait" });
 });
 
 async function saveAndReturn(page: Page, procedure: "routines/create" | "routines/update") {

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 harness behavior is preserved. Offline auth isolation is an Ork addition.
+// Inherited Apache-2.0 harness behavior is preserved. Offline auth isolation and local test concurrency controls are Ork additions.
 
 import { execSync } from "node:child_process";
 import { globSync } from "node:fs";
@@ -23,6 +23,7 @@ const sandboxArg = process.argv.find((arg) => arg.startsWith("--sandbox="));
 const specArg = process.argv.find((arg) => arg.startsWith("--spec="));
 const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
 const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
+const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
 const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
@@ -260,6 +261,7 @@ async function main() {
             ...(e2eSpec ? [e2eSpec] : []),
             ...(e2eGrep ? ["--grep", e2eGrep] : []),
             ...(shard ? ["--shard", shard] : []),
+            ...(workersArg ? [workersArg] : []),
           ],
           {
             ...process.env,
@@ -270,10 +272,12 @@ async function main() {
           },
         );
       } catch (error) {
-        const failedRuns = await handles.prisma.run.findMany({
-          where: { status: "failed" },
-          select: { id: true, error: true },
-        });
+        const failedRuns = await runAsSystem("report failed E2E runs", () =>
+          handles.prisma.run.findMany({
+            where: { status: "failed" },
+            select: { id: true, error: true },
+          }),
+        );
         if (failedRuns.length) console.error("Failed agent runs:", failedRuns);
         throw error;
       }

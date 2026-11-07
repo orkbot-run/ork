@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
 import { CONNECTION_LABEL_MAX_LENGTH } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
@@ -353,14 +353,16 @@ test("takeover, routine, plugins, and export are reachable", async ({ page }, te
 test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) => {
   const browserErrors: string[] = [];
   const failedRequests: string[] = [];
+  const coreWrites = new Set(["/rpc/threads/send", "/rpc/threads/stop", "/rpc/bots/create"]);
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
   });
   page.on("requestfailed", (request) => {
-    failedRequests.push(
-      `${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`,
-    );
+    const failure = request.failure()?.errorText ?? "";
+    // Navigation and responsive remounts cancel background work; this test's writes must finish.
+    if (failure === "net::ERR_ABORTED" && !coreWrites.has(new URL(request.url()).pathname)) return;
+    failedRequests.push(`${request.method()} ${request.url()} ${failure}`);
   });
   const stamp = Date.now();
   const email = `shell-${stamp}@orkbot.test`;
@@ -452,6 +454,8 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await expect(sidebarBotButton(page, /^Chief/)).toBeVisible();
   await expect(sidebarBotButton(page, /Scout/)).toBeVisible();
   await captureScreenshot(page, testInfo, "15-restored-session");
+  expect(browserErrors).toEqual([]);
+  expect(failedRequests).toEqual([]);
 });
 
 async function threadRunStatus(page: Page) {

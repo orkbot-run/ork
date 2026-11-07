@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
 import type { Page, Route } from "@playwright/test";
 import {
@@ -464,7 +464,10 @@ test("a page's failures, legacy link revocation, and the Library's search and re
   // A failed delete keeps the confirmation open with the reason.
   await page.route("**/rpc/pages/remove", (route) => route.abort("failed"));
   await library.getByRole("button", { name: "Actions for Beta" }).click();
-  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await page
+    .getByRole("menu", { name: "Actions for Beta", exact: true })
+    .getByRole("menuitem", { name: "Delete", exact: true })
+    .click();
   const confirm = page.getByRole("alertdialog", { name: "Delete Beta?" });
   await confirm.getByRole("button", { name: "Delete" }).click();
   await expect(confirm.locator("p.text-destructive")).not.toBeEmpty();

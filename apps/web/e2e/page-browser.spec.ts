@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
+// Inherited Apache-2.0 tests are preserved. Native renderer entry selection and test reliability changes are Ork additions.
 
 import { execFile } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -62,7 +62,7 @@ test("live page helper preserves identity, masks passwords, and reports partial 
     const page = context.pages()[0]!;
     await page.goto(`http://127.0.0.1:${address.port}`);
     const snapshot = await command("snapshot");
-    expect(snapshot.ok).toBe(true);
+    expect(snapshot.ok, snapshot.error ?? "Page snapshot failed").toBe(true);
     expect(snapshot.title).toBe("Fixture");
     expect(snapshot.tree).toContain("Readable article content");
     expect(JSON.stringify(snapshot)).not.toContain("fake-test-password");
