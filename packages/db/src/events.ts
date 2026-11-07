@@ -691,6 +691,7 @@ export async function sendUserMessage(
         runId: run?.id ?? busy?.id,
         payload: {
           messageId: message.id,
+          seq: message.seq,
           role: "user",
           blocks: input.blocks,
           // Carries the call id on the live event so a spoken turn groups into the
@@ -1057,7 +1058,7 @@ async function commitAnswerRunInput(
       botId: run.botId,
       type: "thread.message.created",
       runId: input.runId,
-      payload: { messageId: utterance.id, role: "user", blocks, callId },
+      payload: { messageId: utterance.id, seq: utterance.seq, role: "user", blocks, callId },
     });
   }
 
@@ -1180,7 +1181,7 @@ async function commitAnswerRunInput(
     botId: run.botId,
     type: "thread.message.updated",
     runId: input.runId,
-    payload: { messageId: message.id, role: "bot", blocks },
+    payload: { messageId: message.id, seq: message.seq, role: "bot", blocks },
   });
   return {
     threadId: updated.threadId,
@@ -1245,7 +1246,7 @@ export async function retireWaitingQuestionInTransaction(
   if (!run) return false;
   const messages = await tx.message.findMany({
     where: { threadId: input.threadId, runId: input.runId, role: "bot" },
-    select: { id: true, blocks: true },
+    select: { id: true, seq: true, blocks: true },
   });
   const questions = [];
   for (const message of messages) {
@@ -1264,6 +1265,7 @@ export async function retireWaitingQuestionInTransaction(
     if (pending.length) {
       questions.push({
         id: message.id,
+        seq: message.seq,
         blocks: parsed.data.map((block) =>
           pending.includes(block) ? { ...block, status: "answered" as const, answer } : block,
         ),
@@ -1303,7 +1305,7 @@ export async function retireWaitingQuestionInTransaction(
       ...input,
       type: "thread.message.updated",
       allowCancelledRun: true,
-      payload: { messageId: question.id, role: "bot", blocks: question.blocks },
+      payload: { messageId: question.id, seq: question.seq, role: "bot", blocks: question.blocks },
     });
   }
   await appendEventInTransaction(tx, { ...input, type: "run.cancelled", payload: {} });
@@ -1420,7 +1422,7 @@ export async function pauseRunForInput(
       botId: input.botId,
       type: "thread.message.created",
       runId: input.runId,
-      payload: { messageId: message.id, role: "bot", blocks: input.blocks },
+      payload: { messageId: message.id, seq: message.seq, role: "bot", blocks: input.blocks },
     });
     const run = await tx.run.findUnique({
       where: { id: input.runId },
@@ -1744,7 +1746,7 @@ async function settleReleasedTakeoverCardsInTransaction(
 ): Promise<number | null> {
   const messages = await tx.message.findMany({
     where: { threadId: input.threadId, runId: input.runId, role: "bot" },
-    select: { id: true, blocks: true },
+    select: { id: true, seq: true, blocks: true },
   });
   let lastSeq: number | null = null;
   for (const message of messages) {
@@ -1763,7 +1765,7 @@ async function settleReleasedTakeoverCardsInTransaction(
       type: "thread.message.updated",
       runId: input.runId,
       lease: input.lease,
-      payload: { messageId: message.id, role: "bot", blocks },
+      payload: { messageId: message.id, seq: message.seq, role: "bot", blocks },
     });
     lastSeq = updated.seq;
   }
@@ -1960,7 +1962,7 @@ async function finalizeRunOnce(
         botId: input.botId,
         type: "thread.message.created",
         runId: input.runId,
-        payload: { messageId: message.id, role: "bot", blocks: replyBlocks },
+        payload: { messageId: message.id, seq: message.seq, role: "bot", blocks: replyBlocks },
       });
       firstResponse = response.firstResponse;
     }

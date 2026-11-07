@@ -2,11 +2,25 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
 
-// @vitest-environment jsdom
 import type { MessageBlock } from "@orkbot/contracts";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import type { MobileSnapshot } from "./api";
+import type { SendAttempt } from "./thread-feedback";
+
+const owner = vi.hoisted(() => ({
+  apiBase: "https://app.example",
+  spaceId: null as string | null,
+  generation: 1,
+  selectionGeneration: 0,
+}));
+vi.mock("expo-file-system", () => ({
+  Directory: class {},
+  File: class {},
+  Paths: { cache: "cache" },
+}));
 
 vi.mock("react-native", () => ({ Alert: { alert: vi.fn() } }));
 vi.mock("expo-router", () => ({
@@ -14,17 +28,18 @@ vi.mock("expo-router", () => ({
   useNavigation: () => ({ isFocused: () => true }),
 }));
 vi.mock("./api", () => ({
-  currentApiBase: () => "https://app.example",
+  currentApiBase: () => owner.apiBase,
   loadSessionToken: async () => "token",
   rpc: vi.fn(),
-  selectedSpaceId: () => null,
+  selectedSpaceId: () => owner.spaceId,
+  spaceSelectionSeq: () => owner.selectionGeneration,
 }));
 vi.mock("./i18n", () => ({ t: (text: string) => text, useI18n: () => ({ t: (s: string) => s }) }));
 vi.mock("./live-notifications", () => ({ resumeLiveNotifications: async () => undefined }));
 vi.mock("./focus-prompt", () => ({ cancelFocusPrompt: () => undefined }));
 vi.mock("./unsent-sends", () => ({ prepareUnsentSends: async () => undefined }));
 vi.mock("./session", () => ({
-  currentSessionGeneration: () => 1,
+  currentSessionGeneration: () => owner.generation,
   registerSessionDiskCache: () => undefined,
 }));
 vi.mock("./page-runtime", () => ({ loadPageRuntime: async () => "" }));
@@ -56,6 +71,33 @@ async function chat(
   const payloads: unknown[] = [];
   let sender!: Sender;
   let draft = "";
+  const snapRef: { current: MobileSnapshot | null } = {
+    current: {
+      threadId: "thread",
+      botId: "bot-1",
+      cursor: 0,
+      olderCursor: null,
+      run: null,
+      messages: messages as MobileSnapshot["messages"],
+    },
+  };
+  const snapshotOrigin = {
+    current: {
+      apiBase: owner.apiBase,
+      userId: "owner",
+      spaceId: "space",
+      namespace: "namespace",
+      sessionGeneration: owner.generation,
+      selectionId: owner.spaceId,
+      selectionGeneration: owner.selectionGeneration,
+    },
+  };
+  const terminalRunReceipts = { current: new Set<string>() };
+  const commitSnap = vi.fn((next: MobileSnapshot | null) => {
+    snapRef.current = next;
+  });
+  const refresh = vi.fn<() => Promise<MobileSnapshot | undefined>>(async () => undefined);
+  const activeBotId = { current: "bot-1" as string | undefined };
   const feedback = {
     setError: () => undefined,
     sendAttempt: (payload: unknown) => {
@@ -70,7 +112,9 @@ async function chat(
       readOnly: false,
       threadKey: "bot-1",
       history: {
-        snapRef: { current: { messages } },
+        snapRef,
+        snapshotOrigin,
+        commitSnap,
         pinnedAroundRef: { current: null },
         jumpScrollTarget: { current: null },
       },
@@ -84,10 +128,12 @@ async function chat(
         importingShare: { current: false },
       },
       mentionBotsRef: { current: [] },
-      activeBotId: { current: "bot-1" },
+      activeBotId,
       activeGroupId: { current: undefined },
-      isCurrentTarget: () => true,
-      refresh: async () => undefined,
+      isCurrentTarget: (botId: string | undefined, groupId: string | undefined) =>
+        botId === activeBotId.current && !groupId,
+      terminalRunReceipts,
+      refresh,
       showLatest: () => undefined,
       markCaughtUp: () => undefined,
       openBotChat: () => undefined,
@@ -126,6 +172,12 @@ async function chat(
   };
   return {
     sender: () => sender,
+    snapRef,
+    snapshotOrigin,
+    terminalRunReceipts,
+    commitSnap,
+    refresh,
+    activeBotId,
     captureForSend,
     releaseAttachments,
     payloads,
@@ -248,3 +300,87 @@ it("keeps newer mobile text separate when an earlier send remains in its outbox"
     await act(async () => fixture.root.unmount());
   }
 });
+
+it.each([false, true])(
+  "applies a committed receipt before refresh, unless its run already ended: %s",
+  async (terminal) => {
+    const outbox = await import("./thread-feedback");
+    let delivered!: (attempt: SendAttempt) => void;
+    const subscription = vi.spyOn(outbox, "subscribeDelivered").mockImplementation((listener) => {
+      delivered = listener;
+      return () => {};
+    });
+    const fixture = await chat([]);
+    try {
+      const receipt = { botId: "bot-1", runId: "receipt", taskId: "task" };
+      if (terminal) fixture.terminalRunReceipts.current.add(receipt.runId);
+      const before = fixture.snapRef.current;
+      fixture.refresh.mockRejectedValueOnce(new Error("fixture refresh unavailable"));
+      await act(async () =>
+        delivered({
+          payload: {
+            originThreadKey: "bot-1",
+            botTarget: "bot-1",
+            reroutedToGroup: false,
+            plan: {},
+          },
+          acceptedRun: receipt,
+          apiBase: owner.apiBase,
+          spaceId: "space",
+          userId: "owner",
+          cacheSession: "namespace",
+        } as SendAttempt),
+      );
+      expect(fixture.refresh).toHaveBeenCalledOnce();
+      if (terminal) expect(fixture.snapRef.current).toBe(before);
+      else {
+        expect(fixture.snapRef.current?.run).toMatchObject({
+          id: receipt.runId,
+          botId: receipt.botId,
+          taskId: receipt.taskId,
+          status: "queued",
+        });
+        expect(fixture.snapRef.current?.activeRuns).toEqual([fixture.snapRef.current?.run]);
+      }
+    } finally {
+      await act(async () => fixture.root.unmount());
+      subscription.mockRestore();
+    }
+  },
+);
+
+it.each(["account", "namespace", "server", "Space", "generation", "selection", "chat"])(
+  "does not apply a delivery to a replacement %s",
+  async (change) => {
+    const outbox = await import("./thread-feedback");
+    let delivered!: (attempt: SendAttempt) => void;
+    const subscription = vi.spyOn(outbox, "subscribeDelivered").mockImplementation((listener) => {
+      delivered = listener;
+      return () => {};
+    });
+    const fixture = await chat([]);
+    const attempt = {
+      payload: { originThreadKey: "bot-1", botTarget: "bot-1", reroutedToGroup: false, plan: {} },
+      acceptedRun: { botId: "bot-1", runId: "receipt", taskId: "task" },
+      apiBase: owner.apiBase,
+      spaceId: "space",
+      userId: "owner",
+      cacheSession: "namespace",
+    } as SendAttempt;
+    try {
+      if (change === "account") fixture.snapshotOrigin.current.userId = "other";
+      if (change === "namespace") fixture.snapshotOrigin.current.namespace = "other";
+      if (change === "server") fixture.snapshotOrigin.current.apiBase = "https://other.example";
+      if (change === "Space") fixture.snapshotOrigin.current.spaceId = "other";
+      if (change === "generation") fixture.snapshotOrigin.current.sessionGeneration--;
+      if (change === "selection") fixture.snapshotOrigin.current.selectionGeneration--;
+      if (change === "chat") fixture.activeBotId.current = "other";
+      await act(async () => delivered(attempt));
+      expect(fixture.commitSnap).not.toHaveBeenCalled();
+      expect(fixture.refresh).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => fixture.root.unmount());
+      subscription.mockRestore();
+    }
+  },
+);

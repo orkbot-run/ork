@@ -9,27 +9,27 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   answerableAskMessageIds,
+  applyThreadSendReceipt,
+  clearActiveThreadRuns,
   dismissableAskMessageIds,
+  isThreadSnapshotEvent,
+  mergeThreadSnapshot,
+  reconcileRefreshedThread,
+  reduceThreadSnapshot,
+  threadRunError,
   withLiveStreamingProgress,
 } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
-  activeThreadRuns,
-  applyThreadSendReceipt,
-  clearActiveThreadRuns,
   computerPanelNeedsMaintenance,
   computerPanelNeedsScreen,
   computerTakeoverBlocked,
-  isThreadSnapshotEvent,
-  mergeThreadSnapshot,
   prependThreadMessagePage,
-  reconcileRefreshedThread,
   reduceComputerStatus,
-  reduceThreadSnapshot,
   screenMissing,
   screenReadLoaded,
-  threadRunError,
   userHoldsComputerControl,
 } from "./thread-events.js";
 
@@ -501,7 +501,7 @@ describe("thread event reduction", () => {
       initial,
       event({
         type: "run.started",
-        seq: 3,
+        seq: 4,
         runId: "run-1",
         payload: { trigger: "user" },
       }),
@@ -856,7 +856,8 @@ describe("thread event reduction", () => {
 
     const reconciled = reconcileRefreshedThread(newer, older, prevComputer);
 
-    expect(reconciled.snapshot).toBe(newer);
+    expect(reconciled.snapshot).toEqual({ ...newer, computer: prevComputer });
+    expect(reconciled.snapshot.messages).toBe(newer.messages);
     expect(reconciled.computer).toBe(prevComputer);
   });
 
@@ -876,7 +877,8 @@ describe("thread event reduction", () => {
       computer({ state: "running", controlHolder: "bot", busyBotName: null }),
     );
 
-    expect(reconciled.snapshot).toBe(newer);
+    expect(reconciled.snapshot).toEqual({ ...newer, computer: older.computer });
+    expect(reconciled.snapshot.messages).toBe(newer.messages);
     expect(reconciled.computer?.busyBotName).toBe("Chief");
   });
 
@@ -1170,9 +1172,13 @@ describe("thread event reduction", () => {
 
     expect(waiting?.run?.status).toBe("waiting_input");
     expect(waiting?.cursor).toBe(6);
-    expect(
-      reduceThreadSnapshot(waiting, event({ type: "run.waiting_input", seq: 7, runId: "run-1" })),
-    ).toBe(waiting);
+    const repeated = reduceThreadSnapshot(
+      waiting,
+      event({ type: "run.waiting_input", seq: 7, runId: "run-1" }),
+    );
+    expect(repeated?.run).toBe(waiting?.run);
+    expect(repeated?.messages).toBe(waiting?.messages);
+    expect(repeated?.cursor).toBe(7);
   });
 
   it("clears live progress when a run waits for input", () => {
@@ -2001,7 +2007,7 @@ describe("stale helper projection", () => {
     };
     const helper = { agentId: "helper", name: "Helper", task: "Check", status: "running" };
     let next = reduceThreadSnapshot(
-      snapshot([]),
+      { ...snapshot([]), cursor: 0 },
       event({ ...base, type: "thread.subagent", payload: helper }),
     );
     next = reduceThreadSnapshot(next, event({ ...base, seq: 2, type, payload: {} }));

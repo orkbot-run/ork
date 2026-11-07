@@ -1,7 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 thread behavior is preserved. Shared reconciliation follows LICENSE.md.
+
 import { isRetryableError } from "@orkbot/core";
 import { useFocusEffect } from "expo-router";
 import type { Dispatch, RefObject, SetStateAction } from "react";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { mergeMobileSnapshot, mobileThreadRefreshResult, rpc, selectedSpaceId } from "./api";
 import { onConversationCleared } from "./conversation-cleared";
 import { useI18n } from "./i18n";
@@ -68,6 +72,7 @@ export function useThreadSync({
   markReadIfVisible: () => void;
 }) {
   const { t } = useI18n();
+  const terminalRunReceipts = useRef(new Set<string>());
   const {
     snap,
     showingSaved,
@@ -154,9 +159,13 @@ export function useThreadSync({
     if (result.commit) {
       snapshotOrigin.current = scope;
       pendingSave.current = null;
-      writeSavedThread(scope, savedChatTarget(next), next);
+      writeSavedThread(scope, savedChatTarget(next), result.snapshot ?? next);
       commitSnap(
-        mergeMobileSnapshot(snapRef.current, next, expandedHistoryThread.current === next.threadId),
+        mergeMobileSnapshot(
+          snapRef.current,
+          result.snapshot ?? next,
+          expandedHistoryThread.current === next.threadId,
+        ),
       );
       setShowingSaved(false);
     }
@@ -196,6 +205,7 @@ export function useThreadSync({
     jumpScrollTarget,
     jumpAnchor,
     snapRef,
+    terminalRunReceipts,
     readVisibleTarget,
     showSavedThread,
     refresh,
@@ -301,5 +311,5 @@ export function useThreadSync({
     );
   }, [botId, groupId, messageId, sessionEpoch]);
 
-  return { isCurrentTarget, refresh, applyMessageJump, showLatest };
+  return { isCurrentTarget, refresh, applyMessageJump, showLatest, terminalRunReceipts };
 }

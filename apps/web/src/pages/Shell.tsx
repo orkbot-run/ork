@@ -13,6 +13,7 @@ import type {
 } from "@orkbot/contracts";
 import { DEFAULT_NEW_BOT_AVATAR_SET } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   answerableAskMessageIds,
   canConfigureComputers,
   channelMessageSender,
@@ -72,7 +73,7 @@ import type { Panel } from "../lib/right-panel-state";
 import { rightPanelStorageKey } from "../lib/right-panel-state";
 import { createSpaceRpc, selectedSpaceId, selectSpace } from "../lib/rpc";
 import { markShellReady, useSpaceEpoch } from "../lib/space-switch";
-import { activeThreadRuns } from "../lib/thread-events";
+
 import { getToolActivityEnabled, subscribeToolActivity } from "../lib/tool-activity-preference";
 import type { AppearancePreference } from "../lib/ui-appearance";
 import { getUiAppearancePreference, setUiAppearance } from "../lib/ui-appearance";

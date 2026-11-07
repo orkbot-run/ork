@@ -335,24 +335,25 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     speakFinishedReplyRef,
   });
 
-  const { isCurrentTarget, refresh, applyMessageJump, showLatest } = useThreadSync({
-    history,
-    scroll,
-    botId,
-    groupId,
-    messageId,
-    readOnly,
-    foreground,
-    sessionEpoch,
-    activeBotId,
-    activeGroupId,
-    readVisibleTarget,
-    setExpandedPeerMarkers,
-    setError,
-    onRefreshed: feedback.refreshed,
-    refreshMentionBots,
-    markReadIfVisible,
-  });
+  const { isCurrentTarget, refresh, applyMessageJump, showLatest, terminalRunReceipts } =
+    useThreadSync({
+      history,
+      scroll,
+      botId,
+      groupId,
+      messageId,
+      readOnly,
+      foreground,
+      sessionEpoch,
+      activeBotId,
+      activeGroupId,
+      readVisibleTarget,
+      setExpandedPeerMarkers,
+      setError,
+      onRefreshed: feedback.refreshed,
+      refreshMentionBots,
+      markReadIfVisible,
+    });
 
   const paging = useThreadPaging({
     history,
@@ -378,6 +379,7 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
     activeBotId,
     activeGroupId,
     isCurrentTarget,
+    terminalRunReceipts,
     refresh,
     showLatest,
     markCaughtUp,

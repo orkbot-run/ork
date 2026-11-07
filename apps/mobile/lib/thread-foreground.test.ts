@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 thread behavior is preserved. Shared reconciliation follows LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { act, createElement } from "react";
@@ -56,6 +60,7 @@ describe("thread foreground subscription", () => {
     const root = createRoot(document.createElement("div"));
     function Probe() {
       useThreadLiveSubscription({
+        terminalRunReceipts: { current: new Set() },
         botId: "bot-1",
         foreground: true,
         readOnly: false,
@@ -125,6 +130,7 @@ describe("thread foreground subscription", () => {
     const root = createRoot(document.createElement("div"));
     function Probe() {
       useThreadLiveSubscription({
+        terminalRunReceipts: { current: new Set() },
         groupId: "group-1",
         foreground: true,
         readOnly: false,
@@ -197,6 +203,7 @@ describe("thread foreground subscription", () => {
       };
       function Probe({ botId, foreground }: { botId: string; foreground: boolean }) {
         useThreadLiveSubscription({
+          terminalRunReceipts: { current: new Set() },
           botId,
           foreground,
           readOnly: false,
@@ -242,4 +249,76 @@ describe("thread foreground subscription", () => {
       act(() => root.unmount());
     },
   );
+});
+
+it("fences terminal receipts and duplicate side effects with the same live cursor and owner", async () => {
+  const snapshot = { cursor: 10 } as MobileSnapshot;
+  const terminalRunReceipts = ref(new Set<string>());
+  let deliver: (event: LiveEvent) => void = () => {};
+  vi.mocked(applyMobileThreadEvent).mockReturnValue(snapshot);
+  vi.mocked(subscribeThread).mockImplementation(async (_target, _cursor, onEvent, signal) => {
+    deliver = onEvent as typeof deliver;
+    await new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve()));
+  });
+  const refresh = vi.fn(async () => snapshot);
+  const refreshMentionBots = vi.fn(async () => undefined);
+  const root = createRoot(document.createElement("div"));
+  function Probe({
+    foreground,
+    epoch,
+    botId,
+  }: {
+    foreground: boolean;
+    epoch: number;
+    botId: string;
+  }) {
+    useThreadLiveSubscription({
+      botId,
+      foreground,
+      sessionEpoch: epoch,
+      readOnly: false,
+      terminalRunReceipts,
+      historyEpoch: ref(0),
+      expandedHistoryThread: ref(null),
+      pinnedAroundRef: ref(null),
+      jumpScrollTarget: ref(null),
+      jumpAnchor: ref({ release() {} } as ThreadJumpAnchor),
+      snapRef: ref(snapshot),
+      readVisibleTarget: ref(null),
+      showSavedThread() {},
+      refresh,
+      commitSnap() {},
+      setError() {},
+      refreshMentionBots,
+      markReadIfVisible() {},
+    });
+    return null;
+  }
+  const render = (foreground: boolean, epoch = 1, botId = "bot-1") =>
+    act(async () => root.render(createElement(Probe, { foreground, epoch, botId })));
+  try {
+    await render(true);
+    deliver({ type: "run.completed", seq: 11, runId: "finished" });
+    deliver({ type: "run.completed", seq: 11, runId: "duplicate" });
+    deliver({ type: "run.completed", seq: 9, runId: "older" });
+    expect([...terminalRunReceipts.current]).toEqual(["finished"]);
+    expect(applyMobileThreadEvent).toHaveBeenCalledTimes(1);
+    expect(refreshMentionBots).toHaveBeenCalledTimes(1);
+    const retired = deliver;
+    await render(false);
+    retired({ type: "run.completed", seq: 12, runId: "late" });
+    expect([...terminalRunReceipts.current]).toEqual(["finished"]);
+    await render(true);
+    expect([...terminalRunReceipts.current]).toEqual(["finished"]);
+    await render(true, 1, "bot-2");
+    await render(true, 1, "bot-1");
+    expect([...terminalRunReceipts.current]).toEqual(["finished"]);
+    session.generation++;
+    deliver({ type: "run.completed", seq: 12, runId: "old-owner" });
+    expect([...terminalRunReceipts.current]).toEqual(["finished"]);
+    await render(true, 2);
+    expect(terminalRunReceipts.current.size).toBe(0);
+  } finally {
+    act(() => root.unmount());
+  }
 });

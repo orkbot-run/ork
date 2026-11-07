@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 composer tests are preserved. Shared receipt races follow LICENSE.md.
+
 // @vitest-environment jsdom
 import type { Bot, ComputerStatus, Me, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
 import { act } from "react";
@@ -46,7 +50,9 @@ const botsRef = ref<Bot[]>([]);
 const terminalRunReceipts = ref(new Set<string>());
 const computerRef = ref<ComputerStatus | null>(null);
 const refreshBots = async () => undefined;
-const updateSnapshot = () => undefined;
+const updateSnapshot = (update: (previous: ThreadSnapshot | null) => ThreadSnapshot | null) => {
+  activeSnapshot = update(activeSnapshot);
+};
 const commitComputer = () => undefined;
 const clearReadBoundary = () => undefined;
 const flushPendingBrowserNotifications = () => undefined;
@@ -552,3 +558,45 @@ it("clears a quoted reply re-picked as a fresh object after a thread refresh", a
   expect(latest.replyTarget).toBeNull();
   expect(latest.replyQuote).toBeNull();
 });
+
+it.each([false, true])(
+  "keeps accepted work visible before a failed refresh without reviving a terminal run: %s",
+  async (terminal) => {
+    activeSnapshot = {
+      botId: "bot-1",
+      threadId: "thread",
+      cursor: 0,
+      messages: [],
+      olderCursor: null,
+      run: null,
+    };
+    act(() => root.render(<Harness />));
+    let release!: (receipt: { runId: string; taskId: string }) => void;
+    rpc.threads.send.mockReturnValue(
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+    );
+    refreshThread = async () => {
+      throw new Error("fixture refresh unavailable");
+    };
+    let sending!: Promise<boolean>;
+    act(() => {
+      sending = latest.sendMessage("accepted", [], "receipt-nonce");
+    });
+    await vi.waitFor(() => expect(rpc.threads.send).toHaveBeenCalledOnce());
+    if (terminal) terminalRunReceipts.current.add("receipt-run");
+    const before = activeSnapshot;
+    await act(async () => {
+      release({ runId: "receipt-run", taskId: "receipt-task" });
+      expect(await sending).toBe(true);
+    });
+    if (terminal) expect(activeSnapshot).toBe(before);
+    else
+      expect(activeSnapshot?.run).toMatchObject({
+        id: "receipt-run",
+        taskId: "receipt-task",
+        status: "queued",
+      });
+  },
+);

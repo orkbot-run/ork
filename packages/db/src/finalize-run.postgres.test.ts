@@ -1,8 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 finalization tests are preserved. Authoritative message sequence coverage follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
-import { finalizeRun } from "./events.js";
+import { appendEvent, finalizeRun } from "./events.js";
 import { createThreadMessage } from "./messages.js";
 import { provisionMessagingIdentity } from "./messaging.js";
 import { asSystem, runAsSystem, runAsTenant } from "./row-security.js";
@@ -86,6 +90,23 @@ describePostgres("finalizing a run (PostgreSQL)", () => {
         role: "user",
         blocks: [{ kind: "text", text: `also this ${randomUUID()}` }],
       });
+      // Event and durable-message counters deliberately diverge in this fixture.
+      let offset = await appendEvent(system, {
+        spaceId,
+        threadId,
+        botId,
+        type: "thread.progress",
+        payload: { text: "fixture offset" },
+      });
+      while (offset.seq <= steering.seq) {
+        offset = await appendEvent(system, {
+          spaceId,
+          threadId,
+          botId,
+          type: "thread.progress",
+          payload: { text: "fixture offset" },
+        });
+      }
       await system.steeringMessage.create({
         data: { messageId: steering.id, botId, userId, runId: run.id },
       });
@@ -122,6 +143,14 @@ describePostgres("finalizing a run (PostgreSQL)", () => {
 
       await expect(finalized).resolves.toEqual({ continuationRunId: expect.any(String) });
       await reader;
+      const reply = await system.message.findFirstOrThrow({
+        where: { threadId, runId: run.id, role: "bot" },
+      });
+      const replyEvent = await system.event.findFirstOrThrow({
+        where: { threadId, runId: run.id, type: "thread.message.created" },
+      });
+      expect(replyEvent.seq).not.toBe(reply.seq);
+      expect(replyEvent.payload).toMatchObject({ messageId: reply.id, seq: reply.seq });
       expect(await system.run.findUniqueOrThrow({ where: { id: run.id } })).toMatchObject({
         status: "completed",
         error: null,
