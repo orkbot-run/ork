@@ -1,61 +1,34 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared preference integration follows LICENSE.md.
+
+import { browserPreference, preferenceStorage } from "./persisted-preference";
+
 export type BotsSidebarDensity = "comfortable" | "compact";
-
 export const BOTS_SIDEBAR_DENSITY_STORAGE_KEY = "orkbot.botsSidebarDensity";
-
-type DensityStorage = Pick<Storage, "getItem" | "setItem">;
-
-const listeners = new Set<() => void>();
-let memoryPreference: BotsSidebarDensity | null = null;
-
-function getLocalStorage(): DensityStorage | null {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage : null;
-  } catch {
-    return null;
-  }
-}
 
 export function normalizeBotsSidebarDensity(raw: string | null | undefined): BotsSidebarDensity {
   return raw?.trim().toLowerCase() === "compact" ? "compact" : "comfortable";
 }
+const preference = browserPreference(BOTS_SIDEBAR_DENSITY_STORAGE_KEY, normalizeBotsSidebarDensity);
 
 export function readBotsSidebarDensity(
-  storage: Pick<Storage, "getItem"> | null = getLocalStorage(),
+  storage: Pick<Storage, "getItem"> | null = preferenceStorage(),
 ): BotsSidebarDensity {
-  if (!storage) return "comfortable";
-  try {
-    return normalizeBotsSidebarDensity(storage.getItem(BOTS_SIDEBAR_DENSITY_STORAGE_KEY));
-  } catch {
-    return "comfortable";
-  }
+  return preference.read(() => storage?.getItem(BOTS_SIDEBAR_DENSITY_STORAGE_KEY) ?? null);
 }
-
 export function persistBotsSidebarDensity(
   density: BotsSidebarDensity,
-  storage: Pick<Storage, "setItem"> | null = getLocalStorage(),
+  storage: Pick<Storage, "setItem"> | null = preferenceStorage(),
 ): void {
-  if (!storage) return;
-  try {
-    storage.setItem(BOTS_SIDEBAR_DENSITY_STORAGE_KEY, normalizeBotsSidebarDensity(density));
-  } catch {
-    // Keep the in-memory preference when local storage is unavailable or blocked.
-  }
+  preference.persist(normalizeBotsSidebarDensity(density), (serialized) => {
+    if (!storage) return false;
+    storage.setItem(BOTS_SIDEBAR_DENSITY_STORAGE_KEY, serialized);
+    return true;
+  });
 }
-
-export function getBotsSidebarDensity(): BotsSidebarDensity {
-  return memoryPreference ?? readBotsSidebarDensity();
-}
-
+export const getBotsSidebarDensity: () => BotsSidebarDensity = preference.get;
 export function setBotsSidebarDensity(density: BotsSidebarDensity): BotsSidebarDensity {
-  memoryPreference = normalizeBotsSidebarDensity(density);
-  persistBotsSidebarDensity(memoryPreference);
-  for (const listener of listeners) listener();
-  return memoryPreference;
+  return preference.set(normalizeBotsSidebarDensity(density));
 }
-
-export function subscribeBotsSidebarDensity(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+export const subscribeBotsSidebarDensity = preference.subscribe;

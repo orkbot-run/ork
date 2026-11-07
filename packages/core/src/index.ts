@@ -84,6 +84,7 @@ export * from "./peer-exchanges.js";
 export * from "./peer-history.js";
 export * from "./peer-messages.js";
 export * from "./pending-revocations.js";
+export * from "./persisted-preference.js";
 export * from "./personal-ork.js";
 export * from "./plugin-catalog.js";
 export * from "./product-analytics.js";

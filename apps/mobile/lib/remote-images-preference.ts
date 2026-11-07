@@ -1,48 +1,30 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared preference integration follows LICENSE.md.
+
 import type { RemoteImagesPreference } from "@orkbot/core";
-import { normalizeRemoteImagesPreference, REMOTE_IMAGES_STORAGE_KEY } from "@orkbot/core";
+import {
+  createPersistedPreference,
+  normalizeRemoteImagesPreference,
+  REMOTE_IMAGES_STORAGE_KEY,
+} from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 
 export type { RemoteImagesPreference };
 
-let memoryPreference: RemoteImagesPreference | null = null;
-const listeners = new Set<() => void>();
-
-function notify() {
-  for (const listener of listeners) listener();
-}
+const preference = createPersistedPreference({ normalize: normalizeRemoteImagesPreference });
 
 export function getCachedRemoteImagesEnabled(): boolean {
-  return memoryPreference === "on";
+  return preference.get() === "on";
 }
-
-export async function loadRemoteImagesPreference(): Promise<RemoteImagesPreference> {
-  try {
-    const stored = await SecureStore.getItemAsync(REMOTE_IMAGES_STORAGE_KEY);
-    memoryPreference = normalizeRemoteImagesPreference(stored);
-  } catch {
-    memoryPreference = memoryPreference ?? "off";
-  }
-  notify();
-  return memoryPreference;
+export function loadRemoteImagesPreference(): Promise<RemoteImagesPreference> {
+  return preference.load(() => SecureStore.getItemAsync(REMOTE_IMAGES_STORAGE_KEY));
 }
-
-export async function setRemoteImagesPreference(
-  preference: RemoteImagesPreference,
+export function setRemoteImagesPreference(
+  value: RemoteImagesPreference,
 ): Promise<RemoteImagesPreference> {
-  memoryPreference = preference;
-  // Paint the switch before SecureStore resolves.
-  notify();
-  try {
-    await SecureStore.setItemAsync(REMOTE_IMAGES_STORAGE_KEY, preference);
-  } catch {
-    // Keep the in-memory preference when SecureStore is unavailable.
-  }
-  return preference;
+  return preference.save(value, (serialized) =>
+    SecureStore.setItemAsync(REMOTE_IMAGES_STORAGE_KEY, serialized),
+  );
 }
-
-export function subscribeRemoteImages(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+export const subscribeRemoteImages = preference.subscribe;
