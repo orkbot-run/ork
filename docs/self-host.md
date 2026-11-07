@@ -132,7 +132,7 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Signup never grants server-
 that HTTPS URL.
 
 Images Compose binds web to loopback (`127.0.0.1:5173`). Terminate TLS on the host and proxy
-there. Vite preview same-origin-proxies `/api` and `/rpc`, so do not expose `:3100`. Set
+there. The Node HTTP gateway proxies `/api` and `/rpc` on the same origin, so do not expose `:3100`. Set
 `BETTER_AUTH_URL`, `WEB_ORIGIN`, and `API_URL` to that same HTTPS origin, and set
 `ORKBOT_HOST` to its hostname (for example, `app.example.com`). Cookies and CORS follow those
 origins.
@@ -163,7 +163,7 @@ If the installer, Compose downloads, or image pulls are blocked, use the
 
 On Windows, if an older clone with `core.autocrlf=true` leaves the computer pane hung on boot (`bash\r` in sandbox logs): from a clean worktree, set `git config core.autocrlf false`, run `git add --renormalize . && git checkout -- .`, then rebuild with `pnpm sandbox:build`.
 
-Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview serving pairing pages, authorization callbacks and the screen proxy. The product renderer ships with Tauri. Bot computers are sibling containers (`orkbot/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
+Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Node HTTP gateway serving pairing pages, authorization callbacks and the screen proxy. The product renderer ships with Tauri. Bot computers are sibling containers (`orkbot/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
 
 Postgres stays on the Compose network only (not published on the host), matching the images
 compose. Credentials come from `.env` (`POSTGRES_PASSWORD` is required). Prefer a URI-safe value

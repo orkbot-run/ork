@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rakazo contributors
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Railway startup is preserved. The gateway runs as compiled JavaScript.
+
 set -euo pipefail
 umask 077
 
@@ -27,7 +32,7 @@ export SIGNUPS_ENABLED=false
 trap 'kill $(jobs -pr) 2>/dev/null || true; wait || true' EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
-# The API is reached only through the web preview proxy on loopback. Railway's edge names the
+# The API is reached only through the web gateway on loopback. Railway's edge names the
 # client in X-Real-IP, which that proxy passes on unchanged.
 # Server installs encrypt content at rest unless the operator sets CONTENT_ENCRYPTION=off.
 export CONTENT_ENCRYPTION="${CONTENT_ENCRYPTION:-on}"
@@ -45,7 +50,7 @@ pnpm --filter @orkbot/worker start &
   throw new Error("API did not become ready");
 '
   exec env -u RAILWAY_API_TOKEN -u DATABASE_URL -u ENCRYPTION_KEY -u ENCRYPTION_MASTER_KEYS -u OBJECT_STORAGE_SECRET_ACCESS_KEY -u BETTER_AUTH_SECRET \
-    pnpm --filter @orkbot/web preview --host 0.0.0.0 --port 5173
+    node --enable-source-maps apps/web/server/index.js --host 0.0.0.0 --port 5173
 ) &
 wait -n
 exit 1

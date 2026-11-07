@@ -146,7 +146,7 @@ services:
     image: ${TOPOLOGY_APP_IMAGE:-orkbot/app:topology}
     # Directly, not through pnpm, so a stop reaches it (see the api command).
     working_dir: /app/apps/web
-    command: ["node_modules/.bin/vite", "preview", "--host", "0.0.0.0", "--port", "5173"]
+    command: ["node", "--enable-source-maps", "server/index.js", "--host", "0.0.0.0", "--port", "5173"]
     environment:
       NODE_ENV: production
       API_PROXY_TARGET: http://api:3100

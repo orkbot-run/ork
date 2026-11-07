@@ -1,13 +1,14 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
 import type { ProxyOptions, UserConfig } from "vite";
-import { createServer, loadConfigFromFile, preview } from "vite";
+import { createServer, loadConfigFromFile } from "vite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEVICE_SOCKET } from "./api-proxy.js";
+import { createGateway } from "./gateway/server.js";
 
 const configFile = path.resolve(import.meta.dirname, "../vite.config.ts");
 const cleanup: (() => Promise<void>)[] = [];
@@ -70,7 +71,7 @@ describe("vite.config", () => {
   it("loads and forwards only the device socket's upgrades", async () => {
     const loaded = await loadConfigFromFile({ command: "serve", mode: "production" }, configFile);
     const config = loaded?.config as UserConfig;
-    for (const proxy of [config.server?.proxy, config.preview?.proxy]) {
+    for (const proxy of [config.server?.proxy]) {
       const upgrades = Object.entries(proxy ?? {})
         .filter(([, options]) => (options as ProxyOptions).ws)
         .map(([context]) => context);
@@ -79,28 +80,25 @@ describe("vite.config", () => {
     }
   });
 
-  it("lets the device socket through for the hosts the preview server serves", async () => {
+  it("lets the production gateway accept only its configured device socket hosts", async () => {
     await useStandInApi();
-    const outDir = await mkdtemp(path.join(tmpdir(), "orkbot-vite-config-"));
-    cleanup.push(() => rm(outDir, { recursive: true, force: true }));
-    await writeFile(path.join(outDir, "index.html"), "<!doctype html>");
-
-    // Hosts given here reach only the preview server's list, not the dev server's.
-    const server = await preview({
-      configFile,
-      root: path.dirname(configFile),
-      mode: "production",
-      logLevel: "silent",
-      build: { outDir },
-      preview: { host: "127.0.0.1", port: 0, allowedHosts: ["preview.example.test"] },
+    const root = await mkdtemp(path.join(tmpdir(), "orkbot-gateway-config-"));
+    cleanup.push(() => rm(root, { recursive: true, force: true }));
+    await mkdir(path.join(root, "dist"));
+    await writeFile(path.join(root, "dist/index.html"), "<!doctype html>");
+    const server = createGateway({
+      root,
+      api: process.env.API_PROXY_TARGET!,
+      screenSecret: "fake-secret",
+      allowedHosts: ["app.example.test", ".team.example.test", "gateway.example.test"],
     });
-    cleanup.push(() => server.close());
-    const { port } = server.httpServer.address() as AddressInfo;
-
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    cleanup.push(() => server.shutdown(0));
+    const { port } = server.address() as AddressInfo;
     await expect(upgrade(port, "app.example.test")).resolves.toBe(101);
     await expect(upgrade(port, "a.team.example.test:443")).resolves.toBe(101);
-    await expect(upgrade(port, "preview.example.test")).resolves.toBe(101);
-    await expect(upgrade(port, "evil.example")).resolves.toBe(404);
+    await expect(upgrade(port, "gateway.example.test")).resolves.toBe(101);
+    await expect(upgrade(port, "evil.example")).resolves.toBe(403);
   });
 
   it("lets the device socket through for the hosts the dev server serves", async () => {

@@ -22,7 +22,7 @@ RUN corepack enable
 COPY --from=build /usr/local/share/corepack /usr/local/share/corepack
 WORKDIR /app
 COPY --from=build --chmod=755 /runtime/ ./
-RUN install -d -m 750 -o node -g node /data /app/apps/web/node_modules/.vite-temp /app/apps/web/asset-archive
+RUN install -d -m 750 -o node -g node /data /app/apps/web/asset-archive
 ENV NODE_ENV=production
 ENV ORKBOT_ALLOWED_HOSTS=healthcheck.railway.app
 EXPOSE 5173

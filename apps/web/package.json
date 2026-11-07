@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "cross-env NODE_ENV=production vite build",
-    "preview": "vite preview",
+    "build": "cross-env NODE_ENV=production vite build && node scripts/build-gateway.mjs",
+    "start": "node --enable-source-maps server/index.js",
+    "preview": "node --enable-source-maps server/index.js",
     "check": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p e2e/tsconfig.json",
     "test": "vitest run --root ../.. apps/web/src",
     "e2e": "playwright test",

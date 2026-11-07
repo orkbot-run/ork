@@ -22,6 +22,10 @@
       ],
       "outputs": ["dist/**", "src/generated/**"]
     },
+    "@orkbot/web#build": {
+      "dependsOn": ["^build", "^generate"],
+      "outputs": ["dist/**", "server/**"]
+    },
     "check": {
       "dependsOn": ["^check", "^generate", "generate"]
     },

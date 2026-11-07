@@ -2,4 +2,5 @@ SPDX-FileCopyrightText: 2026 Rakazo contributors
 SPDX-FileCopyrightText: 2026 Ork contributors
 SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 Modified by Ork contributors to declare mixed licensing for the native authentication contract.
+Modified by Ork contributors to build and start the production HTTP gateway independently of Vite.
 Inherited material remains Apache-2.0. New changes follow LICENSE.md.

@@ -8,10 +8,9 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { USER_DEVICE_CONNECT_PATH } from "@orkbot/contracts";
-import type { PreviewServer } from "vite";
-import { preview } from "vite";
 import { afterEach, describe, expect, it } from "vitest";
-import { apiProxy, hostAllowed } from "./api-proxy.js";
+import { hostAllowed } from "./api-proxy.js";
+import { createGateway } from "./gateway/server.js";
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {
@@ -33,27 +32,18 @@ async function startApi() {
   return { target: `http://127.0.0.1:${(api.address() as AddressInfo).port}`, upgrades };
 }
 
-async function startPreview(
+async function startGateway(
   target: string,
-  allowedHosts: string[] | true = ["app.example.test", ".team.example.test"],
+  allowedHosts: string[] = ["app.example.test", ".team.example.test"],
 ) {
   const root = await mkdtemp(path.join(tmpdir(), "orkbot-api-proxy-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, "dist"));
   await writeFile(path.join(root, "dist", "index.html"), "<!doctype html>");
-  const server: PreviewServer = await preview({
-    root,
-    configFile: false,
-    logLevel: "silent",
-    preview: {
-      host: "127.0.0.1",
-      port: 0,
-      allowedHosts,
-      proxy: apiProxy(target, () => allowedHosts),
-    },
-  });
-  cleanup.push(() => server.close());
-  return (server.httpServer.address() as AddressInfo).port;
+  const server = createGateway({ root, api: target, screenSecret: "fake-secret", allowedHosts });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => server.shutdown(0));
+  return (server.address() as AddressInfo).port;
 }
 
 function upgrade(
@@ -92,7 +82,7 @@ function upgrade(
 describe("apiProxy", () => {
   it("proxies only the exact loopback callback path and preserves its query", async () => {
     const api = await startApi();
-    const port = await startPreview(api.target);
+    const port = await startGateway(api.target);
     const response = await fetch(
       `http://127.0.0.1:${port}/callback?code=fake-code&state=fake-state`,
     );
@@ -103,7 +93,7 @@ describe("apiProxy", () => {
   });
   it("forwards the device socket and preserves authentication, origin and address headers", async () => {
     const { target, upgrades } = await startApi();
-    const port = await startPreview(target);
+    const port = await startGateway(target);
 
     await expect(
       upgrade(port, {
@@ -126,7 +116,7 @@ describe("apiProxy", () => {
 
   it("appends the hop it saw to an API request's forwarded address", async () => {
     const { target } = await startApi();
-    const port = await startPreview(target);
+    const port = await startGateway(target);
 
     const response = await fetch(`http://127.0.0.1:${port}/api/devices`, {
       headers: { "X-Forwarded-For": "203.0.113.9" },
@@ -143,17 +133,15 @@ describe("apiProxy", () => {
     `${USER_DEVICE_CONNECT_PATH}/../../threads`,
   ])("forwards no other upgrade path, such as %s", async (path) => {
     const { target, upgrades } = await startApi();
-    const port = await startPreview(target);
+    const port = await startGateway(target);
 
-    await expect(upgrade(port, { path, timeoutMs: 500 })).rejects.toThrow(
-      "upgrade was never answered",
-    );
+    await expect(upgrade(port, { path, timeoutMs: 500 })).resolves.toBe(404);
     expect(upgrades).toHaveLength(0);
   });
 
-  it("lets any host through when the server allows every host", async () => {
+  it("allows device upgrades for an explicitly configured hostname", async () => {
     const { target, upgrades } = await startApi();
-    const port = await startPreview(target, true);
+    const port = await startGateway(target, ["evil.example"]);
 
     await expect(upgrade(port, { headers: { Host: "evil.example" } })).resolves.toBe(101);
     expect(upgrades).toHaveLength(1);
@@ -161,9 +149,9 @@ describe("apiProxy", () => {
 
   it("refuses a device socket for a host the server does not serve", async () => {
     const { target, upgrades } = await startApi();
-    const port = await startPreview(target);
+    const port = await startGateway(target);
 
-    await expect(upgrade(port, { headers: { Host: "evil.example" } })).resolves.toBe(404);
+    await expect(upgrade(port, { headers: { Host: "evil.example" } })).resolves.toBe(403);
     await expect(upgrade(port, { headers: { Host: "app.example.test" } })).resolves.toBe(101);
     expect(upgrades).toHaveLength(1);
   });
@@ -195,10 +183,10 @@ describe("hostAllowed", () => {
     ["[::1", false],
   ];
 
-  it("matches Vite's own check for plain requests on every case", async () => {
+  it("keeps the established host policy for plain requests", async () => {
     const { target } = await startApi();
     // A copy, because Vite adds its own listening host to the list it is given.
-    const port = await startPreview(target, [...allowed]);
+    const port = await startGateway(target, [...allowed]);
     for (const [host, expected] of cases) {
       const status = await new Promise<number | undefined>((resolve, reject) => {
         http

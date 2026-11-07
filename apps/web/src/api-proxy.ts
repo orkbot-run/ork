@@ -11,7 +11,7 @@ import { appendForwardedFor } from "./forwarded-for.js";
 export const DEVICE_SOCKET = `^${USER_DEVICE_CONNECT_PATH}(?:\\?|$)`;
 
 /**
- * What the web server forwards to the API, in development and in `vite preview` deployments.
+ * What the Vite development server forwards to the API. Production uses the Node gateway.
  * `allowedHosts` reads the running server's own list: Vite checks it for plain requests but not
  * for the upgrades its proxy forwards.
  */

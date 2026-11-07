@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import type { Server } from "node:http";
 import { createServer as createHttpServer } from "node:http";
 import type { AddressInfo, Server as NetServer } from "node:net";
@@ -18,7 +18,8 @@ import {
 } from "@orkbot/core/node/screen-capability";
 import { screenProbeUrl } from "@orkbot/core/screen-reconnect";
 import type { Plugin, ViteDevServer } from "vite";
-import { createServer, preview } from "vite";
+import { createServer } from "vite";
+import { createGateway } from "../src/gateway/server.js";
 import { expect, test } from "./renderer-test";
 
 const scope = {
@@ -55,7 +56,7 @@ const screenHtml = `<!doctype html><title>Fake screen</title>
       }
     })(),
     parent: attempt(() => parent.document.title),
-    api: await fetch('/session', { credentials: 'include' }).then(r => r.text()).catch(() => 'blocked'),
+    api: await fetch('/api/test-session', { credentials: 'include' }).then(r => r.text()).catch(() => 'blocked'),
   };
   const socketUrl = new URL('./websockify', location.href);
   socketUrl.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -101,7 +102,7 @@ async function resetDuringUpgrade(server: Server, url: URL, beforeReset?: Promis
   await closed;
 }
 
-for (const mode of ["development", "preview"] as const) {
+for (const mode of ["development", "production"] as const) {
   test.describe(`screen response isolation in ${mode}`, () => {
     let origin: string;
     let screenUrl: string;
@@ -172,7 +173,6 @@ for (const mode of ["development", "preview"] as const) {
       const appFixture: Plugin = {
         name: "fake-app-origin",
         configureServer: installApp,
-        configurePreviewServer: installApp,
       };
       function installApp(server: Pick<ViteDevServer, "middlewares">) {
         server.middlewares.use((req, res, next) => {
@@ -187,13 +187,18 @@ for (const mode of ["development", "preview"] as const) {
             res.end(
               'localStorage.setItem("app-data", "private-app-data"); document.cookie = "app-session=fake-session; Path=/";',
             );
-          } else if (req.url === "/session") {
+          } else if (req.url === "/api/test-session") {
             res.setHeader("Content-Type", "application/json");
             res.end(JSON.stringify({ cookie: req.headers.cookie ?? null }));
           } else next();
         });
       }
       const authority = createHttpServer(async (req, res) => {
+        if (req.url === "/api/test-session") {
+          res.setHeader("content-type", "application/json");
+          res.end(JSON.stringify({ cookie: req.headers.cookie ?? null }));
+          return;
+        }
         authorityReached?.();
         await authorityHold;
         const chunks: Buffer[] = [];
@@ -222,10 +227,31 @@ for (const mode of ["development", "preview"] as const) {
           server: { host: "127.0.0.1", port: 0, hmr: false as const },
           preview: { host: "127.0.0.1", port: 0 },
         };
-        const server = mode === "development" ? await createServer(config) : await preview(config);
-        // listen() replaces zero with Vite's default port; bind the HTTP server directly instead.
-        httpServer = server.httpServer as Server;
-        if ("listen" in server) await listen(httpServer);
+        let shutdown: () => Promise<void>;
+        if (mode === "development") {
+          const server = await createServer(config);
+          httpServer = server.httpServer as Server;
+          await listen(httpServer);
+          shutdown = () => server.close();
+        } else {
+          await writeFile(
+            path.join(root, "dist/index.html"),
+            '<!doctype html><title>Fake app</title><body><script src="/app.js"></script></body>',
+          );
+          await writeFile(
+            path.join(root, "dist/app.js"),
+            'localStorage.setItem("app-data", "private-app-data"); document.cookie = "app-session=fake-session; Path=/";',
+          );
+          const gateway = createGateway({
+            root,
+            api: process.env.API_PROXY_TARGET!,
+            screenSecret: secret,
+            allowedHosts: ["localhost"],
+          });
+          httpServer = gateway;
+          await listen(gateway);
+          shutdown = () => gateway.shutdown(0);
+        }
         origin = `http://127.0.0.1:${(httpServer.address() as AddressInfo).port}`;
         // Exercise the same capability issuer used by the production API, with a configured web origin.
         // A loopback upstream serving /vnc.html stands in for E2B, Daytona, Boat and Railway.
@@ -246,7 +272,7 @@ for (const mode of ["development", "preview"] as const) {
           providerHeaders,
         );
         stop = async () => {
-          await server.close();
+          await shutdown();
           await close(upstream);
           await close(authority);
           await rm(root, { recursive: true, force: true });
@@ -428,7 +454,7 @@ for (const mode of ["development", "preview"] as const) {
       }) => {
         const app = await page.goto(`${origin}/app`);
         // The app's own policy must still let it frame the screen proxy.
-        if (mode === "preview") {
+        if (mode === "production") {
           expect(app?.headers()["content-security-policy"]).toContain("frame-src 'self'");
         }
         await page.evaluate(

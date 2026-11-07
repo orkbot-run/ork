@@ -101,16 +101,14 @@ export function output(command: string, args: string[]) {
   return execFileSync(command, args, { cwd: repositoryRoot, encoding: "utf8" }).trim();
 }
 
-/** The production web build served by `vite preview`, proxying the API like a deployment. */
+/** The production HTTP gateway and browser assets, proxying the API like a deployment. */
 export function startPreview(env: NodeJS.ProcessEnv, port: number) {
   return spawn(
     "pnpm",
     [
       "--filter",
       "@orkbot/web",
-      "exec",
-      "vite",
-      "preview",
+      "start",
       "--host",
       "127.0.0.1",
       "--port",

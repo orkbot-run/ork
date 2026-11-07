@@ -62,6 +62,7 @@ test("stages the server and proxy without native clients or product renderer sou
     write("apps/web/package.json");
     write("apps/web/vite.config.ts");
     write("apps/web/lingui.config.ts");
+    write("apps/web/server/index.js");
     write("package.json.license", "root license notice");
     write("apps/web/package.json.license", "web license notice");
     write("apps/web/dist/index.html");
@@ -107,7 +108,12 @@ test("stages the server and proxy without native clients or product renderer sou
       readFileSync(path.join(destination, "apps/web/package.json.license"), "utf8"),
       "web license notice",
     );
-    assert.ok(existsSync(path.join(destination, "apps/web/lingui.config.ts")));
+    assert.equal(existsSync(path.join(destination, "apps/web/vite.config.ts")), false);
+    assert.equal(existsSync(path.join(destination, "apps/web/lingui.config.ts")), false);
+    assert.equal(
+      readFileSync(path.join(destination, "apps/web/server/index.js"), "utf8"),
+      "fixture",
+    );
     assert.equal(
       readFileSync(path.join(destination, "apps/web/node_modules/example/index.js"), "utf8"),
       "fixture",
@@ -117,7 +123,7 @@ test("stages the server and proxy without native clients or product renderer sou
       "../../../node_modules/.pnpm/example",
     );
     assert.ok(existsSync(path.join(destination, "infra/sandboxes/supervisor/package.json")));
-    assert.ok(existsSync(path.join(destination, "apps/web/src/screen-proxy.ts")));
+    assert.equal(existsSync(path.join(destination, "apps/web/src")), false);
     for (const directory of ["desktop", "mobile", "www", "accounts-web"])
       assert.equal(existsSync(path.join(destination, `apps/${directory}`)), false);
     assert.equal(existsSync(path.join(destination, "apps/web/src/native-app.tsx")), false);

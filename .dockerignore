@@ -53,3 +53,4 @@ verify-report
 .playwright-cli
 .deploy.lock
 .last-deployed-revision
+apps/web/server

@@ -43,6 +43,7 @@ test("first boot generates private role-specific secrets without operator creden
   assert.notEqual(migrate.DATABASE_URL, migrate.DATABASE_MIGRATION_URL);
   assert.equal(web.API_PROXY_TARGET, "http://ork-selfhost-api:3100");
   assert.equal(web.ORKBOT_HOST, "server.example.test");
+  assert.equal(web.RAYON_NUM_THREADS, undefined);
   assert.match(api.ENCRYPTION_KEY, /^[a-f0-9]{64}$/);
   for (const config of [api, worker, web, migrate]) {
     assert.equal(config.OIDC_CLIENT_ID, undefined);

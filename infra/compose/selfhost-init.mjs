@@ -193,7 +193,6 @@ export function initialize({
       ORKBOT_HOST: url.hostname,
       API_PROXY_TARGET: `http://${apiHost}:3100`,
       SCREEN_PROXY_SECRET: secret.screen,
-      RAYON_NUM_THREADS: "4",
     },
     migrate: {
       DATABASE_URL: database,

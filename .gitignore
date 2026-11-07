@@ -52,3 +52,4 @@ playwright-report-www
 # Downloaded embedded computer screen SDK files
 apps/web/public/computer-screen/*.js
 apps/web/public/computer-screen/sdk/
+apps/web/server

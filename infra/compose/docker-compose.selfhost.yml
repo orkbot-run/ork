@@ -107,7 +107,7 @@ services:
   web:
     <<: *runtime
     working_dir: /app/apps/web
-    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node_modules/.bin/vite, preview, --host, 0.0.0.0, --port, "5173"]
+    command: [node, /app/infra/compose/selfhost-runtime.mjs, /run/orkbot/environment.json, node, --enable-source-maps, server/index.js, --host, 0.0.0.0, --port, "5173"]
     pids_limit: 128
     mem_limit: 512m
     volumes: [web-configuration:/run/orkbot:ro, webassets:/app/apps/web/asset-archive]
