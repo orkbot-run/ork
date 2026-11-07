@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 OAuth tests are preserved; authorization URL bounds follow LICENSE.md.
+
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import { getLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -1333,6 +1337,93 @@ describe("MCP OAuth", () => {
     expect(provider.authorizationUrl).toBeUndefined();
     expect(onAuthorization).not.toHaveBeenCalled();
     expect(await provider.tokens()).toMatchObject({ access_token: "working" });
+  });
+
+  it("accepts browser authorization URLs beyond the endpoint limit within the authorization bound", async () => {
+    const onAuthorization = vi.fn();
+    const provider = new StoredMcpOAuthProvider("server-1", {}, async () => undefined, {
+      onAuthorization,
+    });
+    const url = new URL(`https://auth.example.test/authorize?scope=${"read".repeat(750)}`);
+    await expect(provider.redirectToAuthorization(url)).resolves.toBeUndefined();
+    expect(provider.authorizationUrl).toEqual(url);
+    expect(onAuthorization).toHaveBeenCalledWith(url);
+  });
+
+  it.each([true, false])(
+    "rejects an encoded final authorization URL before handoff (foreground: %s)",
+    async (foreground) => {
+      const onAuthorization = vi.fn();
+      const persist = vi.fn(async () => undefined);
+      const provider = new StoredMcpOAuthProvider(
+        "server-1",
+        {
+          oauthClient: {
+            client_id: "fixture-client",
+            authorization_params: `audience=${"界".repeat(900)}`,
+          },
+          oauth: { tokens: { access_token: "working", token_type: "bearer" } },
+        },
+        persist,
+        foreground ? { onAuthorization } : {},
+      );
+      const prefix = "https://auth.example.test/authorize?state=";
+      const url = new URL(prefix + "x".repeat(2000 - prefix.length));
+      await expect(provider.redirectToAuthorization(url)).rejects.toThrow(
+        "MCP URL exceeds 8192 characters",
+      );
+      expect(provider.authorizationUrl).toBeUndefined();
+      expect(onAuthorization).not.toHaveBeenCalled();
+      if (foreground) {
+        expect(await provider.tokens()).toMatchObject({ access_token: "working" });
+        expect(persist).not.toHaveBeenCalled();
+      } else {
+        expect(await provider.tokens()).toBeUndefined();
+        expect(persist).toHaveBeenCalledOnce();
+      }
+    },
+  );
+
+  it("rejects a browser authorization URL with an empty fragment", async () => {
+    const onAuthorization = vi.fn();
+    const provider = new StoredMcpOAuthProvider("server-1", {}, async () => undefined, {
+      onAuthorization,
+    });
+    await expect(
+      provider.redirectToAuthorization(new URL("https://auth.example.test/authorize#")),
+    ).rejects.toThrow(/fragment/);
+    expect(provider.authorizationUrl).toBeUndefined();
+    expect(onAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("rechecks the final bound after requesting offline access", async () => {
+    const onAuthorization = vi.fn();
+    const provider = new StoredMcpOAuthProvider(
+      "server-1",
+      {
+        oauth: {
+          discoveryState: {
+            authorizationServerUrl: "https://auth.example.test",
+            authorizationServerMetadata: {
+              issuer: "https://auth.example.test",
+              authorization_endpoint: "https://auth.example.test/authorize",
+              token_endpoint: "https://auth.example.test/token",
+              response_types_supported: ["code"],
+              scopes_supported: ["read", "offline_access"],
+            },
+          },
+        },
+      },
+      async () => undefined,
+      { onAuthorization },
+    );
+    const prefix = "https://auth.example.test/authorize?scope=read&padding=";
+    const url = new URL(prefix + "x".repeat(8182 - prefix.length));
+    await expect(provider.redirectToAuthorization(url)).rejects.toThrow(
+      "MCP URL exceeds 8192 characters",
+    );
+    expect(provider.authorizationUrl).toBeUndefined();
+    expect(onAuthorization).not.toHaveBeenCalled();
   });
 
   it("allows private-network HTTP authorization URLs only when the instance opts in", async () => {

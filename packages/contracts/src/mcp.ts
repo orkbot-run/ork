@@ -1,24 +1,40 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 contracts are preserved; bounded authorization URLs follow LICENSE.md.
+
 import * as z from "zod";
 
 export const McpTransportSchema = z.enum(["streamable_http", "sse", "stdio"]);
 export type McpTransport = z.infer<typeof McpTransportSchema>;
 
+export const MCP_AUTHORIZATION_URL_MAX_LENGTH = 8_192;
+
+function isMcpHttpUrl(value: string, maxLength: number): boolean {
+  try {
+    if (value.endsWith("#")) return false;
+    const url = new URL(value);
+    if (url.username || url.password || url.hash || url.href.length > maxLength) return false;
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export const McpRemoteEndpointSchema = z
   .string()
   .max(2048)
   .url()
-  .refine((value) => {
-    try {
-      if (value.endsWith("#")) return false;
-      const url = new URL(value);
-      if (url.username || url.password || url.hash) return false;
-      // Persist HTTP(S). Runtime SSRF still requires HTTPS for public hosts and
-      // blocks private LAN targets unless the deployment-owner escape is on.
-      return url.protocol === "https:" || url.protocol === "http:";
-    } catch {
-      return false;
-    }
-  }, "MCP remote endpoint must be an HTTP(S) URL without credentials or a fragment");
+  // Runtime SSRF still requires HTTPS for public hosts and an owner opt-in for private targets.
+  .refine(
+    (value) => isMcpHttpUrl(value, 2048),
+    "MCP remote endpoint must be an HTTP(S) URL without credentials or a fragment",
+  );
+
+export const McpAuthorizationUrlSchema = z
+  .string()
+  .max(MCP_AUTHORIZATION_URL_MAX_LENGTH)
+  .url()
+  .refine((value) => isMcpHttpUrl(value, MCP_AUTHORIZATION_URL_MAX_LENGTH));
 
 export const McpHeadersSchema = z
   // HTTP field names are tokens (RFC 9110 section 5.6.2), including underscores.

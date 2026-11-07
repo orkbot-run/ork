@@ -169,6 +169,7 @@ import {
   IntegrationProviderIdSchema,
   IntegrationSetupStateSchema,
 } from "./integration-settings.js";
+import { McpAuthorizationUrlSchema } from "./mcp.js";
 import { ModelHeadersSchema } from "./model-headers.js";
 import { ModelRoleSchema, ModelRoleUpdateSchema, ModelRoleViewSchema } from "./model-roles.js";
 import {
@@ -1130,7 +1131,7 @@ export const appContract = {
           z.object({
             status: z.literal("authorization_required"),
             sessionId: Id,
-            authorizationUrl: z.string().url(),
+            authorizationUrl: McpAuthorizationUrlSchema,
           }),
           z.object({
             status: z.enum(["already_connected", "authorization_not_requested"]),

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Modified by Ork contributors for coordinated OAuth refreshes and launch credential redaction.
+// Modified by Ork contributors for OAuth refreshes, launch credential redaction and authorization URL bounds.
 // Inherited Apache material remains Apache-2.0; new Ork changes are PolyForm-covered. See LICENSE.md.
 
 import { randomUUID } from "node:crypto";
@@ -26,6 +26,7 @@ import type { SecretStore } from "@orkbot/adapter-kit";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {
   isLocalhostOrLoopbackIp,
+  MCP_AUTHORIZATION_URL_MAX_LENGTH,
   MCP_OAUTH_CLIENT_REQUIRED,
   mcpOAuthEnvReferences,
   parseMcpOAuthAuthorizationParams,
@@ -622,23 +623,29 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   }
   async redirectToAuthorization(url: URL): Promise<void> {
     let authorizationUrl: URL;
+    const policy = {
+      maxUrlLength: MCP_AUTHORIZATION_URL_MAX_LENGTH,
+      allowHttpLocalhost: true,
+      allowPrivateEndpoint: this.options.allowPrivateEndpoint,
+    };
     try {
-      authorizationUrl = validateUrl(url, {
-        allowHttpLocalhost: true,
-        allowPrivateEndpoint: this.options.allowPrivateEndpoint,
-      });
+      authorizationUrl = validateUrl(url, policy);
+      if (authorizationUrl.href.endsWith("#"))
+        throw new Error("MCP URL must not contain credentials or a fragment");
+      const extra = this.material.oauthClient?.authorization_params;
+      if (extra) {
+        for (const [key, value] of Object.entries(parseMcpOAuthAuthorizationParams(extra)))
+          if (!authorizationUrl.searchParams.has(key))
+            authorizationUrl.searchParams.set(key, value);
+      }
+      requestOfflineAccess(authorizationUrl, this.material.oauth?.discoveryState);
+      authorizationUrl = validateUrl(authorizationUrl, policy);
     } catch (error) {
       if (!this.options.onAuthorization) {
         await this.invalidateCredentials("tokens");
       }
       throw error;
     }
-    const extra = this.material.oauthClient?.authorization_params;
-    if (extra) {
-      for (const [key, value] of Object.entries(parseMcpOAuthAuthorizationParams(extra)))
-        if (!authorizationUrl.searchParams.has(key)) authorizationUrl.searchParams.set(key, value);
-    }
-    requestOfflineAccess(authorizationUrl, this.material.oauth?.discoveryState);
     this.authorizationUrl = authorizationUrl;
     if (this.options.onAuthorization) {
       this.options.onAuthorization(authorizationUrl);
