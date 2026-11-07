@@ -242,6 +242,23 @@ describe("OpenAiCompatibleVoiceProvider", () => {
     });
   });
 
+  it.each([
+    ["missing endpoint", () => Promise.resolve(new Response("Not Found", { status: 404 }))],
+    ["empty list", () => Promise.resolve(new Response('{"voices":[]}'))],
+    ["network failure", () => Promise.reject(new TypeError("fetch failed"))],
+  ])(
+    "uses compatible speech voices for %s when the configured model is not Kokoro",
+    async (_label, reply) => {
+      const secret = serializeAsOwner({
+        baseUrl: "http://100.64.0.10:8810",
+        ttsModel: "gpt-4o-mini-tts",
+      });
+      const voices = await provider(vi.fn().mockImplementation(reply)).listVoices(secret, ctx);
+      expect(voices.map((voice) => voice.id)).toContain("alloy");
+      expect(voices.map((voice) => voice.id)).not.toContain("af_heart");
+    },
+  );
+
   it("speaks MP3 with the saved model and the voice's Kokoro language", async () => {
     const fetchMock = vi
       .fn()
@@ -261,6 +278,28 @@ describe("OpenAiCompatibleVoiceProvider", () => {
       input: "Hola",
       response_format: "mp3",
       lang_code: "e",
+    });
+  });
+
+  it("synthesizes a fallback standard voice without Kokoro-only parameters", async () => {
+    const secret = serializeAsOwner({
+      baseUrl: "http://100.64.0.10:8810",
+      ttsModel: "tts-1",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("Not Found", { status: 404 }))
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([1, 2]), { headers: { "content-type": "audio/mpeg" } }),
+      );
+    const adapter = provider(fetchMock);
+    const voices = await adapter.listVoices(secret, ctx);
+    await adapter.synthesize({ text: "Hello", voiceId: voices[0]!.id, apiKey: secret }, ctx);
+    expect(JSON.parse(String(calledInit(fetchMock, 1).body))).toEqual({
+      model: "tts-1",
+      voice: voices[0]!.id,
+      input: "Hello",
+      response_format: "mp3",
     });
   });
 

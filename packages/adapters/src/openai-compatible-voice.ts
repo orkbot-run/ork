@@ -19,6 +19,7 @@ import {
   assertHttpsForKeyedOpenAiCompatibleUrl,
   normalizeOpenAiCompatibleBaseUrl,
 } from "./openai-compatible-url.js";
+import { OPENAI_VOICES } from "./openai-voice.js";
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
 import {
   readVoiceAudio,
@@ -232,6 +233,14 @@ const KOKORO_FALLBACK_VOICES = [
   "bm_fable",
 ].map((id) => voiceInfo(id));
 
+const STANDARD_FALLBACK_VOICES = OPENAI_VOICES.filter((voice) =>
+  ["alloy", "echo", "fable", "onyx", "nova", "shimmer"].includes(voice.id),
+);
+
+function fallbackVoices(model: string): VoiceInfo[] {
+  return /kokoro/i.test(model) ? KOKORO_FALLBACK_VOICES : STANDARD_FALLBACK_VOICES;
+}
+
 /**
  * OpenAI has no voice list endpoint. Self-hosted servers answer GET /audio/voices in
  * one of these shapes: `{ data: [{ id, name }] }` (mlx-audio), `{ voices: [{ id, name }] }`
@@ -350,15 +359,15 @@ export class OpenAiCompatibleVoiceProvider implements VoiceProvider {
       );
       if (!res.ok) {
         await res.body?.cancel().catch(() => undefined);
-        return KOKORO_FALLBACK_VOICES;
+        return fallbackVoices(secret.ttsModel);
       }
       const voices = parseCompatibleVoiceList(await readVoiceJson(res));
-      return voices.length ? voices : KOKORO_FALLBACK_VOICES;
+      return voices.length ? voices : fallbackVoices(secret.ttsModel);
     } catch (error) {
       // A server that cannot list voices still speaks; a blocked address is a real error.
       if (context.signal.aborted || !(error instanceof Error) || !isNetworkError(error))
         throw error;
-      return KOKORO_FALLBACK_VOICES;
+      return fallbackVoices(secret.ttsModel);
     }
   }
 
