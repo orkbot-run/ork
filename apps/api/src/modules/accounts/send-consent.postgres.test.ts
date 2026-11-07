@@ -316,6 +316,181 @@ postgres("send consent acceptance (PostgreSQL)", () => {
       await prisma.message.count({ where: { threadId: group.thread!.id, role: "user" } }),
     ).toBe(1);
   });
+  it("holds the group thread stable while the real consent preflight is pending", async () => {
+    const group = await prisma.chatGroup.create({
+      data: {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        name: "Stable admission group",
+        members: { create: [{ botId }, { botId: routineBotId }] },
+        thread: { create: { spaceId: actor.spaceId, userId: actor.userId } },
+      },
+      include: { thread: true },
+    });
+    await grant(threadRecipient.key);
+    const target = await runAsTenant(actor, () =>
+      resolveThreadTarget(deps.prisma, actor, { groupId: group.id }),
+    );
+    const preflight = await runAsTenant(actor, () =>
+      prepareSendAiConsent(deps, actor, { groupId: group.id }),
+    );
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let attempts = 0;
+    const sending = runAsTenant(actor, () =>
+      sendThreadMessage(
+        {
+          ...deps,
+          consentPreflight: async (tx) => {
+            await preflight(tx);
+            attempts += 1;
+            started();
+            await held;
+          },
+        },
+        actor,
+        target,
+        { text: "Stable consent acceptance", clientNonce: randomUUID() },
+      ),
+    );
+    await Promise.race([ready, sending]);
+    let writerPid = 0;
+    let writerFinished = false;
+    const writer = prisma
+      .$transaction(async (tx) => {
+        const [connection] = await tx.$queryRaw<
+          Array<{ pid: number }>
+        >`SELECT pg_backend_pid() AS pid`;
+        writerPid = connection!.pid;
+        await tx.thread.update({ where: { id: group.thread!.id }, data: { unread: true } });
+      })
+      .finally(() => {
+        writerFinished = true;
+      });
+    try {
+      await vi.waitFor(async () => {
+        expect(writerFinished).toBe(false);
+        expect(writerPid).toBeGreaterThan(0);
+        const [state] = await prisma.$queryRaw<Array<{ blockers: number }>>`
+          SELECT cardinality(pg_blocking_pids(${writerPid})) AS blockers
+        `;
+        expect(state!.blockers).toBeGreaterThan(0);
+      });
+      expect(await prisma.message.count({ where: { threadId: group.thread!.id } })).toBe(0);
+      expect(enqueue).not.toHaveBeenCalled();
+    } finally {
+      release();
+      await Promise.all([sending, writer]);
+    }
+    expect(attempts).toBe(1);
+    expect(
+      await prisma.message.count({ where: { threadId: group.thread!.id, role: "user" } }),
+    ).toBe(1);
+    expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(2);
+  });
+  it.each([1, 3])(
+    "retries a real group send conflict within the three-attempt bound (%i conflicts)",
+    async (conflicts) => {
+      const group = await prisma.chatGroup.create({
+        data: {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          name: "Conflicting group",
+          members: { create: [{ botId }, { botId: routineBotId }] },
+          thread: { create: { spaceId: actor.spaceId, userId: actor.userId } },
+        },
+        include: { thread: true },
+      });
+      await grant(threadRecipient.key);
+      const target = await runAsTenant(actor, () =>
+        resolveThreadTarget(deps.prisma, actor, { groupId: group.id }),
+      );
+      const preflight = await runAsTenant(actor, () =>
+        prepareSendAiConsent(deps, actor, { groupId: group.id }),
+      );
+      let attempts = 0;
+      const conflicting = new Proxy(deps.prisma, {
+        get(client, property) {
+          if (property !== "$transaction") return Reflect.get(client, property);
+          return (
+            work: (tx: Prisma.TransactionClient) => Promise<unknown>,
+            options?: Parameters<PrismaClient["$transaction"]>[1],
+          ) =>
+            client.$transaction(
+              (tx) =>
+                work(
+                  new Proxy(tx, {
+                    get(transaction, method) {
+                      const original = Reflect.get(transaction, method);
+                      if (method !== "$queryRaw") return original;
+                      return async (
+                        ...query: [Prisma.Sql | TemplateStringsArray, ...unknown[]]
+                      ) => {
+                        const sql = query[0];
+                        const statement = "strings" in sql ? sql.strings.join("") : sql.join("");
+                        if (
+                          statement.includes("FROM threads WHERE id =") &&
+                          statement.includes("FOR UPDATE")
+                        ) {
+                          attempts += 1;
+                          // The Space lock establishes a snapshot before the thread row lock.
+                          if (attempts <= conflicts)
+                            await prisma.thread.update({
+                              where: { id: group.thread!.id },
+                              data: { unread: attempts % 2 === 1 },
+                            });
+                        }
+                        return Reflect.apply(original, transaction, query);
+                      };
+                    },
+                  }),
+                ),
+              options,
+            );
+        },
+      });
+      const sending = runAsTenant(actor, () =>
+        sendThreadMessage(
+          {
+            ...deps,
+            prisma: conflicting,
+            consentPreflight: preflight,
+          },
+          actor,
+          target,
+          { text: "One accepted group message", clientNonce: randomUUID() },
+        ),
+      );
+      if (conflicts === 1) {
+        await sending;
+        expect(attempts).toBe(2);
+        expect(
+          await prisma.message.count({ where: { threadId: group.thread!.id, role: "user" } }),
+        ).toBe(1);
+        expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(2);
+      } else {
+        const error = await sending.catch((failure: unknown) => failure);
+        expect(error).toMatchObject({
+          code: "P2010",
+          meta: {
+            driverAdapterError: {
+              cause: { originalCode: "40001", kind: "TransactionWriteConflict" },
+            },
+          },
+        });
+        expect(attempts).toBe(3);
+        expect(await prisma.message.count({ where: { threadId: group.thread!.id } })).toBe(0);
+        expect(await prisma.run.count({ where: { threadId: group.thread!.id } })).toBe(0);
+        expect(enqueue).not.toHaveBeenCalled();
+      }
+    },
+  );
   it("rejects a changed encrypted endpoint before any acceptance without loading a provider under the lock", async () => {
     await prisma.secret.create({
       data: {

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 behavior is preserved. Personal Ork and Space work admission changes follow LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved. Personal Ork, Space work admission and consent locking changes follow LICENSE.md.
 
 import type { JobPublisher, ProductAnalytics, SandboxProvider } from "@orkbot/adapter-kit";
 import { runContinueJob } from "@orkbot/adapter-kit";
@@ -833,6 +833,10 @@ export async function sendThreadMessage(
   const commit = () =>
     deps.prisma.$transaction(async (tx) => {
       await lockSpaceForWork(tx, actor.spaceId);
+      const members =
+        target.kind === "group" ? await lockAndLoadGroupMembers(tx, actor, target) : [];
+      // Stabilize the work target before consent reads, as well as before message counters.
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
       await deps.consentPreflight?.(tx);
       let routineRuns: Array<{ id: string; status: string }> = [];
       let replyToMessageId: string | undefined;
@@ -900,8 +904,6 @@ export async function sendThreadMessage(
           actor,
           mentionTargets.connectorMentionIds,
         );
-        // Match message counter locking before inspecting runs, without changing counters on rejection.
-        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
         routineRuns = (await startRoutines?.(tx)) ?? [];
         const activeRuns = await tx.run.findMany({
           where: {
@@ -1094,7 +1096,6 @@ export async function sendThreadMessage(
         return { message, runs: [run], routineRuns, eventSeq: event.seq };
       }
 
-      const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
       let { botIds: targetBotIds, namesNobody } = groupSendTargets(members, input, repliedBotId);
@@ -1110,8 +1111,6 @@ export async function sendThreadMessage(
         actor,
         mentionTargets.connectorMentionIds,
       );
-      // Group ownership is locked first, then the thread, as in the normal write path.
-      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
       routineRuns = (await startRoutines?.(tx)) ?? [];
       let activeRuns = await tx.run.findMany({
         where: {
