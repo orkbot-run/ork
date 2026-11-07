@@ -1,11 +1,68 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   displayBotWorkspacePath,
   resolveBotUploadPath,
   resolveBotWorkspaceCwd,
   resolveBotWorkspacePath,
+  resolveWorkspaceCwd,
   teamBotWorkspaceDirectory,
 } from "./computer-support.js";
+
+describe("portable command cwd", () => {
+  it.each([undefined, "", ".", "/", "~", "~/", "/home/orkbot", "/home/orkbot/"])(
+    "uses the workspace root for %s",
+    (cwd) => {
+      expect(resolveWorkspaceCwd("/home/orkbot", cwd)).toBe("/home/orkbot");
+    },
+  );
+
+  it.each([
+    "notes/二",
+    "/notes/二",
+    "~/notes/二",
+    "/home/orkbot/notes/二",
+    String.raw`\home\orkbot\notes\二`,
+  ])("maps equivalent workspace child spellings: %s", (cwd) => {
+    expect(resolveWorkspaceCwd("/home/orkbot", cwd)).toBe("/home/orkbot/notes/二");
+  });
+
+  it("uses the longest complete alias boundary and retains provider-native output roots", () => {
+    expect(
+      resolveWorkspaceCwd("orkbot-home", "/home/user/orkbot-home/notes", [
+        "/home/user",
+        "/home/user/orkbot-home",
+      ]),
+    ).toBe("orkbot-home/notes");
+    expect(resolveWorkspaceCwd("/root", "/home/user-else/notes", ["/home/user"])).toBe(
+      "/root/home/user-else/notes",
+    );
+    expect(resolveWorkspaceCwd("orkbot-home", "orkbot-home")).toBe("orkbot-home/orkbot-home");
+    expect(resolveWorkspaceCwd("", "/home/orkbot/notes", ["/home/orkbot"])).toBe("notes");
+  });
+
+  it.each([
+    "..",
+    "notes/../outside",
+    "./notes",
+    "~/../outside",
+    "/home/orkbot/../outside",
+    String.raw`\home\orkbot\notes\..\outside`,
+    "notes\0hidden",
+    "C:/outside",
+    String.raw`C:\outside`,
+    "C:outside",
+    String.raw`\\server\share`,
+    "//server/share",
+  ])("rejects traversal or foreign native paths before normalization: %s", (cwd) => {
+    expect(() => resolveWorkspaceCwd("/home/orkbot", cwd)).toThrow(
+      "Path escapes the computer workspace",
+    );
+  });
+});
 
 describe("Team Computer bot folders", () => {
   it("uses the bot folder for relative paths and cwd", () => {

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
@@ -20,7 +24,7 @@ import {
   boundedComputerActions,
   normalizeWorkspacePath,
   placeholderObservation,
-  workspacePath,
+  resolveWorkspaceCwd,
 } from "./computer-support.js";
 import { FakeScreenServer } from "./fake-screen.js";
 import { FakeTerminalGateway } from "./fake-terminal.js";
@@ -99,6 +103,7 @@ export class FakeSandboxProvider implements SandboxProvider {
       yield { type: "exit", code: 1 };
       return;
     }
+    resolveWorkspaceCwd("/home/orkbot", request.cwd);
     if (request.argv[0] === "printenv") {
       const value = sandboxCommandEnvironment(request)[request.argv[1] ?? ""];
       if (value !== undefined) yield { type: "stdout", data: `${value}\n` };
@@ -152,7 +157,7 @@ export class FakeSandboxProvider implements SandboxProvider {
       url: await this.terminals.open(
         computer.id,
         request.controlToken,
-        workspacePath("/home/orkbot", request.cwd ?? ""),
+        resolveWorkspaceCwd("/home/orkbot", request.cwd),
       ),
     };
   }

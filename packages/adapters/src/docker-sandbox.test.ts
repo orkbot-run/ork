@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type { ProcessEvent } from "@orkbot/adapter-kit";
 import { SandboxRequestRejectedError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,6 +28,26 @@ describe("Docker sandbox", () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
   });
+
+  it.each(["/home/orkbot/../outside", "/home/orkbot/notes/../../outside"])(
+    "rejects rooted cwd traversal before contacting the supervisor: %s",
+    async (cwd) => {
+      const fetch = vi.fn(async () => Response.json({ stdout: "", stderr: "", code: 0 }));
+      vi.stubGlobal("fetch", fetch);
+      const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+      const execute = async () => {
+        for await (const _event of provider.execute(
+          { id: "computer", botId: "bot", kind: "docker", providerRef: "computer" },
+          { argv: ["pwd"], cwd },
+          context,
+        )) {
+          /* Consume the command. */
+        }
+      };
+      await expect(execute()).rejects.toThrow("Path escapes the computer workspace");
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("rejects a failed interactive screen instead of returning a viewer fallback", async () => {
     vi.stubGlobal(
@@ -836,4 +860,61 @@ describe("Docker sandbox stopped containers", () => {
       provider.connectScreen(computer, { view: "stream", interactive: false }, context),
     ).resolves.toMatchObject({ url: null });
   });
+});
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", String.raw`\home\orkbot\notes`])(
+  "Docker maps portable cwd %s at the supervisor boundary",
+  async (cwd) => {
+    const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      Response.json({ stdout: "", stderr: "", code: 0 }),
+    );
+    vi.stubGlobal("fetch", fetch);
+    try {
+      const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+      for await (const _event of provider.execute(
+        { id: "computer", botId: "bot", kind: "docker", providerRef: "computer" },
+        { argv: ["true"], cwd },
+        context,
+      )) {
+        /* Consume the command. */
+      }
+      expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body)).cwd).toBe("/home/orkbot/notes");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);
+
+it("uses the same portable cwd mapping for a controlled terminal without changing its lease", async () => {
+  const fetch = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+    Response.json({ terminalUrl: "https://screen.example.test/terminal" }),
+  );
+  vi.stubGlobal("fetch", fetch);
+  const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+  const computer = {
+    id: "computer",
+    botId: "bot",
+    kind: "docker" as const,
+    providerRef: "computer",
+  };
+  try {
+    for (const cwd of ["notes", "~/notes", "/home/orkbot/notes"]) {
+      await provider.connectTerminal(computer, { controlToken: "lease-1", cwd }, context);
+      expect(JSON.parse(String(fetch.mock.calls.at(-1)?.[1]?.body))).toEqual({
+        controlToken: "lease-1",
+        cwd: "notes",
+      });
+    }
+    const before = fetch.mock.calls.length;
+    await expect(
+      provider.connectTerminal(
+        computer,
+        { controlToken: "lease-1", cwd: "/home/orkbot/../outside" },
+        context,
+      ),
+    ).rejects.toThrow(/escapes/);
+    expect(fetch).toHaveBeenCalledTimes(before);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

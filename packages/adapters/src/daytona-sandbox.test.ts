@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type { CreateSandboxFromSnapshotParams, FileInfo, SandboxState } from "@daytona/sdk";
 import {
   DaytonaAuthenticationError,
@@ -27,6 +31,40 @@ describe("DaytonaSandboxProvider", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+  });
+
+  it.each([
+    "notes",
+    "~/notes",
+    "/home/orkbot/notes",
+    "/home/user/notes",
+    "/home/daytona/notes",
+    "/home/daytona/orkbot-home/notes",
+  ])("maps workspace child %s to one cwd", async (cwd) => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    for await (const _event of provider.execute(computer, { argv: ["pwd"], cwd }, context)) {
+      /* Consume the command. */
+    }
+    expect(fixture.executeCommand).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "/home/daytona/orkbot-home/notes",
+      undefined,
+      expect.any(Number),
+    );
+    const before = fixture.executeCommand.mock.calls.length;
+    const rejected = async () => {
+      for await (const _event of provider.execute(
+        computer,
+        { argv: ["true"], cwd: "/home/daytona/orkbot-home/../outside" },
+        context,
+      )) {
+        /* Consume. */
+      }
+    };
+    await expect(rejected()).rejects.toThrow(/escapes/);
+    expect(fixture.executeCommand).toHaveBeenCalledTimes(before);
   });
 
   it("forwards an optional snapshot name to create()", async () => {

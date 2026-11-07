@@ -27,7 +27,12 @@ import {
 } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
-import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
+import {
+  normalizeWorkspacePath,
+  resolveWorkspaceCwd,
+  shellQuote,
+  workspacePath,
+} from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
 import {
   INSTALL_LINUX_BROWSER,
@@ -820,14 +825,7 @@ function commandFailure(result: BoxdCommandResult): string {
 }
 
 function boxdCwd(cwd: string | undefined): string {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/orkbot" || cwd === HOME)
-    return WORKSPACE;
-  const relative = cwd.startsWith(`${WORKSPACE}/`)
-    ? cwd.slice(WORKSPACE.length + 1)
-    : cwd.startsWith("/home/orkbot/")
-      ? cwd.slice("/home/orkbot/".length)
-      : cwd;
-  return workspacePath(WORKSPACE, relative);
+  return resolveWorkspaceCwd(WORKSPACE, cwd, [HOME, "/home/orkbot"]);
 }
 
 /** `path\0mode\0size\0` for every workspace file, relative to the workspace. */

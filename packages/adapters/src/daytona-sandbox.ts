@@ -23,7 +23,12 @@ import type {
 import { abortableDelay, boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { screenSessionKey } from "./computer-screens.js";
-import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
+import {
+  normalizeWorkspacePath,
+  resolveWorkspaceCwd,
+  shellQuote,
+  workspacePath,
+} from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
 import { LinuxDesktop, onBotScreen, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
@@ -853,18 +858,7 @@ function isFailedDaytonaTransition(error: unknown): boolean {
 }
 
 function daytonaCwd(root: string, cwd: string | undefined): string {
-  if (
-    !cwd ||
-    cwd === "." ||
-    cwd === "/" ||
-    cwd === "/home/orkbot" ||
-    cwd === "/home/user" ||
-    cwd === "/home/daytona" ||
-    cwd === root
-  ) {
-    return root;
-  }
-  return workspacePath(root, cwd);
+  return resolveWorkspaceCwd(root, cwd, ["/home/orkbot", "/home/user", "/home/daytona"]);
 }
 
 function isDaytonaExecutable(mode: string, permissions: string): boolean {

@@ -38,6 +38,7 @@ import {
   boundedComputerActions,
   clampRounded,
   computerObservation,
+  resolveWorkspaceCwd,
   workspacePath,
 } from "./computer-support.js";
 import {
@@ -175,7 +176,10 @@ export class LinuxDesktop {
         screen.env,
         request.controlToken,
         terminalToken,
-        workspacePath(screen.env.workspaceDir, request.cwd ?? ""),
+        resolveWorkspaceCwd(screen.env.workspaceDir, request.cwd, [
+          screen.env.homeDir,
+          "/home/orkbot",
+        ]),
       ),
       context,
     );

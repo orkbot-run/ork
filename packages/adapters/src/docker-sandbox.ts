@@ -1,4 +1,7 @@
-import path from "node:path";
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
@@ -30,6 +33,7 @@ import {
   clampRounded,
   computerObservation,
   normalizeWorkspacePath,
+  resolveWorkspaceCwd,
 } from "./computer-support.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
 import { readBodyCapped, withAbort } from "./web-ssrf.js";
@@ -309,7 +313,10 @@ export class DockerSandboxProvider implements SandboxProvider {
     const res = await fetch(this.url(`/computers/${computer.id}/terminal`), {
       method: "POST",
       headers: { ...this.headers(context, computer.botId), "content-type": "application/json" },
-      body: JSON.stringify({ controlToken: request.controlToken, cwd: request.cwd ?? "" }),
+      body: JSON.stringify({
+        controlToken: request.controlToken,
+        cwd: resolveWorkspaceCwd("", request.cwd, ["/home/orkbot"]),
+      }),
       signal: context.signal,
     });
     if (!res.ok) {
@@ -704,9 +711,5 @@ function parseProcessLine(line: string): ProcessEvent | undefined {
 }
 
 function dockerCwd(cwd: string | undefined) {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/orkbot") return "/home/orkbot";
-  const relative = cwd.startsWith("/home/orkbot/")
-    ? cwd.slice("/home/orkbot/".length)
-    : normalizeWorkspacePath(cwd);
-  return path.posix.join("/home/orkbot", relative);
+  return resolveWorkspaceCwd("/home/orkbot", cwd);
 }

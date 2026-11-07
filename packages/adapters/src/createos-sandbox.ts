@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { setTimeout as delay } from "node:timers/promises";
 import type {
   AdapterContext,
@@ -28,6 +32,7 @@ import {
   clampRounded,
   computerObservation,
   normalizeWorkspacePath,
+  resolveWorkspaceCwd,
   shellQuote,
   workspacePath,
 } from "./computer-support.js";
@@ -1828,11 +1833,7 @@ function isAllowedCreateOSScreenHost(hostname: string, baseHost: string): boolea
 }
 
 function createosCwd(cwd: string | undefined): string {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === "/home/orkbot" || cwd === "/home/desktop") {
-    return CREATEOS_WORKSPACE;
-  }
-  if (cwd === CREATEOS_WORKSPACE || cwd.startsWith(`${CREATEOS_WORKSPACE}/`)) return cwd;
-  return workspacePath(CREATEOS_WORKSPACE, cwd);
+  return resolveWorkspaceCwd(CREATEOS_WORKSPACE, cwd, ["/home/orkbot", "/home/desktop"]);
 }
 
 function emptyScreenSession(): ScreenSession {

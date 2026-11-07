@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -1215,3 +1219,28 @@ describe("Railway computers", () => {
     }
   });
 });
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", String.raw`\home\orkbot\notes`])(
+  "Railway maps portable cwd %s at the SDK boundary",
+  async (cwd) => {
+    for await (const _event of provider.execute(computer, { argv: ["true"], cwd }, ctx)) {
+      /* Consume the command. */
+    }
+    expect(sandbox.exec).toHaveBeenLastCalledWith(
+      expect.any(String),
+      expect.objectContaining({ cwd: "/home/orkbot/notes" }),
+    );
+    const before = sandbox.exec.mock.calls.length;
+    const rejected = async () => {
+      for await (const _event of provider.execute(
+        computer,
+        { argv: ["true"], cwd: "/home/orkbot/../outside" },
+        ctx,
+      )) {
+        /* Consume. */
+      }
+    };
+    await expect(rejected()).rejects.toThrow(/escapes/);
+    expect(sandbox.exec).toHaveBeenCalledTimes(before);
+  },
+);

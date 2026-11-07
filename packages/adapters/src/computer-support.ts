@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { createHash } from "node:crypto";
 import path from "node:path";
 import type { ComputerAction, ComputerObservation, ComputerRef } from "@orkbot/adapter-kit";
@@ -74,6 +78,28 @@ export function normalizeWorkspacePath(value: string): string {
 export function workspacePath(root: string, relative: string): string {
   const normalized = normalizeWorkspacePath(relative);
   return normalized ? path.posix.join(root, normalized) : root;
+}
+
+/** Portable command cwd. Validate alias suffixes before joining, never normalize traversal away. */
+export function resolveWorkspaceCwd(
+  root: string,
+  cwd: string | undefined,
+  aliases: readonly string[] = [],
+): string {
+  if (cwd?.includes("\0")) throw new Error("Path escapes the computer workspace");
+  const portable = (cwd ?? "").replace(/\\/g, "/");
+  if (/^[A-Za-z]:/.test(portable) || portable.startsWith("//"))
+    throw new Error("Path escapes the computer workspace");
+  if (!portable || portable === "." || portable === "/") return root;
+  const roots = [...(root.startsWith("/") ? [root] : []), "~", ...aliases]
+    .map((alias) => alias.replace(/\\/g, "/").replace(/\/+$/, ""))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const alias = roots.find(
+    (candidate) => portable === candidate || portable.startsWith(`${candidate}/`),
+  );
+  const relative = normalizeWorkspacePath(alias ? portable.slice(alias.length) : portable);
+  return relative ? path.posix.join(root, relative) : root;
 }
 
 export function teamBotWorkspaceDirectory(botId: string): string {

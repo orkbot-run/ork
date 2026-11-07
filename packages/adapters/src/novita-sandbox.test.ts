@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import {
   AuthenticationError,
   CommandExitError,
@@ -363,4 +367,33 @@ describe("Novita adapter over the SDK emulator", () => {
     expect(emulator.computers.has(computer.id)).toBe(false);
     expect(emulator.requests.filter((entry) => entry.startsWith("connect"))).toEqual([]);
   });
+});
+
+it.each([
+  "notes",
+  "~/notes",
+  "/home/orkbot/notes",
+  "/home/user/notes",
+  "/home/user/orkbot-home/notes",
+])("Novita maps portable cwd %s through the shared remote adapter", async (cwd) => {
+  const { provider, computer, desktop } = await started();
+  for await (const _event of provider.execute(computer, { argv: ["true"], cwd }, ctx)) {
+    /* Consume the command. */
+  }
+  expect(desktop.commands.run).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({ cwd: "/home/user/orkbot-home/notes" }),
+  );
+  const before = vi.mocked(desktop.commands.run).mock.calls.length;
+  const rejected = async () => {
+    for await (const _event of provider.execute(
+      computer,
+      { argv: ["true"], cwd: "/home/user/orkbot-home/../outside" },
+      ctx,
+    )) {
+      /* Consume. */
+    }
+  };
+  await expect(rejected()).rejects.toThrow(/escapes/);
+  expect(desktop.commands.run).toHaveBeenCalledTimes(before);
 });

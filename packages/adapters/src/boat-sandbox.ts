@@ -52,7 +52,12 @@ import {
   callerSignal,
   wrapBoatCall,
 } from "./boat-errors.js";
-import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
+import {
+  normalizeWorkspacePath,
+  resolveWorkspaceCwd,
+  shellQuote,
+  workspacePath,
+} from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
 import {
   LinuxDesktop,
@@ -1720,22 +1725,7 @@ function commandResponse(response: CommandResponse): BoatCommandResult {
 }
 
 function boatCwd(cwd: string | undefined): string {
-  if (
-    !cwd ||
-    cwd === "." ||
-    cwd === "/" ||
-    cwd === "/home/orkbot" ||
-    cwd === "/home/user" ||
-    cwd === BOAT_WORKSPACE
-  ) {
-    return "orkbot-home";
-  }
-  const relative = cwd.startsWith(`${BOAT_WORKSPACE}/`)
-    ? cwd.slice(BOAT_WORKSPACE.length + 1)
-    : cwd.startsWith("/home/orkbot/")
-      ? cwd.slice("/home/orkbot/".length)
-      : cwd;
-  return path.posix.join("orkbot-home", normalizeWorkspacePath(relative));
+  return resolveWorkspaceCwd("orkbot-home", cwd, [BOAT_WORKSPACE, "/home/orkbot", "/home/user"]);
 }
 
 function configureBoatWorkspaceCommand(): string {

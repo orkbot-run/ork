@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -384,4 +388,99 @@ describe("sandbox conformance", () => {
     await desktop.destroy(computer, ctx);
     rmSync(root, { recursive: true, force: true });
   });
+});
+
+it("rejects cwd escape across provider boundaries before the requested command can run", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "orkbot-cwd-conformance-"));
+  const providers: SandboxProvider[] = [
+    new FakeSandboxProvider(),
+    fakeBoat(),
+    fakeBoxdProvider(),
+    emulatedNovita().provider(),
+    new DesktopSandboxProvider({ root }),
+    new FakeWuyingDesktop().provider(),
+  ];
+  try {
+    for (const [index, provider] of providers.entries()) {
+      const computer = await provisionPrepared(
+        provider,
+        { botId: `cwd-${index}`, homePath: "/unused" },
+        ctx,
+      );
+      try {
+        for (const cwd of [
+          "..",
+          "notes/../outside",
+          "/home/orkbot/../outside",
+          "~/../outside",
+          "C:outside",
+          String.raw`\\server\share`,
+          "notes\0hidden",
+        ]) {
+          const events: ProcessEvent[] = [];
+          let failure: unknown;
+          try {
+            for await (const event of provider.execute(
+              computer,
+              { argv: ["echo", "cwd-command-must-not-run"], cwd },
+              ctx,
+            ))
+              events.push(event);
+          } catch (error) {
+            failure = error;
+          }
+          if (failure)
+            expect(String(failure), `${provider.describe().id}: ${cwd}`).toMatch(
+              /escapes|outside.*home/,
+            );
+          else {
+            expect(events.some((event) => event.type === "exit" && event.code !== 0)).toBe(true);
+            expect(
+              events.some(
+                (event) =>
+                  event.type === "stdout" && event.data.includes("cwd-command-must-not-run"),
+              ),
+            ).toBe(false);
+          }
+        }
+      } finally {
+        await provider.destroy(computer, ctx);
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("runs Desktop cwd aliases inside the same real workspace without changing native host policy", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "orkbot-cwd-native-"));
+  const provider = new DesktopSandboxProvider({ root });
+  const computer = await provider.provision({ botId: "cwd", homePath: "/unused" }, ctx);
+  try {
+    const pwd = async (cwd?: string) => {
+      let output = "";
+      for await (const event of provider.execute(
+        computer,
+        { argv: [process.execPath, "-e", "process.stdout.write(process.cwd())"], cwd },
+        ctx,
+      )) {
+        if (event.type === "stdout") output += event.data;
+        if (event.type === "exit") expect(event.code).toBe(0);
+      }
+      return output;
+    };
+    const home = await pwd();
+    for (const cwd of [
+      "notes",
+      "~/notes",
+      "/home/orkbot/notes",
+      "/home/user/notes",
+      path.join(computer.providerRef, "notes"),
+    ]) {
+      expect(await pwd(cwd)).toBe(path.join(home, "notes"));
+    }
+  } finally {
+    await provider.destroy(computer, ctx);
+    rmSync(root, { recursive: true, force: true });
+  }
 });

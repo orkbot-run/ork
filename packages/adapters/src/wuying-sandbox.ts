@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -26,7 +30,11 @@ import {
   WorkspaceTooLargeError,
 } from "@orkbot/adapter-kit";
 import { abortableDelay, boundedSandboxCommandTimeoutMs, isRetryableError } from "@orkbot/core";
-import { boundedComputerActions, computerObservation } from "./computer-support.js";
+import {
+  boundedComputerActions,
+  computerObservation,
+  resolveWorkspaceCwd,
+} from "./computer-support.js";
 import { normalizeDesktopWorkspacePath } from "./desktop-sandbox-paths.js";
 import { McpSession } from "./mcp-transport.js";
 import { shouldSkipPortableWorkspaceFile } from "./workspace-save-policy.js";
@@ -539,9 +547,11 @@ export class WuyingSandboxProvider implements SandboxProvider {
     const [program = "cmd.exe", ...args] = utf8Output(
       request.argv.length ? request.argv : ["cmd.exe", "/c", "echo ready"],
     );
-    const cwd = request.cwd
-      ? await this.target(computer, request.cwd, context.signal)
-      : await this.home(computer.botId, context.signal);
+    const cwd = await this.target(
+      computer,
+      resolveWorkspaceCwd("", request.cwd, ["/home/orkbot", "/home/user"]),
+      context.signal,
+    );
     await this.mkdirs(cwd, context.signal);
     const env = { ...request.env };
     // The gateway's environment overlay has no unset; an empty value is the closest it offers.

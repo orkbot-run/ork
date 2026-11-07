@@ -1,8 +1,71 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { isAllowedDesktopPath, normalizeDesktopWorkspacePath } from "./desktop-sandbox-paths.js";
+import {
+  isAllowedDesktopPath,
+  normalizeDesktopWorkspacePath,
+  resolveDesktopCommandCwd,
+} from "./desktop-sandbox-paths.js";
 
 describe("desktop sandbox path rules", () => {
+  it("maps portable cwd aliases while preserving explicitly allowed native host paths", () => {
+    for (const cwd of [undefined, ".", "/", "~", "/home/orkbot", "/home/user"])
+      expect(resolveDesktopCommandCwd("/private/work", cwd, [], "darwin")).toBe("/private/work");
+    for (const cwd of ["notes", "~/notes", "/home/orkbot/notes", "/home/user/notes"])
+      expect(resolveDesktopCommandCwd("/private/work", cwd, [], "darwin")).toBe(
+        "/private/work/notes",
+      );
+    expect(
+      resolveDesktopCommandCwd("/private/work", "/home/user/notes", ["/home/user"], "linux"),
+    ).toBe("/home/user/notes");
+    expect(
+      resolveDesktopCommandCwd("/private/work", "/native/project", ["/native"], "darwin"),
+    ).toBe("/native/project");
+    expect(
+      isAllowedDesktopPath(resolveDesktopCommandCwd("/private/work", "/etc", [], "darwin"), [
+        "/private/work",
+      ]),
+    ).toBe(false);
+    expect(() => resolveDesktopCommandCwd("/private/work", "../outside", [], "darwin")).toThrow(
+      /escapes/,
+    );
+  });
+
+  it("retains drive/UNC host containment and Windows reserved-name checks", () => {
+    const home = String.raw`C:\work\bot`;
+    expect(resolveDesktopCommandCwd(home, "/home/orkbot/notes", [], "win32")).toBe(
+      String.raw`C:\work\bot\notes`,
+    );
+    expect(
+      resolveDesktopCommandCwd(home, String.raw`D:\project`, [String.raw`D:\project`], "win32"),
+    ).toBe(String.raw`D:\project`);
+    expect(
+      resolveDesktopCommandCwd(
+        home,
+        String.raw`\\server\share\project`,
+        [String.raw`\\server\share`],
+        "win32",
+      ),
+    ).toBe(String.raw`\\server\share\project`);
+    for (const cwd of [
+      "../outside",
+      "NUL.txt",
+      "notes:stream",
+      "trailing.",
+      String.raw`~\..\outside`,
+    ])
+      expect(() => resolveDesktopCommandCwd(home, cwd, [], "win32")).toThrow(/escapes/);
+    expect(
+      isAllowedDesktopPath(
+        resolveDesktopCommandCwd(home, String.raw`D:\outside`, [], "win32"),
+        [home],
+        path.win32,
+      ),
+    ).toBe(false);
+  });
   it("compares Windows roots case-insensitively without accepting siblings or other drives", () => {
     const roots = ["C:\\Users\\Owner\\Orkbot\\bot"];
 

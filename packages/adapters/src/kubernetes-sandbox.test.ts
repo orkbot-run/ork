@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { execFileSync } from "node:child_process";
 import { link, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1256,3 +1260,30 @@ describe("KubernetesSandboxProvider", () => {
     }
   });
 });
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", String.raw`\home\orkbot\notes`])(
+  "Kubernetes maps portable cwd %s through shared exec",
+  async (cwd) => {
+    const exec = successfulExec();
+    for await (const _event of providerFor({}, exec).execute(
+      computer,
+      { argv: ["true"], cwd },
+      context,
+    )) {
+      /* Consume the command. */
+    }
+    expect(exec.mock.calls[0]?.[3]).toContain("/home/orkbot/notes");
+    const before = exec.mock.calls.length;
+    const rejected = async () => {
+      for await (const _event of providerFor({}, exec).execute(
+        computer,
+        { argv: ["true"], cwd: "/home/orkbot/../outside" },
+        context,
+      )) {
+        /* Consume. */
+      }
+    };
+    await expect(rejected()).rejects.toThrow(/escapes/);
+    expect(exec).toHaveBeenCalledTimes(before);
+  },
+);

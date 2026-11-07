@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { RateLimitError } from "@boxd-sh/sdk";
 import type { AdapterContext, ComputerRef, ProcessEvent } from "@orkbot/adapter-kit";
 import { SandboxRateLimitError, WorkspaceTooLargeError } from "@orkbot/adapter-kit";
@@ -263,3 +267,26 @@ describe("boxd computers", () => {
     expect(boxd.calls).not.toContain("create");
   });
 });
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", "/home/boxd/notes", `${BOXD_WORKSPACE}/notes`])(
+  "boxd maps portable cwd %s at the SDK boundary",
+  async (cwd) => {
+    const boxd = new FakeBoxd();
+    const provider = fakeBoxdProvider(boxd);
+    const computer = await provider.provision({ botId: "cwd", homePath: "/unused" }, ctx);
+    try {
+      await events(provider, computer, { argv: ["echo", "ok"], cwd });
+      expect(boxd.commands.at(-1)?.cwd).toBe(`${BOXD_WORKSPACE}/notes`);
+      const before = boxd.commands.length;
+      await expect(
+        events(provider, computer, {
+          argv: ["echo", "must-not-run"],
+          cwd: `${BOXD_WORKSPACE}/../outside`,
+        }),
+      ).rejects.toThrow(/escapes/);
+      expect(boxd.commands).toHaveLength(before);
+    } finally {
+      await provider.destroy(computer, ctx);
+    }
+  },
+);

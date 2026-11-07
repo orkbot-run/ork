@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type * as TimersPromises from "node:timers/promises";
 import type { ComputerRef, ProcessEvent } from "@orkbot/adapter-kit";
 import { WorkspaceTooLargeError } from "@orkbot/adapter-kit";
@@ -354,4 +358,46 @@ describe("WuyingSandboxProvider", () => {
     );
     expect(await provider.workspaceDirectories(computer, { action: "list" }, ctx)).toEqual([]);
   });
+});
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", String.raw`\home\orkbot\notes`])(
+  "remote Windows maps portable cwd %s before native validation",
+  async (cwd) => {
+    const desktop = new FakeWuyingDesktop();
+    const provider = desktop.provider();
+    const computer = await provider.provision({ botId: "bot", homePath: "/unused" }, ctx);
+    for await (const _event of provider.execute(
+      computer,
+      { argv: ["cmd.exe", "/c", "echo ok"], cwd, timeoutMs: 30_000 },
+      ctx,
+    )) {
+      /* Consume the command. */
+    }
+    expect(desktop.calls.findLast((call) => call.tool === "process_exec")?.args.cwd).toBe(
+      `${FAKE_PROFILE}\\orkbot\\bot\\notes`,
+    );
+  },
+);
+
+it.each([
+  "NUL.txt",
+  "notes:stream",
+  "trailing.",
+  String.raw`C:\outside`,
+  String.raw`\\server\share`,
+])("remote Windows retains native path rejection for %s", async (cwd) => {
+  const desktop = new FakeWuyingDesktop();
+  const provider = desktop.provider();
+  const computer = await provider.provision({ botId: "bot", homePath: "/unused" }, ctx);
+  const execute = async () => {
+    for await (const _event of provider.execute(
+      computer,
+      { argv: ["cmd.exe", "/c", "echo no"], cwd },
+      ctx,
+    )) {
+      /* Consume the command. */
+    }
+  };
+  await expect(execute()).rejects.toThrow(/escapes/);
+  expect(desktop.calls.some((call) => call.tool === "process_exec")).toBe(false);
 });

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { createServer } from "node:http";
 import type { CommandResult, EntryInfo } from "@e2b/desktop";
 import {
@@ -573,6 +577,24 @@ describe("E2B computer backend", () => {
       expect.stringContaining("/home/user/orkbot-home/bots/bot-1"),
       expect.anything(),
     );
+    for (const cwd of [
+      "~/bots/bot-1",
+      "/home/orkbot/bots/bot-1",
+      "/home/user/orkbot-home/bots/bot-1",
+    ]) {
+      await provider.connectTerminal(computer, { controlToken: "lease-1", cwd }, context);
+      expect(command).toHaveBeenLastCalledWith(
+        expect.stringContaining("/home/user/orkbot-home/bots/bot-1"),
+        expect.anything(),
+      );
+    }
+    await expect(
+      provider.connectTerminal(
+        computer,
+        { controlToken: "lease-1", cwd: "/home/user/orkbot-home/../outside" },
+        context,
+      ),
+    ).rejects.toThrow(/escapes/);
   });
 
   it("controls the desktop and exposes a portable workspace", async () => {
@@ -1404,4 +1426,40 @@ describe("keepingAwake", () => {
       vi.unstubAllEnvs();
     }
   });
+});
+
+it.each([
+  "notes",
+  "~/notes",
+  "/home/orkbot/notes",
+  "/home/user/notes",
+  "/home/user/orkbot-home/notes",
+])("remote desktop maps portable cwd %s at the SDK boundary", async (cwd) => {
+  const run = vi.fn(async () => ({ stdout: "", stderr: "", exitCode: 0 }));
+  const provider = new E2BSandboxProvider("test-key", {
+    connect: async () => ({ sandboxId: "existing", commands: { run } }),
+  } as unknown as E2BSandboxSdk);
+  for await (const _event of provider.execute(
+    { id: "existing", providerRef: "existing", kind: "e2b", botId: "bot" },
+    { argv: ["true"], cwd },
+    context,
+  )) {
+    /* Consume the command. */
+  }
+  expect(run).toHaveBeenLastCalledWith(
+    expect.any(String),
+    expect.objectContaining({ cwd: "/home/user/orkbot-home/notes" }),
+  );
+  const before = run.mock.calls.length;
+  const rejected = async () => {
+    for await (const _event of provider.execute(
+      { id: "existing", providerRef: "existing", kind: "e2b", botId: "bot" },
+      { argv: ["true"], cwd: "/home/user/orkbot-home/../outside" },
+      context,
+    )) {
+      /* Consume. */
+    }
+  };
+  await expect(rejected()).rejects.toThrow(/escapes/);
+  expect(run).toHaveBeenCalledTimes(before);
 });

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import type {
   AdapterContext,
   CommandRequest,
@@ -17,7 +21,12 @@ import type {
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { getLogger } from "@orkbot/logging";
 import { sandboxIdleMs } from "./computer-idle.js";
-import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
+import {
+  normalizeWorkspacePath,
+  resolveWorkspaceCwd,
+  shellQuote,
+  workspacePath,
+} from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
 import { LinuxDesktop, onBotScreen, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
@@ -687,22 +696,7 @@ async function* walkRemoteWorkspace(
 }
 
 function remoteCwd(cwd: string | undefined): string {
-  if (
-    !cwd ||
-    cwd === "." ||
-    cwd === "/" ||
-    cwd === "/home/orkbot" ||
-    cwd === "/home/user" ||
-    cwd === REMOTE_WORKSPACE
-  ) {
-    return REMOTE_WORKSPACE;
-  }
-  const relative = cwd.startsWith(`${REMOTE_WORKSPACE}/`)
-    ? cwd.slice(REMOTE_WORKSPACE.length + 1)
-    : cwd.startsWith("/home/orkbot/")
-      ? cwd.slice("/home/orkbot/".length)
-      : cwd;
-  return workspacePath(REMOTE_WORKSPACE, relative);
+  return resolveWorkspaceCwd(REMOTE_WORKSPACE, cwd, ["/home/orkbot", "/home/user"]);
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {

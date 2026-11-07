@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { createHash } from "node:crypto";
 import type * as TimersPromises from "node:timers/promises";
 import type { FileUrlResponse, SandboxStateEnum } from "@boatdev/sdk";
@@ -2491,4 +2495,40 @@ describe("Boat computer snapshot", () => {
     expect(api.savedSnapshots.size).toBe(0);
     expect(remove).toHaveBeenCalledWith("bx_fake1");
   });
+});
+
+it.each([
+  "notes",
+  "~/notes",
+  "/home/orkbot/notes",
+  "/home/user/notes",
+  "/home/user/orkbot-home/notes",
+])("Boat maps portable cwd %s to its SDK's relative workspace", async (cwd) => {
+  const api = new FakeBoatApi();
+  const command = vi.spyOn(api, "command");
+  const provider = new BoatSandboxProvider({ apiKey: "test-key" }, api);
+  const computer = await provider.provision({ botId: "cwd", homePath: "/unused" }, context);
+  try {
+    for await (const _event of provider.execute(computer, { argv: ["echo", "ok"], cwd }, context)) {
+      /* Consume the command. */
+    }
+    const request = command.mock.calls.at(-1)?.[0];
+    expect(request && "commandRequest" in request ? request.commandRequest.cwd : undefined).toBe(
+      "orkbot-home/notes",
+    );
+    const before = command.mock.calls.length;
+    const rejected = async () => {
+      for await (const _event of provider.execute(
+        computer,
+        { argv: ["echo", "must-not-run"], cwd: "/home/user/orkbot-home/../outside" },
+        context,
+      )) {
+        /* Consume. */
+      }
+    };
+    await expect(rejected()).rejects.toThrow(/escapes/);
+    expect(command).toHaveBeenCalledTimes(before);
+  } finally {
+    await provider.destroy(computer, context);
+  }
 });

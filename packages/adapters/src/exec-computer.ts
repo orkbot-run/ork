@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -11,7 +15,12 @@ import type {
 } from "@orkbot/adapter-kit";
 import { boundedSandboxCommandTimeoutMs } from "@orkbot/core";
 import { COMPUTER_CACHE_ENV } from "@orkbot/core/node/desktop-runtime";
-import { normalizeWorkspacePath, shellQuote, workspacePath } from "./computer-support.js";
+import {
+  normalizeWorkspacePath,
+  resolveWorkspaceCwd,
+  shellQuote,
+  workspacePath,
+} from "./computer-support.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
 import {
   shouldSkipPortableWorkspaceFile,
@@ -410,11 +419,7 @@ function withTimeout(command: string[], timeoutMs: number): string[] {
 }
 
 function commandCwd(cwd: string | undefined): string {
-  if (!cwd || cwd === "." || cwd === "/" || cwd === WORKSPACE) return WORKSPACE;
-  return workspacePath(
-    WORKSPACE,
-    cwd.startsWith(`${WORKSPACE}/`) ? cwd.slice(WORKSPACE.length + 1) : cwd,
-  );
+  return resolveWorkspaceCwd(WORKSPACE, cwd);
 }
 
 const TAR_BLOCK = 512;

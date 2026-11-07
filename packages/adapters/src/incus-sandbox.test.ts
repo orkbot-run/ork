@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { X509Certificate } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -1034,3 +1038,24 @@ describe("incusTlsOptions", () => {
     ).toThrow();
   });
 });
+
+it.each(["notes", "~/notes", "/home/orkbot/notes", String.raw`\home\orkbot\notes`])(
+  "Incus maps portable cwd %s through shared exec",
+  async (cwd) => {
+    const fake = new FakeIncus();
+    fake.instances.set("box", running());
+    await collect(providerFor(fake).execute(computer, { argv: ["true"], cwd }, context));
+    expect(fake.execs[0]?.command).toContain("/home/orkbot/notes");
+    const before = fake.execs.length;
+    await expect(
+      collect(
+        providerFor(fake).execute(
+          computer,
+          { argv: ["true"], cwd: "/home/orkbot/../outside" },
+          context,
+        ),
+      ),
+    ).rejects.toThrow(/escapes/);
+    expect(fake.execs).toHaveLength(before);
+  },
+);

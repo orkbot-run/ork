@@ -42,7 +42,11 @@ import {
 } from "./computer-support.js";
 import type { NativeProcessTree } from "./desktop-process-tree.js";
 import { spawnOwnedCommand } from "./desktop-process-tree.js";
-import { isAllowedDesktopPath, normalizeDesktopWorkspacePath } from "./desktop-sandbox-paths.js";
+import {
+  isAllowedDesktopPath,
+  normalizeDesktopWorkspacePath,
+  resolveDesktopCommandCwd,
+} from "./desktop-sandbox-paths.js";
 import type { Win32FileHandle } from "./desktop-sandbox-win32-path.js";
 import {
   createExclusiveChildViaDirectoryFdWin32,
@@ -292,7 +296,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
       yield { type: "exit", code: 1 };
       return;
     }
-    const cwd = resolveExecuteCwd(request.cwd, box.home);
+    const cwd = resolveDesktopCommandCwd(box.home, request.cwd, this.opts.hostRoots);
     if (!isAllowedDesktopPath(cwd, this.allowedRoots(box.home))) {
       yield { type: "stderr", data: "path is outside this computer's home" };
       yield { type: "exit", code: 1 };
@@ -879,11 +883,6 @@ async function* walkDesktopWorkspace(
       };
     }
   }
-}
-
-function resolveExecuteCwd(requestCwd: string | undefined, home: string) {
-  if (!requestCwd || requestCwd === "/home/orkbot" || requestCwd === "/home/user") return home;
-  return path.resolve(home, requestCwd);
 }
 
 /** Batch files require cmd.exe and cannot be executed directly. */

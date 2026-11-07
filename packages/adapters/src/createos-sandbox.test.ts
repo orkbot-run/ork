@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+
 import { execFile, execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -321,6 +325,21 @@ describe("CreateOSSandboxProvider", () => {
       `mkdir -p '/home/desktop/orkbot-home/notes' && cd '/home/desktop/orkbot-home/notes' && eval "$(cat)" && 'env' '-u' 'FAILED' '--' 'echo' 'hello'`,
     );
     expect(exec?.stdin).toBe("export TEST_VALUE='works'\n");
+  });
+
+  it("rejects traversal inside an absolute workspace cwd before dispatch", async () => {
+    const fixture = createosFixture();
+    const execute = async () => {
+      for await (const _event of provider(fixture).execute(
+        computer,
+        { argv: ["pwd"], cwd: "/home/desktop/orkbot-home/../outside" },
+        context,
+      )) {
+        /* Consume the command. */
+      }
+    };
+    await expect(execute()).rejects.toThrow("Path escapes the computer workspace");
+    expect(fixture.execs).toEqual([]);
   });
 
   it("sends command secrets on stdin, never in command text", async () => {
@@ -1297,4 +1316,22 @@ describe("CreateOS screen map", () => {
     const replaced = JSON.parse(await mapOp(dir, "read", "", "")) as Record<string, string>;
     expect(replaced["bot-b"]).toBe("screen-2");
   });
+});
+
+it.each([
+  "notes",
+  "~/notes",
+  "/home/orkbot/notes",
+  "/home/desktop/notes",
+  "/home/desktop/orkbot-home/notes",
+])("CreateOS maps portable cwd %s without duplicating its real root", async (cwd) => {
+  const fixture = createosFixture();
+  for await (const _event of provider(fixture).execute(
+    computer,
+    { argv: ["true"], cwd },
+    context,
+  )) {
+    /* Consume the command. */
+  }
+  expect(fixture.execs.at(-1)?.command).toContain("cd '/home/desktop/orkbot-home/notes'");
 });
