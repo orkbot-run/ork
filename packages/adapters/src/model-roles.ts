@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 model selection is preserved; fleet source reporting follows LICENSE.md.
+
 import type { AgentRunRequest, SecretStore } from "@orkbot/adapter-kit";
 import type {
   ModelRole,
@@ -76,8 +80,9 @@ export type MemberMainModel = ModelRoleChoice & {
 export async function resolveMemberMainModel(
   deps: { prisma: PrismaClient; secretStore: Pick<SecretStore, "load"> },
   scope: { userId: string; spaceId: string },
+  requested?: SettingsScope,
 ): Promise<MemberMainModel | null> {
-  const { primary } = await appliedModelRole(deps.prisma, scope, "main");
+  const { primary } = await appliedModelRole(deps.prisma, scope, "main", requested);
   if (!primary) return null;
   const credential = await findConnectedModelCredential(
     deps.prisma,
@@ -127,6 +132,13 @@ export function selectConfiguredModel(input: {
       : null;
   return {
     ...selected,
+    source: useOverride
+      ? ("bot" as const)
+      : useMain
+        ? ("member" as const)
+        : fallback
+          ? ("deployment" as const)
+          : null,
     // Preserve bot thinking for the main model; drop it for an unavailable override.
     thinkingLevel:
       hasOverride && !useOverride

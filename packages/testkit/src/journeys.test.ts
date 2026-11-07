@@ -15,6 +15,7 @@ import {
   FakeComposioClient,
   FakeSandboxProvider,
   handoffToGroupBot,
+  listFleet,
   listPiCatalog,
   organizeBot,
   toComputerRef,
@@ -3985,6 +3986,106 @@ describeJourneys("required product journeys", () => {
         expect.arrayContaining([expect.objectContaining({ outcome: "succeeded" })]),
       );
       expect((await childState(scout.id)).instructions).toBe("Plan the offsite");
+    });
+
+    it("list_fleet reports effective model and thinking from account, Space and bot settings", async () => {
+      const model = listPiCatalog().find(
+        (entry) =>
+          entry.provider === "openrouter" &&
+          entry.thinkingLevels?.includes("low") &&
+          entry.thinkingLevels.includes("medium") &&
+          entry.thinkingLevels.includes("high"),
+      );
+      if (!model)
+        throw new Error("The fixture needs a catalog model with low, medium and high thinking");
+      const { cookie, chief } = await fleetOwner("effective-model");
+      const peer = await createBot(cookie, "Peer");
+      const outsider = await signup(app, `fleet-model-other-${stamp}@orkbot.test`, "Other owner");
+      const foreign = await createBot(outsider, "Foreign");
+      await rpc(app, cookie, "models/connect", {
+        provider: "openrouter",
+        apiKey: "fake-fleet-model-key",
+        label: "Fixture",
+        modelId: model.id,
+      });
+      await rpc(app, cookie, "models/setRole", {
+        role: "main",
+        scope: "account",
+        primary: { provider: "openrouter", modelId: model.id, thinkingLevel: "low" },
+      });
+      const sent = await sendAndWait(app, cookie, chief.id, "list the bots you manage");
+      expect(await toolOutcomes(sent.run.id, "list_fleet")).toEqual([
+        expect.objectContaining({ outcome: "succeeded" }),
+      ]);
+      const storedRun = await prisma.run.findUniqueOrThrow({ where: { id: sent.run.id } });
+      const scope = { ...storedRun, groupId: null, runId: storedRun.id };
+      const readSecret = vi.fn(async () => {
+        throw new Error("This model metadata needs no credential plaintext");
+      });
+      const deps = {
+        prisma,
+        secretStore: { load: readSecret },
+        billingEnabled: false,
+        deploymentModelConfigured: false,
+      };
+      const listing = async () => {
+        const result = await listFleet(deps, scope, {});
+        if ("error" in result) throw new Error(result.error);
+        return result;
+      };
+      const account = await listing();
+      expect(account.bots.find((bot) => bot.id === chief.id)?.model).toEqual({
+        provider: "openrouter",
+        id: model.id,
+        thinkingLevel: "low",
+        source: "account",
+      });
+      expect(account.bots.some((bot) => bot.id === foreign.id)).toBe(false);
+      await rpc(app, cookie, "spaceSettings/setOverride", { setting: "models", enabled: true });
+      await rpc(app, cookie, "models/setRole", {
+        role: "main",
+        scope: "space",
+        primary: { provider: "openrouter", modelId: model.id, thinkingLevel: "medium" },
+      });
+      await prisma.bot.update({ where: { id: chief.id }, data: { thinkingLevel: "high" } });
+      await prisma.bot.update({
+        where: { id: peer.id },
+        data: { modelProvider: "openrouter", modelId: model.id },
+      });
+      const space = await listing();
+      expect(space.bots.find((bot) => bot.id === chief.id)?.model).toEqual({
+        provider: "openrouter",
+        id: model.id,
+        thinkingLevel: "high",
+        source: "space",
+      });
+      expect(space.bots.find((bot) => bot.id === peer.id)?.model).toEqual({
+        provider: "openrouter",
+        id: model.id,
+        thinkingLevel: "medium",
+        source: "bot",
+      });
+      await prisma.bot.update({
+        where: { id: peer.id },
+        data: { modelProvider: "missing", modelId: "unavailable", thinkingLevel: "max" },
+      });
+      const fallback = await listing();
+      expect(fallback.bots.find((bot) => bot.id === peer.id)?.model).toEqual({
+        provider: "openrouter",
+        id: model.id,
+        thinkingLevel: null,
+        source: "space",
+      });
+      const detail = await listFleet(deps, scope, { bot_id: peer.id });
+      expect(detail).toMatchObject({
+        bot: {
+          id: peer.id,
+          model: { provider: "openrouter", id: model.id, thinkingLevel: null, source: "space" },
+        },
+      });
+      expect(await listFleet(deps, scope, { bot_id: foreign.id })).toHaveProperty("error");
+      expect(readSecret).not.toHaveBeenCalled();
+      expect(JSON.stringify(fallback)).not.toContain("fake-fleet-model-key");
     });
 
     it("set_child_bot_model applies the approved model and re-checks it at execution", async () => {

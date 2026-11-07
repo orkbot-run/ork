@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 fleet behavior is preserved; effective model reporting follows LICENSE.md.
+
 import type { AdapterContext, JobPublisher } from "@orkbot/adapter-kit";
 import type { Actor, Group, MessageBlock } from "@orkbot/contracts";
 import {
@@ -10,6 +14,7 @@ import {
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   isAttachmentImageMimeType,
+  OPENAI_COMPATIBLE_PROVIDER_ID,
   ThinkingLevelSchema,
   TimeZoneSchema,
   UpdateGroupInput,
@@ -22,6 +27,7 @@ import {
   createRepos,
   InstructionConflictError,
   IsolationError,
+  modelRoleTarget,
   SpaceDeletionInProgressError,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -30,11 +36,20 @@ import { approvalDetailLength, MAX_APPROVAL_SUMMARY_LENGTH } from "./approval-as
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { createdByWhere, managedBotsWhere } from "./child-bots.js";
 import { stopCancelledGroupRuns } from "./computer-idle.js";
+import { resolveDeploymentModel } from "./deployment-model.js";
 import type { ExecutorDeps } from "./executor-deps.js";
 import { resolveModelChoice } from "./model-choice.js";
-import type { BotModelChangeDeps } from "./model-selection.js";
-import { validateBotModelChange } from "./model-selection.js";
+import { resolveMemberMainModel, selectConfiguredModel } from "./model-roles.js";
+import type { BotModelChangeDeps, ModelChoice, ModelCredential } from "./model-selection.js";
+import {
+  findConnectedModelCredential,
+  loadStoredModelSecret,
+  validateBotModelChange,
+} from "./model-selection.js";
 import { listPiCatalog, scriptedCatalogEntry } from "./pi-models.js";
+import type { StoredModelSecret } from "./pi-oauth.js";
+import { parseModelSecret } from "./pi-oauth.js";
+import { compatibleModelThinking } from "./pi-openai-compatible-provider.js";
 import type { ScheduleToolDeps } from "./schedule-tools.js";
 import {
   compactScheduleInput,
@@ -76,6 +91,13 @@ export type FleetDeps = {
 export type FleetPrepareDeps = {
   prisma: PrismaClient;
   modelChange: Omit<BotModelChangeDeps, "prisma">;
+};
+
+type FleetListDeps = Pick<
+  ExecutorDeps,
+  "prisma" | "deploymentModelConfigured" | "billingEnabled"
+> & {
+  secretStore: Pick<ExecutorDeps["secretStore"], "load">;
 };
 
 export type FleetPrepared =
@@ -445,7 +467,7 @@ async function prepareChildInstructions(
 const FLEET_BOT_LIMIT = 200;
 const FLEET_GROUP_LIMIT = 100;
 const FLEET_SECTION_LIMIT = 100;
-const FLEET_ROSTER_MAX_LENGTH = 60_000;
+const FLEET_ROSTER_MAX_BYTES = 60_000;
 const GROUP_PAGE_SIZE = 200;
 const NOT_FOUND = "That bot or group is no longer available. Call list_fleet and try again.";
 
@@ -456,6 +478,13 @@ type FleetBot = {
   section: string | null;
   pinned: boolean;
   createdByMe: boolean;
+  model: FleetModel;
+};
+type FleetModel = {
+  provider: string | null;
+  id: string | null;
+  thinkingLevel: string | null;
+  source: "bot" | "space" | "account" | "deployment" | null;
 };
 type FleetGroup = {
   id: string;
@@ -470,7 +499,13 @@ export type FleetListing = {
   sections: string[];
   truncated: boolean;
   /** With `bot_id`: what an instruction edit must start from. */
-  bot?: { id: string; name: string; instructions: string; instructionsVersion: string };
+  bot?: {
+    id: string;
+    name: string;
+    instructions: string;
+    instructionsVersion: string;
+    model: FleetModel;
+  };
 };
 
 /** The version an instruction edit must echo back: the newest history entry, or "initial". */
@@ -481,7 +516,7 @@ export function instructionsVersionOf(bot: { instructionHistory: unknown }): str
 }
 
 export async function listFleet(
-  deps: Pick<FleetDeps, "prisma">,
+  deps: FleetListDeps,
   run: FleetRun,
   args: { bot_id?: unknown },
 ): Promise<FleetListing | { error: string }> {
@@ -492,13 +527,21 @@ export async function listFleet(
     if ("error" in child) return { error: child.error };
     const row = await prisma.bot.findUniqueOrThrow({
       where: { id: child.id },
-      select: { instructions: true, instructionHistory: true },
+      select: {
+        instructions: true,
+        instructionHistory: true,
+        modelProvider: true,
+        modelId: true,
+        thinkingLevel: true,
+      },
     });
+    const modelFor = await fleetModelSelection(deps, run);
     detail = {
       id: child.id,
       name: singleLine(child.name),
       instructionsVersion: instructionsVersionOf(row),
       instructions: row.instructions,
+      model: await modelFor(row),
     };
   }
   if (detail) return { bot: detail, bots: [], groups: [], sections: [], truncated: false };
@@ -511,6 +554,9 @@ export async function listFleet(
         description: true,
         pinned: true,
         section: { select: { name: true } },
+        modelProvider: true,
+        modelId: true,
+        thinkingLevel: true,
       },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: FLEET_BOT_LIMIT + 1,
@@ -524,6 +570,7 @@ export async function listFleet(
     }),
   ]);
   const listedBots = bots.slice(0, FLEET_BOT_LIMIT);
+  const modelFor = listedBots.length ? await fleetModelSelection(deps, run) : undefined;
   // Only the listed bots need the creator flag, so this read is bounded by the bot cap.
   const children = await prisma.bot.findMany({
     where: {
@@ -535,14 +582,17 @@ export async function listFleet(
   });
   const childIds = new Set(children.map((child) => child.id));
   const listing: FleetListing = {
-    bots: listedBots.map((bot) => ({
-      id: bot.id,
-      name: singleLine(bot.name),
-      description: bot.description,
-      section: bot.section ? singleLine(bot.section.name) : null,
-      pinned: bot.pinned,
-      createdByMe: childIds.has(bot.id),
-    })),
+    bots: await Promise.all(
+      listedBots.map(async (bot) => ({
+        id: bot.id,
+        name: singleLine(bot.name),
+        description: bot.description,
+        section: bot.section ? singleLine(bot.section.name) : null,
+        pinned: bot.pinned,
+        createdByMe: childIds.has(bot.id),
+        model: await modelFor!(bot),
+      })),
+    ),
     groups: groups.slice(0, FLEET_GROUP_LIMIT),
     sections: sections.slice(0, FLEET_SECTION_LIMIT).map((section) => singleLine(section.name)),
     truncated:
@@ -551,12 +601,12 @@ export async function listFleet(
       sections.length > FLEET_SECTION_LIMIT,
   };
   let remaining =
-    FLEET_ROSTER_MAX_LENGTH -
-    JSON.stringify({ bots: [], groups: [], sections: [], truncated: false }).length;
+    FLEET_ROSTER_MAX_BYTES -
+    Buffer.byteLength(JSON.stringify({ bots: [], groups: [], sections: [], truncated: false }));
   for (const rows of [listing.bots, listing.groups, listing.sections]) {
     let kept = 0;
     for (const row of rows) {
-      const length = JSON.stringify(row).length + 1;
+      const length = Buffer.byteLength(JSON.stringify(row)) + 1;
       if (length > remaining) break;
       remaining -= length;
       kept += 1;
@@ -567,6 +617,87 @@ export async function listFleet(
     }
   }
   return listing;
+}
+
+/** One listing shares its settings and connection reads; no credential survives the request. */
+async function fleetModelSelection(deps: FleetListDeps, scope: FleetRun) {
+  const [target, settings] = await Promise.all([
+    modelRoleTarget(deps.prisma, scope),
+    deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+  ]);
+  const main = await resolveMemberMainModel(deps, scope, target.scope);
+  const deployment = resolveDeploymentModel();
+  const hostedProvider =
+    (deps.billingEnabled ?? settings?.modelCreditsEnabled === true)
+      ? deployment.provider
+      : undefined;
+  const defaults = { settings, deployment: deps.deploymentModelConfigured ? deployment : null };
+  const connections = new Map<string, Promise<ModelCredential>>();
+  const compatible = new Map<
+    string,
+    Promise<Extract<StoredModelSecret, { kind: "openai_compatible" }> | null>
+  >();
+  const compatibleConnection = (credential: NonNullable<ModelCredential>) => {
+    let pending = compatible.get(credential.id);
+    if (!pending) {
+      pending = (async () => {
+        const stored = await loadStoredModelSecret(
+          deps.prisma,
+          deps.secretStore,
+          scope.userId,
+          credential.secretId,
+        );
+        if (stored.status !== "loaded") return null;
+        try {
+          const secret = parseModelSecret(stored.plaintext);
+          return secret.kind === "openai_compatible" ? secret : null;
+        } catch {
+          return null;
+        }
+      })();
+      compatible.set(credential.id, pending);
+    }
+    return pending;
+  };
+  return async (bot: ModelChoice): Promise<FleetModel> => {
+    let overrideCredential: ModelCredential = null;
+    if (bot.modelProvider && bot.modelId) {
+      const key = JSON.stringify([bot.modelProvider, bot.modelId]);
+      let pending = connections.get(key);
+      if (!pending) {
+        pending = findConnectedModelCredential(
+          deps.prisma,
+          deps.secretStore,
+          scope,
+          bot.modelProvider,
+          bot.modelId,
+        );
+        connections.set(key, pending);
+      }
+      overrideCredential = await pending;
+    }
+    const selected = selectConfiguredModel({
+      override: bot,
+      overrideCredential,
+      main,
+      hostedProvider,
+      defaults,
+    });
+    const connection =
+      selected.credential?.provider === OPENAI_COMPATIBLE_PROVIDER_ID
+        ? await compatibleConnection(selected.credential)
+        : null;
+    const preferred = selected.thinkingLevel ?? connection?.thinkingLevel ?? null;
+    return {
+      provider: selected.provider ?? null,
+      id: selected.id,
+      thinkingLevel:
+        connection && selected.id
+          ? (compatibleModelThinking(selected.id, connection, preferred).level ?? null)
+          : preferred,
+      source: selected.source === "member" ? target.scope : selected.source,
+    };
+  };
 }
 
 /**

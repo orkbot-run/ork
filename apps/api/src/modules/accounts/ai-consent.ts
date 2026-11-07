@@ -144,7 +144,7 @@ export async function aiConsentStatus(
     const deployment = deps.env.deploymentModelConfigured
       ? { provider: deps.env.defaultProvider, model: deps.env.defaultModel }
       : null;
-    const selected = await Promise.all(
+    const selected: Omit<ReturnType<typeof selectConfiguredModel>, "source">[] = await Promise.all(
       (botIds ? [...bots, ...routines, ...requestedRoutines] : [null, ...bots, ...routines]).map(
         async (override) => {
           const overrideCredential =

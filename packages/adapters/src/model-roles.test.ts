@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 selection assertions are preserved; fleet source reporting follows LICENSE.md.
+
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
 import type { DeploymentModelDefaults, MemberMainModel } from "./model-roles.js";
@@ -75,6 +79,7 @@ describe("configured model selection", () => {
         provider: "bot-provider",
         id: "bot-model",
         credential: overrideCredential,
+        source: "bot",
         thinkingLevel: "high",
       },
     },
@@ -85,6 +90,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "member",
         thinkingLevel: null,
       },
     },
@@ -95,6 +101,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "member",
         thinkingLevel: "high",
       },
     },
@@ -105,6 +112,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "member",
         thinkingLevel: "high",
       },
     },
@@ -115,6 +123,7 @@ describe("configured model selection", () => {
         provider: "settings-provider",
         id: "settings-model",
         credential: null,
+        source: "deployment",
         thinkingLevel: null,
       },
     },
@@ -125,13 +134,20 @@ describe("configured model selection", () => {
         provider: "deployment-provider",
         id: "deployment-model",
         credential: null,
+        source: "deployment",
         thinkingLevel: null,
       },
     },
     {
       name: "leaves missing configuration for the caller's runtime fallback or failure path",
       input: { main: null, defaults: {} },
-      expected: { provider: undefined, id: null, credential: null, thinkingLevel: null },
+      expected: {
+        provider: undefined,
+        id: null,
+        credential: null,
+        thinkingLevel: null,
+        source: null,
+      },
     },
     {
       name: "falls back to the deployment when the main model's connection is gone",
@@ -140,6 +156,7 @@ describe("configured model selection", () => {
         provider: "settings-provider",
         id: "settings-model",
         credential: null,
+        source: "deployment",
         thinkingLevel: null,
       },
     },
@@ -153,6 +170,7 @@ describe("configured model selection", () => {
         provider: "deployment-provider",
         id: "managed-model",
         credential: null,
+        source: "member",
         thinkingLevel: null,
       },
     },
@@ -163,6 +181,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "member",
         thinkingLevel: "low",
       },
     },
@@ -176,6 +195,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "member",
         thinkingLevel: "high",
       },
     },
@@ -190,6 +210,7 @@ describe("configured model selection", () => {
         provider: "bot-provider",
         id: "other-model",
         credential: overrideCredential,
+        source: "bot",
         thinkingLevel: null,
       },
     },
@@ -204,6 +225,7 @@ describe("configured model selection", () => {
         provider: "space-provider",
         id: "space-model",
         credential: spaceCredential,
+        source: "bot",
         thinkingLevel: "xhigh",
       },
     },

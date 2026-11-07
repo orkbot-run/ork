@@ -1,6 +1,15 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 fleet assertions are preserved; effective model reporting follows LICENSE.md.
+
+import type { Model } from "@earendil-works/pi-ai";
+import type { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { JobPublisher } from "@orkbot/adapter-kit";
+import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
+import type { ModelRoleChoice } from "@orkbot/contracts";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ExecutorDeps } from "./executor-deps.js";
 import type { FleetDeps, FleetPrepareDeps, FleetRun } from "./fleet-tools.js";
 import {
   createChildRoutine,
@@ -12,6 +21,33 @@ import {
   setChildInstructions,
   updateChildBot,
 } from "./fleet-tools.js";
+
+// A known model with a bounded effort range keeps this regression independent of catalog churn.
+vi.mock("@earendil-works/pi-ai/providers/all", async (original) => {
+  const actual = await original<{ builtinModels: typeof builtinModels }>();
+  return {
+    ...actual,
+    builtinModels: (...args: Parameters<typeof builtinModels>) => {
+      const models = actual.builtinModels(...args);
+      const provider = models.getProvider("openai")!;
+      const known: Model<"openai-completions"> = {
+        provider: "openai",
+        id: "fleet-fixture-thinker",
+        name: "Fixture thinker",
+        api: "openai-completions",
+        baseUrl: "https://models.example.test/v1",
+        reasoning: true,
+        input: ["text"],
+        contextWindow: 4096,
+        maxTokens: 128,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        thinkingLevelMap: { off: "none", minimal: null, xhigh: null, max: null },
+      };
+      models.setProvider({ ...provider, getModels: () => [...provider.getModels(), known] });
+      return models;
+    },
+  };
+});
 
 type FakeBot = {
   id: string;
@@ -64,6 +100,24 @@ function fakeFleet(input: {
   effects?: Array<{ request: unknown; result: unknown }>;
   routines?: Array<Record<string, unknown>>;
   timezone?: string;
+  accountMain?: ModelRoleChoice;
+  spaceMain?: ModelRoleChoice;
+  modelScope?: "space" | "account";
+  deploymentSettings?: {
+    defaultModelProvider: string | null;
+    defaultModelId: string | null;
+    modelCreditsEnabled?: boolean;
+  };
+  credentialRows?: Array<{
+    id: string;
+    userId: string;
+    provider: string;
+    label: string;
+    secretId: string;
+    updatedAt: Date;
+    createdAt: Date;
+  }>;
+  secrets?: Record<string, string>;
 }) {
   const bots = (input.bots ?? []).map((bot) => ({
     spaceId: "space-1",
@@ -72,6 +126,7 @@ function fakeFleet(input: {
     archivedAt: null,
     modelProvider: null,
     modelId: null,
+    thinkingLevel: null,
     description: "",
     pinned: false,
     section: null,
@@ -144,13 +199,69 @@ function fakeFleet(input: {
       ),
     },
     userModelPreference: { findMany: vi.fn(async () => input.credentials ?? []) },
-    userModelCredential: { findMany: vi.fn(async () => []) },
-    secret: { findMany: vi.fn(async () => []) },
+    userModelCredential: {
+      findMany: vi.fn(async () => input.credentialRows ?? []),
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) => {
+        const credential = input.credentialRows?.find(
+          (row) => row.id === where.id && row.userId === where.userId,
+        );
+        return credential ? { ...credential, userPreferences: [] } : null;
+      }),
+    },
+    secret: {
+      findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+        where.userId === run.userId && input.secrets?.[where.id]
+          ? { id: where.id, ciphertext: input.secrets[where.id] }
+          : null,
+      ),
+    },
+    spaceSettingOverride: {
+      findUnique: vi.fn(async () => (input.modelScope === "space" ? { setting: "models" } : null)),
+    },
+    userModelRoleChoice: {
+      findMany: vi.fn(async () =>
+        input.accountMain
+          ? [
+              {
+                role: "main",
+                position: 0,
+                thinkingLevel: null,
+                credentialId: null,
+                ...input.accountMain,
+              },
+            ]
+          : [],
+      ),
+    },
+    spaceModelRoleChoice: {
+      findMany: vi.fn(async () =>
+        input.spaceMain
+          ? [
+              {
+                role: "main",
+                position: 0,
+                thinkingLevel: null,
+                credentialId: null,
+                ...input.spaceMain,
+              },
+            ]
+          : [],
+      ),
+    },
+    deploymentSettings: { findUnique: vi.fn(async () => input.deploymentSettings ?? null) },
   };
-  const deps: FleetPrepareDeps = {
+  const secretStore = { load: vi.fn(async (ciphertext: string) => ciphertext) };
+  const deps: FleetPrepareDeps &
+    Pick<ExecutorDeps, "billingEnabled" | "deploymentModelConfigured"> & {
+      secretStore: Pick<ExecutorDeps["secretStore"], "load">;
+    } = {
+    secretStore,
+    billingEnabled: false,
+    deploymentModelConfigured: false,
     prisma: prisma as unknown as PrismaClient,
     modelChange: {
-      secretStore: { load: vi.fn() },
+      secretStore,
       refreshExpiredCredential: vi.fn(),
       defaultModel: async () => ({ provider: null, model: null }),
     },
@@ -915,6 +1026,324 @@ describe("prepareFleetRequest keeps the card whole and honest", () => {
 });
 
 describe("listFleet", () => {
+  const credential = (id: string, provider = "fixture") => ({
+    id,
+    provider,
+    userId: run.userId,
+    label: "Fixture",
+    secretId: `secret-${id}`,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+  });
+
+  it.each(["account", "space"] as const)(
+    "reports the %s main choice once, bot thinking and same-model overrides",
+    async (modelScope) => {
+      const connection = credential("main");
+      const main = {
+        provider: "fixture",
+        modelId: "inherited",
+        thinkingLevel: "low" as const,
+        credentialId: connection.id,
+      };
+      const { deps, prisma } = fakeFleet({
+        modelScope,
+        accountMain: main,
+        spaceMain: main,
+        credentialRows: [connection],
+        bots: [
+          { id: "bot-self", name: "Self" },
+          { id: "custom-thinking", name: "Own thinking", thinkingLevel: "high" },
+          { id: "same-model", name: "Same model", modelProvider: "fixture", modelId: "inherited" },
+          {
+            id: "same-model-again",
+            name: "Same model again",
+            modelProvider: "fixture",
+            modelId: "inherited",
+          },
+        ],
+      });
+      const listing = await listFleet(deps, run, {});
+      expect("bots" in listing && listing.bots.map((bot) => bot.model)).toEqual([
+        { provider: "fixture", id: "inherited", thinkingLevel: "low", source: modelScope },
+        { provider: "fixture", id: "inherited", thinkingLevel: "high", source: modelScope },
+        { provider: "fixture", id: "inherited", thinkingLevel: "low", source: "bot" },
+        { provider: "fixture", id: "inherited", thinkingLevel: "low", source: "bot" },
+      ]);
+      expect(prisma.spaceSettingOverride.findUnique).toHaveBeenCalledOnce();
+      expect(prisma.deploymentSettings.findUnique).toHaveBeenCalledOnce();
+      expect(
+        prisma[modelScope === "space" ? "spaceModelRoleChoice" : "userModelRoleChoice"].findMany,
+      ).toHaveBeenCalledOnce();
+      expect(
+        prisma[modelScope === "space" ? "userModelRoleChoice" : "spaceModelRoleChoice"].findMany,
+      ).not.toHaveBeenCalled();
+      expect(prisma.userModelCredential.findMany).toHaveBeenCalledOnce();
+      expect(prisma.userModelPreference.findMany).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("follows the selected main and drops thinking from an unavailable override", async () => {
+    const connection = credential("main");
+    const { deps } = fakeFleet({
+      accountMain: { provider: "fixture", modelId: "main", credentialId: connection.id },
+      credentialRows: [connection],
+      bots: [
+        {
+          id: "bot-self",
+          name: "Self",
+          modelProvider: "missing",
+          modelId: "unavailable",
+          thinkingLevel: "max",
+        },
+      ],
+    });
+    const listing = await listFleet(deps, run, {});
+    expect("bots" in listing && listing.bots[0]?.model).toEqual({
+      provider: "fixture",
+      id: "main",
+      thinkingLevel: null,
+      source: "account",
+    });
+  });
+
+  it("reports deployment defaults when neither the override nor the main connection exists", async () => {
+    const { deps } = fakeFleet({
+      accountMain: { provider: "missing", modelId: "main" },
+      deploymentSettings: { defaultModelProvider: "deployment", defaultModelId: "default" },
+      bots: [
+        {
+          id: "bot-self",
+          name: "Self",
+          modelProvider: "missing",
+          modelId: "override",
+          thinkingLevel: "high",
+        },
+      ],
+    });
+    const listing = await listFleet(deps, run, {});
+    expect("bots" in listing && listing.bots[0]?.model).toEqual({
+      provider: "deployment",
+      id: "default",
+      thinkingLevel: null,
+      source: "deployment",
+    });
+  });
+
+  it("reports the configured environment default when no member model was chosen", async () => {
+    vi.stubEnv("PI_DEFAULT_PROVIDER", "fixture");
+    vi.stubEnv("PI_DEFAULT_MODEL", "environment-default");
+    try {
+      const { deps } = fakeFleet({ bots: [{ id: "bot-self", name: "Self" }] });
+      deps.deploymentModelConfigured = true;
+      const listing = await listFleet(deps, run, {});
+      expect("bots" in listing && listing.bots[0]?.model).toEqual({
+        provider: "fixture",
+        id: "environment-default",
+        thinkingLevel: null,
+        source: "deployment",
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("bounds connection resolution to the admitted roster rows", async () => {
+    const { deps, prisma } = fakeFleet({
+      bots: Array.from({ length: 201 }, (_, index) => ({
+        id: `bot-${index}`,
+        name: "Bot",
+        modelProvider: "missing",
+        modelId: `model-${index}`,
+      })),
+    });
+    expect(await listFleet(deps, run, {})).toMatchObject({ truncated: true });
+    expect(prisma.userModelCredential.findMany).toHaveBeenCalledTimes(200);
+    expect(prisma.spaceSettingOverride.findUnique).toHaveBeenCalledOnce();
+    expect(prisma.deploymentSettings.findUnique).toHaveBeenCalledOnce();
+  });
+
+  it("clamps old compatible secret and bot effort to the known runtime range while retaining off", async () => {
+    const connection = credential("known", "openai-compatible");
+    const id = "fleet-fixture-thinker";
+    const { deps } = fakeFleet({
+      credentialRows: [connection],
+      credentials: [
+        { credential: connection, modelId: id, thinkingLevel: null, updatedAt: new Date(0) },
+      ],
+      secrets: {
+        [connection.secretId]: JSON.stringify({
+          kind: "openai_compatible",
+          baseUrl: "https://models.example.test/v1",
+          reasoning: true,
+          thinkingLevel: "max",
+        }),
+      },
+      bots: [
+        { id: "saved", name: "Saved effort", modelProvider: connection.provider, modelId: id },
+        {
+          id: "override",
+          name: "Bot effort",
+          modelProvider: connection.provider,
+          modelId: id,
+          thinkingLevel: "max",
+        },
+        {
+          id: "off",
+          name: "Off",
+          modelProvider: connection.provider,
+          modelId: id,
+          thinkingLevel: "off",
+        },
+      ],
+    });
+    const listing = await listFleet(deps, run, {});
+    expect("bots" in listing && listing.bots.map((bot) => bot.model)).toEqual([
+      { provider: connection.provider, id, thinkingLevel: "high", source: "bot" },
+      { provider: connection.provider, id, thinkingLevel: "high", source: "bot" },
+      { provider: connection.provider, id, thinkingLevel: "off", source: "bot" },
+    ]);
+    expect(deps.secretStore.load).toHaveBeenCalledOnce();
+  });
+
+  it("reads compatible connection thinking once, respects explicit off and exposes no connection material", async () => {
+    const connection = credential("compatible", "openai-compatible");
+    const { deps, prisma } = fakeFleet({
+      credentialRows: [connection],
+      credentials: [
+        { credential: connection, modelId: "custom", thinkingLevel: null, updatedAt: new Date(0) },
+      ],
+      secrets: {
+        [connection.secretId]: JSON.stringify({
+          kind: "openai_compatible",
+          reasoning: true,
+          baseUrl: "https://private.example.test/v1",
+          apiKey: "fake-private-key",
+          headers: { "x-fixture-token": "fake-private-header" },
+          thinkingLevel: "medium",
+        }),
+      },
+      bots: [
+        { id: "a", name: "A", modelProvider: "openai-compatible", modelId: "custom" },
+        { id: "b", name: "B", modelProvider: "openai-compatible", modelId: "custom" },
+        {
+          id: "c",
+          name: "C",
+          modelProvider: "openai-compatible",
+          modelId: "custom",
+          thinkingLevel: "off",
+        },
+      ],
+    });
+    const listing = await listFleet(deps, run, {});
+    expect("bots" in listing && listing.bots.map((bot) => bot.model.thinkingLevel)).toEqual([
+      "medium",
+      "medium",
+      "off",
+    ]);
+    expect(deps.secretStore.load).toHaveBeenCalledOnce();
+    expect(prisma.secret.findFirst).toHaveBeenCalledWith({
+      where: { id: connection.secretId, userId: run.userId, spaceId: null },
+      select: { id: true, ciphertext: true },
+    });
+    expect(JSON.stringify(listing)).not.toMatch(
+      /private.example|fake-private|secret-compatible|"compatible"/,
+    );
+  });
+
+  it("does not reuse a removed credential or failed secret read in another listing", async () => {
+    const connection = credential("compatible", "openai-compatible");
+    const rows = [connection];
+    const secrets = {
+      [connection.secretId]: JSON.stringify({
+        kind: "openai_compatible",
+        reasoning: true,
+        baseUrl: "https://fixture.example.test/v1",
+        thinkingLevel: "low",
+      }),
+    };
+    const { deps } = fakeFleet({
+      credentialRows: rows,
+      credentials: [],
+      accountMain: {
+        provider: connection.provider,
+        modelId: "custom",
+        credentialId: connection.id,
+      },
+      secrets,
+      bots: [{ id: "bot-self", name: "Self" }],
+    });
+    vi.mocked(deps.secretStore.load).mockRejectedValueOnce(
+      new SecretStoreUnavailableError(503, "Fixture unavailable"),
+    );
+    await expect(listFleet(deps, run, {})).rejects.toThrow("Fixture unavailable");
+    const ready = await listFleet(deps, run, {});
+    expect("bots" in ready && ready.bots[0]?.model).toEqual({
+      provider: connection.provider,
+      id: "custom",
+      thinkingLevel: "low",
+      source: "account",
+    });
+    secrets[connection.secretId] = JSON.stringify({
+      kind: "openai_compatible",
+      reasoning: true,
+      baseUrl: "https://rotated.example.test/v1",
+      thinkingLevel: "medium",
+    });
+    const rotated = await listFleet(deps, run, {});
+    expect("bots" in rotated && rotated.bots[0]?.model.thinkingLevel).toBe("medium");
+    rows.splice(0);
+    const removed = await listFleet(deps, run, {});
+    expect("bots" in removed && removed.bots[0]?.model).toEqual({
+      provider: null,
+      id: null,
+      thinkingLevel: null,
+      source: null,
+    });
+  });
+
+  it("reports an authorized detail model but does no model or secret read for another account's bot", async () => {
+    const connection = credential("main");
+    const { deps, prisma } = fakeFleet({
+      accountMain: { provider: "fixture", modelId: "main", credentialId: connection.id },
+      credentialRows: [connection],
+      bots: [
+        { id: "own", name: "Own", thinkingLevel: "high" },
+        { id: "foreign", name: "Foreign", userId: "other" },
+      ],
+    });
+    expect(await listFleet(deps, run, { bot_id: "foreign" })).toHaveProperty("error");
+    expect(prisma.spaceSettingOverride.findUnique).not.toHaveBeenCalled();
+    expect(prisma.deploymentSettings.findUnique).not.toHaveBeenCalled();
+    expect(deps.secretStore.load).not.toHaveBeenCalled();
+    expect(await listFleet(deps, run, { bot_id: "own" })).toMatchObject({
+      bot: {
+        id: "own",
+        model: { provider: "fixture", id: "main", thinkingLevel: "high", source: "account" },
+      },
+    });
+  });
+
+  it("counts UTF-8 model and description bytes in the roster budget", async () => {
+    const { deps } = fakeFleet({
+      deploymentSettings: {
+        defaultModelProvider: "fixture",
+        defaultModelId: `model-${"界".repeat(200)}`,
+      },
+      bots: Array.from({ length: 200 }, (_, index) => ({
+        id: `bot-${index}`,
+        name: "Bot",
+        description: "界".repeat(1000),
+      })),
+    });
+    const listing = await listFleet(deps, run, {});
+    expect(listing).toMatchObject({ truncated: true });
+    expect(Buffer.byteLength(JSON.stringify(listing))).toBeLessThanOrEqual(60_000);
+    expect(
+      "bots" in listing && listing.bots.every((bot) => bot.description === "界".repeat(1000)),
+    ).toBe(true);
+  });
+
   it("returns full requested instructions and version separately from a large roster", async () => {
     const instructions = "x".repeat(20_000);
     const { deps } = fakeFleet({
@@ -933,7 +1362,13 @@ describe("listFleet", () => {
       ],
     });
     expect(await listFleet(deps, run, { bot_id: "child" })).toEqual({
-      bot: { id: "child", name: "Child", instructionsVersion: "v2", instructions },
+      bot: {
+        id: "child",
+        name: "Child",
+        instructionsVersion: "v2",
+        instructions,
+        model: { provider: null, id: null, thinkingLevel: null, source: null },
+      },
       bots: [],
       groups: [],
       sections: [],
@@ -976,6 +1411,7 @@ describe("listFleet", () => {
           section: null,
           pinned: false,
           createdByMe: false,
+          model: { provider: null, id: null, thinkingLevel: null, source: null },
         },
         {
           id: "bot-scout",
@@ -984,6 +1420,7 @@ describe("listFleet", () => {
           section: "Research",
           pinned: true,
           createdByMe: true,
+          model: { provider: null, id: null, thinkingLevel: null, source: null },
         },
         expect.objectContaining({ id: "bot-writer", createdByMe: true }),
         expect.objectContaining({ id: "bot-ops", createdByMe: false }),
