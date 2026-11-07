@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
@@ -9,7 +14,7 @@ import { useSpaceQueries } from "../../lib/query";
 import { errorCode } from "../../lib/user-error";
 import { PageNotice } from "./PageNotice";
 import { PageView } from "./PageView";
-import { SharePopover } from "./SharePopover";
+import { StopPageSharing } from "./StopPageSharing";
 
 const COARSE = "(pointer: coarse)";
 /** A tablet: the page is a sheet over the chat, with the chat's composer docked over it. */
@@ -61,15 +66,7 @@ function OpenPage({
     true,
     DOCK_CLEARANCE,
   );
-  const [shareOpen, setShareOpen] = useState(false);
-  const link = useQuery({
-    ...queries.pages.get.queryOptions({ input: { pageId: shownId, link: true } }),
-    enabled: pageId !== null && shareOpen,
-  });
-
   function close() {
-    session.askShare(null);
-    setShareOpen(false);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
       next.delete(PAGE_PARAM);
@@ -86,17 +83,12 @@ function OpenPage({
   const rename = useMutation(actions.rename);
   const visibility = useMutation(actions.setVisibility);
   // A failed change may have been saved with only its answer lost: until the page is read again,
-  // who can view it is unknown, and either choice is sent, so the link can always be turned off.
+  // who can view it is unknown, so the link can still be turned off.
   const shownVisibility =
     visibility.isError && page.dataUpdatedAt < visibility.submittedAt
       ? null
       : (page.data?.visibility ?? null);
 
-  // Share asked for with this page opens once it has loaded; any other request is dropped.
-  const loaded = page.data !== undefined;
-  useEffect(() => {
-    if (loaded && pageId && session.takeShare(pageId)) setShareOpen(true);
-  }, [loaded, pageId, session]);
   const setDockNode = useCallback(
     (node: HTMLDivElement | null) => session.dock.set({ node }),
     [session],
@@ -147,23 +139,17 @@ function OpenPage({
       }
       composer={<div ref={setDockNode} />}
       onReply={session.offerReply}
-      share={
+      access={
         data ? (
-          <SharePopover
-            compact={compact}
-            title={data.title}
-            owner={data.owner}
+          <StopPageSharing
             visibility={shownVisibility}
-            shareUrl={link.data?.shareUrl ?? null}
-            open={shareOpen}
-            onOpenChange={setShareOpen}
             pending={visibility.isPending}
             error={
               visibility.isError ? t`Could not change who can view this page. Try again.` : null
             }
-            onVisibilityChange={(next) => {
-              if (pageId && next !== shownVisibility && !visibility.isPending) {
-                visibility.mutate({ pageId, visibility: next });
+            onStop={() => {
+              if (pageId && !visibility.isPending) {
+                visibility.mutate({ pageId, visibility: "private" });
               }
             }}
           />

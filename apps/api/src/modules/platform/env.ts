@@ -23,7 +23,6 @@ import {
 import type { OidcConfig } from "@orkbot/auth";
 import type { MinimumClientBuilds, NavLink } from "@orkbot/contracts";
 import { parseMinimumClientBuilds, parseNavLinks } from "@orkbot/contracts";
-import { parseCrispWebsiteId } from "@orkbot/contracts/content-security-policy";
 import {
   attachmentCountFromEnv,
   phoneCallSettings,
@@ -181,8 +180,6 @@ export interface AppEnv {
   browserMonitoring:
     | { dsn: string; environment?: string; release?: string; pseudonymSecret?: string }
     | undefined;
-  /** Crisp chat on the paywall, for the hosted service; self-hosted installs leave it unset. */
-  crispWebsiteId?: string | null;
 }
 
 /** Enforce the shipped API's identity boundary without changing injectable library fixtures. */
@@ -418,7 +415,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     gitSha: optional(source.GIT_SHA) ?? optional(source.ORKBOT_GIT_SHA),
     minimumClientBuilds: parseMinimumClientBuilds(source.ORKBOT_MIN_CLIENT_BUILD),
     browserMonitoring: browserMonitoringFromEnv(source),
-    crispWebsiteId: parseCrispWebsiteId(source.CRISP_WEBSITE_ID),
   };
 }
 

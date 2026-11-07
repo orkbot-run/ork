@@ -7,6 +7,8 @@ import { z } from "zod";
 export const authCapabilitiesSchema = z.object({
   /** Native Accounts proofs are exchanged for a server session, without server OIDC credentials. */
   accountsLogin: z.boolean().optional(),
+  /** The server supplies browser handoff pages while the desktop carries its renderer. */
+  nativeRenderer: z.literal("bundled-v1").optional(),
   sso: z
     .object({
       name: z.string().min(1),
@@ -28,8 +30,6 @@ export const authCapabilitiesSchema = z.object({
   passkeyRpId: z.string().min(1).nullable().optional(),
   /** Native apps this domain vouches for; omitted by older servers, which means none. */
   nativePasskeys: z.object({ ios: z.boolean(), android: z.boolean() }).optional(),
-  /** Crisp chat on the paywall; null or omitted when the deployment offers none. */
-  crispWebsiteId: z.string().min(1).nullable().optional(),
 });
 export type AuthCapabilities = z.infer<typeof authCapabilitiesSchema>;
 

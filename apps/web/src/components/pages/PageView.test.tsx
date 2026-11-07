@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
@@ -36,7 +41,7 @@ function mount(props: { document: string; onOpenChange?: (open: boolean) => void
           onOpenChange={next.onOpenChange ?? (() => {})}
           title="Plan"
           document={next.document}
-          share={<button type="button">Share</button>}
+          access={<button type="button">Stop sharing</button>}
         />,
       ),
     );

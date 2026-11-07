@@ -146,7 +146,7 @@ pub async fn probe_server(server: &Url) -> Result<(), String> {
     Ok(())
 }
 
-/// Refuse password-enabled or unavailable sign-in before opening a product renderer.
+/// Require native renderer support and safe sign-in before opening a product renderer.
 pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
     const ERROR: &str = "This server must use Accounts sign-in with password sign-in disabled.";
     let origin = normalize_server_url(server.as_str())?;
@@ -187,6 +187,9 @@ pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
             }))
     {
         return Err(ERROR.into());
+    }
+    if value.get("nativeRenderer").and_then(Value::as_str) != Some("bundled-v1") {
+        return Err("Update this server before connecting with this version of Ork.".into());
     }
     Ok(())
 }
@@ -417,7 +420,7 @@ mod tests {
     async fn accounts_only_capability_check_never_sends_central_credentials() {
         let (server, request) = serve_once(http_response(
             "200 OK",
-            r#"{"passwordAuth":false,"sso":{"name":"Accounts","availability":"available"}}"#,
+            r#"{"passwordAuth":false,"sso":{"name":"Accounts","availability":"available"},"nativeRenderer":"bundled-v1"}"#,
         ));
         require_accounts_only(&server).await.unwrap();
         let request = request.join().unwrap().to_ascii_lowercase();
@@ -429,7 +432,7 @@ mod tests {
     async fn accounts_only_capability_check_accepts_native_grants_without_server_oidc() {
         let (server, request) = serve_once(http_response(
             "200 OK",
-            r#"{"passwordAuth":false,"accountsLogin":true,"sso":null}"#,
+            r#"{"passwordAuth":false,"accountsLogin":true,"sso":null,"nativeRenderer":"bundled-v1"}"#,
         ));
         require_accounts_only(&server).await.unwrap();
         assert!(!request
@@ -437,6 +440,22 @@ mod tests {
             .unwrap()
             .to_lowercase()
             .contains("authorization:"));
+    }
+
+    #[tokio::test]
+    async fn accounts_only_capability_check_requires_the_packaged_renderer_protocol() {
+        for capability in [None, Some(json!(true)), Some(json!("bundled-v2"))] {
+            let mut value = json!({ "passwordAuth": false, "accountsLogin": true });
+            if let Some(capability) = capability {
+                value["nativeRenderer"] = capability;
+            }
+            let (server, request) = serve_once(http_response("200 OK", &value.to_string()));
+            assert_eq!(
+                require_accounts_only(&server).await.unwrap_err(),
+                "Update this server before connecting with this version of Ork."
+            );
+            request.join().unwrap();
+        }
     }
 
     #[tokio::test]

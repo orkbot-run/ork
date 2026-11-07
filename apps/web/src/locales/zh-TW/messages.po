@@ -822,10 +822,6 @@ msgstr ""
 msgid "Any model, with your own key"
 msgstr "使用自己的金鑰連接任何模型"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "任何擁有連結的人"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1201,10 +1197,6 @@ msgstr "撥號中…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "通話"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "無需登入即可檢視"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1846,8 +1838,6 @@ msgstr "對話"
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1875,8 +1865,6 @@ msgid "Copy diagram source"
 msgstr "複製圖表原始碼"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "複製連結"
 
@@ -1928,6 +1916,7 @@ msgstr "無法修改密碼"
 msgid "Could not change where this is available"
 msgstr ""
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "無法變更誰可以檢視此頁面。請再試一次。"
@@ -2440,10 +2429,6 @@ msgstr "無法更新預設記憶範圍"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "無法驗證電腦設定（{failureMessage}）。請修復連線後再次檢查。"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "無法複製。請選取連結後複製。"
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2459,10 +2444,6 @@ msgstr "無法載入頁面。"
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr ""
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "無法載入此頁面。請再試一次。"
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3774,11 +3755,6 @@ msgstr "淺色"
 msgid "Link"
 msgstr ""
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "連結已複製"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "連結私訊"
@@ -4651,10 +4627,6 @@ msgstr "單次購買，額度不會到期。"
 msgid "Only enter a code {codeHost} sent you."
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "僅限自己"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4704,18 +4676,9 @@ msgstr "開啟外部連結？"
 msgid "Open in full window"
 msgstr "在完整視窗中開啟"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "開啟連結"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "開啟導覽"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "開啟 Ork"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4784,7 +4747,6 @@ msgstr "其他模型…"
 msgid "Output"
 msgstr "輸出"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4814,14 +4776,6 @@ msgstr "頁面 · 已在下方更新"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "第 {page} 頁，共 {count} 頁"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "頁面動作"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "頁面連結"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5891,19 +5845,6 @@ msgid "Shape"
 msgstr "形狀"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "分享"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "分享「{title}」"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "共用，任何擁有連結的人都能檢視"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6211,6 +6152,11 @@ msgstr "停止"
 msgid "Stop computer"
 msgstr "停止電腦"
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr ""
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "停止朗讀"
@@ -6402,10 +6348,6 @@ msgstr "模型供應商回傳了錯誤。"
 msgid "The model returned an unusable response. Try again."
 msgstr "模型回傳了無法使用的回覆，請再試一次。"
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "擁有者可能已關閉連結或刪除了它。"
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "供應商正在限制請求頻率。"
@@ -6425,10 +6367,6 @@ msgstr "螢幕連結已過期。"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "所選記憶供應商在此版本中不可用。"
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "共用連結將失效"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6567,7 +6505,6 @@ msgid "This page couldn't load"
 msgstr "無法載入此頁面"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "此頁面無法使用"
 
@@ -6744,7 +6681,6 @@ msgstr "受信任的網站"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "重試"
@@ -6836,6 +6772,10 @@ msgstr "來自 {name} 的更新：{text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "更新指令？"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7144,10 +7084,6 @@ msgstr "何時使用"
 msgid "Where should bots run?"
 msgstr "機器人應在哪裡執行？"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "誰可以開啟此頁面"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr "不處理"
@@ -7192,7 +7128,6 @@ msgstr "按年"
 msgid "Yesterday"
 msgstr "昨天"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

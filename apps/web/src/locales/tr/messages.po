@@ -821,10 +821,6 @@ msgstr "Anthropic Messages"
 msgid "Any model, with your own key"
 msgstr "Herhangi bir model, kendi anahtarınla"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "Bağlantıya sahip herkes"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1200,10 +1196,6 @@ msgstr "Arıyor…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "Çağrılar"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "Oturum açmadan görüntüleyebilir"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1845,8 +1837,6 @@ msgstr "Sohbetler"
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1874,8 +1864,6 @@ msgid "Copy diagram source"
 msgstr "Diyagram kaynağını kopyala"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "Bağlantıyı kopyala"
 
@@ -1927,6 +1915,7 @@ msgstr "Parola değiştirilemedi"
 msgid "Could not change where this is available"
 msgstr "Kullanılabilir alanlar değiştirilemedi"
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "Bu sayfayı kimin görebileceği değiştirilemedi. Tekrar deneyin."
@@ -2439,10 +2428,6 @@ msgstr "Varsayılan hafıza kapsamı güncellenemedi"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "Bilgisayar kurulumu doğrulanamadı ({failureMessage}). Bağlantıyı düzeltip tekrar kontrol et."
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "Kopyalanamadı. Bağlantıyı seçip kopyalayın."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr "Yetkiler yüklenemedi"
@@ -2458,10 +2443,6 @@ msgstr "Sayfalar yüklenemedi."
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr "Gönderimler yüklenemedi"
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "Bu sayfa yüklenemedi. Tekrar deneyin."
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3773,11 +3754,6 @@ msgstr "Açık"
 msgid "Link"
 msgstr "Bağlantı"
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "Bağlantı kopyalandı"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "Özel mesajları bağla"
@@ -4650,10 +4626,6 @@ msgstr "Tek seferlik satın alma. Krediler sona ermez."
 msgid "Only enter a code {codeHost} sent you."
 msgstr "Yalnızca {codeHost} tarafından gönderilen kodu gir."
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "Yalnızca siz"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4703,18 +4675,9 @@ msgstr "Harici bağlantı açılsın mı?"
 msgid "Open in full window"
 msgstr "Tam pencerede aç"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "Bağlantıyı aç"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "Gezinmeyi aç"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "Ork'yu aç"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4783,7 +4746,6 @@ msgstr "Başka model…"
 msgid "Output"
 msgstr "Çıktı"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4813,14 +4775,6 @@ msgstr "Sayfa · Aşağıda güncellendi"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "Sayfa {page} / {count}"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "Sayfa işlemleri"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "Sayfa bağlantısı"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5890,19 +5844,6 @@ msgid "Shape"
 msgstr "Şekil"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "Paylaş"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "“{title}” paylaş"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "Paylaş, bağlantıya sahip herkes görüntüleyebilir"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6210,6 +6151,11 @@ msgstr "Durdur"
 msgid "Stop computer"
 msgstr "Bilgisayarı durdur"
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr ""
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "Seslendirmeyi durdur"
@@ -6401,10 +6347,6 @@ msgstr "Model sağlayıcısı bir hata döndürdü."
 msgid "The model returned an unusable response. Try again."
 msgstr "Model kullanılamaz bir yanıt döndürdü. Tekrar deneyin."
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "Sahibi bağlantıyı kapatmış veya sayfayı silmiş olabilir."
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "Sağlayıcı istek hızını sınırlıyor."
@@ -6424,10 +6366,6 @@ msgstr "Ekran bağlantısının süresi doldu."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "Seçilen hafıza sağlayıcısı bu sürümde kullanılamıyor."
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "Paylaşılan bağlantı çalışmayı durdurur"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6566,7 +6504,6 @@ msgid "This page couldn't load"
 msgstr "Bu sayfa yüklenemedi"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "Bu sayfa kullanılamıyor"
 
@@ -6743,7 +6680,6 @@ msgstr "Güvenilen siteler"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "Tekrar dene"
@@ -6835,6 +6771,10 @@ msgstr "{name} tarafından güncelleme: {text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "Talimatlar güncellensin mi?"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7143,10 +7083,6 @@ msgstr "Ne zaman kullanılır"
 msgid "Where should bots run?"
 msgstr "Botlar nerede çalışsın?"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "Bu sayfayı kimler açabilir"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr "Yapılmayacak"
@@ -7191,7 +7127,6 @@ msgstr "Yıllık"
 msgid "Yesterday"
 msgstr "Dün"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

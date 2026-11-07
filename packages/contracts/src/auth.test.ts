@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited authentication tests are preserved. Bundled renderer compatibility is an Ork addition.
+
 import { expect, it, vi } from "vitest";
 import {
   accountSecuritySchema,
@@ -26,6 +31,18 @@ it("treats email code sign-in as an optional boolean capability", () => {
   expect(authCapabilitiesSchema.parse(base).emailCode).toBeUndefined();
   expect(authCapabilitiesSchema.parse({ ...base, emailCode: true }).emailCode).toBe(true);
   expect(authCapabilitiesSchema.safeParse({ ...base, emailCode: "true" }).success).toBe(false);
+});
+
+it("versions the bundled desktop renderer contract without requiring it from older servers", () => {
+  const base = { passwordAuth: false, passwordReset: false, resetUrl: null, sso: null };
+  expect(authCapabilitiesSchema.parse(base).nativeRenderer).toBeUndefined();
+  expect(
+    authCapabilitiesSchema.parse({ ...base, nativeRenderer: "bundled-v1" }).nativeRenderer,
+  ).toBe("bundled-v1");
+  expect(authCapabilitiesSchema.safeParse({ ...base, nativeRenderer: true }).success).toBe(false);
+  expect(authCapabilitiesSchema.safeParse({ ...base, nativeRenderer: "bundled-v2" }).success).toBe(
+    false,
+  );
 });
 
 it("only accepts complete legacy capabilities without partial SSO fields", () => {

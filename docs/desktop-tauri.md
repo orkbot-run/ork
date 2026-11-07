@@ -3,9 +3,11 @@
 
 # Tauri desktop development
 
-`apps/desktop` uses Tauri 2. Its native WebView loads the selected Ork Server's web
-frontend, and the bundle keeps the **Ork Preview** name and
-`run.orkbot.desktop.preview` identifier so existing Tauri profiles remain usable.
+`apps/desktop` uses Tauri 2 and carries the React renderer in its application bundle.
+The WebView keeps the selected server's origin for API requests and session cookies,
+then starts the packaged renderer on the server's minimal HTML document. The bundle
+keeps the **Ork Preview** name and `run.orkbot.desktop.preview` identifier so existing
+Tauri profiles remain usable.
 
 ## Run and check locally
 
@@ -46,8 +48,14 @@ Related SSO popups share the server's session without receiving native authority
 The setup page has separate capabilities, while remote pages receive no direct
 filesystem or shell plugin permissions.
 
-The selected frontend is trusted, including scripts it loads, so document proofs
-cannot stop a successful XSS in that frontend from calling the permitted bridge actions.
+The renderer and its stylesheet ship with the desktop app. Server deployments cannot
+replace them. The selected server's document remains trusted, including scripts its
+content policy permits, so an XSS in that document could call the permitted bridge
+actions.
+
+Desktop checks for the server's `nativeRenderer: "bundled-v1"` capability before
+opening a product window. Upgrade an older server first. An older desktop connected
+to the new server receives an **Update Ork** link instead of an empty product window.
 
 **This computer** starts the shared Docker Compose stack through Rust. A private
 ownership probe protects reuse of the managed project, and its server address stays

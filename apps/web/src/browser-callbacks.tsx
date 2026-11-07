@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { BrowserConnect } from "./browser-connect";
-import { I18nBootstrap } from "./components/I18nBootstrap";
+import { LocaleProvider } from "./components/LocaleProvider";
 import { completeSsoCallback } from "./lib/sso-flow";
 import { IntegrationCallbackPage } from "./pages/IntegrationCallback";
 import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
@@ -19,7 +19,7 @@ function SsoCallback() {
 
 export function BrowserCallbacks() {
   return (
-    <I18nBootstrap>
+    <LocaleProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/sso/callback" element={<SsoCallback />} />
@@ -29,6 +29,6 @@ export function BrowserCallbacks() {
           <Route path="*" element={<BrowserConnect />} />
         </Routes>
       </BrowserRouter>
-    </I18nBootstrap>
+    </LocaleProvider>
   );
 }

@@ -8,11 +8,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { runPnpm } from "../../../scripts/pnpm.mjs";
 import { APP_DOCUMENT_STATE_SCRIPT } from "../src/app-document-script.ts";
+import { buildPackagedRenderer } from "./build-renderer.mjs";
 import { prepareTauriSpeech } from "./prepare-tauri-speech.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.join(root, "build/tauri-ui");
 const native = path.join(root, "build/tauri-native");
+await buildPackagedRenderer(path.join(root, "build/tauri-renderer"));
 await rm(native, { recursive: true, force: true });
 await mkdir(native, { recursive: true });
 const helper = await prepareTauriSpeech();

@@ -227,6 +227,18 @@ describe("server image publish workflow", () => {
     };
     const paths = tauri.on.pull_request.paths;
     expect(paths).toContain("apps/desktop/**");
+    for (const rendererSource of [
+      "apps/web/**",
+      "packages/contracts/**",
+      "packages/avatar/**",
+      "packages/core/**",
+      "packages/chat-ui/**",
+      "packages/ui-web/**",
+      "packages/ui-tokens/**",
+      "packages/logging/**",
+    ]) {
+      expect(paths, rendererSource).toContain(rendererSource);
+    }
     expect(tauri.on.push.branches).toEqual(["main"]);
     expect(tauri.on.push.paths).toBeUndefined();
     const desktop = path.join(workflowsDir, "../../apps/desktop/src-tauri");

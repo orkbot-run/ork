@@ -1,3 +1,8 @@
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited configuration guidance is preserved. Browser helper terminology is an Ork modification. -->
+
 # Configuration
 
 Ork reads its settings from environment variables, normally kept in the `.env` file next to
@@ -151,7 +156,7 @@ new container of each side by side, so leave room for both.
 
 The API listens on `API_HOST` (default `127.0.0.1`) and `API_PORT` (default `3100`). Keep loopback
 unless a container or a trusted reverse proxy must reach it; the Compose files set this for you.
-The published-images stack publishes the web app on `127.0.0.1:5173` and the API on
+The published-images stack publishes browser helper pages and the proxy on `127.0.0.1:5173` and the API on
 `127.0.0.1:3100`; set `ORKBOT_WEB_PORT` or `ORKBOT_API_PORT` to use other host ports.
 For LAN access, set `ORKBOT_WEB_BIND` as described in
 [Connecting a phone on the same network](./self-host-clients.md#connecting-a-phone-on-the-same-network).

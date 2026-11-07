@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited browser update tests are preserved. Packaged desktop recovery is covered separately.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./rpc", () => ({ onRpcResponse: () => () => {} }));
@@ -86,6 +91,32 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 afterEach(() => vi.restoreAllMocks());
 
 describe("client updates", () => {
+  it("keeps a packaged renderer across server deployments without checking server assets", async () => {
+    const listen = vi.fn(() => () => {});
+    const setInterval = vi.fn();
+    const { deps, reply, updates, doc } = setup({ bundled: true, listen, setInterval });
+    doc.visibilityState = "hidden";
+    reply(200, NEWER);
+    updates.noteServerBuild(NEW);
+    updates.navigated();
+    await flush();
+    expect(listen).not.toHaveBeenCalled();
+    expect(setInterval).not.toHaveBeenCalled();
+    expect(deps.servedBuild).not.toHaveBeenCalled();
+    expect(deps.reload).not.toHaveBeenCalled();
+  });
+
+  it("offers an app update once when the server refuses a packaged renderer", async () => {
+    const { deps, reply, updates } = setup({ bundled: true });
+    reply(426, NEW);
+    reply(426, NEWER);
+    updates.updateRequired();
+    await flush();
+    expect(deps.offerReload).toHaveBeenCalledOnce();
+    expect(deps.servedBuild).not.toHaveBeenCalled();
+    expect(deps.reload).not.toHaveBeenCalled();
+  });
+
   it("waits for a safe moment instead of reloading a visible tab at once", async () => {
     const { deps, reply, fire, doc } = setup();
     reply(200, NEW);

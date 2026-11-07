@@ -821,10 +821,6 @@ msgstr ""
 msgid "Any model, with your own key"
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "लिंक वाला कोई भी"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1200,10 +1196,6 @@ msgstr "कॉल हो रही है…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "कॉल"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "साइन इन किए बिना देख सकते हैं"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1845,8 +1837,6 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1874,8 +1864,6 @@ msgid "Copy diagram source"
 msgstr "डायग्राम स्रोत कॉपी करें"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "लिंक कॉपी करें"
 
@@ -1927,6 +1915,7 @@ msgstr "पासवर्ड बदला नहीं जा सका"
 msgid "Could not change where this is available"
 msgstr ""
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "यह नहीं बदला जा सका कि इस पेज को कौन देख सकता है। फिर कोशिश करें।"
@@ -2439,10 +2428,6 @@ msgstr "डिफ़ॉल्ट मेमोरी स्कोप अपडे
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "कॉपी नहीं हो सका। लिंक चुनें और उसे कॉपी करें।"
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2458,10 +2443,6 @@ msgstr "पेज लोड नहीं हो सके।"
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr ""
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "यह पेज लोड नहीं हो सका। फिर से कोशिश करें।"
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3773,11 +3754,6 @@ msgstr "लाइट"
 msgid "Link"
 msgstr ""
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "लिंक कॉपी हो गया"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "निजी संदेश लिंक करें"
@@ -4650,10 +4626,6 @@ msgstr ""
 msgid "Only enter a code {codeHost} sent you."
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "सिर्फ़ आप"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4703,18 +4675,9 @@ msgstr "बाहरी लिंक खोलें?"
 msgid "Open in full window"
 msgstr "पूरी विंडो में खोलें"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "लिंक खोलें"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "नेविगेशन खोलें"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "Ork खोलें"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4783,7 +4746,6 @@ msgstr "अन्य मॉडल…"
 msgid "Output"
 msgstr "आउटपुट"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4813,14 +4775,6 @@ msgstr "पेज · नीचे अपडेट हुआ"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "पृष्ठ {page} / {count}"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "पेज कार्रवाइयाँ"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "पेज का लिंक"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5890,19 +5844,6 @@ msgid "Shape"
 msgstr "आकार"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "शेयर करें"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "“{title}” शेयर करें"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "शेयर करें, लिंक वाला कोई भी देख सकता है"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6210,6 +6151,11 @@ msgstr "रोकें"
 msgid "Stop computer"
 msgstr ""
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr ""
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "बोलना रोकें"
@@ -6401,10 +6347,6 @@ msgstr "मॉडल प्रदाता ने एक त्रुटि ल�
 msgid "The model returned an unusable response. Try again."
 msgstr "मॉडल ने ऐसा जवाब दिया जिसका उपयोग नहीं हो सकता। फिर से कोशिश करें।"
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "हो सकता है मालिक ने इसका लिंक बंद कर दिया हो या इसे हटा दिया हो।"
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "प्रोवाइडर अनुरोधों की दर सीमित कर रहा है।"
@@ -6424,10 +6366,6 @@ msgstr "स्क्रीन लिंक की समय सीमा सम�
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "चयनित मेमोरी प्रोवाइडर इस बिल्ड में उपलब्ध नहीं है।"
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "शेयर किया गया लिंक काम करना बंद कर देगा"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6566,7 +6504,6 @@ msgid "This page couldn't load"
 msgstr "यह पेज लोड नहीं हो सका"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "यह पेज उपलब्ध नहीं है"
 
@@ -6743,7 +6680,6 @@ msgstr "विश्वसनीय साइटें"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "फिर से कोशिश करें"
@@ -6835,6 +6771,10 @@ msgstr "{name} से अपडेट: {text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "निर्देश अपडेट करें?"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7143,10 +7083,6 @@ msgstr "कब उपयोग करें"
 msgid "Where should bots run?"
 msgstr "बॉट कहां चलने चाहिए?"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "यह पेज कौन खोल सकता है"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr ""
@@ -7191,7 +7127,6 @@ msgstr "वार्षिक"
 msgid "Yesterday"
 msgstr "कल"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

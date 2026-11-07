@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import { PageIcon } from "@orkbot/chat-ui/web";
 import type { PageSummary } from "@orkbot/contracts";
@@ -59,6 +64,7 @@ function OwnerPages({ botId, groupId }: { botId?: string; groupId?: string }) {
   const pin = useMutation(actions.pin);
   const remove = useMutation(actions.remove);
   const rename = useMutation(actions.rename);
+  const visibility = useMutation(actions.setVisibility);
   const [deleting, setDeleting] = useState<PageSummary | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; draft: string } | null>(null);
   if (pages.isPending) {
@@ -178,9 +184,14 @@ function OwnerPages({ botId, groupId }: { botId?: string; groupId?: string }) {
           <DropdownMenuItem onClick={() => setRenaming({ id: page.id, draft: page.title })}>
             <Trans>Rename</Trans>
           </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => openPage(page.id, { share: true })}>
-            <Trans>Share</Trans>
-          </DropdownMenuItem>
+          {page.visibility === "link" ? (
+            <DropdownMenuItem
+              disabled={visibility.isPending && visibility.variables?.pageId === page.id}
+              onClick={() => visibility.mutate({ pageId: page.id, visibility: "private" })}
+            >
+              <Trans>Stop sharing</Trans>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem
             disabled={pin.isPending}
             onClick={() => {
@@ -211,6 +222,25 @@ function OwnerPages({ botId, groupId }: { botId?: string; groupId?: string }) {
             className="min-w-0 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-muted-foreground"
           />
         </label>
+      ) : null}
+      {visibility.isError ? (
+        <div
+          role="alert"
+          className="flex flex-col items-start gap-2 px-2 text-[12px] text-destructive"
+        >
+          <p>
+            <Trans>Could not change who can view this page. Try again.</Trans>
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (visibility.variables) visibility.mutate(visibility.variables);
+            }}
+          >
+            <Trans>Try again</Trans>
+          </Button>
+        </div>
       ) : null}
       {rename.isError ? (
         <p role="alert" className="px-2 text-[12px] text-destructive">

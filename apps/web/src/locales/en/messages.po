@@ -821,10 +821,6 @@ msgstr "Anthropic Messages"
 msgid "Any model, with your own key"
 msgstr "Any model, with your own key"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "Anyone with the link"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1200,10 +1196,6 @@ msgstr "Calling…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "Calls"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "Can view without signing in"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1845,8 +1837,6 @@ msgstr "Conversations"
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1874,8 +1864,6 @@ msgid "Copy diagram source"
 msgstr "Copy diagram source"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "Copy link"
 
@@ -1927,6 +1915,7 @@ msgstr "Could not change password"
 msgid "Could not change where this is available"
 msgstr "Could not change where this is available"
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "Could not change who can view this page. Try again."
@@ -2439,10 +2428,6 @@ msgstr "Could not update the default memory scope"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "Couldn't copy. Select the link and copy it."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr "Couldn't load grants"
@@ -2458,10 +2443,6 @@ msgstr "Couldn't load pages."
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr "Couldn't load submissions"
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "Couldn't load this page. Try again."
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3773,11 +3754,6 @@ msgstr "Light"
 msgid "Link"
 msgstr "Link"
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "Link copied"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "Link DMs"
@@ -4650,10 +4626,6 @@ msgstr "One-time purchase. Credits do not expire."
 msgid "Only enter a code {codeHost} sent you."
 msgstr "Only enter a code {codeHost} sent you."
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "Only you"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4703,18 +4675,9 @@ msgstr "Open external link?"
 msgid "Open in full window"
 msgstr "Open in full window"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "Open link"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "Open navigation"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "Open Ork"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4783,7 +4746,6 @@ msgstr "Other model…"
 msgid "Output"
 msgstr "Output"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4813,14 +4775,6 @@ msgstr "Page · Updated below"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "Page {page} of {count}"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "Page actions"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "Page link"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5890,19 +5844,6 @@ msgid "Shape"
 msgstr "Shape"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "Share"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "Share “{title}”"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "Share, anyone with the link can view"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6210,6 +6151,11 @@ msgstr "Stop"
 msgid "Stop computer"
 msgstr "Stop computer"
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr "Stop sharing"
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "Stop speaking"
@@ -6401,10 +6347,6 @@ msgstr "The model provider returned an error."
 msgid "The model returned an unusable response. Try again."
 msgstr "The model returned an unusable response. Try again."
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "The owner may have turned off its link or deleted it."
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "The provider is rate-limiting requests."
@@ -6424,10 +6366,6 @@ msgstr "The screen link expired."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "The selected memory provider is not available in this build."
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "The shared link stops working"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6566,7 +6504,6 @@ msgid "This page couldn't load"
 msgstr "This page couldn't load"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "This page isn't available"
 
@@ -6743,7 +6680,6 @@ msgstr "Trusted sites"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "Try again"
@@ -6835,6 +6771,10 @@ msgstr "Update from {name}: {text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "Update instructions?"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr "Update Ork"
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7143,10 +7083,6 @@ msgstr "When to use"
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "Who can open this page"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr "Won't do"
@@ -7191,7 +7127,6 @@ msgstr "Yearly"
 msgid "Yesterday"
 msgstr "Yesterday"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

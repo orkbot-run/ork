@@ -1,7 +1,13 @@
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited client setup is preserved. Packaged desktop renderer guidance is an Ork addition. -->
+
 # Apps and clients
 
-Connect the mobile and desktop apps to your server and control push, client updates and what the
-web app may load.
+Connect the mobile and desktop apps to your server and configure notifications and
+client compatibility. Tauri includes its React renderer. Browser pages handle server
+pairing and authorization callbacks.
 
 ## Connect mobile clients
 
@@ -88,18 +94,22 @@ and offline unit tests cannot validate APNs delivery or operating-system push th
 
 ## Client updates
 
-Every web build is named by the UTC time it was built (`YYYYMMDDHHMMSS`). The web app sends its
-build on each `/rpc` request in `x-orkbot-client-build` (`web/20261022093015`; the mobile app sends
-`mobile/` and the time its JavaScript bundle was built), and the API answers with the web build in
-its own image in `x-orkbot-build`. An open tab that sees a newer build reloads at a safe moment:
-while hidden, on its next navigation, or after a few idle minutes with nothing typed.
+Each desktop renderer and mobile JavaScript bundle has a UTC build ID
+(`YYYYMMDDHHMMSS`). RPC requests send it in `x-orkbot-client-build`. Desktop retains
+the `web/` prefix for compatibility, for example `web/20261022093015`. Mobile uses
+`mobile/`.
+
+Desktop updates with the installed app. A server deployment cannot replace its
+packaged renderer, so desktop ignores the server's `x-orkbot-build` header and never
+reloads to fetch a newer interface.
 
 To retire old clients immediately, set `ORKBOT_MIN_CLIENT_BUILD` on the API, for example
 `web=20261022093015` or `web=20261022093015,mobile=20261001000000`, and restart it. Older clients
-get HTTP 426 `CLIENT_UPDATE_REQUIRED`: the web app reloads, and the mobile app offers its update.
-Read the current build from the `x-orkbot-build` header of any `/rpc` response. Requests that name
-no build, such as webhooks and API tools, are never refused. A malformed value stops the API from
-starting rather than being ignored.
+get HTTP 426 `CLIENT_UPDATE_REQUIRED`. Desktop offers **Update Ork**, which opens the
+download page, and mobile offers its update. Choose minimums from the supported app
+builds. The server's `x-orkbot-build` identifies its browser helper pages, not the
+installed desktop renderer. Requests without a build, such as webhooks and API tools,
+are never refused. A malformed minimum stops the API from starting.
 
 ## Content-Security-Policy
 

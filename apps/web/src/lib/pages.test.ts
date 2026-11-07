@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 import { describe, expect, it, vi } from "vitest";
 import { createPageSession } from "./pages";
 
@@ -16,17 +21,6 @@ describe("page session", () => {
     expect(session.send("bigger", [card], "m0")).toEqual({ text: "bigger" });
     session.dock.set({ page: null });
     expect(session.send("bigger", [card])).toEqual({ text: "bigger" });
-  });
-
-  it("opens Share only on the page it was asked with, once", () => {
-    const session = createPageSession();
-    session.askShare("A");
-    expect(session.takeShare("B")).toBe(false);
-    expect(session.takeShare("A")).toBe(false);
-    session.askShare("A");
-    expect(session.takeShare("A")).toBe(true);
-    // Back to the same page in history does not ask again.
-    expect(session.takeShare("A")).toBe(false);
   });
 });
 

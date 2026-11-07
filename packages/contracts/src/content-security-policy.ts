@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited CSP behavior is preserved. Browser-only support-chat exceptions are removed.
+
 /**
  * Content-Security-Policy for documents the web server (and the desktop bundled renderer) serves.
  * The app talks only to its own origin: /api, /rpc, the Sentry tunnel and the /novnc screen proxy
@@ -58,30 +63,6 @@ function serialize(directives: Record<string, string[]>) {
 export interface ContentSecurityPolicyExtensions {
   scriptSrc?: readonly string[];
   connectSrc?: readonly string[];
-  /** Allows the Crisp chat widget the paywall loads when `CRISP_WEBSITE_ID` is set. */
-  crisp?: boolean;
-}
-
-// The required origins from Crisp's domain list; images already pass the https: img-src.
-const CRISP = "https://client.crisp.chat";
-const CRISP_DIRECTIVES: Record<string, string[]> = {
-  "script-src": [CRISP],
-  "connect-src": [CRISP, "https://storage.crisp.chat", "wss://client.relay.crisp.chat"],
-  "style-src": [CRISP],
-  "font-src": [CRISP],
-  "media-src": [CRISP],
-  // Its bot checks run in workers loaded from blob: URLs.
-  "worker-src": ["'self'", "blob:", CRISP],
-};
-
-const CRISP_WEBSITE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** `CRISP_WEBSITE_ID` is optional; a malformed one throws so the server refuses to start. */
-export function parseCrispWebsiteId(value: string | undefined): string | null {
-  const id = value?.trim();
-  if (!id) return null;
-  if (!CRISP_WEBSITE_ID.test(id)) throw new Error("CRISP_WEBSITE_ID must be a Crisp website ID");
-  return id.toLowerCase();
 }
 
 // An https origin with an optional port and no path. A wildcard covers subdomains of a base with at
@@ -119,11 +100,6 @@ export function appContentSecurityPolicy(extensions: ContentSecurityPolicyExtens
     "script-src": ["'self'", ...(extensions.scriptSrc ?? [])],
     "connect-src": ["'self'", ...(extensions.connectSrc ?? [])],
   };
-  if (extensions.crisp) {
-    for (const [name, sources] of Object.entries(CRISP_DIRECTIVES)) {
-      directives[name] = [...new Set([...(directives[name] ?? []), ...sources])];
-    }
-  }
   return serialize(directives);
 }
 

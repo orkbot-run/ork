@@ -821,10 +821,6 @@ msgstr ""
 msgid "Any model, with your own key"
 msgstr "自分のキーで、あらゆるモデルを"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "リンクを知っている全員"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1200,10 +1196,6 @@ msgstr "発信中…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "呼び出し"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "サインインせずに閲覧できます"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1845,8 +1837,6 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1874,8 +1864,6 @@ msgid "Copy diagram source"
 msgstr "ダイアグラムのソースをコピー"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "リンクをコピー"
 
@@ -1927,6 +1915,7 @@ msgstr "パスワードを変更できませんでした"
 msgid "Could not change where this is available"
 msgstr ""
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "このページを閲覧できる人を変更できませんでした。もう一度お試しください。"
@@ -2439,10 +2428,6 @@ msgstr "デフォルトのメモリ範囲を更新できませんでした"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "コンピューターのセットアップを確認できませんでした（{failureMessage}）。接続を修正してから、もう一度確認してください。"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "コピーできませんでした。リンクを選択してコピーしてください。"
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2458,10 +2443,6 @@ msgstr "ページを読み込めませんでした。"
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr ""
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "このページを読み込めませんでした。もう一度お試しください。"
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3773,11 +3754,6 @@ msgstr "ライト"
 msgid "Link"
 msgstr ""
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "リンクをコピーしました"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "DMを連携"
@@ -4650,10 +4626,6 @@ msgstr "1回限りの購入です。クレジットは失効しません。"
 msgid "Only enter a code {codeHost} sent you."
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "自分のみ"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4703,18 +4675,9 @@ msgstr "外部リンクを開きますか？"
 msgid "Open in full window"
 msgstr "フルウィンドウで開く"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "リンクを開く"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "ナビゲーションを開く"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "Ork を開く"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4783,7 +4746,6 @@ msgstr "その他のモデル…"
 msgid "Output"
 msgstr "出力"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4813,14 +4775,6 @@ msgstr "ページ · 下で更新済み"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "{page} / {count} ページ"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "ページの操作"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "ページのリンク"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5890,19 +5844,6 @@ msgid "Shape"
 msgstr "形"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "共有"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "「{title}」を共有"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "共有、リンクを知っている人は誰でも閲覧可能"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6210,6 +6151,11 @@ msgstr "停止"
 msgid "Stop computer"
 msgstr ""
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr ""
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "読み上げを停止"
@@ -6401,10 +6347,6 @@ msgstr "モデルプロバイダーがエラーを返しました。"
 msgid "The model returned an unusable response. Try again."
 msgstr "モデルが利用できない応答を返しました。もう一度お試しください。"
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "所有者がリンクをオフにしたか、ページを削除した可能性があります。"
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "プロバイダーがリクエストを制限しています。"
@@ -6424,10 +6366,6 @@ msgstr "画面リンクの有効期限が切れました。"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "選択したメモリプロバイダーはこのビルドでは利用できません。"
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "共有リンクは使えなくなります"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6566,7 +6504,6 @@ msgid "This page couldn't load"
 msgstr "このページを読み込めませんでした"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "このページは利用できません"
 
@@ -6743,7 +6680,6 @@ msgstr "信頼済みサイト"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "再試行"
@@ -6835,6 +6771,10 @@ msgstr "{name}からの更新: {text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "指示を更新しますか？"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7143,10 +7083,6 @@ msgstr "使用するタイミング"
 msgid "Where should bots run?"
 msgstr "ボットをどこで実行しますか？"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "このページを開けるユーザー"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr "対応しない"
@@ -7191,7 +7127,6 @@ msgstr "年払い"
 msgid "Yesterday"
 msgstr "昨日"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

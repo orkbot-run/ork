@@ -1,10 +1,15 @@
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited deployment guidance is preserved. Browser helper terminology is an Ork modification. -->
+
 # Production deployment
 
 Run Ork on a public server with automatic HTTPS, hardened hosts and zero-downtime deploys.
 
 ## Public single-VM deployment
 
-`infra/compose/docker-compose.prod.yml` runs the hosted product with Postgres, the API, worker, web app,
+`infra/compose/docker-compose.prod.yml` runs Postgres, the API, worker, browser helper pages,
 and automatic HTTPS through Caddy. It uses E2B for bot computers, so the VM never exposes a Docker
 supervisor or browser containers — `infra/compose/docker-compose.prod.docker.yml` is the opt-in
 overlay that runs local Docker computers on the same stack (see below). The root-equivalent updater
@@ -228,7 +233,7 @@ Node.js version supported by the root `package.json`, Postgres 16 or newer and a
 backups. Homes stay on that volume unless they are kept in
 [object storage](./self-host-storage.md#bot-homes-in-object-storage); other `DATA_DIR` files still need it shared.
 
-Use the same HTTPS origin for the web app, `/api`, and `/rpc`. Preserve the authenticated screen
+Use the same HTTPS origin for the browser helper pages, `/api`, and `/rpc`. Preserve the authenticated screen
 proxy routes. Choose a [computer provider](./self-host-sandbox-providers.md#choosing-a-provider) appropriate to the
 service's trust boundary. `SIGNUPS_ENABLED` and `SIGNUP_ALLOWLIST` apply from the environment on every API start.
 The optional marketing site in `apps/www` can be hosted separately.

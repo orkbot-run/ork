@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited billing behavior is preserved. Browser-only support chat is removed.
+
 import { useLingui } from "@lingui/react/macro";
 import type { BillingStatus, Me } from "@orkbot/contracts";
 import { Dialog, DialogContent } from "@orkbot/ui-web";
@@ -9,8 +14,6 @@ import { peekInitialBootstrap } from "../lib/bootstrap";
 import { lazyComponent } from "../lib/preload-recovery";
 import { loadBillingStatus } from "../lib/referral";
 import { rpc, SPACE_SELECTED_EVENT } from "../lib/rpc";
-import type { SupportChat } from "../lib/support-chat";
-import { useSupportChat } from "../lib/support-chat";
 
 const PaywallPage = lazyComponent(() =>
   import("../pages/Paywall").then((module) => module.PaywallPage),
@@ -57,7 +60,6 @@ export function SubscriptionGate({
   fallback: ReactNode;
 }) {
   const [state, setState] = useState<GateState>({ kind: "loading" });
-  const [supportChat, setSupportChat] = useState<SupportChat | null>(null);
   const { t } = useLingui();
   // `?plans` links straight to the plan choice.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -77,13 +79,6 @@ export function SubscriptionGate({
         const me = await loadMe();
         if (!me.billingEnabled) return { kind: "open" };
         const status = await loadBillingStatus();
-        if (active && capabilities.crispWebsiteId) {
-          setSupportChat({
-            crispWebsiteId: capabilities.crispWebsiteId,
-            email: me.email,
-            name: me.name,
-          });
-        }
         return gateFor(status);
       })
       .catch((): GateState => ({ kind: "open" }))
@@ -143,7 +138,6 @@ export function SubscriptionGate({
   }, [billed]);
 
   // On the required paywall only: the plans dialog blocks pointer input outside itself.
-  useSupportChat(state.kind === "paywall" ? supportChat : null);
 
   if (state.kind === "loading") return fallback;
   if (state.kind === "paywall") {

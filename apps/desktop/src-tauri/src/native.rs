@@ -291,8 +291,9 @@ pub fn initialization_script(
         "label": label,
     });
     format!(
-        "(() => {{ const config = {config}; {} }})();",
-        include_str!("../../build/tauri-ui/native-bridge.js")
+        "(() => {{ const config = {config}; {}\n{} }})();",
+        include_str!("../../build/tauri-ui/native-bridge.js"),
+        include_str!("../../build/tauri-renderer/renderer-init.js")
     )
 }
 
@@ -895,7 +896,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 const [bootstrap, stale, current] = JSON.parse(readFileSync(new URL('./payload.json', import.meta.url), 'utf8'));
 const window = {
-  location: { origin: 'https://orkbot.example.com', protocol: 'https:' },
+  location: { origin: 'https://orkbot.example.com', protocol: 'https:', pathname: '/api/native-event-fixture' },
   __TAURI_INTERNALS__: {
     invoke: () => Promise.resolve(),
     metadata: { currentWindow: { label: 'server-1' }, currentWebview: { label: 'server-1' } }

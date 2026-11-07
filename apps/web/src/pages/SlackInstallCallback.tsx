@@ -1,12 +1,16 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited OAuth completion is preserved. Document navigation restarts the packaged renderer.
+
 import { Trans } from "@lingui/react/macro";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { PageLoading } from "../components/PageLoading";
 import { rpc } from "../lib/rpc";
 
 export function SlackInstallCallbackPage() {
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [failed, setFailed] = useState(false);
   const handled = useRef(false);
@@ -20,10 +24,10 @@ export function SlackInstallCallbackPage() {
       return;
     }
     rpc.messaging.installations.complete({ state, code }).then(
-      () => navigate("/app?settings=messaging", { replace: true }),
+      () => window.location.replace("/app?settings=messaging"),
       () => setFailed(true),
     );
-  }, [navigate, params]);
+  }, [params]);
   if (!failed) return <PageLoading />;
   return (
     <div className="grid min-h-screen place-items-center bg-background p-6 text-center">
@@ -31,7 +35,11 @@ export function SlackInstallCallbackPage() {
         <div className="text-lg text-foreground">
           <Trans>Could not connect</Trans>
         </div>
-        <Button type="button" className="mt-5" onClick={() => navigate("/app?settings=messaging")}>
+        <Button
+          type="button"
+          className="mt-5"
+          onClick={() => window.location.replace("/app?settings=messaging")}
+        >
           <Trans>Return to Ork</Trans>
         </Button>
       </div>

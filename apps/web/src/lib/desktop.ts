@@ -9,6 +9,7 @@ export type { OrkDesktop, OrkDesktopOAuthCallback } from "@orkbot/contracts";
 declare global {
   interface Window {
     orkbotDesktop?: OrkDesktop;
+    orkbotBundledRenderer?: boolean;
     orkbotNativeAuth?: OrkNativeAuth;
   }
 }

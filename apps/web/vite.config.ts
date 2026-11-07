@@ -20,7 +20,6 @@ import {
   CSP_REPORTING_ENDPOINTS,
   contentSecurityPolicyFor,
   parseContentSecuritySources,
-  parseCrispWebsiteId,
 } from "@orkbot/contracts/content-security-policy";
 import {
   safeScreenProxyResponseHeaders,
@@ -513,7 +512,6 @@ export default defineConfig(({ command, mode }) => {
       "ORKBOT_CSP_CONNECT_SRC",
       process.env.ORKBOT_CSP_CONNECT_SRC ?? rootEnv.ORKBOT_CSP_CONNECT_SRC,
     ),
-    crisp: parseCrispWebsiteId(process.env.CRISP_WEBSITE_ID ?? rootEnv.CRISP_WEBSITE_ID) !== null,
   });
   return {
     build: {

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import type { MessageBlock } from "@orkbot/contracts";
 import { PAGE_RUNTIME_PATH, pageReply, pageReplyText, pageViewerDocument } from "@orkbot/core";
@@ -99,12 +104,11 @@ export function usePageDocument(
 type Dock = { node: HTMLElement | null; page: { id: string; title: string } | null };
 
 /**
- * One chat's open-page state: what opened the page (for focus), a Share asked for with it, and
+ * One chat's open-page state: what opened the page (for focus) and
  * where the composer docks. Shared by the shell, the open page and the composer through context.
  */
 export function createPageSession() {
   let opener: { element: HTMLElement; ring: boolean } | null = null;
-  let shareRequest: string | null = null;
   let dock: Dock = { node: null, page: null };
   const dockListeners = new Set<() => void>();
   const replyListeners = new Set<(text: string) => void>();
@@ -121,15 +125,6 @@ export function createPageSession() {
       if (!opener?.element.isConnected) return true;
       opener.element.focus({ focusVisible: opener.ring } as FocusOptions);
       return false;
-    },
-    askShare(pageId: string | null) {
-      shareRequest = pageId;
-    },
-    /** Share asked for with this page, taken once so history never pops it open again. */
-    takeShare(pageId: string) {
-      const asked = shareRequest === pageId;
-      shareRequest = null;
-      return asked;
     },
     dock: {
       set(next: Partial<Dock>) {
@@ -173,7 +168,7 @@ export function createPageSession() {
 }
 export type PageSession = ReturnType<typeof createPageSession>;
 
-type OpenPage = (pageId: string, options?: { share?: boolean }) => void;
+type OpenPage = (pageId: string) => void;
 type Pages = { open: OpenPage; session: PageSession };
 
 const PagesContext = createContext<Pages | null>(null);
@@ -197,12 +192,11 @@ export function usePagesForChat(): Pages {
   const queries = useSpaceQueries();
   const queryClient = useQueryClient();
   const open = useCallback<OpenPage>(
-    (pageId, options) => {
+    (pageId) => {
       // A page known to be deleted (its card says so) opens nothing, from a card or a link chip.
       const known = queryClient.getQueryState(queries.pages.get.queryKey({ input: { pageId } }));
       if (errorCode(known?.error) === "NOT_FOUND") return;
       session.rememberOpener();
-      session.askShare(options?.share ? pageId : null);
       setSearchParams((current) => {
         const next = new URLSearchParams(current);
         next.set(PAGE_PARAM, pageId);

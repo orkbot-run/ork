@@ -821,10 +821,6 @@ msgstr ""
 msgid "Any model, with your own key"
 msgstr "Cualquier modelo, con tu propia clave"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Anyone with the link"
-msgstr "Cualquiera con el enlace"
-
 #: src/components/ComputerProviderSettings.tsx
 #: src/components/SecretAskCard.tsx
 #: src/components/vault/kinds.tsx
@@ -1200,10 +1196,6 @@ msgstr "Llamando…"
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Calls"
 msgstr "Llamadas"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Can view without signing in"
-msgstr "Puede verla sin iniciar sesión"
 
 #: src/App.tsx
 msgid "Can't reach the server."
@@ -1845,8 +1837,6 @@ msgstr "Conversaciones"
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/InviteDialog.tsx
 #: src/components/markdown-copy.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 #: src/components/vault/VaultItemDetail.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
@@ -1874,8 +1864,6 @@ msgid "Copy diagram source"
 msgstr "Copiar fuente del diagrama"
 
 #: src/components/InviteDialog.tsx
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
 msgid "Copy link"
 msgstr "Copiar enlace"
 
@@ -1927,6 +1915,7 @@ msgstr "No se pudo cambiar la contraseña"
 msgid "Could not change where this is available"
 msgstr "No se pudo cambiar dónde está disponible"
 
+#: src/components/pages/PagesList.tsx
 #: src/components/pages/PageViewHost.tsx
 msgid "Could not change who can view this page. Try again."
 msgstr "No se pudo cambiar quién puede ver esta página. Inténtalo de nuevo."
@@ -2439,10 +2428,6 @@ msgstr "No se pudo actualizar el alcance de memoria predeterminado"
 msgid "Could not verify computer setup ({failureMessage}). Fix the connection, then check again."
 msgstr "No se pudo verificar la configuración de la computadora ({failureMessage}). Corrige la conexión y vuelve a comprobar."
 
-#: src/components/pages/SharePopover.tsx
-msgid "Couldn't copy. Select the link and copy it."
-msgstr "No se pudo copiar. Selecciona el enlace y cópialo."
-
 #: src/pages/AdminAccessPage.tsx
 msgid "Couldn't load grants"
 msgstr ""
@@ -2458,10 +2443,6 @@ msgstr "No se pudieron cargar las páginas."
 #: src/pages/PluginSubmissionsPanel.tsx
 msgid "Couldn't load submissions"
 msgstr "No se pudieron cargar los envíos"
-
-#: src/pages/SharedPage.tsx
-msgid "Couldn't load this page. Try again."
-msgstr "No se pudo cargar esta página. Inténtalo de nuevo."
 
 #: src/pages/PaymentWalletSettingsPanel.tsx
 msgid "Couldn't load your wallet"
@@ -3773,11 +3754,6 @@ msgstr "Claro"
 msgid "Link"
 msgstr "Enlace"
 
-#: src/components/pages/PublicPageShell.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Link copied"
-msgstr "Enlace copiado"
-
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Link DMs"
 msgstr "Vincular mensajes privados"
@@ -4650,10 +4626,6 @@ msgstr "Compra única. Los créditos no vencen."
 msgid "Only enter a code {codeHost} sent you."
 msgstr ""
 
-#: src/components/pages/SharePopover.tsx
-msgid "Only you"
-msgstr "Solo tú"
-
 #: src/components/markdown-link-prompt.tsx
 #: src/components/pages/PagesList.tsx
 #: src/pages/PaymentWalletSettingsPanel.tsx
@@ -4703,18 +4675,9 @@ msgstr "¿Abrir enlace externo?"
 msgid "Open in full window"
 msgstr "Abrir en ventana completa"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Open link"
-msgstr "Abrir enlace"
-
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "Abrir navegación"
-
-#: src/components/pages/PublicPageShell.tsx
-#: src/pages/SharedPage.tsx
-msgid "Open Ork"
-msgstr "Abrir Ork"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -4783,7 +4746,6 @@ msgstr "Otro modelo…"
 msgid "Output"
 msgstr "Salida"
 
-#: src/components/pages/SharePopover.tsx
 #: src/lib/identity-display.ts
 #: src/pages/Board.tsx
 msgid "Owner"
@@ -4813,14 +4775,6 @@ msgstr "Página · Actualizada abajo"
 #: src/components/markdown-copy.tsx
 msgid "Page {page} of {count}"
 msgstr "Página {page} de {count}"
-
-#: src/components/pages/PublicPageShell.tsx
-msgid "Page actions"
-msgstr "Acciones de la página"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Page link"
-msgstr "Enlace de la página"
 
 #: src/pages/NotFound.tsx
 msgid "Page not found"
@@ -5890,19 +5844,6 @@ msgid "Shape"
 msgstr "Forma"
 
 #: src/components/pages/PagesList.tsx
-#: src/components/pages/SharePopover.tsx
-msgid "Share"
-msgstr "Compartir"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share “{title}”"
-msgstr "Compartir «{title}»"
-
-#: src/components/pages/SharePopover.tsx
-msgid "Share, anyone with the link can view"
-msgstr "Compartir, cualquiera con el enlace puede verla"
-
-#: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Shared"
@@ -6210,6 +6151,11 @@ msgstr "Detener"
 msgid "Stop computer"
 msgstr "Detener computadora"
 
+#: src/components/pages/PagesList.tsx
+#: src/components/pages/StopPageSharing.tsx
+msgid "Stop sharing"
+msgstr ""
+
 #: src/pages/shell/message-view.tsx
 msgid "Stop speaking"
 msgstr "Dejar de hablar"
@@ -6401,10 +6347,6 @@ msgstr "El proveedor de modelos devolvió un error."
 msgid "The model returned an unusable response. Try again."
 msgstr "El modelo devolvió una respuesta inutilizable. Inténtalo de nuevo."
 
-#: src/pages/SharedPage.tsx
-msgid "The owner may have turned off its link or deleted it."
-msgstr "Puede que el propietario haya desactivado el enlace o la haya eliminado."
-
 #: src/lib/model-connection-preflight.ts
 msgid "The provider is rate-limiting requests."
 msgstr "El proveedor está limitando la frecuencia de las solicitudes."
@@ -6424,10 +6366,6 @@ msgstr "El enlace de la pantalla caducó."
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The selected memory provider is not available in this build."
 msgstr "El proveedor de memoria seleccionado no está disponible en esta build."
-
-#: src/components/pages/SharePopover.tsx
-msgid "The shared link stops working"
-msgstr "El enlace compartido dejará de funcionar"
 
 #: src/components/ModelCredits.tsx
 msgid "The unused difference is credited to your next invoice."
@@ -6566,7 +6504,6 @@ msgid "This page couldn't load"
 msgstr "No se pudo cargar esta página"
 
 #: src/components/pages/PageViewHost.tsx
-#: src/pages/SharedPage.tsx
 msgid "This page isn't available"
 msgstr "Esta página no está disponible"
 
@@ -6743,7 +6680,6 @@ msgstr "Sitios de confianza"
 #: src/components/pages/PagesList.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/SharedPage.tsx
 #: src/pages/SpaceSearch.tsx
 msgid "Try again"
 msgstr "Intentarlo de nuevo"
@@ -6835,6 +6771,10 @@ msgstr "Actualización de {name}: {text}"
 #: src/components/AskCard.tsx
 msgid "Update instructions?"
 msgstr "¿Actualizar instrucciones?"
+
+#: src/lib/client-update.ts
+msgid "Update Ork"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
@@ -7143,10 +7083,6 @@ msgstr "Cuándo usar"
 msgid "Where should bots run?"
 msgstr "¿Dónde deben ejecutarse los bots?"
 
-#: src/components/pages/SharePopover.tsx
-msgid "Who can open this page"
-msgstr "Quién puede abrir esta página"
-
 #: src/lib/ticket-status.ts
 msgid "Won't do"
 msgstr "No se hará"
@@ -7191,7 +7127,6 @@ msgstr "Anual"
 msgid "Yesterday"
 msgstr "Ayer"
 
-#: src/components/pages/SharePopover.tsx
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/message-view.tsx

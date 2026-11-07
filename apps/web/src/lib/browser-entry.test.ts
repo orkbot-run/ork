@@ -24,4 +24,5 @@ it.each([
   "/messaging/slack/callback",
 ])("preserves protocol callback %s without exposing the product", (path) => {
   expect(browserEntry(path, false)).toBe("callback");
+  expect(browserEntry(path, true)).toBe("callback");
 });

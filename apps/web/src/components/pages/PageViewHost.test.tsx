@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 // @vitest-environment jsdom
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -10,6 +15,8 @@ import { createPageSession, PagesProvider } from "../../lib/pages";
 import { PageNotice } from "./PageNotice";
 import { PageViewHost } from "./PageViewHost";
 
+const revoke = vi.hoisted(() => vi.fn(async (_input: unknown) => ({ visibility: "private" })));
+
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ i18n: { locale: "en" }, t: String.raw }),
   Trans: ({ children }: { children: ReactNode }) => children,
@@ -18,7 +25,6 @@ vi.mock("../../lib/query", () => ({
   useSpaceQueries: () => ({
     pages: {
       get: {
-        // Like the server: the link only when asked for.
         queryOptions: ({ input }: { input: { pageId: string; link?: true } }) => ({
           queryKey: ["page", input],
           queryFn: async () => ({
@@ -27,7 +33,7 @@ vi.mock("../../lib/query", () => ({
             code: "",
             owner: { name: "" },
             visibility: "link",
-            shareUrl: input.link === true ? "https://orkbot.example/p/1" : null,
+            shareUrl: null,
           }),
         }),
       },
@@ -35,18 +41,19 @@ vi.mock("../../lib/query", () => ({
   }),
 }));
 vi.mock("../../lib/page-actions", () => ({
-  pageMutationOptions: () => ({ rename: {}, setVisibility: {} }),
+  pageMutationOptions: () => ({ rename: {}, setVisibility: { mutationFn: revoke } }),
 }));
 vi.mock("./PageView", () => ({
-  PageView: ({ composer, share }: { composer: ReactNode; share: ReactNode }) => (
+  PageView: ({ composer, access }: { composer: ReactNode; access: ReactNode }) => (
     <div>
-      {share}
+      {access}
       {composer}
     </div>
   ),
 }));
 
 afterEach(() => {
+  revoke.mockClear();
   vi.unstubAllGlobals();
   document.body.replaceChildren();
 });
@@ -86,7 +93,7 @@ it("docks the chat's composer over a tablet's page sheet, so its reply goes to t
   root.unmount();
 });
 
-it("shows the link when Share opens on a page that is already shared", async () => {
+it("offers to revoke an existing public link without exposing it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("matchMedia", () => ({
     matches: false,
@@ -95,7 +102,6 @@ it("shows the link when Share opens on a page that is already shared", async () 
   }));
   vi.stubGlobal("fetch", async () => new Response(""));
   const session = createPageSession();
-  session.askShare("p1");
   const root = createRoot(document.body.appendChild(document.createElement("div")));
   await act(async () =>
     root.render(
@@ -109,9 +115,10 @@ it("shows the link when Share opens on a page that is already shared", async () 
     ),
   );
   await act(async () => await new Promise((resolve) => setTimeout(resolve, 0)));
-  const share = document.querySelector('[data-testid="page-share"]');
-  expect(share?.textContent).toContain("Open link");
-  expect(share?.querySelector("a")?.getAttribute("href")).toBe("https://orkbot.example/p/1");
+  expect(document.body.textContent).toContain("Stop sharing");
+  expect(document.querySelector("a")).toBeNull();
+  await act(async () => document.querySelector("button")!.click());
+  expect(revoke).toHaveBeenCalledWith({ pageId: "p1", visibility: "private" }, expect.anything());
   root.unmount();
 });
 

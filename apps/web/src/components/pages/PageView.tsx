@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited page behavior is preserved. Legacy public link cleanup follows LICENSE.md.
+
 import { useLingui } from "@lingui/react/macro";
 import { PageIcon } from "@orkbot/chat-ui/web";
 import { PAGE_TITLE_MAX_LENGTH } from "@orkbot/contracts";
@@ -14,7 +19,7 @@ const FRAME_TIMEOUT_MS = 15_000;
 
 /**
  * A page full screen: close at the top left, the title pill in the middle (click to rename),
- * Download PDF and sharing at the top right, and the bot's composer docked over the bottom of the
+ * Download PDF and legacy link access at the top right, and the bot's composer docked over the bottom of the
  * page. Printed, only the page shows, at its full height.
  */
 export function PageView({
@@ -24,7 +29,7 @@ export function PageView({
   document,
   onRename,
   renameError = null,
-  share,
+  access,
   composer,
   onReply,
   returnFocus,
@@ -38,7 +43,7 @@ export function PageView({
   /** Absent while a rename is being saved. */
   onRename?: (title: string) => void;
   renameError?: string | null;
-  share: ReactNode;
+  access?: ReactNode;
   composer?: ReactNode;
   /** Takes a page's reply text into the docked composer. */
   onReply?: (text: unknown) => void;
@@ -75,7 +80,7 @@ export function PageView({
     <Dialog
       open={open}
       onOpenChange={(next, details) => {
-        // Escape in the share popover or its menu closes only that, not the page under it.
+        // Escape in a menu closes only that, not the page under it.
         // The popup may already be closing when this runs, so where the key landed decides.
         const target = details.event?.target;
         if (
@@ -142,7 +147,7 @@ export function PageView({
                 labelClassName="sr-only"
               />
             ) : null}
-            {share}
+            {access}
           </div>
           {/* After the controls, so Tab reaches Close, Download PDF and Share before the page's stops. */}
           <section

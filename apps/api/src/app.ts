@@ -961,6 +961,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.get("/api/auth/capabilities", (c) => {
     return c.json({
       accountsLogin: env.accountsEnabled || undefined,
+      nativeRenderer: "bundled-v1",
       managedAccountKey: managedAccountKeyForRequest(
         env.desktopAccountKey,
         env.desktopStackToken,
@@ -977,7 +978,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       billing: Boolean(billing),
       passkeyRpId: auth.passkeyRpId,
       nativePasskeys: nativePasskeys(env, auth.passkeyRpId),
-      crispWebsiteId: billing ? (env.crispWebsiteId ?? null) : null,
     } satisfies AuthCapabilities);
   });
   mountAppAssociation(app, env);

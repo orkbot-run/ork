@@ -3,7 +3,6 @@
 
 /** Protocol callbacks finish an existing native flow; they do not expose product screens. */
 export function browserEntry(path: string, native: boolean): "native" | "callback" | "connect" {
-  if (native) return "native";
   return [
     "/sso/callback",
     "/integrations/callback",
@@ -11,5 +10,7 @@ export function browserEntry(path: string, native: boolean): "native" | "callbac
     "/messaging/slack/callback",
   ].includes(path)
     ? "callback"
-    : "connect";
+    : native
+      ? "native"
+      : "connect";
 }

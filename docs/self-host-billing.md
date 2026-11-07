@@ -1,4 +1,7 @@
-<!-- Modified by Ork contributors: canonical domain links now use ork.run. -->
+<!-- SPDX-FileCopyrightText: 2026 Rakazo contributors -->
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited billing guidance is preserved. Ork updates canonical links and removes browser support chat. -->
 
 # Billing
 
@@ -88,7 +91,3 @@ explicitly retain classic billing mode so API upgrades do not change invoice/pro
 
 For local testing, forward Stripe test events to `/api/v1/billing/webhook`. Use the signing secret
 from `stripe listen` and test API credentials; keep them in an ignored environment file.
-
-## Support chat
-
-`CRISP_WEBSITE_ID` on the API shows a [Crisp](https://crisp.chat) support chat on the paywall.

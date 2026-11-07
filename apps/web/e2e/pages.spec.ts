@@ -12,7 +12,7 @@ import {
   rpc,
   signup,
 } from "./helpers";
-import { expect, useNativeRenderer as installNativeRenderer, test } from "./renderer-test";
+import { expect, test } from "./renderer-test";
 
 function dashboard(churn: string) {
   return `const data = { signups: [42, 51, 47, 63, 58, 71, 66], labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] };
@@ -56,9 +56,8 @@ async function send(page: Page, text: string) {
   await composer.press("Enter");
 }
 
-test("a bot's page shows in its reply, opens full screen, is shared by link and updates", async ({
+test("a bot's page shows in its reply, opens full screen and updates", async ({
   page,
-  browser,
 }, testInfo) => {
   await page.addInitScript(() => localStorage.setItem("orkbot.uiAppearance", "dark"));
   await page.setViewportSize({ width: 1280, height: 860 });
@@ -88,15 +87,13 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
     pageFrame(page, title).getByRole("heading", { name: "Test dashboard", level: 1 }),
   ).toBeVisible();
   await captureScreenshot(page, testInfo, "page-full-screen");
-  // Opening lands on Close, and Tab reaches the title, Download PDF and Share before anything in
-  // the page.
+  // Opening lands on Close, and Tab reaches the title and Download PDF before the page.
   await expect(view.getByRole("button", { name: "Close page" })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(view.getByRole("button", { name: title })).toBeFocused();
   await page.keyboard.press("Tab");
   await expect(view.getByRole("button", { name: "Download PDF" })).toBeFocused();
-  await page.keyboard.press("Tab");
-  await expect(view.getByRole("button", { name: "Share" })).toBeFocused();
+  await expect(view.getByRole("button", { name: "Share" })).toHaveCount(0);
 
   // Download PDF opens the print dialog, and on paper only the page shows: no controls, no
   // composer, no chat behind it, and the page at its full height drawn light on a dark app.
@@ -172,117 +169,15 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
   await view.getByRole("textbox", { name: "Page title" }).press("Enter");
   await expect(view.getByRole("button", { name: "Signups dashboard" })).toBeVisible();
 
-  await view.getByRole("button", { name: "Share" }).click();
-  const share = page.getByTestId("page-share");
-  await expect(share.getByText("Share “Signups dashboard”")).toBeVisible();
-  await expect(share.getByText("Owner", { exact: true })).toBeVisible();
-  await share.getByRole("radio", { name: /Anyone with the link/ }).click();
-  const openLink = share.getByRole("link", { name: "Open link" });
-  await expect(openLink).toBeVisible();
-  // The Share button says the page is public.
-  await expect(
-    view.getByRole("button", { name: "Share, anyone with the link can view" }),
-  ).toBeVisible();
-  await captureScreenshot(page, testInfo, "page-share-anyone");
-  const shareUrl = (await openLink.getAttribute("href"))!;
-  expect(new URL(shareUrl).pathname).toMatch(/^\/p\/signups-dashboard-[A-Za-z0-9_-]{43}$/);
-  // Copy link works without the Clipboard API, as on a server reached over plain http.
-  await page.evaluate(() => {
-    const scope = window as unknown as { realClipboard?: Clipboard };
-    scope.realClipboard = navigator.clipboard;
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-    Object.defineProperty(window, "isSecureContext", { value: false, configurable: true });
-  });
-  await share.getByRole("button", { name: "Copy link" }).click();
-  await expect(share.getByRole("button", { name: "Copied" })).toBeVisible();
-  await expect(share.getByRole("status")).toHaveText("Link copied");
-  await captureScreenshot(page, testInfo, "page-share-copied");
-  const restore = () =>
-    page.evaluate(() => {
-      const scope = window as unknown as { realClipboard?: Clipboard };
-      Object.defineProperty(navigator, "clipboard", {
-        value: scope.realClipboard,
-        configurable: true,
-      });
-    });
-  await restore();
-  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(shareUrl);
-  // The label goes back to Copy link after a moment.
-  await expect(share.getByRole("button", { name: "Copy link" })).toBeVisible();
-  // Where the browser will not copy at all, the link is offered selected to copy by hand.
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-    Object.defineProperty(document, "execCommand", { value: () => false, configurable: true });
-  });
-  await share.getByRole("button", { name: "Copy link" }).click();
-  await expect(share.getByText("Couldn't copy. Select the link and copy it.")).toBeVisible();
-  await expect(share.getByRole("textbox", { name: "Page link" })).toHaveValue(shareUrl);
-  await expect(share.getByRole("textbox", { name: "Page link" })).toBeFocused();
-  await captureScreenshot(page, testInfo, "page-share-copy-fallback");
-  await restore();
-  await page.evaluate(() => Reflect.deleteProperty(document, "execCommand"));
-  // Escape closes the share popover and leaves the page open.
-  await page.keyboard.press("Escape");
-  await expect(share).toBeHidden();
-  await expect(view).toBeVisible();
-
-  // Signed out, the link opens the page and nothing else.
-  const visitor = await browser.newContext({ colorScheme: "dark" });
-  await installNativeRenderer(visitor);
-  const outside = await visitor.newPage();
-  // The link is the page's only key: no search engine indexes it and no Referer carries it on.
-  const served = await outside.goto(shareUrl);
-  expect(served?.headers()["x-robots-tag"]).toBe("noindex, nofollow");
-  expect(served?.headers()["referrer-policy"]).toBe("no-referrer");
-  await expect(outside.locator('meta[name="robots"]')).toHaveAttribute(
-    "content",
-    "noindex, nofollow",
-  );
-  await expect(outside.getByRole("heading", { name: "Signups dashboard", level: 1 })).toBeVisible();
-  await expect(outside.getByRole("button", { name: "Download PDF" })).toBeVisible();
-  await expect(outside.getByRole("link", { name: "Open Ork" })).toBeVisible();
-  await expect(pageFrame(outside, "Signups dashboard").getByText("$12,400")).toBeVisible();
-  // There is no chat beside a shared page, so its reply buttons do nothing.
-  await expect(
-    pageFrame(outside, "Signups dashboard").getByRole("button", { name: "Ask about churn" }),
-  ).toBeDisabled();
-  await captureScreenshot(outside, testInfo, "page-public");
-  await visitor.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await pageFrame(outside, "Signups dashboard").getByRole("button", { name: "Copy MRR" }).click();
-  await expect(
-    pageFrame(outside, "Signups dashboard").getByRole("button", { name: "Copied" }),
-  ).toBeVisible();
-  expect(await outside.evaluate(() => navigator.clipboard.readText())).toBe("MRR $12,400");
-  // The viewer's own Copy link works over plain http too.
-  await outside.evaluate(() => {
-    const scope = window as unknown as { realClipboard?: Clipboard };
-    scope.realClipboard = navigator.clipboard;
-    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
-  });
-  await outside.getByRole("button", { name: "Copy link" }).click();
-  await expect(outside.getByRole("button", { name: "Copied" })).toBeVisible();
-  expect(
-    await outside.evaluate(() =>
-      (window as unknown as { realClipboard: Clipboard }).realClipboard.readText(),
-    ),
-  ).toBe(shareUrl);
-  // The page's code failing to download is not a blank page: the visitor can try again.
-  await outside.route("**/api/v1/assets/page-runtime.js", (route) =>
-    route.fulfill({ status: 503 }),
-  );
-  await outside.reload();
-  await expect(outside.getByRole("alert")).toHaveText("Couldn't load this page. Try again.");
-  await outside.unroute("**/api/v1/assets/page-runtime.js");
-  await outside.getByRole("button", { name: "Try again" }).click();
-  await expect(pageFrame(outside, "Signups dashboard").getByText("$12,400")).toBeVisible();
+  await expect(view.getByRole("button", { name: "Share" })).toHaveCount(0);
 
   // The docked composer talks to the same chat, naming the page.
   await send(page, "make the churn tile red");
   await page.keyboard.press("Escape");
   await expect(view).toBeHidden();
   await expect(page).not.toHaveURL(/[?&]page=/);
-  await expect(card).toContainText(/Page · Shared · \S/);
-  await captureScreenshot(page, testInfo, "page-card-shared");
+  await expect(card).not.toContainText("Shared");
+  await captureScreenshot(page, testInfo, "page-card-updated");
   await expect(
     page.getByTestId("message-user-bubble").filter({ hasText: "make the churn tile red" }),
   ).toBeVisible();
@@ -335,28 +230,7 @@ test("a bot's page shows in its reply, opens full screen, is shared by link and 
     .click();
   await expect(view).toBeVisible();
 
-  // Turning the link off breaks it at once.
-  await view.getByRole("button", { name: "Share" }).click();
-  await expect(share.getByText("The shared link stops working")).toBeVisible();
-  await share.getByRole("radio", { name: /Only you/ }).click();
-  await expect(share.getByRole("link", { name: "Open link" })).toBeHidden();
-  await outside.reload();
-  await expect(outside.getByRole("heading", { name: "This page isn't available" })).toBeVisible();
-  await expect(outside.getByRole("link", { name: "Open Ork" })).toBeVisible();
-  await captureScreenshot(outside, testInfo, "page-public-unavailable");
-  // Busy or unreachable is not gone: the visitor is asked to try again.
-  await outside.route("**/api/v1/pages/shared/**", (route) => route.fulfill({ status: 503 }));
-  await outside.reload();
-  await expect(outside.getByRole("alert")).toHaveText("Couldn't load this page. Try again.");
-  await captureScreenshot(outside, testInfo, "page-public-error");
-  await outside.unroute("**/api/v1/pages/shared/**");
-  await outside.getByRole("button", { name: "Try again" }).click();
-  await expect(outside.getByRole("heading", { name: "This page isn't available" })).toBeVisible();
-  await visitor.close();
-  await page.keyboard.press("Escape");
-  await expect(share).toBeHidden();
-  await page.keyboard.press("Escape");
-  await expect(view).toBeHidden();
+  await closePage(page);
 
   // The Library pins a page into its own group and deletes it after naming it.
   const library = page.getByTestId("bot-pages");
@@ -397,18 +271,13 @@ async function loseAnswer(route: Route) {
   await route.abort("failed");
 }
 
-/** Closes the open page, and first its Share popover if that is showing. */
+/** Closes the open page. */
 async function closePage(page: Page) {
-  const share = page.getByTestId("page-share");
-  if (await share.isVisible()) {
-    await page.keyboard.press("Escape");
-    await expect(share).toBeHidden();
-  }
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("page-view")).toBeHidden();
 }
 
-test("a page's failures, a deleted page's card, and the Library's Share, search and rename", async ({
+test("a page's failures, legacy link revocation, and the Library's search and rename", async ({
   page,
 }, testInfo) => {
   // Nine saves through the bot: more than the default budget on a busy machine.
@@ -433,7 +302,6 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   await save("Alpha");
   await save("Beta");
   const view = page.getByTestId("page-view");
-  const share = page.getByTestId("page-share");
   const open = async (title: string) => {
     await cards
       .filter({ hasText: title })
@@ -443,7 +311,7 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   };
 
   // The composer is one element that moves onto the page and back, so nothing in it is lost.
-  const bar = await page.getByTestId("composer-bar").elementHandle();
+  let bar = await page.getByTestId("composer-bar").elementHandle();
   const onPage = () =>
     bar!.evaluate((element) =>
       element.isConnected ? Boolean(element.closest('[data-testid="page-view"]')) : null,
@@ -464,48 +332,40 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   await expect(page.getByTestId("reply-parent-preview")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "page-reply-no-quote");
 
-  // A share the server made but whose answer was lost shows what the server has: the link on.
-  await page.route("**/rpc/pages/setVisibility", loseAnswer);
+  // Existing public grants can still be revoked, including after a lost answer and failed read.
   await open("Alpha");
-  await view.getByRole("button", { name: "Share" }).click();
-  const onlyYou = share.getByRole("radio", { name: /Only you/ });
-  const anyone = share.getByRole("radio", { name: /Anyone with the link/ });
-  await anyone.click();
-  await expect(share.getByRole("alert")).toHaveText(
+  const alphaId = new URL(page.url()).searchParams.get("page")!;
+  await rpc(page, "pages/setVisibility", { pageId: alphaId, visibility: "link" });
+  await page.reload();
+  bar = await page.getByTestId("composer-bar").elementHandle();
+  const stopSharing = view.getByRole("button", { name: "Stop sharing" });
+  await expect(stopSharing).toBeVisible();
+  await expect(view.getByRole("button", { name: "Share", exact: true })).toHaveCount(0);
+  await page.route("**/rpc/pages/setVisibility", loseAnswer);
+  await page.route("**/rpc/pages/get", (route) => route.fulfill({ status: 500 }));
+  await stopSharing.click();
+  await expect(view.getByRole("alert")).toHaveText(
     "Could not change who can view this page. Try again.",
   );
-  await expect(anyone).toBeChecked();
-  await expect(share.getByRole("button", { name: "Copy link" })).toBeVisible();
-  await captureScreenshot(page, testInfo, "page-share-error");
-  // Turned off the same way while the page can't be read: neither choice is claimed, and Only you
-  // still sends, so the link can always be turned off.
-  await page.route("**/rpc/pages/get", (route) => route.fulfill({ status: 500 }));
-  await onlyYou.click();
-  await expect(share.getByRole("alert")).toBeVisible();
-  await expect(onlyYou).not.toBeChecked();
-  await expect(anyone).not.toBeChecked();
-  await expect(share.getByRole("button", { name: "Copy link" })).toBeHidden();
+  await expect(stopSharing).toBeEnabled();
+  await captureScreenshot(page, testInfo, "page-revoke-error");
   await page.unroute("**/rpc/pages/setVisibility");
-  await page.unroute("**/rpc/pages/get");
   const revoke = page.waitForRequest(
     (request) =>
       request.url().includes("/rpc/pages/setVisibility") &&
       (request.postData() ?? "").includes('"private"'),
   );
-  await onlyYou.click();
+  await stopSharing.click();
   await revoke;
-  await expect(onlyYou).toBeChecked();
-  await expect(share.getByRole("alert")).toHaveCount(0);
+  await expect(stopSharing).toBeHidden();
+  await expect(view.getByRole("alert")).toHaveCount(0);
+  await page.unroute("**/rpc/pages/get");
   await closePage(page);
   await open("Beta");
   await expect(view.getByRole("alert")).toHaveCount(0);
-  await view.getByRole("button", { name: "Share" }).click();
-  await expect(share.getByRole("alert")).toHaveCount(0);
-  await expect(share.getByRole("radio", { name: /Only you/ })).toBeEnabled();
+  await expect(view.getByRole("button", { name: "Stop sharing" })).toHaveCount(0);
 
   // A failed rename says so under the title.
-  await page.keyboard.press("Escape");
-  await expect(share).toBeHidden();
   await page.route("**/rpc/pages/rename", (route) => route.abort("failed"));
   await view.getByRole("button", { name: "Beta" }).click();
   await view.getByRole("textbox", { name: "Page title" }).fill("Gamma");
@@ -518,14 +378,11 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   // Opened again, the page starts clean.
   await open("Beta");
   await expect(view.getByRole("alert")).toHaveCount(0);
-  // Leaving by Back with Share open, then Forward, shows the page without it.
-  await view.getByRole("button", { name: "Share" }).click();
-  await expect(share).toBeVisible();
+  // Leaving by Back and returning with Forward reopens the page.
   await page.goBack();
   await expect(view).toBeHidden();
   await page.goForward();
   await expect(view).toBeVisible();
-  await expect(share).toBeHidden();
   await closePage(page);
 
   // A page that cannot be read says so with a way to try again, not a blank or closed view.
@@ -591,21 +448,18 @@ test("a page's failures, a deleted page's card, and the Library's Share, search 
   await page.unroute("**/rpc/pages/get");
   await closePage(page);
 
-  // The Library's Share opens the popover, every time.
+  // The Library can revoke a legacy grant without offering to create a public link.
+  await rpc(page, "pages/setVisibility", { pageId: alphaId, visibility: "link" });
+  await page.reload();
   await openBotPanelTab(page, "Pages");
   const library = page.getByTestId("bot-pages");
-  for (let round = 0; round < 2; round++) {
-    await library.getByRole("button", { name: "Actions for Alpha" }).click();
-    await page.getByRole("menuitem", { name: "Share" }).click();
-    await expect(share.getByText("Share “Alpha”")).toBeVisible();
-    await closePage(page);
-  }
-  // Back to the page in history opens it, not its Share popover again.
-  await page.goBack();
-  await expect(view).toBeVisible();
-  await expect(share).toBeHidden();
-  await page.goForward();
-  await expect(view).toBeHidden();
+  await library.getByRole("button", { name: "Actions for Alpha" }).click();
+  await expect(page.getByRole("menuitem", { name: "Share", exact: true })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Stop sharing" }).click();
+  await expect(library.getByText("Shared", { exact: true })).toHaveCount(0);
+  await library.getByRole("button", { name: "Actions for Alpha" }).click();
+  await expect(page.getByRole("menuitem", { name: "Stop sharing" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   // A failed delete keeps the confirmation open with the reason.
   await page.route("**/rpc/pages/remove", (route) => route.abort("failed"));

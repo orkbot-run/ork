@@ -1,7 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited OAuth completion is preserved. Document navigation restarts the packaged renderer.
+
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Button } from "@orkbot/ui-web";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { rpc } from "../lib/rpc";
 import { errorText } from "../lib/user-error";
@@ -13,7 +18,6 @@ const POPUP_NAME = MCP_OAUTH_CHANNEL;
 
 export function McpOAuthCallbackPage() {
   const { t } = useLingui();
-  const navigate = useNavigate();
   const [params] = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -38,10 +42,10 @@ export function McpOAuthCallbackPage() {
           window.close();
           return;
         }
-        navigate("/app?mcp_oauth=connected", { replace: true });
+        window.location.replace("/app?mcp_oauth=connected");
       })
       .catch((err: unknown) => setError(errorText(err, t`Could not complete OAuth`)));
-  }, [navigate, params, t]);
+  }, [params, t]);
   const showReturn = Boolean(error) && window.name !== POPUP_NAME;
   return (
     <div className="grid min-h-screen place-items-center bg-background p-6 text-center">
@@ -57,7 +61,7 @@ export function McpOAuthCallbackPage() {
         </div>
         {error ? <p className="mt-2 max-w-md text-sm text-muted-foreground">{error}</p> : null}
         {showReturn ? (
-          <Button type="button" className="mt-5" onClick={() => navigate("/app")}>
+          <Button type="button" className="mt-5" onClick={() => window.location.replace("/app")}>
             <Trans>Return to Ork</Trans>
           </Button>
         ) : (

@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited browser update recovery is preserved. Packaged desktop updates use the app installer.
+
 import { t } from "@lingui/core/macro";
 import {
   CLIENT_UPDATE_REQUIRED_STATUS,
@@ -29,6 +34,8 @@ const INPUT_EVENTS = ["keydown", "pointerdown", "input", "wheel", "touchstart"] 
 type Moment = "hidden" | "navigation" | "idle" | "required";
 
 export type ClientUpdateDeps = {
+  /** Packaged desktop code changes only with an app update, never a server deployment. */
+  bundled?: boolean;
   build: string;
   document: Pick<Document, "visibilityState" | "activeElement" | "querySelector">;
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -73,6 +80,7 @@ export function createClientUpdates(deps: ClientUpdateDeps) {
   let lastCheck = Number.NEGATIVE_INFINITY;
   let checking = false;
   let requiredRetries = 0;
+  let bundledUpdateOffered = false;
 
   const attempted = (build: string): boolean => {
     try {
@@ -166,6 +174,7 @@ export function createClientUpdates(deps: ClientUpdateDeps) {
   const updates = {
     /** Every API reply names the deployed build. */
     noteServerBuild(build: string | null | undefined) {
+      if (deps.bundled) return;
       if (!newer(build) || attempted(build)) return;
       if (target && (compareBuilds(target, build) ?? 0) >= 0) return;
       target = build;
@@ -177,6 +186,13 @@ export function createClientUpdates(deps: ClientUpdateDeps) {
      */
     updateRequired() {
       if (!deps.build) return;
+      if (deps.bundled) {
+        if (!bundledUpdateOffered) {
+          bundledUpdateOffered = true;
+          deps.offerReload();
+        }
+        return;
+      }
       requiredRetries = CLIENT_UPDATE_REQUIRED_RETRIES;
       tryRequired();
     },
@@ -185,6 +201,11 @@ export function createClientUpdates(deps: ClientUpdateDeps) {
     },
     install(): () => void {
       if (!deps.build) return () => {};
+      if (deps.bundled) {
+        return deps.responses((response) => {
+          if (response.status === CLIENT_UPDATE_REQUIRED_STATUS) updates.updateRequired();
+        });
+      }
       const noteInput = () => {
         lastInput = deps.now();
       };
@@ -226,6 +247,7 @@ function sessionStorageOrNull(): Storage | null {
 export function clientUpdates(): ReturnType<typeof createClientUpdates> {
   shared ??= createClientUpdates({
     build: typeof window === "undefined" ? "" : CLIENT_BUILD,
+    bundled: typeof window !== "undefined" && window.orkbotBundledRenderer === true,
     document: globalThis.document,
     storage: typeof window === "undefined" ? null : sessionStorageOrNull(),
     listen: (type, listener) => {
@@ -246,7 +268,13 @@ export function clientUpdates(): ReturnType<typeof createClientUpdates> {
         id: "client-update-required",
         duration: Number.POSITIVE_INFINITY,
         dismissible: false,
-        action: { label: t`Reload`, onClick: () => window.location.reload() },
+        action: window.orkbotBundledRenderer
+          ? {
+              label: t`Update Ork`,
+              onClick: () =>
+                window.open("https://ork.run/download/", "_blank", "noopener,noreferrer"),
+            }
+          : { label: t`Reload`, onClick: () => window.location.reload() },
       }),
     hasUnsentDraft: () => hasUnsentComposerDraft(),
     now: () => Date.now(),

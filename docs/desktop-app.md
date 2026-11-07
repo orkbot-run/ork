@@ -4,8 +4,8 @@
 
 # Desktop app
 
-The Tauri desktop app for Mac, Windows and Linux loads the same Ork frontend as the web
-and can run the server on your own computer.
+The Tauri desktop app for Mac, Windows and Linux includes the React interface and
+connects it to your Ork server. It can also run the server on your own computer.
 
 ## Install
 
@@ -57,6 +57,10 @@ Updates are available only in builds configured with a signed Tauri update feed.
 Default diagnostic builds have updates disabled. In a configured build, the app checks
 and downloads updates in the background, then asks before installation.
 **Check for Updates…** in the app menu checks now. See [Desktop releases](desktop-release.md).
+
+The interface updates with the desktop app. Updating the server keeps the installed
+interface in place. If the server requires a newer client, **Update Ork** opens the
+download page.
 
 ## Shortcuts
 
