@@ -3,6 +3,21 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  Rule: "Regla",
+  Inactive: "Inactiva",
+  "Other tool": "Otra herramienta",
+  "Integration tool": "Herramienta de integración",
+  "No tools found.": "No se encontraron herramientas.",
+  "Computer access is approved separately.": "El acceso al ordenador se aprueba por separado.",
+  "Ask rules are inactive in Never ask.":
+    'Las reglas con "Preguntar" están inactivas en el modo "No preguntar nunca".',
+  "Scheduling a command requires approval.": "Programar un comando requiere aprobación.",
+  "Adding routine destinations from outside content requires approval.":
+    "Añadir destinos de contenido externo a una rutina requiere aprobación.",
+  "Webhook-triggered actions require approval.":
+    "Las acciones activadas por webhooks requieren aprobación.",
+  "Review AI data sharing in Account settings before continuing.":
+    "Revisa Compartir datos con IA en los ajustes de Cuenta antes de continuar.",
   "Update Ork to connect to this server.": "Actualiza Ork para conectarte a este servidor.",
   "Update this server before connecting with this version of Ork.":
     "Actualiza este servidor antes de conectarte con esta versión de Ork.",

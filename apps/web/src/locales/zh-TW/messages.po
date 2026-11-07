@@ -701,6 +701,7 @@ msgstr "所有狀態"
 msgid "All time"
 msgstr "不限時間"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "允許"
@@ -926,6 +927,10 @@ msgstr "成品"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "詢問"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "永不詢問模式下，詢問規則不會生效。"
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1404,6 +1409,10 @@ msgstr "設定新密碼"
 msgid "Choose a provider"
 msgstr "選擇供應商"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "選擇工具"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "選擇備份"
@@ -1607,6 +1616,10 @@ msgstr "已完成"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "電腦"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "存取電腦需要另行核准。"
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3541,6 +3554,7 @@ msgstr "審查中"
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
 msgstr "未啟用"
@@ -3615,6 +3629,10 @@ msgstr "指令已更新"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr "整合服務網域"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "整合工具"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4493,6 +4511,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr "尚無工作項目"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "找不到工具。"
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "無觸發器"
@@ -4530,6 +4552,7 @@ msgstr "不在 Ork 目錄中"
 msgid "Not in the plugin catalog"
 msgstr "不在外掛程式目錄中"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4738,6 +4761,10 @@ msgstr "orkbot-shared 與以 bot- 開頭的 ID 保留給 Ork 使用。"
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "其他模型…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "其他工具"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4994,6 +5021,10 @@ msgstr "上一組設定區段"
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr "優先順序"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "隱私權政策"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5501,6 +5532,10 @@ msgid "Row"
 msgstr "列"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "規則"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
 msgstr ""
 
@@ -5643,6 +5678,7 @@ msgstr "範圍（選填）"
 msgid "Screen not connected"
 msgstr "螢幕未連線"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5696,6 +5732,10 @@ msgstr "搜尋執行紀錄"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "搜尋工具"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5839,6 +5879,10 @@ msgstr "設定說明"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "形狀"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "與 {name} 分享資料？"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6603,6 +6647,10 @@ msgstr "顯示或隱藏側邊欄"
 msgid "Tokens"
 msgstr "Token"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "工具"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "工具參數（JSON）"
@@ -6615,11 +6663,11 @@ msgstr "工具參數必須是 JSON 物件"
 msgid "Tool arguments must be JSON"
 msgstr "工具參數必須是 JSON"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "工具名稱"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
@@ -7235,3 +7283,37 @@ msgstr "你的語音供應商拒絕了該金鑰。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "從外部內容將目標位址新增至例行任務需要核准。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "對話摘要、記憶、搜尋請求及機器人和空間 ID 會被傳送，用於儲存和檢索上下文。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "為了執行機器人與例行任務，會傳送訊息、聊天紀錄、機器人指令、記憶、附件、螢幕截圖，以及已連接應用程式的內容。"
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "繼續之前，請查看資料分享。"
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "排定指令執行需要核准。"
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "由 Webhook 觸發的操作需要核准。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "你的錄音會傳送至服務進行轉錄，播放的文字則會傳送至服務產生語音。"

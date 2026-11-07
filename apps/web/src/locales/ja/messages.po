@@ -700,6 +700,7 @@ msgstr "すべてのステータス"
 msgid "All time"
 msgstr "全期間"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "許可"
@@ -925,6 +926,10 @@ msgstr "成果物"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "確認"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "確認しないモードでは、確認のルールは無効です。"
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "新しいパスワードを設定"
 msgid "Choose a provider"
 msgstr "プロバイダーを選択"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "ツールを選択"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "バックアップを選択"
@@ -1606,6 +1615,10 @@ msgstr "完了"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "コンピューター"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "コンピューターへのアクセスは別途承認が必要です。"
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,6 +3553,7 @@ msgstr "レビュー中"
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
 msgstr "無効"
@@ -3614,6 +3628,10 @@ msgstr "指示を更新しました"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr "連携ドメイン"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "連携ツール"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr "チケットはまだありません"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "ツールが見つかりません。"
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "トリガーなし"
@@ -4529,6 +4551,7 @@ msgstr "Orkのカタログにありません"
 msgid "Not in the plugin catalog"
 msgstr "プラグインカタログにありません"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr "orkbot-sharedおよびbot-で始まるIDはOrk用に予約されてい�
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "その他のモデル…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "その他のツール"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr "前の設定セクション"
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr "優先度"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "プライバシーポリシー"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,6 +5531,10 @@ msgid "Row"
 msgstr "行"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "ルール"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
 msgstr ""
 
@@ -5642,6 +5677,7 @@ msgstr "スコープ（任意）"
 msgid "Screen not connected"
 msgstr "画面が接続されていません"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "実行を検索"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "ツールを検索"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "設定ヘルプ"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "形"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "{name}とデータを共有しますか？"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "サイドバーの表示切り替え"
 msgid "Tokens"
 msgstr "トークン"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "ツール"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "ツールの引数（JSON）"
@@ -6614,11 +6662,11 @@ msgstr "ツールの引数はJSONオブジェクトである必要がありま�
 msgid "Tool arguments must be JSON"
 msgstr "ツールの引数はJSONである必要があります"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "ツール名"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
@@ -7234,3 +7282,37 @@ msgstr "音声プロバイダーのキーが拒否されました。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "外部コンテンツからルーティンの送信先を追加するには承認が必要です。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "会話の要約、メモリ、検索、ボットとスペースのIDが、コンテキストの保存と呼び出しのために送信されます。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "メッセージ、チャット履歴、ボットの指示、メモリ、添付ファイル、スクリーンショット、接続アプリのコンテンツが、ルーティンを含むボットの実行のために送信されます。"
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "続行する前に、データ共有を確認してください。"
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "コマンドの実行を予約するには承認が必要です。"
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Webhookで開始される操作には承認が必要です。"
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "録音は文字起こしのために送信され、再生するテキストは音声生成のために送信されます。"

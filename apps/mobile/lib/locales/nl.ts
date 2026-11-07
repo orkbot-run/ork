@@ -3,6 +3,21 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  Rule: "Regel",
+  Inactive: "Inactief",
+  "Other tool": "Andere tool",
+  "Integration tool": "Integratietool",
+  "No tools found.": "Geen tools gevonden.",
+  "Computer access is approved separately.": "Computertoegang wordt apart goedgekeurd.",
+  "Ask rules are inactive in Never ask.":
+    'Regels met "Vragen" zijn inactief in de modus "Nooit vragen".',
+  "Scheduling a command requires approval.": "Een opdracht inplannen vereist goedkeuring.",
+  "Adding routine destinations from outside content requires approval.":
+    "Bestemmingen uit externe inhoud aan een routine toevoegen vereist goedkeuring.",
+  "Webhook-triggered actions require approval.":
+    "Acties die door webhooks worden gestart, vereisen goedkeuring.",
+  "Review AI data sharing in Account settings before continuing.":
+    "Controleer AI-gegevensdeling in de accountinstellingen voordat je doorgaat.",
   "Update Ork to connect to this server.": "Werk Ork bij om verbinding te maken met deze server.",
   "Update this server before connecting with this version of Ork.":
     "Werk deze server bij voordat je verbinding maakt met deze versie van Ork.",

@@ -609,7 +609,7 @@ msgstr "הוספת ספק"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
-msgstr ""
+msgstr "הוספת כלל"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -700,6 +700,7 @@ msgstr "כל הסטטוסים"
 msgid "All time"
 msgstr "כל הזמנים"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "לאפשר"
@@ -925,6 +926,10 @@ msgstr "תוצרים"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "לשאול"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "במצב לא לשאול אף פעם, כללי לשאול אינם פעילים."
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "בחירת סיסמה חדשה"
 msgid "Choose a provider"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "בחירת כלי"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "בחירת גיבוי"
@@ -1606,6 +1615,10 @@ msgstr "הושלם"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "מחשב"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "הגישה למחשב מאושרת בנפרד."
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,6 +3553,7 @@ msgstr "בבדיקה"
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
 msgstr "לא פעיל"
@@ -3614,6 +3628,10 @@ msgstr "ההנחיות עודכנו"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr "דומיין האינטגרציה"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "כלי אינטגרציה"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr "עדיין אין כרטיסים"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "לא נמצאו כלים."
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "ללא טריגר"
@@ -4529,6 +4551,7 @@ msgstr "לא בקטלוג של Ork"
 msgid "Not in the plugin catalog"
 msgstr "לא נמצא בקטלוג התוספים"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr ""
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "מודל אחר…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "כלי אחר"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr ""
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr "עדיפות"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "מדיניות פרטיות"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,8 +5531,12 @@ msgid "Row"
 msgstr "שורה"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "כלל"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
-msgstr ""
+msgstr "כללים"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -5642,6 +5677,7 @@ msgstr "היקפים (אופציונלי)"
 msgid "Screen not connected"
 msgstr "המסך אינו מחובר"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "חיפוש הרצות"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "חיפוש כלים"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "עזרה בהגדרה"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "צורה"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "לשתף נתונים עם {name}?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "הצגה או הסתרה של סרגל הצד"
 msgid "Tokens"
 msgstr "טוקנים"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "כלי"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr ""
@@ -6614,11 +6662,11 @@ msgstr ""
 msgid "Tool arguments must be JSON"
 msgstr ""
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "שם הכלי"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
@@ -7234,3 +7282,43 @@ msgstr "ספק הקול שלך דחה את המפתח."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "תזמון פקודה דורש אישור."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "הוספת יעדים לרוטינות מתוך תוכן חיצוני דורשת אישור."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "פעולות שמופעלות באמצעות webhook דורשות אישור."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "הודעות, היסטוריית צ'אט, הוראות לבוטים, זיכרונות, קבצים מצורפים, צילומי מסך ותוכן מאפליקציות מחוברות נשלחים לצורך הפעלת הבוטים שלך, כולל רוטינות."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "ההקלטות שלך נשלחות לתמלול, והטקסט שמושמע נשלח ליצירת דיבור."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "סיכומי שיחות, זיכרונות, חיפושים ומזהים של בוטים ומרחבים נשלחים כדי לשמור הקשר ולאחזר אותו."
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "לפני שממשיכים, יש לבדוק את שיתוף הנתונים."

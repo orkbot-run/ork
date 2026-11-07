@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  Rule: "ルール",
+  Inactive: "無効",
+  "Other tool": "その他のツール",
+  "Integration tool": "連携ツール",
+  "No tools found.": "ツールが見つかりません。",
+  "Computer access is approved separately.": "コンピューターへのアクセスは別途承認が必要です。",
+  "Ask rules are inactive in Never ask.": "確認しないモードでは、確認のルールは無効です。",
+  "Scheduling a command requires approval.": "コマンドの実行を予約するには承認が必要です。",
+  "Adding routine destinations from outside content requires approval.":
+    "外部コンテンツからルーティンの送信先を追加するには承認が必要です。",
+  "Webhook-triggered actions require approval.": "Webhookで開始される操作には承認が必要です。",
+  "Review AI data sharing in Account settings before continuing.":
+    "続行する前に、アカウント設定のAIデータ共有を確認してください。",
   "Update Ork to connect to this server.": "このサーバーに接続するには、Orkを更新してください。",
   "Update this server before connecting with this version of Ork.":
     "このバージョンのOrkで接続する前に、サーバーを更新してください。",

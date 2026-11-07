@@ -700,6 +700,7 @@ msgstr ""
 msgid "All time"
 msgstr ""
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Erlauben"
@@ -925,6 +926,10 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "Fragen"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "Regeln mit \"Fragen\" sind im Modus \"Nie fragen\" inaktiv."
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "Wähle ein neues Passwort"
 msgid "Choose a provider"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "Werkzeug auswählen"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "Backup wählen"
@@ -1606,6 +1615,10 @@ msgstr "Abgeschlossen"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "Computer"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "Der Computerzugriff wird separat genehmigt."
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,9 +3553,10 @@ msgstr ""
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
-msgstr ""
+msgstr "Inaktiv"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
@@ -3614,6 +3628,10 @@ msgstr "Anweisungen aktualisiert"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "Integrationstool"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "Keine Tools gefunden."
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr ""
@@ -4529,6 +4551,7 @@ msgstr "Nicht im Katalog von Ork"
 msgid "Not in the plugin catalog"
 msgstr ""
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr ""
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "Anderes Modell…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "Anderes Tool"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr ""
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr ""
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "Datenschutzerklärung"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,6 +5531,10 @@ msgid "Row"
 msgstr "Zeile"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "Regel"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
 msgstr ""
 
@@ -5642,6 +5677,7 @@ msgstr "Bereiche (optional)"
 msgid "Screen not connected"
 msgstr "Bildschirm nicht verbunden"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "Durchläufe suchen"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "Werkzeuge suchen"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "Einrichtungshilfe"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "Form"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "Daten mit {name} teilen?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "Seitenleiste ein-/ausblenden"
 msgid "Tokens"
 msgstr "Token"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "Werkzeug"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "Toolargumente (JSON)"
@@ -6614,15 +6662,15 @@ msgstr "Toolargumente müssen ein JSON-Objekt sein"
 msgid "Tool arguments must be JSON"
 msgstr "Toolargumente müssen JSON sein"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "Toolname"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
-msgstr ""
+msgstr "Tools"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Transcribing…"
@@ -7234,3 +7282,37 @@ msgstr "Der Schlüssel deines Stimmanbieters wurde abgelehnt."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Das Hinzufügen von Zielen aus externen Inhalten zu einer Routine erfordert eine Genehmigung."
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Gesprächszusammenfassungen, Erinnerungen, Suchanfragen sowie Bot- und Space-IDs werden gesendet, um Kontext zu speichern und abzurufen."
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Nachrichten, Chatverlauf, Bot-Anweisungen, Erinnerungen, Anhänge, Screenshots und Inhalte verbundener Apps werden gesendet, um deine Bots auszuführen, einschließlich Routinen."
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "Das Planen eines Befehls erfordert eine Genehmigung."
+
+#. js-lingui-explicit-id
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Per Webhook ausgelöste Aktionen erfordern eine Genehmigung."
+
+#. js-lingui-explicit-id
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Deine Aufnahmen werden zur Transkription gesendet, und Text, den du abspielst, wird zur Spracherzeugung gesendet."

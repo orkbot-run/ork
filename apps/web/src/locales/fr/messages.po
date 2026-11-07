@@ -609,7 +609,7 @@ msgstr "Ajouter un fournisseur"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
-msgstr ""
+msgstr "Ajouter une règle"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -700,6 +700,7 @@ msgstr ""
 msgid "All time"
 msgstr "Toute la période"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "Autoriser"
@@ -925,6 +926,10 @@ msgstr "Artefacts"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "Demander"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "Les règles Demander sont inactives en mode Ne jamais demander."
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "Choisissez un nouveau mot de passe"
 msgid "Choose a provider"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "Choisir un outil"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "Choisir une sauvegarde"
@@ -1606,6 +1615,10 @@ msgstr "Terminé"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "Ordinateur"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "L'accès à l'ordinateur fait l'objet d'une approbation distincte."
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,9 +3553,10 @@ msgstr ""
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
-msgstr ""
+msgstr "Inactif"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
@@ -3614,6 +3628,10 @@ msgstr "Instructions mises à jour"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr "Domaine d'intégration"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "Outil d'intégration"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "Aucun outil trouvé."
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "Aucun déclencheur"
@@ -4529,6 +4551,7 @@ msgstr "Absent du catalogue de Ork"
 msgid "Not in the plugin catalog"
 msgstr "Pas dans le catalogue de plugins"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr ""
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "Autre modèle…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "Autre outil"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr ""
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr ""
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "Politique de confidentialité"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,8 +5531,12 @@ msgid "Row"
 msgstr "Ligne"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "Règle"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
-msgstr ""
+msgstr "Règles"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -5642,6 +5677,7 @@ msgstr "Portées (facultatif)"
 msgid "Screen not connected"
 msgstr "Écran non connecté"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "Rechercher des exécutions"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "Rechercher des outils"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "Aide à la configuration"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "Forme"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "Partager des données avec {name} ?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "Afficher ou masquer la barre latérale"
 msgid "Tokens"
 msgstr "Jetons"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "Outil"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "Arguments de l’outil (JSON)"
@@ -6614,11 +6662,11 @@ msgstr "Les arguments doivent être un objet JSON"
 msgid "Tool arguments must be JSON"
 msgstr "Les arguments doivent être au format JSON"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "Nom de l’outil"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
@@ -7234,3 +7282,43 @@ msgstr "Votre fournisseur vocal a refusé la clé."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "Planifier une commande nécessite une approbation."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Ajouter des destinations de routine issues d'un contenu externe nécessite une approbation."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Les actions déclenchées par webhook nécessitent une approbation."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Les messages, l'historique des conversations, les instructions des bots, les souvenirs, les pièces jointes, les captures d'écran et le contenu des applications connectées sont envoyés pour faire fonctionner vos bots, y compris les routines."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Vos enregistrements sont envoyés pour être transcrits, et le texte que vous faites lire est envoyé pour générer la voix."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Les résumés de conversation, les souvenirs, les recherches et les identifiants des bots et des Espaces sont envoyés pour stocker et retrouver le contexte."
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Vérifiez le partage des données avant de continuer."

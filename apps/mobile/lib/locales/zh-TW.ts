@@ -3,6 +3,19 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  Rule: "規則",
+  Inactive: "未生效",
+  "Other tool": "其他工具",
+  "Integration tool": "整合工具",
+  "No tools found.": "找不到工具。",
+  "Computer access is approved separately.": "存取電腦需要另行核准。",
+  "Ask rules are inactive in Never ask.": "永不詢問模式下，詢問規則不會生效。",
+  "Scheduling a command requires approval.": "排定指令執行需要核准。",
+  "Adding routine destinations from outside content requires approval.":
+    "從外部內容將目標位址新增至例行任務需要核准。",
+  "Webhook-triggered actions require approval.": "由 Webhook 觸發的操作需要核准。",
+  "Review AI data sharing in Account settings before continuing.":
+    "繼續之前，請在帳號設定中查看 AI 資料分享。",
   "Update Ork to connect to this server.": "請更新 Ork 以連線至此伺服器。",
   "Update this server before connecting with this version of Ork.":
     "使用此版本的 Ork 連線前，請先更新此伺服器。",

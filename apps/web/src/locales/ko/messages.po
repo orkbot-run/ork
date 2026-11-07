@@ -609,7 +609,7 @@ msgstr "서비스 추가"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
-msgstr ""
+msgstr "규칙 추가"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -700,6 +700,7 @@ msgstr ""
 msgid "All time"
 msgstr ""
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "허용"
@@ -925,6 +926,10 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "묻기"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "묻지 않기 모드에서는 묻기 규칙이 적용되지 않습니다."
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "새 비밀번호 선택"
 msgid "Choose a provider"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "도구 선택"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "백업 선택"
@@ -1606,6 +1615,10 @@ msgstr "완료"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "컴퓨터"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "컴퓨터 접근은 별도로 승인합니다."
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,9 +3553,10 @@ msgstr ""
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
-msgstr ""
+msgstr "비활성"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
@@ -3614,6 +3628,10 @@ msgstr "지침 업데이트됨"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "연동 도구"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "도구를 찾을 수 없습니다."
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "트리거 없음"
@@ -4529,6 +4551,7 @@ msgstr "Ork 카탈로그에 없음"
 msgid "Not in the plugin catalog"
 msgstr "플러그인 카탈로그에 없음"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr ""
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "다른 모델 직접 입력…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "다른 도구"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr ""
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr ""
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "개인정보 처리방침"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,8 +5531,12 @@ msgid "Row"
 msgstr "행"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "규칙"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
-msgstr ""
+msgstr "규칙"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -5642,6 +5677,7 @@ msgstr "범위 (선택 사항)"
 msgid "Screen not connected"
 msgstr "화면이 연결되지 않음"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "실행 검색"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "도구 검색"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "설정 도움말"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "모양"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "{name}에 데이터를 공유할까요?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "사이드바 표시/숨기기"
 msgid "Tokens"
 msgstr "토큰"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "도구"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "도구 인수 (JSON)"
@@ -6614,15 +6662,15 @@ msgstr "도구 인수는 JSON 객체여야 합니다"
 msgid "Tool arguments must be JSON"
 msgstr "도구 인수는 JSON이어야 합니다"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "도구 이름"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
-msgstr ""
+msgstr "도구"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Transcribing…"
@@ -7234,3 +7282,43 @@ msgstr "음성 서비스에서 키를 거부했습니다."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "명령 실행을 예약하려면 승인이 필요합니다."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "외부 콘텐츠에서 가져온 대상을 자동 실행에 추가하려면 승인이 필요합니다."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "웹훅으로 시작된 작업에는 승인이 필요합니다."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "자동 실행을 포함한 봇 실행을 위해 메시지, 대화 기록, 봇 지침, 메모리, 첨부 파일, 스크린샷, 연결된 앱의 콘텐츠가 전송됩니다."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "녹음은 텍스트로 변환하기 위해 전송되며, 재생할 텍스트는 음성을 생성하기 위해 전송됩니다."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "대화 요약, 메모리, 검색 내용, 봇 및 스페이스 ID가 컨텍스트 저장과 검색을 위해 전송됩니다."
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "계속하기 전에 데이터 공유를 검토하세요."

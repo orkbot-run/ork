@@ -700,6 +700,7 @@ msgstr "Tüm durumlar"
 msgid "All time"
 msgstr "Tüm zamanlar"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "İzin ver"
@@ -925,6 +926,10 @@ msgstr "Çıktılar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "Sor"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "Asla sorma modunda Sor kuralları devre dışıdır."
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "Yeni bir parola seçin"
 msgid "Choose a provider"
 msgstr "Sağlayıcı seç"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "Bir araç seçin"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "Yedek seç"
@@ -1606,6 +1615,10 @@ msgstr "Tamamlandı"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "Bilgisayar"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "Bilgisayar erişimi ayrıca onaylanır."
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -3540,6 +3553,7 @@ msgstr "İncelemede"
 msgid "In this bot"
 msgstr "Bu botta"
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
 msgstr "Etkin değil"
@@ -3614,6 +3628,10 @@ msgstr "Talimatlar güncellendi"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr "Entegrasyon etki alanı"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "Entegrasyon aracı"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr "Gönderim yok"
 msgid "No tickets yet"
 msgstr "Henüz talep yok"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "Araç bulunamadı."
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr "Tetikleyici yok"
@@ -4529,6 +4551,7 @@ msgstr "Ork kataloğunda yok"
 msgid "Not in the plugin catalog"
 msgstr "Eklenti kataloğunda yok"
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr "orkbot-shared ve bot- ile başlayan kimlikler Ork için ayrılmıştır.
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "Başka model…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "Diğer araç"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr "Önceki ayar bölümleri"
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr "Öncelik"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "Gizlilik politikası"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,6 +5531,10 @@ msgid "Row"
 msgstr "Satır"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "Kural"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
 msgstr "Kurallar"
 
@@ -5642,6 +5677,7 @@ msgstr "Kapsamlar (isteğe bağlı)"
 msgid "Screen not connected"
 msgstr "Ekran bağlı değil"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "Çalıştırmaları ara"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr "Beceri ara"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "Araç ara"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "Kurulum yardımı"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "Şekil"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "{name} ile veri paylaşılsın mı?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "Kenar çubuğunu göster/gizle"
 msgid "Tokens"
 msgstr "Token"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "Araç"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "Araç bağımsız değişkenleri (JSON)"
@@ -6614,11 +6662,11 @@ msgstr "Araç bağımsız değişkenleri bir JSON nesnesi olmalıdır"
 msgid "Tool arguments must be JSON"
 msgstr "Araç bağımsız değişkenleri JSON olmalıdır"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "Araç adı"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
@@ -7234,3 +7282,43 @@ msgstr "Ses sağlayıcınız anahtarı reddetti."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Posta kodu"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "Bir komutun zamanlanması için onay gerekir."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "Dış içerikten alınan hedefleri rutinlere eklemek için onay gerekir."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "Webhook ile tetiklenen işlemler için onay gerekir."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "Rutinler dahil botlarınızı çalıştırmak için mesajlar, sohbet geçmişi, bot talimatları, anılar, ekler, ekran görüntüleri ve bağlı uygulamaların içeriği gönderilir."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "Kayıtlarınız metne dönüştürülmek üzere, seslendirdiğiniz metinler ise konuşma üretmek üzere gönderilir."
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "Bağlamı saklamak ve geri çağırmak için konuşma özetleri, anılar, aramalar, bot ve Alan kimlikleri gönderilir."
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "Devam etmeden önce veri paylaşımını gözden geçirin."

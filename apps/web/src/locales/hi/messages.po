@@ -527,7 +527,7 @@ msgstr "निगरानी के लिए फ़ाइल या फ़ो�
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
-msgstr ""
+msgstr "इसका उपयोग करने के लिए सेटिंग्स में एक मॉडल जोड़ें।"
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "Add a note"
@@ -609,7 +609,7 @@ msgstr "प्रोवाइडर जोड़ें"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add rule"
-msgstr ""
+msgstr "नियम जोड़ें"
 
 #: src/pages/McpServersOverlay.tsx
 msgid "Add server"
@@ -700,6 +700,7 @@ msgstr ""
 msgid "All time"
 msgstr ""
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow"
 msgstr "अनुमति दें"
@@ -925,6 +926,10 @@ msgstr ""
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask"
 msgstr "पूछें"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Ask rules are inactive in Never ask."
+msgstr "कभी न पूछें मोड में पूछें वाले नियम निष्क्रिय रहते हैं।"
 
 #: src/pages/shell/computer-panel.tsx
 msgid "Asleep"
@@ -1403,6 +1408,10 @@ msgstr "नया पासवर्ड चुनें"
 msgid "Choose a provider"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Choose a tool"
+msgstr "एक टूल चुनें"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "बैकअप चुनें"
@@ -1606,6 +1615,10 @@ msgstr "पूर्ण"
 #: src/pages/shell/message-view.tsx
 msgid "Computer"
 msgstr "कंप्यूटर"
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Computer access is approved separately."
+msgstr "कंप्यूटर तक पहुँच के लिए अलग से अनुमोदन लिया जाता है।"
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -2287,7 +2300,7 @@ msgstr "सहेजा नहीं जा सका"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not save Auto Review"
-msgstr ""
+msgstr "स्वचालित समीक्षा सहेजी नहीं जा सकी"
 
 #: src/components/ComputerProviderSettings.tsx
 msgid "Could not save computer settings"
@@ -3540,9 +3553,10 @@ msgstr ""
 msgid "In this bot"
 msgstr ""
 
+#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/BillingSettingsPanel.tsx
 msgid "Inactive"
-msgstr ""
+msgstr "निष्क्रिय"
 
 #: src/pages/shell/message-cards.tsx
 msgid "Inbox & email"
@@ -3614,6 +3628,10 @@ msgstr "निर्देश अपडेट किए गए"
 #: src/pages/PluginsOverlay.tsx
 msgid "Integration domain"
 msgstr ""
+
+#: src/components/ApprovalRulesSettings.tsx
+msgid "Integration tool"
+msgstr "इंटीग्रेशन टूल"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Integrations"
@@ -4492,6 +4510,10 @@ msgstr ""
 msgid "No tickets yet"
 msgstr ""
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "No tools found."
+msgstr "कोई टूल नहीं मिला।"
+
 #: src/pages/RoutineEditor.tsx
 msgid "No trigger"
 msgstr ""
@@ -4529,6 +4551,7 @@ msgstr "Ork के कैटलॉग में नहीं"
 msgid "Not in the plugin catalog"
 msgstr ""
 
+#: src/components/AiConsentDialog.tsx
 #: src/components/GitHubStarPrompt.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Not now"
@@ -4737,6 +4760,10 @@ msgstr ""
 #: src/pages/model-settings/compatible-model-fields.tsx
 msgid "Other model…"
 msgstr "अन्य मॉडल…"
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Other tool"
+msgstr "अन्य टूल"
 
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Output"
@@ -4993,6 +5020,10 @@ msgstr ""
 #: src/pages/Board.tsx
 msgid "Priority"
 msgstr ""
+
+#: src/components/AiConsentDialog.tsx
+msgid "Privacy policy"
+msgstr "गोपनीयता नीति"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Private"
@@ -5500,8 +5531,12 @@ msgid "Row"
 msgstr "पंक्ति"
 
 #: src/components/ApprovalRulesSettings.tsx
+msgid "Rule"
+msgstr "नियम"
+
+#: src/components/ApprovalRulesSettings.tsx
 msgid "Rules"
-msgstr ""
+msgstr "नियम"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Run at"
@@ -5642,6 +5677,7 @@ msgstr "स्कोप (वैकल्पिक)"
 msgid "Screen not connected"
 msgstr "स्क्रीन कनेक्ट नहीं है"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/components/FoundModelPicker.tsx
 #: src/components/VaultSettings.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -5695,6 +5731,10 @@ msgstr "रन खोजें"
 #: src/components/integrations/skills-dialog.tsx
 msgid "Search skills"
 msgstr ""
+
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Search tools"
+msgstr "टूल खोजें"
 
 #: src/components/VaultSettings.tsx
 msgid "Search Vault"
@@ -5838,6 +5878,10 @@ msgstr "सेटअप सहायता"
 #: src/components/ComputerProviderSettings.tsx
 msgid "Shape"
 msgstr "आकार"
+
+#: src/components/AiConsentDialog.tsx
+msgid "Share data with {name}?"
+msgstr "{name} के साथ डेटा साझा करें?"
 
 #: src/components/pages/PagesList.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -6602,6 +6646,10 @@ msgstr "साइडबार दिखाएं या छिपाएं"
 msgid "Tokens"
 msgstr "टोकन"
 
+#: src/components/ApprovalRuleToolPicker.tsx
+msgid "Tool"
+msgstr "टूल"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Tool arguments (JSON)"
 msgstr "टूल आर्ग्युमेंट (JSON)"
@@ -6614,15 +6662,15 @@ msgstr "टूल आर्ग्युमेंट JSON ऑब्जेक्�
 msgid "Tool arguments must be JSON"
 msgstr "टूल आर्ग्युमेंट JSON होने चाहिए"
 
-#: src/components/ApprovalRulesSettings.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Tool name"
 msgstr "टूल का नाम"
 
+#: src/components/ApprovalRuleToolPicker.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Tools"
-msgstr ""
+msgstr "टूल"
 
 #: src/components/composer/HoldToTalk.tsx
 msgid "Transcribing…"
@@ -7234,3 +7282,43 @@ msgstr "आपके आवाज़ प्रोवाइडर ने कु�
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Scheduling a command requires approval."
+msgstr "किसी कमांड को शेड्यूल करने के लिए अनुमोदन ज़रूरी है।"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Adding routine destinations from outside content requires approval."
+msgstr "बाहरी सामग्री से मिले गंतव्यों को रूटीन में जोड़ने के लिए अनुमोदन ज़रूरी है।"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/core/src/decision-card.ts
+msgid "Webhook-triggered actions require approval."
+msgstr "वेबहुक से शुरू होने वाली कार्रवाइयों के लिए अनुमोदन ज़रूरी है।"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Messages, chat history, bot instructions, memories, attachments, screenshots and connected-app content are sent to run your bots, including routines."
+msgstr "रूटीन्स सहित आपके बॉट चलाने के लिए संदेश, चैट इतिहास, बॉट के निर्देश, यादें, अटैचमेंट, स्क्रीनशॉट और जुड़े ऐप्स की सामग्री भेजी जाती है।"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Your recordings are sent for transcription, and text you play is sent to generate speech."
+msgstr "आपकी रिकॉर्डिंग को टेक्स्ट में बदलने के लिए भेजा जाता है और जो टेक्स्ट आप सुनते हैं, उसे आवाज़ में बदलने के लिए भेजा जाता है।"
+
+#. js-lingui-explicit-id
+#. Shared message; keep the canonical English message as its ID.
+#: ../../packages/contracts/src/ai-consent.ts
+msgid "Conversation summaries, memories, searches and bot and Space IDs are sent to store and recall context."
+msgstr "संदर्भ को सहेजने और वापस पाने के लिए बातचीत के सारांश, यादें, खोजें और बॉट व कार्यस्थान की आईडी भेजी जाती हैं।"
+
+#: src/lib/user-error.ts
+msgid "Review data sharing before continuing."
+msgstr "आगे बढ़ने से पहले डेटा साझाकरण की समीक्षा करें।"
