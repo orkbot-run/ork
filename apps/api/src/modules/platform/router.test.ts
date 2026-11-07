@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
 
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9942,6 +9943,8 @@ describe("API-key live model catalog", () => {
       } satisfies Actor;
       const client = createRouterClient(createRouter(deps), { context: { actor } as never });
       const entries = await client.models.list();
+      expect(load).toHaveBeenCalledTimes(1);
+      expect(prisma.secret.findMany).toHaveBeenCalledTimes(1);
       const openai = entries.filter((entry) => entry.provider === "openai");
       expect(openai.some((entry) => entry.id === retired)).toBe(fails);
       expect(openai.some((entry) => entry.id === saved)).toBe(true);
@@ -9956,6 +9959,8 @@ describe("API-key live model catalog", () => {
           auth: "api-key",
         });
       await client.models.list();
+      expect(load).toHaveBeenCalledTimes(2);
+      expect(prisma.secret.findMany).toHaveBeenCalledTimes(2);
       expect(probe).toHaveBeenCalledTimes(1);
       expect(probe).toHaveBeenCalledWith(
         { provider: "openai", apiKey: "fake-api-key" },
@@ -9967,6 +9972,17 @@ describe("API-key live model catalog", () => {
           where: expect.objectContaining({ userId: actor.userId, spaceId: null }),
         }),
       );
+      if (!fails) {
+        prisma.bot.findMany.mockResolvedValue([]);
+        const changed = await client.models.list();
+        expect(changed.some((entry) => entry.provider === "openai" && entry.id === saved)).toBe(
+          false,
+        );
+        expect(load).toHaveBeenCalledTimes(3);
+        expect(prisma.secret.findMany).toHaveBeenCalledTimes(3);
+        expect(prisma.bot.findMany).toHaveBeenCalledTimes(3);
+        expect(probe).toHaveBeenCalledTimes(1);
+      }
     },
   );
 });

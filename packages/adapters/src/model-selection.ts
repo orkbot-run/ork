@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
+
 import type { SecretStore } from "@orkbot/adapter-kit";
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import type { Actor } from "@orkbot/contracts";
@@ -9,6 +14,7 @@ import {
 import type { PrismaClient } from "@orkbot/db";
 import { chooseModelCredential, findModelCredential, findModelCredentialById } from "@orkbot/db";
 import { resolveDeploymentModel } from "./deployment-model.js";
+import type { ModelCatalogReads } from "./model-catalog-reads.js";
 import { modelCredentialDto } from "./model-connect.js";
 import { compatibleModelSeesImages, modelAcceptsImageInput } from "./model-vision.js";
 import type { ModelCredentialAuthKind } from "./pi-catalog-availability.js";
@@ -42,11 +48,23 @@ async function credentialLiveListsModel(
   provider: string,
   modelId: string,
   codex?: CodexLiveCatalog,
+  reads?: ModelCatalogReads,
 ): Promise<boolean> {
-  if (await providerLiveListsModel(prisma, secrets, userId, secretId, provider, modelId))
+  if (
+    await providerLiveListsModel(
+      prisma,
+      secrets,
+      userId,
+      secretId,
+      provider,
+      modelId,
+      undefined,
+      reads,
+    )
+  )
     return true;
   if (provider !== "openai-codex" || !codex || !liveCatalogEntry(provider, modelId)) return false;
-  const secret = await loadModelSecret(prisma, secrets, userId, secretId);
+  const secret = await loadModelSecret(prisma, secrets, userId, secretId, reads);
   return secret ? codexLiveListsModel(codex, userId, secret, modelId) : false;
 }
 
@@ -59,6 +77,7 @@ export async function connectionServesModel(
     prisma: PrismaClient;
     secretStore: Pick<SecretStore, "load">;
     codexCatalog?: CodexLiveCatalog;
+    catalogReads?: ModelCatalogReads;
   },
   userId: string,
   credential: { secretId: string },
@@ -75,6 +94,8 @@ export async function connectionServesModel(
       provider,
       modelId,
       deps.codexCatalog,
+      undefined,
+      deps.catalogReads,
     ));
   }
   // Models no live catalog lists, such as decision models, are not tied to an account.
@@ -87,6 +108,7 @@ export async function connectionServesModel(
     provider,
     modelId,
     deps.codexCatalog,
+    deps.catalogReads,
   );
 }
 
@@ -142,6 +164,7 @@ export async function modelCredentialAuthKindsForSpace(
   secretStore: Pick<SecretStore, "load">,
   scope: Pick<Actor, "userId" | "spaceId">,
   hostedProvider?: string,
+  reads?: ModelCatalogReads,
 ): Promise<SpaceCatalogAuth> {
   const hosted = hostedProvider && (await hasHostedModelCredits(prisma, scope, hostedProvider));
   const [credentials, preferences] = await Promise.all([
@@ -231,14 +254,13 @@ export async function modelCredentialAuthKindsForSpace(
   if (hosted && hostedProvider) empty.byProvider[hostedProvider] = "api_key";
   if (selections.length === 0) return empty;
 
-  const secrets = await prisma.secret.findMany({
-    where: {
-      id: { in: [...new Set(selections.map((selection) => selection.secretId))] },
-      userId: scope.userId,
-      spaceId: null,
-    },
-    select: { id: true, ciphertext: true },
-  });
+  const secretIds = [...new Set(selections.map((selection) => selection.secretId))];
+  const secrets = reads
+    ? await reads.secrets(scope.userId, secretIds)
+    : await prisma.secret.findMany({
+        where: { id: { in: secretIds }, userId: scope.userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      });
   const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
   // Every catalog model of a provider shares one secret; load each once per operation.
   const kindBySecretId = new Map<string, Promise<ModelCredentialAuthKind | undefined>>();
@@ -246,7 +268,9 @@ export async function modelCredentialAuthKindsForSpace(
     const ciphertext = ciphertextById.get(secretId);
     if (!ciphertext) return undefined;
     try {
-      return modelCredentialAuthKindFromPlaintext(await secretStore.load(ciphertext, secretId));
+      return modelCredentialAuthKindFromPlaintext(
+        await (reads?.secretStore ?? secretStore).load(ciphertext, secretId),
+      );
     } catch (error) {
       if (error instanceof SecretStoreUnavailableError) throw error;
       return undefined;
@@ -374,14 +398,17 @@ export async function loadStoredModelSecret(
   secretStore: Pick<SecretStore, "load">,
   userId: string,
   secretId: string,
+  reads?: ModelCatalogReads,
 ): Promise<LoadedModelSecret> {
-  const secret = await prisma.secret.findFirst({
-    where: { id: secretId, userId, spaceId: null },
-    select: { id: true, ciphertext: true },
-  });
+  const secret = reads
+    ? (await reads.secrets(userId, [secretId]))[0]
+    : await prisma.secret.findFirst({
+        where: { id: secretId, userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      });
   if (!secret) return { status: "missing" };
   try {
-    const plaintext = await secretStore.load(secret.ciphertext, secret.id);
+    const plaintext = await (reads?.secretStore ?? secretStore).load(secret.ciphertext, secret.id);
     return { status: "loaded", ciphertext: secret.ciphertext, plaintext };
   } catch (error) {
     if (error instanceof SecretStoreUnavailableError) throw error;
@@ -399,8 +426,9 @@ export async function prepareStoredModelAuth(
   modelId: string,
   live?: CodexLiveCatalog,
   liveOpts?: CodexLiveReadOptions,
+  reads?: ModelCatalogReads,
 ): Promise<{ ref: string | null; auth: StoredModelAuthRead }> {
-  const secret = await loadStoredModelSecret(prisma, secretStore, userId, secretId);
+  const secret = await loadStoredModelSecret(prisma, secretStore, userId, secretId, reads);
   if (secret.status === "missing") return { ref: null, auth: { status: "unreadable" } };
   if (secret.status === "unreadable") {
     return { ref: secret.ciphertext, auth: { status: "unreadable" } };
@@ -442,6 +470,7 @@ export async function validateStoredModelAuth(
   modelId: string,
   live?: CodexLiveCatalog,
   liveOpts?: CodexLiveReadOptions,
+  reads?: ModelCatalogReads,
 ): Promise<string | undefined> {
   const auth = await readStoredModelAuth(
     prisma,
@@ -452,6 +481,7 @@ export async function validateStoredModelAuth(
     modelId,
     live,
     liveOpts,
+    reads,
   );
   // Unreadable credentials fail when the run loads them, not as an auth mismatch.
   return auth.status === "rejected" ? auth.message : undefined;
@@ -475,8 +505,9 @@ async function loadModelSecret(
   secretStore: Pick<SecretStore, "load">,
   userId: string,
   secretId: string,
+  reads?: ModelCatalogReads,
 ): Promise<StoredModelSecret | undefined> {
-  const secret = await loadStoredModelSecret(prisma, secretStore, userId, secretId);
+  const secret = await loadStoredModelSecret(prisma, secretStore, userId, secretId, reads);
   if (secret.status !== "loaded") return undefined;
   try {
     return parseModelSecret(secret.plaintext);

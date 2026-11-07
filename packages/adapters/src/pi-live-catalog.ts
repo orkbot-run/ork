@@ -1,8 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
+
 import { createHash } from "node:crypto";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { SecretStore } from "@orkbot/adapter-kit";
 import { canonicalPiProviderId } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
+import type { ModelCatalogReads } from "./model-catalog-reads.js";
 import type { ModelCredentialAuthKind } from "./pi-catalog-availability.js";
 import { LiveCatalogCache, liveModelCatalogEnabled } from "./pi-live-cache.js";
 import { isChatModelId, liveModelSibling } from "./pi-live-model.js";
@@ -201,6 +207,7 @@ export async function providerLiveCatalogsForSpace(
   scope: { userId: string; spaceId: string },
   auth: CatalogSpaceAuth,
   cache: ProviderCatalogCache,
+  reads?: ModelCatalogReads,
 ): Promise<Map<string, string[]>> {
   if (!cache.enabled) return new Map();
   const slots = new Map<string, string>();
@@ -219,15 +226,17 @@ export async function providerLiveCatalogsForSpace(
   }
   const out = new Map<string, string[]>();
   if (!slots.size) return out;
-  const rows = await prisma.secret.findMany({
-    where: { id: { in: [...slots.keys()] }, userId: scope.userId, spaceId: null },
-    select: { id: true, ciphertext: true },
-  });
+  const rows = reads
+    ? await reads.secrets(scope.userId, [...slots.keys()])
+    : await prisma.secret.findMany({
+        where: { id: { in: [...slots.keys()] }, userId: scope.userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      });
   await Promise.all(
     rows.map(async (row) => {
       const provider = slots.get(row.id);
       if (!provider) return;
-      const ids = await readSecretCatalog(cache, secrets, provider, row);
+      const ids = await readSecretCatalog(cache, reads?.secretStore ?? secrets, provider, row);
       if (ids) out.set(row.id, ids);
     }),
   );
@@ -263,6 +272,7 @@ export async function providerLiveListsModel(
   provider: string,
   modelId: string,
   cache = providerCatalogCache,
+  reads?: ModelCatalogReads,
 ): Promise<boolean> {
   provider = canonicalPiProviderId(provider);
   if (
@@ -271,15 +281,20 @@ export async function providerLiveListsModel(
     !liveCatalogEntry(provider, modelId)
   )
     return false;
-  const row = await prisma.secret.findFirst({
-    where: { id: secretId, userId, spaceId: null },
-    select: { id: true, ciphertext: true },
-  });
+  const row = reads
+    ? (await reads.secrets(userId, [secretId]))[0]
+    : await prisma.secret.findFirst({
+        where: { id: secretId, userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      });
   if (!row) return false;
-  const ids = await readSecretCatalog(cache, secrets, provider, row);
+  const ids = await readSecretCatalog(cache, reads?.secretStore ?? secrets, provider, row);
   if (!ids) return false;
   if (ids.includes(modelId)) return true;
-  return (await savedCatalogSelections(prisma, userId)).has(`${provider}:${modelId}`);
+  const selected = reads
+    ? await reads.selections(userId)
+    : await savedCatalogSelections(prisma, userId);
+  return selected.has(`${provider}:${modelId}`);
 }
 
 /** Saved selections, the account's and every Space's, survive retirement filtering. */

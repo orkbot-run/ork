@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
 
+import type { ModelCatalogReads } from "@orkbot/adapters";
 import {
   applyCodexLiveCatalog,
   applyProviderLiveCatalog,
@@ -11,6 +13,7 @@ import {
   connectedModelSeesImages,
   connectionServesModel,
   createFaviconResolver,
+  createModelCatalogReads,
   decisionModelCatalog,
   deploymentModelRole,
   findConnectedModelCredential,
@@ -22,7 +25,6 @@ import {
   offeredCatalog,
   providerCatalogCache,
   providerLiveCatalogsForSpace,
-  savedCatalogSelections,
   scriptedCatalogEntry,
   validateConnectedModelChoice,
 } from "@orkbot/adapters";
@@ -141,20 +143,25 @@ export function createRouterContext(deps: RouterDeps) {
   });
   // The scripted fixture only exists to drive the scripted runtime; a real runtime
   // cannot execute it, so it stays out of the user-facing catalog otherwise.
-  const chatCatalog = async (actor: Actor) => {
-    const catalog = await catalogForSpace(actor);
+  const chatCatalog = async (
+    actor: Actor,
+    reads = createModelCatalogReads(deps.prisma, deps.secrets, actor.userId),
+  ) => {
+    const catalog = await catalogForSpace(actor, reads);
     return deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
   };
-  const catalogForSpace = async (actor: Actor) => {
+  const catalogForSpace = async (actor: Actor, reads: ModelCatalogReads) => {
     const auth = await modelCredentialAuthKindsForSpace(
       deps.prisma,
       deps.secrets,
       actor,
       deps.billing?.modelCreditsEnabled ? deps.env.defaultProvider : undefined,
+      reads,
     );
     const available = listAvailablePiCatalog(auth.byProvider, auth.byModel);
     const [live, providerLive] = await Promise.all([
       codexLiveCatalogsForSpace(deps.prisma, deps.secrets, actor, auth, codexCatalog, {
+        reads,
         // An expired bearer yields no catalog this round; kick the runtime's
         // locked refresh so the next read can see the account's real list.
         onExpiredToken: (secretId) =>
@@ -166,12 +173,11 @@ export function createRouterContext(deps: RouterDeps) {
         actor,
         auth,
         deps.providerCatalog ?? providerCatalogCache,
+        reads,
       ),
     ]);
     const codexMerged = live.size > 0 ? applyCodexLiveCatalog(available, auth, live) : available;
-    let selected = providerLive.size
-      ? await savedCatalogSelections(deps.prisma, actor.userId)
-      : undefined;
+    let selected = providerLive.size ? await reads.selections(actor.userId) : undefined;
     const merged = applyProviderLiveCatalog(codexMerged, auth, providerLive, selected);
     // A connected provider's saved choice stays listed after new users stop being offered it.
     if (
@@ -184,7 +190,7 @@ export function createRouterContext(deps: RouterDeps) {
           hiddenCatalogModel(entry),
       )
     )
-      selected = await savedCatalogSelections(deps.prisma, actor.userId);
+      selected = await reads.selections(actor.userId);
     return offeredCatalog(merged, selected).map((entry) =>
       entry.provider === auth.managedProvider
         ? {
@@ -218,7 +224,8 @@ export function createRouterContext(deps: RouterDeps) {
     return { ...settings, deploymentPrimary: deploymentModelRole(role, defaults).primary };
   };
   const modelRoleCatalog = async (actor: Actor, role: ModelRole): Promise<ModelCatalogEntry[]> => {
-    const catalog = await chatCatalog(actor);
+    const reads = createModelCatalogReads(deps.prisma, deps.secrets, actor.userId);
+    const catalog = await chatCatalog(actor, reads);
     const decisions = role === "approval" ? decisionModelCatalog() : [];
     const managedProviders = new Set(
       catalog.filter((entry) => "managed" in entry && entry.managed).map((entry) => entry.provider),
@@ -229,6 +236,7 @@ export function createRouterContext(deps: RouterDeps) {
         ...catalog,
         ...decisions.map((entry) => ({ ...entry, managed: managedProviders.has(entry.provider) })),
       ].filter((entry) => modelSupportsRole(entry, role)),
+      reads,
     );
   };
   /**
@@ -239,6 +247,7 @@ export function createRouterContext(deps: RouterDeps) {
   const withServingConnections = async (
     actor: Actor,
     catalog: ModelCatalogEntry[],
+    reads: ModelCatalogReads,
   ): Promise<ModelCatalogEntry[]> => {
     const connections = await deps.prisma.userModelCredential.findMany({
       where: { userId: actor.userId },
@@ -264,7 +273,13 @@ export function createRouterContext(deps: RouterDeps) {
         const serving: string[] = [];
         for (const owner of owners)
           if (
-            await connectionServesModel(servingDeps, actor.userId, owner, entry.provider, entry.id)
+            await connectionServesModel(
+              { ...servingDeps, catalogReads: reads },
+              actor.userId,
+              owner,
+              entry.provider,
+              entry.id,
+            )
           )
             serving.push(owner.id);
         return serving.length === owners.length ? entry : { ...entry, credentialIds: serving };

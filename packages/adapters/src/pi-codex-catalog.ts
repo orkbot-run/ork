@@ -1,8 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited material remains Apache-2.0; Ork model-list read sharing is PolyForm-covered.
+
 import type { OAuthCredential } from "@earendil-works/pi-ai";
 import type { SecretStore } from "@orkbot/adapter-kit";
 import type { ThinkingLevel } from "@orkbot/contracts";
 import { ThinkingLevelSchema } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
+import type { ModelCatalogReads } from "./model-catalog-reads.js";
 import { listAvailablePiCatalog } from "./pi-catalog-availability.js";
 import { LiveCatalogCache, liveModelCatalogEnabled } from "./pi-live-cache.js";
 import type { CatalogSpaceAuth } from "./pi-live-catalog.js";
@@ -393,20 +399,24 @@ export async function codexLiveCatalogsForSpace(
   scope: { userId: string; spaceId: string },
   auth: CodexCatalogSpaceAuth,
   catalog: CodexLiveCatalog,
-  opts?: { onExpiredToken?: (secretId: string) => void },
+  opts?: { onExpiredToken?: (secretId: string) => void; reads?: ModelCatalogReads },
 ): Promise<Map<string, CodexCatalogModel[]>> {
   const live = new Map<string, CodexCatalogModel[]>();
   const secretIds = oauthCodexSecretIds(auth);
   if (secretIds.length === 0) return live;
-  const secrets = await prisma.secret.findMany({
-    where: { id: { in: secretIds }, userId: scope.userId, spaceId: null },
-    select: { id: true, ciphertext: true },
-  });
+  const secrets = opts?.reads
+    ? await opts.reads.secrets(scope.userId, secretIds)
+    : await prisma.secret.findMany({
+        where: { id: { in: secretIds }, userId: scope.userId, spaceId: null },
+        select: { id: true, ciphertext: true },
+      });
   const accounts = new Map<string, CodexCatalogAccount>();
   for (const secret of secrets) {
     let credential: OAuthCredential | undefined;
     try {
-      const parsed = parseModelSecret(await secretStore.load(secret.ciphertext, secret.id));
+      const parsed = parseModelSecret(
+        await (opts?.reads?.secretStore ?? secretStore).load(secret.ciphertext, secret.id),
+      );
       credential =
         parsed.kind === "oauth" && !parsed.reconnectRequired ? parsed.credential : undefined;
     } catch {
