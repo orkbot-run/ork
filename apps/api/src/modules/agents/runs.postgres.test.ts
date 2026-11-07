@@ -58,14 +58,14 @@ describe.skipIf(!enabled)("recent activity by chat (PostgreSQL)", () => {
   });
   afterAll(async () => close?.());
 
-  async function bot(name: string, spaceId = actor.spaceId) {
+  async function bot(name: string, spaceId = actor.spaceId, userId = actor.userId) {
     const row = await system.bot.create({
       data: {
         spaceId,
-        userId: actor.userId,
+        userId,
         name,
         color: "primary",
-        thread: { create: { spaceId, userId: actor.userId } },
+        thread: { create: { spaceId, userId } },
       },
       include: { thread: true },
     });
@@ -184,7 +184,38 @@ describe.skipIf(!enabled)("recent activity by chat (PostgreSQL)", () => {
     const keep = await run(initial, 100);
     await run(initial, 200, { trigger: "tickets" });
     await run(initial, 201, { status: "running" });
-    await run(initial, 202, { userId: "foreign-activity-user" });
+    const foreign = await runAsSystem("recent activity second owner fixture", () =>
+      provisionMessagingIdentity(
+        prisma,
+        { provider: "test", address: `recent-activity-peer-${randomUUID()}` },
+        { signupsEnabled: undefined, signupAllowlist: undefined },
+      ),
+    );
+    identities.push(foreign);
+    const { organizationId } = await system.space.findUniqueOrThrow({
+      where: { id: actor.spaceId },
+    });
+    await system.member.create({
+      data: {
+        id: randomUUID(),
+        organizationId,
+        userId: foreign.userId,
+        role: "member",
+        createdAt: new Date(),
+      },
+    });
+    expect(
+      await system.spaceMember.findUniqueOrThrow({
+        where: { spaceId_userId: { spaceId: actor.spaceId, userId: foreign.userId } },
+      }),
+    ).toMatchObject({ organizationId, userId: foreign.userId });
+    const foreignBot = await bot("Another owner's bot", actor.spaceId, foreign.userId);
+    await system.bot.update({ where: { id: foreignBot.id }, data: { replyMode: "explicit" } });
+    const foreignRun = await run(foreignBot, 202, { userId: foreign.userId });
+    expect(foreignRun).toMatchObject({ replyMode: "explicit", requiredReaderVersion: 2 });
+    await expect(run(initial, 203, { userId: foreign.userId })).rejects.toThrow(
+      "Bot is unavailable",
+    );
     const archived = await bot("Archived");
     await run(archived, 300);
     await system.bot.update({ where: { id: archived.id }, data: { archivedAt: at(400) } });
@@ -201,6 +232,12 @@ describe.skipIf(!enabled)("recent activity by chat (PostgreSQL)", () => {
     expect((await listSpaceRuns(system, actor, "recent")).map((row) => row.runId)).toEqual([
       keep.id,
     ]);
+    const foreignActor = { ...actor, userId: foreign.userId };
+    expect(
+      (await runAsTenant(foreignActor, () => listSpaceRuns(prisma, foreignActor, "recent"))).map(
+        (row) => row.runId,
+      ),
+    ).toEqual([foreignRun.id]);
   });
 
   it("hydrates encrypted previews through Prisma and keeps terminal statuses and legacy timestamp fallback", async () => {
