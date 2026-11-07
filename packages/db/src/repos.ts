@@ -7,6 +7,7 @@ import type {
   Actor,
   Bot,
   BotAvatarSet,
+  BotReplyMode,
   BotSection,
   MessageBlock,
   SpaceBot,
@@ -96,6 +97,7 @@ function mapBot(
     avatarSet?: string;
     avatarSeed?: string | null;
     notifyOnFinish: boolean;
+    replyMode?: string;
     pinned: boolean;
     sectionId: string | null;
     archivedAt: Date | null;
@@ -140,6 +142,7 @@ function mapBot(
     avatarSet: resolveBotAvatarSet(bot.avatarSet),
     avatarSeed: bot.avatarSeed ?? null,
     notifyOnFinish: bot.notifyOnFinish,
+    replyMode: bot.replyMode === "explicit" ? "explicit" : "chat",
     pinned: bot.pinned,
     sectionId: bot.sectionId,
     archivedAt: bot.archivedAt?.toISOString() ?? null,
@@ -535,6 +538,7 @@ export function createRepos(
         description: string;
         instructions: string;
         notifyOnFinish: boolean;
+        replyMode?: BotReplyMode;
         dailyCheckIns?: boolean;
         fleetManagement?: boolean;
         color?: string;
@@ -657,6 +661,7 @@ export function createRepos(
               description: input.description,
               instructions: input.instructions,
               notifyOnFinish: input.notifyOnFinish,
+              replyMode: input.replyMode,
               dailyCheckIns: input.dailyCheckIns,
               fleetManagement: input.fleetManagement,
               color: avatar.color,

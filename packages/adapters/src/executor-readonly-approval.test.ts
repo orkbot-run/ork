@@ -90,6 +90,7 @@ function fixture({
   checkerConnected = true,
   skipApprovals = false,
   trigger = "user",
+  replyMode = "chat",
   secrets = [] as string[],
   prompt = "Read the item",
   bot = {
@@ -152,6 +153,7 @@ function fixture({
   checkerConnected?: boolean;
   skipApprovals?: boolean;
   trigger?: string;
+  replyMode?: "chat" | "explicit";
   secrets?: string[];
   prompt?: string;
   bot?: { name: string; description: string };
@@ -203,6 +205,7 @@ function fixture({
     userId: "user-1",
     status: "queued",
     trigger,
+    replyMode,
     sourceMessageId: sourceRole ? "source-1" : null,
     leaseFence: 0,
   };
@@ -2595,6 +2598,42 @@ describe("bot management approvals", () => {
 });
 
 describe("command watch creation approval", () => {
+  it.each(["chat", "explicit"] as const)(
+    "retains mandatory once-only review in %s reply mode",
+    async (replyMode) => {
+      const f = fixture({
+        name: "schedule_create",
+        builtin: true,
+        replyMode,
+        rules: [{ effect: "always_allow", matchKind: "tool", matchValue: "schedule_create" }],
+      });
+      f.setCalls([
+        {
+          args: {
+            name: "Check",
+            prompt: "Summarize changes",
+            watch: { kind: "command", command: "echo changed" },
+          },
+          executionId: "watch",
+        },
+      ]);
+      await f.run();
+      expect(f.pauseRunForInput).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: [
+            expect.objectContaining({
+              approvalReason: "scheduled_command",
+              allowRule: false,
+              actions: [
+                { id: "allow", label: "Allow once" },
+                { id: "deny", label: "Deny" },
+              ],
+            }),
+          ],
+        }),
+      );
+    },
+  );
   beforeEach(() => reviewMock.mockReset());
   it.each([false, true])(
     "requires explicit approval for command watch JSON=%s even with an allow rule",

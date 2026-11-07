@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotContextCards } from "../components/bot-context-cards";
+import { BotReplyModeSetting } from "../components/bot-reply-mode";
 import { ComputerModePicker } from "../components/computer-mode-picker";
 import { glassHeaderOptions } from "../components/glass-title";
 import { GrowingTextInput } from "../components/growing-text-input";
@@ -46,6 +47,7 @@ import { useI18n } from "../lib/i18n";
 import { afterChatNotifyChange } from "../lib/live-notifications";
 import { native, useMobileTokens } from "../lib/native";
 import { createQueuedSave } from "../lib/queued-save";
+import { captureSettingsContext } from "../lib/settings-target";
 import { useSideInsets } from "../lib/side-insets";
 import { thinkingLevelLabel } from "../lib/thinking-level";
 import { errorText } from "../lib/user-error";
@@ -61,6 +63,8 @@ export default function BotSettingsScreen() {
     model: pickedModel,
     focus,
   } = useLocalSearchParams<{ botId: string; model?: string; focus?: string }>();
+  const currentBotTarget = useRef(botId);
+  currentBotTarget.current = botId;
   const scrollRef = useRef<ScrollView>(null);
   const modelY = useRef(0);
   const [bot, setBot] = useState<Bot | null>(null);
@@ -92,6 +96,11 @@ export default function BotSettingsScreen() {
   const voiceChoice = useRef(0);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [replyModePending, setReplyModePending] = useState(false);
+  const replyModeFlush = useRef<(() => Promise<void>) | undefined>(undefined);
+  const registerReplyModeFlush = useCallback((flush: (() => Promise<void>) | undefined) => {
+    replyModeFlush.current = flush;
+  }, []);
 
   const crossSpaceSave = useMemo(
     () =>
@@ -366,6 +375,8 @@ export default function BotSettingsScreen() {
 
   async function save() {
     if (!botId || !bot || pending) return;
+    const origin = captureSettingsContext({ scope: "space", spaceId: bot.spaceId });
+    const current = () => origin.isCurrent() && currentBotTarget.current === botId;
     setPending(true);
     setError(null);
     try {
@@ -405,7 +416,7 @@ export default function BotSettingsScreen() {
       }
       if (autoSpeak !== bot.autoSpeak) input.autoSpeak = autoSpeak;
       if (computerMode !== bot.computerMode) {
-        await rpc(
+        await origin.send(
           "bots/setComputer",
           { botId, mode: computerMode },
           { timeoutMs: COMPUTER_LIFECYCLE_TIMEOUT_MS },
@@ -414,22 +425,25 @@ export default function BotSettingsScreen() {
       }
       // Use key presence so clearing description to "" still persists.
       if (Object.keys(input).length > 1) {
-        const updated = await rpc("bots/update", input);
+        const updated = await origin.send("bots/update", input);
         // Saved edits and their history become the baseline, so a retry after a failed switch write
         // does not resend them.
         const { botId: _botId, expectedInstructions: _expected, ...saved } = input;
         setBot((prev) => (prev ? { ...prev, ...saved, ...updated } : prev));
       }
       await Promise.all([
+        replyModeFlush.current?.(),
         dailyCheckInsSave.flush(),
         crossSpaceSave.flush(),
         fleetSave.flush(),
         notifySave.flush(),
         nameSave.flush(),
       ]);
-      router.back();
+      if (!current()) return;
+      await replyModeFlush.current?.();
+      if (current()) router.back();
     } catch (err) {
-      setError(errorText(err, t("Could not save bot")));
+      if (current()) setError(errorText(err, t("Could not save bot")));
     } finally {
       setPending(false);
     }
@@ -442,6 +456,7 @@ export default function BotSettingsScreen() {
       color !== bot.color ||
       computerMode !== bot.computerMode ||
       autoSpeak !== bot.autoSpeak ||
+      replyModePending ||
       (selectedModel?.provider ?? null) !== (bot.modelProvider ?? null) ||
       (selectedModel?.modelId ?? null) !== (bot.modelId ?? null) ||
       (thinkingLevel || null) !== (bot.thinkingLevel ?? null));
@@ -625,6 +640,14 @@ export default function BotSettingsScreen() {
               </Text>
             ) : null}
 
+            {bot?.replyMode !== undefined ? (
+              <BotReplyModeSetting
+                key={`${bot.spaceId}:${bot.id}`}
+                bot={bot}
+                registerFlush={registerReplyModeFlush}
+                onSavingChange={setReplyModePending}
+              />
+            ) : null}
             <SettingsGroup label={t("Computer")}>
               <ComputerModePicker plain value={computerMode} onChange={setComputerMode} />
             </SettingsGroup>

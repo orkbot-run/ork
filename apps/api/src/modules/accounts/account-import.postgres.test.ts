@@ -40,6 +40,7 @@ function sourceRecords(): AccountExportRecord[] {
       color: "#3EC5A8",
       avatarSet: "organic",
       notifyOnFinish: false,
+      replyMode: "explicit",
       pinned: true,
       position: 1,
       sectionId: "src-section",
@@ -429,6 +430,8 @@ describePostgres("account import (PostgreSQL)", () => {
     expect(child.pinned).toBe(true);
     expect(child.fleetManagement).toBe(false);
     expect(child.dailyCheckIns).toBe(false);
+    expect(child.replyMode).toBe("explicit");
+    expect(parent.replyMode).toBe("chat");
     expect(parent.dailyCheckIns).toBe(false);
     expect(child.disabledBuiltinTools).toEqual(["browser"]);
     const section = await system.botSection.findFirstOrThrow({ where: { spaceId } });

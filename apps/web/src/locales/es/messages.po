@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "No se pudo renderizar el gráfico: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "Chat"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -2291,6 +2292,7 @@ msgstr "No se pudo ejecutar la rutina"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -5351,6 +5353,10 @@ msgstr "Responder"
 msgid "Reply cancelled"
 msgstr "Respuesta cancelada"
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Modo de respuesta"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -6825,6 +6831,10 @@ msgstr "Actualizar servidor"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Actualizaciones"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Avances y respuesta final"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

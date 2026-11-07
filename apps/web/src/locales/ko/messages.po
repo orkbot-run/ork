@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "차트를 표시하지 못했습니다: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "채팅"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -2291,6 +2292,7 @@ msgstr "루틴을 실행할 수 없습니다"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -5351,6 +5353,10 @@ msgstr "답장"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "응답 방식"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -6825,6 +6831,10 @@ msgstr "서버 업데이트"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "업데이트"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "진행 상황 및 최종 답변"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

@@ -1298,6 +1298,7 @@ msgid "Chart failed to render: {error}"
 msgstr "Chart failed to render: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
 msgstr "Chat"
 
@@ -2291,6 +2292,7 @@ msgstr "Could not run routine"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -5351,6 +5353,10 @@ msgstr "Reply"
 msgid "Reply cancelled"
 msgstr "Reply cancelled"
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Reply mode"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -6825,6 +6831,10 @@ msgstr "Update server"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Updates"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Updates and final reply"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

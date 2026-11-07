@@ -605,6 +605,11 @@ describe("runReplyGuidance", () => {
 });
 
 describe("runPromotesMidTurnNarration", () => {
+  it("keeps background reporting unchanged and suppresses explicit narration for ordinary chat", () => {
+    expect(runReplyGuidance("tickets", "explicit")).toBe(TICKET_SILENT_REPLY_GUIDANCE);
+    expect(runPromotesMidTurnNarration("user", "explicit")).toBe(false);
+    expect(runPromotesMidTurnNarration("user", "chat")).toBe(true);
+  });
   it("drops mid-turn narration in bot-to-bot runs", () => {
     expect(runPromotesMidTurnNarration("bot_message")).toBe(false);
   });

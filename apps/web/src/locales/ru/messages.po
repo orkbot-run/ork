@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "Не удалось отобразить диаграмму: {error}."
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "Чат"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -2291,6 +2292,7 @@ msgstr "Не удалось запустить задачу"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -5351,6 +5353,10 @@ msgstr "Ответить"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Режим ответа"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -6825,6 +6831,10 @@ msgstr "Обновить сервер"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Обновления"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Обновления и итоговый ответ"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

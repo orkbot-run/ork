@@ -1891,7 +1891,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 pluginLine,
                 agentSkillsLine,
                 taughtSkillsLine,
-                replyGuidance: runReplyGuidance(run.trigger),
+                replyGuidance: runReplyGuidance(run.trigger, run.replyMode),
                 disabledBuiltinTools: isStrategicInitiativeRun(run)
                   ? new Set(
                       builtinAgentTools

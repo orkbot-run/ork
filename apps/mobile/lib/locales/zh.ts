@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Reply mode": "回复模式",
+  Chat: "聊天",
+  "Updates and final reply": "进度更新和最终回复",
   "Haptic feedback": "触感反馈",
   "Check again": "重新检查",
   "Computers unavailable": "计算机不可用",

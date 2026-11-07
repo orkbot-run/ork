@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited chat guidance is preserved; explicit reply policy is an Ork addition.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import { isBackgroundRunTrigger } from "@orkbot/core";
 import { NO_RESPONSE } from "./silent-reply.js";
@@ -23,14 +28,25 @@ export function runAllowsSilentEmpty(trigger: string): boolean {
  * only when the model supplies none and has not explicitly chosen silence.
  * Background runs never promote it.
  */
-export function runPromotesMidTurnNarration(trigger: string): boolean {
+export function runPromotesMidTurnNarration(trigger: string, replyMode = "chat"): boolean {
+  if (replyMode === "explicit") return false;
   return trigger !== "routine" && trigger !== "bot_message" && !isBackgroundRunTrigger(trigger);
 }
 
 export const TICKET_SILENT_REPLY_GUIDANCE =
   "Ticket work is reported on the board, not in chat. Put updates and results in ticket_comment and keep the ticket status current with ticket_update. Use the existing ask or approval mechanism when user input is needed. Leave the final reply empty.";
 
-export function runReplyGuidance(trigger: string): string {
+const EXPLICIT_REPLY_GUIDANCE =
+  "Text written before a tool call stays in the tool notes. To send an interim message, use message_user. Put the complete final result in your normal final reply after the tools; tool notes do not replace it.";
+
+export function runReplyGuidance(trigger: string, replyMode = "chat"): string {
+  const guidance = chatReplyGuidance(trigger);
+  return replyMode === "explicit" && !isBackgroundRunTrigger(trigger)
+    ? `${guidance}\n\n${EXPLICIT_REPLY_GUIDANCE}`
+    : guidance;
+}
+
+function chatReplyGuidance(trigger: string): string {
   if (trigger === "reaction") return REACTION_SILENT_REPLY_GUIDANCE;
   if (isBackgroundRunTrigger(trigger)) return TICKET_SILENT_REPLY_GUIDANCE;
   return runAllowsSilentEmpty(trigger) ? ROUTINE_SILENT_REPLY_GUIDANCE : longWorkProgressGuidance();
@@ -41,6 +57,16 @@ export function replyGuidanceForOfferedTools(
   disabled?: ReadonlySet<string>,
 ): string | undefined {
   if (!disabled?.has("message_user")) return guidance;
+  const explicitSuffix = `\n\n${EXPLICIT_REPLY_GUIDANCE}`;
+  if (guidance.endsWith(explicitSuffix)) {
+    const base = replyGuidanceForOfferedTools(guidance.slice(0, -explicitSuffix.length), disabled);
+    return [
+      base,
+      EXPLICIT_REPLY_GUIDANCE.replace("To send an interim message, use message_user. ", ""),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   if (guidance === longWorkProgressGuidance()) {
     return "Always put the complete final answer in your normal reply.";
   }

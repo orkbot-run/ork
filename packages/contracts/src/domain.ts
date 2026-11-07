@@ -5,6 +5,7 @@
 import * as z from "zod";
 import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { BotAvatarSetSchema, BotAvatarValueSchema } from "./bot-avatar.js";
+import { BotReplyModeSchema } from "./bot-settings-layout.js";
 import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "./connector-errors.js";
 import { BotSettingsValuesSchema, ThreadMessageSchema } from "./events.js";
@@ -113,6 +114,8 @@ export const BotSchema = z.object({
   avatarSet: BotAvatarSetSchema.optional(),
   avatarSeed: z.uuidv4().nullable().optional(),
   notifyOnFinish: z.boolean(),
+  /** Absent on servers predating reply-mode support. */
+  replyMode: BotReplyModeSchema.optional(),
   pinned: z.boolean(),
   sectionId: Id.nullable(),
   archivedAt: z.string().nullable(),
@@ -424,6 +427,7 @@ export const CreateBotInput = z.object({
   description: z.string().max(BOT_DESCRIPTION_MAX_LENGTH).default(""),
   instructions: z.string().max(BOT_INSTRUCTIONS_MAX_LENGTH).default(""),
   notifyOnFinish: z.boolean().default(true),
+  replyMode: BotReplyModeSchema.optional(),
   dailyCheckIns: z.boolean().optional(),
   fleetManagement: z.boolean().optional(),
   color: BotAvatarValueSchema.optional(),
@@ -447,6 +451,7 @@ export const UpdateBotInput = z
     /** Ignored; installed mobile apps may still send it. */
     selfUpdateInstructions: z.boolean().optional(),
     notifyOnFinish: z.boolean().optional(),
+    replyMode: BotReplyModeSchema.optional(),
     color: BotAvatarValueSchema.optional(),
     avatarSet: BotAvatarSetSchema.optional(),
     pinned: z.boolean().optional(),

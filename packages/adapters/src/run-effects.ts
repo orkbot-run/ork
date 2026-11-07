@@ -14,6 +14,7 @@ import {
   RUN_READER_VERSION,
   RUN_TURN_CHECKPOINT_KIND,
   RunHistoryWriteError,
+  SUPPORTED_RUN_READER_VERSION,
 } from "@orkbot/db";
 import {
   boundDirectApprovalDetails,
@@ -307,7 +308,7 @@ export async function recordEffect(
             status: "running",
             leaseOwner: lease.owner,
             leaseFence: lease.fence,
-            requiredReaderVersion: { lte: RUN_READER_VERSION },
+            requiredReaderVersion: { lte: SUPPORTED_RUN_READER_VERSION },
           },
           data: { requiredReaderVersion: RUN_READER_VERSION },
         });

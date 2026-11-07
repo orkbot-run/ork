@@ -1298,6 +1298,7 @@ msgid "Chart failed to render: {error}"
 msgstr "Grafik çizilemedi: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
 msgstr "Sohbet"
 
@@ -2291,6 +2292,7 @@ msgstr "Rutin çalıştırılamadı"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -5351,6 +5353,10 @@ msgstr "Yanıtla"
 msgid "Reply cancelled"
 msgstr "Yanıt iptal edildi"
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Yanıt modu"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -6825,6 +6831,10 @@ msgstr "Sunucuyu güncelle"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Güncellemeler"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Güncellemeler ve son yanıt"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

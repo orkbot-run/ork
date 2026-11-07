@@ -89,6 +89,7 @@ export * from "./personal-ork.js";
 export * from "./plugin-catalog.js";
 export * from "./product-analytics.js";
 export * from "./prompt-data.js";
+export * from "./queued-save.js";
 export * from "./refresh-coalescer.js";
 export * from "./remote-images.js";
 export * from "./response-bytes.js";

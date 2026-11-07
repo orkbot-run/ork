@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Reply mode": "Modo de respuesta",
+  Chat: "Chat",
+  "Updates and final reply": "Avances y respuesta final",
   "Haptic feedback": "Respuesta háptica",
   "Check again": "Comprobar de nuevo",
   "Computers unavailable": "Computadoras no disponibles",

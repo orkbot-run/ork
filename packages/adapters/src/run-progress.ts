@@ -137,7 +137,10 @@ export function nextProgressNonce(ctx: RunContext) {
 }
 
 export function canPublishDurableNarration(ctx: RunContext) {
-  return runPromotesMidTurnNarration(ctx.run.trigger) && canPublishDurableProgress(ctx.state.reply);
+  return (
+    runPromotesMidTurnNarration(ctx.run.trigger, ctx.run.replyMode) &&
+    canPublishDurableProgress(ctx.state.reply)
+  );
 }
 
 export function flushPendingTools(reply: ReplyState) {
@@ -178,6 +181,7 @@ export async function flushProgress(ctx: RunContext) {
   // sentinel before the final outcome is known.
   if (
     ctx.scripted ||
+    run.replyMode === "explicit" ||
     !reply.pendingProgress ||
     run.trigger === "routine" ||
     isBackgroundRunTrigger(run.trigger) ||
@@ -220,7 +224,7 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   reply.pendingProgress = "";
   // Text the redactor still holds back belongs to the text just taken out.
   reply.redactor.skip();
-  const promotes = runPromotesMidTurnNarration(run.trigger);
+  const promotes = runPromotesMidTurnNarration(run.trigger, run.replyMode);
   if (
     text.length <= USER_PROGRESS_MESSAGE_MAX_LENGTH &&
     (canPublishDurableNarration(ctx) || (beforeConnectCard && promotes))
@@ -241,7 +245,7 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
   }
   reply.discardedMidTurnNarration = true;
   reply.lastDiscardedMidTurnNarration = clampUserProgressMessage(text);
-  if (promotes && !ctx.allowSilentEmptyRun) {
+  if ((promotes || run.replyMode === "explicit") && !ctx.allowSilentEmptyRun) {
     reply.workingNotes.push(text);
     flushPendingTools(reply);
     reply.messageSegments = noteLastToolStep(reply.messageSegments, text);
@@ -257,7 +261,8 @@ export async function publishMidTurnNarration(ctx: RunContext, beforeConnectCard
 export async function publishNarrationBeforeAsk(ctx: RunContext) {
   const { deps, run } = ctx;
   const { reply } = ctx.state;
-  if (!runPromotesMidTurnNarration(run.trigger)) return;
+  if (run.replyMode !== "explicit" && !runPromotesMidTurnNarration(run.trigger, run.replyMode))
+    return;
   const extracted = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
   const pending = redactSecretsAfter(reply.narrationSoFar, extracted.text, ctx.secrets).trim();
   reply.narrationSoFar += extracted.text;
@@ -275,6 +280,8 @@ export async function publishNarrationBeforeAsk(ctx: RunContext) {
   reply.hasStreamedText = false;
   reply.pendingProgress = "";
   reply.redactor.skip();
+  // Keep review context on the question card, separately from ordinary chat replies.
+  if (run.replyMode === "explicit") return text;
   await publishMessage(
     deps,
     run,
@@ -296,7 +303,7 @@ export async function showNarrationStatus(ctx: RunContext, note: string | undefi
   if (
     !note ||
     ctx.scripted ||
-    !runPromotesMidTurnNarration(run.trigger) ||
+    !runPromotesMidTurnNarration(run.trigger, run.replyMode) ||
     isBackgroundRunTrigger(run.trigger)
   )
     return;

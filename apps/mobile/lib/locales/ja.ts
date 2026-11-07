@@ -3,6 +3,9 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Reply mode": "応答モード",
+  Chat: "チャット",
+  "Updates and final reply": "進捗と最終回答",
   "Haptic feedback": "触覚フィードバック",
   "Check again": "もう一度確認",
   "Computers unavailable": "コンピューターを利用できません",

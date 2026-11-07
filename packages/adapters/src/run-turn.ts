@@ -310,7 +310,7 @@ async function streamProgress(ctx: RunContext, event: RuntimeEvent<"progress">) 
   if (event.activity && reply.narrationStatusShowing) return;
   // Flush batched text deltas first so an activity line cannot land
   // ahead of text the model streamed before the tool call.
-  if (reply.pendingProgress && !progressHeldForSilence(ctx)) {
+  if (run.replyMode !== "explicit" && reply.pendingProgress && !progressHeldForSilence(ctx)) {
     await deps.events.append({
       spaceId: run.spaceId,
       threadId: thread.id,
@@ -369,7 +369,11 @@ async function onSteered(ctx: RunContext, event: RuntimeEvent<"steered">) {
   await flushProgress(ctx);
   const before = extractNarrationText(reply.messageSegments, reply.currentTextSegment);
   const text = redactSecretsAfter(reply.narrationSoFar, before.text, ctx.secrets).trim();
-  if (text && runPromotesMidTurnNarration(run.trigger) && !mayBeSilentEnding(ctx, text)) {
+  if (
+    text &&
+    runPromotesMidTurnNarration(run.trigger, run.replyMode) &&
+    !mayBeSilentEnding(ctx, text)
+  ) {
     reply.narrationSoFar += before.text;
     reply.messageSegments = before.remaining;
     reply.currentTextSegment = "";
@@ -404,11 +408,15 @@ async function pauseForAnswer(ctx: RunContext, event: RuntimeEvent<"ask">) {
   }
   const { deps, run, runId, bot, thread, workerId, fence } = ctx;
   if (!(await renewRunLease(deps, runId, workerId, fence))) return;
-  await publishNarrationBeforeAsk(ctx);
+  const pendingDetail = await publishNarrationBeforeAsk(ctx);
+  const detail = event.detail ?? pendingDetail;
+  if (detail !== undefined && detail.length > ASK_DECISION_DETAIL_MAX_LENGTH) {
+    throw new ModelOutputError("The question detail is too large to review.");
+  }
   const safeText = redactSecrets(event.text, ctx.secrets);
-  const safeDetail = event.detail
-    ? redactSecrets(event.detail, ctx.secrets).slice(0, ASK_DECISION_DETAIL_MAX_LENGTH)
-    : event.detail;
+  const safeDetail = detail
+    ? redactSecrets(detail, ctx.secrets).slice(0, ASK_DECISION_DETAIL_MAX_LENGTH)
+    : detail;
   const safeActions = event.actions?.map((action) => ({
     id: action.id,
     label: redactSecrets(action.label, ctx.secrets),
@@ -816,6 +824,7 @@ export async function completeRun(ctx: RunContext) {
     !isBackgroundRunTrigger(run.trigger) &&
     !ctx.state.handedOff &&
     !reply.explicitNoResponse &&
+    run.replyMode !== "explicit" &&
     reply.workingNotes.length > 0 &&
     !reply.textSinceLastStep.trim()
   ) {
@@ -835,6 +844,7 @@ export async function completeRun(ctx: RunContext) {
     !ctx.state.handedOff &&
     !reply.explicitNoResponse &&
     !reply.assembled.trim() &&
+    run.replyMode !== "explicit" &&
     reply.lastDiscardedMidTurnNarration &&
     !reply.midTurnUserTexts.includes(reply.lastDiscardedMidTurnNarration)
   ) {
@@ -866,6 +876,15 @@ export async function completeRun(ctx: RunContext) {
           !reply.publishedMidTurnUserMessage
         ? peerReplyWithoutSentinel(reply.assembled, reply.messageSegments)
         : stripStrayNoResponse(reply.assembled, reply.messageSegments);
+  if (
+    run.replyMode === "explicit" &&
+    !ctx.allowSilentEmptyRun &&
+    !groupSilentEnd &&
+    !ctx.state.handedOff &&
+    !silentReply.assembled.trim() &&
+    silentReply.blocks.some((block) => block.kind === "steps")
+  )
+    throw new Error(TOOL_STEPS_WITHOUT_RESPONSE);
   let completionBlocks = silentReply.blocks;
   if (!silentReply.assembled || isBackgroundRunTrigger(run.trigger)) {
     // Mid-turn progress already posted durable chat messages; skip the empty
@@ -1030,7 +1049,7 @@ export async function failRun(
     ctx.scripted ||
     ctx.state.handedOff ||
     reply.explicitNoResponse ||
-    !runPromotesMidTurnNarration(run.trigger)
+    !runPromotesMidTurnNarration(run.trigger, run.replyMode)
       ? ""
       : redactSecrets(
           extractNarrationText(reply.messageSegments, reply.currentTextSegment).text,

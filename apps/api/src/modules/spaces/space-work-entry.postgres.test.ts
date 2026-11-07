@@ -41,6 +41,7 @@ import {
   runAsSystem,
   runAsTenant,
   SpaceDeletionInProgressError,
+  SUPPORTED_RUN_READER_VERSION,
   saveRunTurnCheckpoint,
   sendUserMessage,
   withTransactionRetry,
@@ -362,7 +363,7 @@ describePostgres("Space deletion work admission (PostgreSQL)", () => {
 
   it("T20 the compatibility declaration cannot bypass RLS or admit a future protocol", async () => {
     const required = await readerRun();
-    const future = await readerRun(2);
+    const future = await readerRun(SUPPORTED_RUN_READER_VERSION + 1);
     const other = await provisionMessagingIdentity(
       prisma,
       { provider: "email", address: `reader-isolation-${randomUUID()}@example.test` },

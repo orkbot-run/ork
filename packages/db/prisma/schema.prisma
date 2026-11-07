@@ -761,6 +761,7 @@ model Bot {
   avatarSeed        String?
   /// True once the owner picks this bot a set other than their default; the default no longer moves it.
   avatarSetPinned   Boolean           @default(false)
+  replyMode         String            @default("chat")
   notifyOnFinish    Boolean           @default(true)
   pinned            Boolean           @default(false)
   position          Int               @default(0)
@@ -1012,6 +1013,7 @@ model Run {
   leaseOwner           String?
   leaseFence           Int               @default(0)
   /// Minimum execution reader protocol; monotonic so older workers cannot replay newer effects.
+  replyMode            String            @default("chat")
   requiredReaderVersion Int              @default(0)
   leaseExpiresAt       DateTime?
   checkpoint           String?

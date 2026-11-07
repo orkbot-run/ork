@@ -155,6 +155,7 @@ async function* spaceRecords(
       avatarSet: bot.avatarSet,
       avatarSeed: bot.avatarSeed,
       notifyOnFinish: bot.notifyOnFinish,
+      replyMode: bot.replyMode === "explicit" ? "explicit" : "chat",
       pinned: bot.pinned,
       position: bot.position,
       sectionId: bot.sectionId,
