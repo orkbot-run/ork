@@ -1,4 +1,9 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; bounded discovery coverage follows LICENSE.md.
+
 import type { AdapterContext } from "@orkbot/adapter-kit";
+import { getLogger } from "@orkbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isPipedreamEnabled,
@@ -100,6 +105,21 @@ function appTools(app: string, count: number): Record<string, string[]> {
 }
 
 describe("pipedreamConfigFromEnv", () => {
+  it("propagates configured discovery bounds and reports the partial catalog structurally", async () => {
+    const warn = vi.spyOn(getLogger(), "warn");
+    const connector = new PipedreamConnector(FAKE_CONFIG, {
+      ...TEST_NETWORK,
+      fetch: pipedreamMcpFetch(appTools("gmail", 3)),
+      discoveryLimits: { maxTools: 1 },
+    });
+    const tools = await connector.discoverTools(connectedContext("gmail"));
+    expect(tools).toHaveLength(1);
+    expect(warn.mock.calls).toContainEqual([
+      "mcp.discovery_truncated",
+      expect.objectContaining({ reason: "tool_limit", toolsListed: 1, pagesRead: 1 }),
+    ]);
+    warn.mockRestore();
+  });
   it("maps shared environment values and normalizes unsupported environments", () => {
     expect(
       pipedreamConfigFromEnv({

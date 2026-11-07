@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+
 import type { McpServerHealth } from "@orkbot/contracts";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
@@ -44,10 +48,7 @@ export async function recordMcpServerHealth(
       where: { id: serverId, ...(revision === undefined ? {} : { revision }) },
       data: {
         healthStatus: update.status,
-        healthMessage:
-          update.status === "ok" || !update.message
-            ? null
-            : update.message.slice(0, HEALTH_MESSAGE_MAX),
+        healthMessage: update.message ? update.message.slice(0, HEALTH_MESSAGE_MAX) : null,
         healthToolCount: update.toolCount ?? null,
         healthCheckedAt: new Date(),
       },

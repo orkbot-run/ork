@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 environment handling is preserved. Public-client validation is an Ork addition.
+// Inherited Apache-2.0 environment handling is preserved. Public-client and discovery configuration validation are Ork additions.
 
 import type {
   ApnsVoipConfig,
@@ -12,6 +12,7 @@ import {
   apnsVoipConfig,
   boatApiKeyFromEnv,
   boatApiUrlFromEnv,
+  mcpDiscoveryLimitsFromEnv,
   mcpStdioOptionsFromEnv,
   photonProjectsFromEnv,
   resolveCloudAgentProvider,
@@ -170,6 +171,7 @@ export interface AppEnv {
   mcpStdioEnabled: boolean;
   mcpStdioAllowedCommands: string[];
   mcpStdio: ReturnType<typeof mcpStdioOptionsFromEnv>;
+  mcpDiscovery?: ReturnType<typeof mcpDiscoveryLimitsFromEnv>;
   /** Deployment-owner escape for remote MCP on RFC1918 / Docker-network hosts. */
   mcpAllowPrivateEndpoint: boolean;
   port: number;
@@ -410,6 +412,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       .map((value) => value.trim())
       .filter(Boolean),
     mcpStdio: mcpStdioOptionsFromEnv(source),
+    mcpDiscovery: mcpDiscoveryLimitsFromEnv(source),
     mcpAllowPrivateEndpoint: source.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
     port: Number(source.API_PORT ?? 3100),
     gitSha: optional(source.GIT_SHA) ?? optional(source.ORKBOT_GIT_SHA),

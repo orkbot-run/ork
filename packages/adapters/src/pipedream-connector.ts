@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+
 import { createHmac } from "node:crypto";
 import type {
   AdapterContext,
@@ -25,6 +29,7 @@ import {
   lazyCatalogTools,
   resolveCatalogCall,
 } from "./lazy-tool-catalog.js";
+import type { McpDiscoveryLimits } from "./mcp-discovery.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import { callRemoteMcpTool, listRemoteMcpTools } from "./remote-mcp.js";
 import { isVitestRuntime } from "./test-runtime.js";
@@ -64,7 +69,9 @@ export function pipedreamConfigFromEnv(
   };
 }
 
-export type PipedreamConnectorDependencies = RemoteTransportDependencies;
+export type PipedreamConnectorDependencies = RemoteTransportDependencies & {
+  discoveryLimits?: Partial<McpDiscoveryLimits>;
+};
 
 type PipedreamApp = {
   id: string;
@@ -176,14 +183,15 @@ export class PipedreamConnector implements ManagedConnectorProvider {
             await Promise.all(
               accounts.map(async (account) => {
                 try {
-                  const tools = await listRemoteMcpTools({
+                  const listing = await listRemoteMcpTools({
                     endpoint: MCP_ENDPOINT,
                     headers: this.mcpHeaders(context, app, account.id, token),
                     signal: context.signal,
                     fetch: this.dependencies.fetch,
                     resolveHostname: this.dependencies.resolveHostname,
+                    discoveryLimits: this.dependencies.discoveryLimits,
                   });
-                  return scopeConnectorTools(tools, {
+                  return scopeConnectorTools(listing.tools, {
                     id: account.connectionId,
                     connectorId: "pipedream",
                     externalId: app,

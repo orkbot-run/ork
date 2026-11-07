@@ -60,6 +60,7 @@ import {
   isPipedreamEnabled,
   McpConnector,
   McpOAuthBroker,
+  mcpDiscoveryLimitsFromEnv,
   mcpStdioOptionsFromEnv,
   messagingEnvFromProcess,
   messagingPlatformsFromEnv,
@@ -108,6 +109,7 @@ import { createRootLogger } from "@orkbot/logging/axiom";
 const logger = await createRootLogger(SERVICE_NAMES.worker);
 
 async function main() {
+  const discoveryLimits = mcpDiscoveryLimitsFromEnv(process.env);
   const stopStallWatch = watchEventLoopStalls();
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
@@ -193,6 +195,7 @@ async function main() {
     {
       ...mcpStdio,
       ...mcpStdioOptionsFromEnv(process.env),
+      discoveryLimits,
       events,
       allowPrivateEndpoint,
     },
@@ -206,7 +209,7 @@ async function main() {
     encryptionKey: resolveEncryptionKey(process.env),
   });
   const pipedream = isPipedreamEnabled(pipedreamConfig)
-    ? new PipedreamConnector(pipedreamConfig)
+    ? new PipedreamConnector(pipedreamConfig, { discoveryLimits })
     : undefined;
   // Never poll inbound here: Telegram allows a single getUpdates consumer,
   // and that is the API process, which owns the inbound sink.
@@ -234,7 +237,7 @@ async function main() {
   const installedConnectors = new InstalledConnectorProvider(
     prisma,
     secrets,
-    {},
+    { discoveryLimits },
     allowPrivateEndpoint,
   );
   const stack = createConnectorStack(undefined, [

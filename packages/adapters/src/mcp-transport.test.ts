@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -345,10 +349,20 @@ describe("MCP transport seam", () => {
           },
         });
 
-        const names = (await session.listTools()).tools.map((tool) => tool.name);
+        const listing = await session.listTools();
+        const names = listing.tools.map((tool) => tool.name);
 
-        if (typeof expected === "number") expect(names).toHaveLength(expected);
-        else expect(names).toEqual(expected);
+        if (typeof expected === "number") {
+          expect(names).toHaveLength(expected);
+          expect(listing.diagnostic).toMatchObject({
+            reason: expected === 250 ? "tool_limit" : "page_limit",
+            toolsListed: expected,
+            pagesRead: requestedPages,
+          });
+        } else {
+          expect(names).toEqual(expected);
+          expect(listing.diagnostic).toBeUndefined();
+        }
         expect(cursors).toHaveLength(requestedPages);
         expect(cursors[0]).toBeUndefined();
         expect(cursors[1]).toBe("page-1");

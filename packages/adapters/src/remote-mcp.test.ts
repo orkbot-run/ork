@@ -640,10 +640,12 @@ describe("remote MCP tool result", () => {
         fetch,
         resolveHostname: publicResolver,
       }),
-    ).toMatchObject([
-      { name: "list_items", label: "Reading API_items", readOnly: true },
-      { name: "write_items", label: "Updating items", readOnly: false },
-    ]);
+    ).toMatchObject({
+      tools: [
+        { name: "list_items", label: "Reading API_items", readOnly: true },
+        { name: "write_items", label: "Updating items", readOnly: false },
+      ],
+    });
   });
 
   /** Streamable HTTP peer answering one fixed tool result over an injected

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache material; Ork launch credential redaction changes are PolyForm-covered.
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache material; Ork credential redaction and bounded discovery changes are PolyForm-covered.
 // See LICENSE.md.
 
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -52,6 +53,8 @@ import {
   resolveCatalogCall,
 } from "./lazy-tool-catalog.js";
 import { closeMcpResource } from "./mcp-close.js";
+import type { McpDiscoveryLimits, McpDiscoveryResult } from "./mcp-discovery.js";
+import { mcpDiscoveryLimits, mcpDiscoveryMessage } from "./mcp-discovery.js";
 import type { McpOAuthBroker, OAuthMaterial } from "./mcp-oauth.js";
 import {
   accessTokenExpiresAt,
@@ -219,6 +222,7 @@ const UNAVAILABLE_TOOL = "__orkbot_unavailable";
 const HEALTH_REWRITE_MS = 60_000;
 
 export type McpConnectorOptions = {
+  discoveryLimits?: Partial<McpDiscoveryLimits>;
   stdioEnabled?: boolean;
   allowedCommands?: string[];
   network?: RemoteTransportDependencies;
@@ -366,6 +370,7 @@ async function closeEntry(entry: { session: McpSession; credentialDir?: string }
 }
 
 export class McpConnector implements ConnectorProvider {
+  private readonly discoveryLimits: McpDiscoveryLimits;
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly connecting = new Map<string, PendingSession>();
   private readonly probes = new Map<string, Promise<McpServerHealthUpdate>>();
@@ -393,6 +398,7 @@ export class McpConnector implements ConnectorProvider {
     private readonly options: McpConnectorOptions = {},
     private readonly oauth?: McpOAuthBroker,
   ) {
+    this.discoveryLimits = mcpDiscoveryLimits(options.discoveryLimits);
     this.unsubscribe =
       this.secrets.onChange?.((ref) => {
         for (const [key, entry] of this.sessions)
@@ -496,6 +502,7 @@ export class McpConnector implements ConnectorProvider {
               entry = this.sessions.get(key);
               return session.listTools({
                 signal: AbortSignal.any([context.signal, listing.signal]),
+                discoveryLimits: this.discoveryLimits,
               });
             }),
             this.options.discoveryTimeoutMs ?? DEFAULT_MCP_DISCOVERY_TIMEOUT_MS,
@@ -504,7 +511,7 @@ export class McpConnector implements ConnectorProvider {
           this.unavailable.delete(key);
           void this.recordHealth(assignment.server.id, {
             status: "ok",
-            message: null,
+            message: mcpDiscoveryMessage(listed.diagnostic),
             toolCount: listed.tools.length,
           });
           reportAllowlistDrift(assignment, listed.tools, context);
@@ -755,30 +762,38 @@ export class McpConnector implements ConnectorProvider {
       this.sessions.get(key)?.revision === server.revision ||
       this.connecting.get(key)?.revision === server.revision;
     try {
-      let toolCount: number;
+      let listed: McpDiscoveryResult<unknown>;
       if (shared) {
-        toolCount = (
-          await this.withSession(server, context, (session) => {
-            const material = this.sessions.get(key)?.material;
-            secrets = [
-              ...(material ? oauthMaterialSecrets(material) : []),
-              ...(this.sessions.get(key)?.launchSecrets ?? []),
-            ];
-            return session.listTools({ signal: context.signal });
-          })
-        ).tools.length;
+        listed = await this.withSession(server, context, (session) => {
+          const material = this.sessions.get(key)?.material;
+          secrets = [
+            ...(material ? oauthMaterialSecrets(material) : []),
+            ...(this.sessions.get(key)?.launchSecrets ?? []),
+          ];
+          return session.listTools({
+            signal: context.signal,
+            discoveryLimits: this.discoveryLimits,
+          });
+        });
       } else {
         const connected = await this.connectSession(server, context, () => undefined);
         secrets = [...oauthMaterialSecrets(connected.material), ...(connected.launchSecrets ?? [])];
         try {
-          toolCount = (await connected.session.listTools({ signal: context.signal })).tools.length;
+          listed = await connected.session.listTools({
+            signal: context.signal,
+            discoveryLimits: this.discoveryLimits,
+          });
         } finally {
           await closeEntry(connected).catch(() => undefined);
         }
       }
       this.unavailable.delete(key);
       this.discoveryBackoff.delete(key);
-      update = { status: "ok", message: null, toolCount };
+      update = {
+        status: "ok",
+        message: mcpDiscoveryMessage(listed.diagnostic),
+        toolCount: listed.tools.length,
+      };
     } catch (error) {
       // Like discovery: a shared session that cannot list its tools is dropped.
       if (shared) await this.evict(key).catch(() => undefined);

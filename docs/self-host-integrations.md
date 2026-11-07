@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
 <!-- SPDX-FileCopyrightText: 2026 Ork contributors -->
-<!-- Modified by Ork contributors for the Tauri desktop cleanup. Inherited material remains Apache-2.0. -->
+<!-- Modified by Ork contributors for native clients and bounded integration discovery. Inherited material remains Apache-2.0. -->
 
 # Tools and integrations
 
@@ -112,6 +112,15 @@ A run never waits long on one server. It gives each server `MCP_DISCOVERY_TIMEOU
 background and its tools appear on a later turn. After a failure, runs skip that server for 30
 seconds, doubling up to 5 minutes while it keeps failing. A successful **Test connection** or
 discovery, or a change to the server's settings, ends the wait at once.
+
+Tool discovery has three bounds, shared by the API and worker: `MCP_DISCOVERY_MAX_TOOLS`
+(default 250, maximum 10000), `MCP_DISCOVERY_MAX_PAGES` (default 20, maximum 100), and
+`MCP_DISCOVERY_MAX_BYTES` (default 16777216, maximum 67108864). Set positive integers.
+Invalid values stop startup. The byte budget counts serialized catalog metadata across all
+pages, including schemas and cursors. Remote HTTP responses have a separate 16 MiB limit.
+A repeated cursor also stops discovery. Tools already listed remain available, and incomplete
+catalogs produce a bounded warning in server health or structured discovery logs. Increase the
+limits only if the server's catalog needs them.
 
 If a server shows its tools in **Settings** but a bot never uses them, run the
 [diagnostics report](./self-host.md#reporting-a-problem). Its **Assignment** column names any

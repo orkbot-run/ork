@@ -110,6 +110,7 @@ export * from "./keyless-http-web.js";
 export type * from "./kubernetes-sandbox.js";
 export * from "./macos-voice.js";
 export * from "./mcp-connector.js";
+export * from "./mcp-discovery.js";
 export * from "./mcp-emulator.js";
 export * from "./mcp-oauth.js";
 export * from "./mcp-server-health.js";

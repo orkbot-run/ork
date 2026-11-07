@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 behavior is preserved; bounded action display labels follow LICENSE.md.
 
+import { createHash } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import type { LookupFunction } from "node:net";
 import { isDeepStrictEqual } from "node:util";
@@ -25,11 +26,18 @@ import {
   normalizeHost,
 } from "@orkbot/contracts";
 import { cancelResponseBody } from "@orkbot/core";
+import { getLogger } from "@orkbot/logging";
 import { Agent } from "undici";
 import { composioToolBatch } from "./composio-batch.js";
 import { sensitiveQueryParameter } from "./connector-http.js";
 import { combineSignals } from "./connector-safety.js";
 import { credentialDigest } from "./credential-digest.js";
+import type {
+  McpDiscoveryDiagnostic,
+  McpDiscoveryLimits,
+  McpDiscoveryResult,
+} from "./mcp-discovery.js";
+import { mcpDiscoveryLimits } from "./mcp-discovery.js";
 import { limitMcpResponseBody } from "./mcp-response-limit.js";
 import type { ResolvedAddress, ResolveHostname } from "./network-address.js";
 import {
@@ -39,8 +47,6 @@ import {
 } from "./network-address.js";
 import { dispatcherFetch, fetchPairedWithDispatcher } from "./undici-fetch.js";
 
-const MAX_MCP_TOOLS = 250;
-const MAX_MCP_PAGES = 20;
 const MCP_TIMEOUT_MS = 30_000;
 const MAX_RESULT_BYTES = 1_000_000;
 
@@ -57,6 +63,7 @@ export interface RemoteTransportDependencies {
 }
 
 export interface RemoteMcpOptions extends RemoteTransportDependencies, RemoteUrlPolicy {
+  discoveryLimits?: Partial<McpDiscoveryLimits>;
   endpoint: string;
   headers?: Record<string, string>;
   signal?: AbortSignal;
@@ -96,30 +103,68 @@ export interface SafeRemoteFetch {
 const resolveHostname: ResolveHostname = (hostname) =>
   lookup(hostname, { all: true, verbatim: true });
 
-export async function listRemoteMcpTools(options: RemoteMcpOptions): Promise<ConnectorTool[]> {
-  const list = async (client: Client, signal: AbortSignal | undefined): Promise<ConnectorTool[]> =>
-    (await listMcpTools(client, { signal, timeout: MCP_TIMEOUT_MS })).map((tool) => ({
-      name: tool.name,
-      description: tool.description ?? tool.title ?? tool.name,
-      label: tool.title ?? tool.annotations?.title,
-      inputSchema: tool.inputSchema,
-      readOnly: tool.annotations?.readOnlyHint,
-      batch: composioToolBatch(tool.name),
-    }));
+export async function listRemoteMcpTools(
+  options: RemoteMcpOptions,
+): Promise<McpDiscoveryResult<ConnectorTool>> {
+  const limits = mcpDiscoveryLimits(options.discoveryLimits);
+  const list = async (
+    client: Client,
+    signal: AbortSignal | undefined,
+  ): Promise<McpDiscoveryResult<ConnectorTool>> => {
+    const listing = await listMcpTools(client, { signal, timeout: MCP_TIMEOUT_MS }, limits);
+    if (listing.diagnostic) {
+      getLogger().warn("mcp.discovery_truncated", listing.diagnostic);
+    }
+    return {
+      ...listing,
+      tools: listing.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description ?? tool.title ?? tool.name,
+        label: tool.title ?? tool.annotations?.title,
+        inputSchema: tool.inputSchema,
+        readOnly: tool.annotations?.readOnlyHint,
+        batch: composioToolBatch(tool.name),
+      })),
+    };
+  };
   return withScopedMcpClient(options, list);
 }
 
 /** Follow `tools/list` cursors, bounded by the shared page and tool caps. */
-export async function listMcpTools(client: Client, options: RequestOptions): Promise<Tool[]> {
+export async function listMcpTools(
+  client: Pick<Client, "listTools">,
+  options: RequestOptions,
+  configuredLimits?: Partial<McpDiscoveryLimits>,
+): Promise<McpDiscoveryResult<Tool>> {
+  const limits = mcpDiscoveryLimits(configuredLimits);
   const tools: Tool[] = [];
+  const cursors = new Set<string>();
   let cursor: string | undefined;
-  for (let page = 0; page < MAX_MCP_PAGES && tools.length < MAX_MCP_TOOLS; page += 1) {
-    const result = await client.listTools(cursor ? { cursor } : undefined, options);
-    tools.push(...result.tools.slice(0, MAX_MCP_TOOLS - tools.length));
+  let catalogBytes = 0;
+  let pagesRead = 0;
+  const truncated = (reason: McpDiscoveryDiagnostic["reason"]): McpDiscoveryResult<Tool> => ({
+    tools,
+    diagnostic: { reason, toolsListed: tools.length, pagesRead, catalogBytes },
+  });
+  while (pagesRead < limits.maxPages && tools.length < limits.maxTools) {
+    if (cursor !== undefined) cursors.add(createHash("sha256").update(cursor).digest("hex"));
+    const result = await client.listTools(cursor !== undefined ? { cursor } : undefined, options);
+    pagesRead += 1;
+    // This is serialized SDK catalog metadata, not wire bytes. The transport independently
+    // caps every response, including a page rejected before retaining any of its tools.
+    catalogBytes += Buffer.byteLength(JSON.stringify(result), "utf8");
+    if (catalogBytes > limits.maxBytes) return truncated("byte_limit");
+    const remaining = limits.maxTools - tools.length;
+    tools.push(...result.tools.slice(0, remaining));
+    if (result.tools.length > remaining) return truncated("tool_limit");
     cursor = result.nextCursor;
-    if (!cursor) break;
+    if (cursor === undefined) return { tools };
+    if (cursors.has(createHash("sha256").update(cursor).digest("hex")))
+      return truncated("cursor_cycle");
+    if (tools.length >= limits.maxTools) return truncated("tool_limit");
+    if (catalogBytes >= limits.maxBytes) return truncated("byte_limit");
   }
-  return tools;
+  return truncated("page_limit");
 }
 
 /** Call through the guarded transport, optionally projecting before the final byte limit. */

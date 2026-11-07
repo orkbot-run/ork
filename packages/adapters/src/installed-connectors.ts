@@ -51,6 +51,8 @@ import {
   resolveCatalogCall,
   SELECTED_SCHEMA_MAX_BYTES,
 } from "./lazy-tool-catalog.js";
+import type { McpDiscoveryDiagnostic, McpDiscoveryLimits } from "./mcp-discovery.js";
+import { mcpDiscoveryMessage } from "./mcp-discovery.js";
 import { localSchemaReference } from "./openai-tool-parameters.js";
 import type { RemoteTransportDependencies, RemoteUrlPolicy } from "./remote-mcp.js";
 import {
@@ -110,7 +112,9 @@ type InstalledRow = {
   config: unknown;
 };
 
-export type RemoteConnectorDependencies = RemoteTransportDependencies;
+export type RemoteConnectorDependencies = RemoteTransportDependencies & {
+  discoveryLimits?: Partial<McpDiscoveryLimits>;
+};
 type RemoteRequestPolicy = RemoteConnectorDependencies & RemoteUrlPolicy;
 
 export class InstalledConnectorProvider implements ConnectorProvider {
@@ -222,14 +226,14 @@ export class InstalledConnectorProvider implements ConnectorProvider {
       if (install.kind === "mcp") {
         const config = McpConfigSchema.parse(install.config);
         const credential = await this.loadCredential(install, context);
-        const tools = await listRemoteMcpTools({
+        const listing = await listRemoteMcpTools({
           ...remote,
           endpoint: install.source,
           headers: connectorHeaders(config, credential),
           signal: context.signal,
           ...this.mcpSessionOptions(context, install),
         });
-        return tools.map((tool) => ({
+        return listing.tools.map((tool) => ({
           ...tool,
           route: {
             connectorId: "installed",
@@ -403,19 +407,29 @@ export async function verifyMcpInstall(input: {
   remote?: RemoteConnectorDependencies;
   /** Loopback / LAN endpoint escape: operator-configured instance flag. */
   allowPrivateEndpoint?: boolean;
-}): Promise<{ config: Record<string, unknown>; toolCount: number }> {
+}): Promise<{
+  config: Record<string, unknown>;
+  toolCount: number;
+  diagnostic?: McpDiscoveryDiagnostic;
+}> {
   assertNoSensitiveQuery(input.source);
   const config = McpConfigSchema.parse(input.config);
   requireCredential(config.auth, input.credential);
-  const tools = await listRemoteMcpTools({
+  const listing = await listRemoteMcpTools({
     ...input.remote,
     endpoint: input.source,
     headers: connectorHeaders(config, input.credential),
     signal: input.signal,
     allowPrivateEndpoint: input.allowPrivateEndpoint,
   });
-  if (tools.length === 0) throw new Error("MCP server returned no tools");
-  return { config, toolCount: tools.length };
+  if (listing.tools.length === 0) {
+    throw new Error(mcpDiscoveryMessage(listing.diagnostic) ?? "MCP server returned no tools");
+  }
+  return {
+    config,
+    toolCount: listing.tools.length,
+    ...(listing.diagnostic ? { diagnostic: listing.diagnostic } : {}),
+  };
 }
 
 export async function prepareApiInstall(input: {

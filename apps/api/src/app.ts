@@ -314,6 +314,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ...envOverrides
   } = overrides;
   const env = { ...loadEnv(process.env), ...envOverrides };
+  const discoveryRemote = { ...remoteConnectors, discoveryLimits: env.mcpDiscovery };
   if (env.passwordAuth === false) env.messagingOpenSignup = false;
   const logger = loggerOverride ?? createServiceLogger({ service: SERVICE_NAMES.api });
   installLogger(logger);
@@ -465,6 +466,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       stdioEnabled: env.mcpStdioEnabled,
       allowedCommands: env.mcpStdioAllowedCommands,
       ...env.mcpStdio,
+      discoveryLimits: env.mcpDiscovery,
       network: remoteConnectors,
       events,
       allowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
@@ -474,7 +476,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const pipedreamConfig = pipedreamConfigFromEnv(env);
   const pipedream =
     pipedreamOverride ??
-    (isPipedreamEnabled(pipedreamConfig) ? new PipedreamConnector(pipedreamConfig) : undefined);
+    (isPipedreamEnabled(pipedreamConfig)
+      ? new PipedreamConnector(pipedreamConfig, discoveryRemote)
+      : undefined);
   // This process registers the inbound sink, so it must hold Telegram's getUpdates connection.
   const messagingPlatforms = await messagingPlatformsFromEnv(
     env.slackClientId ? { ...env, slackBotToken: undefined } : env,
@@ -531,7 +535,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const installed = new InstalledConnectorProvider(
     prisma,
     secrets,
-    remoteConnectors,
+    discoveryRemote,
     env.mcpAllowPrivateEndpoint,
   );
   const integrationSettings = new IntegrationProviderSettings(prisma, secrets, env.encryptionKey, {
@@ -878,7 +882,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     mcpOAuth,
     mcp,
     connectors: stack.connector,
-    remoteConnectors,
+    remoteConnectors: discoveryRemote,
     modelConnectionFetch,
     // The scripted runtime never calls a provider, so neither does its connect.
     modelConnectionCheck: env.agentRuntime === "pi" ? verifyModelServesAgents : undefined,

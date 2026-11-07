@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
@@ -5,11 +9,12 @@ import type { StdioServerParameters } from "@modelcontextprotocol/sdk/client/std
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import type { CallToolResult, ListToolsResult } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
 import { isLocalhostOrLoopbackIp } from "@orkbot/contracts";
 import { cancelResponseBody } from "@orkbot/core";
 import { combineSignals } from "./connector-safety.js";
 import { closeMcpResource } from "./mcp-close.js";
+import type { McpDiscoveryLimits, McpDiscoveryResult } from "./mcp-discovery.js";
 import type { InstalledMcpBin } from "./mcp-package-installer.js";
 import {
   isInstalledMcpBin,
@@ -458,9 +463,12 @@ export class McpSession {
     }
   }
 
-  async listTools(options?: { signal?: AbortSignal }): Promise<ListToolsResult> {
+  async listTools(options?: {
+    signal?: AbortSignal;
+    discoveryLimits?: Partial<McpDiscoveryLimits>;
+  }): Promise<McpDiscoveryResult<Tool>> {
     this.assertConnected();
-    return { tools: await listMcpTools(this.client, { signal: options?.signal }) };
+    return listMcpTools(this.client, { signal: options?.signal }, options?.discoveryLimits);
   }
 
   async callTool(

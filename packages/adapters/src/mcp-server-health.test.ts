@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 behavior is preserved; bounded discovery changes follow LICENSE.md.
+
 import { MCP_OAUTH_CLIENT_REQUIRED } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { createLogger, createTestSink, installLogger } from "@orkbot/logging";
@@ -44,19 +48,34 @@ describe("recordMcpServerHealth", () => {
     expect(arg.data.healthCheckedAt.getTime()).toBeGreaterThanOrEqual(before);
   });
 
-  it("clears the message on ok and records the tool count", async () => {
+  it("retains an explicit bounded warning on ok and records the tool count", async () => {
     const { prisma, updateMany } = fakePrisma();
 
     await recordMcpServerHealth(prisma, "server-1", {
       status: "ok",
-      message: "stale note",
+      message: "Tool catalog is incomplete.",
       toolCount: 7,
     });
 
     expect(updateMany.mock.calls[0]![0].data).toMatchObject({
       healthStatus: "ok",
-      healthMessage: null,
+      healthMessage: "Tool catalog is incomplete.",
       healthToolCount: 7,
+    });
+  });
+
+  it("clears a previous warning when a complete discovery succeeds", async () => {
+    const { prisma, updateMany } = fakePrisma();
+    await recordMcpServerHealth(prisma, "server-1", {
+      status: "ok",
+      message: "Tool catalog is incomplete.",
+      toolCount: 1,
+    });
+    await recordMcpServerHealth(prisma, "server-1", { status: "ok", toolCount: 2 });
+    expect(updateMany.mock.calls[1]![0].data).toMatchObject({
+      healthStatus: "ok",
+      healthMessage: null,
+      healthToolCount: 2,
     });
   });
 

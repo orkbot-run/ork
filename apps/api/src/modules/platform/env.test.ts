@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 environment tests are preserved. Public-client coverage is an Ork addition.
+// Inherited Apache-2.0 environment tests are preserved. Public-client and discovery configuration coverage are Ork additions.
 
 import { describe, expect, it } from "vitest";
 import { loadEnv, loadProductEnv } from "./env.js";
@@ -12,6 +12,23 @@ const base = {
 };
 
 describe("loadEnv", () => {
+  it("validates shared MCP discovery limits at startup", () => {
+    expect(loadEnv(base).mcpDiscovery).toEqual({ maxTools: 250, maxPages: 20, maxBytes: 16777216 });
+    expect(
+      loadEnv({
+        ...base,
+        MCP_DISCOVERY_MAX_TOOLS: "500",
+        MCP_DISCOVERY_MAX_PAGES: "30",
+        MCP_DISCOVERY_MAX_BYTES: "2097152",
+      }).mcpDiscovery,
+    ).toEqual({ maxTools: 500, maxPages: 30, maxBytes: 2097152 });
+    for (const name of [
+      "MCP_DISCOVERY_MAX_TOOLS",
+      "MCP_DISCOVERY_MAX_PAGES",
+      "MCP_DISCOVERY_MAX_BYTES",
+    ])
+      expect(() => loadEnv({ ...base, [name]: "0" })).toThrow();
+  });
   it("binds managed native instances only with an exact owner key and OIDC", () => {
     const configured = {
       ...base,
