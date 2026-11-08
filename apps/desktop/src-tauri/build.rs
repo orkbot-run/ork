@@ -71,6 +71,7 @@ fn main() {
             "get_server_pairing",
             "approve_server_pairing",
             "cancel_server_pairing",
+            "cancel_setup_connection",
             "remove_server",
             "connect_saved_server",
             "connect_server",

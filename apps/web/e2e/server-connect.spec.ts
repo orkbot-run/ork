@@ -99,7 +99,12 @@ test("initialized servers offer only the native handoff across reloads", async (
     );
     await expect(page.getByRole("textbox")).toHaveCount(0);
     await expect(page.getByRole("button")).toHaveCount(0);
-    await expect(page.getByRole("link")).toHaveCount(1);
+    await expect(page.getByRole("heading", { name: "Your server is ready" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Need the app? Download Ork" })).toHaveAttribute(
+      "href",
+      "https://ork.run/download/",
+    );
+    await expect(page.getByRole("link")).toHaveCount(2);
     if (visit === 0) await page.reload();
   }
   await captureScreenshot(page, testInfo, "initialized-server-handoff");

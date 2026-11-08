@@ -1701,7 +1701,7 @@ impl Startup {
     }
 }
 
-fn update_startup(app: &tauri::AppHandle, startup: Startup) {
+fn update_startup<R: tauri::Runtime>(app: &tauri::AppHandle<R>, startup: Startup) {
     let state = app.state::<DesktopState>();
     if let Ok(mut value) = state.startup.lock() {
         *value = startup.clone();
@@ -1909,6 +1909,20 @@ async fn start_local_server(
         &authorization,
     )
     .await
+}
+
+#[tauri::command]
+async fn cancel_setup_connection<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    cancel_restore(&state);
+    state.deactivate_stack();
+    let _switch = state.switching.lock().await;
+    update_startup(&app, Startup::idle());
+    Ok(())
 }
 
 async fn open_server(
@@ -2778,8 +2792,12 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
         MenuAction::ChangeServer => {
             let state = app.state::<DesktopState>();
             cancel_restore(&state);
+            state.deactivate_stack();
             update_startup(app, Startup::idle());
             let _ = show_setup(app);
+            if let Some(window) = app.get_webview_window("setup") {
+                let _ = window.emit("desktop-change-server", ());
+            }
         }
         MenuAction::StopLocalServer => {
             let Some(document) = active_document(app) else {
@@ -2909,6 +2927,7 @@ fn main() {
             get_server_pairing,
             approve_server_pairing,
             cancel_server_pairing,
+            cancel_setup_connection,
             remove_server,
             connect_saved_server,
             connect_server,
@@ -3680,6 +3699,7 @@ mod tests {
                 get_server_pairing,
                 approve_server_pairing,
                 cancel_server_pairing,
+                cancel_setup_connection,
                 remove_server,
             ])
             .build(app_context())
@@ -3745,6 +3765,11 @@ mod tests {
         );
         tauri::test::assert_ipc_response(
             &setup,
+            request("cancel_setup_connection", local),
+            Ok(serde_json::Value::Null),
+        );
+        tauri::test::assert_ipc_response(
+            &setup,
             request("setup_state", local),
             Ok(
                 serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
@@ -3766,6 +3791,7 @@ mod tests {
                 "get_server_pairing",
                 "approve_server_pairing",
                 "cancel_server_pairing",
+                "cancel_setup_connection",
                 "remove_server",
                 "connect_saved_server",
                 "setup_accounts_sign_in",

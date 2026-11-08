@@ -130,66 +130,87 @@ export function BrowserConnect() {
     // Public plain HTTP cannot safely hand off authentication to a native client.
   }
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-6 bg-background p-8 text-center text-foreground">
-      <h1 className="text-3xl font-semibold">Ork</h1>
-      <p className="text-muted-foreground">{window.location.host}</p>
-      {initialization === "required" && (
-        <form className="flex w-full max-w-xs flex-col gap-3" onSubmit={pair}>
-          <label htmlFor="pairing-code">{polish ? "Klucz parowania" : "Pairing key"}</label>
-          <Input
-            id="pairing-code"
-            autoComplete="off"
-            autoCapitalize="characters"
-            spellCheck={false}
-            maxLength={16}
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            disabled={pending}
-          />
-          <Button type="submit" disabled={pending || !normalizeServerPairingCode(code)}>
-            {polish ? "Inicjalizuj" : "Initialize"}
-          </Button>
-          {awaitingApproval && (
-            <p role="status">
-              {polish ? "Potwierdź serwer w aplikacji Ork." : "Confirm the server in Ork."}
-            </p>
-          )}
-          {error && (
-            <p role="alert">
+    <main className="flex min-h-full items-center justify-center bg-background px-6 py-12 text-foreground">
+      <div className="flex w-full max-w-sm flex-col items-center gap-6 text-center">
+        <div className="flex flex-col items-center gap-2">
+          <h1 className="text-3xl font-semibold">Ork</h1>
+          <p className="break-all text-sm text-muted-foreground">{window.location.host}</p>
+        </div>
+        {initialization === "complete" && (
+          <div className="flex flex-col gap-2">
+            <h2 className="text-lg font-medium">
+              {polish ? "Serwer jest gotowy" : "Your server is ready"}
+            </h2>
+            <p className="text-sm leading-6 text-muted-foreground">
               {polish
-                ? "Nie udało się zainicjalizować. Sprawdź klucz i spróbuj ponownie."
-                : "Could not initialize. Check the key and try again."}
+                ? "Otwórz aplikację Ork, aby połączyć się z tym serwerem i pracować ze swoimi botami."
+                : "Open the Ork app to connect to this server and work with your bots."}
             </p>
-          )}
-        </form>
-      )}
-      {link ? (
-        <Button nativeButton={false} role="link" render={<a href={link} />}>
-          {polish ? "Otwórz w Orku" : "Open in Ork"}
-        </Button>
-      ) : (
-        <p role="alert">
-          {polish ? "Publiczny serwer wymaga HTTPS." : "Public servers require HTTPS."}
-        </p>
-      )}
-      {initialization === "unavailable" && (
-        <Button
-          onClick={() => {
-            setInitialization("loading");
-            setCheckAttempt((value) => value + 1);
-          }}
-        >
-          {polish ? "Spróbuj ponownie" : "Retry"}
-        </Button>
-      )}
-      {initialization === "required" && (
-        <a
-          className="text-sm text-muted-foreground underline underline-offset-4"
-          href="https://ork.run"
-        >
-          {polish ? "Pobierz Orka" : "Get Ork"}
-        </a>
-      )}
+          </div>
+        )}
+        {initialization === "required" && (
+          <form className="flex w-full max-w-xs flex-col gap-3" onSubmit={pair}>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {polish
+                ? "Utwórz klucz parowania w aplikacji Ork, aby skonfigurować ten serwer."
+                : "Create a pairing key in the Ork app to set up this server."}
+            </p>
+            <label htmlFor="pairing-code">{polish ? "Klucz parowania" : "Pairing key"}</label>
+            <Input
+              id="pairing-code"
+              autoComplete="off"
+              autoCapitalize="characters"
+              spellCheck={false}
+              maxLength={16}
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              disabled={pending}
+            />
+            <Button type="submit" disabled={pending || !normalizeServerPairingCode(code)}>
+              {polish ? "Inicjalizuj" : "Initialize"}
+            </Button>
+            {awaitingApproval && (
+              <p role="status">
+                {polish ? "Potwierdź serwer w aplikacji Ork." : "Confirm the server in Ork."}
+              </p>
+            )}
+            {error && (
+              <p role="alert">
+                {polish
+                  ? "Nie udało się zainicjalizować. Sprawdź klucz i spróbuj ponownie."
+                  : "Could not initialize. Check the key and try again."}
+              </p>
+            )}
+          </form>
+        )}
+        {link ? (
+          <Button nativeButton={false} role="link" render={<a href={link} />}>
+            {polish ? "Otwórz w Orku" : "Open in Ork"}
+          </Button>
+        ) : (
+          <p role="alert">
+            {polish ? "Publiczny serwer wymaga HTTPS." : "Public servers require HTTPS."}
+          </p>
+        )}
+        {initialization === "unavailable" && (
+          <Button
+            onClick={() => {
+              setInitialization("loading");
+              setCheckAttempt((value) => value + 1);
+            }}
+          >
+            {polish ? "Spróbuj ponownie" : "Retry"}
+          </Button>
+        )}
+        {(initialization === "required" || initialization === "complete") && (
+          <a
+            className="text-sm text-muted-foreground underline underline-offset-4"
+            href="https://ork.run/download/"
+          >
+            {polish ? "Nie masz aplikacji? Pobierz Orka" : "Need the app? Download Ork"}
+          </a>
+        )}
+      </div>
     </main>
   );
 }
