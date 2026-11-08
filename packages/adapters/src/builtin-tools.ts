@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved; decision-card changes are Ork additions.
+// Inherited Apache-2.0 material is preserved; decision-card and cross-chat routine guidance changes are Ork additions.
 
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
@@ -1286,13 +1286,13 @@ export const builtinAgentTools: ConnectorTool[] = [
   },
   {
     name: "schedule_list",
-    description: "List this bot's active and inactive schedules (routines).",
+    description: "List all bot schedules; inThisChat marks this chat.",
     inputSchema: { type: "object", properties: {} },
   },
   {
     name: "schedule_update",
     description:
-      "Edit one of this bot's schedules by routineId instead of cancelling and recreating it. Send only what changes. Timing fields replace the current timing; startAt alone moves the next run of the current repeat. active false pauses it. It cannot change a watch's interval or timezone; the user can change the interval in the routine's settings on the web.",
+      "Edit one of this bot's schedules by routineId instead of cancelling and recreating it. In groups, edit only this chat's schedules. Send only what changes. Timing fields replace the current timing; startAt alone moves the next run of the current repeat. active false pauses it. It cannot change a watch's interval or timezone; the user can change the interval in the routine's settings on the web.",
     inputSchema: {
       type: "object",
       properties: {
@@ -1312,7 +1312,8 @@ export const builtinAgentTools: ConnectorTool[] = [
   },
   {
     name: "schedule_cancel",
-    description: "Cancel a schedule by routineId or exact name.",
+    description:
+      "Cancel a schedule by routineId or exact name. In groups, cancel only this chat's schedules.",
     inputSchema: {
       type: "object",
       properties: {
