@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved; attachment-label and replay-boundary regressions are Ork additions.
 
+import type { MessagingInboundAttachment } from "@orkbot/adapter-kit";
 import { ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingInboundDeps } from "./messaging-inbound.js";
@@ -427,6 +428,49 @@ describe("createMessagingInboundHandler DM routing", () => {
     });
     expect(deps.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
+    );
+  });
+
+  it("delivers an image-only DM whose authenticated type is discovered during download", async () => {
+    const storeAttachment = vi.fn(
+      async ({ attachment }: { attachment: MessagingInboundAttachment }) => {
+        const downloaded = await attachment.fetch();
+        if (downloaded instanceof Uint8Array) throw new Error("expected download metadata");
+        return {
+          id: "artifact-downloaded",
+          name: attachment.name,
+          mimeType: downloaded.mimeType,
+          size: downloaded.bytes.length,
+        };
+      },
+    );
+    const deps = createDeps({ storeAttachment });
+    const fetch = vi.fn(async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }));
+    await createMessagingInboundHandler(deps)({
+      ...dmEvent,
+      content: "",
+      attachments: [{ name: "image-1", mimeType: "", fetch }],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(storeAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: "ws-1",
+        userId: "user-1",
+        botId: "bot-1",
+        clientNonce: `messaging-attachment:${dmEvent.provider}:${dmEvent.handle}:0`,
+      }),
+    );
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          {
+            kind: "image",
+            artifactId: "artifact-downloaded",
+            name: "image-1",
+            mimeType: "image/png",
+          },
+        ],
+      }),
     );
   });
 

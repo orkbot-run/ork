@@ -996,7 +996,8 @@ export interface MessagingInboundAttachment {
   mimeType: string;
   /** Size the platform reported, when known. */
   size?: number;
-  fetch: () => Promise<Uint8Array>;
+  /** Metadata returned with the bytes is authoritative when the type is only known after download. */
+  fetch: () => Promise<Uint8Array | { bytes: Uint8Array; mimeType: string }>;
 }
 
 /** Provider-neutral inbound team/external room message for TeamChatBridge. */

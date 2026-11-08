@@ -118,6 +118,36 @@ describePostgres("artifact upload nonce (PostgreSQL)", () => {
     await upload("send-3:0", { botId });
     await expect(upload("send-3:0", { botId: otherBotId })).rejects.toBeInstanceOf(IsolationError);
   });
+  it("persists download MIME and replays an image without metadata resolution or resource access", async () => {
+    const nonce = "inbound-image:0";
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const fetch = vi.fn(async () => ({ bytes, mimeType: "image/png" }));
+    const deliver = () =>
+      runAsTenant(actor, () =>
+        storeInboundAttachment({ prisma, artifacts }, actor, {
+          botId,
+          clientNonce: nonce,
+          attachment: { name: "image-1", mimeType: "", fetch },
+        }),
+      );
+    const first = await deliver();
+    expect(first).toMatchObject({
+      name: "image-1",
+      mimeType: "image/png",
+      size: bytes.length,
+      bytes,
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    fetch.mockRejectedValue(new Error("resource no longer exists"));
+    const replayed = await deliver();
+    expect(replayed.id).toBe(first.id);
+    expect(replayed).not.toHaveProperty("bytes");
+    expect(fetch).toHaveBeenCalledOnce();
+    const row = await system.artifact.findUniqueOrThrow({ where: { id: first.id } });
+    expect(row).toMatchObject({ userId, spaceId, botId, name: "image-1", mimeType: "image/png" });
+    expect(await system.artifact.count({ where: { userId, spaceId, clientNonce: nonce } })).toBe(1);
+  });
+
   it("reuses an inbound artifact before expired deadline or changed metadata and rejects retarget before fetch", async () => {
     const nonce = "inbound-expired:0";
     const stored = await upload(nonce, { botId });

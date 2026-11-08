@@ -462,6 +462,51 @@ describe("storeInboundAttachment", () => {
     return { put, store, findFirst };
   }
 
+  it("uses validated download MIME for these bytes instead of filename inference", async () => {
+    const { put, store } = setup();
+    await expect(
+      store({
+        name: "misleading.jpg",
+        mimeType: "",
+        fetch: async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }),
+      }),
+    ).rejects.toBe(reachedStorage);
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({ mimeType: "image/png" }),
+      expect.anything(),
+    );
+  });
+
+  it.each(["", "application/x-msdownload"])(
+    "never stores unknown or unsupported downloaded MIME %s",
+    async (mimeType) => {
+      const { put, store } = setup();
+      await expect(
+        store({
+          name: "valid.png",
+          mimeType: "image/png",
+          fetch: async () => ({ bytes: new Uint8Array([1]), mimeType }),
+        }),
+      ).rejects.toThrow("Unsupported attachment type");
+      expect(put).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not authorize missing MIME from an unannotated download or defer a known invalid type", async () => {
+    const { put, store } = setup();
+    const fetch = vi.fn(async () => new Uint8Array([1]));
+    await expect(store({ name: "image-1", mimeType: "", fetch })).rejects.toThrow(
+      "Unsupported attachment type",
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+    fetch.mockClear();
+    await expect(
+      store({ name: "image-1", mimeType: "application/x-msdownload", fetch }),
+    ).rejects.toThrow("Unsupported attachment type");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it("bounds a stalled download and does not store its late result", async () => {
     vi.useFakeTimers();
     try {

@@ -1,7 +1,21 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 messaging is preserved; bounded inbound image resources are Ork additions.
+
 import { createHash, timingSafeEqual } from "node:crypto";
 import type * as LarkSdk from "@larksuiteoapi/node-sdk";
-import type { Adapter, AdapterPostableMessage, ChatInstance, WebhookOptions } from "chat";
+import { ATTACHMENT_COUNT_CEILING } from "@orkbot/contracts";
+import type {
+  Adapter,
+  AdapterPostableMessage,
+  Attachment,
+  ChatInstance,
+  WebhookOptions,
+} from "chat";
 import { Message, parseMarkdown } from "chat";
+import { withAttachmentMimeType } from "../chat-sdk-attachment.js";
+import { fetchImageResource, imageResourceKey } from "./image-resource.js";
 import type { LarkAdapterConfig } from "./lazy-adapter.js";
 import { LarkAdapterBase } from "./lazy-adapter.js";
 import type { LarkTextPart } from "./text-parts.js";
@@ -156,7 +170,11 @@ export class LarkAdapter extends LarkAdapterBase implements Adapter {
     const event = raw as LarkMessageEvent;
     const msg = event.message;
     const id = event.sender.sender_id?.open_id ?? "";
-    const { text, parts } = inboundText(msg.content, msg.message_type, msg.mentions ?? []);
+    const { text, parts, imageKeys } = inboundText(
+      msg.content,
+      msg.message_type,
+      msg.mentions ?? [],
+    );
     const formatted = parseMarkdown(text);
     if (parts) setLarkTextParts(formatted, parts);
     const name = this.users.get(id) ?? id;
@@ -176,7 +194,19 @@ export class LarkAdapter extends LarkAdapterBase implements Adapter {
         isBot: event.sender.sender_type === "bot",
         isMe: id === this.botId,
       },
-      attachments: [],
+      attachments: imageResourceKey(msg.message_id)
+        ? imageKeys.map((key, index): Attachment => {
+            const messageId = msg.message_id;
+            return {
+              name: `image-${index + 1}`,
+              type: "image",
+              fetchData: async () => {
+                const downloaded = await fetchImageResource(this.sdk, this.config, messageId, key);
+                return withAttachmentMimeType(downloaded.bytes, downloaded.mimeType);
+              },
+            };
+          })
+        : [],
       isMention:
         msg.chat_type === "p2p" ||
         (msg.mentions?.some((mention) => mention.id.open_id === this.botId) ?? false),
@@ -269,15 +299,20 @@ function inboundText(
   content: string,
   type: string,
   mentions: NonNullable<LarkMessageEvent["message"]["mentions"]>,
-): { text: string; parts?: LarkTextPart[] } {
+): { text: string; parts?: LarkTextPart[]; imageKeys: string[] } {
+  const imageKeys: string[] = [];
   const replaceMentions = (value: string) => {
     for (const mention of mentions) value = value.replaceAll(mention.key, `@${mention.name}`);
     return value;
   };
-  const plain = (value: string) => ({ text: replaceMentions(value) });
-  if (type !== "text" && type !== "post") return plain("");
+  const plain = (value: string) => ({ text: replaceMentions(value), imageKeys });
+  if (type !== "text" && type !== "post" && type !== "image") return plain("");
   try {
     const parsed = JSON.parse(content);
+    if (type === "image") {
+      if (imageResourceKey(parsed?.image_key)) imageKeys.push(parsed.image_key);
+      return plain("");
+    }
     if (typeof parsed.text === "string") return plain(parsed.text);
     const posts = parsed.post ?? parsed;
     const post = Array.isArray(posts.content)
@@ -286,8 +321,25 @@ function inboundText(
     if (!post || typeof post !== "object") return plain("");
     const rich = post as {
       title?: string;
-      content?: { tag: string; text?: string; href?: string; user_name?: string }[][];
+      content?: {
+        tag: string;
+        text?: string;
+        href?: string;
+        user_name?: string;
+        image_key?: unknown;
+      }[][];
     };
+    for (const row of rich.content ?? []) {
+      for (const item of row) {
+        if (
+          imageKeys.length < ATTACHMENT_COUNT_CEILING &&
+          item.tag === "img" &&
+          imageResourceKey(item.image_key) &&
+          !imageKeys.includes(item.image_key)
+        )
+          imageKeys.push(item.image_key);
+      }
+    }
     const itemText = (item: NonNullable<typeof rich.content>[number][number]) =>
       item.tag === "a"
         ? `[${item.text ?? ""}](${item.href ?? ""})`
@@ -317,7 +369,7 @@ function inboundText(
         row.forEach(append);
       });
       for (const part of parts) if (!part.literal) part.text = replaceMentions(part.text);
-      return { text: parts.map((part) => part.text).join(""), parts };
+      return { text: parts.map((part) => part.text).join(""), parts, imageKeys };
     }
     return plain(
       [
@@ -328,7 +380,8 @@ function inboundText(
         .join("\n"),
     );
   } catch {
-    return plain(content);
+    imageKeys.length = 0;
+    return plain(type === "text" ? content : "");
   }
 }
 export async function createLarkAdapter(config: LarkAdapterConfig) {

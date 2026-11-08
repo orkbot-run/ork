@@ -34,6 +34,7 @@ import {
   toPlainText,
   walkAst,
 } from "chat";
+import { attachmentDownload } from "./chat-sdk-attachment.js";
 import { getLarkTextParts } from "./lark/text-parts.js";
 
 /**
@@ -578,7 +579,7 @@ function inboundAttachments(message: Message): MessagingInboundAttachment[] {
         name: attachment.name || attachment.type,
         mimeType: attachment.mimeType ?? "",
         ...(attachment.size !== undefined ? { size: attachment.size } : {}),
-        fetch: async () => new Uint8Array(await fetchData()),
+        fetch: async () => attachmentDownload(await fetchData()),
       },
     ];
   });
