@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -43,8 +44,31 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   expect(diagnostic.run).toContain(
     'tauri:build --verbose --config "$RUNNER_TEMP/linux-webkit.json"',
   );
-  expect(signed.run).toContain('Linux) bundles="appimage"; tauri_options+=(--verbose)');
-  expect(signed.run).toContain('tauri:build "${tauri_options[@]}" --bundles');
+  const command = signed.run.slice(
+    signed.run.indexOf('case "$RUNNER_OS" in'),
+    signed.run.indexOf(
+      'if [[ "$RUNNER_OS" == macOS ]]; then\n  node apps/desktop/scripts/macos-distribution.ts verify',
+    ),
+  );
+  expect(command).toContain('Linux) bundles="appimage"');
+  for (const [os, bundle, verbose] of [
+    ["macOS", "app,dmg", false],
+    ["Windows", "nsis", false],
+    ["Linux", "appimage", true],
+  ] as const) {
+    const result = execFileSync(
+      "bash",
+      ["-c", `set -eu; pnpm() { printf '%s\\n' "$@"; }; ${command}`],
+      {
+        encoding: "utf8",
+        env: { ...process.env, RUNNER_OS: os, RUNNER_TEMP: "/tmp/tauri-workflow-test" },
+      },
+    )
+      .trim()
+      .split("\n");
+    expect(result).toContain(bundle);
+    expect(result.includes("--verbose")).toBe(verbose);
+  }
   const publish = parse(
     readFileSync(path.join(root, ".github/workflows/desktop-tauri-publish.yml"), "utf8"),
   );

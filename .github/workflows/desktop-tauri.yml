@@ -149,13 +149,16 @@ jobs:
             jq -s '.[0] * .[1]' "$RUNNER_TEMP/tauri-release.json" "$RUNNER_TEMP/linux-webkit.json" > "$RUNNER_TEMP/linux-release.json"
             mv "$RUNNER_TEMP/linux-release.json" "$RUNNER_TEMP/tauri-release.json"
           fi
-          tauri_options=()
           case "$RUNNER_OS" in
             macOS) bundles="app,dmg" ;;
             Windows) bundles="nsis" ;;
-            Linux) bundles="appimage"; tauri_options+=(--verbose) ;;
+            Linux) bundles="appimage" ;;
           esac
-          pnpm --filter @orkbot/desktop tauri:build "${tauri_options[@]}" --bundles "$bundles" --config "$RUNNER_TEMP/tauri-release.json"
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            pnpm --filter @orkbot/desktop tauri:build --verbose --bundles "$bundles" --config "$RUNNER_TEMP/tauri-release.json"
+          else
+            pnpm --filter @orkbot/desktop tauri:build --bundles "$bundles" --config "$RUNNER_TEMP/tauri-release.json"
+          fi
           if [[ "$RUNNER_OS" == macOS ]]; then
             node apps/desktop/scripts/macos-distribution.ts verify apps/desktop/src-tauri/target/release/bundle
           fi

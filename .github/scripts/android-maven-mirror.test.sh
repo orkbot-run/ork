@@ -64,9 +64,20 @@ PY
 mkdir -p "$work/cache-test"
 cat > "$work/cache-test/settings.gradle" <<'EOF'
 rootProject.name = 'ork-maven-cache-test'
+include 'child'
 EOF
 cat > "$work/cache-test/build.gradle" <<'EOF'
-repositories { maven { name = 'MavenRepo'; url = uri(System.getenv('ORK_TEST_MAVEN_CENTRAL')) } }
+allprojects {
+  repositories { maven { name = 'MavenRepo'; url = uri(System.getenv('ORK_TEST_MAVEN_CENTRAL')) } }
+}
+configurations { fixture }
+dependencies { fixture('org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.20') { transitive = false } }
+tasks.register('resolveFixture') {
+  doLast { assert configurations.fixture.singleFile.text == System.getenv('ORK_TEST_EXPECTED') }
+}
+EOF
+mkdir -p "$work/cache-test/child"
+cat > "$work/cache-test/child/build.gradle" <<'EOF'
 configurations { fixture }
 dependencies { fixture('org.jetbrains.kotlin:kotlin-compiler-embeddable:2.1.20') { transitive = false } }
 tasks.register('resolveFixture') {
@@ -74,5 +85,5 @@ tasks.register('resolveFixture') {
 }
 EOF
 export ORK_TEST_MAVEN_CENTRAL="$work/central"
-ORK_TEST_EXPECTED=central "$gradle" --no-daemon --offline -p "$work/cache-test" resolveFixture
-ORK_TEST_EXPECTED=mirror "$gradle" --no-daemon --offline -p "$work/cache-test" --init-script "$work/fixture.init.gradle" resolveFixture
+ORK_TEST_EXPECTED=central "$gradle" --no-daemon --offline -p "$work/cache-test" :resolveFixture :child:resolveFixture
+ORK_TEST_EXPECTED=mirror "$gradle" --no-daemon --offline -p "$work/cache-test" --init-script "$work/fixture.init.gradle" :resolveFixture :child:resolveFixture

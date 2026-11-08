@@ -6,7 +6,7 @@ import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 // Route this artifact only to the mirror. A second build without this script
 // retains the original repositories as the fallback.
 def addCentralMirror = { repositories ->
-  repositories.whenObjectAdded { repository ->
+  def inspect = { repository ->
     if (repository instanceof MavenArtifactRepository &&
         repository.url.toString().replaceAll('/+$', '') == 'https://repo.maven.apache.org/maven2' &&
         repositories.findByName('orkMavenCentralMirror') == null) {
@@ -22,6 +22,8 @@ def addCentralMirror = { repositories ->
       }
     }
   }
+  repositories.whenObjectAdded(inspect)
+  repositories.toList().each(inspect)
 }
 
 gradle.beforeSettings { settings ->
