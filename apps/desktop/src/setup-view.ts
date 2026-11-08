@@ -136,11 +136,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element<HTMLButtonElement>("sign-out").disabled = operation === "logout";
     element<HTMLButtonElement>("cancel-sign-in").disabled = operation === "logout";
     element<HTMLButtonElement>("back").disabled =
-      startup.phase === "opening" ||
-      (operation !== null &&
-        operation !== "directory" &&
-        operation !== "pair" &&
-        operation !== "approve");
+      screen !== "local" &&
+      (startup.phase === "opening" ||
+        (operation !== null &&
+          operation !== "directory" &&
+          operation !== "pair" &&
+          operation !== "approve"));
     element("sign-out").hidden = !account;
     element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
     element("browser-hint").hidden = !browserSignIn;
@@ -702,7 +703,28 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (!account) void signIn(true);
   });
   on("sign-in", "click", () => void signIn());
+  function chooseServer() {
+    if (disposed) return;
+    discardPendingServer();
+    generation++;
+    operation = null;
+    startup = { phase: "idle" };
+    show(account ? "servers" : "welcome");
+    if (account)
+      void run(
+        "directory",
+        async (version) => {
+          await transport.invoke("cancel_setup_connection");
+          if (current(version)) await loadServers(version);
+        },
+        "servers",
+      );
+  }
   on("back", "click", () => {
+    if (screen === "local") {
+      chooseServer();
+      return;
+    }
     if (
       !operation ||
       operation === "directory" ||
@@ -875,6 +897,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       }
       cleanups.push(stopStartup);
+      const stopChooseServer = await transport.listen("desktop-change-server", () =>
+        chooseServer(),
+      );
+      if (!current(version)) {
+        stopChooseServer();
+        return;
+      }
+      cleanups.push(stopChooseServer);
       const stopLinks = await transport.listen<string>("desktop-server-link", ({ payload }) => {
         if (!disposed) receivePendingServer(payload);
       });

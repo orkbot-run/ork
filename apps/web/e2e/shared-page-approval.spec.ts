@@ -34,7 +34,9 @@ test("a shared page changes only after approval of its current version and link"
   await send({ pageId, source: source("Approved revision") });
   const allow = page.getByRole("button", { name: "Allow once", exact: true });
   await expect(allow).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Update shared page “Shared plan”?", { exact: true })).toBeVisible();
+  await expect(
+    page.getByTestId("transcript").getByText("Update shared page “Shared plan”?", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Always allow this tool", exact: true }),
   ).toHaveCount(0);

@@ -32,7 +32,7 @@ const keys = createLocalJWKSet({
 });
 const system = <T>(run: () => Promise<T>) => runAsSystem("server claim PostgreSQL test", run);
 
-function broker(claimId = id, nonce = proofNonce) {
+function broker(claimId = id, nonce = proofNonce, organizationId?: string) {
   let challenge = "";
   let approval = false;
   let failReport = false;
@@ -68,6 +68,7 @@ function broker(claimId = id, nonce = proofNonce) {
         jti: grantId,
         iat: now,
         exp,
+        ...(organizationId ? { organization_id: organizationId } : {}),
       })
         .setProtectedHeader({ alg: "RS256", kid: "test" })
         .sign(privateKey);
@@ -118,7 +119,7 @@ describe.skipIf(!enabled)("durable server authorization", () => {
       await prisma!.deploymentSettings.upsert({
         where: { id: "default" },
         create: { id: "default" },
-        update: { nativeAccountsOwnerKey: null },
+        update: { nativeAccountsOwnerKey: null, nativeAccountsOrganizationId: null },
       });
       await prisma!.organization.deleteMany({});
       await prisma!.user.deleteMany({ where: { email: { endsWith: "@example.test" } } });
@@ -127,6 +128,52 @@ describe.skipIf(!enabled)("durable server authorization", () => {
   afterAll(async () => {
     await database?.pool.end();
   });
+
+  it("persists the signed organization and owner together and refuses a second claim", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const service = broker(id, proofNonce, organizationId);
+      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
+      await issueServerClaim(prisma!, options);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      const settings = await prisma!.deploymentSettings.findUniqueOrThrow({
+        where: { id: "default" },
+      });
+      expect(settings.nativeAccountsOwnerKey).toBe(oidcAccountSubject(issuer, "owner"));
+      expect(settings.nativeAccountsOrganizationId).toBe(organizationId);
+      await expect(issueServerClaim(prisma!, options)).rejects.toThrow();
+    }));
+
+  it("refuses to claim an installation that already has an organization binding", async () =>
+    system(async () => {
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOrganizationId: randomUUID(), nativeAccountsOwnerKey: null },
+      });
+      const service = broker();
+      await expect(
+        issueServerClaim(prisma!, { issuer, origin, bootstrapSecret, request: service.request }),
+      ).rejects.toThrow();
+      expect(service.request).not.toHaveBeenCalled();
+      const login = nativeLoginStore(prisma!, { bootstrapSecret });
+      const challenge = await login.issue(origin);
+      await expect(
+        login.consume({
+          origin,
+          challenge: challenge.challenge,
+          bootstrapSecret,
+          identity: {
+            issuer,
+            subject: "another-owner",
+            jwtId: randomUUID(),
+            expiresAt: Math.floor(Date.now() / 1000) + 60,
+            email: "another-owner@example.test",
+            name: "Another owner",
+          },
+        }),
+      ).rejects.toThrow();
+    }));
 
   it("reports a lost owner race and retries the failure after interruption", async () =>
     system(async () => {
@@ -172,6 +219,7 @@ describe.skipIf(!enabled)("durable server authorization", () => {
         id,
         proofNonce,
         status: "pending",
+        organizationBinding: true,
       });
       expect(
         await serverClaimProof(prisma!, id, "z".repeat(43), { origin, bootstrapSecret }),
@@ -190,7 +238,12 @@ describe.skipIf(!enabled)("durable server authorization", () => {
         }),
       );
       expect(publicProof.status).toBe(200);
-      expect(await publicProof.json()).toEqual({ id, proofNonce, status: "pending" });
+      expect(await publicProof.json()).toEqual({
+        id,
+        proofNonce,
+        status: "pending",
+        organizationBinding: true,
+      });
       expect(publicProof.headers.get("set-cookie")).toBeNull();
       const injected = await auth.handler(
         new Request(`${origin}/api/auth/native/claim-proof`, {
@@ -240,6 +293,7 @@ describe.skipIf(!enabled)("durable server authorization", () => {
         proofNonce,
         status: "claimed",
         grantId: service.grantId,
+        organizationBinding: true,
       });
       const claimedProof = await auth.handler(
         new Request(`${origin}/api/auth/native/claim-proof`, {
@@ -253,6 +307,7 @@ describe.skipIf(!enabled)("durable server authorization", () => {
         proofNonce,
         status: "claimed",
         grantId: service.grantId,
+        organizationBinding: true,
       });
       await expect(issueServerClaim(prisma!, options)).rejects.toThrow();
       service.failReport(true);

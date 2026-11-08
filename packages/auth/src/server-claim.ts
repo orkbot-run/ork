@@ -38,6 +38,7 @@ type ClaimProof = {
   proofNonce: string;
   status: "pending" | "claimed";
   grantId?: string;
+  organizationBinding: true;
 };
 
 function parse(value: string): Saved | null {
@@ -109,13 +110,13 @@ async function ownerAvailable(tx: PrismaClient, lock = false): Promise<boolean> 
         where: { id: "default" },
         create: { id: "default" },
         update: {},
-        select: { nativeAccountsOwnerKey: true },
+        select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
       })
     : await tx.deploymentSettings.findUnique({
         where: { id: "default" },
-        select: { nativeAccountsOwnerKey: true },
+        select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
       });
-  if (settings?.nativeAccountsOwnerKey) return false;
+  if (settings?.nativeAccountsOwnerKey || settings?.nativeAccountsOrganizationId) return false;
   return (
     (await tx.user.count({
       where: {
@@ -258,9 +259,9 @@ export async function serverClaimProof(
   if (saved.state === "pending") {
     if (saved.expiresAt <= Math.floor(Date.now() / 1000) || !(await ownerAvailable(prisma)))
       return null;
-    return { id, proofNonce, status: "pending" };
+    return { id, proofNonce, status: "pending", organizationBinding: true };
   }
-  return { id, proofNonce, status: "claimed", grantId: saved.grantId };
+  return { id, proofNonce, status: "claimed", grantId: saved.grantId, organizationBinding: true };
 }
 
 async function post(
@@ -311,10 +312,15 @@ export async function verifyServerClaimGrant(
   });
   if (
     Object.keys(payload).some(
-      (key) => !["iss", "aud", "sub", "nonce", "jti", "iat", "exp", "purpose"].includes(key),
+      (key) =>
+        !["iss", "aud", "sub", "nonce", "jti", "iat", "exp", "purpose", "organization_id"].includes(
+          key,
+        ),
     ) ||
     payload.aud !== options.origin ||
     payload.purpose !== PURPOSE ||
+    (payload.organization_id !== undefined &&
+      (typeof payload.organization_id !== "string" || !UUID.test(payload.organization_id))) ||
     payload.nonce !== options.challenge ||
     typeof payload.sub !== "string" ||
     !payload.sub.trim() ||
@@ -424,8 +430,12 @@ export async function processServerClaim(
         return;
       }
       const bound = await tx.deploymentSettings.updateMany({
-        where: { id: "default", nativeAccountsOwnerKey: null },
-        data: { nativeAccountsOwnerKey: owner },
+        where: { id: "default", nativeAccountsOwnerKey: null, nativeAccountsOrganizationId: null },
+        data: {
+          nativeAccountsOwnerKey: owner,
+          nativeAccountsOrganizationId:
+            typeof payload.organization_id === "string" ? payload.organization_id : null,
+        },
       });
       if (bound.count !== 1) throw new Error("Server owner already exists.");
       const admitted = await tx.user.count({

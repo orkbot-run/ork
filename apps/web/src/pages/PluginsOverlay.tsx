@@ -343,10 +343,13 @@ export function PluginsOverlay({
       ...mcpOptions,
       queryFn: () => origin.client.mcp.servers.list(),
     }).catch(() => undefined);
-    void queryClient.invalidateQueries({
-      queryKey: queries.mcp.assignments.key(),
-      refetchType: "none",
-    });
+    if (activeBotId) {
+      const botId = activeBotId;
+      void fetchFresh(queryClient, {
+        ...queries.mcp.assignments.list.queryOptions({ input: { botId } }),
+        queryFn: () => origin.client.mcp.assignments.list({ botId }),
+      }).catch(() => undefined);
+    }
     await fetchFresh(queryClient, {
       queryKey: integrationsOptions.queryKey,
       queryFn: () => loadIntegrations(origin.client),
