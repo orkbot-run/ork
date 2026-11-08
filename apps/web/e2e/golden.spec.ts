@@ -393,7 +393,14 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
 
   const composer = page.locator('textarea[name="chat-message"]');
   await composer.fill("spawn a bot named Scout to research venues");
+  const spawnSend = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/rpc/threads/send" &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await page.keyboard.press("Enter");
+  expect((await spawnSend).ok()).toBe(true);
   await expect(sidebarBotButton(page, /Scout/)).toBeVisible({
     timeout: 30_000,
   });
@@ -407,7 +414,14 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     .getByRole("button", { name: /^Chief/ })
     .click();
   await composer.fill("keep working until I stop you");
+  const firstSend = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/rpc/threads/send" &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await page.keyboard.press("Enter");
+  expect((await firstSend).ok()).toBe(true);
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible({
     timeout: 30_000,
   });
@@ -424,7 +438,14 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
   await composer.press("Tab");
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeFocused();
+  const steeringSend = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === "/rpc/threads/send" &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
   await page.keyboard.press("Enter");
+  expect((await steeringSend).ok()).toBe(true);
   await expect(
     page.getByTestId("transcript").getByText("Use the newer report and keep the answer short."),
   ).toBeVisible();
