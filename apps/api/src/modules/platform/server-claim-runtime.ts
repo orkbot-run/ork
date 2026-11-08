@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 export function serverClaimInstructions(code: string): string {
   if (!/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/.test(code))
     throw new Error("Invalid server authorization code.");
-  return `Open this link to authorize the server:\nhttps://accounts.ork.run/account/connect-server#code=${code}\n\nOr enter this code at https://accounts.ork.run/account/connect-server:\n${code}\n\nThe link and code expire in five minutes.\n`;
+  return `Open this link to authorize the server:\nhttps://accounts.orkbot.run/account/connect-server#code=${code}\n\nOr enter this code at https://accounts.orkbot.run/account/connect-server:\n${code}\n\nThe link and code expire in five minutes.\n`;
 }
 
 /** The Compose self-host API stores its role environment in a private mounted file. */
