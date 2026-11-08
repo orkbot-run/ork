@@ -397,10 +397,10 @@ def pin_images(base):
     write_environment(values)
 
 
-def initialization_link(url):
+def initialization_required(url):
     env = environment()
     if env.get("AUTH_ACCOUNTS_ENABLED") != "true" or env.get("OIDC_CLIENT_ID"):
-        return
+        return False
     secret = env.get("ORKBOT_BOOTSTRAP_SECRET", "")
     if not re.fullmatch(r"[A-Za-z0-9_-]{43}", secret):
         raise SetupError("The initialization secret is unavailable; keep the existing configuration.")
@@ -412,9 +412,9 @@ def initialization_link(url):
         if not isinstance(challenge, dict) or type(challenge.get("bootstrapRequired")) is not bool:
             raise SetupError("Could not determine whether server authorization is required.")
         if not challenge["bootstrapRequired"]:
-            return
-        link = "orkbot://initialize?" + urllib.parse.urlencode({"server": url, "secret": secret})
-        print("Open this link in Ork to authorize the server:\n" + link)
+            return False
+        return True
+    return False
 
 
 def main():
@@ -445,8 +445,8 @@ def main():
         configure(url)
     elif operation == "ready":
         ready(url)
-    elif operation == "initialization-link":
-        initialization_link(url)
+    elif operation == "initialization-required":
+        print("true" if initialization_required(url) else "false")
     else:
         raise SetupError("Unknown server installer operation.")
 

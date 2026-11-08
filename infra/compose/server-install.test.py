@@ -181,24 +181,24 @@ class InstallerTests(unittest.TestCase):
         with self.assertRaises(installer.SetupError):
             installer.configured(URL, {**self.env, "AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "z" * 43})
 
-    def test_initialization_link_is_only_shown_before_claim(self):
+    def test_initialization_is_required_only_before_claim(self):
         env = {**self.env, "AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "z" * 43}
         for required in (True, False):
-            with self.subTest(required=required), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": required}, {"bootstrapRequired": True}]), patch("sys.stdout", new_callable=io.StringIO) as output:
-                installer.initialization_link(URL)
-            text = output.getvalue()
-            self.assertEqual("orkbot://initialize?" in text, required)
-            if required:
-                link = text.splitlines()[-1]
-                query = urllib.parse.parse_qs(urllib.parse.urlsplit(link).query)
-                self.assertEqual(query, {"server": [URL], "secret": ["z" * 43]})
-        with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": True}, {"bootstrapRequired": False}]), patch("sys.stdout", new_callable=io.StringIO) as output:
-            installer.initialization_link(URL)
-        self.assertEqual(output.getvalue(), "")
+            with self.subTest(required=required), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": required}, {"bootstrapRequired": True}]):
+                self.assertEqual(installer.initialization_required(URL), required)
+        with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": True}, {"bootstrapRequired": False}]):
+            self.assertFalse(installer.initialization_required(URL))
         with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": True}, {"bootstrapRequired": "false"}]), self.assertRaises(installer.SetupError):
-            installer.initialization_link(URL)
+            installer.initialization_required(URL)
         with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", return_value={"required": "true"}), self.assertRaises(installer.SetupError):
-            installer.initialization_link(URL)
+            installer.initialization_required(URL)
+
+    def test_legacy_oidc_does_not_issue_a_native_claim(self):
+        for enabled in ("true", "false"):
+            env = {**self.env, "AUTH_ACCOUNTS_ENABLED": enabled, "OIDC_CLIENT_ID": "legacy-client"}
+            with self.subTest(enabled=enabled), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json") as request:
+                self.assertFalse(installer.initialization_required(URL))
+                request.assert_not_called()
 
     def test_new_client_redeems_once_and_saves_literal_values(self):
         with patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": CODE}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json", return_value=self.result(clientSecret='dollar$double"quote')) as request:

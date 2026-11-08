@@ -201,13 +201,9 @@ server_main() {
   server_progress ready
   echo "Ork is ready at ${server_url}"
   local initialization
-  initialization=$(timeout --foreground 60 python3 "$helper" initialization-link "$server_url") || fail "could not determine the server initialization status."
-  if [[ -n "$initialization" ]]; then
-    printf '%s\n' "$initialization"
-  fi
-  if [[ "$auth_mode" == native && -n "$initialization" ]]; then
-    echo 'If you cannot open the authorization link, generate a code on this server with:'
-    if [[ "$ORKBOT_INSTALL_DOCKER_SUDO" == 1 ]]; then printf 'sudo '; fi
-    echo 'docker compose -f docker-compose.images.yml exec -T api node dist/cli/server-claim.js'
+  initialization=$(timeout --foreground 60 python3 "$helper" initialization-required "$server_url") || fail "could not determine the server initialization status."
+  if [[ "$auth_mode" == native && "$initialization" == true ]]; then
+    timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/server-claim.js || fail "could not generate server authorization; rerun this installer to try again."
+    echo 'If the link or code expires, rerun this installer to get a new one.'
   fi
 }

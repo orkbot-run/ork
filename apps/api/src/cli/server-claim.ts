@@ -4,7 +4,10 @@
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
 import { issueServerClaim } from "@orkbot/auth";
 import { createDb, runAsSystem } from "@orkbot/db";
-import { loadServerClaimRuntime } from "#modules/platform/server-claim-runtime";
+import {
+  loadServerClaimRuntime,
+  serverClaimInstructions,
+} from "#modules/platform/server-claim-runtime";
 
 await loadServerClaimRuntime(process.env);
 await unwrapEnvFromKeyManager();
@@ -28,9 +31,7 @@ try {
   const claim = await runAsSystem("local server authorization", () =>
     issueServerClaim(prisma, { origin, issuer: "https://api.orkbot.run", bootstrapSecret: secret }),
   );
-  process.stdout.write(
-    `Open https://accounts.ork.run/account/connect-server and enter this code:\n${claim.code}\n`,
-  );
+  process.stdout.write(serverClaimInstructions(claim.code));
 } finally {
   await prisma.$disconnect();
   await pool.end();

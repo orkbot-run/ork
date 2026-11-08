@@ -6,13 +6,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterAll, expect, it } from "vitest";
-import { loadServerClaimRuntime } from "./server-claim-runtime.js";
+import { loadServerClaimRuntime, serverClaimInstructions } from "./server-claim-runtime.js";
 
 const root = mkdtempSync(path.join(tmpdir(), "ork-claim-runtime-"));
 const loader = pathToFileURL(
   path.resolve(import.meta.dirname, "../../../../../infra/compose/selfhost-runtime.mjs"),
 ).href;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+it("offers the same one-time code as an Accounts link and manual entry", () => {
+  const instructions = serverClaimInstructions("23456789AB");
+  const lines = instructions.trim().split("\n");
+  const link = new URL(lines[1]!);
+  expect(link.origin + link.pathname).toBe("https://accounts.ork.run/account/connect-server");
+  expect(link.search).toBe("");
+  expect(link.hash).toBe("#code=23456789AB");
+  expect(lines.at(-3)).toBe("23456789AB");
+  expect(() => serverClaimInstructions("invalid")).toThrow();
+});
 
 it("loads a private Compose role file using the production runtime loader", async () => {
   const file = path.join(root, "environment.json");

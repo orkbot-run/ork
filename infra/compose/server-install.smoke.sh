@@ -51,6 +51,11 @@ case " $* " in
     "$STUB_PYTHON" -c 'from pathlib import Path; print("\n".join(line.split("=",1)[0]+"="+line.split("=",1)[1].strip("\047\042") for line in Path(".env").read_text().splitlines() if "=" in line and not line.startswith("#")))'
     exit 0 ;;
   *' pull '*) echo pull >> "$STUB_EVENTS"; exit "${STUB_PULL_FAIL:-0}" ;;
+  *' exec -T api node dist/cli/server-claim.js '*)
+    echo claim >> "$STUB_EVENTS"
+    [[ "${STUB_CLAIM_FAIL:-0}" == 0 ]] || exit 1
+    printf 'Open this link to authorize the server:\nhttps://accounts.ork.run/account/connect-server#code=23456789AB\n\nOr enter this code at https://accounts.ork.run/account/connect-server:\n23456789AB\n'
+    exit 0 ;;
   *' up '*)
     echo up >> "$STUB_EVENTS"
     if [[ "${STUB_UP_FAIL:-0}" != 0 ]]; then
@@ -140,20 +145,22 @@ run_case fresh || { cat "$tmp/fresh/output"; exit 1; }
 [[ "$(cksum "$tmp/fresh/.env")" == "$checksum" ]]
 STUB_NATIVE_ACCOUNTS=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
-grep -q '^orkbot://initialize?' "$tmp/native/output"
-grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
+grep -q '^https://accounts.ork.run/account/connect-server#code=23456789AB$' "$tmp/native/output"
+grep -q '^23456789AB$' "$tmp/native/output"
+grep -q '^claim$' "$tmp/native/events"
+! grep -q 'orkbot://initialize?' "$tmp/native/output"
 grep -q '^AUTH_ACCOUNTS_ENABLED=' "$tmp/native/.env"
 grep -q '^ORKBOT_BOOTSTRAP_SECRET=' "$tmp/native/.env"
 ! grep -q '^redeem$' "$tmp/native/events"
 native_before=$(cksum "$tmp/native/.env")
 STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
-! grep -q 'orkbot://initialize?' "$tmp/native/output"
+! grep -q '^claim$' "$tmp/native/events"
 ! grep -q '^redeem$' "$tmp/native/events"
 [[ "$(cksum "$tmp/native/.env")" == "$native_before" ]]
-! grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
 STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_CLAIMED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
-! grep -q 'orkbot://initialize?' "$tmp/native/output"
-! grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
+! grep -q '^claim$' "$tmp/native/events"
+if STUB_NATIVE_ACCOUNTS=1 STUB_CLAIM_FAIL=1 run_case claim-fails; then echo 'claim failure accepted' >&2; exit 1; fi
+grep -q 'could not generate server authorization' "$tmp/claim-fails/output"
 if STUB_PULL_FAIL=1 run_case pull-fails --code "$code"; then echo 'pull failure accepted' >&2; exit 1; fi
 grep -q '^redeem$' "$tmp/pull-fails/events"
 grep -q '^progress-failed$' "$tmp/pull-fails/events"
