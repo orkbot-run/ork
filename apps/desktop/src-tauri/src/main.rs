@@ -25,6 +25,7 @@ mod revocation_storage;
 mod revocations;
 mod server;
 mod server_directory;
+mod server_discovery;
 mod server_link;
 mod server_login;
 mod server_pairing;
@@ -758,6 +759,118 @@ fn native_text(app: &tauri::AppHandle, text: &str) -> String {
         .lock()
         .map(|locale| locale.text(text))
         .unwrap_or_else(|_| text.into())
+}
+
+fn discovery_session_current(
+    state: &DesktopState,
+    generation: u64,
+    authorization: &accounts::Authorization,
+) -> bool {
+    state.accounts.is_current(authorization)
+        && state
+            .accounts_started
+            .lock()
+            .ok()
+            .is_some_and(|gate| gate.started && gate.generation == generation)
+}
+
+/// Poll the account directory without exposing the Accounts bearer to product renderers.
+fn start_server_discovery(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut discovery = server_discovery::Discovery::default();
+        let directory = match server_directory::Directory::new() {
+            Ok(directory) => directory,
+            Err(_) => return,
+        };
+        let mut delay = 2;
+        loop {
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+            delay = 30;
+            let state = app.state::<DesktopState>();
+            let generation = match state.accounts_started.lock() {
+                Ok(gate) if gate.started => gate.generation,
+                _ => {
+                    discovery.reset();
+                    delay = 2;
+                    continue;
+                }
+            };
+            let Some(document) = active_document(&app) else {
+                if !discovery.has_baseline() {
+                    delay = 2;
+                }
+                continue;
+            };
+            if !app
+                .get_webview_window(&document.label)
+                .is_some_and(|window| window.is_visible().unwrap_or(false))
+                || app
+                    .get_webview_window("setup")
+                    .is_some_and(|window| window.is_visible().unwrap_or(false))
+            {
+                if !discovery.has_baseline() {
+                    delay = 2;
+                }
+                continue;
+            }
+            let Ok(authorization) = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await
+            else {
+                continue;
+            };
+            if !discovery_session_current(&state, generation, &authorization) {
+                continue;
+            }
+            if !current_server_account(&app, &state, &document, &authorization) {
+                continue;
+            }
+            let Ok(device) = server_directory::device_id(&state.directory) else {
+                continue;
+            };
+            let Ok(bearer) = authorization.directory_bearer() else {
+                continue;
+            };
+            let Ok(servers) = directory.list(bearer, &device).await else {
+                continue;
+            };
+            if !discovery_session_current(&state, generation, &authorization)
+                || !current_server_account(&app, &state, &document, &authorization)
+                || !app
+                    .get_webview_window(&document.label)
+                    .is_some_and(|window| window.is_visible().unwrap_or(false))
+                || app
+                    .get_webview_window("setup")
+                    .is_some_and(|window| window.is_visible().unwrap_or(false))
+                || !discovery.observe(
+                    authorization.account.identity(),
+                    generation,
+                    &servers,
+                    &document.origin.origin().ascii_serialization(),
+                )
+            {
+                continue;
+            }
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            app.dialog()
+                .message(native_text(&app, "New server available"))
+                .title("Ork")
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    native_text(&app, "Open servers"),
+                    native_text(&app, "Later"),
+                ))
+                .show(move |open| {
+                    let _ = sender.send(open);
+                });
+            if receiver.await.unwrap_or(false)
+                && discovery_session_current(&state, generation, &authorization)
+                && current_server_account(&app, &state, &document, &authorization)
+            {
+                menu_event(&app, menu::MenuAction::ChangeServer);
+            }
+        }
+    });
 }
 
 async fn request_computer_access(
@@ -2863,6 +2976,7 @@ fn main() {
             app.state::<DesktopState>().accounts.retry_revocations();
             app.manage(updates::UpdateCheck::default());
             updates::start_background(app.handle().clone());
+            start_server_discovery(app.handle().clone());
             refresh_menu(app.handle())?;
             setup_window(app.handle(), false)?;
             #[cfg(any(windows, target_os = "linux"))]

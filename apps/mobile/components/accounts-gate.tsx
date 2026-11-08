@@ -1,12 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { SERVER_INSTALL_COMMAND } from "@orkbot/contracts";
 import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ActivityIndicator, AppState, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import type { AccountServer } from "../lib/account-servers";
 import { accountServers, addAccountServer } from "../lib/account-servers";
@@ -55,6 +64,7 @@ import { NativeActionButton } from "./native-action-button";
 
 const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
+const DIRECTORY_REFRESH_MS = 15_000;
 let ownershipChanges = Promise.resolve();
 const welcomeOrk = welcomeAccountsOrk();
 
@@ -165,11 +175,18 @@ export function AccountsGate({
   const [attempt, setAttempt] = useState(0);
   const [readyAt, setReadyAt] = useState({ version: -1, attempt: -1 });
   const owner = useRef("");
+  const directoryOwner = useRef("");
+  const knownServers = useRef(new Set<string>());
+  const discoveryAlert = useRef(false);
+  const translate = useRef(t);
+  translate.current = t;
   const generation = useRef(0);
   const pairingRef = useRef<PairingWait | null>(null);
   const pairingRequest = useRef<AbortController | null>(null);
   const [pairing, setPairing] = useState<PairingWait | null>(null);
-  const [pairingForeground, setPairingForeground] = useState(true);
+  const [pairingForeground, setPairingForeground] = useState(
+    AppState.currentState == null || AppState.currentState === "active",
+  );
 
   function discardPairing(update = true) {
     const creating = pairingRequest.current;
@@ -204,6 +221,8 @@ export function AccountsGate({
       if (!identity) {
         if (!(await adoptAccount(null, () => generation.current === current))) return;
         owner.current = "";
+        directoryOwner.current = "";
+        knownServers.current.clear();
         setOrkAvatar(welcomeOrk);
         setServers([]);
         setDraft("");
@@ -220,6 +239,10 @@ export function AccountsGate({
       const directoryServer = currentApiBase();
       const entries = await accountServers(account);
       if (generation.current !== current) return;
+      if (directoryOwner.current !== account) {
+        directoryOwner.current = account;
+        knownServers.current = new Set(entries.map((entry) => entry.id));
+      }
       setServers(entries);
       directoryReady = true;
       setAdding(Boolean(linkedServer) || entries.length === 0);
@@ -303,6 +326,89 @@ export function AccountsGate({
     return () => subscription.remove();
   }, []);
 
+  useEffect(() => {
+    if (
+      (phase !== "servers" && !(productGate && phase === "ready")) ||
+      readyAt.version !== version ||
+      readyAt.attempt !== attempt ||
+      !pairingForeground ||
+      linkedServer ||
+      !owner.current
+    )
+      return;
+    const account = owner.current;
+    const currentGeneration = generation.current;
+    const sessionGeneration = currentSessionGeneration();
+    const activeServer = currentApiBase();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const sameSession = () =>
+      generation.current === currentGeneration &&
+      owner.current === account &&
+      accountsVersion() === version &&
+      currentSessionGeneration() === sessionGeneration &&
+      currentApiBase() === activeServer;
+    const current = () => !cancelled && sameSession();
+    async function poll() {
+      if (!current()) return;
+      if (!operationPending.current && !pairingRef.current) {
+        try {
+          const entries = await accountServers(account);
+          if (!current()) return;
+          const changed =
+            entries.length !== knownServers.current.size ||
+            entries.some((entry) => !knownServers.current.has(entry.id));
+          const added = entries.some(
+            (entry) => !knownServers.current.has(entry.id) && entry.url !== activeServer,
+          );
+          knownServers.current = new Set(entries.map((entry) => entry.id));
+          if (changed) setServers(entries);
+          if (added && phase === "ready") {
+            if (!discoveryAlert.current) {
+              discoveryAlert.current = true;
+              Alert.alert(
+                translate.current("New server available"),
+                undefined,
+                [
+                  {
+                    text: translate.current("Later"),
+                    style: "cancel",
+                    onPress: () => {
+                      discoveryAlert.current = false;
+                    },
+                  },
+                  {
+                    text: translate.current("Open servers"),
+                    onPress: () => {
+                      discoveryAlert.current = false;
+                      if (!current()) return;
+                      setAdding(false);
+                      setPhase("servers");
+                    },
+                  },
+                ],
+                {
+                  cancelable: true,
+                  onDismiss: () => {
+                    discoveryAlert.current = false;
+                  },
+                },
+              );
+            }
+          }
+        } catch {
+          // Directory outages must not interrupt the active server.
+        }
+      }
+      if (current()) timer = setTimeout(() => void poll(), DIRECTORY_REFRESH_MS);
+    }
+    timer = setTimeout(() => void poll(), DIRECTORY_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [attempt, linkedServer, pairingForeground, phase, productGate, readyAt, version]);
+
   async function action(operation: () => Promise<unknown>) {
     if (operationPending.current) return;
     const operationId = ++operationVersion.current;
@@ -350,6 +456,7 @@ export function AccountsGate({
     if (!probe.ok) throw new Error(probe.error);
     if (!(await selectServer(entry, account, active, handoff?.sessionGeneration, handoff?.server)))
       return false;
+    knownServers.current.add(entry.id);
     confirmServerInitialization(entry.url, account!);
     if (onSelected) onSelected();
     else {
@@ -664,7 +771,7 @@ export function AccountsGate({
                     onPress={() => void action(() => select(entry))}
                   />
                 ))}
-                {adding ? (
+                {adding && (linkedServer || pairing || hasPendingServerInitialization(draft)) ? (
                   <>
                     {hasPendingServerInitialization(draft) ? (
                       <TextInput
@@ -780,13 +887,34 @@ export function AccountsGate({
                       />
                     ) : null}
                   </>
-                ) : (
+                ) : null}
+                {!linkedServer && !pairing && adding ? (
+                  <>
+                    <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
+                      {t(
+                        "Run this command on your Linux server, then open the authorization link it prints.",
+                      )}
+                    </Text>
+                    <Text selectable style={{ color: tokens.foreground, textAlign: "center" }}>
+                      {SERVER_INSTALL_COMMAND}
+                    </Text>
+                    <NativeActionButton
+                      label={t("Copy command")}
+                      prominence="secondary"
+                      onPress={() =>
+                        void import("expo-clipboard")
+                          .then(({ setStringAsync }) => setStringAsync(SERVER_INSTALL_COMMAND))
+                          .catch(() => setError(t("Could not copy the command.")))
+                      }
+                    />
+                  </>
+                ) : !linkedServer && !pairing ? (
                   <NativeActionButton
-                    label={t("Add")}
+                    label={t("Self-hosted")}
                     prominence="secondary"
                     onPress={() => setAdding(true)}
                   />
-                )}
+                ) : null}
               </>
             ) : null}
             {error ? (

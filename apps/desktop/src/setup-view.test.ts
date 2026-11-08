@@ -24,12 +24,6 @@ const pairingTicket = () => ({
   code: "2A3B4C",
   expiresAt: Math.floor(Date.now() / 1000) + 60,
 });
-const installCommand = () => ({
-  id: "10000000-0000-4000-8000-000000000001",
-  command: "curl -fsSL https://install.ork.run | sh -s -- --revision test-revision --code one-time-test-code",
-  expiresAt: new Date(Date.now() + 60_000).toISOString(),
-  url: null,
-});
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason: unknown) => void;
@@ -69,11 +63,14 @@ async function setup(
         pendingServer: options.pendingServer,
         initializingServer: options.initializingServer,
       };
-    if (options.invoke) return options.invoke(command, args);
+    if (options.invoke) {
+      const result = await options.invoke(command, args);
+      if (result !== undefined || command !== "server_initialization_required") return result;
+      return true;
+    }
     if (command === "setup_accounts_session") return options.session ?? null;
     if (command === "list_servers") return saved;
     if (command === "setup_accounts_sign_in") return account;
-    if (command === "create_server_installation") return installCommand();
     if (command === "create_server_pairing") return pairingTicket();
     if (command === "server_initialization_required") return true;
     return undefined;
@@ -99,14 +96,6 @@ async function setup(
     startup: (value: unknown) => listeners.get("desktop-startup-changed")?.({ payload: value }),
     link: (value: unknown) => listeners.get("desktop-server-link")?.({ payload: value }),
   };
-}
-
-async function openInstaller() {
-  node("selfhost").click();
-  await flush();
-  node<HTMLDetailsElement>("install").open = true;
-  node("install").dispatchEvent(new Event("toggle"));
-  await flush();
 }
 
 async function continueSetup(options: Parameters<typeof setup>[0] = {}) {
@@ -644,7 +633,7 @@ describe("bundled desktop setup", () => {
     const ticket = pairingTicket();
     let approved = false;
     let ready = false;
-    const { invoke } = await continueSetup({
+    const { invoke, link } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "create_server_pairing") return ticket;
@@ -665,7 +654,7 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     expect(invoke).toHaveBeenCalledWith("create_server_pairing", { requestId: expect.any(String) });
     expect(node("legacy-target").hidden).toBe(true);
@@ -699,7 +688,7 @@ describe("bundled desktop setup", () => {
     async (status) => {
       vi.useFakeTimers();
       const ticket = pairingTicket();
-      const { invoke } = await continueSetup({
+      const { invoke, link } = await continueSetup({
         invoke: async (name) => {
           if (name === "setup_accounts_session") return account;
           if (name === "list_servers") return saved;
@@ -709,7 +698,7 @@ describe("bundled desktop setup", () => {
           return undefined;
         },
       });
-      node("selfhost").click();
+      link(pairingOrigin);
       await flush();
       await vi.advanceTimersByTimeAsync(2000);
       expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
@@ -722,7 +711,7 @@ describe("bundled desktop setup", () => {
     vi.useFakeTimers();
     const ticket = pairingTicket();
     let origin = pairingOrigin;
-    const { invoke } = await continueSetup({
+    const { invoke, link } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
@@ -732,7 +721,7 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     await vi.advanceTimersByTimeAsync(2000);
     origin = "https://replacement.example.com";
@@ -768,7 +757,7 @@ describe("bundled desktop setup", () => {
           return undefined;
         },
       });
-      node("selfhost").click();
+      fixture.link(pairingOrigin);
       await flush();
       await vi.advanceTimersByTimeAsync(2000);
       node("approve-pairing").click();
@@ -810,7 +799,7 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     await vi.advanceTimersByTimeAsync(2000);
     node("approve-pairing").click();
@@ -828,7 +817,7 @@ describe("bundled desktop setup", () => {
   it("cancels an in-flight key on Back and ignores its late result after returning", async () => {
     const pending = deferred<unknown>();
     let calls = 0;
-    const { invoke } = await continueSetup({
+    const { invoke, link } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
@@ -837,7 +826,7 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     const first = invoke.mock.calls.find(([name]) => name === "create_server_pairing")![1] as {
       requestId: string;
@@ -845,7 +834,7 @@ describe("bundled desktop setup", () => {
     node("back").click();
     await flush();
     expect(invoke).toHaveBeenCalledWith("cancel_server_pairing", { requestId: first.requestId });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     pending.resolve(pairingTicket());
     await flush();
@@ -855,7 +844,7 @@ describe("bundled desktop setup", () => {
   it("expires a key without a target and stops polling", async () => {
     vi.useFakeTimers();
     const ticket = { ...pairingTicket(), expiresAt: Math.floor(Date.now() / 1000) + 3 };
-    const { invoke } = await continueSetup({
+    const { invoke, link } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return saved;
@@ -865,7 +854,7 @@ describe("bundled desktop setup", () => {
         return undefined;
       },
     });
-    node("selfhost").click();
+    link(pairingOrigin);
     await flush();
     await vi.advanceTimersByTimeAsync(4000);
     expect(node("pairing").hidden).toBe(true);
@@ -874,225 +863,93 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it("creates a domain-free installer only when its disclosure is opened", async () => {
+  it("shows a static self-host command without creating an installation or pairing code", async () => {
     const { invoke } = await continueSetup({ session: account });
-    await openInstaller();
-    expect(invoke).toHaveBeenCalledWith("create_server_installation");
+    node("selfhost").click();
+    await flush();
     const value = node<HTMLTextAreaElement>("install-command").value;
-    expect(value).toContain("--code");
-    expect(value).not.toContain("--url");
+    expect(value).toBe("curl -fsSL https://install.ork.run | sh");
     expect(node("installation").hidden).toBe(false);
+    expect(node("setup").hidden).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith("create_server_installation");
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
     node("copy").click();
     await flush();
     expect(document.activeElement?.id).toBe("install-command");
     expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(value.length);
   });
 
-  it("preserves the confirmed legacy initialization link without waiting for installation polling", async () => {
-    const connection = deferred<unknown>();
+  it("shows a newly authorized server while waiting on the install instructions", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    let entries = saved;
     const { invoke } = await continueSetup({
-      pendingServer: "https://new.example.com",
-      initializingServer: "https://new.example.com",
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return saved;
-        if (name === "create_server_installation") return installCommand();
-        if (name === "connect_server") return connection.promise;
+        if (name === "list_servers") return entries;
         return undefined;
       },
     });
-    await openInstaller();
-    node<HTMLInputElement>("server-url").value = "https://new.example.com";
-    node<HTMLFormElement>("setup").dispatchEvent(new Event("submit", { cancelable: true }));
-    expect(screen()).toBe("opening");
-    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-    connection.resolve(undefined);
+    node("selfhost").click();
     await flush();
+    entries = [
+      ...saved,
+      { id: "new-server", kind: "selfhosted", url: "https://new.example.com", isDefault: false },
+    ];
+    await vi.advanceTimersByTimeAsync(15_000);
     expect(screen()).toBe("servers");
+    expect(node("servers").textContent).toContain("https://new.example.com");
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", { id: "new-server" });
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
-  it("discards a command that finishes after back or sign-out", async () => {
-    const ticket = deferred<unknown>();
+  it("ignores a directory refresh completed after logout", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const pending = deferred<typeof saved>();
+    let calls = 0;
     await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation") return ticket.promise;
+        if (name === "list_servers") return ++calls === 1 ? saved : pending.promise;
         return undefined;
       },
     });
-    await openInstaller();
-    node("back").click();
-    ticket.resolve(installCommand());
-    await flush();
-    expect(screen()).toBe("servers");
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-    await openInstaller();
+    node("selfhost").click();
+    await vi.advanceTimersByTimeAsync(15_000);
     node("sign-out").click();
     await flush();
-    expect(screen()).toBe("welcome");
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-  });
-
-  it("expires unused commands and removes both native listeners on disposal", async () => {
-    vi.useFakeTimers();
-    const { dispose, stops, invoke } = await continueSetup({ session: account });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(60_001);
-    expect(node("installation").hidden).toBe(true);
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
-    expect(node("create-installation").hidden).toBe(false);
-    expect(node("installation-status").textContent).toContain("expired");
-    const count = invoke.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(9000);
-    expect(invoke.mock.calls).toHaveLength(count);
-    dispose();
-    for (const stop of stops.values()) expect(stop).toHaveBeenCalledOnce();
-  });
-
-  it("shows remote installation progress and connects only after ready", async () => {
-    vi.useFakeTimers();
-    let phase = "preparing";
-    const value = installCommand();
-    const { invoke } = await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return saved;
-        if (name === "create_server_installation") return value;
-        if (name === "get_server_installation")
-          return {
-            ...value,
-            phase,
-            expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-            url: "https://new.example.com",
-          };
-        return undefined;
-      },
-    });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation").hidden).toBe(true);
-    expect(node("installation-status").textContent).toBe("Prepare server");
-    phase = "pulling";
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation-status").textContent).toBe("Download Ork");
-    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
-    phase = "ready";
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: "https://new.example.com" });
-    expect(screen()).toBe("servers");
-  });
-
-  it("ignores an installation result arriving after logout", async () => {
-    vi.useFakeTimers();
-    const progress = deferred<unknown>();
-    const ticket = installCommand();
-    const { invoke } = await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation") return ticket;
-        if (name === "get_server_installation") return progress.promise;
-        return undefined;
-      },
-    });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(3000);
-    node("sign-out").click();
-    await flush();
-    progress.resolve({ ...ticket, phase: "ready", url: "https://new.example.com" });
+    pending.resolve([
+      ...saved,
+      { id: "new-server", kind: "selfhosted", url: "https://new.example.com", isDefault: false },
+    ]);
     await flush();
     expect(screen()).toBe("welcome");
-    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe("");
+    expect(node("servers").textContent).not.toContain("new.example.com");
   });
 
-  it("allows retrying a failed installation with the same command and follows its resumed status", async () => {
-    vi.useFakeTimers();
-    const ticket = installCommand();
-    let phase = "preparing";
-    const deadline = new Date(Date.now() + 180_000).toISOString();
-    const { invoke } = await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation") return ticket;
-        if (name === "get_server_installation")
-          return { ...ticket, phase, expiresAt: deadline, url: "https://new.example.com" };
-        return undefined;
-      },
+  it("preserves a pending legacy initialization link", async () => {
+    const { invoke } = await setup({
+      session: account,
+      pendingServer: pairingOrigin,
+      initializingServer: pairingOrigin,
     });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(63_000);
-    phase = "failed";
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation").hidden).toBe(false);
-    expect(node<HTMLTextAreaElement>("install-command").value).toBe(ticket.command);
-    expect(node("create-installation").hidden).toBe(true);
-    node("copy").click();
+    const input = node<HTMLInputElement>("server-url");
+    expect(input.readOnly).toBe(true);
+    expect(input.value).toBe(pairingOrigin);
+    input.value = "https://other.example.com";
+    node<HTMLFormElement>("setup").dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
     await flush();
-    expect(node<HTMLTextAreaElement>("install-command").selectionEnd).toBe(ticket.command.length);
-    phase = "pulling";
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation").hidden).toBe(true);
-    expect(node("installation-status").textContent).toBe("Download Ork");
-    expect(
-      invoke.mock.calls.filter(([name]) => name === "create_server_installation"),
-    ).toHaveLength(1);
-  });
-
-  it("stops polling at the reported absolute deadline when Accounts goes offline after pairing", async () => {
-    vi.useFakeTimers();
-    const ticket = installCommand();
-    const deadline = new Date(Date.now() + 12_000).toISOString();
-    let online = true;
-    const { invoke } = await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation") return ticket;
-        if (name === "get_server_installation") {
-          if (!online) throw new Error("Offline");
-          return { ...ticket, phase: "pulling", expiresAt: deadline };
-        }
-        return undefined;
-      },
-    });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation-status").textContent).toBe("Download Ork");
-    online = false;
-    await vi.advanceTimersByTimeAsync(10_000);
-    expect(node("installation-status").textContent).toContain("expired");
-    const requests = invoke.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(30_000);
-    expect(invoke.mock.calls).toHaveLength(requests);
-  });
-
-  it("keeps polling after a temporary status error and stops on an expired ticket", async () => {
-    vi.useFakeTimers();
-    let fail = true;
-    const ticket = installCommand();
-    await continueSetup({
-      invoke: async (name) => {
-        if (name === "setup_accounts_session") return account;
-        if (name === "list_servers") return [];
-        if (name === "create_server_installation") return ticket;
-        if (name === "get_server_installation") {
-          if (fail) throw new Error("Offline");
-          return { ...ticket, phase: "expired" };
-        }
-        return undefined;
-      },
-    });
-    await openInstaller();
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation-status").textContent).toContain("Retrying");
-    fail = false;
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(node("installation-status").textContent).toContain("expired");
-    expect(node("create-installation").hidden).toBe(false);
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+    input.value = pairingOrigin;
+    node<HTMLFormElement>("setup").dispatchEvent(
+      new Event("submit", { bubbles: true, cancelable: true }),
+    );
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_server", { rawUrl: pairingOrigin });
   });
 });
 

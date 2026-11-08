@@ -56,7 +56,7 @@ ork_install() {
   umask 077
   mkdir -p -m 700 "$HOME/orkbot"
   cd "$HOME/orkbot"
-  if [ "$code_stdin" = true ] || { [ "$code_argument" = false ] && [ ! -f .env ]; }; then
+  if [ "$code_stdin" = true ]; then
     if ! (: </dev/tty) 2>/dev/null; then
       echo 'Ork setup failed: an installation code and an interactive terminal are required for a new server.' >&2
       return 1

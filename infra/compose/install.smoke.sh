@@ -96,8 +96,8 @@ python3 - "$root/install.sh" <<'PY'
 import os, subprocess, sys
 script = open(sys.argv[1], "rb").read()
 result = subprocess.run(["sh", "-s", "--", "--revision", "0123456789abcdef0123456789abcdef01234567"], input=script, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
-assert result.returncode != 0 and b"interactive terminal" in result.stderr
-assert not os.path.exists(os.path.join(os.environ["TEST_ROOT"], "curl-args"))
+assert result.returncode == 0, result.stderr
+assert open(os.path.join(os.environ["TEST_ROOT"], "installer-args")).read().strip() == "--server"
 PY
 
 python3 - "$root/install.sh" "$code" <<'PY'
@@ -110,7 +110,7 @@ if pid == 0:
     os.close(write_fd)
     os.dup2(read_fd, 0)
     os.close(read_fd)
-    os.execvp("sh", ["sh", "-s", "--", "--revision", "0123456789abcdef0123456789abcdef01234567"])
+    os.execvp("sh", ["sh", "-s", "--", "--revision", "0123456789abcdef0123456789abcdef01234567", "--code-stdin"])
 os.close(read_fd)
 os.write(write_fd, script)
 os.close(write_fd)

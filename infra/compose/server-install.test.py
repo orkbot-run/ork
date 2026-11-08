@@ -147,6 +147,54 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("SANDBOX_COMPUTER_EGRESS='restricted'", content)
         self.assertEqual(installer.ENV.stat().st_mode & 0o777, 0o600)
 
+    def test_new_native_server_configures_without_enrollment_and_resumes(self):
+        bootstrap = "z" * 43
+        self.env.update(AUTH_ACCOUNTS_ENABLED="true", ORKBOT_BOOTSTRAP_SECRET=bootstrap)
+        self.write_env()
+        with patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": ""}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json") as request:
+            installer.configure(URL)
+        request.assert_not_called()
+        content = installer.ENV.read_text()
+        self.assertIn("ORKBOT_BOOTSTRAP_SECRET=" + bootstrap, content)
+        self.assertIn("AUTH_ACCOUNTS_ENABLED='true'", content)
+        self.assertIn("SIGNUPS_ENABLED='false'", content)
+        self.assertIn("OIDC_REDIRECT_URI=''", content)
+        self.assertEqual(json.loads(installer.STATE.read_text()), {"url": URL, "externalProxy": False})
+        self.env.update(BETTER_AUTH_URL=URL, WEB_ORIGIN=URL, API_URL=URL, OIDC_REDIRECT_URI="", SIGNUPS_ENABLED="false")
+        with patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json") as request:
+            installer.configure(URL)
+        request.assert_not_called()
+        self.assertIn("ORKBOT_BOOTSTRAP_SECRET=" + bootstrap, installer.ENV.read_text())
+        with patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": CODE}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json") as request:
+            installer.configure(URL)
+        request.assert_not_called()
+        self.assertIn("OIDC_REDIRECT_URI=''", installer.ENV.read_text())
+        self.assertNotIn("OIDC_CLIENT_ID='new-id'", installer.ENV.read_text())
+
+    def test_native_server_refuses_missing_bootstrap_and_wrong_origin(self):
+        for changes in ({"AUTH_ACCOUNTS_ENABLED": "true"}, {"AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "short"}):
+            before = installer.ENV.read_bytes()
+            with self.subTest(changes=changes), patch.object(installer, "environment", return_value={**self.env, **changes}), self.assertRaises(installer.SetupError):
+                installer.configure(URL)
+            self.assertEqual(before, installer.ENV.read_bytes())
+        installer.atomic(installer.STATE, json.dumps({"url": "https://other.example.com", "externalProxy": False}))
+        with self.assertRaises(installer.SetupError):
+            installer.configured(URL, {**self.env, "AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "z" * 43})
+
+    def test_initialization_link_is_only_shown_before_claim(self):
+        env = {**self.env, "AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "z" * 43}
+        for required in (True, False):
+            with self.subTest(required=required), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", return_value={"required": required}), patch("sys.stdout", new_callable=io.StringIO) as output:
+                installer.initialization_link(URL)
+            text = output.getvalue()
+            self.assertEqual("orkbot://initialize?" in text, required)
+            if required:
+                link = text.splitlines()[-1]
+                query = urllib.parse.parse_qs(urllib.parse.urlsplit(link).query)
+                self.assertEqual(query, {"server": [URL], "secret": ["z" * 43]})
+        with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", return_value={"required": "true"}), self.assertRaises(installer.SetupError):
+            installer.initialization_link(URL)
+
     def test_new_client_redeems_once_and_saves_literal_values(self):
         with patch.dict(os.environ, {"ORKBOT_INSTALL_CODE": CODE}), patch.object(installer, "environment", return_value=self.env), patch.object(installer, "request_json", return_value=self.result(clientSecret='dollar$double"quote')) as request:
             installer.configure(URL)
@@ -296,6 +344,11 @@ class InstallerTests(unittest.TestCase):
         with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=responses) as request:
             installer.ready(URL)
         self.assertEqual([call.args for call in request.call_args_list], [(URL + "/rpc/health", {"json": {}}), (URL + "/api/auth/capabilities",)])
+        native = [{"json": {"ok": True, "version": "test"}}, {"passwordAuth": False, "accountsLogin": True, "sso": None}, {"keys": [{"kty": "RSA"}]}]
+        with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=native):
+            installer.ready(URL)
+        with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=native[:2] + [{"keys": []}]), patch.object(installer.time, "monotonic", side_effect=[0, 181]), self.assertRaises(installer.SetupError):
+            installer.ready(URL)
         for field in ({"passwordAuth": True, "sso": {"name": "Accounts", "availability": "available"}}, {"passwordAuth": False, "sso": {"name": "Accounts", "availability": "checking"}}, {"passwordAuth": False, "sso": None}):
             with patch.object(installer, "public_dns"), patch.object(installer, "request_json", side_effect=responses[:1] + [field]), patch.object(installer.time, "monotonic", side_effect=[0, 181]), self.assertRaises(installer.SetupError):
                 installer.ready(URL)

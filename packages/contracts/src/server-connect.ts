@@ -3,6 +3,8 @@
 
 import { isPrivateNetworkHost } from "./network-host.js";
 
+export const SERVER_INSTALL_COMMAND = "curl -fsSL https://install.ork.run | sh";
+
 /** Connection links identify a server; they never authorize a session or a directory write. */
 function serverOrigin(input: string): string | null {
   try {

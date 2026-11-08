@@ -255,6 +255,13 @@ create_env() {
     esac
   done < "$ENV_EXAMPLE" > "$temporary_file"
 
+  # New server installs use native Accounts and a locally generated initialization secret.
+  # An explicitly supplied legacy enrollment code keeps the existing OIDC setup path.
+  if [[ "$server_mode" == true && -z "${code:-}" ]]; then
+    printf 'AUTH_ACCOUNTS_ENABLED=true\nORKBOT_BOOTSTRAP_SECRET=%s\n' \
+      "$(openssl rand -base64 32 | tr '/+' '_-' | tr -d '=\n')" >> "$temporary_file"
+  fi
+
   chmod 600 "$temporary_file"
   mv -- "$temporary_file" "$ENV_FILE"
   temporary_file=""
