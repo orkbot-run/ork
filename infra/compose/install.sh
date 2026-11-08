@@ -2,6 +2,35 @@
 # SPDX-FileCopyrightText: 2026 Ork contributors
 # SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+# Install the metadata parser before selecting a release on supported Linux hosts.
+ensure_python3() {
+  command -v python3 >/dev/null 2>&1 && return 0
+  if [ "$(uname -s)" != Linux ] || [ ! -r "$1" ]; then
+    echo 'Ork setup failed: install python3 before running the installer.' >&2
+    return 1
+  fi
+  ork_os=$(awk -F= '$1 == "ID" { gsub(/^["\047]|["\047]$/, "", $2); print $2; exit }' "$1")
+  case "$ork_os" in
+    debian|ubuntu) ;;
+    *) echo 'Ork setup failed: install python3 before running the installer.' >&2; return 1 ;;
+  esac
+  command -v apt-get >/dev/null 2>&1 || { echo 'Ork setup failed: install python3 before running the installer.' >&2; return 1; }
+  if [ "$(id -u)" -eq 0 ]; then
+    echo 'Installing Python 3 from the distribution repository.'
+    apt-get update -qq && apt-get install -y -qq python3 || {
+      echo 'Ork setup failed: could not install python3.' >&2; return 1;
+    }
+  else
+    command -v sudo >/dev/null 2>&1 || { echo 'Ork setup failed: installing python3 requires root or sudo.' >&2; return 1; }
+    sudo -v || { echo 'Ork setup failed: could not obtain sudo access.' >&2; return 1; }
+    echo 'Installing Python 3 from the distribution repository.'
+    sudo apt-get update -qq && sudo apt-get install -y -qq python3 || {
+      echo 'Ork setup failed: could not install python3.' >&2; return 1;
+    }
+  fi
+  command -v python3 >/dev/null 2>&1 || { echo 'Ork setup failed: python3 is unavailable after installation.' >&2; return 1; }
+}
+
 # Keep the entry point POSIX-compatible: it is also executed by `curl ... | sh`.
 ork_install() {
   set +x
@@ -120,7 +149,7 @@ ork_install() {
     fi
   fi
   if [ "$revision_set" = false ]; then
-    command -v python3 >/dev/null 2>&1 || { echo 'Ork setup failed: python3 is required to find the latest release; alternatively provide --revision.' >&2; return 1; }
+    ensure_python3 /etc/os-release
     curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -o "$ork_runtime/channel.json" 'https://api.github.com/repos/orkbot-run/ork/releases/tags/desktop-preview' || {
       echo 'Ork setup failed: could not retrieve the release channel.' >&2; return 1;
     }

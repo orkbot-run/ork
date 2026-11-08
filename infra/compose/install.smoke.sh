@@ -158,4 +158,52 @@ cat "$root/install.sh" | sh -s -- --revision "$revision"
 [ "$(cat "$tmp/base")" = "https://raw.githubusercontent.com/orkbot-run/ork/$revision/infra/compose" ]
 printf '%s\n' "ORKBOT_IMAGE_TAG=sha-$revision" "ORKBOT_IMAGE_TAG=sha-$revision" >"$HOME/orkbot/.env"
 if cat "$root/install.sh" | sh -s -- >/dev/null 2>&1; then echo 'Ambiguous resume was accepted.' >&2; exit 1; fi
+
+# Exercise prerequisite installation using isolated commands, without invoking apt or sudo.
+mkdir "$tmp/python-bin"
+sed -n '/^ensure_python3() {/,/^}$/p' "$root/install.sh" >"$tmp/python-helper"
+ln -s "$(command -v awk)" "$tmp/python-bin/awk"
+cat >"$tmp/python-bin/uname" <<'EOF'
+#!/bin/sh
+printf '%s\n' "${TEST_OS:-Linux}"
+EOF
+cat >"$tmp/python-bin/id" <<'EOF'
+#!/bin/sh
+printf '%s\n' "${TEST_UID:-0}"
+EOF
+cat >"$tmp/python-bin/apt-get" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$TEST_ROOT/apt-calls"
+[ "${TEST_APT_FAIL:-0}" != 1 ] || exit 1
+if [ "$1" = install ]; then
+  printf '#!/bin/sh\nexit 0\n' >"$TEST_ROOT/python-bin/python3"
+  /bin/chmod +x "$TEST_ROOT/python-bin/python3"
+fi
+EOF
+cat >"$tmp/python-bin/sudo" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$*" >>"$TEST_ROOT/sudo-calls"
+[ "$1" != -v ] || exit 0
+exec "$@"
+EOF
+chmod +x "$tmp/python-bin/uname" "$tmp/python-bin/id" "$tmp/python-bin/apt-get" "$tmp/python-bin/sudo"
+printf '%s\n' 'ID=debian' >"$tmp/os-release"
+PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release"
+[ "$(cat "$tmp/apt-calls")" = "$(printf '%s\n' 'update -qq' 'install -y -qq python3')" ]
+rm "$tmp/python-bin/python3" "$tmp/apt-calls"
+printf '%s\n' 'ID="ubuntu"' >"$tmp/os-release"
+TEST_UID=1000 PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release"
+[ "$(cat "$tmp/sudo-calls")" = "$(printf '%s\n' '-v' 'apt-get update -qq' 'apt-get install -y -qq python3')" ]
+rm "$tmp/python-bin/python3" "$tmp/apt-calls"
+printf '%s\n' 'ID=alpine' >"$tmp/os-release"
+if PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release" >/dev/null 2>&1; then
+  echo 'An unsupported distribution attempted automatic Python installation.' >&2
+  exit 1
+fi
+[ ! -e "$tmp/apt-calls" ]
+printf '%s\n' 'ID=debian' >"$tmp/os-release"
+if TEST_APT_FAIL=1 PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release" >/dev/null 2>&1; then
+  echo 'A failed Python installation was accepted.' >&2
+  exit 1
+fi
 echo 'Installer entry point smoke checks passed.'
