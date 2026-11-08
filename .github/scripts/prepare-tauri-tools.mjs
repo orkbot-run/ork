@@ -7,10 +7,10 @@ import { createHash } from "node:crypto";
 import {
   chmodSync,
   copyFileSync,
+  cpSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  renameSync,
   rmSync,
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -56,6 +56,11 @@ export function tauriCache(platform, env) {
       "tauri",
     );
   return path.join(env.LOCALAPPDATA, "tauri");
+}
+
+export function installNsisToolset(source, destination) {
+  rmSync(destination, { recursive: true, force: true });
+  cpSync(source, destination, { recursive: true });
 }
 
 function download(asset, target) {
@@ -134,8 +139,7 @@ export function prepareTauriTools(platform, env = process.env) {
         },
       );
       const nsis = path.join(tools, "NSIS");
-      rmSync(nsis, { recursive: true, force: true });
-      renameSync(path.join(temporary, "nsis-3.13"), nsis);
+      installNsisToolset(path.join(temporary, "nsis-3.13"), nsis);
       const plugins = path.join(nsis, "Plugins", "x86-unicode", "additional");
       mkdirSync(plugins, { recursive: true });
       copyFileSync(plugin, path.join(plugins, "nsis_tauri_utils.dll"));
