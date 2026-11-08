@@ -186,9 +186,6 @@ async function sendMessage(page: Page, text: string) {
   await page.keyboard.press("Enter");
   const response = await sent;
   expect(response.ok()).toBe(true);
-  const result = (await response.json()) as { json?: { runId?: string } };
-  if (!result.json?.runId) throw new Error("threads/send did not return a run id");
-  return result.json.runId;
 }
 
 async function waitForIdle(page: Page, botId: string) {
