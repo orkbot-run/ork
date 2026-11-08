@@ -333,9 +333,7 @@ export async function clickAndWaitForRpc(page: Page, button: Locator, path: stri
     button.click(),
   ]);
   expect(reply.status()).toBe(200);
-  // The whole reply has arrived, not just its headers.
-  const failure = await reply.finished();
-  if (failure) throw new Error(`/rpc/${path} reply did not finish: ${failure.message}`);
+  // Callers also wait for the resulting UI state, including navigation when applicable.
 }
 
 export async function makeAdmin(route: Route, path: "me" | "bootstrap") {

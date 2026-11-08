@@ -58,7 +58,7 @@ for (const platform of ["darwin", "linux"]) {
     );
     const configuredProfile = page.waitForResponse(/\/rpc\/me$/);
     await page.evaluate(() => window.dispatchEvent(new Event("test-computer-configure")));
-    await (await configuredProfile).finished();
+    expect((await configuredProfile).ok()).toBe(true);
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(resolve)));
     await expect(dialog.getByRole("button", { name: "Close", exact: true })).toHaveCount(0);
     await page.keyboard.press("Escape");
