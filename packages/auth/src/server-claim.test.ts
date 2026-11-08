@@ -48,6 +48,22 @@ describe("server authorization grant", () => {
       createNativeGrantVerifier({ issuer, origin, keys })(grant, challenge),
     ).rejects.toThrow();
   });
+  it("accepts an organization only when it is present in the signed claim as a UUID", async () => {
+    const organizationId = randomUUID();
+    const grant = await signed({ organization_id: organizationId });
+    expect(await verifyServerClaimGrant(grant, { issuer, origin, challenge, keys })).toMatchObject({
+      sub: "owner",
+      organization_id: organizationId,
+    });
+    await expect(
+      verifyServerClaimGrant(await signed({ organization_id: "not-an-organization" }), {
+        issuer,
+        origin,
+        challenge,
+        keys,
+      }),
+    ).rejects.toThrow();
+  });
   it.each([
     { aud: "https://other.example.test" },
     { aud: [origin, "https://other.example.test"] },
@@ -56,6 +72,8 @@ describe("server authorization grant", () => {
     { email: "owner@example.test" },
     { jti: "not-a-uuid" },
     { sub: "" },
+    { organization_id: null },
+    { organization_id: ["00000000-0000-4000-8000-000000000001"] },
     { exp: Math.floor(Date.now() / 1000) - 30 },
   ])("rejects a misbound or invalid grant: %j", async (changes) => {
     await expect(
@@ -99,6 +117,7 @@ describe("server authorization proof", () => {
       id,
       proofNonce,
       status: "pending",
+      organizationBinding: true,
     });
     expect(await serverClaimProof(db, id, "z".repeat(43), { origin, bootstrapSecret })).toBeNull();
     expect(
@@ -145,7 +164,7 @@ describe("server authorization proof", () => {
         origin,
         bootstrapSecret,
       }),
-    ).toEqual({ id, proofNonce, status: "claimed", grantId });
+    ).toEqual({ id, proofNonce, status: "claimed", grantId, organizationBinding: true });
   });
 });
 

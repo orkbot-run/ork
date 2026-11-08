@@ -211,8 +211,10 @@ export function nativeLoginStore(
               where: { id: "default" },
               create: { id: "default" },
               update: {},
-              select: { nativeAccountsOwnerKey: true },
+              select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
             });
+            if (settings.nativeAccountsOrganizationId && !settings.nativeAccountsOwnerKey)
+              throw denied();
             if (settings.nativeAccountsOwnerKey && settings.nativeAccountsOwnerKey !== accountKey)
               throw denied();
             allowProvision = true;
@@ -223,7 +225,11 @@ export function nativeLoginStore(
               )
                 throw denied();
               const claimed = await tx.deploymentSettings.updateMany({
-                where: { id: "default", nativeAccountsOwnerKey: null },
+                where: {
+                  id: "default",
+                  nativeAccountsOwnerKey: null,
+                  nativeAccountsOrganizationId: null,
+                },
                 data: { nativeAccountsOwnerKey: accountKey },
               });
               if (claimed.count !== 1) throw denied();
