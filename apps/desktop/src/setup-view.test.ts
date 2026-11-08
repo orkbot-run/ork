@@ -26,7 +26,7 @@ const pairingTicket = () => ({
 });
 const installCommand = () => ({
   id: "10000000-0000-4000-8000-000000000001",
-  command: "bash install-images.sh --server --code one-time-test-code",
+  command: "curl -fsSL https://install.ork.run | sh -s -- --revision test-revision --code one-time-test-code",
   expiresAt: new Date(Date.now() + 60_000).toISOString(),
   url: null,
 });
@@ -879,7 +879,7 @@ describe("bundled desktop setup", () => {
     await openInstaller();
     expect(invoke).toHaveBeenCalledWith("create_server_installation");
     const value = node<HTMLTextAreaElement>("install-command").value;
-    expect(value).toContain("--server --code");
+    expect(value).toContain("--code");
     expect(value).not.toContain("--url");
     expect(node("installation").hidden).toBe(false);
     node("copy").click();
