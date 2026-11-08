@@ -53,9 +53,59 @@ describe("Android APK release workflow", () => {
     expect(diagnostic).not.toMatch(/gh release|eas build|expo-github-action/);
     expect(diagnostic).toContain("expo prebuild --platform android --no-install");
     expect(diagnostic).toContain("bash .github/scripts/prepare-android-gradle.sh");
-    expect(diagnostic).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
+    expect(diagnostic).toContain("build-android-diagnostic.sh");
+    const script = readFileSync(
+      path.resolve(import.meta.dirname, "../../../.github/scripts/build-android-diagnostic.sh"),
+      "utf8",
+    );
+    expect(script).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
     expect(diagnostic).toContain("actions/upload-artifact@");
     expect(diagnostic).toContain("outputs/apk/release/app-release.apk");
+  });
+
+  it.each([
+    { mirrorFails: false, fallbackFails: false, expectedCalls: 1, succeeds: true },
+    { mirrorFails: true, fallbackFails: false, expectedCalls: 2, succeeds: true },
+    { mirrorFails: true, fallbackFails: true, expectedCalls: 2, succeeds: false },
+  ])("retries with the original repositories only after a mirror build failure: %j", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "ork-android-mirror-"));
+    try {
+      const fake = path.join(root, "gradlew");
+      const log = path.join(root, "calls");
+      writeFileSync(
+        fake,
+        `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$TEST_CALLS"
+if [[ "$*" == *--init-script* ]]; then exit "$TEST_MIRROR_FAIL"; fi
+exit "$TEST_FALLBACK_FAIL"
+`,
+      );
+      chmodSync(fake, 0o755);
+      const result = spawnSync(
+        "bash",
+        [
+          path.resolve(import.meta.dirname, "../../../.github/scripts/build-android-diagnostic.sh"),
+          fake,
+          "/tmp/mirror.init.gradle",
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            TEST_CALLS: log,
+            TEST_MIRROR_FAIL: scenario.mirrorFails ? "1" : "0",
+            TEST_FALLBACK_FAIL: scenario.fallbackFails ? "1" : "0",
+          },
+        },
+      );
+      expect(result.status === 0).toBe(scenario.succeeds);
+      const calls = readFileSync(log, "utf8").trim().split("\n");
+      expect(calls).toHaveLength(scenario.expectedCalls);
+      expect(calls[0]).toContain("--init-script /tmp/mirror.init.gradle");
+      if (calls.length === 2) expect(calls[1]).not.toContain("--init-script");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it.each(["9.3.1", "8.14.3"])(
