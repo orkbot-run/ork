@@ -103,7 +103,12 @@ import {
   verifyModelServesAgents,
   withSecretPersistence,
 } from "@orkbot/adapters";
-import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@orkbot/auth";
+import {
+  createAuth,
+  isBlockedAuthPath,
+  loopbackTwinOrigins,
+  startServerClaimWorker,
+} from "@orkbot/auth";
 import type { Actor, AuthCapabilities } from "@orkbot/contracts";
 import {
   isLocalhostOrLoopbackIp,
@@ -1542,6 +1547,14 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ),
   );
 
+  const stopServerClaim =
+    env.accountsEnabled && env.bootstrapSecret && !env.desktopAccountKey
+      ? startServerClaimWorker(prisma, {
+          issuer: "https://api.orkbot.run",
+          origin: env.webOrigin,
+          bootstrapSecret: env.bootstrapSecret,
+        })
+      : undefined;
   return {
     app,
     prisma,
@@ -1560,6 +1573,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     stop: async () => {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
+      await stopServerClaim?.();
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       auth.disposeOidcDiscovery();

@@ -14,6 +14,7 @@ import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import type { NativePairingStore } from "./native-pairing-store.js";
 import { nativePairingStore } from "./native-pairing-store.js";
 import { oidcAccountSubject } from "./oidc.js";
+import { serverClaimProof } from "./server-claim.js";
 
 const PURPOSE = "orkbot-server-login-v1";
 const CHALLENGE_SECONDS = 120;
@@ -381,6 +382,27 @@ export function nativeAccountsLogin(
   return {
     id: "native-accounts-login",
     endpoints: {
+      nativeAccountsClaimProof: createAuthEndpoint(
+        "/native/claim-proof",
+        { method: "POST" },
+        async (ctx) => {
+          ctx.setHeader("Cache-Control", "no-store");
+          const body = ctx.body as { id?: unknown; proofNonce?: unknown } | undefined;
+          if (
+            !body ||
+            typeof body !== "object" ||
+            Array.isArray(body) ||
+            Object.keys(body).sort().join(",") !== "id,proofNonce"
+          )
+            throw new APIError("NOT_FOUND", { message: "Not found" });
+          const proof = await serverClaimProof(prisma, body?.id, body?.proofNonce, {
+            origin: options.origin,
+            bootstrapSecret: options.bootstrapSecret,
+          });
+          if (!proof) throw new APIError("NOT_FOUND", { message: "Not found" });
+          return ctx.json(proof);
+        },
+      ),
       nativeAccountsInitialization: createAuthEndpoint(
         "/native/initialization",
         { method: "GET" },

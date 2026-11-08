@@ -81,6 +81,7 @@ def request(url,payload=None,bearer=None):
     if bearer:
         return {'url':payload['url'],'issuer':module.ISSUER,'clientId':'fixture-client','clientSecret':'fixture-secret','installationTicketId':'6d2d8377-3af0-4ca8-8c12-ab25ba2f7a6d','reportToken':'b'*43}
     if url.endswith('/api/auth/native/initialization'): return {'required': not bool(os.environ.get('STUB_ALREADY_INITIALIZED'))}
+    if url.endswith('/api/auth/native/challenge'): return {'bootstrapRequired': not bool(os.environ.get('STUB_ALREADY_CLAIMED'))}
     if url.endswith('/api/auth/jwks'): return {'keys':[{'kty':'RSA'}]}
     if url.endswith('/rpc/health'): return {'json':{'ok':True,'version':'fixture'}}
     if url.endswith('/health'): return {'ok':True}
@@ -140,6 +141,7 @@ run_case fresh || { cat "$tmp/fresh/output"; exit 1; }
 STUB_NATIVE_ACCOUNTS=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
 grep -q '^orkbot://initialize?' "$tmp/native/output"
+grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
 grep -q '^AUTH_ACCOUNTS_ENABLED=' "$tmp/native/.env"
 grep -q '^ORKBOT_BOOTSTRAP_SECRET=' "$tmp/native/.env"
 ! grep -q '^redeem$' "$tmp/native/events"
@@ -148,6 +150,10 @@ STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp
 ! grep -q 'orkbot://initialize?' "$tmp/native/output"
 ! grep -q '^redeem$' "$tmp/native/events"
 [[ "$(cksum "$tmp/native/.env")" == "$native_before" ]]
+! grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
+STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_CLAIMED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
+! grep -q 'orkbot://initialize?' "$tmp/native/output"
+! grep -q 'node dist/cli/server-claim.js' "$tmp/native/output"
 if STUB_PULL_FAIL=1 run_case pull-fails --code "$code"; then echo 'pull failure accepted' >&2; exit 1; fi
 grep -q '^redeem$' "$tmp/pull-fails/events"
 grep -q '^progress-failed$' "$tmp/pull-fails/events"

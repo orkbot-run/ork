@@ -200,5 +200,14 @@ server_main() {
   timeout --foreground 210 python3 "$helper" ready "$server_url" || fail "public HTTPS or Accounts is not ready; check DNS, inbound TCP 80/443, proxy settings and service logs, then rerun without --code."
   server_progress ready
   echo "Ork is ready at ${server_url}"
-  timeout --foreground 60 python3 "$helper" initialization-link "$server_url" || fail "could not determine the server initialization status."
+  local initialization
+  initialization=$(timeout --foreground 60 python3 "$helper" initialization-link "$server_url") || fail "could not determine the server initialization status."
+  if [[ -n "$initialization" ]]; then
+    printf '%s\n' "$initialization"
+  fi
+  if [[ "$auth_mode" == native && -n "$initialization" ]]; then
+    echo 'If you cannot open the authorization link, generate a code on this server with:'
+    if [[ "$ORKBOT_INSTALL_DOCKER_SUDO" == 1 ]]; then printf 'sudo '; fi
+    echo 'docker compose -f docker-compose.images.yml exec -T api node dist/cli/server-claim.js'
+  fi
 }

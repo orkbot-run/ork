@@ -408,6 +408,11 @@ def initialization_link(url):
     if not isinstance(state, dict) or type(state.get("required")) is not bool:
         raise SetupError("Could not determine whether server initialization is required.")
     if state["required"]:
+        challenge = request_json(url + "/api/auth/native/challenge", {})
+        if not isinstance(challenge, dict) or type(challenge.get("bootstrapRequired")) is not bool:
+            raise SetupError("Could not determine whether server authorization is required.")
+        if not challenge["bootstrapRequired"]:
+            return
         link = "orkbot://initialize?" + urllib.parse.urlencode({"server": url, "secret": secret})
         print("Open this link in Ork to authorize the server:\n" + link)
 

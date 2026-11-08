@@ -184,7 +184,7 @@ class InstallerTests(unittest.TestCase):
     def test_initialization_link_is_only_shown_before_claim(self):
         env = {**self.env, "AUTH_ACCOUNTS_ENABLED": "true", "ORKBOT_BOOTSTRAP_SECRET": "z" * 43}
         for required in (True, False):
-            with self.subTest(required=required), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", return_value={"required": required}), patch("sys.stdout", new_callable=io.StringIO) as output:
+            with self.subTest(required=required), patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": required}, {"bootstrapRequired": True}]), patch("sys.stdout", new_callable=io.StringIO) as output:
                 installer.initialization_link(URL)
             text = output.getvalue()
             self.assertEqual("orkbot://initialize?" in text, required)
@@ -192,6 +192,11 @@ class InstallerTests(unittest.TestCase):
                 link = text.splitlines()[-1]
                 query = urllib.parse.parse_qs(urllib.parse.urlsplit(link).query)
                 self.assertEqual(query, {"server": [URL], "secret": ["z" * 43]})
+        with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": True}, {"bootstrapRequired": False}]), patch("sys.stdout", new_callable=io.StringIO) as output:
+            installer.initialization_link(URL)
+        self.assertEqual(output.getvalue(), "")
+        with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", side_effect=[{"required": True}, {"bootstrapRequired": "false"}]), self.assertRaises(installer.SetupError):
+            installer.initialization_link(URL)
         with patch.object(installer, "environment", return_value=env), patch.object(installer, "request_json", return_value={"required": "true"}), self.assertRaises(installer.SetupError):
             installer.initialization_link(URL)
 
