@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; shared attachment labels and replay-first deadlines are Ork additions.
 
 import type {
   JobPublisher,
@@ -12,7 +13,12 @@ import type {
 import { runContinueJob } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { ATTACHMENT_MAX_COUNT, AutomatedSenderPoliciesSchema } from "@orkbot/contracts";
-import { botMessageMaxHops, messageBlockForArtifact, promptTextForAttachments } from "@orkbot/core";
+import {
+  botMessageMaxHops,
+  messageBlockForArtifact,
+  promptTextForAttachments,
+  unavailableAttachmentLabel,
+} from "@orkbot/core";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
 import { clearEndedRunState, teamChatRunClientNonce } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -760,12 +766,8 @@ export class TeamChatBridge {
     const unavailable: string[] = [];
     const storeAttachment = this.deps.storeAttachment;
     for (const [index, attachment] of attachments.entries()) {
-      if (
-        !storeAttachment ||
-        index >= fileLimit ||
-        (downloadDeadline !== undefined && Date.now() >= downloadDeadline)
-      ) {
-        unavailable.push(`[file: ${attachment.name} (unavailable)]`);
+      if (!storeAttachment || index >= fileLimit) {
+        unavailable.push(unavailableAttachmentLabel(attachment.name));
         continue;
       }
       try {
@@ -783,7 +785,7 @@ export class TeamChatBridge {
         getLogger().warn("team chat attachment was not stored", {
           reason: error instanceof Error ? error.message : String(error),
         });
-        unavailable.push(`[file: ${attachment.name} (unavailable)]`);
+        unavailable.push(unavailableAttachmentLabel(attachment.name));
       }
     }
     return { artifacts, unavailable };

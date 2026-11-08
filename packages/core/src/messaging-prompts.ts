@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; bounded attachment failure labels are Ork additions.
+
 import type { MessageBlock } from "@orkbot/contracts";
 
 /** Instruction-stack note for bots whose owner has a messaging identity. */
@@ -49,4 +54,10 @@ export function sanitizeMessagingLabel(value: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 64);
+}
+
+/** Preserve the existing failure syntax without allowing a filename to add framing or controls. */
+export function unavailableAttachmentLabel(name: string): string {
+  const label = sanitizeMessagingLabel(name.replace(/[\p{Cc}\p{Bidi_Control}]/gu, " "));
+  return label ? `[file: ${label} (unavailable)]` : "[file (unavailable)]";
 }

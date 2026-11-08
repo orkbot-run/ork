@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; attachment-label and replay-boundary regressions are Ork additions.
 
 import type { ArtifactStore } from "@orkbot/adapter-kit";
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { asSystem, createDb, IsolationError, runAsTenant } from "@orkbot/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createOwnedArtifact } from "./artifacts.js";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { createOwnedArtifact, storeInboundAttachment } from "./artifacts.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -116,5 +117,47 @@ describePostgres("artifact upload nonce (PostgreSQL)", () => {
   it("refuses a nonce reused for another chat", async () => {
     await upload("send-3:0", { botId });
     await expect(upload("send-3:0", { botId: otherBotId })).rejects.toBeInstanceOf(IsolationError);
+  });
+  it("reuses an inbound artifact before expired deadline or changed metadata and rejects retarget before fetch", async () => {
+    const nonce = "inbound-expired:0";
+    const stored = await upload(nonce, { botId });
+    const putsBefore = puts;
+    const fetch = vi.fn(async () => new Uint8Array([1]));
+    const attachment = {
+      name: "changed.exe",
+      mimeType: "application/x-msdownload",
+      size: Number.MAX_SAFE_INTEGER,
+      fetch,
+    };
+    const deliver = (targetBot: string, clientNonce = nonce) =>
+      runAsTenant(actor, () =>
+        storeInboundAttachment({ prisma, artifacts }, actor, {
+          botId: targetBot,
+          clientNonce,
+          attachment,
+          downloadDeadline: Date.now() - 1,
+        }),
+      );
+    const replayed = await deliver(botId);
+    expect(replayed).toEqual(stored);
+    expect(replayed).not.toHaveProperty("bytes");
+    await expect(deliver(otherBotId)).rejects.toBeInstanceOf(IsolationError);
+    // A fresh supported attachment after the same deadline must fail without fetching.
+    await expect(
+      runAsTenant(actor, () =>
+        storeInboundAttachment({ prisma, artifacts }, actor, {
+          botId,
+          clientNonce: "inbound-missing:0",
+          attachment: { name: "fresh.txt", mimeType: "text/plain", fetch },
+          downloadDeadline: Date.now() - 1,
+        }),
+      ),
+    ).rejects.toThrow("Attachment download timed out");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(puts).toBe(putsBefore);
+    expect(await system.artifact.count({ where: { spaceId, userId, clientNonce: nonce } })).toBe(1);
+    expect(
+      await system.artifact.count({ where: { spaceId, userId, clientNonce: "inbound-missing:0" } }),
+    ).toBe(0);
   });
 });
