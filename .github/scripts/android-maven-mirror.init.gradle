@@ -3,7 +3,8 @@
 
 import org.gradle.api.artifacts.repositories.MavenArtifactRepository
 
-// Keep Maven Central as a fallback while preferring its Google-hosted mirror.
+// Route this artifact only to the mirror. A second build without this script
+// retains the original repositories as the fallback.
 def addCentralMirror = { repositories ->
   repositories.whenObjectAdded { repository ->
     if (repository instanceof MavenArtifactRepository &&
@@ -12,10 +13,13 @@ def addCentralMirror = { repositories ->
       def mirror = repositories.maven {
         name = 'orkMavenCentralMirror'
         url = uri('https://maven-central.storage-download.googleapis.com/maven2')
-        content { includeModule('org.jetbrains.kotlin', 'kotlin-compiler-embeddable') }
       }
       repositories.remove(mirror)
       repositories.addFirst(mirror)
+      repositories.exclusiveContent {
+        forRepositories(mirror)
+        filter { includeModule('org.jetbrains.kotlin', 'kotlin-compiler-embeddable') }
+      }
     }
   }
 }
