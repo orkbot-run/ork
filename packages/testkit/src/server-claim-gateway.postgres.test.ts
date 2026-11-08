@@ -135,7 +135,12 @@ describe.skipIf(!enabled)(
         req.end(payload);
       });
       expect(response.status).toBe(200);
-      expect(JSON.parse(response.body)).toEqual({ id, proofNonce, status: "pending" });
+      expect(JSON.parse(response.body)).toEqual({
+        id,
+        proofNonce,
+        status: "pending",
+        organizationBinding: true,
+      });
       expect(response.cache).toBe("no-store");
       expect(response.cookie).toBeUndefined();
       expect(seen).toEqual({ origin: null, cookie: null, authorization: null });
