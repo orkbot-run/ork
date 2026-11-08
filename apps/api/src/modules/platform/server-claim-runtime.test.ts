@@ -18,12 +18,10 @@ it("offers the same one-time code as an Accounts link and manual entry", () => {
   const instructions = serverClaimInstructions("23456789AB");
   const lines = instructions.trim().split("\n");
   const link = new URL(lines[1]!);
-  expect(link.origin + link.pathname).toBe("https://accounts.orkbot.run/account/connect-server");
+  expect(link.origin + link.pathname).toBe("https://accounts.ork.run/account/connect-server");
   expect(link.search).toBe("");
   expect(link.hash).toBe("#code=23456789AB");
-  expect(lines[3]).toBe(
-    "Or enter this code at https://accounts.orkbot.run/account/connect-server:",
-  );
+  expect(lines[3]).toBe("Or enter this code at https://accounts.ork.run/account/connect-server:");
   expect(lines.at(-3)).toBe("23456789AB");
   expect(() => serverClaimInstructions("invalid")).toThrow();
 });
