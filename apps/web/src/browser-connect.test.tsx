@@ -56,6 +56,25 @@ async function submit() {
   );
 }
 
+it("explains workspace setup and accepts only an HTTPS dashboard origin", async () => {
+  expect(host.textContent).toContain("Connect a workspace");
+  expect(host.textContent).toContain("node /app/apps/api/dist/cli/server-claim.js");
+  const input = host.querySelector<HTMLInputElement>("#workspace-dashboard")!;
+  const setDashboard = async (value: string) =>
+    act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  await setDashboard("http://dashboard.example.test");
+  expect(host.textContent).not.toContain("Open dashboard");
+  await setDashboard("https://dashboard.example.test");
+  expect(
+    host.querySelector<HTMLAnchorElement>('a[href="https://dashboard.example.test"]')?.textContent,
+  ).toBe("Open dashboard");
+  await setDashboard("https://user@dashboard.example.test");
+  expect(host.textContent).not.toContain("Open dashboard");
+});
+
 it("checks initialization without a session request and waits for a canonical six-character code", async () => {
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
@@ -189,16 +208,17 @@ async function remount(fetcher: typeof initializationFetch) {
   await act(async () => root.render(<BrowserConnect />));
 }
 
-it("shows only the native handoff for an initialized server after a fresh page load", async () => {
+it("shows the native handoff and workspace guidance for an initialized server", async () => {
   const fetcher = vi.fn(async () => Response.json({ required: false }));
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
-  expect(host.querySelector("input")).toBeNull();
+  expect(host.querySelector('input[id="pairing-code"]')).toBeNull();
   expect(host.querySelector("button")).toBeNull();
   expect(host.querySelectorAll("a")).toHaveLength(2);
   expect(host.querySelector("a")?.textContent).toBe("Open in Ork");
   expect(host.querySelector("a")?.getAttribute("href")).toMatch(/^orkbot:\/\/connect/);
   expect(host.textContent).toContain("Your server is ready");
+  expect(host.textContent).toContain("node /app/apps/api/dist/cli/server-claim.js --workspace");
   expect(host.querySelector('a[href="https://ork.run/download/"]')?.textContent).toBe(
     "Need the app? Download Ork",
   );

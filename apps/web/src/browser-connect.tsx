@@ -11,6 +11,7 @@ import "./styles.css";
 export function BrowserConnect() {
   const polish = navigator.language.toLowerCase().startsWith("pl");
   const [code, setCode] = useState("");
+  const [dashboard, setDashboard] = useState("");
   const [pending, setPending] = useState(false);
   const [awaitingApproval, setAwaitingApproval] = useState(false);
   const [initialization, setInitialization] = useState<
@@ -124,6 +125,21 @@ export function BrowserConnect() {
     }
   };
   let link: string | undefined;
+  let dashboardLink: string | undefined;
+  try {
+    const candidate = new URL(dashboard.trim());
+    if (
+      candidate.protocol === "https:" &&
+      !candidate.username &&
+      !candidate.password &&
+      candidate.pathname === "/" &&
+      !candidate.search &&
+      !candidate.hash
+    )
+      dashboardLink = candidate.origin;
+  } catch {
+    // The operator must provide the HTTPS dashboard origin.
+  }
   try {
     link = createServerConnectLink(window.location.origin);
   } catch {
@@ -191,6 +207,58 @@ export function BrowserConnect() {
           <p role="alert">
             {polish ? "Publiczny serwer wymaga HTTPS." : "Public servers require HTTPS."}
           </p>
+        )}
+        {(initialization === "required" || initialization === "complete") && (
+          <details className="w-full rounded-xl border border-border p-4 text-start text-sm">
+            <summary className="cursor-pointer font-medium">
+              {polish ? "Połącz z workspace’em" : "Connect a workspace"}
+            </summary>
+            <div className="mt-3 flex flex-col gap-3 text-muted-foreground">
+              <p>
+                {polish
+                  ? "Na serwerze uruchom poniższe polecenie w kontenerze API, aby uzyskać kod ważny przez pięć minut:"
+                  : "Run this command in the server’s API container to get a code valid for five minutes:"}
+              </p>
+              <code className="break-all text-foreground">
+                {initialization === "complete"
+                  ? "node /app/apps/api/dist/cli/server-claim.js --workspace"
+                  : "node /app/apps/api/dist/cli/server-claim.js"}
+              </code>
+              <p>
+                {polish
+                  ? "Zaloguj się do dashboardu, wybierz organizację i wpisz kod w sekcji Server. Przed zatwierdzeniem sprawdź adres serwera."
+                  : "Sign in to your dashboard, choose an organization, and enter the code under Server. Check the server address before confirming."}
+              </p>
+              <label htmlFor="workspace-dashboard">
+                {polish ? "Adres dashboardu" : "Dashboard address"}
+              </label>
+              <Input
+                id="workspace-dashboard"
+                type="url"
+                value={dashboard}
+                onChange={(event) => setDashboard(event.target.value)}
+                placeholder="https://dashboard.example.com"
+                autoComplete="url"
+              />
+              {dashboardLink && (
+                <a
+                  href={dashboardLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground underline underline-offset-4"
+                >
+                  {polish ? "Otwórz dashboard" : "Open dashboard"}
+                </a>
+              )}
+              {initialization === "complete" && (
+                <p>
+                  {polish
+                    ? "Zaloguj się na konto obecnego właściciela serwera, które ma również uprawnienia administratora workspace’u."
+                    : "Sign in as the server’s current owner, who must also be a workspace administrator."}
+                </p>
+              )}
+            </div>
+          </details>
         )}
         {initialization === "unavailable" && (
           <Button

@@ -26,6 +26,14 @@ it("offers the same one-time code as an Accounts link and manual entry", () => {
   expect(() => serverClaimInstructions("invalid")).toThrow();
 });
 
+it("sends an existing server's owner to the workspace dashboard", () => {
+  const instructions = serverClaimInstructions("23456789AB", true);
+  expect(instructions).toContain("workspace dashboard");
+  expect(instructions).toContain("23456789AB");
+  expect(instructions).toContain("current owner");
+  expect(instructions).not.toContain("connect-server#code");
+});
+
 it("loads a private Compose role file using the production runtime loader", async () => {
   const file = path.join(root, "environment.json");
   writeFileSync(
