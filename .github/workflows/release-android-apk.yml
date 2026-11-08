@@ -97,6 +97,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Generate local Android project
         run: pnpm --filter @orkbot/mobile exec expo prebuild --platform android --no-install
+      - name: Prepare verified Gradle distribution
+        run: bash .github/scripts/prepare-android-gradle.sh apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
       - name: Build development-signed standalone APK
         working-directory: apps/mobile/android
         run: >-

@@ -3,6 +3,14 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "New server available": "新しいサーバーが利用可能です",
+  "Open servers": "サーバーを開く",
+  Later: "後で",
+  "Self-hosted": "セルフホスト",
+  "Copy command": "コマンドをコピー",
+  "Could not copy the command.": "コマンドをコピーできませんでした。",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "Linuxサーバーでこのコマンドを実行し、表示された認証リンクを開いてください。",
   "Routine: {names}": "ルーティン: {names}",
   "Routines: {names}": "ルーティン: {names}",
   "Stop {name}": "{name}を停止",

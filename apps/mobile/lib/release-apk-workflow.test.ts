@@ -1,4 +1,15 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -41,9 +52,49 @@ describe("Android APK release workflow", () => {
     expect(diagnostic).not.toContain("secrets.");
     expect(diagnostic).not.toMatch(/gh release|eas build|expo-github-action/);
     expect(diagnostic).toContain("expo prebuild --platform android --no-install");
+    expect(diagnostic).toContain("bash .github/scripts/prepare-android-gradle.sh");
     expect(diagnostic).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
     expect(diagnostic).toContain("actions/upload-artifact@");
     expect(diagnostic).toContain("outputs/apk/release/app-release.apk");
+  });
+
+  it.each(["9.3.1", "8.14.3"])(
+    "prepares the generated Gradle %s distribution offline",
+    (version) => {
+      const result = prepareGradle(version);
+      try {
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.properties).toContain("distributionUrl=file\\:///");
+        expect(result.properties).toContain(`distributionSha256Sum=${result.checksum}`);
+        expect(result.properties).toContain("networkTimeout=10000");
+        expect(result.requests).toContain(`/releases/tags/v${version}`);
+        expect(result.requests).toContain(`/distributions/gradle-${version}-bin.zip.sha256`);
+      } finally {
+        result.cleanup();
+      }
+    },
+  );
+
+  it("rejects a Gradle archive that fails its official checksum", () => {
+    const result = prepareGradle("9.3.1", true);
+    try {
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("checksum does not match");
+      expect(result.properties).toContain("distributionUrl=https\\://services.gradle.org/");
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it("rejects an unexpected generated distribution before downloading anything", () => {
+    const result = prepareGradle("9.3.1/../../unexpected");
+    try {
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("distribution URL is unsupported");
+      expect(result.requests).toBe("");
+    } finally {
+      result.cleanup();
+    }
   });
 
   it("requires explicit EAS mode and main before production publishing", () => {
@@ -83,3 +134,66 @@ describe("Android APK release workflow", () => {
     );
   });
 });
+
+function prepareGradle(version: string, badChecksum = false) {
+  const root = mkdtempSync(path.join(tmpdir(), "ork-gradle-test-"));
+  const bin = path.join(root, "bin");
+  const wrapper = path.join(root, "gradle-wrapper.properties");
+  const requests = path.join(root, "requests");
+  const archive = "offline fake archive";
+  const checksum = createHash("sha256").update(archive).digest("hex");
+  mkdirSync(bin);
+  const fakeCurl = path.join(bin, "curl");
+  writeFileSync(
+    fakeCurl,
+    `#!/bin/sh
+set -eu
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output=$2; shift 2 ;;
+    https://*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+printf '%s\\n' "$url" >> "$TEST_REQUESTS"
+case "$url" in
+  */releases/tags/*) printf '{"assets":[{"name":"gradle-%s-bin.zip","state":"uploaded","url":"https://api.github.com/repos/gradle/gradle-distributions/releases/assets/123"}]}' "$TEST_VERSION" > "$output" ;;
+  */releases/assets/123) printf '%s' "$TEST_ARCHIVE" > "$output" ;;
+  *.sha256) printf '%s' "$TEST_CHECKSUM" > "$output" ;;
+  *) exit 22 ;;
+esac
+`,
+  );
+  chmodSync(fakeCurl, 0o755);
+  writeFileSync(
+    wrapper,
+    `distributionUrl=https\\://services.gradle.org/distributions/gradle-${version}-bin.zip\nnetworkTimeout=10000\n`,
+  );
+  const run = spawnSync(
+    "bash",
+    [
+      path.resolve(import.meta.dirname, "../../../.github/scripts/prepare-android-gradle.sh"),
+      wrapper,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        RUNNER_TEMP: root,
+        TEST_REQUESTS: requests,
+        TEST_VERSION: version,
+        TEST_ARCHIVE: archive,
+        TEST_CHECKSUM: badChecksum ? "0".repeat(64) : checksum,
+      },
+    },
+  );
+  return {
+    status: run.status,
+    stderr: run.stderr,
+    checksum,
+    properties: readFileSync(wrapper, "utf8"),
+    requests: existsSync(requests) ? readFileSync(requests, "utf8") : "",
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}

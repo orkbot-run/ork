@@ -3,6 +3,14 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "New server available": "Nuevo servidor disponible",
+  "Open servers": "Abrir servidores",
+  Later: "Más tarde",
+  "Self-hosted": "Servidor propio",
+  "Copy command": "Copiar comando",
+  "Could not copy the command.": "No se pudo copiar el comando.",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "Ejecuta este comando en tu servidor Linux y luego abre el enlace de autorización que aparece.",
   "Routine: {names}": "Rutina: {names}",
   "Routines: {names}": "Rutinas: {names}",
   "Stop {name}": "Detener {name}",

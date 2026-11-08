@@ -3,6 +3,14 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "New server available": "有新伺服器可用",
+  "Open servers": "開啟伺服器清單",
+  Later: "稍後",
+  "Self-hosted": "自行託管",
+  "Copy command": "複製命令",
+  "Could not copy the command.": "無法複製命令。",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "在 Linux 伺服器上執行此命令，然後開啟顯示的授權連結。",
   "Routine: {names}": "例行工作：{names}",
   "Routines: {names}": "例行工作：{names}",
   "Stop {name}": "停止{name}",
