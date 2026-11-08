@@ -482,6 +482,9 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   });
   await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
 
+  // Leave the authenticated app before clearing its cookies, so background requests cannot
+  // race the simulated session loss and produce unrelated 401 errors.
+  await page.goto("about:blank");
   await page.context().clearCookies();
   await page.goto("/sign-in");
   await page.getByPlaceholder("Your email address").fill(email);
