@@ -228,3 +228,46 @@ it("keeps a secondary takeover's cleared busy state when the refresh cursor is o
   expect(result.snapshot.computer?.busyBotName).toBeNull();
   expect(result.computer?.busyBotName).toBeNull();
 });
+
+it("retains a routine label across legacy starts and waits but clears explicit null", () => {
+  const named = { ...run, routineName: "Morning report" };
+  const initial = { ...snapshot(), run: named, activeRuns: [named] };
+  const legacy = reduceThreadSnapshot(initial, event("run.started", 1))!;
+  expect(legacy.run?.routineName).toBe("Morning report");
+  const waiting = reduceThreadSnapshot(legacy, event("computer.takeover.requested", 2))!;
+  expect(waiting.run?.routineName).toBe("Morning report");
+  const cleared = reduceThreadSnapshot(
+    waiting,
+    event("run.started", 3, { routineId: "routine", routineName: null }),
+  )!;
+  expect(cleared.run?.routineName).toBeNull();
+});
+it("binds each streamed routine label to its run, bot, trigger and current thread", () => {
+  const named = { ...run, routineName: "Morning report" };
+  const initial = { ...snapshot(), run: named, activeRuns: [named] };
+  const next = reduceThreadSnapshot(initial, {
+    ...event("run.started", 1, {
+      trigger: "routine",
+      routineId: "other",
+      routineName: "Evening report",
+    }),
+    runId: "next",
+  })!;
+  expect(next.run).toMatchObject({ id: "next", routineId: "other", routineName: "Evening report" });
+  expect(next.activeRuns?.find((item) => item.id === run.id)?.routineName).toBe("Morning report");
+  const changedBot = reduceThreadSnapshot(initial, {
+    ...event("run.started", 1, { routineId: "routine", routineName: "Foreign name" }),
+    botId: "peer",
+  })!;
+  expect(changedBot.run?.routineName).toBeNull();
+  const changedTrigger = reduceThreadSnapshot(
+    initial,
+    event("run.started", 1, { trigger: "user" }),
+  )!;
+  expect(changedTrigger.run?.routineName).toBeNull();
+  const deleted = reduceThreadSnapshot(
+    initial,
+    event("run.started", 1, { routineId: null, routineName: null }),
+  )!;
+  expect(deleted.run).toMatchObject({ routineId: null, routineName: null });
+});

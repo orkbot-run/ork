@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Routine: {names}": "Routine: {names}",
+  "Routines: {names}": "Routines: {names}",
+  "Stop {name}": "{name} stoppen",
+  "Stop all": "Alles stoppen",
   "Review delivery": "Bezorging controleren",
   "Mark as sent": "Markeren als verzonden",
   "Mark as not sent": "Markeren als niet verzonden",

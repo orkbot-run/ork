@@ -21,7 +21,7 @@ import {
 import { ModelHeadersSchema } from "./model-headers.js";
 import { NavLinkSchema } from "./nav-links.js";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "./routine-watch.js";
-import { RunTriggerSchema } from "./runs.js";
+import { RunRoutineNameSchema, RunTriggerSchema } from "./runs.js";
 import { SettingsScopeSchema } from "./settings-scope.js";
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
@@ -1437,6 +1437,7 @@ export const RunSchema = z.object({
   status: RunStatus,
   trigger: RunTriggerSchema,
   routineId: Id.nullable(),
+  routineName: RunRoutineNameSchema.optional(),
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   error: z.string().nullable(),

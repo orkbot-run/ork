@@ -31,6 +31,7 @@ import {
   messagingDmSurfaceNote,
   nextFence,
   nonOwnerChatPrivacyBlock,
+  projectRunRoutineName,
   promptInvokesSkill,
   redactSecrets,
   renderBotDirectory,
@@ -367,6 +368,18 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
 
       const current = await deps.prisma.run.findUniqueOrThrow({
         where: { id: runId },
+        include: {
+          routine: {
+            select: {
+              id: true,
+              name: true,
+              userId: true,
+              spaceId: true,
+              botId: true,
+              threadId: true,
+            },
+          },
+        },
       });
       if (
         current.status === "queued" ||
@@ -761,7 +774,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           botId: bot.id,
           type: "run.started",
           runId,
-          payload: { trigger: run.trigger, routineId: run.routineId },
+          payload: {
+            trigger: run.trigger,
+            routineId: current.routineId,
+            routineName: projectRunRoutineName(current, current.routine, thread),
+          },
         });
 
         const discoveredPromise = deps.connector

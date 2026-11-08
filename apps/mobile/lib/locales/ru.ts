@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Routine: {names}": "Процедура: {names}",
+  "Routines: {names}": "Процедуры: {names}",
+  "Stop {name}": "Остановить {name}",
+  "Stop all": "Остановить всё",
   "Review delivery": "Проверить доставку",
   "Mark as sent": "Отметить как отправленное",
   "Mark as not sent": "Отметить как неотправленное",

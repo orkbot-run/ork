@@ -5527,6 +5527,10 @@ msgstr "輪換金鑰"
 msgid "Routine"
 msgstr "例行任務"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "例行工作：{names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5535,6 +5539,10 @@ msgstr "例行任務"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "在你離線時執行的例行任務"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "例行工作：{names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6205,6 +6213,15 @@ msgstr "步驟"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "停止"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "停止{name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "全部停止"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

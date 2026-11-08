@@ -5526,6 +5526,10 @@ msgstr "Tourner la clé"
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Routine : {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5534,6 +5538,10 @@ msgstr "Routines"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr ""
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Routines : {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6204,6 +6212,15 @@ msgstr "Étapes"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Arrêter"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "Arrêter {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Tout arrêter"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

@@ -5526,6 +5526,10 @@ msgstr ""
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Routine: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5534,6 +5538,10 @@ msgstr "Routinen"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr ""
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Routinen: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6204,6 +6212,15 @@ msgstr "Schritte"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Stoppen"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "{name} stoppen"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Alle stoppen"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

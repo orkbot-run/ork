@@ -5526,6 +5526,10 @@ msgstr "Rotar clave"
 msgid "Routine"
 msgstr "Rutina"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Rutina: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5534,6 +5538,10 @@ msgstr "Rutinas"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "Rutinas que se ejecutan mientras no estás"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Rutinas: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6204,6 +6212,15 @@ msgstr "Pasos"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Detener"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "Detener {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Detener todo"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

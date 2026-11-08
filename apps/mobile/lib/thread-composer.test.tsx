@@ -229,7 +229,14 @@ vi.mock("./native", () => ({
   useMobileTokens: () => ({ link: "token-link" }),
   useResolvedAppearance: () => "light",
 }));
-vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
+vi.mock("./i18n", () => ({
+  useI18n: () => ({
+    t: (text: string, values: Record<string, string | number> = {}) =>
+      ["Routine: {names}", "Routines: {names}", "Stop {name}"].includes(text)
+        ? text.replace(/\{(\w+)\}/g, (original, key: string) => String(values[key] ?? original))
+        : text,
+  }),
+}));
 
 const skill = {
   id: "skill-1",
@@ -312,6 +319,30 @@ describe("thread composer isolation", () => {
   function render(changes: HarnessProps = {}) {
     act(() => root.render(<ThreadHarness {...changes} />));
   }
+  it("identifies a single active routine and preserves its existing stop callback", () => {
+    const stop = vi.fn(async () => {});
+    render({
+      working: true,
+      routineWork: { names: ["Morning report"], stopName: "Morning report", stopAll: false },
+      stop,
+    });
+    expect(container.textContent).toContain("Morning report");
+    press("Stop Morning report");
+    expect(stop).toHaveBeenCalledOnce();
+    render({ working: false });
+    expect(container.textContent).not.toContain("Morning report");
+  });
+  it("shows all known group routine names without narrowing global Stop", () => {
+    const stop = vi.fn(async () => {});
+    render({
+      working: true,
+      routineWork: { names: ["Morning report", "Evening report"], stopName: null, stopAll: true },
+      stop,
+    });
+    expect(container.textContent).toContain("Morning report, Evening report");
+    press("Stop all");
+    expect(stop).toHaveBeenCalledOnce();
+  });
   function type(value: string) {
     act(() => input.change(value));
   }

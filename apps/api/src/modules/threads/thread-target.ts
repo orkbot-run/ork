@@ -30,6 +30,7 @@ import {
   messageReaction,
   parseMessagingCommand,
   projectMessages,
+  projectRunRoutineName,
   QUEUE_HOLDING_RUN_STATUSES,
   resolveGroupTargetBotIds,
   runFailureError,
@@ -87,6 +88,11 @@ export type ThreadTarget =
     };
 
 const THREAD_MESSAGE_PAGE_SIZE = 100;
+const runRoutineInclude = {
+  routine: {
+    select: { id: true, name: true, userId: true, spaceId: true, botId: true, threadId: true },
+  },
+} as const;
 const RUNS_NEEDING_CONTINUE = new Set(["queued", "waiting_takeover"]);
 
 const STEERABLE_RUN_STATUSES = new Set<string>(QUEUE_HOLDING_RUN_STATUSES);
@@ -445,6 +451,11 @@ export async function threadSnapshot(
   // progress are read from one consistent commit. A torn Promise.all can
   // otherwise advance the client cursor past thread.message.created while the
   // ask message page still omits it — leaving waiting_input with no AskCard.
+  const runThread = {
+    id: target.threadId,
+    botId: target.kind === "bot" ? target.botId : null,
+    groupId: target.kind === "group" ? target.groupId : null,
+  };
   if (target.kind === "bot") {
     const [capabilities, busyBotName, core] = await Promise.all([
       botComputerCapabilities(deps, target.bot),
@@ -464,6 +475,7 @@ export async function threadSnapshot(
               select: { seq: true },
             }),
             tx.run.findMany({
+              include: runRoutineInclude,
               where: {
                 botId: target.botId,
                 threadId: target.threadId,
@@ -539,8 +551,8 @@ export async function threadSnapshot(
       cursor: core.last?.seq ?? -1,
       messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents, core.activeRuns),
       olderCursor: core.messagePage.olderCursor,
-      run: core.run ? mapRun(core.run) : null,
-      activeRuns: core.activeRuns.map(mapRun),
+      run: core.run ? mapRun(core.run, runThread) : null,
+      activeRuns: core.activeRuns.map((run) => mapRun(run, runThread)),
       computer: toComputerStatus(target.botId, target.bot.computer, busyBotName, capabilities),
     };
   }
@@ -556,6 +568,7 @@ export async function threadSnapshot(
           select: { seq: true },
         }),
         tx.run.findMany({
+          include: runRoutineInclude,
           where: {
             threadId: target.threadId,
             status: { in: [...ACTIVE_RUN_STATUSES] },
@@ -623,11 +636,11 @@ export async function threadSnapshot(
     // still active or start late. A newer completed/cancelled terminal clears it.
     run:
       core.terminalRun?.status === "failed"
-        ? mapRun(core.terminalRun)
+        ? mapRun(core.terminalRun, runThread)
         : primaryActiveRun
-          ? mapRun(primaryActiveRun)
+          ? mapRun(primaryActiveRun, runThread)
           : null,
-    activeRuns: core.activeRuns.map(mapRun),
+    activeRuns: core.activeRuns.map((run) => mapRun(run, runThread)),
   };
 }
 
@@ -685,22 +698,28 @@ function messagesWithLiveEvents(
   return [...persisted, ...live];
 }
 
-function mapRun(run: {
-  id: string;
-  userId: string;
-  botId: string;
-  threadId: string;
-  taskId: string;
-  status: string;
-  trigger: string;
-  routineId: string | null;
-  modelProvider: string | null;
-  modelId: string | null;
-  error: string | null;
-  startedAt: Date | null;
-  completedAt: Date | null;
-  createdAt: Date;
-}) {
+function mapRun(
+  run: {
+    id: string;
+    userId: string;
+    spaceId: string;
+    botId: string;
+    threadId: string;
+    taskId: string;
+    status: string;
+    trigger: string;
+    routineId: string | null;
+    clientNonce?: string | null;
+    routine?: Parameters<typeof projectRunRoutineName>[1];
+    modelProvider: string | null;
+    modelId: string | null;
+    error: string | null;
+    startedAt: Date | null;
+    completedAt: Date | null;
+    createdAt: Date;
+  },
+  thread: Parameters<typeof projectRunRoutineName>[2],
+) {
   return {
     id: run.id,
     userId: run.userId,
@@ -710,6 +729,7 @@ function mapRun(run: {
     status: run.status as never,
     trigger: run.trigger as never,
     routineId: run.routineId ?? null,
+    routineName: projectRunRoutineName(run, run.routine, thread),
     modelProvider: run.modelProvider,
     modelId: run.modelId,
     // Same display clamp as live run.failed events so a huge stored error cannot bypass it.

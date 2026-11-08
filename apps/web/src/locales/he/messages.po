@@ -5526,6 +5526,10 @@ msgstr "החלפת מפתח"
 msgid "Routine"
 msgstr "רוטינה"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "שגרה: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5534,6 +5538,10 @@ msgstr "רוטינות"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "רוטינות שרצות גם כשלא נמצאים"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "שגרות: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6204,6 +6212,15 @@ msgstr "שלבים"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "עצירה"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "עצירת {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "עצירת הכול"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

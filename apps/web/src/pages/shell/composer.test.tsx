@@ -1644,3 +1644,35 @@ it("keeps newer text and mention identities in memory when the login namespace c
     unavailable.mockRestore();
   }
 });
+
+it("identifies the current routine without changing the stop operation", async () => {
+  const onStop = vi.fn(async () => {});
+  renderComposer(async () => true, {
+    running: true,
+    routineWork: { names: ["Morning report"], stopName: "Morning report", stopAll: false },
+    onStop,
+  });
+  expect(container?.textContent).toContain("Morning report");
+  const stop = container?.querySelector<HTMLButtonElement>(
+    'button[aria-label="Stop Morning report"]',
+  );
+  expect(stop).not.toBeNull();
+  await act(async () => stop?.click());
+  expect(onStop).toHaveBeenCalledOnce();
+});
+
+it("lists multiple routine names and keeps Stop global for mixed active work", async () => {
+  const onStop = vi.fn(async () => {});
+  renderComposer(async () => true, {
+    running: true,
+    routineWork: { names: ["Morning report", "Evening report"], stopName: null, stopAll: true },
+    onStop,
+  });
+  expect(container?.textContent).toContain("Morning report, Evening report");
+  const stop = container?.querySelector<HTMLButtonElement>('button[aria-label="Stop all"]');
+  expect(stop).not.toBeNull();
+  await act(async () => stop?.click());
+  expect(onStop).toHaveBeenCalledOnce();
+  rerenderComposer({ running: false });
+  expect(container?.querySelector('[data-testid="active-routine-context"]')).toBeNull();
+});

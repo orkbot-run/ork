@@ -5526,6 +5526,10 @@ msgstr "キーをローテーション"
 msgid "Routine"
 msgstr "ルーティン"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "ルーティン: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5534,6 +5538,10 @@ msgstr "ルーティン"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "不在中に実行されるルーティン"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "ルーティン: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6204,6 +6212,15 @@ msgstr "手順"
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "停止"
+
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "{name}を停止"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "すべて停止"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"

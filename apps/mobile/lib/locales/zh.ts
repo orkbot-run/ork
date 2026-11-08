@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Routine: {names}": "例行任务：{names}",
+  "Routines: {names}": "例行任务：{names}",
+  "Stop {name}": "停止{name}",
+  "Stop all": "全部停止",
   "Review delivery": "检查发送结果",
   "Mark as sent": "标记为已发送",
   "Mark as not sent": "标记为未发送",

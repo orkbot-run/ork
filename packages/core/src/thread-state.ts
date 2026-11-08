@@ -24,6 +24,7 @@ import {
 } from "./events.js";
 import { mergeThreadHistory, upsertMessageById } from "./message-pages.js";
 import { replyMetadata } from "./message-replies.js";
+import { runRoutineDisplayName } from "./routine-work.js";
 import { isActive, isBackgroundRunTrigger, QUEUE_HOLDING_RUN_STATUSES } from "./run-state.js";
 import { takeLiveMessage, updateCloudAgentMessages } from "./thread-message-updates.js";
 
@@ -73,8 +74,31 @@ function runFromStartedEvent(
   snapshot: ClientThreadSnapshot,
 ): ClientThreadRun {
   const trigger = event.payload?.trigger;
+  const routineId =
+    typeof event.payload?.routineId === "string"
+      ? event.payload.routineId
+      : event.payload?.routineId === null
+        ? null
+        : (previous?.routineId ?? null);
+  const sameSource =
+    !previous ||
+    ((!previous.botId || previous.botId === (event.botId ?? previous.botId)) &&
+      (!previous.threadId || previous.threadId === (event.threadId ?? snapshot.threadId)));
+  const keepName =
+    sameSource &&
+    routineId === previous?.routineId &&
+    (typeof trigger !== "string" || trigger === previous?.trigger);
+  const routineName = Object.hasOwn(event.payload ?? {}, "routineName")
+    ? {
+        routineName:
+          routineId && sameSource ? runRoutineDisplayName(event.payload?.routineName) : null,
+      }
+    : previous?.routineName !== undefined
+      ? { routineName: keepName ? previous.routineName : null }
+      : {};
   return {
     ...previous,
+    ...routineName,
     id: event.runId ?? previous?.id ?? event.id ?? "",
     botId: event.botId ?? previous?.botId,
     threadId: event.threadId ?? snapshot.threadId,
@@ -85,10 +109,7 @@ function runFromStartedEvent(
       typeof trigger === "string" && runTriggers.has(trigger)
         ? (trigger as RunTrigger)
         : (previous?.trigger ?? "user"),
-    routineId:
-      typeof event.payload?.routineId === "string"
-        ? event.payload?.routineId
-        : (previous?.routineId ?? null),
+    routineId,
     modelProvider: previous?.modelProvider ?? null,
     modelId: previous?.modelId ?? null,
     error: null,

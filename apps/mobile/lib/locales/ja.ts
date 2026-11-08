@@ -3,6 +3,10 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Routine: {names}": "ルーティン: {names}",
+  "Routines: {names}": "ルーティン: {names}",
+  "Stop {name}": "{name}を停止",
+  "Stop all": "すべて停止",
   "Review delivery": "配信結果を確認",
   "Mark as sent": "送信済みにする",
   "Mark as not sent": "未送信にする",

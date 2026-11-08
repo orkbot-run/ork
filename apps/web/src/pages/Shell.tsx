@@ -25,6 +25,7 @@ import {
   isRunWorking,
   memberName,
   newClientId,
+  routineWorkContext,
 } from "@orkbot/core";
 import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
@@ -1197,6 +1198,7 @@ function SpaceShell() {
               enterToSend={enterToSend}
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               running={composerRunning}
+              routineWork={routineWorkContext(currentRuns)}
               disabled={Boolean(recordingSkill)}
               pendingAttachments={composer.activePendingAttachments}
               attachmentNotice={composer.attachmentNotice}
@@ -1332,6 +1334,7 @@ function SpaceShell() {
         routinesPanel={
           <RoutineList
             routines={activeRoutines}
+            stopAll={currentRuns.length > 1}
             runningRoutineId={
               snapshot?.run && isActive(snapshot.run.status)
                 ? (snapshot.run.routineId ?? undefined)

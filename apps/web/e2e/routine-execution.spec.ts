@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
-import type { Routine, RoutineHistory } from "@orkbot/contracts";
+import type { Routine, RoutineHistory, ThreadSnapshot } from "@orkbot/contracts";
 import {
   activeBotId,
   captureScreenshot,
@@ -242,4 +242,62 @@ test("run history links runs that replied and marks silent ones", async ({ page 
   await expect(history.getByText(/Started .* late/)).toHaveCount(1);
   await history.scrollIntoViewIfNeeded();
   await captureScreenshot(page, testInfo, "routine-run-history-states");
+});
+
+test("active routine names survive reload and global Stop keeps all active work in scope", async ({
+  page,
+}, testInfo) => {
+  const stamp = Date.now();
+  await signup(page, `routine-label-${stamp}@orkbot.test`, "password12", "Routine context");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+  const snapshot = () => rpc<ThreadSnapshot>(page, "threads/get", { botId });
+  await expect.poll(async () => (await snapshot()).activeRuns?.length ?? 0).toBe(0);
+  const create = (name: string) =>
+    rpc<Routine>(page, "routines/create", {
+      botId,
+      name,
+      prompt: "Ask me before continuing",
+      crons: ["0 9 * * *"],
+      timezone: "UTC",
+      active: false,
+      notify: false,
+    });
+  const first = await create("Morning verification");
+  const firstRun = await rpc<{ runId: string }>(page, "routines/testRun", {
+    routineId: first.id,
+    clientNonce: `first-label-${stamp}`,
+  });
+  await expect
+    .poll(
+      async () => (await snapshot()).activeRuns?.find((run) => run.id === firstRun.runId)?.status,
+      { timeout: 30_000 },
+    )
+    .toBe("waiting_input");
+  const context = page.getByTestId("active-routine-context");
+  await expect(context).toHaveText("Routine: Morning verification");
+  await expect(
+    page.getByRole("button", { name: "Stop Morning verification", exact: true }),
+  ).toBeEnabled();
+  await captureScreenshot(page, testInfo, "routine-current-name");
+  await page.reload();
+  await expect(context).toHaveText("Routine: Morning verification");
+  const second = await create("Evening verification");
+  const secondRun = await rpc<{ runId: string }>(page, "routines/testRun", {
+    routineId: second.id,
+    clientNonce: `second-label-${stamp}`,
+  });
+  await expect
+    .poll(
+      async () => (await snapshot()).activeRuns?.find((run) => run.id === secondRun.runId)?.status,
+      { timeout: 30_000 },
+    )
+    .toBe("waiting_input");
+  await expect(context).toContainText("Morning verification");
+  await expect(context).toContainText("Evening verification");
+  await expect(page.getByRole("button", { name: "Stop all", exact: true })).toBeEnabled();
+  await captureScreenshot(page, testInfo, "routine-current-names");
+  await page.getByRole("button", { name: "Stop all", exact: true }).click();
+  await expect.poll(async () => (await snapshot()).activeRuns?.length ?? 0).toBe(0);
+  await expect(context).toHaveCount(0);
 });

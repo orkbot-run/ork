@@ -5,6 +5,7 @@
 
 import type { AgentSkillCatalogEntry } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   buildComposerMentionOptions,
   channelMessageSender,
   chatUserBubbleColors,
@@ -15,6 +16,7 @@ import {
   memberName,
   newClientId,
   newestPageCards,
+  routineWorkContext,
   displayName as safeDisplayName,
 } from "@orkbot/core";
 import { useFocusEffect, useIsFocused, useLocalSearchParams, useRouter } from "expo-router";
@@ -643,6 +645,11 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
               botId={botId}
               onCall={onCall}
               working={working}
+              routineWork={routineWorkContext(
+                (inGroup ? snap?.groupId === groupId : snap?.botId === botId)
+                  ? activeThreadRuns(snap)
+                  : [],
+              )}
               sending={composer.sending || attachments.shareImporting}
               styles={styles}
               attachActions={attachments.attachActions}

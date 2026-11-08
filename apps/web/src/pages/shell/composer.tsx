@@ -8,6 +8,7 @@ import type {
   ComposerDraftContent,
   ComposerMention,
   ComposerMentionRange,
+  RoutineWorkContext,
   SlashActionId,
 } from "@orkbot/core";
 import {
@@ -84,6 +85,7 @@ const ComposerBody = memo(function Composer({
   artifactTarget,
   activeName,
   running,
+  routineWork,
   disabled,
   pendingAttachments,
   attachmentNotice,
@@ -118,6 +120,7 @@ const ComposerBody = memo(function Composer({
 }: {
   activeName?: string;
   running: boolean;
+  routineWork?: RoutineWorkContext;
   disabled?: boolean;
   pendingAttachments: PendingAttachment[];
   attachmentNotice: string | null;
@@ -701,6 +704,10 @@ const ComposerBody = memo(function Composer({
     }
   }, [replyTarget, replyName, t]);
 
+  const names = routineWork?.names.join(", ") ?? "";
+  const name = routineWork?.stopName;
+  const stopLabel = routineWork?.stopAll ? t`Stop all` : name ? t`Stop ${name}` : t`Stop`;
+
   return (
     <fieldset
       aria-label={t`Message composer`}
@@ -728,6 +735,14 @@ const ComposerBody = memo(function Composer({
         onDismissError={onDismissError}
         textareaRef={textareaRef}
       />
+      {running && names ? (
+        <p
+          data-testid="active-routine-context"
+          className="mb-2 truncate text-[13px] text-muted-foreground"
+        >
+          {routineWork?.names.length === 1 ? t`Routine: ${names}` : t`Routines: ${names}`}
+        </p>
+      ) : null}
       {replyTarget ? (
         <ComposerReplyPreview
           author={replyName}
@@ -1074,7 +1089,8 @@ const ComposerBody = memo(function Composer({
               <Button
                 variant="outline"
                 size="icon"
-                aria-label={t`Stop`}
+                aria-label={stopLabel}
+                title={stopLabel}
                 disabled={sending}
                 onClick={() => void onStop()}
                 className="size-8 rounded-full border border-border bg-muted text-foreground/80 shadow-sm transition-colors hover:bg-accent hover:text-foreground"
