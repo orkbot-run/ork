@@ -37,6 +37,14 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   expect(helpers.if).toBe("runner.os == 'Linux'");
   expect(helpers.run).toContain("/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1");
   expect(signed.run).toContain("linux-webkit.json");
+  const diagnostic = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Build diagnostic installers",
+  );
+  expect(diagnostic.run).toContain(
+    'tauri:build --verbose --config "$RUNNER_TEMP/linux-webkit.json"',
+  );
+  expect(signed.run).toContain('Linux) bundles="appimage"; tauri_options+=(--verbose)');
+  expect(signed.run).toContain('tauri:build "${tauri_options[@]}" --bundles');
   const publish = parse(
     readFileSync(path.join(root, ".github/workflows/desktop-tauri-publish.yml"), "utf8"),
   );
