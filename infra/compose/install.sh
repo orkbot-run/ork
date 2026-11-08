@@ -15,18 +15,40 @@ ensure_python3() {
     *) echo 'Ork setup failed: install python3 before running the installer.' >&2; return 1 ;;
   esac
   command -v apt-get >/dev/null 2>&1 || { echo 'Ork setup failed: install python3 before running the installer.' >&2; return 1; }
-  if [ "$(id -u)" -eq 0 ]; then
-    echo 'Installing Python 3 from the distribution repository.'
-    apt-get update -qq && apt-get install -y -qq python3 || {
-      echo 'Ork setup failed: could not install python3.' >&2; return 1;
-    }
-  else
+  if [ "$(id -u)" -ne 0 ]; then
     command -v sudo >/dev/null 2>&1 || { echo 'Ork setup failed: installing python3 requires root or sudo.' >&2; return 1; }
     sudo -v || { echo 'Ork setup failed: could not obtain sudo access.' >&2; return 1; }
-    echo 'Installing Python 3 from the distribution repository.'
-    sudo apt-get update -qq && sudo apt-get install -y -qq python3 || {
-      echo 'Ork setup failed: could not install python3.' >&2; return 1;
-    }
+  fi
+  echo 'Installing Python 3 from the distribution repository.'
+  ork_apt_error=$(mktemp) || return 1
+  ork_apt_attempt=0
+  while :; do
+    if [ "$(id -u)" -eq 0 ]; then
+      if env LC_ALL=C apt-get update -qq 2>"$ork_apt_error"; then ork_apt_status=0; else ork_apt_status=$?; fi
+    else
+      if sudo env LC_ALL=C apt-get update -qq 2>"$ork_apt_error"; then ork_apt_status=0; else ork_apt_status=$?; fi
+    fi
+    if [ "$ork_apt_status" -eq 0 ]; then
+      cat "$ork_apt_error" >&2
+      rm -f -- "$ork_apt_error"
+      break
+    fi
+    if ! grep -Eq '^E: Could not get lock /var/lib/apt/lists/lock(\. It is held by process [0-9]+ .+| - open \(11: Resource temporarily unavailable\))$' "$ork_apt_error" ||
+      grep '^E: ' "$ork_apt_error" | grep -Evq '^E: (Could not get lock /var/lib/apt/lists/lock|Unable to lock directory /var/lib/apt/lists/)' ||
+      [ "$ork_apt_attempt" -ge 60 ]; then
+      cat "$ork_apt_error" >&2
+      rm -f -- "$ork_apt_error"
+      echo 'Ork setup failed: could not update package lists.' >&2
+      return "$ork_apt_status"
+    fi
+    if [ "$ork_apt_attempt" -eq 0 ]; then echo 'Waiting for the package manager to release the package-list lock.' >&2; fi
+    ork_apt_attempt=$((ork_apt_attempt + 1))
+    sleep 5
+  done
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get -o DPkg::Lock::Timeout=300 install -y -qq python3 || { echo 'Ork setup failed: could not install python3.' >&2; return 1; }
+  else
+    sudo apt-get -o DPkg::Lock::Timeout=300 install -y -qq python3 || { echo 'Ork setup failed: could not install python3.' >&2; return 1; }
   fi
   command -v python3 >/dev/null 2>&1 || { echo 'Ork setup failed: python3 is unavailable after installation.' >&2; return 1; }
 }

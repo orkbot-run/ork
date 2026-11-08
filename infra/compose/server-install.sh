@@ -7,6 +7,33 @@ server_privileged() {
   if [[ "$EUID" == 0 ]]; then "$@"; else sudo "$@"; fi
 }
 
+server_apt_update() {
+  local error_file status attempts=0
+  error_file=$(mktemp "$server_runtime/apt-update.XXXXXX") || return 1
+  while :; do
+    if server_privileged env LC_ALL=C apt-get update -qq 2>"$error_file"; then
+      cat "$error_file" >&2
+      rm -f -- "$error_file"
+      return 0
+    else
+      status=$?
+    fi
+    # APT's dpkg lock timeout does not cover the separate package-list lock.
+    if ! grep -Eq '^E: Could not get lock /var/lib/apt/lists/lock(\. It is held by process [0-9]+ .+| - open \(11: Resource temporarily unavailable\))$' "$error_file" ||
+      grep '^E: ' "$error_file" | grep -Evq '^E: (Could not get lock /var/lib/apt/lists/lock|Unable to lock directory /var/lib/apt/lists/)' ||
+      (( attempts >= 60 )); then
+      cat "$error_file" >&2
+      rm -f -- "$error_file"
+      return "$status"
+    fi
+    if (( attempts == 0 )); then
+      echo 'Waiting for the package manager to release the package-list lock.' >&2
+    fi
+    attempts=$((attempts + 1))
+    sleep 5
+  done
+}
+
 server_progress() {
   # Reporting is bounded and never turns a healthy server into a failed installation.
   timeout --foreground 60 python3 "$server_progress_helper" progress "$server_progress_url" "$1" || true
@@ -41,8 +68,8 @@ server_packages() {
     fail "conflicting container packages are installed; follow Docker's official package migration guide before retrying."
   fi
   echo "Installing server prerequisites from distribution and Docker repositories."
-  server_privileged apt-get update -qq
-  server_privileged apt-get install -y -qq ca-certificates curl openssl python3 iptables
+  server_apt_update
+  server_privileged apt-get -o DPkg::Lock::Timeout=300 install -y -qq ca-certificates curl openssl python3 iptables
   if [[ "$install_docker" == true ]]; then
     local source=/etc/apt/sources.list.d/orkbot-docker.sources key=/etc/apt/keyrings/orkbot-docker.asc
     [[ ! -e "$source" && ! -L "$source" && ! -e "$key" && ! -L "$key" ]] || fail "Docker repository files already exist; finish Docker setup manually and rerun."
@@ -56,8 +83,8 @@ server_packages() {
     server_privileged install -d -m 0755 /etc/apt/keyrings
     server_privileged install -m 0644 "$server_runtime/docker.asc" "$key"
     server_privileged install -m 0644 "$server_runtime/docker.sources" "$source"
-    server_privileged apt-get update -qq
-    server_privileged apt-get install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    server_apt_update
+    server_privileged apt-get -o DPkg::Lock::Timeout=300 install -y -qq docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     server_privileged systemctl enable --now docker
   fi
 }
@@ -72,7 +99,7 @@ server_main() {
   # This mode stores credentials in .env; ambient development settings cannot override them.
   unset OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_REDIRECT_URI AUTH_PASSWORD_ENABLED
   unset AUTH_ACCOUNTS_ENABLED ORKBOT_BOOTSTRAP_SECRET SIGNUPS_ENABLED
-  unset BETTER_AUTH_URL WEB_ORIGIN API_URL ORKBOT_HOST SANDBOX_COMPUTER_EGRESS
+  unset BETTER_AUTH_URL WEB_ORIGIN API_URL ORKBOT_HOST CADDYFILE_PATH SANDBOX_COMPUTER_EGRESS
   unset POSTGRES_PASSWORD POSTGRES_APP_PASSWORD BETTER_AUTH_SECRET ENCRYPTION_KEY SCREEN_PROXY_SECRET SANDBOX_SUPERVISOR_TOKEN
   while (($#)); do
     case "$1" in
@@ -144,7 +171,7 @@ server_main() {
 
   curl_download "${DOWNLOAD_BASE}/server-install.py" "$server_runtime/server-install.py" || fail "could not download server configuration support."
   local helper="$server_runtime/server-install.py"
-  server_url=$(python3 "$helper" server-url "$server_url") || fail "configure this server's public HTTPS domain and retry."
+  server_url=$(python3 "$helper" server-url "$server_url") || fail "configure this server's public HTTPS address and retry."
   external_proxy=$(python3 "$helper" proxy-mode "$server_url" "$external_proxy") || fail "existing HTTPS proxy configuration needs attention."
   server_progress_helper="$helper"
   server_progress_url="$server_url"
@@ -160,6 +187,7 @@ server_main() {
   if [[ "$external_proxy" != true ]]; then
     download docker-compose.https.yml
     download Caddyfile.prod
+    python3 "$helper" ip-edge "$server_url" || fail "could not prepare HTTPS for this server."
     compose_files+=(-f docker-compose.https.yml)
   fi
   local created_env=false

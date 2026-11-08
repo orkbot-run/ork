@@ -8,6 +8,50 @@ bash -n "$root/install-images.sh" "$root/server-install.sh"
 PYTHONDONTWRITEBYTECODE=1 python3 "$root/server-install.test.py"
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
+
+# Exercise only the package-list lock retry, without using the host package manager.
+test_apt_update() (
+  local scenario="$1" calls=0
+  server_runtime="$tmp/apt-$scenario"
+  mkdir -p "$server_runtime"
+  source "$root/server-install.sh"
+  server_privileged() {
+    [[ "$*" == 'env LC_ALL=C apt-get update -qq' ]] || return 1
+    calls=$((calls + 1))
+    printf '%s\n' "$calls" >> "$server_runtime/calls"
+    case "$scenario:$calls" in
+      released:1|timeout:*|mixed:1)
+        echo 'E: Could not get lock /var/lib/apt/lists/lock. It is held by process 42 (apt-get)' >&2
+        echo 'E: Unable to lock directory /var/lib/apt/lists/' >&2
+        [[ "$scenario" != mixed ]] || echo 'E: Repository signature is invalid' >&2
+        return 100 ;;
+      old-format:1)
+        echo 'E: Could not get lock /var/lib/apt/lists/lock - open (11: Resource temporarily unavailable)' >&2
+        echo 'E: Unable to lock directory /var/lib/apt/lists/' >&2
+        return 100 ;;
+      network:*) echo 'E: Repository signature is invalid' >&2; return 100 ;;
+      *) echo 'W: Partial mirror failure' >&2 ;;
+    esac
+  }
+  sleep() { [[ "$1" == 5 ]]; }
+  if server_apt_update > "$server_runtime/output" 2>&1; then
+    [[ "$scenario" == released || "$scenario" == old-format ]]
+    [[ "$calls" == 2 ]]
+    grep -q 'Waiting for the package manager' "$server_runtime/output"
+    grep -q 'Partial mirror failure' "$server_runtime/output"
+  else
+    [[ "$scenario" == timeout || "$scenario" == network || "$scenario" == mixed ]]
+    if [[ "$scenario" == timeout ]]; then
+      [[ "$calls" == 61 ]]
+      grep -q 'Could not get lock' "$server_runtime/output"
+    else
+      [[ "$calls" == 1 ]]
+      grep -q 'Repository signature is invalid' "$server_runtime/output"
+    fi
+  fi
+)
+for scenario in released old-format timeout network mixed; do test_apt_update "$scenario"; done
+
 real_python=$(command -v python3)
 mkdir -p "$tmp/bin"
 cat > "$tmp/bin/curl" <<'STUB'
@@ -76,6 +120,7 @@ sys.argv=sys.argv[1:]
 module.public_dns=lambda _: None
 module.occupied_ports=lambda: False
 module.terminal_prompt=lambda _: 'server.example.com'
+module.detect_public_ipv4=lambda: '8.8.8.8'
 def request(url,payload=None,bearer=None):
     if url.endswith('/api/installations/progress'):
         assert bearer == 'b'*43
@@ -215,6 +260,9 @@ grep -q '^progress-ready$' "$tmp/external/events"
 run_case cached --pull-never --code "$code" || { cat "$tmp/cached/output"; exit 1; }
 ! grep -q '^pull$' "$tmp/cached/events"
 STUB_SERVER_PROMPT=1 run_case server-domain --code "$code" || { cat "$tmp/server-domain/output"; exit 1; }
+grep -q '^Ork is ready at https://8.8.8.8$' "$tmp/server-domain/output"
+grep -q "^CADDYFILE_PATH='./Caddyfile.ip.prod'$" "$tmp/server-domain/.env"
+grep -q 'profile shortlived' "$tmp/server-domain/Caddyfile.ip.prod"
 grep -q '^progress-ready$' "$tmp/server-domain/events"
 STUB_SERVER_PROMPT=1 run_case server-domain || { cat "$tmp/server-domain/output"; exit 1; }
 ! grep -q '^redeem$' "$tmp/server-domain/events"

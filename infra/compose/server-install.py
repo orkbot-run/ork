@@ -42,12 +42,16 @@ def origin(value):
     if (parsed.scheme != "https" or parsed.netloc != hostname or parsed.path or
             parsed.query or parsed.fragment or len(hostname) > 253 or len(labels) < 2 or
             any(not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", label) for label in labels)):
-        raise SetupError("Use an exact HTTPS origin with a DNS hostname and no port or path.")
+        raise SetupError("Use an exact HTTPS origin with a hostname or public IPv4 address and no port or path.")
     try:
-        ipaddress.ip_address(hostname)
+        address = ipaddress.ip_address(hostname)
     except ValueError:
+        if all(label.isdigit() for label in labels):
+            raise SetupError("The server IP address is invalid.") from None
         return hostname
-    raise SetupError("A public DNS hostname is required for automatic HTTPS.")
+    if address.version != 4 or not address.is_global:
+        raise SetupError("Use a publicly routable IPv4 address.")
+    return hostname
 
 
 def regular(path, private=False):
@@ -162,6 +166,19 @@ def terminal_prompt(message):
         raise SetupError("Run this command in a server terminal, or provide --url and --external-proxy when needed.") from None
 
 
+def detect_public_ipv4():
+    try:
+        # Connecting a UDP socket selects a route without sending a packet.
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("192.0.2.1", 9))
+            address = ipaddress.ip_address(probe.getsockname()[0])
+    except (OSError, ValueError):
+        raise SetupError("Could not detect a public server IPv4 address; provide --url with your public HTTPS origin.") from None
+    if address.version != 4 or not address.is_global:
+        raise SetupError("The default network route does not have a public IPv4 address; provide --url with your public HTTPS origin.")
+    return str(address)
+
+
 def server_url(value):
     if value:
         origin(value)
@@ -169,11 +186,7 @@ def server_url(value):
     saved = saved_settings()
     if saved:
         return saved["url"]
-    value = terminal_prompt("Server domain (for example ork.example.com): ")
-    if not value.startswith("https://"):
-        value = "https://" + value
-    origin(value)
-    return value
+    return "https://" + detect_public_ipv4()
 
 
 def proxy_mode(url, mode):
@@ -198,7 +211,7 @@ def proxy_mode(url, mode):
 def preflight(url, external):
     hostname = origin(url)
     regular(ENV, private=True)
-    for name in ("docker-compose.images.yml", ".env.images.example", "docker-compose.override.yml", "docker-compose.https.yml", "Caddyfile.prod", "restrict-computer-egress.sh"):
+    for name in ("docker-compose.images.yml", ".env.images.example", "docker-compose.override.yml", "docker-compose.https.yml", "Caddyfile.prod", "Caddyfile.ip.prod", "restrict-computer-egress.sh"):
         regular(Path(name))
     regular(STATE, private=True)
     regular(INSTALLATION, private=True)
@@ -261,6 +274,27 @@ def write_environment(values):
     atomic(ENV, "\n".join(lines) + "\n")
 
 
+def ip_edge(url):
+    hostname = origin(url)
+    try:
+        ipaddress.IPv4Address(hostname)
+    except ipaddress.AddressValueError:
+        return
+    template = Path("Caddyfile.prod").read_text()
+    marker = "{$ORKBOT_HOST:app.example.com} {\n"
+    if template.count(marker) != 1:
+        raise SetupError("The HTTPS proxy configuration cannot be prepared safely.")
+    tls = "\ttls {\n\t\tissuer acme https://acme-v02.api.letsencrypt.org/directory {\n\t\t\tprofile shortlived\n\t\t\tdisable_tlsalpn_challenge\n\t\t}\n\t}\n"
+    content = "{\n\tdefault_sni " + hostname + "\n}\n\n" + template.replace(marker, marker + tls)
+    target = Path("Caddyfile.ip.prod")
+    regular(target, private=True)
+    if target.exists():
+        if target.read_text() != content:
+            raise SetupError("The existing IP HTTPS proxy configuration was kept; resolve the conflict before retrying.")
+        return
+    atomic(target, content)
+
+
 class NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         return None
@@ -295,6 +329,15 @@ def configure(url):
     env = environment()
     hostname = origin(url)
     values = {}
+    if os.environ.get("ORKBOT_INSTALL_EXTERNAL_PROXY") != "true":
+        try:
+            ipaddress.IPv4Address(hostname)
+        except ipaddress.AddressValueError:
+            pass
+        else:
+            if env.get("CADDYFILE_PATH", "") not in ("", "./Caddyfile.ip.prod"):
+                raise SetupError("The existing HTTPS proxy configuration was kept; resolve the conflict before retrying.")
+            values["CADDYFILE_PATH"] = "./Caddyfile.ip.prod"
     ticket, token = None, None
     already_configured = configured(url, env)
     if not already_configured and code and env.get("AUTH_ACCOUNTS_ENABLED") != "true":
@@ -424,6 +467,9 @@ def main():
         return
     if operation == "pin-images":
         pin_images(url)
+        return
+    if operation == "ip-edge":
+        ip_edge(url)
         return
     origin(url)
     if operation == "proxy-mode":

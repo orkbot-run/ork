@@ -71,21 +71,51 @@ class InstallerTests(unittest.TestCase):
 
     def test_exact_public_origin_only(self):
         self.assertEqual(installer.origin(URL), "server.example.com")
-        for value in ("http://server.example.com", URL + "/", URL + "/a", URL + "?a=b", URL + "#x", URL + ":443", "https://user@server.example.com", "https://localhost", "https://127.0.0.1", "https://SERVER.example.com", "https://-bad.example.com", "https://server..com", "https://$(id).example.com"):
+        self.assertEqual(installer.origin("https://8.8.8.8"), "8.8.8.8")
+        for value in ("http://server.example.com", URL + "/", URL + "/a", URL + "?a=b", URL + "#x", URL + ":443", "https://user@server.example.com", "https://localhost", "https://127.0.0.1", "https://10.0.0.1", "https://192.0.2.1", "https://999.999.999.999", "https://SERVER.example.com", "https://-bad.example.com", "https://server..com", "https://$(id).example.com"):
             with self.subTest(value=value), self.assertRaises(installer.SetupError):
                 installer.origin(value)
 
-    def test_domain_is_requested_only_on_the_server_and_saved_for_resume(self):
-        with patch.object(installer, "terminal_prompt", return_value="server.example.com") as prompt:
-            self.assertEqual(installer.server_url(""), URL)
-        prompt.assert_called_once()
+    def test_public_address_is_detected_and_existing_url_is_preserved(self):
+        with patch.object(installer.socket, "socket") as factory:
+            factory.return_value.__enter__.return_value.getsockname.return_value = ("8.8.8.8", 1234)
+            self.assertEqual(installer.server_url(""), "https://8.8.8.8")
+            factory.return_value.__enter__.return_value.connect.assert_called_once_with(("192.0.2.1", 9))
+            factory.return_value.__enter__.return_value.getsockname.return_value = ("10.0.0.2", 1234)
+            with self.assertRaises(installer.SetupError):
+                installer.server_url("")
+        with patch.object(installer.socket, "socket", side_effect=OSError()), self.assertRaises(installer.SetupError):
+            installer.server_url("")
         installer.atomic(installer.STATE, json.dumps({"url": URL, "externalProxy": True}))
-        with patch.object(installer, "terminal_prompt") as prompt:
+        with patch.object(installer.socket, "socket") as factory:
             self.assertEqual(installer.server_url(""), URL)
             self.assertTrue(installer.proxy_mode(URL, "auto"))
-        prompt.assert_not_called()
+        factory.assert_not_called()
         with self.assertRaises(installer.SetupError):
             installer.proxy_mode("https://other.example.com", "auto")
+
+    def test_ip_proxy_config_uses_public_acme_and_refuses_operator_changes(self):
+        source = Path(__file__).resolve().parent / "Caddyfile.prod"
+        Path("Caddyfile.prod").write_text(source.read_text())
+        installer.ip_edge("https://8.8.8.8")
+        target = Path("Caddyfile.ip.prod")
+        content = target.read_text()
+        self.assertIn("default_sni 8.8.8.8", content)
+        self.assertIn("profile shortlived", content)
+        self.assertIn("disable_tlsalpn_challenge", content)
+        installer.ip_edge("https://8.8.8.8")
+        target.write_text("operator configuration")
+        with self.assertRaises(installer.SetupError):
+            installer.ip_edge("https://8.8.8.8")
+        self.assertEqual(target.read_text(), "operator configuration")
+
+    def test_ip_proxy_does_not_replace_operator_configuration(self):
+        self.env.update(AUTH_ACCOUNTS_ENABLED="true", ORKBOT_BOOTSTRAP_SECRET="z" * 43, CADDYFILE_PATH="./operator.caddy")
+        self.write_env()
+        before = installer.ENV.read_bytes()
+        with patch.dict(os.environ, {"ORKBOT_INSTALL_EXTERNAL_PROXY": "false"}), patch.object(installer, "environment", return_value=self.env), self.assertRaises(installer.SetupError):
+            installer.configure("https://8.8.8.8")
+        self.assertEqual(installer.ENV.read_bytes(), before)
 
     def test_terminal_prompt_requires_a_terminal_and_bounds_input(self):
         with patch("builtins.open", side_effect=OSError()), self.assertRaises(installer.SetupError):

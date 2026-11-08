@@ -163,6 +163,9 @@ if cat "$root/install.sh" | sh -s -- >/dev/null 2>&1; then echo 'Ambiguous resum
 mkdir "$tmp/python-bin"
 sed -n '/^ensure_python3() {/,/^}$/p' "$root/install.sh" >"$tmp/python-helper"
 ln -s "$(command -v awk)" "$tmp/python-bin/awk"
+for command in env mktemp cat rm grep; do ln -s "$(command -v "$command")" "$tmp/python-bin/$command"; done
+printf '#!/bin/sh\nexit 0\n' >"$tmp/python-bin/sleep"
+chmod +x "$tmp/python-bin/sleep"
 cat >"$tmp/python-bin/uname" <<'EOF'
 #!/bin/sh
 printf '%s\n' "${TEST_OS:-Linux}"
@@ -175,7 +178,13 @@ cat >"$tmp/python-bin/apt-get" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$*" >>"$TEST_ROOT/apt-calls"
 [ "${TEST_APT_FAIL:-0}" != 1 ] || exit 1
-if [ "$1" = install ]; then
+if [ "$1" = update ] && [ "${TEST_APT_LOCK:-}" != '' ] && [ ! -e "$TEST_ROOT/apt-unlocked" ]; then
+  printf '%s\n' 'E: Could not get lock /var/lib/apt/lists/lock. It is held by process 42 (apt-get)' >&2
+  if [ "$TEST_APT_LOCK" = mixed ]; then printf '%s\n' 'E: Repository failed' >&2; fi
+  [ "$TEST_APT_LOCK" != once ] || : >"$TEST_ROOT/apt-unlocked"
+  exit 100
+fi
+if [ "$1" = -o ] && [ "$2" = DPkg::Lock::Timeout=300 ] && [ "$3" = install ]; then
   printf '#!/bin/sh\nexit 0\n' >"$TEST_ROOT/python-bin/python3"
   /bin/chmod +x "$TEST_ROOT/python-bin/python3"
 fi
@@ -189,11 +198,11 @@ EOF
 chmod +x "$tmp/python-bin/uname" "$tmp/python-bin/id" "$tmp/python-bin/apt-get" "$tmp/python-bin/sudo"
 printf '%s\n' 'ID=debian' >"$tmp/os-release"
 PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release"
-[ "$(cat "$tmp/apt-calls")" = "$(printf '%s\n' 'update -qq' 'install -y -qq python3')" ]
+[ "$(cat "$tmp/apt-calls")" = "$(printf '%s\n' 'update -qq' '-o DPkg::Lock::Timeout=300 install -y -qq python3')" ]
 rm "$tmp/python-bin/python3" "$tmp/apt-calls"
 printf '%s\n' 'ID="ubuntu"' >"$tmp/os-release"
 TEST_UID=1000 PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release"
-[ "$(cat "$tmp/sudo-calls")" = "$(printf '%s\n' '-v' 'apt-get update -qq' 'apt-get install -y -qq python3')" ]
+[ "$(cat "$tmp/sudo-calls")" = "$(printf '%s\n' '-v' 'env LC_ALL=C apt-get update -qq' 'apt-get -o DPkg::Lock::Timeout=300 install -y -qq python3')" ]
 rm "$tmp/python-bin/python3" "$tmp/apt-calls"
 printf '%s\n' 'ID=alpine' >"$tmp/os-release"
 if PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release" >/dev/null 2>&1; then
@@ -206,4 +215,12 @@ if TEST_APT_FAIL=1 PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2
   echo 'A failed Python installation was accepted.' >&2
   exit 1
 fi
+rm -f "$tmp/python-bin/python3" "$tmp/apt-calls" "$tmp/apt-unlocked"
+TEST_APT_LOCK=once PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release" >/dev/null 2>&1
+[ "$(grep -c '^update -qq$' "$tmp/apt-calls")" -eq 2 ]
+rm -f "$tmp/python-bin/python3" "$tmp/apt-calls" "$tmp/apt-unlocked"
+if TEST_APT_LOCK=mixed PATH="$tmp/python-bin" /bin/sh -c '. "$1"; ensure_python3 "$2"' _ "$tmp/python-helper" "$tmp/os-release" >/dev/null 2>&1; then
+  echo 'An unrelated repository failure was retried or accepted.' >&2; exit 1
+fi
+[ "$(grep -c '^update -qq$' "$tmp/apt-calls")" -eq 1 ]
 echo 'Installer entry point smoke checks passed.'
