@@ -1358,6 +1358,10 @@ msgstr "Check in."
 msgid "Check the API key or sign-in, then test again."
 msgstr "Check the API key or sign-in, then test again."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Check the chat first. Marking the result resumes queued messages without resending this message."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Check the server URL and network, then test again."
@@ -1465,6 +1469,7 @@ msgstr "Clearing…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "Could not update the default memory scope"
 msgid "Couldn't load grants"
 msgstr "Couldn't load grants"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
@@ -2453,6 +2459,7 @@ msgstr "Couldn't load submissions"
 msgid "Couldn't load your wallet"
 msgstr "Couldn't load your wallet"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
@@ -3903,9 +3910,17 @@ msgstr "Manual"
 msgid "Manual setup required"
 msgstr "Manual setup required"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Mark as not sent"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Mark as Read"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Mark as sent"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Return to Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Review data sharing before continuing."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Review delivery"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

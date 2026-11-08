@@ -1358,6 +1358,10 @@ msgstr "확인해 주세요."
 msgid "Check the API key or sign-in, then test again."
 msgstr "API 키 또는 로그인을 확인한 뒤 다시 테스트하세요."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "먼저 채팅을 확인하세요. 결과를 표시하면 이 메시지를 다시 보내지 않고 대기 중인 메시지 전송을 재개합니다."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "서버 URL과 네트워크를 확인한 뒤 다시 테스트하세요."
@@ -1465,6 +1469,7 @@ msgstr "비우는 중…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "기본 기억 범위를 변경하지 못했습니다."
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "메시징 설정을 불러올 수 없습니다"
@@ -2453,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "메시징 설정을 업데이트할 수 없습니다"
@@ -3903,9 +3910,17 @@ msgstr ""
 msgid "Manual setup required"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "전송되지 않음으로 표시"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "읽음으로 표시"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "전송됨으로 표시"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Ork로 돌아가기"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "계속하기 전에 데이터 공유를 검토하세요."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "전송 결과 확인"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

@@ -1936,6 +1936,10 @@ model MessagingOutbound {
   attempts        Int       @default(0)
   nextAttemptAt   DateTime?
   providerHandle  String?
+  /// Minimum sender protocol; zero preserves legacy direct and group delivery behavior.
+  requiredDeliveryVersion Int @default(0)
+  /// Server confirmations without a message pin their identity and owner context at insertion.
+  sourceBinding String?
   sourceMessageId String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

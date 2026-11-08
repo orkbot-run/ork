@@ -1358,6 +1358,10 @@ msgstr "לבדוק מה המצב."
 msgid "Check the API key or sign-in, then test again."
 msgstr "יש לבדוק את מפתח ה-API או את ההתחברות, ואז לבדוק שוב."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "בדקו קודם בצ'אט. סימון התוצאה מחדש את שליחת ההודעות הממתינות בלי לשלוח שוב את ההודעה הזו."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "יש לבדוק את כתובת ה-URL של השרת ואת הרשת, ואז לבדוק שוב."
@@ -1465,6 +1469,7 @@ msgstr "מנקה…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "לא ניתן לעדכן את היקף הזיכרון המוגדר כב�
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "לא ניתן לטעון את הגדרות ההודעות"
@@ -2453,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "לא ניתן לעדכן את הגדרות ההודעות"
@@ -3903,9 +3910,17 @@ msgstr "ידני"
 msgid "Manual setup required"
 msgstr "נדרשת הגדרה ידנית"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "סימון כלא נשלחה"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "סימון כנקראה"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "סימון כנשלחה"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "חזרה ל-Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "לפני שממשיכים, יש לבדוק את שיתוף הנתונים."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "בדיקת מסירה"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

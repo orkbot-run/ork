@@ -129,6 +129,7 @@ export * from "./messaging-composition.js";
 export * from "./messaging-context.js";
 export * from "./messaging-delivery.js";
 export * from "./messaging-installations.js";
+export * from "./messaging-outbound-state.js";
 export * from "./messaging-platforms.js";
 export * from "./messaging-team-chat-emulator.js";
 export * from "./model-catalog-reads.js";

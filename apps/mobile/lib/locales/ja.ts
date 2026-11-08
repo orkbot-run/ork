@@ -3,6 +3,11 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Review delivery": "配信結果を確認",
+  "Mark as sent": "送信済みにする",
+  "Mark as not sent": "未送信にする",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "先にチャットを確認してください。結果を記録すると、このメッセージを再送信せずに待機中のメッセージの送信を再開します。",
   "Reply mode": "応答モード",
   Chat: "チャット",
   "Updates and final reply": "進捗と最終回答",

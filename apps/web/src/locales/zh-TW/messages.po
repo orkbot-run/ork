@@ -1359,6 +1359,10 @@ msgstr "報到。"
 msgid "Check the API key or sign-in, then test again."
 msgstr "請檢查 API 金鑰或登入，然後重新測試。"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "請先查看聊天。標記結果後將繼續傳送佇列中的訊息，不會重新傳送這則訊息。"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "請檢查伺服器 URL 和網路，然後重新測試。"
@@ -1466,6 +1470,7 @@ msgstr "正在清空…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2438,6 +2443,7 @@ msgstr "無法更新預設記憶範圍"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "無法載入訊息設定"
@@ -2454,6 +2460,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "無法更新訊息設定"
@@ -3904,9 +3911,17 @@ msgstr "手動"
 msgid "Manual setup required"
 msgstr "需要手動設定"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "標記為未傳送"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "標為已讀"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "標記為已傳送"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5479,6 +5494,10 @@ msgstr "返回 Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "繼續之前，請查看資料分享。"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "檢查傳送結果"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

@@ -3,6 +3,11 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Review delivery": "检查发送结果",
+  "Mark as sent": "标记为已发送",
+  "Mark as not sent": "标记为未发送",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "请先查看聊天。标记结果后将继续发送排队的消息，不会重新发送此消息。",
   "Reply mode": "回复模式",
   Chat: "聊天",
   "Updates and final reply": "进度更新和最终回复",

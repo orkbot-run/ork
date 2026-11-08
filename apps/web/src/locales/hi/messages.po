@@ -1358,6 +1358,10 @@ msgstr "जांच करें।"
 msgid "Check the API key or sign-in, then test again."
 msgstr "API कुंजी या साइन-इन जाँचें, फिर फिर से परीक्षण करें।"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "पहले चैट देखें। नतीजा दर्ज करने पर इस संदेश को दोबारा भेजे बिना कतार में मौजूद संदेशों का भेजना फिर शुरू होगा।"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "सर्वर URL और नेटवर्क जाँचें, फिर फिर से परीक्षण करें।"
@@ -1465,6 +1469,7 @@ msgstr "साफ़ किया जा रहा है…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "डिफ़ॉल्ट मेमोरी स्कोप अपडे
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -2453,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr ""
@@ -3903,9 +3910,17 @@ msgstr ""
 msgid "Manual setup required"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "नहीं भेजा गया चिह्नित करें"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "पढ़ा हुआ चिह्नित करें"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "भेजा गया चिह्नित करें"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Ork पर लौटें"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "आगे बढ़ने से पहले डेटा साझाकरण की समीक्षा करें।"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "डिलीवरी जाँचें"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

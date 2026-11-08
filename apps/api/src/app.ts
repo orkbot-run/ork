@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 composition is preserved. Native OIDC callbacks and delegated server updates are Ork additions.
 // Ork deferred messaging SDK loading is PolyForm-covered.
+// Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
 import type {
@@ -729,7 +730,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     phoneCallsEnabled: env.phoneCallsEnabled,
     phoneCallRingSeconds: env.phoneCallRingSeconds,
     phoneCallCooldownMinutes: env.phoneCallCooldownMinutes,
-    messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
+    messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
     userDevices: userDevicesOverride ?? userDevices,

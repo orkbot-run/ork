@@ -12,6 +12,7 @@ export * from "./connector-errors.js";
 export * from "./decisions.js";
 export * from "./interfaces.js";
 export * from "./media-generation.js";
+export * from "./messaging-errors.js";
 export * from "./messaging-installations.js";
 export * from "./model-errors.js";
 export * from "./payments.js";

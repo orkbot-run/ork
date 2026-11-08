@@ -1358,6 +1358,10 @@ msgstr "Inchecken."
 msgid "Check the API key or sign-in, then test again."
 msgstr "Controleer de API-sleutel of aanmelding en test daarna opnieuw."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Controleer eerst de chat. Door de uitkomst te markeren gaan berichten in de wachtrij verder, zonder dit bericht opnieuw te verzenden."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Controleer de server-URL en het netwerk en test daarna opnieuw."
@@ -1465,6 +1469,7 @@ msgstr "Bezig met wissen…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "Het standaardgeheugenbereik bijwerken mislukt"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Berichtinstellingen laden mislukt"
@@ -2453,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Berichtinstellingen bijwerken mislukt"
@@ -3903,9 +3910,17 @@ msgstr "Handmatig"
 msgid "Manual setup required"
 msgstr "Handmatige installatie vereist"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Markeren als niet verzonden"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Markeren als gelezen"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Markeren als verzonden"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Terug naar Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Controleer het delen van gegevens voordat je doorgaat."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Bezorging controleren"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

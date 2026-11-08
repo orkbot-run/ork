@@ -3,6 +3,11 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Review delivery": "Bezorging controleren",
+  "Mark as sent": "Markeren als verzonden",
+  "Mark as not sent": "Markeren als niet verzonden",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "Controleer eerst de chat. Door de uitkomst te markeren gaan berichten in de wachtrij verder, zonder dit bericht opnieuw te verzenden.",
   "Reply mode": "Antwoordmodus",
   Chat: "Chat",
   "Updates and final reply": "Updates en eindantwoord",

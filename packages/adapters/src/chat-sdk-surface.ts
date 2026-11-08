@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited SDK integration is preserved; explicit send outcomes are Ork additions.
+
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import type {
@@ -15,9 +20,20 @@ import type {
   MessagingSendResult,
   MessagingSurface,
 } from "@orkbot/adapter-kit";
+import { MessagingSendError } from "@orkbot/adapter-kit";
 import { getLogger } from "@orkbot/logging";
 import type { Adapter, Message, PostableMarkdown, Root, Thread } from "chat";
-import { Chat, isLinkNode, paragraph, parseMarkdown, root, text, toPlainText, walkAst } from "chat";
+import {
+  Chat,
+  isLinkNode,
+  paragraph,
+  parseMarkdown,
+  RateLimitError,
+  root,
+  text,
+  toPlainText,
+  walkAst,
+} from "chat";
 import { getLarkTextParts } from "./lark/text-parts.js";
 
 /**
@@ -94,6 +110,8 @@ export interface MessagingPlatform {
   redeliveryKeys?: (payload: unknown) => string[];
   /** Send errors that retrying cannot fix (unknown channel, blocked bot, revoked token). */
   isPermanentSendError?: (error: unknown) => boolean;
+  /** Proves that this entire request was rejected, including any internal SDK posts. */
+  isRejectedSendError?: (error: unknown, request: MessagingSendRequest) => boolean;
   /** Group roster addresses from the raw inbound payload, excluding our line. */
   participants?: (raw: unknown) => string[];
   /**
@@ -278,6 +296,7 @@ export class ChatSdkMessagingSurface implements MessagingSurface {
       throw new MessagingSendError(new Error("File is larger than Telegram accepts"), {
         permanent: true,
         retryAfterMs: null,
+        outcome: "rejected",
       });
     }
     const message = attachment
@@ -292,7 +311,7 @@ export class ChatSdkMessagingSurface implements MessagingSurface {
       const handle = "id" in sent && typeof sent.id === "string" ? sent.id : "";
       return { handle };
     } catch (error) {
-      throw sendError(mounted.platform, error);
+      throw sendError(mounted.platform, error, request);
     }
   }
 
@@ -712,27 +731,26 @@ function chatDedupeKey(adapter: Adapter, messageId: string): string {
   return scope === undefined ? key : `concurrency:${JSON.stringify([adapter.name, scope, key])}`;
 }
 
-/**
- * A failed platform send, classified for the outbox: give up when
- * `permanent`, otherwise retry no sooner than `retryAfterMs` when set.
- */
-export class MessagingSendError extends Error {
-  override readonly name = "MessagingSendError";
-  readonly permanent: boolean;
-  readonly retryAfterMs: number | null;
+/** Compatibility export for the shared provider-neutral delivery outcome. */
+export { MessagingSendError } from "@orkbot/adapter-kit";
 
-  constructor(cause: unknown, options: { permanent: boolean; retryAfterMs: number | null }) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
-    this.permanent = options.permanent;
-    this.retryAfterMs = options.retryAfterMs;
-  }
-}
-
-function sendError(platform: MessagingPlatform, error: unknown): MessagingSendError {
+function sendError(
+  platform: MessagingPlatform,
+  error: unknown,
+  request?: MessagingSendRequest,
+): MessagingSendError {
   // Chat SDK AdapterRateLimitError and Slack's rate-limited error both carry seconds.
   const seconds = (error as { retryAfter?: unknown } | null)?.retryAfter;
+  const milliseconds = error instanceof RateLimitError ? error.retryAfterMs : undefined;
+  const permanent = platform.isPermanentSendError?.(error) ?? false;
   return new MessagingSendError(error, {
-    permanent: platform.isPermanentSendError?.(error) ?? false,
-    retryAfterMs: typeof seconds === "number" && seconds > 0 ? seconds * 1000 : null,
+    permanent,
+    retryAfterMs:
+      typeof milliseconds === "number" && milliseconds > 0
+        ? milliseconds
+        : typeof seconds === "number" && seconds > 0
+          ? seconds * 1000
+          : null,
+    outcome: request && platform.isRejectedSendError?.(error, request) ? "rejected" : "unknown",
   });
 }

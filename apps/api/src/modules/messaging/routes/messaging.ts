@@ -2,8 +2,15 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache material is preserved; Ork changes consolidate database error matching.
+// Ork adds scoped direct-delivery review and terminal recovery.
 
 import { messagingDeliverJob } from "@orkbot/adapter-kit";
+import {
+  listUnknownDirectDeliveries,
+  MessagingOutboundReviewError,
+  resolveUnknownDirectDelivery,
+  unresolvedDirectWhere,
+} from "@orkbot/adapters";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import {
@@ -11,6 +18,7 @@ import {
   formatMessagingLinkCode,
   issueMessagingLinkCode,
   isUniqueViolation,
+  recordAuditEvent,
   runAsSystem,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -21,6 +29,45 @@ export function messagingRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;
   return {
     messaging: {
+      outbound: {
+        list: authed.messaging.outbound.list.handler(async ({ context, input }) => {
+          try {
+            const { retiredCount, ...list } = await listUnknownDirectDeliveries(
+              deps.prisma,
+              context.actor,
+              input.identityId,
+            );
+            if (retiredCount > 0 && deps.messaging?.enabled)
+              await deps.jobs.enqueue(messagingDeliverJob()).catch((error) => {
+                getLogger().error("messaging retired outbound wake failed", error);
+              });
+            return list;
+          } catch (error) {
+            if (error instanceof MessagingOutboundReviewError) throw new ORPCError(error.code);
+            throw error;
+          }
+        }),
+        resolve: authed.messaging.outbound.resolve.handler(async ({ context, input }) => {
+          try {
+            const result = await resolveUnknownDirectDelivery(deps.prisma, context.actor, input);
+            if (result.changed)
+              await recordAuditEvent({
+                action: "messaging.delivery.resolved",
+                actor: { type: "user", id: context.actor.userId },
+                spaceId: context.actor.spaceId,
+                target: { type: "messaging_outbound", id: input.outboundId },
+                metadata: { resolution: input.resolution },
+              });
+            await deps.jobs.enqueue(messagingDeliverJob()).catch((error) => {
+              getLogger().error("messaging outbound recovery wake failed", error);
+            });
+            return { ok: true as const };
+          } catch (error) {
+            if (error instanceof MessagingOutboundReviewError) throw new ORPCError(error.code);
+            throw error;
+          }
+        }),
+      },
       installations: {
         list: authed.messaging.installations.list.handler(async ({ context }) => {
           if (!deps.messagingInstallations)
@@ -388,7 +435,7 @@ function acrossChatIdentities<T>(fn: () => Promise<T>): Promise<T> {
 
 async function messagingIdentityDto(
   prisma: PrismaClient,
-  identity: { id: string; provider: string; address: string; botId: string },
+  identity: { id: string; provider: string; address: string; botId: string; spaceId: string },
 ) {
   const bot = await acrossChatIdentities(() =>
     prisma.bot.findUnique({
@@ -402,6 +449,12 @@ async function messagingIdentityDto(
     address: identity.address,
     botId: identity.botId,
     botName: bot?.name ?? "",
+    deliveryReview: {
+      spaceId: identity.spaceId,
+      count: await acrossChatIdentities(() =>
+        prisma.messagingOutbound.count({ where: unresolvedDirectWhere(identity.id) }),
+      ),
+    },
   };
 }
 

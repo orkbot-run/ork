@@ -113,6 +113,9 @@ import {
   MessagingChannelMembershipSchema,
   MessagingInstallationsStatusSchema,
   MessagingLinkedIdentitySchema,
+  MessagingOutboundListSchema,
+  MessagingOutboundResolutionSchema,
+  MessagingOutboundVersionSchema,
   MessagingStatusSchema,
   ModelApiProtocolSchema,
   ModelBackupChoiceSchema,
@@ -1247,6 +1250,21 @@ export const appContract = {
       remove: oc.input(z.object({ id: Id })).output(z.object({ ok: z.literal(true) })),
     },
     status: oc.output(MessagingStatusSchema),
+    outbound: {
+      list: oc.input(z.object({ identityId: Id }).strict()).output(MessagingOutboundListSchema),
+      resolve: oc
+        .input(
+          z
+            .object({
+              identityId: Id,
+              outboundId: Id,
+              version: MessagingOutboundVersionSchema,
+              resolution: MessagingOutboundResolutionSchema,
+            })
+            .strict(),
+        )
+        .output(z.object({ ok: z.literal(true) })),
+    },
     link: {
       /** Issue a short-lived code the user sends to the line from a chat app. */
       start: oc

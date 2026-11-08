@@ -1,8 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited surface tests are Apache-covered; Ork tests explicit delivery outcomes.
+
 import { createHmac } from "node:crypto";
 import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMockAdapter, createTestMessage } from "@chat-adapter/tests";
 import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import type { Adapter, ChatInstance } from "chat";
+import { RateLimitError } from "chat";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
 import {
@@ -782,29 +788,70 @@ describe("ChatSdkMessagingSurface outbound", () => {
   });
 
   it.each([
-    ["a transient failure", new Error("socket hang up"), false, null],
+    ["a transient failure", new Error("socket hang up"), false, null, "unknown"],
     [
       "a rate limit",
       Object.assign(new Error("rate limited"), { name: "AdapterRateLimitError", retryAfter: 30 }),
       false,
       30_000,
+      "rejected",
     ],
-    ["a permanent failure", new Error("channel_not_found"), true, null],
-  ] as const)("classifies %s for the outbox", async (_label, error, permanent, retryAfterMs) => {
-    const { surface } = createSurface(
-      { isPermanentSendError: (candidate) => candidate === error && permanent },
-      { postMessage: vi.fn(async () => Promise.reject(error)) },
-    );
+    ["an SDK rate limit", new RateLimitError("rate limited", 45_000), false, 45_000, "rejected"],
+    [
+      "an ambiguous server error",
+      Object.assign(new Error("server failed"), { status: 500, retryAfter: 2 }),
+      false,
+      2_000,
+      "unknown",
+    ],
+    ["a permanent failure", new Error("channel_not_found"), true, null, "rejected"],
+  ] as const)(
+    "classifies %s for the outbox",
+    async (_label, error, permanent, retryAfterMs, outcome) => {
+      const { surface } = createSurface(
+        {
+          isPermanentSendError: (candidate) => candidate === error && permanent,
+          isRejectedSendError: (candidate) => candidate === error && outcome === "rejected",
+        },
+        { postMessage: vi.fn(async () => Promise.reject(error)) },
+      );
 
+      await expect(
+        surface.sendToThread({ threadId: "mock:C1:9", body: "hi" }, context),
+      ).rejects.toMatchObject({
+        name: "MessagingSendError",
+        message: error.message,
+        cause: error,
+        permanent,
+        retryAfterMs,
+        outcome,
+      });
+    },
+  );
+
+  it("does not infer full rejection from a permanent error after a compound post partially succeeds", async () => {
+    const error = new Error("channel_not_found");
+    const accepted: string[] = [];
+    const { surface } = createSurface(
+      { isPermanentSendError: () => true },
+      {
+        postMessage: vi.fn(async () => {
+          accepted.push("attachment accepted");
+          throw error;
+        }),
+      },
+    );
     await expect(
-      surface.sendToThread({ threadId: "mock:C1:9", body: "hi" }, context),
-    ).rejects.toMatchObject({
-      name: "MessagingSendError",
-      message: error.message,
-      cause: error,
-      permanent,
-      retryAfterMs,
-    });
+      surface.sendToThread(
+        {
+          threadId: "mock:C1:9",
+          body: "caption",
+          attachment: { name: "fixture.txt", mimeType: "text/plain", data: new Uint8Array([1]) },
+        },
+        context,
+      ),
+    ).rejects.toMatchObject({ permanent: true, outcome: "unknown" });
+    expect(accepted).toEqual(["attachment accepted"]);
   });
 
   it("prefers the platform's deterministic direct thread id", async () => {

@@ -1355,8 +1355,26 @@ export const MessagingLinkedIdentitySchema = z.object({
   address: z.string(),
   botId: Id,
   botName: z.string(),
+  deliveryReview: z.object({ spaceId: Id, count: z.number().int().nonnegative() }).optional(),
 });
 export type MessagingLinkedIdentity = z.infer<typeof MessagingLinkedIdentitySchema>;
+
+export const MessagingOutboundVersionSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const MessagingOutboundReviewSchema = z.object({
+  id: Id,
+  version: MessagingOutboundVersionSchema,
+  preview: z.string().max(1000),
+  createdAt: z.string(),
+  attachmentName: z.string().max(200).nullable(),
+});
+export type MessagingOutboundReview = z.infer<typeof MessagingOutboundReviewSchema>;
+export const MessagingOutboundListSchema = z.object({
+  items: z.array(MessagingOutboundReviewSchema).max(20),
+  hasMore: z.boolean(),
+});
+export type MessagingOutboundList = z.infer<typeof MessagingOutboundListSchema>;
+export const MessagingOutboundResolutionSchema = z.enum(["confirmed_sent", "confirmed_not_sent"]);
+export type MessagingOutboundResolution = z.infer<typeof MessagingOutboundResolutionSchema>;
 
 export const MessagingInstallationSummarySchema = z.object({
   id: Id,

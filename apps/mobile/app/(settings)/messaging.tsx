@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache messaging settings are preserved; delivery review ownership is an Ork addition.
+
 import type {
   Bot,
   ExternalConversation,
@@ -8,17 +12,24 @@ import type {
 } from "@orkbot/contracts";
 import { messagingConnectOptions, messagingProviderName } from "@orkbot/core";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppState, Linking, ScrollView, StyleSheet, Text, View } from "react-native";
 import { LoadFailure } from "../../components/load-failure";
 import { MenuPicker, MenuPickerMenu } from "../../components/menu-picker";
+import { MessagingDeliveryReview } from "../../components/messaging-delivery-review";
 import { NativeActionButton } from "../../components/native-action-button";
 import { NativeSymbol } from "../../components/native-symbol";
 import { SettingsGroup, SettingsRow } from "../../components/settings-group";
-import { rpc } from "../../lib/api";
+import { rpc, subscribeConfirmedSpaceSwitch } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import { native, useThemedStyles } from "../../lib/native";
+import {
+  currentReadySessionGeneration,
+  currentSessionGeneration,
+  subscribeSessionGeneration,
+} from "../../lib/session";
+import { ACCOUNT_SETTINGS, captureSettingsContext } from "../../lib/settings-target";
 import { errorText } from "../../lib/user-error";
 
 export default function MessagingSettings() {
@@ -28,6 +39,10 @@ export default function MessagingSettings() {
   const [bots, setBots] = useState<Bot[]>([]);
   const [selectedBotId, setSelectedBotId] = useState("");
   const [status, setStatus] = useState<MessagingStatus | null>(null);
+  const [reviewOwner, setReviewOwner] = useState<ReturnType<typeof captureSettingsContext> | null>(
+    null,
+  );
+  const readRevision = useRef(0);
   const [installations, setInstallations] = useState<MessagingInstallationsStatus>({
     available: false,
     installations: [],
@@ -46,23 +61,49 @@ export default function MessagingSettings() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
-    const [nextBots, nextStatus, nextInstallations, nextChannels, nextConnections, navigation] =
-      await Promise.all([
-        rpc("bots/list"),
-        rpc("messaging/status"),
-        rpc("messaging/installations/list"),
-        rpc("messaging/channels/list"),
-        rpc("messaging/connections/list"),
-        rpc("spaces/list"),
-      ]);
-    setBots(nextBots);
-    setStatus(nextStatus);
-    setInstallations(nextInstallations);
-    setChannels(nextChannels);
-    setConnections(nextConnections);
-    setRooms(navigation.current.externalConversations);
-    setLoadError(null);
+    const origin = captureSettingsContext(ACCOUNT_SETTINGS);
+    const revision = ++readRevision.current;
+    try {
+      const [nextBots, nextStatus, nextInstallations, nextChannels, nextConnections, navigation] =
+        await Promise.all([
+          origin.send("bots/list"),
+          origin.send("messaging/status"),
+          origin.send("messaging/installations/list"),
+          origin.send("messaging/channels/list"),
+          origin.send("messaging/connections/list"),
+          origin.send("spaces/list"),
+        ]);
+      if (!origin.isCurrent() || revision !== readRevision.current) return;
+      setReviewOwner((previous) => (previous?.isCurrent() ? previous : origin));
+      setBots(nextBots);
+      setStatus(nextStatus);
+      setInstallations(nextInstallations);
+      setChannels(nextChannels);
+      setConnections(nextConnections);
+      setRooms(navigation.current.externalConversations);
+      setLoadError(null);
+    } catch (error) {
+      if (origin.isCurrent() && revision === readRevision.current) throw error;
+    }
   }, []);
+  useEffect(() => {
+    const changed = () => {
+      setReviewOwner(null);
+      setStatus(null);
+      setLink(null);
+      setError(null);
+      setLoadError(null);
+      if (currentReadySessionGeneration() === currentSessionGeneration())
+        void refresh().catch((err) => setLoadError(errorText(err)));
+    };
+    const session = subscribeSessionGeneration(changed);
+    const space = subscribeConfirmedSpaceSwitch(changed);
+    return () => {
+      readRevision.current += 1;
+      session();
+      space();
+    };
+  }, [refresh]);
   useFocusEffect(
     useCallback(() => {
       void refresh().catch((err) => setLoadError(errorText(err)));
@@ -313,16 +354,32 @@ export default function MessagingSettings() {
       ) : null}
       <SettingsGroup>
         {status?.identities.map((identity) => (
-          <SettingsRow
-            key={identity.id}
-            title={messagingProviderName(identity.provider)}
-            detail={`${identity.address}, ${identity.botName}`}
-            trailing={textAction(
-              t("Unlink"),
-              () => rpc("messaging/identities/unlink", { identityId: identity.id }),
-              "destructive",
-            )}
-          />
+          <View key={identity.id}>
+            <SettingsRow
+              title={messagingProviderName(identity.provider)}
+              detail={`${identity.address}, ${identity.botName}`}
+              trailing={textAction(
+                t("Unlink"),
+                () => rpc("messaging/identities/unlink", { identityId: identity.id }),
+                "destructive",
+              )}
+            />
+            {identity.deliveryReview &&
+            identity.deliveryReview.count > 0 &&
+            reviewOwner?.isCurrent() ? (
+              <MessagingDeliveryReview
+                identity={identity}
+                review={identity.deliveryReview}
+                owner={reviewOwner}
+                onStatus={(next) => {
+                  if (reviewOwner.isCurrent()) {
+                    readRevision.current += 1;
+                    setStatus(next);
+                  }
+                }}
+              />
+            ) : null}
+          </View>
         ))}
       </SettingsGroup>
       <SettingsGroup>

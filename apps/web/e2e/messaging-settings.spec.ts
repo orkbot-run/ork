@@ -19,6 +19,37 @@ test.afterEach(async ({ page }) => {
 test("messaging settings show linked chat apps, channels, connections, and team conversations", async ({
   page,
 }, testInfo) => {
+  let deliveryResolved = false;
+  const deliveryDecisions: unknown[] = [];
+  await page.route("**/rpc/messaging/outbound/list", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        json: {
+          items: deliveryResolved
+            ? []
+            : [
+                {
+                  id: "outbound-review",
+                  version: "a".repeat(64),
+                  preview: "The report is ready to review.",
+                  createdAt: "2026-01-01T00:00:00Z",
+                  attachmentName: null,
+                },
+              ],
+          hasMore: false,
+        },
+      }),
+    }),
+  );
+  await page.route("**/rpc/messaging/outbound/resolve", async (route) => {
+    deliveryDecisions.push(route.request().postDataJSON());
+    deliveryResolved = true;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ json: { ok: true } }),
+    });
+  });
   await page.route("**/rpc/messaging/installations/list", (route) =>
     route.fulfill({
       contentType: "application/json",
@@ -53,6 +84,7 @@ test("messaging settings show linked chat apps, channels, connections, and team 
               address: "+15551230001",
               botId: "bot-1",
               botName: "Chief",
+              deliveryReview: { spaceId: "review-space", count: deliveryResolved ? 0 : 1 },
             },
             {
               id: "mi-2",
@@ -184,6 +216,28 @@ test("messaging settings show linked chat apps, channels, connections, and team 
   await expect(messagingSettings.getByRole("button", { name: "Connect a chat app" })).toBeEnabled();
   await expect(messagingSettings.getByText("Example workspace", { exact: false })).toBeVisible();
   await captureScreenshot(page, testInfo, "messaging-slack-workspace");
+  await messagingSettings.getByRole("button", { name: "Review delivery", exact: true }).click();
+  await expect(messagingSettings.getByText("The report is ready to review.")).toBeVisible();
+  await expect(
+    messagingSettings.getByText(
+      "Check the chat first. Marking the result resumes queued messages without resending this message.",
+    ),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "messaging-delivery-review");
+  await messagingSettings.getByRole("button", { name: "Mark as not sent", exact: true }).click();
+  await expect(
+    messagingSettings.getByRole("button", { name: "Review delivery", exact: true }),
+  ).toHaveCount(0);
+  expect(deliveryDecisions).toEqual([
+    {
+      json: {
+        identityId: "mi-1",
+        outboundId: "outbound-review",
+        version: "a".repeat(64),
+        resolution: "confirmed_not_sent",
+      },
+    },
+  ]);
   await expect(messagingSettings.getByRole("heading", { name: "Conversations" })).toBeVisible();
   await expect(messagingSettings.getByText("#launch")).toBeVisible();
   await messagingSettings.getByRole("button", { name: "Settings", exact: true }).click();

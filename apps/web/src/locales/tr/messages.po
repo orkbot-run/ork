@@ -1358,6 +1358,10 @@ msgstr "Durum bildir."
 msgid "Check the API key or sign-in, then test again."
 msgstr "API anahtarını veya oturumu kontrol et, sonra yeniden test et."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Önce sohbeti kontrol edin. Sonucu işaretlemek, bu mesajı yeniden göndermeden bekleyen mesajların gönderilmesini sürdürür."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Sunucu URL'sini ve ağı kontrol et, sonra yeniden test et."
@@ -1465,6 +1469,7 @@ msgstr "Temizleniyor…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "Varsayılan hafıza kapsamı güncellenemedi"
 msgid "Couldn't load grants"
 msgstr "Yetkiler yüklenemedi"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Mesajlaşma ayarları yüklenemedi"
@@ -2453,6 +2459,7 @@ msgstr "Gönderimler yüklenemedi"
 msgid "Couldn't load your wallet"
 msgstr "Cüzdanın yüklenemedi"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Mesajlaşma ayarları güncellenemedi"
@@ -3903,9 +3910,17 @@ msgstr "Manuel"
 msgid "Manual setup required"
 msgstr "Manuel kurulum gerekli"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Gönderilmedi olarak işaretle"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Okundu olarak işaretle"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Gönderildi olarak işaretle"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Ork'ya dön"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Devam etmeden önce veri paylaşımını gözden geçirin."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Teslimatı kontrol et"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+// Inherited material remains Apache-2.0; Ork deferred SDK loading and explicit rejection proofs are PolyForm-covered.
 
 import { createHash } from "node:crypto";
 import type { TelegramAdapter, TelegramFormatConverter } from "@chat-adapter/telegram";
@@ -9,7 +9,7 @@ import type { HttpInstance } from "@larksuiteoapi/node-sdk";
 import type { MessagingInboundMessage, MessagingOutboundStatus } from "@orkbot/adapter-kit";
 import { getLogger } from "@orkbot/logging";
 import type { Adapter } from "chat";
-import { ConsoleLogger, convertEmojiPlaceholders, markdownToPlainText } from "chat";
+import { ConsoleLogger, convertEmojiPlaceholders, markdownToPlainText, RateLimitError } from "chat";
 import type { ClientOptions as SendblueClientOptions } from "sendblue";
 import type { MessagingPlatform } from "./chat-sdk-surface.js";
 import { boundInboundMarkdown } from "./chat-sdk-surface.js";
@@ -251,6 +251,10 @@ export async function messagingPlatformsFromEnv(
       enrichTeamRoom: enrichSlackTeamRoom,
       redeliveryKeys: slackRedeliveryKeys,
       isPermanentSendError: (error) => SLACK_PERMANENT_ERRORS.has(slackPlatformError(error) ?? ""),
+      // A plain text post has one chat.postMessage call; file uploads can partially succeed.
+      isRejectedSendError: (error, request) =>
+        !request.attachment &&
+        (SLACK_PERMANENT_ERRORS.has(slackPlatformError(error) ?? "") || isSendRateLimit(error)),
     });
   }
 
@@ -273,6 +277,11 @@ export async function messagingPlatformsFromEnv(
       peekStatuses: parseWhatsAppStatuses,
       isPermanentSendError: (error) =>
         error instanceof WhatsAppApiError && error.errorCode === WHATSAPP_REENGAGEMENT_REQUIRED,
+      // Media may send separate text before the media POST, so it is not atomic.
+      isRejectedSendError: (error, request) =>
+        !request.attachment &&
+        error instanceof WhatsAppApiError &&
+        error.errorCode === WHATSAPP_REENGAGEMENT_REQUIRED,
     });
   }
 
@@ -288,6 +297,7 @@ export async function messagingPlatformsFromEnv(
       ...withTelegramRedelivery(adapter),
       ...telegramGroupHooks(adapter),
       isPermanentSendError: isTelegramBlocked,
+      isRejectedSendError: (error) => isTelegramBlocked(error) || isSendRateLimit(error),
     });
   }
 
@@ -310,6 +320,7 @@ export async function messagingPlatformsFromEnv(
       ...withTelegramRedelivery(adapter),
       ...telegramGroupHooks(adapter),
       isPermanentSendError: isTelegramBlocked,
+      isRejectedSendError: (error) => isTelegramBlocked(error) || isSendRateLimit(error),
     });
   }
 
@@ -570,6 +581,13 @@ function isTelegramBlocked(error: unknown): boolean {
   return error instanceof Error && error.name === "PermissionError";
 }
 
+function isSendRateLimit(error: unknown): boolean {
+  return (
+    error instanceof RateLimitError ||
+    (error instanceof Error && error.name === "AdapterRateLimitError")
+  );
+}
+
 async function telegramAdapter(
   botToken: string,
   secretToken: string,
@@ -579,6 +597,8 @@ async function telegramAdapter(
   return createTelegramAdapter({
     botToken,
     secretToken,
+    // Each outbox row is already split; never let the SDK partly send a second chunk.
+    longMessages: "truncate",
     // Auto mode long-polls when no webhook is registered, for deployments
     // without a public HTTPS endpoint. Only the API process may poll: it
     // owns the inbound sink, and Telegram allows one getUpdates per bot.

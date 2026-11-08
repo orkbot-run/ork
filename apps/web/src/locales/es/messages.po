@@ -1358,6 +1358,10 @@ msgstr "Regístrate."
 msgid "Check the API key or sign-in, then test again."
 msgstr "Revisa la clave de API o el inicio de sesión y vuelve a probar."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Comprueba primero el chat. Al marcar el resultado se reanuda el envío de los mensajes pendientes sin reenviar este mensaje."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Revisa la URL del servidor y la red y vuelve a probar."
@@ -1465,6 +1469,7 @@ msgstr "Borrando…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "No se pudo actualizar el alcance de memoria predeterminado"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "No se pudo cargar la configuración de mensajería"
@@ -2453,6 +2459,7 @@ msgstr "No se pudieron cargar los envíos"
 msgid "Couldn't load your wallet"
 msgstr "No se pudo cargar tu billetera"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "No se pudo actualizar la configuración de mensajería"
@@ -3903,9 +3910,17 @@ msgstr "Manual"
 msgid "Manual setup required"
 msgstr "Requiere configuración manual"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Marcar como no enviado"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Marcar como leído"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Marcar como enviado"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Volver a Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Revisa el uso compartido de datos antes de continuar."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Revisar entrega"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."

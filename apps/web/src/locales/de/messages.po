@@ -1358,6 +1358,10 @@ msgstr "Melde dich."
 msgid "Check the API key or sign-in, then test again."
 msgstr "Prüfe den API-Schlüssel oder die Anmeldung und teste erneut."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Zuerst im Chat nachsehen. Das Markieren des Ergebnisses setzt ausstehende Nachrichten fort, ohne diese Nachricht erneut zu senden."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
 msgstr "Prüfe die Server-URL und das Netzwerk und teste erneut."
@@ -1465,6 +1469,7 @@ msgstr "Wird geleert…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2437,6 +2442,7 @@ msgstr "Standardbereich für Erinnerungen konnte nicht aktualisiert werden"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -2453,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr ""
@@ -3903,9 +3910,17 @@ msgstr ""
 msgid "Manual setup required"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Als nicht gesendet markieren"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Als gelesen markieren"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Als gesendet markieren"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5478,6 +5493,10 @@ msgstr "Zurück zu Ork"
 #: src/lib/user-error.ts
 msgid "Review data sharing before continuing."
 msgstr "Prüfe die Datenfreigabe, bevor du fortfährst."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Zustellung prüfen"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
