@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; bounded recent chat selection follows LICENSE.md.
 
 import type { Actor, RunActivityRow } from "@orkbot/contracts";
 import { MessageBlock } from "@orkbot/contracts";
@@ -12,6 +13,7 @@ import {
   truncatePlainText,
 } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
+import { Prisma } from "@orkbot/db";
 
 const RECENT_LIMIT = 20;
 const TERMINAL_STATUSES = ["completed", "failed", "cancelled"] as const;
@@ -64,10 +66,36 @@ export async function listSpaceRuns(
   actor: Actor,
   filter: "active" | "recent",
 ): Promise<RunActivityRow[]> {
+  // Match activityChatKey: a group is one chat across all its member bots.
+  // Select only IDs here so previews still pass through Prisma's content decryption.
+  const recent =
+    filter === "recent"
+      ? await prisma.$queryRaw<Array<{ id: string }>>`
+          WITH ranked AS (
+            SELECT r.id, r."completedAt", r."updatedAt",
+              row_number() OVER (
+                PARTITION BY CASE WHEN t."groupId" IS NOT NULL
+                  THEN 'group:' || t."groupId" ELSE 'bot:' || r."botId" END
+                ORDER BY r."completedAt" DESC, r."updatedAt" DESC, r.id DESC
+              ) AS position
+            FROM runs r
+            JOIN bots b ON b.id = r."botId"
+            JOIN threads t ON t.id = r."threadId"
+            WHERE r."spaceId" = ${actor.spaceId} AND r."userId" = ${actor.userId}
+              AND b."archivedAt" IS NULL
+              AND r.trigger NOT IN (${Prisma.join([...BACKGROUND_RUN_TRIGGERS])})
+              AND r.status IN (${Prisma.join([...TERMINAL_STATUSES])})
+          )
+          SELECT id FROM ranked WHERE position = 1
+          ORDER BY "completedAt" DESC, "updatedAt" DESC, id DESC
+          LIMIT ${RECENT_LIMIT}`
+      : undefined;
+  if (recent?.length === 0) return [];
   const rows = await prisma.run.findMany({
     where: {
       spaceId: actor.spaceId,
       userId: actor.userId,
+      ...(recent ? { id: { in: recent.map((row) => row.id) } } : {}),
       bot: { archivedAt: null },
       // Background ticket work belongs on the board, not in the activity list.
       trigger: { notIn: [...BACKGROUND_RUN_TRIGGERS] },
@@ -90,7 +118,6 @@ export async function listSpaceRuns(
       filter === "active"
         ? [{ updatedAt: "desc" }, { id: "desc" }]
         : [{ completedAt: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
-    take: filter === "recent" ? RECENT_LIMIT : undefined,
   });
 
   return rows.map((row) => ({

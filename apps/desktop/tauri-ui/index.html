@@ -60,17 +60,12 @@
             <p id="pairing-origin" class="pairing-origin"></p>
             <div class="command-actions"><button id="approve-pairing" class="button button-primary" type="button" data-copy="Approve">Approve</button><button id="cancel-pairing" class="link" type="button" data-copy="Cancel">Cancel</button></div>
           </section>
-          <details id="install" class="disclosure">
-            <summary data-copy="Install a server">Install a server</summary>
-            <p class="hint" data-copy="Or run this command on your Linux server. Setup will ask for your domain there.">Or run this command on your Linux server. Setup will ask for your domain there.</p>
-            <div id="installation" hidden>
-              <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
-              <textarea id="install-command" class="command" rows="4" readonly spellcheck="false"></textarea>
-              <div class="command-actions"><span id="expires" class="hint"></span><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>
-            </div>
-            <p id="installation-status" class="hint" role="status" aria-live="polite"></p>
-            <button id="create-installation" class="button button-secondary" type="button" data-copy="New install command">New install command</button>
-          </details>
+          <section id="installation" class="installation-panel">
+            <p class="hint" data-copy="Run this command on your Linux server, then open the authorization link it prints.">Run this command on your Linux server, then open the authorization link it prints.</p>
+            <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
+            <textarea id="install-command" class="command" rows="2" readonly spellcheck="false"></textarea>
+            <div class="command-actions"><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>
+          </section>
         </section>
         <section data-step="local" hidden>
           <h1 data-copy="Making room for Ork">Making room for Ork</h1>

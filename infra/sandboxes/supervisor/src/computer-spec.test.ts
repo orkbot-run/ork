@@ -621,14 +621,17 @@ describe("graphical computer spec", () => {
   it("ships a sha256-pinned gh CLI", () => {
     const root = path.resolve(import.meta.dirname, "../../computer");
     const dockerfile = readFileSync(path.join(root, "Dockerfile"), "utf8");
-    expect(dockerfile).toMatch(/ARG GH_VERSION=\d+\.\d+\.\d+/);
-    expect(dockerfile).toMatch(
-      /cli\/cli\/releases\/download\/v\$\{GH_VERSION\}\/gh_\$\{GH_VERSION\}_linux_\$\{gh_arch\}\.tar\.gz/,
+    const installer = readFileSync(path.join(root, "install-github-cli.sh"), "utf8");
+    const version = /ARG GH_VERSION=(\d+\.\d+\.\d+)/.exec(dockerfile)?.[1];
+    expect(version).toBeDefined();
+    expect(installer).toContain(`[ "$version" = ${version} ]`);
+    expect(dockerfile).toContain(
+      '/tmp/install-github-cli.sh "$GH_VERSION" "$TARGETARCH" /usr/local/bin',
     );
-    expect(dockerfile).toMatch(/amd64\) gh_arch=amd64; gh_sha256=[0-9a-f]{64}/);
-    expect(dockerfile).toMatch(/arm64\) gh_arch=arm64; gh_sha256=[0-9a-f]{64}/);
-    expect(dockerfile).toMatch(/sha256sum -c/);
-    expect(dockerfile).toMatch(/\/usr\/local\/bin --strip-components=2 "gh_/);
+    expect(installer).toMatch(/amd64\) checksum=[0-9a-f]{64}/);
+    expect(installer).toMatch(/arm64\) checksum=[0-9a-f]{64}/);
+    expect(installer).toMatch(/sha256sum -c/);
+    expect(installer).toMatch(/--strip-components=2 "gh_/);
     expect(dockerfile).toMatch(/gh --version/);
   });
 

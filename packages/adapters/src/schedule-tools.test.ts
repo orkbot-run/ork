@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; cross-chat routine regressions are Ork additions.
+
 import { routineWakeupJob } from "@orkbot/adapter-kit";
 import { ONCE_ROUTINE_CRON } from "@orkbot/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -766,7 +771,7 @@ describe("schedule tool persistence", () => {
     ).rejects.toThrow("deactivate failed");
   });
 
-  it("scopes group list and cancel to the current thread without narrowing DMs", async () => {
+  it("lists the bot across chats but scopes group cancellation without narrowing DMs", async () => {
     const findMany = vi.fn(async () => []);
     const findFirst = vi.fn(async () => null);
     const deps = {
@@ -790,7 +795,6 @@ describe("schedule tool persistence", () => {
           spaceId: "ws-1",
           botId: "bot-1",
           userId: "user-1",
-          threadId: "group-thread-1",
         },
       }),
     );
@@ -1663,5 +1667,163 @@ describe("changeUserTimezone", () => {
 
     expect(user.timezone).toBeNull();
     expect(rows[0]).toMatchObject({ timezone: "Africa/Cairo" });
+  });
+});
+
+describe("group routine discovery and write scope", () => {
+  const scope = { spaceId: "ws-1", botId: "bot-1", userId: "user-1" };
+  const outsideError = {
+    error: "This schedule belongs to another chat. Update or cancel it from its original chat.",
+  };
+  function setup() {
+    const findFirst = vi.fn<(args: unknown) => Promise<unknown>>(async () => null);
+    const updateMany = vi.fn(async () => ({ count: 1 }));
+    const deleteMany = vi.fn(async () => ({ count: 1 }));
+    const enqueue = vi.fn(async () => undefined);
+    const cancel = vi.fn(async () => undefined);
+    const append = vi.fn(async () => undefined);
+    const deps = {
+      prisma: { routine: { findFirst, updateMany, deleteMany } },
+      jobs: { enqueue, cancel },
+      events: { append },
+    } as unknown as Parameters<typeof updateScheduleFromTool>[0];
+    return { deps, findFirst, updateMany, deleteMany, enqueue, cancel, append };
+  }
+  function write(
+    kind: "update" | "cancel",
+    deps: Parameters<typeof updateScheduleFromTool>[0],
+    grouped = true,
+  ) {
+    return kind === "update"
+      ? updateScheduleFromTool(deps, {
+          ...scope,
+          threadId: "group-current",
+          ...(grouped ? { scopeThreadId: "group-current" } : {}),
+          routineId: "routine-1",
+          name: "New name",
+          schedule: {},
+        })
+      : cancelScheduleFromTool(deps, {
+          ...scope,
+          ...(grouped ? { threadId: "group-current" } : {}),
+          routineId: "routine-1",
+          name: "Ignored name",
+        });
+  }
+
+  it("marks only current-chat routines without disclosing foreign thread identifiers or changing DM shape", async () => {
+    const rows = ["group-other", "group-current", null].map((threadId, index) => ({
+      id: `routine-${index}`,
+      name: `Routine ${index}`,
+      prompt: "Check messages",
+      threadId,
+      crons: ["0 9 * * *"],
+      timezone: "UTC",
+      active: index !== 0,
+      nextRunAt: null,
+      ...(index === 0
+        ? { watch: { kind: "command", command: "echo ready" }, watchState: { changed: true } }
+        : {}),
+    }));
+    const findMany = vi.fn(async () => rows);
+    const deps = { prisma: { routine: { findMany } } } as unknown as Parameters<
+      typeof listSchedulesFromTool
+    >[0];
+    const group = await listSchedulesFromTool(deps, { ...scope, threadId: "group-current" });
+    expect(findMany).toHaveBeenCalledWith({ where: scope, orderBy: { createdAt: "desc" } });
+    expect(group.routines).toEqual(
+      rows.map((row, index) =>
+        expect.objectContaining({ routineId: row.id, active: row.active, inThisChat: index === 1 }),
+      ),
+    );
+    expect(group.routines[0]).toMatchObject({
+      watch: rows[0]!.watch,
+      lastCheck: { changed: true },
+    });
+    expect(JSON.stringify(group)).not.toContain("group-other");
+    for (const row of group.routines) expect(row).not.toHaveProperty("threadId");
+    const dm = await listSchedulesFromTool(deps, scope);
+    for (const row of dm.routines) expect(row).not.toHaveProperty("inThisChat");
+  });
+
+  it.each(["update", "cancel"] as const)(
+    "%s diagnoses an owned outside-chat schedule only after a local miss",
+    async (kind) => {
+      const fixture = setup();
+      fixture.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "routine-1" });
+      expect(await write(kind, fixture.deps)).toEqual(outsideError);
+      expect(fixture.findFirst).toHaveBeenNthCalledWith(1, {
+        where: {
+          ...scope,
+          threadId: "group-current",
+          id: "routine-1",
+          ...(kind === "update" ? { bot: { archivedAt: null } } : {}),
+        },
+      });
+      expect(fixture.findFirst).toHaveBeenNthCalledWith(2, {
+        where: {
+          ...scope,
+          id: "routine-1",
+          OR: [{ threadId: null }, { threadId: { not: "group-current" } }],
+          ...(kind === "update" ? { bot: { archivedAt: null } } : {}),
+        },
+        select: { id: true },
+      });
+      expect(fixture.updateMany).not.toHaveBeenCalled();
+      expect(fixture.deleteMany).not.toHaveBeenCalled();
+      expect(fixture.enqueue).not.toHaveBeenCalled();
+      expect(fixture.cancel).not.toHaveBeenCalled();
+      expect(fixture.append).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["update", "cancel"] as const)(
+    "%s keeps unavailable schedules opaque and skips diagnosis in DMs",
+    async (kind) => {
+      const fixture = setup();
+      expect(await write(kind, fixture.deps)).toEqual({ error: "Schedule not found." });
+      expect(fixture.findFirst).toHaveBeenCalledTimes(2);
+      fixture.findFirst.mockClear();
+      expect(await write(kind, fixture.deps, false)).toEqual({ error: "Schedule not found." });
+      expect(fixture.findFirst).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("cancels the exact local name before checking another chat", async () => {
+    const fixture = setup();
+    fixture.findFirst.mockResolvedValueOnce({ id: "local", name: "Daily" });
+    expect(
+      await cancelScheduleFromTool(fixture.deps, {
+        ...scope,
+        threadId: "group-current",
+        name: "Daily",
+      }),
+    ).toEqual({ ok: true, routineId: "local", name: "Daily" });
+    expect(fixture.findFirst).toHaveBeenCalledOnce();
+    expect(fixture.deleteMany).toHaveBeenCalledWith({
+      where: { ...scope, threadId: "group-current", id: "local" },
+    });
+    expect(fixture.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("diagnoses an exact name only after it is absent locally", async () => {
+    const fixture = setup();
+    fixture.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: "other" });
+    expect(
+      await cancelScheduleFromTool(fixture.deps, {
+        ...scope,
+        threadId: "group-current",
+        name: "Daily",
+      }),
+    ).toEqual(outsideError);
+    expect(fixture.findFirst).toHaveBeenLastCalledWith({
+      where: {
+        ...scope,
+        name: "Daily",
+        OR: [{ threadId: null }, { threadId: { not: "group-current" } }],
+      },
+      select: { id: true },
+    });
+    expect(fixture.deleteMany).not.toHaveBeenCalled();
   });
 });

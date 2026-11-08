@@ -1,8 +1,17 @@
-import type { Api, Message, Model } from "@earendil-works/pi-ai";
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited checkpoint tests are preserved; delegated reader regression coverage is an Ork addition.
+
+import type { Api, AssistantMessage, Message, Model, ToolCall } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { createRuntimeContextPolicy } from "./runtime-context.js";
-import { restoreTurnCheckpoint, serializeTurnCheckpoint } from "./turn-checkpoint.js";
+import {
+  restoreTurnCheckpoint,
+  serializeTurnCheckpoint,
+  turnCheckpointRequiresFileReader,
+} from "./turn-checkpoint.js";
 
 const assistant = {
   role: "assistant",
@@ -182,3 +191,47 @@ describe("turn checkpoint", () => {
     expect(screenshots[0]).toMatchObject({ toolCallId: "shot-2" });
   });
 });
+
+it.each(["message_bot", "handoff_to_bot"])(
+  "fences only unresolved direct/wrapped %s file calls",
+  (name) => {
+    for (const wrapped of [false, true]) {
+      for (const files of [["report.txt"], "invalid-path-list", null]) {
+        const call: ToolCall = {
+          type: "toolCall",
+          id: "file",
+          name: wrapped ? "use_tool" : name,
+          arguments: wrapped ? { name, arguments: { files } } : { files },
+        };
+        const messages: Message[] = [{ ...(assistant as AssistantMessage), content: [call] }];
+        expect(turnCheckpointRequiresFileReader(messages)).toBe(true);
+        expect(
+          turnCheckpointRequiresFileReader([
+            ...messages,
+            {
+              role: "toolResult",
+              toolCallId: "file",
+              toolName: call.name,
+              content: [],
+              isError: false,
+              timestamp: 0,
+            },
+          ]),
+        ).toBe(false);
+      }
+    }
+    expect(
+      turnCheckpointRequiresFileReader([
+        {
+          ...assistant,
+          content: [{ type: "toolCall", id: "file", name, arguments: { files: [] } }],
+        },
+      ] as Message[]),
+    ).toBe(false);
+    expect(
+      turnCheckpointRequiresFileReader([
+        { ...assistant, content: [{ type: "toolCall", id: "file", name, arguments: {} }] },
+      ] as Message[]),
+    ).toBe(false);
+  },
+);

@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 // Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
 // Ork thread-lock budget coverage is PolyForm-covered.
 
@@ -27,6 +28,7 @@ export * from "./content-migration.js";
 export * from "./credential-secrets.js";
 export * from "./cross-space-communication.js";
 export * from "./database-access.js";
+export * from "./database-errors.js";
 export * from "./deferred-migrations.js";
 export * from "./events.js";
 export * from "./expire-stuck-run.js";
@@ -44,6 +46,7 @@ export * from "./page-shares.js";
 export * from "./provider-transactions.js";
 export * from "./repos.js";
 export * from "./row-security.js";
+export * from "./run-reader-version.js";
 export * from "./run-secrets.js";
 export * from "./run-timing.js";
 export * from "./run-turn-checkpoint.js";

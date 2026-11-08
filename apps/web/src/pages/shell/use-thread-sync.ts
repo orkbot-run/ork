@@ -12,10 +12,15 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   anySignal,
   createRefreshCoalescer,
   isRunTerminalEvent,
   isRunWorking,
+  isThreadSnapshotEvent,
+  reconcileRefreshedThread,
+  reduceThreadSnapshot,
+  rememberTerminalThreadRun,
   runThreadSubscription,
 } from "@orkbot/core";
 import { fetchFresh } from "@orkbot/core/query";
@@ -32,13 +37,9 @@ import type { SpaceQueries } from "../../lib/query";
 import { queryClient } from "../../lib/query";
 import type { createSpaceRpc } from "../../lib/rpc";
 import {
-  activeThreadRuns,
   isComputerStatusEvent,
-  isThreadSnapshotEvent,
   prependThreadMessagePage,
-  reconcileRefreshedThread,
   reduceComputerStatus,
-  reduceThreadSnapshot,
 } from "../../lib/thread-events";
 import {
   firstVisibleTranscriptRow,
@@ -364,13 +365,7 @@ export function useThreadSync({
         ),
       beforeEvent: (event) => {
         webLogoAvatarActivity.apply(avatarSource, event);
-        if (isRunTerminalEvent(event) && event.runId) {
-          terminalRunReceipts.current.add(event.runId);
-          if (terminalRunReceipts.current.size > 100) {
-            const oldest = terminalRunReceipts.current.values().next().value;
-            if (oldest !== undefined) terminalRunReceipts.current.delete(oldest);
-          }
-        }
+        rememberTerminalThreadRun(terminalRunReceipts.current, event);
       },
       applyEvent: (event) =>
         applyThreadEvent(event, commitSnapshot, commitComputer, snapshotRef, computerRef),

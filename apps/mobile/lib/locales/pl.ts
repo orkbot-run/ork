@@ -3,6 +3,18 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Routine: {names}": "Rutyna: {names}",
+  "Routines: {names}": "Rutyny: {names}",
+  "Stop {name}": "Zatrzymaj {name}",
+  "Stop all": "Zatrzymaj wszystko",
+  "Review delivery": "Sprawdź wysyłkę",
+  "Mark as sent": "Oznacz jako wysłaną",
+  "Mark as not sent": "Oznacz jako niewysłaną",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "Najpierw sprawdź czat. Zapisanie wyniku wznowi wysyłkę oczekujących wiadomości bez ponownego wysyłania tej wiadomości.",
+  "Reply mode": "Tryb odpowiedzi",
+  Chat: "Czat",
+  "Updates and final reply": "Aktualizacje i odpowiedź końcowa",
   "Haptic feedback": "Reakcje haptyczne",
   "Check again": "Sprawdź ponownie",
   "Computers unavailable": "Komputery niedostępne",
@@ -40,6 +52,14 @@ export const PL_MESSAGES: Record<string, string> = {
   "Too many attempts. Try again later.": "Za dużo prób. Spróbuj ponownie później.",
   "Pairing code": "Klucz parowania",
   "Approve server": "Zatwierdź serwer",
+  "New server available": "Dostępny nowy serwer",
+  "Self-hosted": "Własny serwer",
+  "Open servers": "Otwórz serwery",
+  Later: "Później",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "Uruchom polecenie na serwerze z Linuxem, a następnie otwórz wyświetlony link autoryzacyjny.",
+  "Copy command": "Kopiuj polecenie",
+  "Could not copy the command.": "Nie udało się skopiować polecenia.",
   "Enter this code on your server's initialization page.":
     "Wpisz ten kod na stronie inicjalizacji serwera.",
   "Could not copy the code.": "Nie udało się skopiować kodu.",

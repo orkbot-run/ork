@@ -1,8 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 thread behavior is preserved. Shared reconciliation follows LICENSE.md.
+
 import {
   abortableDelay,
   createRefreshCoalescer,
   isRetryableError,
   isRunTerminalEvent,
+  rememberTerminalThreadRun,
   retryDelayMs,
 } from "@orkbot/core";
 import type { RefObject } from "react";
@@ -32,6 +37,7 @@ export function useThreadLiveSubscription({
   jumpScrollTarget,
   jumpAnchor,
   snapRef,
+  terminalRunReceipts,
   readVisibleTarget,
   showSavedThread,
   refresh,
@@ -53,6 +59,7 @@ export function useThreadLiveSubscription({
   jumpScrollTarget: RefObject<string | null>;
   jumpAnchor: RefObject<ThreadJumpAnchor>;
   snapRef: RefObject<MobileSnapshot | null>;
+  terminalRunReceipts: RefObject<Set<string>>;
   readVisibleTarget: RefObject<string | null>;
   showSavedThread: (signal: AbortSignal) => void;
   refresh: () => Promise<MobileSnapshot | undefined>;
@@ -68,6 +75,10 @@ export function useThreadLiveSubscription({
   useEffect(() => {
     liveCursor.current = null;
   }, [botId, groupId, sessionEpoch]);
+
+  useEffect(() => {
+    terminalRunReceipts.current.clear();
+  }, [sessionEpoch]);
 
   useEffect(() => {
     // Resume the same chat from its applied cursor so pinned and expanded windows catch up.
@@ -118,7 +129,9 @@ export function useThreadLiveSubscription({
             cursor,
             (event) => {
               if (abort.signal.aborted || sessionGeneration !== currentSessionGeneration()) return;
+              if (typeof event.seq === "number" && event.seq <= cursor) return;
               cursor = Math.max(cursor, event.seq ?? -1);
+              rememberTerminalThreadRun(terminalRunReceipts.current, event);
               retryMs = 250;
               if (event.type === "thread.cleared") {
                 expandedHistoryThread.current = null;

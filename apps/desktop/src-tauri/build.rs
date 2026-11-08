@@ -38,9 +38,12 @@ fn main() {
             }
         }
     }
-    if let Some(revision) = revision
-        .filter(|value| value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
-    {
+    if let Some(revision) = revision.filter(|value| {
+        value.len() == 40
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    }) {
         println!("cargo:rustc-env=ORKBOT_INSTALLER_REVISION={revision}");
     }
     for variable in [
@@ -68,6 +71,7 @@ fn main() {
             "get_server_pairing",
             "approve_server_pairing",
             "cancel_server_pairing",
+            "cancel_setup_connection",
             "remove_server",
             "connect_saved_server",
             "connect_server",

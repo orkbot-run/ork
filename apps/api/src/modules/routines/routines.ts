@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited routine operations remain Apache-2.0; Space work admission guards are Ork additions.
 
+import { randomUUID } from "node:crypto";
 import { routineWakeupJob } from "@orkbot/adapter-kit";
 import { parseRoutineWatch, parseRoutineWatchState, routineRunModelPin } from "@orkbot/adapters";
 import type { Actor, CreateRoutineInput, Routine } from "@orkbot/contracts";
@@ -226,7 +227,7 @@ export async function createRoutineTestRun(
       trigger: "routine",
       routineId: routine.id,
       ...routineRunModelPin(currentModel),
-      clientNonce: nonce,
+      clientNonce: nonce ?? routineTestRunNonce(actor, randomUUID()),
     },
     select: { id: true, status: true },
   });

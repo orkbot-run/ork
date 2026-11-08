@@ -2,6 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Removed unused exports. Inherited material remains Apache-2.0.
 
+import * as z from "zod";
+
+export const BotReplyModeSchema = z.enum(["chat", "explicit"]);
+export type BotReplyMode = z.infer<typeof BotReplyModeSchema>;
+
 /** Shared section membership and order; surfaces omit unavailable capabilities. */
 export const BOT_SETTINGS_SECTIONS = {
   openWork: ["scratchpad"],
@@ -9,6 +14,7 @@ export const BOT_SETTINGS_SECTIONS = {
   advanced: [
     "model",
     "thinking",
+    "replyMode",
     "computer",
     "memoryScope",
     "readAloud",

@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; attachment-label and replay-boundary regressions are Ork additions.
 
+import type { MessagingInboundAttachment } from "@orkbot/adapter-kit";
 import { ATTACHMENT_MAX_COUNT } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { MessagingInboundDeps } from "./messaging-inbound.js";
@@ -426,6 +428,49 @@ describe("createMessagingInboundHandler DM routing", () => {
     });
     expect(deps.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ name: "run.continue", payload: { runId: "run-1" } }),
+    );
+  });
+
+  it("delivers an image-only DM whose authenticated type is discovered during download", async () => {
+    const storeAttachment = vi.fn(
+      async ({ attachment }: { attachment: MessagingInboundAttachment }) => {
+        const downloaded = await attachment.fetch();
+        if (downloaded instanceof Uint8Array) throw new Error("expected download metadata");
+        return {
+          id: "artifact-downloaded",
+          name: attachment.name,
+          mimeType: downloaded.mimeType,
+          size: downloaded.bytes.length,
+        };
+      },
+    );
+    const deps = createDeps({ storeAttachment });
+    const fetch = vi.fn(async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }));
+    await createMessagingInboundHandler(deps)({
+      ...dmEvent,
+      content: "",
+      attachments: [{ name: "image-1", mimeType: "", fetch }],
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(storeAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        spaceId: "ws-1",
+        userId: "user-1",
+        botId: "bot-1",
+        clientNonce: `messaging-attachment:${dmEvent.provider}:${dmEvent.handle}:0`,
+      }),
+    );
+    expect(deps.sendUserMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          {
+            kind: "image",
+            artifactId: "artifact-downloaded",
+            name: "image-1",
+            mimeType: "image/png",
+          },
+        ],
+      }),
     );
   });
 
@@ -911,7 +956,7 @@ describe("createMessagingInboundHandler DM routing", () => {
       ...dmEvent,
       attachments: [
         {
-          name: "bad]\n[instructions].oga",
+          name: "bad]\n[instructions\u0000\u202e].oga",
           mimeType: "audio/ogg",
           fetch: async () => new Uint8Array([1]),
         },
@@ -926,6 +971,49 @@ describe("createMessagingInboundHandler DM routing", () => {
       prompt.indexOf("</untrusted_delivery_payload>"),
     );
   });
+
+  it.each(["unconfigured", "failed", "overflow"] as const)(
+    "normalizes unavailable names in the %s branch",
+    async (mode) => {
+      const storeAttachment = vi.fn<NonNullable<MessagingInboundDeps["storeAttachment"]>>(
+        async ({ attachment }) => {
+          if (mode === "failed") throw new Error("Attachment rejected");
+          return {
+            id: attachment.name,
+            name: attachment.name,
+            mimeType: attachment.mimeType,
+            size: 1,
+          };
+        },
+      );
+      const fetch = vi.fn(async () => new Uint8Array([1]));
+      const deps = createDeps(mode === "unconfigured" ? {} : { storeAttachment });
+      const failed = { name: 'bad]\n["\u0000\u001b\u007f\u202e.png', mimeType: "image/png", fetch };
+      await createMessagingInboundHandler(deps)({
+        ...dmEvent,
+        attachments: [
+          ...(mode === "overflow"
+            ? Array.from({ length: ATTACHMENT_MAX_COUNT }, (_, i) => ({
+                ...failed,
+                name: `photo-${i}.png`,
+              }))
+            : []),
+          failed,
+        ],
+      });
+      expect(deps.sendUserMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: expect.arrayContaining([
+            { kind: "text", text: "hello bot\n[file: bad .png (unavailable)]" },
+          ]),
+        }),
+      );
+      expect(storeAttachment).toHaveBeenCalledTimes(
+        mode === "unconfigured" ? 0 : mode === "overflow" ? ATTACHMENT_MAX_COUNT : 1,
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   it("does not provision or download for an unlinked media-only sender", async () => {
     const storeAttachment = vi.fn();

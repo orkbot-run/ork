@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Modified for the Tauri desktop path. Inherited material remains Apache-2.0.
 // Ork thread-lock budget coverage is PolyForm-covered.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type {
   AdapterContext,
@@ -26,6 +27,7 @@ import {
   clearEndedExecutionRunBinding,
   createGroupRepos,
   createThreadMessageInTransaction,
+  isUniqueViolation,
   recordComputerRunEnd,
   recordComputerRunSeen,
   THREAD_LOCK_TRANSACTION_OPTIONS,
@@ -888,7 +890,7 @@ async function postComputerNote(
       if (seq !== undefined) await deps.events.notify(threadId, seq).catch(() => undefined);
     } catch (cause) {
       // A competing worker already wrote the same nonce. Other failures are retried next tick.
-      if (!(cause && typeof cause === "object" && "code" in cause && cause.code === "P2002")) {
+      if (!isUniqueViolation(cause)) {
         getLogger().error("computer.notice_failed", cause);
       }
     }

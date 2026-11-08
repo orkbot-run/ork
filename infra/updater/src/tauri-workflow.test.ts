@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, it } from "vitest";
@@ -27,6 +28,51 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
       (entry: { platform: string }) => entry.platform,
     ),
   ).toEqual(["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64"]);
+  const linux = build.jobs["diagnostic-build"].strategy.matrix.include.find(
+    (entry: { platform: string }) => entry.platform === "linux-x86_64",
+  );
+  expect(linux.os).toBe("ubuntu-22.04");
+  const helpers = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Configure Linux WebKit helpers",
+  );
+  expect(helpers.if).toBe("runner.os == 'Linux'");
+  expect(helpers.run).toContain("/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1");
+  const packaging = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Prepare verified packaging tools",
+  );
+  expect(packaging.env.GITHUB_TOKEN).toBe(`\${{ github.token }}`);
+  expect(signed.run).toContain("linux-webkit.json");
+  const diagnostic = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Build diagnostic installers",
+  );
+  expect(diagnostic.run).toContain(
+    'tauri:build --verbose --config "$RUNNER_TEMP/linux-webkit.json"',
+  );
+  const command = signed.run.slice(
+    signed.run.indexOf('case "$RUNNER_OS" in'),
+    signed.run.indexOf(
+      'if [[ "$RUNNER_OS" == macOS ]]; then\n  node apps/desktop/scripts/macos-distribution.ts verify',
+    ),
+  );
+  expect(command).toContain('Linux) bundles="appimage"');
+  for (const [os, bundle, verbose] of [
+    ["macOS", "app,dmg", false],
+    ["Windows", "nsis", false],
+    ["Linux", "appimage", true],
+  ] as const) {
+    const result = execFileSync(
+      "bash",
+      ["-c", `set -eu; pnpm() { printf '%s\\n' "$@"; }; ${command}`],
+      {
+        encoding: "utf8",
+        env: { ...process.env, RUNNER_OS: os, RUNNER_TEMP: "/tmp/tauri-workflow-test" },
+      },
+    )
+      .trim()
+      .split("\n");
+    expect(result).toContain(bundle);
+    expect(result.includes("--verbose")).toBe(verbose);
+  }
   const publish = parse(
     readFileSync(path.join(root, ".github/workflows/desktop-tauri-publish.yml"), "utf8"),
   );

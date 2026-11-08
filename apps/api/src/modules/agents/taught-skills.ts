@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { randomUUID } from "node:crypto";
 import type { AgentHomeStore, JobPublisher, SandboxProvider } from "@orkbot/adapter-kit";
@@ -42,7 +43,12 @@ import {
   teachRecordingTtlMs,
 } from "@orkbot/core";
 import type { createRepos, PrismaClient, ThreadEvents } from "@orkbot/db";
-import { clearEndedRunState, expireComputerExecutionLeases, IsolationError } from "@orkbot/db";
+import {
+  clearEndedRunState,
+  expireComputerExecutionLeases,
+  IsolationError,
+  isUniqueViolation,
+} from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 
@@ -362,11 +368,7 @@ export function createTaughtSkillsService(deps: TaughtSkillsDeps) {
         });
       } catch (error) {
         if (error instanceof ORPCError) throw error;
-        if (
-          error instanceof Error &&
-          "code" in error &&
-          (error as { code?: string }).code === "P2002"
-        ) {
+        if (error instanceof Error && isUniqueViolation(error)) {
           throw new ORPCError("CONFLICT", { message: "A teaching session is already active" });
         }
         throw error;

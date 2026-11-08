@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 material is preserved; shared attachment failure labels are Ork additions.
 
 import type {
   JobPublisher,
@@ -20,6 +21,7 @@ import {
   parseMessagingCommand,
   promptTextForAttachments,
   sanitizeMessagingLabel,
+  unavailableAttachmentLabel,
 } from "@orkbot/core";
 import type {
   MessagingIdentityRequest,
@@ -282,7 +284,7 @@ async function storeInboundMedia(
   const downloadDeadline = Date.now() + 2_000;
   for (const [index, attachment] of (event.attachments ?? []).entries()) {
     if (!deps.storeAttachment || index >= ATTACHMENT_MAX_COUNT) {
-      unavailable.push(`[file: ${sanitizeMessagingLabel(attachment.name)} (unavailable)]`);
+      unavailable.push(unavailableAttachmentLabel(attachment.name));
       continue;
     }
     try {
@@ -303,7 +305,7 @@ async function storeInboundMedia(
       getLogger().warn("messaging attachment was not stored", {
         reason: error instanceof Error ? error.message : String(error),
       });
-      unavailable.push(`[file: ${sanitizeMessagingLabel(attachment.name)} (unavailable)]`);
+      unavailable.push(unavailableAttachmentLabel(attachment.name));
     }
   }
   // Transcribe only after every download, so a slow transcription cannot use up the

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited messaging route tests are preserved; Ork adds delivery review metadata coverage.
 
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
@@ -214,6 +215,7 @@ function messagingDeps(
   } as unknown as PrismaClient;
   const outboundRows: Array<Record<string, unknown>> = [];
   const messagingOutbound = {
+    count: vi.fn(async () => 0),
     createMany: vi.fn(async ({ data }: { data: Array<Record<string, unknown>> }) => {
       let count = 0;
       for (const item of data) {
@@ -333,6 +335,7 @@ describe("messaging.status", () => {
             address: "+15551111111",
             botId: "bot-1",
             botName: "Assistant",
+            deliveryReview: { spaceId: "ws-1", count: 0 },
           },
         ],
       },
@@ -393,6 +396,7 @@ describe("messaging.identities", () => {
         address: "+15551111111",
         botId: "bot-2",
         botName: "Assistant",
+        deliveryReview: { spaceId: "ws-1", count: 0 },
       },
     });
   });

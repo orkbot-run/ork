@@ -260,3 +260,17 @@ describe("private task tools after shared-channel messages", () => {
     },
   );
 });
+
+it.each(["message_bot", "handoff_to_bot"])(
+  "rejects malformed %s files before approval persistence",
+  async (name) => {
+    const { ctx, request } = ownBotUpdateCall();
+    const call = {
+      ...request(),
+      name,
+      args: { files: "report.txt" },
+      effectRequest: { files: "report.txt" },
+    };
+    expect(await prepareToolRequest(ctx as never, call)).toHaveProperty("error");
+  },
+);

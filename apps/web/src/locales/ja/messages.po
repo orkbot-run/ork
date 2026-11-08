@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "チャートを表示できませんでした: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "チャット"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -1356,6 +1357,10 @@ msgstr "状況を確認してください。"
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "APIキーまたはログイン情報を確認してから、もう一度テストしてください。"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "先にチャットを確認してください。結果を記録すると、このメッセージを再送信せずに待機中のメッセージの送信を再開します。"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
@@ -1464,6 +1469,7 @@ msgstr "クリア中…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2291,6 +2297,7 @@ msgstr "ルーティンを実行できませんでした"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -2435,6 +2442,7 @@ msgstr "デフォルトのメモリ範囲を更新できませんでした"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "メッセージ設定を読み込めませんでした"
@@ -2451,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "メッセージ設定を更新できませんでした"
@@ -3901,9 +3910,17 @@ msgstr "手動"
 msgid "Manual setup required"
 msgstr "手動設定が必要"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "未送信にする"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "既読にする"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "送信済みにする"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5351,6 +5368,10 @@ msgstr "返信"
 msgid "Reply cancelled"
 msgstr "返信をキャンセルしました"
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "応答モード"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -5473,6 +5494,10 @@ msgstr "Orkに戻る"
 msgid "Review data sharing before continuing."
 msgstr "続行する前に、データ共有を確認してください。"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "配信結果を確認"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "プロバイダー設定を確認して、もう一度テストしてください。"
@@ -5501,6 +5526,10 @@ msgstr "キーをローテーション"
 msgid "Routine"
 msgstr "ルーティン"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "ルーティン: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5509,6 +5538,10 @@ msgstr "ルーティン"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "不在中に実行されるルーティン"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "ルーティン: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6180,6 +6213,15 @@ msgstr "手順"
 msgid "Stop"
 msgstr "停止"
 
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "{name}を停止"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "すべて停止"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr ""
@@ -6825,6 +6867,10 @@ msgstr "サーバーを更新"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "アップデート"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "進捗と最終回答"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

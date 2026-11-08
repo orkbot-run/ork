@@ -3,6 +3,26 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "New server available": "有新服务器可用",
+  "Open servers": "打开服务器列表",
+  Later: "稍后",
+  "Self-hosted": "自托管",
+  "Copy command": "复制命令",
+  "Could not copy the command.": "无法复制命令。",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "在 Linux 服务器上运行此命令，然后打开它显示的授权链接。",
+  "Routine: {names}": "例行任务：{names}",
+  "Routines: {names}": "例行任务：{names}",
+  "Stop {name}": "停止{name}",
+  "Stop all": "全部停止",
+  "Review delivery": "检查发送结果",
+  "Mark as sent": "标记为已发送",
+  "Mark as not sent": "标记为未发送",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "请先查看聊天。标记结果后将继续发送排队的消息，不会重新发送此消息。",
+  "Reply mode": "回复模式",
+  Chat: "聊天",
+  "Updates and final reply": "进度更新和最终回复",
   "Haptic feedback": "触感反馈",
   "Check again": "重新检查",
   "Computers unavailable": "计算机不可用",

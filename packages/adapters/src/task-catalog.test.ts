@@ -1,4 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 tests are preserved; cross-chat routine regressions are Ork additions.
+
 import { describe, expect, it, vi } from "vitest";
+import { listSchedulesFromTool } from "./schedule-tools.js";
 import { TASK_CATALOG_GUIDANCE, taskCatalogFromTool } from "./task-catalog.js";
 
 describe("task catalog", () => {
@@ -100,5 +106,37 @@ describe("task catalog", () => {
       { name: "GITHUB_LIST_RELEASES", description: "List releases", readOnly: true },
     ]);
     expect(result.guidance).toBe(TASK_CATALOG_GUIDANCE);
+  });
+});
+
+it("shares the bot-wide group routine projection with schedule_list", async () => {
+  const findMany = vi.fn(async () =>
+    ["current", "other", null].map((threadId, i) => ({
+      id: `routine-${i}`,
+      threadId,
+      name: "Daily",
+      prompt: "Check",
+      crons: ["0 9 * * *"],
+      active: true,
+      timezone: "UTC",
+      nextRunAt: null,
+    })),
+  );
+  const deps = {
+    prisma: {
+      routine: { findMany },
+      scratchpadItem: { findMany: async () => [] },
+      taughtSkill: { findMany: async () => [] },
+      agentSkill: { findMany: async () => [] },
+    },
+  } as unknown as Parameters<typeof taskCatalogFromTool>[0];
+  const input = { spaceId: "space-1", botId: "bot-1", userId: "user-1", threadId: "current" };
+  const schedules = await listSchedulesFromTool(deps, input);
+  const catalog = await taskCatalogFromTool(deps, { ...input, tools: [] });
+  expect(catalog.routines).toEqual(schedules.routines);
+  expect(catalog.routines.map((row) => row.inThisChat)).toEqual([true, false, false]);
+  expect(findMany).toHaveBeenLastCalledWith({
+    where: { spaceId: "space-1", botId: "bot-1", userId: "user-1" },
+    orderBy: { createdAt: "desc" },
   });
 });

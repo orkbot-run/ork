@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { BUILTIN_AGENT_SKILLS } from "@orkbot/adapters";
 import type { Actor, AgentSkill, AgentSkillSource } from "@orkbot/contracts";
@@ -17,6 +18,7 @@ import {
   AVAILABILITY_SELECT,
   availableInSpace,
   IsolationError,
+  isUniqueViolation,
   spaceAvailability,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
@@ -219,11 +221,7 @@ export function createAgentSkillsService(prisma: PrismaClient) {
         });
         return mapAgentSkill(row);
       } catch (error) {
-        if (
-          error instanceof Error &&
-          "code" in error &&
-          (error as { code?: string }).code === "P2002"
-        ) {
+        if (error instanceof Error && isUniqueViolation(error)) {
           throw new ORPCError("CONFLICT", { message: "A skill with that name already exists." });
         }
         throw error;
@@ -276,11 +274,7 @@ export function createAgentSkillsService(prisma: PrismaClient) {
         if (updated.count !== 1) throw new IsolationError();
       } catch (error) {
         if (error instanceof IsolationError) throw error;
-        if (
-          error instanceof Error &&
-          "code" in error &&
-          (error as { code?: string }).code === "P2002"
-        ) {
+        if (error instanceof Error && isUniqueViolation(error)) {
           throw new ORPCError("CONFLICT", { message: "A skill with that name already exists." });
         }
         throw error;

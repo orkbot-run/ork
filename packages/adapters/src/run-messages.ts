@@ -3,6 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 
+// Ork changes consolidate database error matching through the shared database predicates.
+// Ork also admits durable messaging progress after commit without delaying the run.
+
 import type { MessageBlock } from "@orkbot/contracts";
 import { callIdFromClientNonce, isBackgroundRunTrigger, redactSecrets } from "@orkbot/core";
 import type { Prisma, RunLease } from "@orkbot/db";
@@ -60,10 +63,6 @@ export function redactBlocks(blocks: MessageBlock[], secrets: string[]): Message
   });
 }
 
-export function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
-}
-
 export async function publishMessage(
   deps: ExecutorDeps,
   run: { id: string; spaceId: string; threadId: string; botId: string; trigger: string },
@@ -115,6 +114,18 @@ export async function publishMessage(
       );
     }, THREAD_LOCK_TRANSACTION_OPTIONS),
   );
+  if (
+    committed.message &&
+    role === "bot" &&
+    (run.trigger === "messaging" || run.trigger === "bot_message") &&
+    deps.messaging?.publishProgress
+  ) {
+    void Promise.resolve()
+      .then(() => deps.messaging!.publishProgress!(run.id))
+      .catch((error) => {
+        getLogger().error("messaging progress admission", error);
+      });
+  }
   await deps.events
     .notify(run.threadId, committed.eventSeq, committed.firstResponseRunId)
     .catch((error) => {

@@ -54,6 +54,7 @@ import { lazyComponent } from "../../lib/preload-recovery";
 import { useSpaceQueries } from "../../lib/query";
 import { errorText } from "../../lib/user-error";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
+import { BotReplyModeSetting } from "./bot-reply-mode";
 import { ChatModelPicker } from "./chat-model-picker";
 
 const ScratchpadSection = lazyComponent(() =>
@@ -675,6 +676,9 @@ export function BotSettings({
                 ) : null}
               </div>
             </div>
+            {bot.replyMode !== undefined ? (
+              <BotReplyModeSetting key={`${bot.spaceId}:${bot.id}`} bot={bot} />
+            ) : null}
             <SettingsGroup label={t`Computer`} plain>
               <ComputerModePicker value={computerMode} onChange={setComputerMode} />
               {memoryProviderConfigured ? (

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@orkbot/adapter-kit";
 import { parseRoutineWatch, stableStringify, validateRoutineWatch } from "@orkbot/adapters";
@@ -10,12 +11,11 @@ import {
   hasMixedOneShotSchedule,
   isOneShotRoutineCrons,
 } from "@orkbot/core";
-import { IsolationError, Prisma } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import { assertRoutineModel } from "#modules/models/model-pins";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { isRecordNotFound } from "#modules/platform/routes/shared";
 import { listRoutineRuns } from "../routine-runs.js";
 import {
   assertRoutineSchedule,

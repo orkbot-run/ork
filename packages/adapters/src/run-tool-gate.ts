@@ -430,6 +430,9 @@ export async function gateToolCall(
           executionId,
           ctx.state.effects.consumedIds,
           batch && (batch.complete ? batch.actions : []),
+          (name === "message_bot" || name === "handoff_to_bot") &&
+            Array.isArray(args.files) &&
+            args.files.length > 0,
         );
 
   // Refuse a repeat of a tool the user denied earlier in this run. Refusals carry a result,

@@ -1,12 +1,24 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited ordering tests are preserved; durable progress conformance is an Ork addition.
 
 import { randomUUID } from "node:crypto";
-import type { AdapterContext, MessagingSurface } from "@orkbot/adapter-kit";
+import type { AdapterContext, MessagingSendRequest, MessagingSurface } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
-import { asSystem, createDb, provisionMessagingIdentity, runAsSystem } from "@orkbot/db";
+import {
+  asSystem,
+  createDb,
+  provisionMessagingIdentity,
+  runAsSystem,
+  runAsTenant,
+} from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
+import {
+  deliverMessagingOutbound,
+  mirrorMessagingOutbound,
+  mirrorMessagingProgress,
+} from "./messaging-delivery.js";
 
 const url = process.env.DATABASE_URL;
 const describePostgres =
@@ -66,7 +78,9 @@ describePostgres("messaging outbound drain order (PostgreSQL)", () => {
   });
 
   function fakeSurface() {
-    const sendToThread = vi.fn(async () => ({ handle: "handle-out-1" }));
+    const sendToThread = vi.fn(async (_request: MessagingSendRequest) => ({
+      handle: "handle-out-1",
+    }));
     const messaging: MessagingSurface = {
       describe: () => ({
         id: "fake",
@@ -93,6 +107,91 @@ describePostgres("messaging outbound drain order (PostgreSQL)", () => {
       artifacts: { get: vi.fn(async () => new Uint8Array()) },
     };
   }
+
+  it("queues one durable direct prefix and recovers barrier tails in order across concurrent mirrors", async () => {
+    const marker = randomUUID();
+    const task = await system.task.create({
+      data: { ...identity, prompt: "Progress fixture", status: "running" },
+    });
+    const run = await system.run.create({
+      data: { ...identity, taskId: task.id, trigger: "messaging", status: "running" },
+    });
+    const prefix = await system.message.create({
+      data: {
+        threadId: identity.threadId,
+        botId: identity.botId,
+        runId: run.id,
+        role: "bot",
+        seq: 501,
+        blocks: [{ kind: "text", text: `Before completion ${marker}` }],
+      },
+    });
+    const { messaging, sendToThread } = fakeSurface();
+    const deps = makeDeps(system, messaging);
+    await Promise.all(Array.from({ length: 3 }, () => mirrorMessagingProgress(deps, run.id)));
+    expect(
+      (await system.run.findUniqueOrThrow({ where: { id: run.id } })).messagingMirroredAt,
+    ).toBeNull();
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(sendToThread.mock.calls.map(([request]) => request.body)).toContain(
+      `Before completion ${marker}`,
+    );
+    const barrier = await system.message.create({
+      data: {
+        threadId: identity.threadId,
+        botId: identity.botId,
+        runId: run.id,
+        role: "bot",
+        seq: 502,
+        blocks: [
+          { kind: "text", text: `Barrier ${marker}` },
+          { kind: "page", pageId: "fixture-page", title: "Plan", version: 1 },
+        ],
+      },
+    });
+    const tail = await system.message.create({
+      data: {
+        threadId: identity.threadId,
+        botId: identity.botId,
+        runId: run.id,
+        role: "bot",
+        seq: 503,
+        blocks: [{ kind: "text", text: `After barrier ${marker}` }],
+      },
+    });
+    await mirrorMessagingProgress(deps, run.id);
+    const keys = [prefix, barrier, tail].map((message) => `msg:${message.id}`);
+    expect(await system.messagingOutbound.count({ where: { idempotencyKey: { in: keys } } })).toBe(
+      1,
+    );
+    await Promise.all([
+      mirrorMessagingProgress(deps, run.id),
+      mirrorMessagingOutbound(deps, run.id),
+    ]);
+    await mirrorMessagingOutbound(deps, run.id);
+    const rows = await system.messagingOutbound.findMany({
+      where: { idempotencyKey: { in: keys } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    });
+    expect(rows.map((row) => row.idempotencyKey)).toEqual(keys);
+    expect(rows.map((row) => row.sourceMessageId)).toEqual([prefix.id, barrier.id, tail.id]);
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(
+      sendToThread.mock.calls
+        .map(([request]) => request.body)
+        .filter((body) => body.includes(marker)),
+    ).toEqual([
+      `Before completion ${marker}`,
+      `Barrier ${marker}\nPlan`,
+      `After barrier ${marker}`,
+    ]);
+    expect(
+      await runAsTenant({ spaceId: "foreign-space", userId: "foreign-user" }, () =>
+        mirrorMessagingProgress(makeDeps(db.prisma, messaging), run.id),
+      ),
+    ).toBe(false);
+    await system.messagingOutbound.deleteMany({ where: { idempotencyKey: { in: keys } } });
+  });
 
   /** A channel with two mirrored bot replies: A is long (two parts), B short. */
   async function channelWithReplies(threadId: string) {

@@ -556,6 +556,8 @@ model Invitation {
 model DeploymentSettings {
   /// Verified central identity that claimed an unattended self-hosted installation.
   nativeAccountsOwnerKey           String?
+  /// Central organization that authorized the initial server claim, if any.
+  nativeAccountsOrganizationId    String?
   modelCreditsEnabled             Boolean  @default(false)
   id                              String   @id @default("default")
   /// Deprecated: retained for rolling-release compatibility; never authorizes app users.
@@ -761,6 +763,7 @@ model Bot {
   avatarSeed        String?
   /// True once the owner picks this bot a set other than their default; the default no longer moves it.
   avatarSetPinned   Boolean           @default(false)
+  replyMode         String            @default("chat")
   notifyOnFinish    Boolean           @default(true)
   pinned            Boolean           @default(false)
   position          Int               @default(0)
@@ -1011,6 +1014,9 @@ model Run {
   error                String?
   leaseOwner           String?
   leaseFence           Int               @default(0)
+  /// Minimum execution reader protocol; monotonic so older workers cannot replay newer effects.
+  replyMode            String            @default("chat")
+  requiredReaderVersion Int              @default(0)
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
@@ -1932,6 +1938,10 @@ model MessagingOutbound {
   attempts        Int       @default(0)
   nextAttemptAt   DateTime?
   providerHandle  String?
+  /// Minimum sender protocol; zero preserves legacy direct and group delivery behavior.
+  requiredDeliveryVersion Int @default(0)
+  /// Server confirmations without a message pin their identity and owner context at insertion.
+  sourceBinding String?
   sourceMessageId String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

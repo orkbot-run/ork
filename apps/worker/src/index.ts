@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 worker composition is preserved. Shared resource wiring is an Ork addition.
 // Ork deferred messaging SDK loading is PolyForm-covered.
+// Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -323,7 +324,7 @@ async function main() {
     onTicketChange: ticketChanges,
     ticketBoardEnabled,
     ...phoneCallSettings(process.env),
-    messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
+    messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
     // Device sockets live in an API process; the worker forwards to whichever one holds it.

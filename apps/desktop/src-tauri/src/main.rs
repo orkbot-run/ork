@@ -25,6 +25,7 @@ mod revocation_storage;
 mod revocations;
 mod server;
 mod server_directory;
+mod server_discovery;
 mod server_link;
 mod server_login;
 mod server_pairing;
@@ -758,6 +759,127 @@ fn native_text(app: &tauri::AppHandle, text: &str) -> String {
         .lock()
         .map(|locale| locale.text(text))
         .unwrap_or_else(|_| text.into())
+}
+
+fn discovery_session_current(
+    state: &DesktopState,
+    generation: u64,
+    authorization: &accounts::Authorization,
+) -> bool {
+    state.accounts.is_current(authorization)
+        && state
+            .accounts_started
+            .lock()
+            .ok()
+            .is_some_and(|gate| gate.started && gate.generation == generation)
+}
+
+fn discovery_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) -> Option<WebviewWindow<R>> {
+    let window = app.get_webview_window(label)?;
+    if !window.is_visible().unwrap_or(false)
+        || app
+            .get_webview_window("setup")
+            .is_some_and(|setup| setup.is_visible().unwrap_or(false))
+    {
+        return None;
+    }
+    Some(window)
+}
+
+/// Poll the account directory without exposing the Accounts bearer to product renderers.
+fn start_server_discovery(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut discovery = server_discovery::Discovery::default();
+        let directory = match server_directory::Directory::new() {
+            Ok(directory) => directory,
+            Err(_) => return,
+        };
+        let mut delay = 2;
+        loop {
+            tokio::time::sleep(Duration::from_secs(delay)).await;
+            delay = 30;
+            let state = app.state::<DesktopState>();
+            let generation = match state.accounts_started.lock() {
+                Ok(gate) if gate.started => gate.generation,
+                _ => {
+                    discovery.reset();
+                    delay = 2;
+                    continue;
+                }
+            };
+            let Some(document) = active_document(&app) else {
+                if !discovery.has_baseline() {
+                    delay = 2;
+                }
+                continue;
+            };
+            if discovery_window(&app, &document.label).is_none() {
+                if !discovery.has_baseline() {
+                    delay = 2;
+                }
+                continue;
+            }
+            let Ok(authorization) = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await
+            else {
+                continue;
+            };
+            if !discovery_session_current(&state, generation, &authorization) {
+                continue;
+            }
+            if !current_server_account(&app, &state, &document, &authorization) {
+                continue;
+            }
+            let Ok(device) = server_directory::device_id(&state.directory) else {
+                continue;
+            };
+            let Ok(bearer) = authorization.directory_bearer() else {
+                continue;
+            };
+            let Ok(servers) = directory.list(bearer, &device).await else {
+                continue;
+            };
+            if !discovery_session_current(&state, generation, &authorization)
+                || !current_server_account(&app, &state, &document, &authorization)
+            {
+                continue;
+            }
+            let Some(parent) = discovery_window(&app, &document.label) else {
+                continue;
+            };
+            if !discovery.observe(
+                authorization.account.identity(),
+                generation,
+                &servers,
+                &document.origin.origin().ascii_serialization(),
+            ) {
+                continue;
+            }
+            let (sender, receiver) = tokio::sync::oneshot::channel();
+            app.dialog()
+                .message(native_text(&app, "New server available"))
+                .title("Ork")
+                .parent(&parent)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    native_text(&app, "Open servers"),
+                    native_text(&app, "Later"),
+                ))
+                .show(move |open| {
+                    let _ = sender.send(open);
+                });
+            if receiver.await.unwrap_or(false)
+                && discovery_session_current(&state, generation, &authorization)
+                && current_server_account(&app, &state, &document, &authorization)
+            {
+                menu_event(&app, menu::MenuAction::ChangeServer);
+            }
+        }
+    });
 }
 
 async fn request_computer_access(
@@ -1579,7 +1701,7 @@ impl Startup {
     }
 }
 
-fn update_startup(app: &tauri::AppHandle, startup: Startup) {
+fn update_startup<R: tauri::Runtime>(app: &tauri::AppHandle<R>, startup: Startup) {
     let state = app.state::<DesktopState>();
     if let Ok(mut value) = state.startup.lock() {
         *value = startup.clone();
@@ -1787,6 +1909,20 @@ async fn start_local_server(
         &authorization,
     )
     .await
+}
+
+#[tauri::command]
+async fn cancel_setup_connection<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    app: tauri::AppHandle<R>,
+    state: State<'_, DesktopState>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    cancel_restore(&state);
+    state.deactivate_stack();
+    let _switch = state.switching.lock().await;
+    update_startup(&app, Startup::idle());
+    Ok(())
 }
 
 async fn open_server(
@@ -2656,8 +2792,12 @@ fn menu_event(app: &tauri::AppHandle, action: menu::MenuAction) {
         MenuAction::ChangeServer => {
             let state = app.state::<DesktopState>();
             cancel_restore(&state);
+            state.deactivate_stack();
             update_startup(app, Startup::idle());
             let _ = show_setup(app);
+            if let Some(window) = app.get_webview_window("setup") {
+                let _ = window.emit("desktop-change-server", ());
+            }
         }
         MenuAction::StopLocalServer => {
             let Some(document) = active_document(app) else {
@@ -2748,6 +2888,18 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 }
 
 fn main() {
+    #[cfg(target_os = "linux")]
+    if let Some(appdir) = std::env::var_os("APPDIR") {
+        let webkit =
+            std::path::PathBuf::from(appdir).join("usr/lib/x86_64-linux-gnu/webkit2gtk-4.1");
+        if webkit.join("WebKitNetworkProcess").is_file() {
+            std::env::set_var("WEBKIT_EXEC_PATH", &webkit);
+            std::env::set_var(
+                "WEBKIT_INJECTED_BUNDLE_PATH",
+                webkit.join("injected-bundle"),
+            );
+        }
+    }
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             if !args.iter().any(|argument| {
@@ -2775,6 +2927,7 @@ fn main() {
             get_server_pairing,
             approve_server_pairing,
             cancel_server_pairing,
+            cancel_setup_connection,
             remove_server,
             connect_saved_server,
             connect_server,
@@ -2851,6 +3004,7 @@ fn main() {
             app.state::<DesktopState>().accounts.retry_revocations();
             app.manage(updates::UpdateCheck::default());
             updates::start_background(app.handle().clone());
+            start_server_discovery(app.handle().clone());
             refresh_menu(app.handle())?;
             setup_window(app.handle(), false)?;
             #[cfg(any(windows, target_os = "linux"))]
@@ -3045,6 +3199,30 @@ mod tests {
             .unwrap();
         *app.state::<DesktopState>().active_window.lock().unwrap() = Some("server-missing".into());
         assert!(!focus_active(app.handle()));
+    }
+
+    #[test]
+    fn discovery_requires_a_visible_product_window_and_no_setup_window() {
+        let app = tauri::test::mock_builder().build(app_context()).unwrap();
+        assert!(discovery_window(app.handle(), "server-missing").is_none());
+        let product = WebviewWindowBuilder::new(
+            &app,
+            "server-1",
+            WebviewUrl::External(Url::parse("https://product.example.test").unwrap()),
+        )
+        .build()
+        .unwrap();
+        assert_eq!(
+            discovery_window(app.handle(), product.label())
+                .unwrap()
+                .label(),
+            product.label()
+        );
+        let _setup = WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+        // MockRuntime reports every created window as visible.
+        assert!(discovery_window(app.handle(), product.label()).is_none());
     }
 
     #[test]
@@ -3521,6 +3699,7 @@ mod tests {
                 get_server_pairing,
                 approve_server_pairing,
                 cancel_server_pairing,
+                cancel_setup_connection,
                 remove_server,
             ])
             .build(app_context())
@@ -3586,6 +3765,11 @@ mod tests {
         );
         tauri::test::assert_ipc_response(
             &setup,
+            request("cancel_setup_connection", local),
+            Ok(serde_json::Value::Null),
+        );
+        tauri::test::assert_ipc_response(
+            &setup,
             request("setup_state", local),
             Ok(
                 serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
@@ -3607,6 +3791,7 @@ mod tests {
                 "get_server_pairing",
                 "approve_server_pairing",
                 "cancel_server_pairing",
+                "cancel_setup_connection",
                 "remove_server",
                 "connect_saved_server",
                 "setup_accounts_sign_in",

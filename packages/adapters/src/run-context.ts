@@ -16,7 +16,7 @@ import type { ComputerMode, MessageBlock } from "@orkbot/contracts";
 import { createStreamingRedactor } from "@orkbot/core";
 import { toolEffectIdempotencyKey } from "@orkbot/core/node/approval-effect-key";
 import type { Bot, Computer, effectiveMemoryScope, Run, Task, Thread } from "@orkbot/db";
-import { dropRunTurnCheckpoint, saveRunTurnCheckpoint } from "@orkbot/db";
+import { dropRunTurnCheckpoint, RUN_READER_VERSION, saveRunTurnCheckpoint } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type {
   ApprovalPausedToolResult,
@@ -45,7 +45,11 @@ import { secretPausedToolResult } from "./run-secret.js";
 import type { createRunTrustLoaders } from "./run-trust.js";
 import type { inferScript } from "./scripted-runtime.js";
 import type { LoopGuardStreak } from "./tool-loop.js";
-import { restoreTurnCheckpoint, unresolvedTurnCheckpointCalls } from "./turn-checkpoint.js";
+import {
+  restoreTurnCheckpoint,
+  turnCheckpointRequiresFileReader,
+  unresolvedTurnCheckpointCalls,
+} from "./turn-checkpoint.js";
 
 export type RunningHelper = Omit<Extract<MessageBlock, { kind: "subagent" }>, "kind">;
 
@@ -425,7 +429,14 @@ export async function persistTurnCheckpoint(ctx: RunContext, executionId?: strin
     const saved = JSON.parse(capture());
     saved.effectOccurrences = effects.occurrences;
     saved.ownInstructionsBaseline = ctx.state.ownInstructionsBaseline;
-    await saveRunTurnCheckpoint(deps.prisma, run, workerId, fence, JSON.stringify(saved));
+    await saveRunTurnCheckpoint(
+      deps.prisma,
+      run,
+      workerId,
+      fence,
+      JSON.stringify(saved),
+      turnCheckpointRequiresFileReader(saved.messages) ? RUN_READER_VERSION : undefined,
+    );
     effects.storedTurnCheckpoint = true;
   } else if (effects.storedTurnCheckpoint) {
     // Helper calls have no saved turn. An earlier pause's turn must not resume this one.

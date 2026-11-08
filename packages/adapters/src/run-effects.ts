@@ -1,10 +1,21 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited effect replay is preserved; file-reader admission is an Ork addition.
+
 import {
   isToolEffectIdempotencyKey,
   legacyScopedToolEffectIdempotencyKey,
   stableJsonValue,
 } from "@orkbot/core/node/approval-effect-key";
 import type { Prisma } from "@orkbot/db";
-import { assertRunCanWriteHistory, RUN_TURN_CHECKPOINT_KIND } from "@orkbot/db";
+import {
+  assertRunCanWriteHistory,
+  RUN_READER_VERSION,
+  RUN_TURN_CHECKPOINT_KIND,
+  RunHistoryWriteError,
+  SUPPORTED_RUN_READER_VERSION,
+} from "@orkbot/db";
 import {
   boundDirectApprovalDetails,
   catalogApprovalConnectorId,
@@ -146,13 +157,14 @@ export function isSubagentToolExecution(executionId: string): boolean {
 
 export async function recordEffect(
   deps: ExecutorDeps,
-  run: { id: string; spaceId: string; threadId: string; botId: string },
+  run: { id: string; spaceId: string; threadId: string; botId: string; userId?: string },
   kind: string,
   idempotencyKey: string,
   request: unknown,
   legacyIdempotencyKey?: string,
   consumedIds?: Set<string>,
   batchActions?: string[],
+  requiresFileReader = false,
 ) {
   if (kind === RUN_TURN_CHECKPOINT_KIND) throw new Error("Unsupported tool effect kind");
   const existing = await deps.prisma.externalEffect.findUnique({
@@ -269,7 +281,7 @@ export async function recordEffect(
     return { duplicate: true, effect: legacy };
   }
 
-  const effect = await underRunLease(deps, run.id, (tx) =>
+  const write = (tx: Prisma.TransactionClient) =>
     tx.externalEffect.create({
       data: {
         spaceId: run.spaceId,
@@ -280,8 +292,30 @@ export async function recordEffect(
         request: request as never,
         ...(batchActions ? { batchActions } : {}),
       },
-    }),
-  );
+    });
+  const effect = requiresFileReader
+    ? await deps.prisma.$transaction(async (tx) => {
+        const lease = runLeaseFor(deps, run.id);
+        if (!lease || !run.userId) throw new RunHistoryWriteError();
+        // Take the write lock directly: SHARE->UPDATE upgrades deadlock with parallel tools.
+        const owned = await tx.run.updateMany({
+          where: {
+            id: run.id,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            botId: run.botId,
+            threadId: run.threadId,
+            status: "running",
+            leaseOwner: lease.owner,
+            leaseFence: lease.fence,
+            requiredReaderVersion: { lte: SUPPORTED_RUN_READER_VERSION },
+          },
+          data: { requiredReaderVersion: RUN_READER_VERSION },
+        });
+        if (owned.count !== 1) throw new RunHistoryWriteError();
+        return write(tx);
+      })
+    : await underRunLease(deps, run.id, write);
   consumedIds?.add(effect.id);
   return { duplicate: false, effect };
 }

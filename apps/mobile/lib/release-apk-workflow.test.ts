@@ -1,4 +1,15 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -41,9 +52,109 @@ describe("Android APK release workflow", () => {
     expect(diagnostic).not.toContain("secrets.");
     expect(diagnostic).not.toMatch(/gh release|eas build|expo-github-action/);
     expect(diagnostic).toContain("expo prebuild --platform android --no-install");
-    expect(diagnostic).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
+    expect(diagnostic).toContain("bash .github/scripts/prepare-android-gradle.sh");
+    expect(diagnostic).toContain("build-android-diagnostic.sh");
+    const script = readFileSync(
+      path.resolve(import.meta.dirname, "../../../.github/scripts/build-android-diagnostic.sh"),
+      "utf8",
+    );
+    expect(script).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
     expect(diagnostic).toContain("actions/upload-artifact@");
     expect(diagnostic).toContain("outputs/apk/release/app-release.apk");
+  });
+
+  it.each([
+    { mirrorFails: false, fallbackFails: false, expectedCalls: 1, succeeds: true },
+    { mirrorFails: true, fallbackFails: false, expectedCalls: 2, succeeds: true },
+    { mirrorFails: true, fallbackFails: true, expectedCalls: 2, succeeds: false },
+  ])("retries with the original repositories only after a mirror build failure: %j", (scenario) => {
+    const root = mkdtempSync(path.join(tmpdir(), "ork-android-mirror-"));
+    try {
+      const fake = path.join(root, "gradlew");
+      const log = path.join(root, "calls");
+      writeFileSync(
+        fake,
+        `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$TEST_CALLS"
+if [[ "$*" == *--init-script* ]]; then exit "$TEST_MIRROR_FAIL"; fi
+exit "$TEST_FALLBACK_FAIL"
+`,
+      );
+      chmodSync(fake, 0o755);
+      const result = spawnSync(
+        "bash",
+        [
+          path.resolve(import.meta.dirname, "../../../.github/scripts/build-android-diagnostic.sh"),
+          fake,
+          "/tmp/mirror.init.gradle",
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            TEST_CALLS: log,
+            TEST_MIRROR_FAIL: scenario.mirrorFails ? "1" : "0",
+            TEST_FALLBACK_FAIL: scenario.fallbackFails ? "1" : "0",
+          },
+        },
+      );
+      expect(result.status === 0).toBe(scenario.succeeds);
+      const calls = readFileSync(log, "utf8").trim().split("\n");
+      expect(calls).toHaveLength(scenario.expectedCalls);
+      expect(calls[0]).toContain("--init-script /tmp/mirror.init.gradle");
+      if (calls.length === 2) expect(calls[1]).not.toContain("--init-script");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    ["9.3.1", false],
+    ["9.3.1", true],
+    ["8.14.3", false],
+    ["8.14.3", true],
+  ] as const)(
+    "prepares Gradle %s offline with GitHub CLI failure set to %s",
+    (version, ghFails) => {
+      const result = prepareGradle(version, false, ghFails);
+      try {
+        expect(result.status, result.stderr).toBe(0);
+        expect(result.properties).toContain("distributionUrl=file\\:///");
+        expect(result.properties).toContain(`distributionSha256Sum=${result.checksum}`);
+        expect(result.properties).toContain("networkTimeout=10000");
+        expect(result.requests).toContain(`/releases/tags/v${version}`);
+        expect(result.requests).toContain(`/distributions/gradle-${version}-bin.zip.sha256`);
+        expect(result.requests).toContain("gh repos/gradle/gradle-distributions/releases/tags/");
+        expect(result.requests.includes("curl https://api.github.com/")).toBe(ghFails);
+      } finally {
+        result.cleanup();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    "rejects a Gradle archive with a bad checksum when GitHub CLI fails: %s",
+    (ghFails) => {
+      const result = prepareGradle("9.3.1", true, ghFails);
+      try {
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("checksum does not match");
+        expect(result.properties).toContain("distributionUrl=https\\://services.gradle.org/");
+      } finally {
+        result.cleanup();
+      }
+    },
+  );
+
+  it("rejects an unexpected generated distribution before downloading anything", () => {
+    const result = prepareGradle("9.3.1/../../unexpected");
+    try {
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("distribution URL is unsupported");
+      expect(result.requests).toBe("");
+    } finally {
+      result.cleanup();
+    }
   });
 
   it("requires explicit EAS mode and main before production publishing", () => {
@@ -83,3 +194,86 @@ describe("Android APK release workflow", () => {
     );
   });
 });
+
+function prepareGradle(version: string, badChecksum = false, ghFails = false) {
+  const root = mkdtempSync(path.join(tmpdir(), "ork-gradle-test-"));
+  const bin = path.join(root, "bin");
+  const wrapper = path.join(root, "gradle-wrapper.properties");
+  const requests = path.join(root, "requests");
+  const archive = "offline fake archive";
+  const checksum = createHash("sha256").update(archive).digest("hex");
+  mkdirSync(bin);
+  const fakeGh = path.join(bin, "gh");
+  writeFileSync(
+    fakeGh,
+    `#!/bin/sh
+set -eu
+endpoint=""
+for arg in "$@"; do
+  case "$arg" in repos/gradle/gradle-distributions/*) endpoint=$arg ;; esac
+done
+printf 'gh %s\\n' "$endpoint" >> "$TEST_REQUESTS"
+if [ "$TEST_GH_FAIL" = 1 ]; then exit 1; fi
+case "$endpoint" in
+  */releases/tags/*) printf '{"assets":[{"name":"gradle-%s-bin.zip","state":"uploaded","url":"https://api.github.com/repos/gradle/gradle-distributions/releases/assets/123"}]}' "$TEST_VERSION" ;;
+  */releases/assets/123) printf '%s' "$TEST_ARCHIVE" ;;
+  *) exit 22 ;;
+esac
+`,
+  );
+  chmodSync(fakeGh, 0o755);
+  const fakeCurl = path.join(bin, "curl");
+  writeFileSync(
+    fakeCurl,
+    `#!/bin/sh
+set -eu
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -o) output=$2; shift 2 ;;
+    https://*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+printf 'curl %s\\n' "$url" >> "$TEST_REQUESTS"
+case "$url" in
+  */releases/tags/*) printf '{"assets":[{"name":"gradle-%s-bin.zip","state":"uploaded","url":"https://api.github.com/repos/gradle/gradle-distributions/releases/assets/123"}]}' "$TEST_VERSION" > "$output" ;;
+  */releases/assets/123) printf '%s' "$TEST_ARCHIVE" > "$output" ;;
+  *.sha256) printf '%s' "$TEST_CHECKSUM" > "$output" ;;
+  *) exit 22 ;;
+esac
+`,
+  );
+  chmodSync(fakeCurl, 0o755);
+  writeFileSync(
+    wrapper,
+    `distributionUrl=https\\://services.gradle.org/distributions/gradle-${version}-bin.zip\nnetworkTimeout=10000\n`,
+  );
+  const run = spawnSync(
+    "bash",
+    [
+      path.resolve(import.meta.dirname, "../../../.github/scripts/prepare-android-gradle.sh"),
+      wrapper,
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${bin}:${process.env.PATH ?? ""}`,
+        RUNNER_TEMP: root,
+        TEST_REQUESTS: requests,
+        TEST_VERSION: version,
+        TEST_GH_FAIL: ghFails ? "1" : "0",
+        TEST_ARCHIVE: archive,
+        TEST_CHECKSUM: badChecksum ? "0".repeat(64) : checksum,
+      },
+    },
+  );
+  return {
+    status: run.status,
+    stderr: run.stderr,
+    checksum,
+    properties: readFileSync(wrapper, "utf8"),
+    requests: existsSync(requests) ? readFileSync(requests, "utf8") : "",
+    cleanup: () => rmSync(root, { recursive: true, force: true }),
+  };
+}

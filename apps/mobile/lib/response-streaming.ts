@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared preference integration follows LICENSE.md.
+
 import type { ResponseStreamingPreference } from "@orkbot/core";
 import {
+  createPersistedPreference,
   normalizeResponseStreamingPreference,
   RESPONSE_STREAMING_STORAGE_KEY,
   responseStreamingEnabled,
@@ -8,49 +13,21 @@ import * as SecureStore from "expo-secure-store";
 
 export type { ResponseStreamingPreference };
 
-let memoryPreference: ResponseStreamingPreference | null = null;
-const listeners = new Set<() => void>();
+const preference = createPersistedPreference({ normalize: normalizeResponseStreamingPreference });
 
-function notify() {
-  for (const listener of listeners) listener();
-}
-
-export function getCachedResponseStreamingPreference(): ResponseStreamingPreference {
-  return memoryPreference ?? "off";
-}
-
+export const getCachedResponseStreamingPreference: () => ResponseStreamingPreference =
+  preference.get;
 export function getCachedResponseStreamingEnabled(): boolean {
-  return responseStreamingEnabled(getCachedResponseStreamingPreference());
+  return responseStreamingEnabled(preference.get());
 }
-
-export async function loadResponseStreamingPreference(): Promise<ResponseStreamingPreference> {
-  try {
-    const stored = await SecureStore.getItemAsync(RESPONSE_STREAMING_STORAGE_KEY);
-    memoryPreference = normalizeResponseStreamingPreference(stored);
-  } catch {
-    memoryPreference = memoryPreference ?? "off";
-  }
-  notify();
-  return memoryPreference;
+export function loadResponseStreamingPreference(): Promise<ResponseStreamingPreference> {
+  return preference.load(() => SecureStore.getItemAsync(RESPONSE_STREAMING_STORAGE_KEY));
 }
-
-export async function setResponseStreamingPreference(
-  preference: ResponseStreamingPreference,
+export function setResponseStreamingPreference(
+  value: ResponseStreamingPreference,
 ): Promise<ResponseStreamingPreference> {
-  memoryPreference = preference;
-  // Paint the switch before SecureStore resolves.
-  notify();
-  try {
-    await SecureStore.setItemAsync(RESPONSE_STREAMING_STORAGE_KEY, preference);
-  } catch {
-    // Keep the in-memory preference when SecureStore is unavailable.
-  }
-  return preference;
+  return preference.save(value, (serialized) =>
+    SecureStore.setItemAsync(RESPONSE_STREAMING_STORAGE_KEY, serialized),
+  );
 }
-
-export function subscribeResponseStreaming(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+export const subscribeResponseStreaming = preference.subscribe;

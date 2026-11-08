@@ -5,6 +5,7 @@
 import type { LoginFieldInput, MessageReaction } from "@orkbot/contracts";
 import type { SlashActionId } from "@orkbot/core";
 import {
+  applyThreadSendReceipt,
   attachmentsForThread,
   newClientId,
   pageReply,
@@ -21,6 +22,7 @@ import { findSwitchTarget } from "./bot-switch";
 import { chatSettingsRoute } from "./chat-settings-route";
 import { cancelFocusPrompt } from "./focus-prompt";
 import { useI18n } from "./i18n";
+import { isIntegrationsScopeCurrent } from "./integrations-cache";
 import { resumeLiveNotifications } from "./live-notifications";
 import { takePageReply } from "./pages";
 import { currentSessionGeneration } from "./session";
@@ -59,6 +61,7 @@ export function useThreadSend({
   activeBotId,
   activeGroupId,
   isCurrentTarget,
+  terminalRunReceipts,
   refresh,
   showLatest,
   markCaughtUp,
@@ -76,6 +79,7 @@ export function useThreadSend({
   activeBotId: RefObject<string | undefined>;
   activeGroupId: RefObject<string | undefined>;
   isCurrentTarget: (botId: string | undefined, groupId: string | undefined) => boolean;
+  terminalRunReceipts: RefObject<Set<string>>;
   refresh: () => Promise<MobileSnapshot | undefined>;
   showLatest: () => void;
   /** Clears the "New" divider: the user has caught up. */
@@ -240,6 +244,16 @@ export function useThreadSend({
   }
 
   function afterDelivered(attempt: SendAttempt) {
+    const origin = history.snapshotOrigin.current;
+    const ownsSnapshot = Boolean(
+      origin &&
+        isIntegrationsScopeCurrent(origin) &&
+        attempt.apiBase === origin.apiBase &&
+        attempt.spaceId === origin.spaceId &&
+        attempt.userId === origin.userId &&
+        attempt.cacheSession === origin.namespace,
+    );
+    if (origin && !ownsSnapshot) return;
     const { initialBotTarget, botTarget, groupTarget, reroutedToGroup, plan } = attempt.payload;
     if (initialBotTarget) cancelFocusPrompt(initialBotTarget);
     const generation = currentSessionGeneration();
@@ -268,6 +282,15 @@ export function useThreadSend({
       return;
     }
     if (isCurrentTarget(botTarget, groupTarget)) {
+      if (attempt.acceptedRun && ownsSnapshot) {
+        history.commitSnap(
+          applyThreadSendReceipt(
+            history.snapRef.current,
+            attempt.acceptedRun,
+            terminalRunReceipts.current,
+          ),
+        );
+      }
       if (history.pinnedAroundRef.current) showLatest();
       void refresh().catch(() => undefined);
     }

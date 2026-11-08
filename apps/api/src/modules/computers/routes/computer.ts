@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { randomUUID } from "node:crypto";
 import type { AdapterContext, SandboxProvider } from "@orkbot/adapter-kit";
@@ -55,6 +56,7 @@ import {
   createRepos,
   expireComputerExecutionLeases,
   IsolationError,
+  isRecordNotFound,
   parseComputerMode,
   recordComputerRunEnd,
 } from "@orkbot/db";
@@ -62,7 +64,7 @@ import { getLogger } from "@orkbot/logging";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
-import { computerContext, isRecordNotFound } from "#modules/platform/routes/shared";
+import { computerContext } from "#modules/platform/routes/shared";
 import { botComputerCapabilities } from "../computer-capabilities.js";
 import { scrollPoint } from "../computer-input.js";
 import {

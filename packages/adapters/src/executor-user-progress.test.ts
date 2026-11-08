@@ -57,6 +57,8 @@ async function runTurn(
   secrets: string[] = [],
   intent: "fyi" | "request" | "question" = "fyi",
   options: {
+    replyMode?: "chat" | "explicit";
+    allowFailure?: boolean;
     trigger?: string;
     doneText?: string;
     splitText?: boolean;
@@ -106,6 +108,7 @@ async function runTurn(
     trigger: options.trigger ?? (silent ? "bot_message" : "user"),
     sourceMessageId: "source-1",
     leaseFence: 0,
+    replyMode: options.replyMode ?? "chat",
     groupReplyOptional: options.group?.optional ?? false,
     ...(options.startedAt ? { startedAt: options.startedAt } : {}),
   };
@@ -330,7 +333,9 @@ async function runTurn(
     await options.appendGate?.(event);
     return appendEventInTransaction(prisma as unknown as Prisma.TransactionClient, event);
   });
-  const pauseRunForInput = vi.fn(async () => ({ continuationRunId: null }));
+  const pauseRunForInput = vi.fn(async (_input: { blocks: MessageBlock[] }) => ({
+    continuationRunId: null,
+  }));
   vision.seesImages = options.graphical ?? false;
   const executor = createRunExecutor({
     deploymentModelKey: "fixture-model-key",
@@ -347,6 +352,7 @@ async function runTurn(
         height: 1,
         image: new Uint8Array([0]),
       }),
+      readFile: vi.fn(async () => new TextEncoder().encode("fixture")),
       writeFile: vi.fn(async () => undefined),
       async *exportWorkspace() {
         yield* [];
@@ -392,10 +398,152 @@ async function runTurn(
 
   await executor.continueRun(run.id, "worker-1");
   expect(runtimeRun).toHaveBeenCalled();
-  if (!options.runtimeFailure)
+  if (!options.runtimeFailure && !options.allowFailure)
     expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
   return { finalizeRun, append, pauseRunForInput, messages, savedEvents, prisma, runtimeRun, run };
 }
+
+describe("explicit replies", () => {
+  it("does not complete a delegated tool-only request by turning notes into its outcome", async () => {
+    const result = await runTurn("", true, "Private step note.", [], "request", {
+      replyMode: "explicit",
+      allowFailure: true,
+    });
+    expect(result.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+    expect(result.messages).toEqual([]);
+  });
+  it("recovers the durable progress budget when an explicit run resumes", async () => {
+    const result = await runTurn("", false, "", [], "request", {
+      replyMode: "explicit",
+      startedAt: new Date(Date.now() - 120_000),
+      priorProgressText: "The accepted update from an earlier attempt.",
+      executeTools: true,
+      runtimeEvents: [
+        {
+          type: "tool",
+          name: "message_user",
+          args: { message: "Next update." },
+          executionId: "one",
+        },
+        {
+          type: "tool",
+          name: "message_user",
+          args: { message: "Last update." },
+          executionId: "two",
+        },
+        {
+          type: "tool",
+          name: "message_user",
+          args: { message: "Extra update." },
+          executionId: "three",
+        },
+        { type: "text", text: "The final result." },
+        { type: "done", text: "The final result." },
+      ],
+    });
+    expect(result.messages.map((message) => message.blocks)).toEqual([
+      [{ kind: "text", text: "Next update." }],
+      [{ kind: "text", text: "Last update." }],
+    ]);
+    expect(
+      result.finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text"),
+    ).toEqual([{ kind: "text", text: "The final result." }]);
+  });
+  it("retains the proposal on the question card when no explicit detail was supplied", async () => {
+    const result = await runTurn("", false, "", ["fixture-secret"], "request", {
+      replyMode: "explicit",
+      runtimeEvents: [
+        { type: "text", text: "Proposal with fixture-secret." },
+        { type: "ask", text: "Approve?", executionId: "ask" },
+      ],
+    });
+    expect(result.messages).toEqual([]);
+    expect(result.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [expect.objectContaining({ kind: "ask", text: "Approve?", detailFormat: "text" })],
+      }),
+    );
+    const blocks = (result.pauseRunForInput.mock.calls[0]![0] as { blocks: MessageBlock[] }).blocks;
+    expect(JSON.stringify(blocks)).toContain("Proposal with");
+    expect(JSON.stringify(blocks)).not.toContain("fixture-secret");
+  });
+  it("posts message_user separately while keeping the real final answer", async () => {
+    const result = await runTurn("", false, "", [], "request", {
+      replyMode: "explicit",
+      startedAt: new Date(Date.now() - 120_000),
+      executeTools: true,
+      runtimeEvents: [
+        { type: "text", text: "Private step note." },
+        { type: "tool", name: "read_file", args: { path: "report.txt" }, executionId: "read" },
+        {
+          type: "tool",
+          name: "message_user",
+          args: { message: "An explicit update." },
+          executionId: "update",
+        },
+        { type: "text", text: "Actual result." },
+        { type: "done", text: "Private step note.Actual result." },
+      ],
+    });
+    expect(result.messages.map((message) => message.blocks)).toEqual([
+      [{ kind: "text", text: "An explicit update." }],
+    ]);
+    expect(
+      result.finalizeRun.mock.calls[0]![0].blocks.filter((block) => block.kind === "text"),
+    ).toEqual([{ kind: "text", text: "Actual result." }]);
+  });
+  it("buffers narration as step notes and delivers only the actual final reply", async () => {
+    const result = await runTurn("Actual result.", false, "Private step note.", [], "request", {
+      replyMode: "explicit",
+      startedAt: new Date(Date.now() - 120_000),
+    });
+    expect(result.messages).toEqual([]);
+    expect(
+      JSON.stringify(result.savedEvents.filter((event) => event.type === "thread.progress")),
+    ).not.toContain("Private step note.");
+    const completed = result.finalizeRun.mock.calls[0]![0];
+    expect(completed.blocks.filter((block) => block.kind === "text")).toEqual([
+      { kind: "text", text: "Actual result." },
+    ]);
+    expect(JSON.stringify(completed.blocks.filter((block) => block.kind === "steps"))).toContain(
+      "Private step note.",
+    );
+  });
+
+  it("never restores a cumulative done payload as a missing post-tool answer", async () => {
+    const result = await runTurn("", false, "Private step note.", [], "request", {
+      replyMode: "explicit",
+      allowFailure: true,
+    });
+    expect(result.finalizeRun).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
+    expect(result.messages).toEqual([]);
+    expect(JSON.stringify(result.finalizeRun.mock.calls[0]![0].blocks ?? [])).not.toContain(
+      '"kind":"text","text":"Private step note."',
+    );
+  });
+
+  it("keeps the actual question and decision detail without publishing its narration", async () => {
+    const result = await runTurn("", false, "", [], "request", {
+      replyMode: "explicit",
+      runtimeEvents: [
+        { type: "text", text: "Private step note." },
+        { type: "ask", text: "Approve?", detail: "The actual proposal.", executionId: "ask" },
+      ],
+    });
+    expect(result.messages).toEqual([]);
+    expect(result.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: [
+          expect.objectContaining({
+            kind: "ask",
+            text: "Approve?",
+            detail: "The actual proposal.",
+          }),
+        ],
+      }),
+    );
+  });
+});
 
 /** Notes saved on the final reply's steps, in order. */
 function stepNotes(finalizeRun: Awaited<ReturnType<typeof runTurn>>["finalizeRun"]) {

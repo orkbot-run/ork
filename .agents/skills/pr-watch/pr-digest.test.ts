@@ -14,7 +14,7 @@ const print = (value) => console.log(typeof value === "string" ? value : JSON.st
 if (args[0] === "repo" && args[1] === "view") print("example/project");
 else if (args[0] === "pr" && args[1] === "view") {
   if (args.includes("--jq")) print("abc");
-  else print({ headRefOid: "abc", state: "OPEN", mergeable: "MERGEABLE", headRefName: "topic", reviewDecision: "" });
+  else print({ headRefOid: "abc", state: "OPEN", mergeable: "MERGEABLE", headRefName: "topic", reviewDecision: "", isCrossRepository: fixture.fork ?? false });
 } else if (args[0] === "api") {
   const endpoint = args.find((arg) => arg === "graphql" || arg.startsWith("repos/"));
   if (endpoint === "graphql") print("viewer");
@@ -75,6 +75,7 @@ function runDigest(
     check?: object;
     checks?: object[];
     statuses?: object[][];
+    fork?: boolean;
     steps?: Record<string, object[]>;
     deadline?: number;
   },
@@ -114,6 +115,21 @@ const reply = (id: number, body: string) =>
 const shown = (stdout: string, id: number) => stdout.includes(`[${id}] `);
 
 describe("pr-digest", () => {
+  it("ignores only the expected Vercel authorization failure on a fork", () => {
+    const status = {
+      context: "Vercel",
+      state: "failure",
+      description: "Authorization required to deploy",
+    };
+    expect(runDigest({ fork: true, statuses: [[status]] }).status).toBe(0);
+    expect(runDigest({ fork: false, statuses: [[status]] }).status).toBe(10);
+    expect(runDigest({ fork: true, statuses: [[{ ...status, context: "other" }]] }).status).toBe(
+      10,
+    );
+    expect(
+      runDigest({ fork: true, statuses: [[{ ...status, description: "Build failed" }]] }).status,
+    ).toBe(10);
+  });
   it("does not infer whether tests ran from skipped steps after a failed step", () => {
     const names = ["Run pnpm test:integration", "Install dependencies"];
     const result = runDigest({
@@ -316,6 +332,25 @@ describe("pr-digest", () => {
         "1",
       );
       expect(result.status).toBe(10);
+    });
+
+    it("keeps watching a fork's expected deployment authorization failure", () => {
+      const status = {
+        context: "Vercel",
+        state: "failure",
+        description: "Authorization required to deploy",
+      };
+      const result = runDigest(
+        {
+          fork: true,
+          checks: [running, running, { ...running, status: "completed", conclusion: "success" }],
+          statuses: [[], [status], [status]],
+        },
+        "--watch",
+        "1",
+      );
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain("VERDICT green");
     });
 
     it("keeps waiting on a failure that was already there", () => {

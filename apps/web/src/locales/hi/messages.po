@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "चार्ट रेंडर नहीं हो सका: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "चैट"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -1356,6 +1357,10 @@ msgstr "जांच करें।"
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "API कुंजी या साइन-इन जाँचें, फिर फिर से परीक्षण करें।"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "पहले चैट देखें। नतीजा दर्ज करने पर इस संदेश को दोबारा भेजे बिना कतार में मौजूद संदेशों का भेजना फिर शुरू होगा।"
 
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
@@ -1464,6 +1469,7 @@ msgstr "साफ़ किया जा रहा है…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2291,6 +2297,7 @@ msgstr ""
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -2435,6 +2442,7 @@ msgstr "डिफ़ॉल्ट मेमोरी स्कोप अपडे
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr ""
@@ -2451,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr ""
@@ -3901,9 +3910,17 @@ msgstr ""
 msgid "Manual setup required"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "नहीं भेजा गया चिह्नित करें"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "पढ़ा हुआ चिह्नित करें"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "भेजा गया चिह्नित करें"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5351,6 +5368,10 @@ msgstr "उत्तर दें"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "जवाब का तरीका"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -5473,6 +5494,10 @@ msgstr "Ork पर लौटें"
 msgid "Review data sharing before continuing."
 msgstr "आगे बढ़ने से पहले डेटा साझाकरण की समीक्षा करें।"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "डिलीवरी जाँचें"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "प्रोवाइडर सेटिंग्स की समीक्षा करें और फिर से परीक्षण करें।"
@@ -5501,6 +5526,10 @@ msgstr ""
 msgid "Routine"
 msgstr "रूटीन"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "रूटीन: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5509,6 +5538,10 @@ msgstr "रूटीन्स"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr ""
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "रूटीन: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6180,6 +6213,15 @@ msgstr "चरण"
 msgid "Stop"
 msgstr "रोकें"
 
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "{name} रोकें"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "सभी रोकें"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr ""
@@ -6825,6 +6867,10 @@ msgstr "सर्वर अपडेट करें"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "अपडेट"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "प्रगति और अंतिम जवाब"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

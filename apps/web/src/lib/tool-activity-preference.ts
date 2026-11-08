@@ -1,35 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared preference integration follows LICENSE.md.
+
+import { browserPreference, preferenceStorage } from "./persisted-preference";
+
 export type ToolActivityPreference = "on" | "off";
-
 export const TOOL_ACTIVITY_STORAGE_KEY = "orkbot.showToolActivity";
-
 export type ResolveToolActivityOptions = {
   stored?: string | null;
   storage?: Pick<Storage, "getItem"> | null;
 };
-
-const listeners = new Set<() => void>();
-let memoryPreference: ToolActivityPreference | null = null;
-
-function getLocalStorage(): Pick<Storage, "getItem" | "setItem"> | null {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage : null;
-  } catch {
-    return null;
-  }
-}
-
-function readStored(storage: Pick<Storage, "getItem"> | null | undefined): string | null {
-  if (!storage) return null;
-  try {
-    return storage.getItem(TOOL_ACTIVITY_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function notify() {
-  for (const listener of listeners) listener();
-}
 
 /** Only a saved "on" shows tool cards. Missing or unreadable storage stays off so chats stay clean. */
 export function normalizeToolActivityPreference(
@@ -42,48 +22,31 @@ export function toolActivityEnabled(preference: ToolActivityPreference = "off"):
   return preference === "on";
 }
 
+const preference = browserPreference(TOOL_ACTIVITY_STORAGE_KEY, normalizeToolActivityPreference);
+
 export function resolveToolActivityPreference(
   options: ResolveToolActivityOptions = {},
 ): ToolActivityPreference {
-  const stored =
-    options.stored !== undefined
-      ? options.stored
-      : readStored(options.storage ?? getLocalStorage());
-  return normalizeToolActivityPreference(stored);
+  return options.stored !== undefined
+    ? normalizeToolActivityPreference(options.stored)
+    : preference.read(
+        () => (options.storage ?? preferenceStorage())?.getItem(TOOL_ACTIVITY_STORAGE_KEY) ?? null,
+      );
 }
-
 export function persistToolActivityPreference(
-  preference: ToolActivityPreference,
-  storage: Pick<Storage, "setItem"> | null = getLocalStorage(),
+  value: ToolActivityPreference,
+  storage: Pick<Storage, "setItem"> | null = preferenceStorage(),
 ): void {
-  if (!storage) return;
-  try {
-    storage.setItem(TOOL_ACTIVITY_STORAGE_KEY, preference);
-  } catch {
-    // Ignore quota / private-mode failures; the in-memory preference still applies.
-  }
+  preference.persist(value, (serialized) => {
+    if (!storage) return false;
+    storage.setItem(TOOL_ACTIVITY_STORAGE_KEY, serialized);
+    return true;
+  });
 }
-
-export function getToolActivityPreference(): ToolActivityPreference {
-  return memoryPreference ?? resolveToolActivityPreference();
-}
-
+export const getToolActivityPreference: () => ToolActivityPreference = preference.get;
+export const setToolActivityPreference: (value: ToolActivityPreference) => ToolActivityPreference =
+  preference.set;
+export const subscribeToolActivity = preference.subscribe;
 export function getToolActivityEnabled(): boolean {
   return toolActivityEnabled(getToolActivityPreference());
-}
-
-export function setToolActivityPreference(
-  preference: ToolActivityPreference,
-): ToolActivityPreference {
-  memoryPreference = preference;
-  persistToolActivityPreference(preference);
-  notify();
-  return preference;
-}
-
-export function subscribeToolActivity(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
 }

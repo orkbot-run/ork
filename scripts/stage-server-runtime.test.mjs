@@ -38,6 +38,7 @@ test("stages the server and proxy without native clients or product renderer sou
     ])
       write(file);
     for (const directory of ["api", "worker"]) write(`apps/${directory}/dist/index.js`);
+    write("apps/api/dist/cli/server-claim.js", "server claim CLI");
     for (const directory of [
       "adapter-kit",
       "adapters",
@@ -89,6 +90,11 @@ test("stages the server and proxy without native clients or product renderer sou
     write("apps/web/src/pages/shell/index.tsx");
 
     stageServerRuntime(source, destination);
+
+    assert.equal(
+      readFileSync(path.join(destination, "apps/api/dist/cli/server-claim.js"), "utf8"),
+      "server claim CLI",
+    );
 
     for (const file of computerHelpers)
       assert.equal(

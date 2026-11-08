@@ -259,6 +259,9 @@ describe("mobile i18n", () => {
       "Allow once",
       "Always allow",
       "Deny",
+      "New server available",
+      "Open servers",
+      "Later",
     ]);
     for (const file of collectSourceFiles(mobileRoot)) {
       const source = readFileSync(file, "utf8");

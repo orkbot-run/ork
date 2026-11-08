@@ -1,0 +1,36 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+import org.gradle.api.artifacts.repositories.MavenArtifactRepository
+
+// Route this artifact only to the mirror. A second build without this script
+// retains the original repositories as the fallback.
+def addCentralMirror = { repositories ->
+  def inspect = { repository ->
+    if (repository instanceof MavenArtifactRepository &&
+        repository.url.toString().replaceAll('/+$', '') == 'https://repo.maven.apache.org/maven2' &&
+        repositories.findByName('orkMavenCentralMirror') == null) {
+      def mirror = repositories.maven {
+        name = 'orkMavenCentralMirror'
+        url = uri('https://maven-central.storage-download.googleapis.com/maven2')
+      }
+      repositories.remove(mirror)
+      repositories.addFirst(mirror)
+      repositories.exclusiveContent {
+        forRepositories(mirror)
+        filter { includeModule('org.jetbrains.kotlin', 'kotlin-compiler-embeddable') }
+      }
+    }
+  }
+  repositories.whenObjectAdded(inspect)
+  repositories.toList().each(inspect)
+}
+
+gradle.beforeSettings { settings ->
+  addCentralMirror(settings.pluginManagement.repositories)
+  addCentralMirror(settings.dependencyResolutionManagement.repositories)
+}
+gradle.beforeProject { project ->
+  addCentralMirror(project.buildscript.repositories)
+  addCentralMirror(project.repositories)
+}

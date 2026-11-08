@@ -1,6 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited checkpoint storage is preserved; reader-version fencing is an Ork addition.
+
 import type { PrismaClient } from "./client.js";
 import { ciphertextKeyId, decryptText, encryptText } from "./content-crypto.js";
 import { contentEncryptionOf } from "./content-encryption.js";
+import type { RUN_READER_VERSION } from "./run-reader-version.js";
 
 // A reserved effect kind/status keeps transcripts out of approval queues and
 // client events while reusing run/space cascades and latest-only upsert storage.
@@ -44,6 +50,7 @@ export async function saveRunTurnCheckpoint(
   leaseOwner: string,
   leaseFence: number,
   blob: string,
+  requiredReaderVersion?: typeof RUN_READER_VERSION,
 ): Promise<void> {
   const encryption = contentEncryptionOf(prisma);
   const result = encryption?.ring.encryptWrites
@@ -54,7 +61,7 @@ export async function saveRunTurnCheckpoint(
     // follow this write and remove it, or win first and reject it.
     const locked = await tx.run.updateMany({
       where: { id: run.id, spaceId: run.spaceId, status: "running", leaseOwner, leaseFence },
-      data: { leaseFence },
+      data: { leaseFence, ...(requiredReaderVersion ? { requiredReaderVersion } : {}) },
     });
     if (locked.count !== 1) throw new Error("Run lease expired before checkpoint");
     await tx.externalEffect.upsert({

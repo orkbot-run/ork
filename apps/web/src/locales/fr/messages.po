@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "Le graphique n'a pas pu s'afficher : {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "Discussion"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -1356,6 +1357,10 @@ msgstr "Faites un point."
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "Vérifiez la clé API ou la connexion, puis testez à nouveau."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Vérifiez d'abord le chat. Indiquer le résultat reprend les messages en attente sans renvoyer ce message."
 
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
@@ -1464,6 +1469,7 @@ msgstr "Effacement en cours…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2291,6 +2297,7 @@ msgstr "Impossible d'exécuter la routine"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -2435,6 +2442,7 @@ msgstr "Impossible de mettre à jour la portée de mémoire par défaut"
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Impossible de charger les paramètres de messagerie"
@@ -2451,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Impossible de mettre à jour les paramètres de messagerie"
@@ -3901,9 +3910,17 @@ msgstr "Manuel"
 msgid "Manual setup required"
 msgstr "Configuration manuelle requise"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Marquer comme non envoyé"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Marquer comme lu"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Marquer comme envoyé"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5351,6 +5368,10 @@ msgstr "Répondre"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Mode de réponse"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -5473,6 +5494,10 @@ msgstr "Retour à Ork"
 msgid "Review data sharing before continuing."
 msgstr "Vérifiez le partage des données avant de continuer."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Vérifier la livraison"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Vérifiez les paramètres du fournisseur et testez à nouveau."
@@ -5501,6 +5526,10 @@ msgstr "Tourner la clé"
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Routine : {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5509,6 +5538,10 @@ msgstr "Routines"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr ""
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Routines : {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6180,6 +6213,15 @@ msgstr "Étapes"
 msgid "Stop"
 msgstr "Arrêter"
 
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "Arrêter {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Tout arrêter"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr ""
@@ -6825,6 +6867,10 @@ msgstr "Mettre à jour le serveur"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Mises à jour"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Avancement et réponse finale"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

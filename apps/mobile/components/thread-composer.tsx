@@ -11,6 +11,7 @@ import type {
   ComposerMentionBinding,
   ComposerMentionQuery,
   ComposerMentionRange,
+  RoutineWorkContext,
   SlashActionId,
 } from "@orkbot/core";
 import {
@@ -95,6 +96,7 @@ type ThreadComposerProps = {
   botId?: string;
   onCall: boolean;
   working: boolean;
+  routineWork?: RoutineWorkContext;
   sending: boolean;
   styles: { circleButton: ViewStyle; composerFill: ViewStyle };
   attachActions: MenuAction[];
@@ -120,6 +122,7 @@ export function ThreadComposer({
   botId,
   onCall,
   working,
+  routineWork,
   sending,
   styles,
   attachActions,
@@ -410,9 +413,26 @@ export function ThreadComposer({
   } as const;
 
   const canSend = Boolean(draft.trim()) || selectedSkill !== null || attachmentIds.length > 0;
+  const names = routineWork?.names.join(", ") ?? "";
+  const stopLabel = routineWork?.stopAll
+    ? t("Stop all")
+    : routineWork?.stopName
+      ? t("Stop {name}", { name: routineWork.stopName })
+      : t("Stop");
 
   return (
     <>
+      {working && names ? (
+        <Text
+          testID="active-routine-context"
+          numberOfLines={1}
+          style={{ color: tokens.mutedForeground, fontSize: 13, marginBottom: 8 }}
+        >
+          {routineWork?.names.length === 1
+            ? t("Routine: {names}", { names })
+            : t("Routines: {names}", { names })}
+        </Text>
+      ) : null}
       {mentionOptions.length ? (
         <ScrollView
           testID="mention-picker"
@@ -806,7 +826,7 @@ export function ThreadComposer({
         </GlassSurface>
         {working ? (
           <Pressable
-            accessibilityLabel={t("Stop")}
+            accessibilityLabel={stopLabel}
             disabled={sending}
             onPress={() => void stop()}
             style={{ width: 44, height: 44, opacity: sending ? 0.5 : 1 }}

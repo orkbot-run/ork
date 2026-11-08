@@ -97,6 +97,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "New install command": "Nowe polecenie instalacji",
   "Or run this command on your Linux server. Setup will ask for your domain there.":
     "Lub uruchom to polecenie na serwerze z Linuxem. Instalator zapyta tam o domenę.",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "Uruchom polecenie na serwerze z Linuxem, a następnie otwórz wyświetlony link autoryzacyjny.",
   "Run the command on your Linux server.": "Uruchom polecenie na serwerze z Linuxem.",
   "Server setup failed. Run the command again on your server.":
     "Instalacja nie powiodła się. Uruchom polecenie ponownie na serwerze.",
@@ -114,6 +116,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "Self-hosted": "Własny serwer",
   "Connect or install on your own server.": "Połącz się lub zainstaluj Ork na swoim serwerze.",
   "Refresh servers": "Odśwież serwery",
+  "New server available": "Dostępny nowy serwer",
+  "Open servers": "Otwórz serwery",
   "Connect your server": "Połącz swój serwer",
   "Check server": "Sprawdź serwer",
   "Pairing key": "Klucz parowania",

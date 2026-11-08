@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; attachment-label and replay-boundary regressions are Ork additions.
 
 import type { ArtifactStore } from "@orkbot/adapter-kit";
 import type { Actor } from "@orkbot/contracts";
@@ -461,6 +462,51 @@ describe("storeInboundAttachment", () => {
     return { put, store, findFirst };
   }
 
+  it("uses validated download MIME for these bytes instead of filename inference", async () => {
+    const { put, store } = setup();
+    await expect(
+      store({
+        name: "misleading.jpg",
+        mimeType: "",
+        fetch: async () => ({ bytes: new Uint8Array([1]), mimeType: "image/png" }),
+      }),
+    ).rejects.toBe(reachedStorage);
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({ mimeType: "image/png" }),
+      expect.anything(),
+    );
+  });
+
+  it.each(["", "application/x-msdownload"])(
+    "never stores unknown or unsupported downloaded MIME %s",
+    async (mimeType) => {
+      const { put, store } = setup();
+      await expect(
+        store({
+          name: "valid.png",
+          mimeType: "image/png",
+          fetch: async () => ({ bytes: new Uint8Array([1]), mimeType }),
+        }),
+      ).rejects.toThrow("Unsupported attachment type");
+      expect(put).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not authorize missing MIME from an unannotated download or defer a known invalid type", async () => {
+    const { put, store } = setup();
+    const fetch = vi.fn(async () => new Uint8Array([1]));
+    await expect(store({ name: "image-1", mimeType: "", fetch })).rejects.toThrow(
+      "Unsupported attachment type",
+    );
+    expect(fetch).toHaveBeenCalledOnce();
+    fetch.mockClear();
+    await expect(
+      store({ name: "image-1", mimeType: "application/x-msdownload", fetch }),
+    ).rejects.toThrow("Unsupported attachment type");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it("bounds a stalled download and does not store its late result", async () => {
     vi.useFakeTimers();
     try {
@@ -553,6 +599,33 @@ describe("storeInboundAttachment", () => {
     expect(fetch).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { botId: "other-bot", groupId: null },
+    { botId: "bot-1", groupId: "other-group" },
+  ])(
+    "refuses a wrong-target replay before metadata checks, deadline or fetch: %j",
+    async (target) => {
+      const { put, store, findFirst } = setup({ id: "artifact-private", ...target });
+      const fetch = vi.fn(async () => new Uint8Array([1]));
+      await expect(
+        store(
+          {
+            name: "invalid.exe",
+            mimeType: "application/x-msdownload",
+            size: Number.MAX_SAFE_INTEGER,
+            fetch,
+          },
+          Date.now() - 1,
+        ),
+      ).rejects.toMatchObject({ name: "IsolationError" });
+      expect(findFirst).toHaveBeenCalledWith({
+        where: { spaceId: actor.spaceId, userId: actor.userId, clientNonce: "nonce-1" },
+      });
+      expect(fetch).not.toHaveBeenCalled();
+      expect(put).not.toHaveBeenCalled();
+    },
+  );
 
   it("returns the downloaded bytes with a freshly stored artifact", async () => {
     const bytes = new Uint8Array([7, 8, 9]);

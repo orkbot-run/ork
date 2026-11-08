@@ -1,6 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
+
 import { randomBytes } from "node:crypto";
 import { signupPolicyFromEnv } from "@orkbot/core";
 import type { PrismaClient } from "./client.js";
+import { isUniqueViolation } from "./database-errors.js";
 
 export interface SignupPolicyEnv {
   signupsEnabled: string | undefined;
@@ -14,10 +20,6 @@ type OrganizationClient = Pick<
 
 function newId(): string {
   return randomBytes(16).toString("hex");
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
 
 /**

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 composition is preserved. Native OIDC callbacks and delegated server updates are Ork additions.
 // Ork deferred messaging SDK loading is PolyForm-covered.
+// Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
 import type {
@@ -102,7 +103,12 @@ import {
   verifyModelServesAgents,
   withSecretPersistence,
 } from "@orkbot/adapters";
-import { createAuth, isBlockedAuthPath, loopbackTwinOrigins } from "@orkbot/auth";
+import {
+  createAuth,
+  isBlockedAuthPath,
+  loopbackTwinOrigins,
+  startServerClaimWorker,
+} from "@orkbot/auth";
 import type { Actor, AuthCapabilities } from "@orkbot/contracts";
 import {
   isLocalhostOrLoopbackIp,
@@ -729,7 +735,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     phoneCallsEnabled: env.phoneCallsEnabled,
     phoneCallRingSeconds: env.phoneCallRingSeconds,
     phoneCallCooldownMinutes: env.phoneCallCooldownMinutes,
-    messaging: messaging ? createMessagingContextLoader(prisma) : undefined,
+    messaging: messaging ? createMessagingContextLoader(prisma, { messaging, jobs }) : undefined,
     web: createWebProvider(),
     cloudAgent,
     userDevices: userDevicesOverride ?? userDevices,
@@ -1541,6 +1547,14 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ),
   );
 
+  const stopServerClaim =
+    env.accountsEnabled && env.bootstrapSecret && !env.desktopAccountKey
+      ? startServerClaimWorker(prisma, {
+          issuer: "https://api.orkbot.run",
+          origin: env.webOrigin,
+          bootstrapSecret: env.bootstrapSecret,
+        })
+      : undefined;
   return {
     app,
     prisma,
@@ -1559,6 +1573,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     stop: async () => {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
+      await stopServerClaim?.();
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       auth.disposeOidcDiscovery();

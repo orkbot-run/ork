@@ -4,6 +4,7 @@
 
 import * as z from "zod";
 import { AgentImportSetupItemSchema } from "./agent-import-setup.js";
+import { ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { botSecretDestinationSchema, LoginFieldLabels, OneTimeCodeTarget } from "./bot-secrets.js";
 import { ApprovalReasonSchema } from "./decision-card.js";
 import { Id, ThinkingLevelSchema } from "./ids.js";
@@ -110,6 +111,12 @@ export const BotSettingsValuesSchema = z.object({
   voiceId: z.string().max(120).nullable().optional(),
 });
 export type BotSettingsValues = z.infer<typeof BotSettingsValuesSchema>;
+
+const DelegatedWorkspaceFiles = z.object({
+  computerId: Id,
+  version: z.string().regex(/^[a-f0-9]{64}$/u),
+  paths: z.array(z.string().min(1).max(4096)).max(ATTACHMENT_MAX_COUNT),
+});
 
 export const MessageBlock = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("text"), text: z.string() }),
@@ -333,6 +340,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     /** Links ownership transfers in one user-started group turn. */
     hop: z.number().int().positive().optional(),
+    workspaceFiles: DelegatedWorkspaceFiles.optional(),
   }),
   z.object({
     /** A group-chat message delivered into a member bot's own thread. */
@@ -365,6 +373,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     returnToMessageId: Id.optional(),
     /** Links in a bot-started chain; absent when a person started it. */
     hop: z.number().int().nonnegative().optional(),
+    workspaceFiles: DelegatedWorkspaceFiles.optional(),
   }),
 ]);
 export type MessageBlock = z.infer<typeof MessageBlock>;

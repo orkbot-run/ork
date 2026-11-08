@@ -1298,8 +1298,9 @@ msgid "Chart failed to render: {error}"
 msgstr "Не удалось отобразить диаграмму: {error}."
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
-msgstr ""
+msgstr "Чат"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
@@ -1356,6 +1357,10 @@ msgstr "Проверить."
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "Проверьте API-ключ или вход и повторите тест."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Сначала проверьте чат. Отметка результата возобновит отправку сообщений в очереди без повторной отправки этого сообщения."
 
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
@@ -1464,6 +1469,7 @@ msgstr "Очистка…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2291,6 +2297,7 @@ msgstr "Не удалось запустить задачу"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -2435,6 +2442,7 @@ msgstr "Не удалось обновить область памяти по у
 msgid "Couldn't load grants"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Не удалось загрузить настройки обмена сообщениями."
@@ -2451,6 +2459,7 @@ msgstr ""
 msgid "Couldn't load your wallet"
 msgstr ""
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Не удалось обновить настройки обмена сообщениями."
@@ -3901,9 +3910,17 @@ msgstr "Вручную"
 msgid "Manual setup required"
 msgstr "Требуется ручная настройка"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Отметить как неотправленное"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Отметить как прочитанное"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Отметить как отправленное"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5351,6 +5368,10 @@ msgstr "Ответить"
 msgid "Reply cancelled"
 msgstr ""
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Режим ответа"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -5473,6 +5494,10 @@ msgstr "Вернуться в Ork"
 msgid "Review data sharing before continuing."
 msgstr "Прежде чем продолжить, проверьте передачу данных."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Проверить доставку"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Проверьте настройки поставщика и повторите тест."
@@ -5501,6 +5526,10 @@ msgstr "Сменить ключ"
 msgid "Routine"
 msgstr "Задача"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Процедура: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5509,6 +5538,10 @@ msgstr "Задачи"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr ""
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Процедуры: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6180,6 +6213,15 @@ msgstr "Шаги"
 msgid "Stop"
 msgstr "Остановить"
 
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "Остановить {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Остановить всё"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr ""
@@ -6825,6 +6867,10 @@ msgstr "Обновить сервер"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Обновления"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Обновления и итоговый ответ"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

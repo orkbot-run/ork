@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache screen tests are preserved; captured review boundary fixtures are Ork additions.
 
 import type { ReactNode } from "react";
 import { act, useEffect } from "react";
@@ -10,10 +13,44 @@ import MessagingSettings from "../app/(settings)/messaging";
 import { rpc } from "./api";
 
 const appState = vi.hoisted(() => ({ change: undefined as ((state: string) => void) | undefined }));
-vi.mock("./api", () => ({ rpc: vi.fn() }));
+const session = vi.hoisted(() => ({
+  generation: 0,
+  listeners: new Set<() => void>(),
+  space: undefined as (() => void) | undefined,
+}));
+vi.mock("./api", () => ({
+  rpc: vi.fn(),
+  subscribeConfirmedSpaceSwitch: (callback: () => void) => {
+    session.space = callback;
+    return () => {
+      session.space = undefined;
+    };
+  },
+}));
+vi.mock("./session", () => ({
+  currentReadySessionGeneration: () => session.generation,
+  currentSessionGeneration: () => session.generation,
+  subscribeSessionGeneration: (callback: () => void) => {
+    session.listeners.add(callback);
+    return () => {
+      session.listeners.delete(callback);
+    };
+  },
+}));
+vi.mock("./settings-target", async () => {
+  const { rpc } = await import("./api");
+  return {
+    ACCOUNT_SETTINGS: { scope: "account" },
+    captureSettingsContext: () => {
+      const generation = session.generation;
+      return { send: rpc, isCurrent: () => generation === session.generation };
+    },
+  };
+});
 vi.mock("./appearance", () => ({ mobileTokens: () => ({}) }));
 vi.mock("./native", () => ({
   native: {},
+  useMobileTokens: () => ({}),
   useThemedStyles: (factory: () => unknown) => factory(),
 }));
 vi.mock("./user-error", () => ({
@@ -91,6 +128,7 @@ vi.mock("react-native", () => {
   return {
     View,
     ScrollView: View,
+    Modal: View,
     Text: View,
     StyleSheet: { create: (styles: unknown) => styles },
     AppState: {
@@ -108,6 +146,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  session.generation = 0;
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   Object.assign(responses, {
     "bots/list": [{ id: "bot-1", name: "Chief" }],
@@ -422,3 +461,104 @@ it("keeps a failed action's error when a refresh that was pending then succeeds"
   await act(async () => finishRefresh());
   expect(container.textContent).toContain("Something went wrong. Try again.");
 });
+
+function pending<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+const reviewIdentity = {
+  id: "review-identity",
+  provider: "fixture",
+  address: "fixture-address",
+  botId: "bot-1",
+  botName: "Chief",
+  deliveryReview: { spaceId: "fixture-space", count: 1 },
+};
+const reviewStatus = (count = 1) => ({
+  enabled: true,
+  providers: [],
+  openSignup: false,
+  identities: [{ ...reviewIdentity, deliveryReview: { ...reviewIdentity.deliveryReview, count } }],
+});
+async function pressReview(label: string) {
+  await act(async () => {
+    const button = [...container.querySelectorAll("button")].find(
+      (node) => node.textContent === label,
+    );
+    if (!button) throw new Error(`Missing button ${label}`);
+    button.click();
+  });
+}
+it("only restores recovery controls from a fresh current-session status", async () => {
+  const old = pending<ReturnType<typeof reviewStatus>>();
+  responses["messaging/status"] = old.promise;
+  await act(async () => root.render(<MessagingSettings />));
+  expect(container.textContent).not.toContain("Review delivery");
+  responses["messaging/status"] = reviewStatus();
+  await act(async () => {
+    session.generation += 1;
+    for (const callback of session.listeners) callback();
+  });
+  expect(container.textContent).toContain("Review delivery");
+  await act(async () =>
+    old.resolve({
+      ...reviewStatus(),
+      identities: [{ ...reviewIdentity, address: "retired-address" }],
+    }),
+  );
+  expect(container.textContent).not.toContain("retired-address");
+  expect(container.textContent).toContain("fixture-address");
+});
+it("does not revive an acknowledged review count from an older background refresh", async () => {
+  responses["messaging/status"] = reviewStatus();
+  responses["messaging/outbound/list"] = {
+    items: [
+      {
+        id: "outbound-1",
+        version: "a".repeat(64),
+        preview: "Review this",
+        createdAt: "2026-01-01T00:00:00Z",
+        attachmentName: null,
+      },
+    ],
+    hasMore: false,
+  };
+  await act(async () => root.render(<MessagingSettings />));
+  await pressReview("Review delivery");
+  const old = pending<ReturnType<typeof reviewStatus>>();
+  let reads = 0;
+  vi.mocked(rpc).mockImplementation(async (path: string) => {
+    if (path === "messaging/status")
+      return (++reads === 1 ? old.promise : reviewStatus(0)) as never;
+    if (path === "messaging/outbound/list") return { items: [], hasMore: false } as never;
+    return (responses[path] ?? { ok: true }) as never;
+  });
+  await act(async () => appState.change?.("active"));
+  await pressReview("Mark as sent");
+  expect(container.textContent).not.toContain("Review delivery");
+  await act(async () => old.resolve(reviewStatus()));
+  expect(container.textContent).not.toContain("Review delivery");
+});
+
+it.each([undefined, 0])(
+  "hides recovery for previous-release or settled identities (%s)",
+  async (count) => {
+    responses["messaging/status"] = {
+      ...reviewStatus(),
+      identities: [
+        {
+          ...reviewIdentity,
+          deliveryReview: count === undefined ? undefined : { spaceId: "fixture-space", count },
+        },
+      ],
+    };
+    await act(async () => root.render(<MessagingSettings />));
+    expect(container.textContent).not.toContain("Review delivery");
+    expect(vi.mocked(rpc).mock.calls.some(([path]) => path.startsWith("messaging/outbound/"))).toBe(
+      false,
+    );
+  },
+);

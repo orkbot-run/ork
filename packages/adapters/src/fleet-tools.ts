@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 fleet behavior is preserved; effective model reporting follows LICENSE.md.
+// Ork changes consolidate database error matching through the shared database predicates.
 
 import type { AdapterContext, JobPublisher } from "@orkbot/adapter-kit";
 import type { Actor, Group, MessageBlock } from "@orkbot/contracts";
@@ -27,6 +28,7 @@ import {
   createRepos,
   InstructionConflictError,
   IsolationError,
+  isRecordNotFound,
   modelRoleTarget,
   SpaceDeletionInProgressError,
 } from "@orkbot/db";
@@ -1106,7 +1108,7 @@ export async function setChildBotModel(
       },
     });
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "P2025")
+    if (isRecordNotFound(error))
       return { error: "That bot's model changed since you approved; ask again." };
     throw error;
   }

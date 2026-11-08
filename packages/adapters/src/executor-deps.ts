@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache dependencies are preserved; Ork adds durable messaging progress admission.
+
 import type {
   AgentContextStrategy,
   AgentHomeStore,
@@ -58,7 +63,10 @@ export interface ExecutorDeps {
   phoneCallCooldownMinutes?: number;
   phoneCallRingSeconds?: number;
   /** Messaging surface; absent means zero identity queries and no chat prompts. */
-  messaging?: { hasIdentity(botId: string): Promise<boolean> };
+  messaging?: {
+    hasIdentity(botId: string): Promise<boolean>;
+    publishProgress?(runId: string): Promise<void>;
+  };
   listConnectedPluginSlugs?: (userId: string) => Promise<string[]>;
   /** Builtin web_search / web_fetch. Defaults to keyless HTTP when omitted. */
   web?: WebProvider;

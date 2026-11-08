@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited behavior remains Apache-2.0; Ork changes share thread state handling.
+
 import { useLingui } from "@lingui/react/macro";
 import type {
   Bot,
@@ -11,11 +16,14 @@ import type {
 import { attachmentMaxBytes, attachmentMaxCount, attachmentSizeLabel } from "@orkbot/contracts";
 import type { ComposerMention } from "@orkbot/core";
 import {
+  applyThreadSendReceipt,
   attachmentsForThread,
+  clearActiveThreadRuns,
   inferAttachmentMimeType,
   isImageInputConfirmation,
   newClientId,
   resolveComposerSendPlan,
+  threadRunError,
 } from "@orkbot/core";
 import type { RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -31,11 +39,7 @@ import {
 import { canPrepareImage, prepareImage } from "../../lib/prepare-image";
 import type { createSpaceRpc } from "../../lib/rpc";
 import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../../lib/run-error-storage";
-import {
-  applyThreadSendReceipt,
-  clearActiveThreadRuns,
-  threadRunError,
-} from "../../lib/thread-events";
+
 import { errorText } from "../../lib/user-error";
 import type { PendingAttachment } from "./chat-shared";
 import type { useShellNavigation } from "./use-shell-navigation";

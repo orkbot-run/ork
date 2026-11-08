@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 behavior is preserved. Personal Ork changes follow LICENSE.md.
 
 import * as z from "zod";
+import { BotReplyModeSchema } from "./bot-settings-layout.js";
 import { Id, IsoDate } from "./ids.js";
 import { PageSourceSchema, PageTitleSchema } from "./pages.js";
 
@@ -74,6 +75,7 @@ export const AccountExportRecordSchema = z.discriminatedUnion("type", [
     avatarSet: z.string(),
     avatarSeed: z.uuidv4().nullable().optional(),
     notifyOnFinish: z.boolean(),
+    replyMode: BotReplyModeSchema.optional(),
     pinned: z.boolean(),
     position: z.number().int(),
     sectionId: Id.nullable(),

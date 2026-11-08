@@ -783,6 +783,7 @@ class AccountImporter implements ArchiveSink {
       description: record.description,
       instructions: record.instructions,
       notifyOnFinish: record.notifyOnFinish,
+      replyMode: record.replyMode,
       fleetManagement: record.fleetManagement,
       color: record.color,
       avatarSet: resolveBotAvatarSet(record.avatarSet),

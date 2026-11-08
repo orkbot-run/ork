@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; explicit stop scope is an Ork addition.
+
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type {
@@ -237,12 +241,14 @@ export function routineTriggerSummary(
 export function RoutineList({
   routines,
   runningRoutineId,
+  stopAll,
   onCreate,
   onEdit,
   onStop,
 }: {
   routines: Routine[];
   runningRoutineId?: string;
+  stopAll?: boolean;
   onCreate: () => void;
   onEdit: (routine: Routine) => void;
   onStop: () => void;
@@ -267,6 +273,7 @@ export function RoutineList({
           key={routine.id}
           routine={routine}
           running={runningRoutineId === routine.id}
+          stopAll={stopAll}
           onOpen={() => onEdit(routine)}
           onStop={onStop}
         />
@@ -278,11 +285,13 @@ export function RoutineList({
 function RoutineListRow({
   routine,
   running,
+  stopAll,
   onOpen,
   onStop,
 }: {
   routine: Routine;
   running: boolean;
+  stopAll?: boolean;
   onOpen: () => void;
   onStop: () => void;
 }) {
@@ -324,7 +333,7 @@ function RoutineListRow({
             onClick={onStop}
             className="shrink-0 bg-warning/15 text-warning hover:bg-warning/25"
           >
-            <Trans>Stop</Trans>
+            {stopAll ? <Trans>Stop all</Trans> : <Trans>Stop</Trans>}
           </Button>
         </>
       ) : null}

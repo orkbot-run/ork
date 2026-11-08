@@ -4,7 +4,7 @@
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 // Ork deferred messaging SDK loading is PolyForm-covered.
 
-import type { AdapterContext, MessagingSurface } from "@orkbot/adapter-kit";
+import type { AdapterContext, MessagingSendRequest, MessagingSurface } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatSdkMessagingSurface, MessagingSendError } from "./chat-sdk-surface.js";
@@ -14,6 +14,8 @@ import {
   deliverMessagingOutbound,
   MESSAGING_DM_OUTBOUND_CAP,
   MESSAGING_OUTBOUND_MAX_ATTEMPTS,
+  mirrorMessagingOutbound,
+  mirrorMessagingProgress,
 } from "./messaging-delivery.js";
 import { messagingPlatformsFromEnv } from "./messaging-platforms.js";
 
@@ -38,10 +40,20 @@ const identity = {
 
 const messagingRun = {
   id: "run-1",
+  userId: "user-1",
+  spaceId: "ws-1",
+  threadId: "thread-1",
   botId: "bot-1",
   trigger: "messaging",
   sourceMessage: { blocks: [{ kind: "text", text: "hi" }] },
 };
+
+const rejectedSend = (message: string) =>
+  new MessagingSendError(new Error(message), {
+    permanent: false,
+    retryAfterMs: null,
+    outcome: "rejected",
+  });
 
 type OutboundRowFilter = Record<string, unknown>;
 
@@ -72,10 +84,16 @@ function matchesWhere(row: Record<string, unknown>, where: OutboundRowFilter): b
       return row[key] instanceof Date && (row[key] as Date).getTime() === value.getTime();
     // The mocks do not emulate @updatedAt: an unset one counts as "just now".
     if (key === "updatedAt" && row[key] === undefined)
-      return compareBound(new Date(), (value as { gt: unknown }).gt, true);
+      return matchesWhere({ updatedAt: new Date() }, { updatedAt: value });
     if (value !== null && typeof value === "object") {
-      const bound = value as { lt?: unknown; gt?: unknown };
-      if (bound.lt !== undefined) return compareBound(row[key], bound.lt, false);
+      const bound = value as { lt?: unknown; gt?: unknown; in?: unknown[] };
+      if (bound.in) return bound.in.includes(row[key]);
+      if (bound.lt !== undefined)
+        return compareBound(
+          key === "requiredDeliveryVersion" ? (row[key] ?? 0) : row[key],
+          bound.lt,
+          false,
+        );
       if (bound.gt !== undefined) return compareBound(row[key], bound.gt, true);
       return false;
     }
@@ -94,7 +112,9 @@ function findOutboundRow(rows: Array<Record<string, unknown>>, where: OutboundRo
 }
 
 function createFakeSurface(sendError?: Error) {
-  const sendToThread = vi.fn(async () => ({ handle: "handle-out-1" }));
+  const sendToThread = vi.fn(async (_request: MessagingSendRequest) => ({
+    handle: "handle-out-1",
+  }));
   if (sendError) sendToThread.mockRejectedValue(sendError);
   const openDirectThread = vi.fn(
     async (_provider: string, address: string) => `sendblue:opened:${address}`,
@@ -178,17 +198,20 @@ function createDeps(overrides: {
       ),
     },
     $queryRaw: vi.fn(async (query: TemplateStringsArray) =>
-      query.join("").includes("FROM bots")
-        ? ["bot-1", "bot-2"].map((id) => ({
-            id,
-            spaceId: id,
-            crossSpaceCommunication: id !== overrides.blockedBot,
-            archivedAt: null,
-          }))
-        : overrides.connectionStatus === null
-          ? []
-          : [{ status: overrides.connectionStatus ?? "pending" }],
+      query.join("").includes(" AS allowed")
+        ? [{ allowed: true }]
+        : query.join("").includes("FROM bots")
+          ? ["bot-1", "bot-2"].map((id) => ({
+              id,
+              spaceId: id,
+              crossSpaceCommunication: id !== overrides.blockedBot,
+              archivedAt: null,
+            }))
+          : overrides.connectionStatus === null
+            ? []
+            : [{ status: overrides.connectionStatus ?? "pending" }],
     ),
+    $executeRaw: vi.fn(async () => 0),
     messagingOutbound: {
       findUnique: vi.fn(async ({ where }: { where?: { id?: string } } = {}) => {
         if (overrides.existingOutbox) return overrides.existingOutbox;
@@ -247,18 +270,10 @@ function createDeps(overrides: {
         return row;
       }),
       updateMany: vi.fn(
-        async ({
-          where,
-          data,
-        }: {
-          where: { id?: string; providerHandle?: string; status?: string };
-          data: Record<string, unknown>;
-        }) => {
+        async ({ where, data }: { where: OutboundRowFilter; data: Record<string, unknown> }) => {
           let count = 0;
           for (const row of rows) {
-            if (where.id && row.id !== where.id) continue;
-            if (where.providerHandle && row.providerHandle !== where.providerHandle) continue;
-            if (where.status && row.status !== where.status) continue;
+            if (!matchesWhere(row, where)) continue;
             Object.assign(row, data);
             count += 1;
           }
@@ -284,6 +299,102 @@ function createDeps(overrides: {
     rows,
   };
 }
+
+describe("durable direct messaging progress", () => {
+  it("posts durable text before completion and shares final recovery keys", async () => {
+    const initial = { id: "progress", blocks: [{ kind: "text", text: "Accepted update." }] };
+    const deps = createDeps({ messages: [initial] });
+    expect(await mirrorMessagingProgress(deps, "run-1")).toBe(true);
+    expect(deps.sendToThread).not.toHaveBeenCalled();
+    expect(deps.prisma.run.updateMany).not.toHaveBeenCalled();
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.sendToThread).toHaveBeenCalledTimes(1);
+    deps.prisma.message.findMany.mockResolvedValue([
+      initial,
+      { id: "final", blocks: [{ kind: "text", text: "Actual final reply." }] },
+    ]);
+    await Promise.all([
+      mirrorMessagingProgress(deps, "run-1"),
+      mirrorMessagingProgress(deps, "run-1"),
+      mirrorMessagingOutbound(deps, "run-1"),
+    ]);
+    await deliverMessagingOutbound(deps, {}, context);
+    expect(deps.sendToThread.mock.calls.map(([request]) => request.body)).toEqual([
+      "Accepted update.",
+      "Actual final reply.",
+    ]);
+    expect(deps.rows.map((row) => row.idempotencyKey)).toEqual(["msg:progress", "msg:final"]);
+  });
+
+  it.each(["image", "file", "page"])(
+    "holds a mixed %s message and every later message for final recovery",
+    async (kind) => {
+      const deps = createDeps({
+        messages: [
+          { id: "prefix", blocks: [{ kind: "text", text: "First update." }] },
+          {
+            id: "barrier",
+            blocks: [
+              { kind: "text", text: "Deliver with the attachment." },
+              { kind, artifactId: "artifact", pageId: "page", title: "Page title" },
+            ],
+          },
+          { id: "tail", blocks: [{ kind: "text", text: "Later update." }] },
+        ],
+      });
+      await mirrorMessagingProgress(deps, "run-1");
+      await mirrorMessagingProgress(deps, "run-1");
+      expect(deps.rows.map((row) => row.idempotencyKey)).toEqual(["msg:prefix"]);
+      await mirrorMessagingOutbound(deps, "run-1");
+      expect(deps.rows.map((row) => row.idempotencyKey)).toEqual([
+        "msg:prefix",
+        "msg:barrier",
+        "msg:tail",
+      ]);
+      expect(String(deps.rows[1]!.body)).toContain("Deliver with the attachment.");
+    },
+  );
+
+  it("does not publish anything when a page is the first durable message", async () => {
+    const deps = createDeps({
+      messages: [
+        { id: "page", blocks: [{ kind: "page", pageId: "page", title: "Plan" }] },
+        { id: "tail", blocks: [{ kind: "text", text: "After the page." }] },
+      ],
+    });
+    expect(await mirrorMessagingProgress(deps, "run-1")).toBe(false);
+    expect(deps.rows).toEqual([]);
+  });
+
+  it.each(["user", "routine", "channel", "missing", "foreign-user", "foreign-space"])(
+    "does not admit progress for %s context",
+    async (kind) => {
+      const deps = createDeps({
+        run:
+          kind === "channel"
+            ? {
+                ...messagingRun,
+                sourceMessage: { blocks: [{ kind: "channel_message", channelId: "group" }] },
+              }
+            : {
+                ...messagingRun,
+                ...(kind === "user" || kind === "routine" ? { trigger: kind } : {}),
+              },
+        identity:
+          kind === "missing"
+            ? null
+            : kind === "foreign-user"
+              ? { userId: "other-user" }
+              : kind === "foreign-space"
+                ? { spaceId: "other-space" }
+                : undefined,
+      });
+      expect(await mirrorMessagingProgress(deps, "run-1")).toBe(false);
+      expect(deps.rows).toEqual([]);
+      expect(deps.sendToThread).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe("deliverMessagingOutbound", () => {
   it("mirrors a messaging DM run's bot text to the identity's conversation", async () => {
@@ -469,7 +580,9 @@ describe("deliverMessagingOutbound", () => {
   });
 
   it("returns a transient send failure to pending and schedules a delayed retry", async () => {
-    const deps = createDeps({ sendError: new Error("messaging provider 500") });
+    const deps = createDeps({
+      sendError: rejectedSend("provider explicitly rejected the message"),
+    });
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
 
     expect(deps.rows).toEqual([
@@ -1199,7 +1312,7 @@ describe("deliverMessagingOutbound transient failure retry", () => {
   it("marks the row failed only once the attempt budget is exhausted", async () => {
     const deps = createDeps({
       run: null,
-      sendError: new Error("messaging provider 500"),
+      sendError: rejectedSend("provider explicitly rejected the message"),
       outboundRows: [
         {
           id: "out-9",
@@ -1225,7 +1338,9 @@ describe("deliverMessagingOutbound transient failure retry", () => {
 describe("deliverMessagingOutbound retry enqueue failure", () => {
   it("propagates the enqueue failure so the job queue retries the drain", async () => {
     const deps = createDeps({});
-    deps.sendToThread.mockRejectedValueOnce(new Error("messaging provider 500"));
+    deps.sendToThread.mockRejectedValueOnce(
+      rejectedSend("provider explicitly rejected the message"),
+    );
     deps.jobs.enqueue.mockRejectedValueOnce(new Error("queue down"));
 
     // A swallowed enqueue failure would strand the row in pending forever:
@@ -1253,11 +1368,44 @@ describe("deliverMessagingOutbound retry enqueue failure", () => {
 });
 
 describe("deliverMessagingOutbound send failure classification", () => {
+  it.each([
+    new Error("response lost after acceptance"),
+    new MessagingSendError(new Error("unclassified permanent error"), {
+      permanent: true,
+      retryAfterMs: null,
+    }),
+  ])(
+    "never resends an unknown protected send or passes it after the legacy deadline: %s",
+    async (failure) => {
+      const deps = createDeps({
+        messages: [
+          { id: "unknown", blocks: [{ kind: "text", text: "Accepted remotely." }] },
+          { id: "later", blocks: [{ kind: "text", text: "Must wait." }] },
+        ],
+      });
+      const acceptedRemotely: string[] = [];
+      deps.sendToThread.mockImplementationOnce(async (request) => {
+        acceptedRemotely.push(request.body);
+        throw failure;
+      });
+      await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+      expect(deps.rows.map((row) => row.status)).toEqual(["uncertain", "pending"]);
+      deps.rows[0]!.updatedAt = new Date(0);
+      await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
+      await deliverMessagingOutbound(deps, {}, context);
+      expect(acceptedRemotely).toEqual(["Accepted remotely."]);
+      expect(deps.sendToThread).toHaveBeenCalledTimes(1);
+      expect(deps.jobs.enqueue).not.toHaveBeenCalled();
+      expect(deps.rows[0]!.providerHandle ?? null).toBeNull();
+    },
+  );
+
   it("fails a permanently rejected row at once instead of retrying it", async () => {
     const deps = createDeps({
       sendError: new MessagingSendError(new Error("channel_not_found"), {
         permanent: true,
         retryAfterMs: null,
+        outcome: "rejected",
       }),
     });
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
@@ -1271,6 +1419,7 @@ describe("deliverMessagingOutbound send failure classification", () => {
       sendError: new MessagingSendError(new Error("rate limited"), {
         permanent: false,
         retryAfterMs: 30_000,
+        outcome: "rejected",
       }),
     });
     const before = Date.now();
@@ -1316,7 +1465,7 @@ describe("deliverMessagingOutbound conversation order", () => {
     });
     deps.sendToThread
       .mockResolvedValueOnce({ handle: "wamid.1" })
-      .mockRejectedValueOnce(new Error("WhatsApp API error"));
+      .mockRejectedValueOnce(rejectedSend("provider explicitly rejected the second part"));
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
 
     // The third part waits behind the failed second one.
@@ -1337,7 +1486,7 @@ describe("deliverMessagingOutbound conversation order", () => {
 
   it.each([
     ["in flight in another drain", "sent", new Date(), false],
-    ["abandoned mid-send long ago", "sent", new Date(Date.now() - 10 * 60_000), true],
+    ["abandoned mid-send long ago", "sent", new Date(Date.now() - 10 * 60_000), false],
     ["permanently failed", "failed", new Date(), true],
   ] as const)(
     "a later part whose first part is %s is sent=%s",
@@ -1455,13 +1604,13 @@ describe("WhatsApp rendered outbound delivery", () => {
     expect(sends).toHaveLength(2);
     expect(sends.every(intact)).toBe(true);
     expect(sends.join(" ")).toContain("😀zzz");
-    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "pending"]);
+    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "uncertain"]);
 
     deps.rows[1]!.nextAttemptAt = new Date(Date.now() - 1);
     await run();
 
-    expect(sends.slice(2)).toEqual([sends[1]]);
-    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "sent"]);
+    expect(sends.slice(2)).toEqual([]);
+    expect(deps.rows.map((row) => row.status)).toEqual(["sent", "uncertain"]);
   });
 
   it("sends a table that renders past the limit as one request per queued part", async () => {
@@ -1580,7 +1729,7 @@ describe("deliverMessagingOutbound attachments", () => {
     const deps = createDeps({ identity: telegram, messages: [reply], artifacts });
     deps.sendToThread
       .mockResolvedValueOnce({ handle: "text-1" })
-      .mockRejectedValueOnce(new Error("Telegram 500"));
+      .mockRejectedValueOnce(rejectedSend("provider explicitly rejected the file"));
     await deliverMessagingOutbound(deps, { runId: "run-1" }, context);
 
     // The second file waits behind the failed first one.
@@ -1629,7 +1778,7 @@ describe("deliverMessagingOutbound attachments", () => {
         fileRow,
       ],
     });
-    deps.sendToThread.mockRejectedValueOnce(new Error("Telegram 500"));
+    deps.sendToThread.mockRejectedValueOnce(rejectedSend("provider explicitly rejected file"));
     await deliverMessagingOutbound(deps, {}, context);
 
     expect(deps.rows.map((row) => [row.idempotencyKey, row.status])).toEqual([
@@ -1683,11 +1832,10 @@ describe("deliverMessagingOutbound attachments", () => {
         },
       ],
     });
-    deps.sendToThread.mockRejectedValueOnce(new Error("Telegram 500"));
+    deps.sendToThread.mockRejectedValueOnce(rejectedSend("provider explicitly rejected file"));
     await deliverMessagingOutbound(deps, {}, context);
-    // One transaction claims the row for sending; the failure and its notice
-    // are then saved together in a second one.
-    expect(deps.prisma.$transaction).toHaveBeenCalledTimes(2);
+    // Claim, both source checks and atomic failure-plus-notice each release their lock before I/O.
+    expect(deps.prisma.$transaction).toHaveBeenCalledTimes(4);
 
     await deliverMessagingOutbound(deps, {}, context);
     expect(sentBodies(deps)).toEqual([
@@ -1801,9 +1949,10 @@ describe("accepted outbound bookkeeping failures", () => {
       deps.prisma.messagingOutbound.update.mockRejectedValueOnce(error);
     } else {
       const update = deps.prisma.messagingOutbound.updateMany.getMockImplementation()!;
-      deps.prisma.messagingOutbound.updateMany
-        .mockImplementationOnce(update)
-        .mockRejectedValueOnce(error);
+      deps.prisma.messagingOutbound.updateMany.mockImplementation(async (input) => {
+        if ("providerHandle" in input.data) throw error;
+        return update(input);
+      });
     }
     await deliverMessagingOutbound(deps, {}, context);
     // Past every send retry and abandoned-part deadline, the accepted row stays claimed.
@@ -1822,7 +1971,9 @@ describe("accepted outbound bookkeeping failures", () => {
     "still retries %s when the provider fails before acceptance",
     async (kind) => {
       const deps = pending(kind);
-      deps.sendToThread.mockRejectedValueOnce(new Error("provider unavailable"));
+      deps.sendToThread.mockRejectedValueOnce(
+        rejectedSend("provider explicitly rejected the message"),
+      );
       await deliverMessagingOutbound(deps, {}, context);
       expect(deps.rows[0]!.status).toBe("pending");
       expect(deps.rows[0]!.attempts).toBe(1);

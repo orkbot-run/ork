@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; attachment-label and replay-boundary regressions are Ork additions.
 
 import type {
   ArtifactStore,
@@ -12,6 +13,7 @@ import type { MessageBlock } from "@orkbot/contracts";
 import { userTurnMessageForRun } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { storeInboundAttachment } from "#modules/content/artifacts";
 import type { MessagingReceipts } from "#modules/messaging/messaging-receipts";
 import {
   inboundDeliveryClientNonce,
@@ -299,93 +301,111 @@ describe("team chat bridge", () => {
     },
   );
 
-  it("stores inbound files on the transcript message and marks the ones it could not keep", async () => {
-    const prisma = {
-      externalConversation: {
-        upsert: vi.fn(async () => ({
-          id: "conversation-1",
-          provider: "slack",
-          spaceId: "space-1",
-          botId: "bot-1",
-          userId: "owner-1",
-          thread: { id: "thread-1" },
-        })),
-      },
-      externalMessage: {
-        upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => ({
-          id: "external-1",
-          ...create,
-          threadMessageId: null,
-        })),
-        update: vi.fn(async () => ({})),
-        updateMany: vi.fn(async () => ({ count: 1 })),
-      },
-    } as unknown as PrismaClient;
-    const sendUserMessage = vi.fn(async () => ({
-      messageId: "transcript-1",
-      runId: null,
-      seq: 1,
-      taskId: null,
-    }));
-    const storeAttachment = vi.fn(
-      async (input: { attachment: { name: string }; clientNonce: string }) => {
-        if (input.attachment.name === "huge.mov") throw new Error("too large");
-        return { id: "artifact-1", name: input.attachment.name, mimeType: "image/png", size: 3 };
-      },
-    );
-    const bridge = new TeamChatBridge({
-      prisma,
-      events: { sendUserMessage },
-      jobs: { enqueue: vi.fn() },
-      send: vi.fn(),
-      storeAttachment,
-      providerId: "slack",
-      botId: "bot-1",
-    });
-    (
-      bridge as unknown as {
-        target: { id: string; spaceId: string; userId: string; name: string };
-      }
-    ).target = { id: "bot-1", spaceId: "space-1", userId: "owner-1", name: "Chief" };
-    const fetch = vi.fn(async () => new Uint8Array([1, 2, 3]));
-
-    await bridge.receive(
-      {
-        eventId: "Ev-files",
-        workspaceId: "T-1",
-        kind: "ambient",
-        conversationKey: "C-1",
-        conversationId: "slack:C-1:",
-        replyThreadId: null,
-        senderId: "U-1",
-        senderName: "Ada",
-        content: "",
-        attachments: [
-          { name: "screen.png", mimeType: "image/png", size: 3, fetch },
-          { name: "huge.mov", mimeType: "video/quicktime", size: 99, fetch },
-        ],
-      },
-      { queueAgent: false },
-    );
-
-    expect(storeAttachment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        spaceId: "space-1",
-        userId: "owner-1",
+  it.each([false, true])(
+    "sanitizes unavailable file labels (storage configured: %s)",
+    async (configured) => {
+      const prisma = {
+        externalConversation: {
+          upsert: vi.fn(async () => ({
+            id: "conversation-1",
+            provider: "slack",
+            spaceId: "space-1",
+            botId: "bot-1",
+            userId: "owner-1",
+            thread: { id: "thread-1" },
+          })),
+        },
+        externalMessage: {
+          upsert: vi.fn(async ({ create }: { create: Record<string, unknown> }) => ({
+            id: "external-1",
+            ...create,
+            threadMessageId: null,
+          })),
+          update: vi.fn(async () => ({})),
+          updateMany: vi.fn(async () => ({ count: 1 })),
+        },
+      } as unknown as PrismaClient;
+      const sendUserMessage = vi.fn(async () => ({
+        messageId: "transcript-1",
+        runId: null,
+        seq: 1,
+        taskId: null,
+      }));
+      const storeAttachment = vi.fn(
+        async (input: { attachment: { name: string }; clientNonce: string }) => {
+          if (input.attachment.name.includes("huge")) throw new Error("too large");
+          return { id: "artifact-1", name: input.attachment.name, mimeType: "image/png", size: 3 };
+        },
+      );
+      const bridge = new TeamChatBridge({
+        prisma,
+        events: { sendUserMessage },
+        jobs: { enqueue: vi.fn() },
+        send: vi.fn(),
+        ...(configured ? { storeAttachment } : {}),
+        providerId: "slack",
         botId: "bot-1",
-        clientNonce: "teamchat-attachment:external-1:0",
-      }),
-    );
-    expect(sendUserMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        blocks: [
-          { kind: "text", text: "[file: huge.mov (unavailable)]" },
-          { kind: "image", artifactId: "artifact-1", mimeType: "image/png", name: "screen.png" },
-        ],
-        createRun: false,
-      }),
-    );
-  });
+      });
+      (
+        bridge as unknown as {
+          target: { id: string; spaceId: string; userId: string; name: string };
+        }
+      ).target = { id: "bot-1", spaceId: "space-1", userId: "owner-1", name: "Chief" };
+      const fetch = vi.fn(async () => new Uint8Array([1, 2, 3]));
+
+      await bridge.receive(
+        {
+          eventId: "Ev-files",
+          workspaceId: "T-1",
+          kind: "ambient",
+          conversationKey: "C-1",
+          conversationId: "slack:C-1:",
+          replyThreadId: null,
+          senderId: "U-1",
+          senderName: "Ada",
+          content: "",
+          attachments: [
+            { name: "screen.png", mimeType: "image/png", size: 3, fetch },
+            { name: 'huge]\n["\u0000\u202e.mov', mimeType: "video/quicktime", size: 99, fetch },
+          ],
+        },
+        { queueAgent: false },
+      );
+
+      if (configured)
+        expect(storeAttachment).toHaveBeenCalledWith(
+          expect.objectContaining({
+            spaceId: "space-1",
+            userId: "owner-1",
+            botId: "bot-1",
+            clientNonce: "teamchat-attachment:external-1:0",
+          }),
+        );
+      else expect(storeAttachment).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blocks: configured
+            ? [
+                { kind: "text", text: "[file: huge .mov (unavailable)]" },
+                {
+                  kind: "image",
+                  artifactId: "artifact-1",
+                  mimeType: "image/png",
+                  name: "screen.png",
+                },
+              ]
+            : [
+                {
+                  kind: "text",
+                  text: "[file: screen.png (unavailable)]\n[file: huge .mov (unavailable)]",
+                },
+              ],
+          createRun: false,
+        }),
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
 
   describe("thread history", () => {
     function setup(input: { knownThread: boolean; history?: TeamChatInboundMessage[] | Error }) {
@@ -449,7 +469,9 @@ describe("team chat bridge", () => {
         if (input.history instanceof Error) throw input.history;
         return input.history ?? [];
       });
-      const storeAttachment = vi.fn(async (request: { attachment: { name: string } }) => ({
+      const storeAttachment = vi.fn<
+        NonNullable<ConstructorParameters<typeof TeamChatBridge>[0]["storeAttachment"]>
+      >(async (request) => ({
         id: `artifact-${request.attachment.name}`,
         name: request.attachment.name,
         mimeType: "image/png",
@@ -508,7 +530,7 @@ describe("team chat bridge", () => {
       const { bridge, upsert, sendUserMessage, storeAttachment } = setup({
         knownThread: false,
         history: [
-          earlier("100.1", ["a.png", "b.png"]),
+          earlier("100.1", ["a.png", 'b]\n["\u001b.png']),
           earlier("100.2", ["c.png", "d.png", "e.png"]),
         ],
       });
@@ -530,7 +552,7 @@ describe("team chat bridge", () => {
       ]);
       expect(sendUserMessage.mock.calls[0]?.[0]).toMatchObject({
         blocks: [
-          { kind: "text", text: "message 100.1\n[file: b.png (unavailable)]" },
+          { kind: "text", text: "message 100.1\n[file: b .png (unavailable)]" },
           { kind: "image", artifactId: "artifact-a.png" },
         ],
       });
@@ -619,25 +641,70 @@ describe("team chat bridge", () => {
       ).toBe(0);
     });
 
-    it("skips remaining history files after the shared download deadline", async () => {
+    it("reuses stored history files after the deadline without fetching unstored files", async () => {
       vi.useFakeTimers();
       try {
         const { bridge, storeAttachment, sendUserMessage } = setup({
           knownThread: false,
-          history: [earlier("100.1", ["a.png"]), earlier("100.2", ["b.png"])],
+          history: [
+            earlier("100.1", ["a.png"]),
+            earlier("100.2", ["b.png"]),
+            earlier("100.3", ["c.png"]),
+          ],
         });
-        storeAttachment.mockImplementationOnce(async () => {
-          vi.setSystemTime(Date.now() + 2_000);
-          throw new Error("Attachment download timed out");
+        const replay = {
+          id: "stored-b",
+          botId: "bot-1",
+          groupId: null,
+          runId: null,
+          name: "b.png",
+          mimeType: "image/png",
+          size: 3,
+          version: 1,
+          createdAt: new Date(),
+        };
+        const findFirst = vi.fn(async ({ where }: { where: { clientNonce: string } }) =>
+          where.clientNonce === "teamchat-attachment:external-100.2:0" ? replay : null,
+        );
+        const fetch = vi.fn(async () => new Uint8Array([1]));
+        const put = vi.fn();
+        storeAttachment.mockImplementation(async (request) => {
+          if (request.attachment.name === "a.png") {
+            vi.setSystemTime(Date.now() + 2_000);
+            throw new Error("Attachment download timed out");
+          }
+          return storeInboundAttachment(
+            {
+              prisma: { artifact: { findFirst } } as unknown as PrismaClient,
+              artifacts: { put } as unknown as ArtifactStore,
+            },
+            { spaceId: request.spaceId, userId: request.userId },
+            { ...request, attachment: { ...request.attachment, fetch } },
+          );
         });
         await bridge.receive(mention, { queueAgent: false });
-        expect(storeAttachment).toHaveBeenCalledOnce();
-        expect(storeAttachment.mock.calls[0]?.[0]).toMatchObject({
-          downloadDeadline: expect.any(Number),
+        expect(storeAttachment).toHaveBeenCalledTimes(3);
+        expect(findFirst).toHaveBeenCalledWith({
+          where: {
+            spaceId: "space-1",
+            userId: "owner-1",
+            clientNonce: "teamchat-attachment:external-100.2:0",
+          },
         });
         expect(sendUserMessage.mock.calls[1]?.[0]).toMatchObject({
-          blocks: [{ kind: "text", text: "message 100.2\n[file: b.png (unavailable)]" }],
+          blocks: [
+            { kind: "text", text: "message 100.2" },
+            { kind: "image", artifactId: "stored-b", name: "b.png" },
+          ],
         });
+        expect(sendUserMessage.mock.calls[2]?.[0]).toMatchObject({
+          blocks: [{ kind: "text", text: "message 100.3\n[file: c.png (unavailable)]" }],
+        });
+        const deadlines = storeAttachment.mock.calls.map(([request]) => request.downloadDeadline);
+        expect(new Set(deadlines).size).toBe(1);
+        expect(deadlines[0]).toBeLessThanOrEqual(Date.now());
+        expect(fetch).not.toHaveBeenCalled();
+        expect(put).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

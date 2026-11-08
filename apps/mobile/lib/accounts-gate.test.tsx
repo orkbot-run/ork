@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { tokensForAppearance } from "@orkbot/ui-tokens";
+import * as Clipboard from "expo-clipboard";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { Alert } from "react-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { redirectSystemPath } from "../app/+native-intent";
 import { AccountsGate } from "../components/accounts-gate";
@@ -44,10 +46,12 @@ vi.mock("expo-secure-store", () => ({
   },
 }));
 vi.mock("expo-splash-screen", () => ({ hideAsync: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn().mockResolvedValue(true) }));
 vi.mock("../components/logo-avatar", () => ({
   LogoAvatar: ({ identity }: { identity: string }) => <span data-welcome-avatar={identity} />,
 }));
 vi.mock("react-native", () => ({
+  Alert: { alert: vi.fn() },
   AppState: {
     addEventListener: (_event: string, listener: (value: string) => void) => {
       state.appListeners.add(listener);
@@ -198,8 +202,162 @@ beforeEach(() => {
 });
 afterEach(async () => {
   await act(async () => root.unmount());
+  vi.useRealTimers();
   host.remove();
   vi.unstubAllGlobals();
+});
+
+it("offers newly authorized servers without changing the active server", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  await render();
+  const next = {
+    ...remote,
+    id: "00000000-0000-4000-8000-000000000002",
+    url: "https://new.example.test",
+  };
+  vi.mocked(accountServers).mockResolvedValue([remote, next]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(Alert.alert).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Product screen");
+  expect(saveApiBase).toHaveBeenCalledTimes(1);
+  const buttons = vi.mocked(Alert.alert).mock.calls[0]![2]!;
+  await act(async () => {
+    buttons.find((button) => button.text === "Open servers")?.onPress?.();
+  });
+  expect(host.textContent).toContain("new.example.test");
+  expect(saveApiBase).toHaveBeenCalledTimes(1);
+});
+
+it("ignores a directory response after the account changes", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  await render();
+  let release!: (entries: (typeof remote)[]) => void;
+  vi.mocked(accountServers).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  vi.mocked(accountsIdentity).mockResolvedValue(null);
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  await act(async () => {
+    release([remote, { ...remote, id: "00000000-0000-4000-8000-000000000002" }]);
+  });
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(host.textContent).not.toContain("Product screen");
+});
+
+it("pauses discovery while the application is in the background", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  await render();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("background");
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(30_000);
+  });
+  expect(accountServers).toHaveBeenCalledTimes(1);
+  expect(Alert.alert).not.toHaveBeenCalled();
+});
+
+it("updates the server chooser when a server is authorized", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  vi.mocked(accountServers).mockResolvedValue([]);
+  await render();
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  vi.mocked(accountServers).mockResolvedValue([remote]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(host.textContent).toContain("server.example.test");
+  expect(Alert.alert).not.toHaveBeenCalled();
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("does not notify for the active server or stack multiple alerts", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  await render();
+  const duplicate = { ...remote, id: "00000000-0000-4000-8000-000000000002" };
+  vi.mocked(accountServers).mockResolvedValue([remote, duplicate]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(Alert.alert).not.toHaveBeenCalled();
+  const first = { ...duplicate, url: "https://new.example.test" };
+  const second = { ...first, id: "00000000-0000-4000-8000-000000000003" };
+  vi.mocked(accountServers).mockResolvedValue([remote, first]);
+  // A replacement keeps the UUID, so it is not a newly registered directory entry.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(Alert.alert).not.toHaveBeenCalled();
+  vi.mocked(accountServers).mockResolvedValue([remote, first, second]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(Alert.alert).toHaveBeenCalledOnce();
+  const third = { ...second, id: "00000000-0000-4000-8000-000000000004" };
+  vi.mocked(accountServers).mockResolvedValue([remote, first, second, third]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  expect(Alert.alert).toHaveBeenCalledOnce();
+});
+
+it("ignores an alert action after the account changes", async () => {
+  vi.useFakeTimers();
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  await render();
+  const next = {
+    ...remote,
+    id: "00000000-0000-4000-8000-000000000002",
+    url: "https://new.example.test",
+  };
+  vi.mocked(accountServers).mockResolvedValue([remote, next]);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(15_000);
+  });
+  const open = vi
+    .mocked(Alert.alert)
+    .mock.calls[0]![2]!.find((button) => button.text === "Open servers")!.onPress!;
+  vi.mocked(accountsIdentity).mockResolvedValue(null);
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  await act(async () => {
+    open();
+  });
+  expect(host.textContent).not.toContain("new.example.test");
+  expect(host.textContent).toContain("Get started");
 });
 async function render() {
   await act(async () =>
@@ -355,10 +513,13 @@ it("keeps a verified account at server recovery when the directory is unavailabl
   expect(host.textContent).toContain("server.example.test");
   expect(host.querySelector("input")).toBeNull();
   await act(async () =>
-    [...host.querySelectorAll("button")].find((item) => item.textContent === "Add")!.click(),
+    [...host.querySelectorAll("button")]
+      .find((item) => item.textContent === "Self-hosted")!
+      .click(),
   );
   expect(host.querySelector("input")).toBeNull();
-  expect(host.textContent).toContain("Pairing code");
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  expect(host.textContent).not.toContain("Pairing code");
 });
 
 it("offers other servers after the remembered server fails verification without mounting product", async () => {
@@ -716,17 +877,16 @@ it.each(["server", "product-session"])(
   },
 );
 
-it("generates a code without a URL field or incoming server link", async () => {
+it("shows the install command without creating a pairing code", async () => {
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   vi.mocked(accountServers).mockResolvedValue([]);
   await render();
   expect(host.querySelector("input")).toBeNull();
-  await click("Pairing code");
-  expect(beginServerPairing).toHaveBeenCalledWith(
-    JSON.stringify([identity.issuer, identity.subject]),
-    expect.any(AbortSignal),
-  );
-  expect(host.textContent).toContain("AB2 3CD");
+  expect(beginServerPairing).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  expect(host.textContent).toContain("Copy command");
+  await click("Copy command");
+  expect(Clipboard.setStringAsync).toHaveBeenCalledWith("curl -fsSL https://install.ork.run | sh");
   expect(host.textContent).not.toContain("Approve server");
   expect(saveApiBase).not.toHaveBeenCalled();
 });

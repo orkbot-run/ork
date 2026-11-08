@@ -125,6 +125,18 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await expect(settings.getByRole("button", { name: "Export", exact: true })).toBeVisible();
   await expect(settings.locator('label[for$="-model"]')).toHaveClass("sr-only");
   await expect(modelSelect).toBeVisible();
+  const replyMode = settings.getByRole("combobox", { name: "Reply mode", exact: true });
+  await expect(replyMode).toHaveValue("chat");
+  await replyMode.selectOption("explicit");
+  await expect
+    .poll(async () => {
+      const bot = (await rpc(page, "bots/get", { botId: deletedBotPath.split("/").at(-1) })) as {
+        replyMode?: string;
+      };
+      return bot.replyMode;
+    })
+    .toBe("explicit");
+  await captureScreenshot(page, testInfo, "bot-settings-explicit-replies");
   const dailyCheckIns = settings.getByRole("switch", {
     name: "Daily check-ins on unfinished work",
     exact: true,
@@ -140,6 +152,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await page.getByRole("button", { name: "Close panel" }).click();
   await openBotPanelTab(page, "Advanced");
   await expect(openWork.getByText("First fixture task", { exact: true })).toBeVisible();
+  await expect(replyMode).toHaveValue("explicit");
   await openWork.getByRole("button", { name: "Add open work" }).click();
   await openWork.getByRole("textbox", { name: "New open-work item" }).fill("Second fixture task");
   await openWork.getByRole("button", { name: "Add", exact: true }).click();

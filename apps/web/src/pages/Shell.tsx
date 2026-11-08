@@ -13,6 +13,7 @@ import type {
 } from "@orkbot/contracts";
 import { DEFAULT_NEW_BOT_AVATAR_SET } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   answerableAskMessageIds,
   canConfigureComputers,
   channelMessageSender,
@@ -24,6 +25,7 @@ import {
   isRunWorking,
   memberName,
   newClientId,
+  routineWorkContext,
 } from "@orkbot/core";
 import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
@@ -72,7 +74,7 @@ import type { Panel } from "../lib/right-panel-state";
 import { rightPanelStorageKey } from "../lib/right-panel-state";
 import { createSpaceRpc, selectedSpaceId, selectSpace } from "../lib/rpc";
 import { markShellReady, useSpaceEpoch } from "../lib/space-switch";
-import { activeThreadRuns } from "../lib/thread-events";
+
 import { getToolActivityEnabled, subscribeToolActivity } from "../lib/tool-activity-preference";
 import type { AppearancePreference } from "../lib/ui-appearance";
 import { getUiAppearancePreference, setUiAppearance } from "../lib/ui-appearance";
@@ -1196,6 +1198,7 @@ function SpaceShell() {
               enterToSend={enterToSend}
               activeName={inGroup ? (activeGroup?.name ?? activeSnapshot?.groupName) : active?.name}
               running={composerRunning}
+              routineWork={routineWorkContext(currentRuns)}
               disabled={Boolean(recordingSkill)}
               pendingAttachments={composer.activePendingAttachments}
               attachmentNotice={composer.attachmentNotice}
@@ -1331,6 +1334,7 @@ function SpaceShell() {
         routinesPanel={
           <RoutineList
             routines={activeRoutines}
+            stopAll={currentRuns.length > 1}
             runningRoutineId={
               snapshot?.run && isActive(snapshot.run.status)
                 ? (snapshot.run.routineId ?? undefined)

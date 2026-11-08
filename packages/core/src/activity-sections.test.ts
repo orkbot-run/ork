@@ -1,6 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; activity chat identity regressions follow LICENSE.md.
+
 import type { RunStatus } from "@orkbot/contracts";
 import { expect, it } from "vitest";
-import { activityAttention, activitySections } from "./activity-sections.js";
+import { activityAttention, activityChatKey, activitySections } from "./activity-sections.js";
 import { STUCK_WORK_NOTIFY_AFTER_MS } from "./stuck-work.js";
 
 const now = new Date().toISOString();
@@ -82,4 +86,11 @@ it("lets live work speak for a chat over its older outcome", () => {
   expect(sections.working).toEqual([working]);
   expect(sections.unreadBots).toEqual([]);
   expect(sections.unreadGroups).toEqual([]);
+});
+
+it("uses the same chat for group member runs and distinct bot/group ID namespaces", () => {
+  expect(activityChatKey(run("member-a", "completed", "shared"))).toBe("group:shared");
+  expect(activityChatKey(run("member-b", "failed", "shared"))).toBe("group:shared");
+  expect(activityChatKey(run("shared", "completed"))).toBe("bot:shared");
+  expect(activityChatKey(run("member-a", "completed", "other"))).toBe("group:other");
 });

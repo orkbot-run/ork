@@ -1,17 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared preference integration follows LICENSE.md.
+
+import { browserPreference, preferenceStorage } from "./persisted-preference";
+
 export const COMPOSER_ENTER_TO_SEND_STORAGE_KEY = "orkbot.runposerEnterToSend";
-
 type EnterToSendStorage = Pick<Storage, "getItem" | "setItem">;
-
-const listeners = new Set<() => void>();
-let memoryPreference: boolean | null = null;
-
-function getLocalStorage(): EnterToSendStorage | null {
-  try {
-    return typeof localStorage === "undefined" ? null : localStorage;
-  } catch {
-    return null;
-  }
-}
 
 function detectCoarsePointer(): boolean {
   try {
@@ -41,51 +35,29 @@ export function normalizeComposerEnterToSend(
   return defaultComposerEnterToSend(coarsePointer);
 }
 
-function readStoredComposerEnterToSend(
-  storage: EnterToSendStorage | null,
-  coarsePointer?: boolean,
-): boolean {
-  if (!storage) return defaultComposerEnterToSend(coarsePointer);
-  let raw: string | null = null;
-  try {
-    raw = storage.getItem(COMPOSER_ENTER_TO_SEND_STORAGE_KEY);
-  } catch {
-    raw = null;
-  }
-  return normalizeComposerEnterToSend(raw, coarsePointer);
-}
+const preference = browserPreference(
+  COMPOSER_ENTER_TO_SEND_STORAGE_KEY,
+  normalizeComposerEnterToSend,
+  (value) => (value ? "1" : "0"),
+);
 
 export function getComposerEnterToSend(
-  storage: EnterToSendStorage | null = getLocalStorage(),
+  storage: EnterToSendStorage | null = preferenceStorage(),
   coarsePointer?: boolean,
 ): boolean {
-  if (memoryPreference !== null) return memoryPreference;
-  memoryPreference = readStoredComposerEnterToSend(storage, coarsePointer);
-  return memoryPreference;
+  return preference.initialize(
+    () => storage?.getItem(COMPOSER_ENTER_TO_SEND_STORAGE_KEY) ?? null,
+    (raw) => normalizeComposerEnterToSend(raw, coarsePointer),
+  );
 }
-
-function persistComposerEnterToSend(preference: boolean, storage: EnterToSendStorage | null): void {
-  if (!storage) return;
-  try {
-    storage.setItem(COMPOSER_ENTER_TO_SEND_STORAGE_KEY, preference ? "1" : "0");
-  } catch {
-    // Private browsing etc: keep the in-memory value.
-  }
-}
-
 export function setComposerEnterToSend(
-  preference: boolean,
-  storage: EnterToSendStorage | null = getLocalStorage(),
+  value: boolean,
+  storage: EnterToSendStorage | null = preferenceStorage(),
 ): boolean {
-  memoryPreference = preference;
-  persistComposerEnterToSend(preference, storage);
-  for (const listener of listeners) listener();
-  return preference;
+  return preference.set(value, (serialized) => {
+    if (!storage) return false;
+    storage.setItem(COMPOSER_ENTER_TO_SEND_STORAGE_KEY, serialized);
+    return true;
+  });
 }
-
-export function subscribeComposerEnterToSend(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+export const subscribeComposerEnterToSend = preference.subscribe;

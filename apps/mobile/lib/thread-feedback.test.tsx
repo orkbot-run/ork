@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited behavior remains Apache-2.0; Ork changes share thread state handling.
+
 // @vitest-environment jsdom
 
 import * as core from "@orkbot/core";
@@ -22,6 +27,7 @@ import {
   restoreUnsentSends,
   sendWaitingMessages,
   settleComposer,
+  subscribeDelivered,
   useThreadFeedback,
 } from "./thread-feedback";
 
@@ -181,6 +187,27 @@ describe("scoped mobile outbox", () => {
     act(() => root.unmount());
     clearFailedSends();
     vi.unstubAllGlobals();
+  });
+  it("passes the accepted run receipt through the existing delivery callback", async () => {
+    request.mockResolvedValue({ seq: 42, runId: "receipt-run", taskId: "receipt-task" });
+    const delivered = vi.fn();
+    const unsubscribe = subscribeDelivered(delivered);
+    try {
+      const attempt = feedback.sendAttempt(payload());
+      await act(async () => {
+        await feedback.send(attempt);
+      });
+      expect(attempt.acceptedSeq).toBe(42);
+      expect(attempt.acceptedRun).toEqual({
+        botId: "bot-1",
+        runId: "receipt-run",
+        taskId: "receipt-task",
+      });
+      expect(delivered).toHaveBeenCalledOnce();
+      expect(delivered).toHaveBeenCalledWith(attempt);
+    } finally {
+      unsubscribe();
+    }
   });
   it("shows the optimistic payload before confirmation, then replaces it with the echo", async () => {
     let finish!: (value: { seq: number }) => void;

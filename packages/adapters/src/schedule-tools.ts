@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Rakazo contributors (inherited material)
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 material is preserved; cross-chat routine discovery and diagnostics are Ork additions.
+
 import type { ConnectorProvider, JobPublisher } from "@orkbot/adapter-kit";
 import { routineJobKey, routineWakeupJob } from "@orkbot/adapter-kit";
 import type { RoutineWatch } from "@orkbot/contracts";
@@ -729,7 +734,7 @@ async function createWatchFromTool(
   };
 }
 
-/** List bot routines, optionally restricted to the current group thread. */
+/** List this owner's bot routines and mark those belonging to the current group. */
 export async function listSchedulesFromTool(
   deps: Pick<ScheduleToolDeps, "prisma">,
   input: { spaceId: string; botId: string; userId: string; threadId?: string },
@@ -739,13 +744,13 @@ export async function listSchedulesFromTool(
       spaceId: input.spaceId,
       botId: input.botId,
       userId: input.userId,
-      ...(input.threadId ? { threadId: input.threadId } : {}),
     },
     orderBy: { createdAt: "desc" },
   });
   return {
     routines: rows.map((row) => ({
       routineId: row.id,
+      ...(input.threadId ? { inThisChat: row.threadId === input.threadId } : {}),
       name: row.name,
       prompt: row.prompt,
       crons: row.crons,
@@ -788,7 +793,7 @@ const WATCH_RETIME_ERROR =
 
 /**
  * Edit one of this bot's routines in place: name, prompt, timing (with startAt), or active.
- * Scoped like cancel, so another bot's or another thread's routine reads as not found.
+ * Scoped like cancel; only owned routines outside this group receive a scope diagnostic.
  */
 export async function updateScheduleFromTool(
   deps: ScheduleToolDeps,
@@ -824,7 +829,22 @@ export async function updateScheduleFromTool(
   const existing = await deps.prisma.routine.findFirst({
     where: { ...scope, id: routineId, bot: { archivedAt: null } },
   });
-  if (!existing) return { error: "Schedule not found." };
+  if (!existing) {
+    const outside = input.scopeThreadId
+      ? await deps.prisma.routine.findFirst({
+          where: {
+            spaceId: input.spaceId,
+            botId: input.botId,
+            userId: input.userId,
+            id: routineId,
+            bot: { archivedAt: null },
+            OR: [{ threadId: null }, { threadId: { not: input.scopeThreadId } }],
+          },
+          select: { id: true },
+        })
+      : null;
+    return { error: outside ? OUTSIDE_CHAT_SCHEDULE_ERROR : "Schedule not found." };
+  }
 
   let timezone = existing.timezone;
   if (input.timezone !== undefined) {
@@ -940,6 +960,9 @@ export async function updateScheduleFromTool(
   };
 }
 
+const OUTSIDE_CHAT_SCHEDULE_ERROR =
+  "This schedule belongs to another chat. Update or cancel it from its original chat.";
+
 /** Cancel a bot routine, optionally restricted to the current group thread. */
 export async function cancelScheduleFromTool(
   deps: ScheduleToolDeps,
@@ -967,7 +990,21 @@ export async function cancelScheduleFromTool(
   const existing = await deps.prisma.routine.findFirst({
     where: { ...scope, ...(routineId ? { id: routineId } : { name: name! }) },
   });
-  if (!existing) return { error: "Schedule not found." };
+  if (!existing) {
+    const outside = input.threadId
+      ? await deps.prisma.routine.findFirst({
+          where: {
+            spaceId: input.spaceId,
+            botId: input.botId,
+            userId: input.userId,
+            ...(routineId ? { id: routineId } : { name: name! }),
+            OR: [{ threadId: null }, { threadId: { not: input.threadId } }],
+          },
+          select: { id: true },
+        })
+      : null;
+    return { error: outside ? OUTSIDE_CHAT_SCHEDULE_ERROR : "Schedule not found." };
+  }
 
   // The scope is part of the delete, so the routine cannot change hands between the read and it.
   const { count } = await deps.prisma.routine.deleteMany({ where: { ...scope, id: existing.id } });

@@ -1,11 +1,15 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 thread behavior is preserved. Shared reconciliation follows LICENSE.md.
+
 import type { ThreadSnapshot } from "@orkbot/contracts";
+import { threadRunError } from "@orkbot/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   readSeenRunErrorIds,
   rememberSeenRunErrorId,
   SEEN_RUN_ERROR_LIMIT,
 } from "./run-error-storage";
-import { threadRunError } from "./thread-events";
 
 function storage(values = new Map<string, string>()) {
   return {

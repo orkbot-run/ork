@@ -11,6 +11,7 @@ import type {
   ComputerInput,
   ComputerRef,
   ControlLeaseRef,
+  DirectoryExportLimits,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -282,6 +283,29 @@ export class HostAwareSandbox implements SandboxProvider {
 
   listFiles(computer: ComputerRef, path: string, context: AdapterContext) {
     return this.route(computer).listFiles(computer, path, context);
+  }
+
+  sharesWorkspace(computer: ComputerRef) {
+    return this.route(computer).sharesWorkspace?.(computer) ?? false;
+  }
+
+  readTransferFile(computer: ComputerRef, path: string, context: AdapterContext, maxBytes: number) {
+    const provider = this.route(computer);
+    if (!provider.readTransferFile)
+      throw new Error("File transfer is unsupported on this computer");
+    return provider.readTransferFile(computer, path, context, maxBytes);
+  }
+
+  exportDirectory(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    limits: DirectoryExportLimits,
+  ) {
+    const provider = this.route(computer);
+    if (!provider.exportDirectory)
+      throw new Error("Directory transfer is unsupported on this computer");
+    return provider.exportDirectory(computer, path, context, limits);
   }
 
   readFile(

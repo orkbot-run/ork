@@ -1298,6 +1298,7 @@ msgid "Chart failed to render: {error}"
 msgstr "Chart failed to render: {error}"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 msgid "Chat"
 msgstr "Chat"
 
@@ -1356,6 +1357,10 @@ msgstr "Check in."
 #: src/lib/model-connection-preflight.ts
 msgid "Check the API key or sign-in, then test again."
 msgstr "Check the API key or sign-in, then test again."
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Check the chat first. Marking the result resumes queued messages without resending this message."
+msgstr "Check the chat first. Marking the result resumes queued messages without resending this message."
 
 #: src/lib/model-connection-preflight.ts
 msgid "Check the server URL and network, then test again."
@@ -1464,6 +1469,7 @@ msgstr "Clearing…"
 
 #: src/components/ErrorBoundary.tsx
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PeerMessagesOverlay.tsx
@@ -2291,6 +2297,7 @@ msgstr "Could not run routine"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
 msgid "Could not save"
@@ -2435,6 +2442,7 @@ msgstr "Could not update the default memory scope"
 msgid "Couldn't load grants"
 msgstr "Couldn't load grants"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't load messaging settings"
 msgstr "Couldn't load messaging settings"
@@ -2451,6 +2459,7 @@ msgstr "Couldn't load submissions"
 msgid "Couldn't load your wallet"
 msgstr "Couldn't load your wallet"
 
+#: src/pages/MessagingDeliveryReview.tsx
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Couldn't update messaging settings"
 msgstr "Couldn't update messaging settings"
@@ -3901,9 +3910,17 @@ msgstr "Manual"
 msgid "Manual setup required"
 msgstr "Manual setup required"
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as not sent"
+msgstr "Mark as not sent"
+
 #: src/pages/BotContextMenu.tsx
 msgid "Mark as Read"
 msgstr "Mark as Read"
+
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Mark as sent"
+msgstr "Mark as sent"
 
 #: src/pages/shell/message-hover-actions.tsx
 msgid "Mark as unread"
@@ -5351,6 +5368,10 @@ msgstr "Reply"
 msgid "Reply cancelled"
 msgstr "Reply cancelled"
 
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Reply mode"
+msgstr "Reply mode"
+
 #. placeholder {0}: replyNameRef.current
 #: src/pages/shell/composer.tsx
 msgid "Replying to {0}"
@@ -5473,6 +5494,10 @@ msgstr "Return to Ork"
 msgid "Review data sharing before continuing."
 msgstr "Review data sharing before continuing."
 
+#: src/pages/MessagingDeliveryReview.tsx
+msgid "Review delivery"
+msgstr "Review delivery"
+
 #: src/lib/model-connection-preflight.ts
 msgid "Review provider settings and test again."
 msgstr "Review provider settings and test again."
@@ -5501,6 +5526,10 @@ msgstr "Rotate key"
 msgid "Routine"
 msgstr "Routine"
 
+#: src/pages/shell/composer.tsx
+msgid "Routine: {names}"
+msgstr "Routine: {names}"
+
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Routines"
@@ -5509,6 +5538,10 @@ msgstr "Routines"
 #: src/pages/Paywall.tsx
 msgid "Routines that run while you're away"
 msgstr "Routines that run while you're away"
+
+#: src/pages/shell/composer.tsx
+msgid "Routines: {names}"
+msgstr "Routines: {names}"
 
 #: src/components/markdown-copy.tsx
 msgid "Row"
@@ -6180,6 +6213,15 @@ msgstr "Steps"
 msgid "Stop"
 msgstr "Stop"
 
+#: src/pages/shell/composer.tsx
+msgid "Stop {name}"
+msgstr "Stop {name}"
+
+#: src/pages/RoutineEditor.tsx
+#: src/pages/shell/composer.tsx
+msgid "Stop all"
+msgstr "Stop all"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Stop computer"
 msgstr "Stop computer"
@@ -6825,6 +6867,10 @@ msgstr "Update server"
 #: src/pages/settings-nav.ts
 msgid "Updates"
 msgstr "Updates"
+
+#: src/pages/shell/bot-reply-mode.tsx
+msgid "Updates and final reply"
+msgstr "Updates and final reply"
 
 #. placeholder {0}: update.name
 #: src/components/ComputerUpdateProgress.tsx

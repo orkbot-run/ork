@@ -6,6 +6,7 @@ import type { ServerPairing, ServerPairingState } from "@orkbot/contracts";
 import {
   createServerConnectLink,
   parseServerConnectLink,
+  SERVER_INSTALL_COMMAND,
   SERVER_PAIRING_ALPHABET,
   SERVER_PAIRING_LIFETIME_SECONDS,
 } from "@orkbot/contracts";
@@ -22,27 +23,11 @@ type Startup = {
   kind?: Server["kind"];
   message?: string;
 };
-type Installation = { id: string; command: string; expiresAt: string; url: string | null };
-type InstallationStatus = {
-  id: string;
-  url: string | null;
-  phase:
-    | "waiting"
-    | "preparing"
-    | "pulling"
-    | "starting"
-    | "waiting-healthy"
-    | "ready"
-    | "failed"
-    | "expired";
-  expiresAt: string;
-};
 type Screen = "checking" | "welcome" | "accounts" | "servers" | "selfhost" | "local" | "opening";
 type Operation =
   | "session"
   | "signin"
   | "directory"
-  | "install"
   | "pair"
   | "approve"
   | "connect"
@@ -93,13 +78,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let disposed = false;
   let startup: Startup = { phase: "checking" };
   let failedServer: { id: string; local: boolean } | null = null;
-  let expiryTimer: number | undefined;
-  let pollTimer: number | undefined;
-  let installation: Installation | null = null;
-  let installationVersion = 0;
-  let installing = false;
-  let copyDeadline = 0;
-  let installationDeadline = 0;
+  let directoryOwner: Account | null = null;
+  let directoryServers = new Set<string>();
+  let directoryReady = false;
+  let directoryPolling = false;
+  let directorySnapshot = "";
   const cleanups: (() => void)[] = [];
   const current = (version: number) => !disposed && generation === version;
 
@@ -145,22 +128,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       void transport.invoke("cancel_server_pairing", { requestId }).catch(() => undefined);
   }
 
-  function clearInstallation() {
-    win?.clearTimeout(expiryTimer);
-    win?.clearTimeout(pollTimer);
-    installationVersion++;
-    installation = null;
-    installing = false;
-    copyDeadline = 0;
-    installationDeadline = 0;
-    command.value = "";
-    element("installation").hidden = true;
-    element("installation-status").textContent = "";
-    element("expires").textContent = "";
-    element("copy").textContent = t("Copy command");
-    element("create-installation").hidden = false;
-  }
-
   function controls() {
     for (const button of doc.querySelectorAll<HTMLButtonElement>("button")) {
       button.disabled = operation !== null;
@@ -169,12 +136,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element<HTMLButtonElement>("sign-out").disabled = operation === "logout";
     element<HTMLButtonElement>("cancel-sign-in").disabled = operation === "logout";
     element<HTMLButtonElement>("back").disabled =
-      startup.phase === "opening" ||
-      (operation !== null &&
-        operation !== "install" &&
-        operation !== "directory" &&
-        operation !== "pair" &&
-        operation !== "approve");
+      screen !== "local" &&
+      (startup.phase === "opening" ||
+        (operation !== null &&
+          operation !== "directory" &&
+          operation !== "pair" &&
+          operation !== "approve"));
     element("sign-out").hidden = !account;
     element("back").hidden = !["accounts", "selfhost", "local"].includes(screen);
     element("browser-hint").hidden = !browserSignIn;
@@ -184,7 +151,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       screen !== "local" || operation !== null || startup.phase === "opening";
     element("retry-server").hidden = screen !== "servers" || !failedServer;
     input.disabled = operation !== null;
+    element("setup").hidden = !pendingInitialization;
+    element("installation").hidden = pendingInitialization || !!pairingRequest;
     element("legacy-target").hidden = !pendingInitialization;
+    input.readOnly = pendingInitialization;
     input.required = pendingInitialization;
     element("connect").textContent = t(pendingInitialization ? "Continue" : "New pairing key");
     element<HTMLButtonElement>("cancel-pairing").disabled = operation === "logout";
@@ -195,7 +165,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   function show(next: Screen, focus = true) {
     if (screen !== next) {
       clearPairing();
-      clearInstallation();
       status.textContent = "";
       delete status.dataset.error;
       output.textContent = "";
@@ -339,6 +308,15 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   async function loadServers(version: number): Promise<Server[]> {
     const entries = await transport.invoke<Server[]>("list_servers");
     if (!current(version)) return [];
+    renderServers(entries);
+    return entries;
+  }
+
+  function renderServers(entries: Server[]) {
+    directoryOwner = account;
+    directoryServers = new Set(entries.map((entry) => entry.id));
+    directoryReady = true;
+    directorySnapshot = JSON.stringify(entries);
     servers.replaceChildren();
     for (const entry of entries) {
       const row = doc.createElement("div");
@@ -386,8 +364,53 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     }
     element("account").textContent =
       account?.userinfo.name ?? account?.userinfo.email ?? "Accounts";
-    return entries;
   }
+
+  async function refreshWaitingServers() {
+    if (
+      disposed ||
+      doc.hidden ||
+      !account ||
+      operation ||
+      directoryPolling ||
+      pendingServer ||
+      pendingInitialization ||
+      pairingRequest ||
+      (screen !== "servers" && screen !== "selfhost")
+    )
+      return;
+    const owner = account;
+    const version = generation;
+    const activeScreen = screen;
+    const previous = directoryOwner === owner && directoryReady ? directoryServers : null;
+    directoryPolling = true;
+    try {
+      const entries = await transport.invoke<Server[]>("list_servers");
+      if (
+        !current(version) ||
+        account !== owner ||
+        operation ||
+        screen !== activeScreen ||
+        pendingServer ||
+        pendingInitialization ||
+        pairingRequest
+      )
+        return;
+      const found =
+        previous !== null &&
+        entries.some((entry) => entry.kind === "selfhosted" && !previous.has(entry.id));
+      if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot)
+        renderServers(entries);
+      if (found && activeScreen === "selfhost") show("servers");
+    } catch {
+      // A directory outage does not interrupt the current setup screen.
+    } finally {
+      directoryPolling = false;
+    }
+  }
+
+  const directoryTimer = win.setInterval(() => void refreshWaitingServers(), 15_000);
+  cleanups.push(() => win.clearInterval(directoryTimer));
 
   async function openServer(
     version: number,
@@ -525,7 +548,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (!account || operation || screen !== "selfhost" || pendingInitialization) return;
     discardPendingServer();
     clearPairing();
-    clearInstallation();
     const requestId = createPersonalOrkId();
     pairingRequest = requestId;
     const version = pairingVersion;
@@ -616,119 +638,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     );
   }
 
-  function expireInstallation() {
-    clearInstallation();
-    element("installation-status").textContent = t(
-      "The install command has expired. Create a new one.",
-    );
-  }
-
-  async function pollInstallation(value: Installation, version: number) {
-    const active = () =>
-      !disposed &&
-      screen === "selfhost" &&
-      !!account &&
-      installation === value &&
-      installationVersion === version;
-    if (!active()) return;
-    if (installationDeadline <= Date.now()) {
-      expireInstallation();
-      return;
-    }
-    try {
-      const result = await transport.invoke<InstallationStatus>("get_server_installation", {
-        id: value.id,
-      });
-      if (!active()) return;
-      if (result.id !== value.id) throw new Error("Unexpected installation");
-      if (result.phase === "expired") {
-        expireInstallation();
-        return;
-      }
-      const deadline = Date.parse(result.expiresAt);
-      if (!Number.isFinite(deadline)) throw new Error("Invalid installation deadline");
-      installationDeadline = Math.min(deadline, Date.now() + 3_600_000);
-      win?.clearTimeout(expiryTimer);
-      expiryTimer = win?.setTimeout(
-        expireInstallation,
-        Math.max(0, installationDeadline - Date.now()),
-      );
-      if (result.phase === "failed") {
-        installing = false;
-        copyDeadline = Date.parse(result.expiresAt);
-        command.value = value.command;
-        element("installation").hidden = false;
-        element("expires").textContent = "";
-        element("create-installation").hidden = true;
-      } else if (result.phase !== "waiting") {
-        installing = true;
-        command.value = "";
-        element("installation").hidden = true;
-        element("create-installation").hidden = true;
-      }
-      const copy: Record<InstallationStatus["phase"], string> = {
-        waiting: "Run the command on your Linux server.",
-        preparing: "Prepare server",
-        pulling: "Download Ork",
-        starting: "Start services",
-        "waiting-healthy": "Wait for server",
-        ready: "Opening Ork...",
-        failed: "Server setup failed. Run the command again on your server.",
-        expired: "The install command has expired. Create a new one.",
-      };
-      element("installation-status").textContent = t(copy[result.phase]);
-      if (result.phase === "ready") {
-        if (!result.url) throw new Error("Missing server URL");
-        input.value = result.url;
-        await connect("connect_server", { rawUrl: result.url });
-        return;
-      }
-      if (installationDeadline <= Date.now()) {
-        expireInstallation();
-        return;
-      }
-    } catch {
-      if (!active()) return;
-      if (installationDeadline <= Date.now()) {
-        expireInstallation();
-        return;
-      }
-      element("installation-status").textContent = t("Could not check setup. Retrying...");
-    }
-    if (active()) pollTimer = win?.setTimeout(() => void pollInstallation(value, version), 3000);
-  }
-
-  async function createInstallation() {
-    if (!account || operation || screen !== "selfhost") return;
-    clearInstallation();
-    await run(
-      "install",
-      async (version) => {
-        const value = await transport.invoke<Installation>("create_server_installation");
-        if (!current(version) || screen !== "selfhost") return;
-        const expires = Date.parse(value.expiresAt);
-        if (!value.id || !value.command || !Number.isFinite(expires) || expires <= Date.now()) {
-          throw "The install command has expired. Create a new one.";
-        }
-        installation = value;
-        copyDeadline = expires;
-        installationDeadline = expires;
-        command.value = value.command;
-        element("installation").hidden = false;
-        element("create-installation").hidden = true;
-        element("expires").textContent =
-          `${t("Valid until")} ${new Date(expires).toLocaleTimeString(doc.documentElement.lang, { hour: "2-digit", minute: "2-digit" })}`;
-        element("installation-status").textContent = t("Run the command on your Linux server.");
-        expiryTimer = win?.setTimeout(
-          expireInstallation,
-          Math.min(expires - Date.now(), 2_147_483_647),
-        );
-        pollTimer = win?.setTimeout(() => void pollInstallation(value, installationVersion), 3000);
-      },
-      "selfhost",
-    );
-  }
-
   const on = (id: string, event: string, listener: EventListener) => {
     const target = element(id);
     target.addEventListener(event, listener);
@@ -794,10 +703,30 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     if (!account) void signIn(true);
   });
   on("sign-in", "click", () => void signIn());
+  function chooseServer() {
+    if (disposed) return;
+    discardPendingServer();
+    generation++;
+    operation = null;
+    startup = { phase: "idle" };
+    show(account ? "servers" : "welcome");
+    if (account)
+      void run(
+        "directory",
+        async (version) => {
+          await transport.invoke("cancel_setup_connection");
+          if (current(version)) await loadServers(version);
+        },
+        "servers",
+      );
+  }
   on("back", "click", () => {
+    if (screen === "local") {
+      chooseServer();
+      return;
+    }
     if (
       !operation ||
-      operation === "install" ||
       operation === "directory" ||
       operation === "pair" ||
       operation === "approve"
@@ -811,7 +740,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("selfhost", "click", () => {
     if (account && !operation) {
       show("selfhost");
-      if (!pendingInitialization) void createPairing();
     }
   });
   on("local", "click", () => void connect("connect_local_server", undefined, true));
@@ -823,16 +751,13 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("refresh", "click", () => void run("directory", loadServers, "servers"));
   on("setup", "submit", (event) => {
     event.preventDefault();
-    if (!pendingInitialization || input.reportValidity()) {
-      if (pendingInitialization && input.value === pendingServer) {
-        pendingServer = null;
-        pendingInitialization = false;
-        void connect("connect_server", { rawUrl: input.value });
-      } else {
-        discardPendingServer();
-        void createPairing();
-      }
+    if (!pendingInitialization || !input.reportValidity() || input.value !== pendingServer) {
+      errorMessage("Could not complete that request. Try again.");
+      return;
     }
+    pendingServer = null;
+    pendingInitialization = false;
+    void connect("connect_server", { rawUrl: input.value });
   });
   async function logout() {
     if (operation === "logout" || disposed) return;
@@ -848,7 +773,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element("account").textContent = "";
     servers.replaceChildren();
     clearPairing();
-    clearInstallation();
     show("welcome");
     await run(
       "logout",
@@ -862,13 +786,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("cancel-sign-in", "click", () => void logout());
   on("quit", "click", () => {
     clearPairing();
-    clearInstallation();
     void transport.invoke("quit_setup").catch(errorMessage);
-  });
-  on("server-url", "input", () => {
-    clearPairing();
-    if (input.value !== pendingServer) pendingInitialization = false;
-    controls();
   });
   on("copy-pairing", "click", () => {
     const value = pairing;
@@ -900,32 +818,15 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     clearPairing();
     controls();
   });
-  on("install", "toggle", () => {
-    if (element<HTMLDetailsElement>("install").open && !installation && !operation) {
-      clearPairing();
-      void createInstallation();
-    }
-  });
-  on("create-installation", "click", () => void createInstallation());
+  command.value = SERVER_INSTALL_COMMAND;
   on("copy", "click", () => {
-    const value = installation;
-    if (!value || installing || copyDeadline <= Date.now()) {
-      if (value && !installing) expireInstallation();
-      return;
-    }
-    const version = installationVersion;
-    const text = command.value;
     void Promise.resolve()
+      .then(() => win.navigator.clipboard?.writeText(command.value) ?? Promise.reject())
       .then(() => {
-        if (disposed || installationVersion !== version || installation !== value) return;
-        return win?.navigator.clipboard?.writeText(text) ?? Promise.reject();
-      })
-      .then(() => {
-        if (!disposed && installationVersion === version && installation === value)
-          element("copy").textContent = t("Copied");
+        if (!disposed) element("copy").textContent = t("Copied");
       })
       .catch(() => {
-        if (disposed || installationVersion !== version || installation !== value) return;
+        if (disposed) return;
         command.focus();
         command.select();
         status.textContent = t("Select and copy the command.");
@@ -996,6 +897,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       }
       cleanups.push(stopStartup);
+      const stopChooseServer = await transport.listen("desktop-change-server", () =>
+        chooseServer(),
+      );
+      if (!current(version)) {
+        stopChooseServer();
+        return;
+      }
+      cleanups.push(stopChooseServer);
       const stopLinks = await transport.listen<string>("desktop-server-link", ({ payload }) => {
         if (!disposed) receivePendingServer(payload);
       });
@@ -1029,7 +938,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     disposed = true;
     generation++;
     clearPairing();
-    clearInstallation();
     for (const cleanup of cleanups) cleanup();
     servers.replaceChildren();
   };

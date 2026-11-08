@@ -244,13 +244,17 @@ fn installation_command(
         || value.expires_at.len() > 64
         || expires <= time::OffsetDateTime::now_utc()
         || revision.len() != 40
-        || !revision.bytes().all(|byte| byte.is_ascii_hexdigit())
+        || !revision
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     {
         return Err(ERROR.into());
     }
     // Every interpolated field is validated before the shell command is constructed.
-    let base = format!("https://raw.githubusercontent.com/orkbot-run/ork/{revision}/infra/compose");
-    let command = format!("( mkdir -p -m 700 \"$HOME/orkbot\" && cd \"$HOME/orkbot\" && ork_installer=$(mktemp) && trap 'rm -f \"$ork_installer\"' EXIT && curl -fsSL -o \"$ork_installer\" '{base}/install-images.sh' && ORKBOT_DOWNLOAD_BASE='{base}' bash \"$ork_installer\" --server --code '{}' )", value.code);
+    let command = format!(
+        "curl -fsSL https://install.ork.run | sh -s -- --revision '{revision}' --code '{}'",
+        value.code
+    );
     Ok(InstallationCommand {
         id: value.id,
         command,
@@ -584,13 +588,15 @@ mod tests {
         assert_eq!(result.id, DEVICE);
         assert!(result.url.is_none());
         assert_eq!(result.expires_at, INSTALL_EXPIRY);
-        assert!(result
-            .command
-            .contains(&format!("--server --code '{INSTALL_CODE}'")));
+        assert!(result.command.contains(&format!("--code '{INSTALL_CODE}'")));
         assert!(!result.command.contains("--url"));
         assert!(!result.command.contains(INSTALL_URL));
-        assert!(result.command.contains(&format!("https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose/install-images.sh")));
-        assert!(result.command.contains(&format!("ORKBOT_DOWNLOAD_BASE='https://raw.githubusercontent.com/orkbot-run/ork/{INSTALL_REVISION}/infra/compose'")));
+        assert!(result
+            .command
+            .starts_with("curl -fsSL https://install.ork.run | sh -s -- "));
+        assert!(result
+            .command
+            .contains(&format!("--revision '{INSTALL_REVISION}'")));
         assert!(!serde_json::to_string(&result)
             .unwrap()
             .contains(CENTRAL_BEARER));
@@ -620,6 +626,7 @@ mod tests {
             "",
             "0123456789abcdef0123456789abcdef0123456'",
             "0123456789abcdef0123456789abcdef0123456g",
+            "0123456789ABCDEF0123456789ABCDEF01234567",
         ] {
             assert!(installation_command(installation(), revision).is_err());
         }

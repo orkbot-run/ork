@@ -33,6 +33,14 @@ const MINUTE = 60_000;
 
 interface Scenario {
   error: Error;
+  routine?: {
+    id: string;
+    name: string;
+    userId: string;
+    spaceId: string;
+    botId: string;
+    threadId: string | null;
+  } | null;
   trigger?: string;
   retryOfRunId?: string | null;
   routineNotify?: boolean;
@@ -99,7 +107,7 @@ async function failRun(scenario: Scenario) {
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),
-      findUniqueOrThrow: vi.fn(async () => ({ ...run })),
+      findUniqueOrThrow: vi.fn(async () => ({ ...run, routine: scenario.routine ?? null })),
       findFirst: vi.fn(async () => ({
         bot: {
           id: "bot-1",
@@ -160,6 +168,7 @@ async function failRun(scenario: Scenario) {
     thread: {
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.threadId,
+        botId: run.botId,
         groupId: null,
         historyCompactionSummary: null,
         historyCompactedUpToSeq: null,
@@ -244,6 +253,9 @@ async function failRun(scenario: Scenario) {
     if (job.name === "routine.retry" && scenario.retryEnqueueFails) throw new Error("queue down");
   });
   const send = vi.fn(async (_message: NotificationMessage, _context: unknown) => undefined);
+  const append = vi.fn(
+    async (_event: { type: string; payload?: Record<string, unknown> }) => undefined,
+  );
   const executor = createRunExecutor({
     prisma,
     deploymentModelKey: "fake-deployment-key",
@@ -261,7 +273,7 @@ async function failRun(scenario: Scenario) {
     memoryProviders: { resolve: async () => null },
     artifacts: { get: vi.fn() },
     events: {
-      append: vi.fn(async () => undefined),
+      append,
       finalizeRun,
       pauseRunForInput: vi.fn(async () => {
         run.status = "waiting_input";
@@ -297,7 +309,7 @@ async function failRun(scenario: Scenario) {
   const retries = enqueue.mock.calls
     .map(([job]) => job)
     .filter((job) => job.name === "routine.retry");
-  return { retries, send, prisma, runtimeRun, run };
+  return { retries, send, prisma, runtimeRun, run, append };
 }
 
 const overloaded = () =>
@@ -1120,6 +1132,37 @@ describe("reporting a failed run", () => {
       ]);
       const fields = events.map(({ error: _stack, ...rest }) => rest);
       expect(JSON.stringify(fields)).not.toMatch(/fake-deployment-key|:\/\//);
+    },
+  );
+});
+
+describe("routine name stream provenance", () => {
+  const routine = {
+    id: "routine-1",
+    name: "Morning report",
+    userId: "user-1",
+    spaceId: "space-1",
+    botId: "bot-1",
+    threadId: "thread-1",
+  };
+  it.each([
+    [routine, "Morning report"],
+    [{ ...routine, threadId: null }, "Morning report"],
+    [{ ...routine, userId: "foreign" }, null],
+    [{ ...routine, spaceId: "foreign" }, null],
+    [{ ...routine, botId: "foreign" }, null],
+    [{ ...routine, threadId: "other-group" }, null],
+    [null, null],
+  ] as const)(
+    "publishes only the name bound to the current owned run: %s",
+    async (selected, expected) => {
+      const { append } = await failRun({ error: overloaded(), routine: selected });
+      const started = append.mock.calls.find(([event]) => event.type === "run.started")?.[0];
+      expect(started?.payload).toMatchObject({
+        trigger: "routine",
+        routineId: "routine-1",
+        routineName: expected,
+      });
     },
   );
 });

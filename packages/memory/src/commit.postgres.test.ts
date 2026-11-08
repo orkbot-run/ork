@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache tests are preserved; four-attempt retry assertions are Ork modifications.
+
 import type { AdapterContext, MemoryCommitRequest } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "@orkbot/db";
 import { asSystem, createDb, runAsSystem } from "@orkbot/db";
@@ -224,21 +228,22 @@ describePostgres("memory commits (PostgreSQL)", () => {
       ).rejects.toMatchObject({
         code: "P2034",
       });
-      expect(attempts).toBe(3);
+      expect(attempts).toBe(4);
       const current = await document(path);
-      expect(current).toMatchObject({ revision: 4, content: "winner-3" });
+      expect(current).toMatchObject({ revision: 5, content: "winner-4" });
       expect(current.revisions.map(({ revision, content }) => ({ revision, content }))).toEqual([
         { revision: 1, content: "initial" },
         { revision: 2, content: "winner-1" },
         { revision: 3, content: "winner-2" },
         { revision: 4, content: "winner-3" },
+        { revision: 5, content: "winner-4" },
       ]);
 
       const retried = await store.commit(request(path, "rejected"), context);
-      expect(retried.revision).toBe(5);
+      expect(retried.revision).toBe(6);
       const afterRetry = await document(path);
-      expect(afterRetry).toMatchObject({ revision: 5, content: "rejected" });
-      expect(afterRetry.revisions).toHaveLength(5);
-      expect(afterRetry.revisions.at(-1)).toMatchObject({ revision: 5, content: "rejected" });
+      expect(afterRetry).toMatchObject({ revision: 6, content: "rejected" });
+      expect(afterRetry.revisions).toHaveLength(6);
+      expect(afterRetry.revisions.at(-1)).toMatchObject({ revision: 6, content: "rejected" });
     }));
 });

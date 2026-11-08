@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 material is preserved; source-owned composer recovery is an Ork addition.
 
 import type { AgentSkillCatalogEntry, RpcPath } from "@orkbot/contracts";
-import type { ComposerMention, resolveComposerSendPlan } from "@orkbot/core";
+import type { ComposerMention, resolveComposerSendPlan, ThreadSendReceipt } from "@orkbot/core";
 import {
   isImageInputConfirmation,
   isModelRequiredSendError,
@@ -51,6 +51,7 @@ export type SendAttempt = {
   artifactIds: Map<string, string>;
   state: "queued" | "pending" | "failed" | "refused";
   acceptedSeq?: number;
+  acceptedRun?: ThreadSendReceipt;
   apiBase: string;
   spaceId: string | null;
   userId: string;
@@ -112,6 +113,10 @@ export async function deliverSend(
     replyQuote: reroutedToGroup ? undefined : (payload.replyQuote ?? undefined),
     fromPage: reroutedToGroup ? undefined : payload.fromPage,
   });
+  attempt.acceptedRun =
+    botTarget && !groupTarget && typeof sent.runId === "string" && typeof sent.taskId === "string"
+      ? { botId: botTarget, runId: sent.runId, taskId: sent.taskId }
+      : undefined;
   return sent.seq;
 }
 

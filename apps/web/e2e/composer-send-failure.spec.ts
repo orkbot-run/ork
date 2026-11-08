@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork accepted-send assertions are PolyForm-covered.
 
-import type { Routine } from "@orkbot/contracts";
+import type { Routine, ThreadSnapshot } from "@orkbot/contracts";
 import type { Locator, Page } from "@playwright/test";
 import {
   activeBotId,
@@ -279,4 +279,58 @@ test("a retried send after an edit reuses the attachment's uploaded artifact", {
     limit: 60,
   });
   expect(artifacts.items.filter((artifact) => artifact.name === "notes.txt")).toHaveLength(1);
+});
+
+test("a completed run stays finished when its send acknowledgement arrives after the live events", async ({
+  page,
+}, testInfo) => {
+  const composer = await openComposer(page, "terminal-receipt");
+  const botId = activeBotId(page);
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let accepted!: (runId: string) => void;
+  const committed = new Promise<string>((resolve) => {
+    accepted = resolve;
+  });
+  await page.route("**/rpc/threads/send", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    accepted(body.json.runId);
+    await held;
+    await route.fulfill({ response });
+  });
+  try {
+    await composer.fill("receipt proof");
+    const acknowledged = page.waitForResponse(
+      (response) => response.url().endsWith("/rpc/threads/send") && response.ok(),
+    );
+    await composer.press("Enter");
+    const runId = await committed;
+    await expect(
+      page.getByTestId("message-bot-bubble").filter({ hasText: "receipt proof" }),
+    ).toBeVisible();
+    await expect
+      .poll(async () => {
+        const state = await rpc<ThreadSnapshot>(page, "threads/get", { botId });
+        return Boolean(
+          state.run?.id === runId || state.activeRuns?.some((run) => run.id === runId),
+        );
+      })
+      .toBe(false);
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+    // The best-effort post-send refresh cannot repair a revived queued run in this case.
+    await page.route("**/rpc/threads/get", (route) => route.fulfill({ status: 503 }));
+    release();
+    await acknowledged;
+    await composer.fill("next draft");
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: "Stop", exact: true })).toHaveCount(0);
+    await captureScreenshot(page, testInfo, "completed-send-receipt");
+  } finally {
+    release();
+    await page.unroute("**/rpc/threads/send");
+    await page.unroute("**/rpc/threads/get");
+  }
 });

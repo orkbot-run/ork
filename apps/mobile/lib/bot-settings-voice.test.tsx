@@ -18,6 +18,11 @@ import { afterChatNotifyChange } from "./live-notifications";
 
 const mocks = vi.hoisted(() => ({
   instructions: "",
+  replyMode: undefined as "chat" | "explicit" | undefined,
+  scopeGeneration: 0,
+  readyGeneration: 0,
+  sessionListeners: new Set<() => void>(),
+  sessionCaches: new Set<(same: boolean) => void>(),
   description: "",
   crossSpaceCommunication: false,
   avatarSet: undefined as "organic" | "orkbot" | undefined,
@@ -61,6 +66,34 @@ function deferredSave<T = void>() {
   return { promise, resolve, reject };
 }
 
+vi.mock("./settings-target", () => ({
+  captureSettingsContext: () => {
+    const generation = mocks.scopeGeneration;
+    return {
+      isCurrent: () => generation === mocks.scopeGeneration,
+      send: async (proc: string, input: unknown) => {
+        const { rpc } = await import("./api");
+        return rpc(proc as never, input as never);
+      },
+    };
+  },
+}));
+vi.mock("./session", () => ({
+  currentSessionGeneration: () => mocks.scopeGeneration,
+  currentReadySessionGeneration: () => mocks.readyGeneration,
+  subscribeSessionGeneration: (listener: () => void) => {
+    mocks.sessionListeners.add(listener);
+    return () => {
+      mocks.sessionListeners.delete(listener);
+    };
+  },
+  registerSessionDiskCache: (listener: (same: boolean) => void) => {
+    mocks.sessionCaches.add(listener);
+    return () => {
+      mocks.sessionCaches.delete(listener);
+    };
+  },
+}));
 vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("./bot-voices", () => ({
   voiceLabel: (voice: { language: string; name: string }) => `${voice.name} (${voice.language})`,
@@ -87,6 +120,7 @@ vi.mock("./api", () => ({
   currentApiBase: () => "https://api.example.test",
   loadSessionToken: async () => "token",
   selectedSpaceId: () => "space-a",
+  spaceSelectionSeq: () => 0,
   rpc: async (procedure: string, input?: unknown) => {
     if (
       [
@@ -104,6 +138,9 @@ vi.mock("./api", () => ({
       await mocks.loadBot();
       return {
         id: "bot-fixture",
+        spaceId: "space-a",
+        replyMode: mocks.replyMode,
+        updatedAt: "2026-01-01",
         threadId: "thread-fixture",
         name: "Fixture",
         title: "",
@@ -389,6 +426,9 @@ describe("bot settings device voice menu", () => {
     vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([]);
     mocks.focus = undefined;
     mocks.instructions = "";
+    mocks.replyMode = undefined;
+    mocks.scopeGeneration = 0;
+    mocks.readyGeneration = 0;
     mocks.description = "";
     mocks.os = "ios";
     mocks.work = [];
@@ -414,6 +454,100 @@ describe("bot settings device voice menu", () => {
     await expand();
   };
   const menu = () => container.querySelector('[data-menu="Device voice"]');
+
+  it("saves another setting after a rotated old server hides the retired reply queue", async () => {
+    mocks.replyMode = "chat";
+    const first = deferredSave<{ replyMode: "explicit" }>();
+    mocks.rpc.mockReturnValueOnce(first.promise);
+    await render();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('[data-menu="Reply mode"] button')]
+        .find((button) => button.textContent === "Updates and final reply")!
+        .click(),
+    );
+    mocks.replyMode = undefined;
+    await act(async () => {
+      mocks.scopeGeneration += 1;
+      for (const listener of mocks.sessionCaches) listener(true);
+      mocks.readyGeneration = mocks.scopeGeneration;
+      for (const listener of mocks.sessionListeners) listener();
+    });
+    await act(async () => first.reject(new Error("retired request")));
+    expect(container.querySelector('[data-menu="Reply mode"]')).toBeNull();
+    mocks.rpc.mockResolvedValueOnce({ autoSpeak: true });
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Read replies aloud"]')!.click(),
+    );
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Save")!
+        .click(),
+    );
+    expect(mocks.rpc).toHaveBeenLastCalledWith("bots/update", {
+      botId: "bot-fixture",
+      autoSpeak: true,
+    });
+    expect(mocks.back).toHaveBeenCalledOnce();
+    expect(container.textContent).not.toContain("retired request");
+  });
+
+  it.each([false, true])(
+    "waits for the last reply-mode save before closing (failure=%s)",
+    async (fails) => {
+      mocks.replyMode = "chat";
+      const first = deferredSave<{ replyMode: "explicit" }>();
+      const last = deferredSave<{ replyMode: "chat" }>();
+      mocks.rpc.mockReturnValueOnce(first.promise).mockReturnValueOnce(last.promise);
+      await render();
+      const choice = (label: string) =>
+        [...container.querySelectorAll<HTMLButtonElement>('[data-menu="Reply mode"] button')].find(
+          (button) => button.textContent === label,
+        )!;
+      await act(async () => choice("Updates and final reply").click());
+      await act(async () => choice("Chat").click());
+      await act(async () =>
+        [...container.querySelectorAll<HTMLButtonElement>("button")]
+          .find((button) => button.textContent === "Save")!
+          .click(),
+      );
+      expect(mocks.back).not.toHaveBeenCalled();
+      await act(async () => first.resolve({ replyMode: "explicit" }));
+      expect(mocks.rpc).toHaveBeenLastCalledWith("bots/update", {
+        botId: "bot-fixture",
+        replyMode: "chat",
+      });
+      expect(mocks.back).not.toHaveBeenCalled();
+      await act(async () => {
+        if (fails) last.reject(new Error("latest reply-mode failure"));
+        else last.resolve({ replyMode: "chat" });
+      });
+      if (fails) {
+        expect(mocks.back).not.toHaveBeenCalled();
+        expect(container.textContent).toContain("latest reply-mode failure");
+      } else expect(mocks.back).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("does not close a replacement owner after an old Save acknowledgement", async () => {
+    mocks.replyMode = "chat";
+    const first = deferredSave<{ replyMode: "explicit" }>();
+    mocks.rpc.mockReturnValueOnce(first.promise);
+    await render();
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>('[data-menu="Reply mode"] button')]
+        .find((button) => button.textContent === "Updates and final reply")!
+        .click(),
+    );
+    await act(async () =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")]
+        .find((button) => button.textContent === "Save")!
+        .click(),
+    );
+    mocks.scopeGeneration += 1;
+    await act(async () => first.resolve({ replyMode: "explicit" }));
+    expect(mocks.back).not.toHaveBeenCalled();
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
+  });
 
   it("defaults daily check-ins on and saves an opt-out", async () => {
     await render();

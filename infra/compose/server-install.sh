@@ -71,6 +71,7 @@ server_main() {
   unset server_install_code ORKBOT_INSTALL_CODE
   # This mode stores credentials in .env; ambient development settings cannot override them.
   unset OIDC_ISSUER OIDC_CLIENT_ID OIDC_CLIENT_SECRET OIDC_REDIRECT_URI AUTH_PASSWORD_ENABLED
+  unset AUTH_ACCOUNTS_ENABLED ORKBOT_BOOTSTRAP_SECRET SIGNUPS_ENABLED
   unset BETTER_AUTH_URL WEB_ORIGIN API_URL ORKBOT_HOST SANDBOX_COMPUTER_EGRESS
   unset POSTGRES_PASSWORD POSTGRES_APP_PASSWORD BETTER_AUTH_SECRET ENCRYPTION_KEY SCREEN_PROXY_SECRET SANDBOX_SUPERVISOR_TOKEN
   while (($#)); do
@@ -169,9 +170,6 @@ server_main() {
   fi
   local configured
   configured=$(timeout --foreground 60 python3 "$helper" configured "$server_url") || fail "existing server configuration needs attention."
-  if [[ "$configured" == false && -z "$code" ]]; then
-    fail "a new server needs a one-use installation code from Accounts setup."
-  fi
   validate_required_secrets
 
   # Check firewall support before consuming a one-use code.
@@ -185,10 +183,12 @@ server_main() {
     server_privileged bash "./$EGRESS_SCRIPT" || fail "could not install restricted computer egress; services were not started."
   fi
   # The only process that receives the code performs one bounded HTTPS request.
-  ORKBOT_INSTALL_CODE="$code" timeout --foreground 60 python3 "$helper" configure "$server_url" || fail "could not configure Accounts; rerun with a new code if redemption already succeeded."
+  ORKBOT_INSTALL_CODE="$code" timeout --foreground 60 python3 "$helper" configure "$server_url" || fail "could not configure Accounts; existing credentials were kept."
   unset code
   server_progress preparing
-  validate_accounts_config
+  local auth_mode
+  auth_mode=$(timeout --foreground 60 python3 "$helper" auth-mode "$server_url") || fail "could not validate Accounts configuration."
+  if [[ "$auth_mode" == oidc ]]; then validate_accounts_config; fi
   validate_required_secrets
   if [[ "$pull_never" != true ]]; then
     server_progress pulling
@@ -200,4 +200,10 @@ server_main() {
   timeout --foreground 210 python3 "$helper" ready "$server_url" || fail "public HTTPS or Accounts is not ready; check DNS, inbound TCP 80/443, proxy settings and service logs, then rerun without --code."
   server_progress ready
   echo "Ork is ready at ${server_url}"
+  local initialization
+  initialization=$(timeout --foreground 60 python3 "$helper" initialization-required "$server_url") || fail "could not determine the server initialization status."
+  if [[ "$auth_mode" == native && "$initialization" == true ]]; then
+    timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/server-claim.js || fail "could not generate server authorization; rerun this installer to try again."
+    echo 'If the link or code expires, rerun this installer to get a new one.'
+  fi
 }

@@ -27,6 +27,7 @@ import { providerLabel } from "../lib/messaging";
 import { useSpaceQueries } from "../lib/query";
 import { rpc } from "../lib/rpc";
 import { ExternalConversationSettings } from "./ExternalConversationSettings";
+import { MessagingDeliveryReview } from "./MessagingDeliveryReview";
 
 const LINK_POLL_MS = 3_000;
 const NO_INSTALLATIONS: MessagingInstallationsStatus = { available: false, installations: [] };
@@ -402,25 +403,30 @@ export function MessagingSettingsPanel() {
         {status?.identities.length ? (
           <ul className="mb-4 space-y-3">
             {status.identities.map((identity) => (
-              <Row
-                key={identity.id}
-                actions={
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      void act(() => rpc.messaging.identities.unlink({ identityId: identity.id }))
-                    }
-                  >
-                    <Trans>Unlink</Trans>
-                  </Button>
-                }
-              >
-                <span className="text-foreground">{providerLabel(identity.provider)}</span>
-                <Meta>
-                  {identity.address}, {identity.botName}
-                </Meta>
-              </Row>
+              <li key={identity.id}>
+                <div className="flex items-center justify-between gap-3 text-[14px] text-foreground/75">
+                  <span className="min-w-0 truncate">
+                    <span className="text-foreground">{providerLabel(identity.provider)}</span>
+                    <Meta>
+                      {identity.address}, {identity.botName}
+                    </Meta>
+                  </span>
+                  <span className="flex shrink-0 gap-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        void act(() => rpc.messaging.identities.unlink({ identityId: identity.id }))
+                      }
+                    >
+                      <Trans>Unlink</Trans>
+                    </Button>
+                  </span>
+                </div>
+                {identity.deliveryReview && identity.deliveryReview.count > 0 ? (
+                  <MessagingDeliveryReview identity={identity} review={identity.deliveryReview} />
+                ) : null}
+              </li>
             ))}
           </ul>
         ) : null}

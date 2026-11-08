@@ -1,11 +1,14 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 renderer fixture is preserved. Shared reducer imports follow LICENSE.md.
+
 import type { ProductEvent, ThreadMessage, ThreadSnapshot } from "@orkbot/contracts";
-import { foldPeerReplies } from "@orkbot/core";
+import { foldPeerReplies, reduceThreadSnapshot } from "@orkbot/core";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
 import { DEFAULT_BOT_AVATAR_COLOR } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { useMemo, useRef } from "react";
 import { rpc } from "../../src/lib/rpc";
-import { reduceThreadSnapshot } from "../../src/lib/thread-events";
 import { Transcript } from "../../src/pages/shell/transcript";
 
 export const BOT = { botId: "bot-1", name: "Chief", color: DEFAULT_BOT_AVATAR_COLOR };

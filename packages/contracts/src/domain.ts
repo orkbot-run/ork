@@ -5,6 +5,7 @@
 import * as z from "zod";
 import { AGENT_SECRET_NAME_PATTERN } from "./agent-secret-name.js";
 import { BotAvatarSetSchema, BotAvatarValueSchema } from "./bot-avatar.js";
+import { BotReplyModeSchema } from "./bot-settings-layout.js";
 import { DisabledBuiltinToolsSchema } from "./builtin-tools.js";
 import { MCP_OAUTH_CLIENT_REQUIRED } from "./connector-errors.js";
 import { BotSettingsValuesSchema, ThreadMessageSchema } from "./events.js";
@@ -20,7 +21,7 @@ import {
 import { ModelHeadersSchema } from "./model-headers.js";
 import { NavLinkSchema } from "./nav-links.js";
 import { RoutineWatchSchema, RoutineWatchStateSchema } from "./routine-watch.js";
-import { RunTriggerSchema } from "./runs.js";
+import { RunRoutineNameSchema, RunTriggerSchema } from "./runs.js";
 import { SettingsScopeSchema } from "./settings-scope.js";
 
 export const ComputerModeSchema = z.enum(["team", "dedicated"]);
@@ -113,6 +114,8 @@ export const BotSchema = z.object({
   avatarSet: BotAvatarSetSchema.optional(),
   avatarSeed: z.uuidv4().nullable().optional(),
   notifyOnFinish: z.boolean(),
+  /** Absent on servers predating reply-mode support. */
+  replyMode: BotReplyModeSchema.optional(),
   pinned: z.boolean(),
   sectionId: Id.nullable(),
   archivedAt: z.string().nullable(),
@@ -424,6 +427,7 @@ export const CreateBotInput = z.object({
   description: z.string().max(BOT_DESCRIPTION_MAX_LENGTH).default(""),
   instructions: z.string().max(BOT_INSTRUCTIONS_MAX_LENGTH).default(""),
   notifyOnFinish: z.boolean().default(true),
+  replyMode: BotReplyModeSchema.optional(),
   dailyCheckIns: z.boolean().optional(),
   fleetManagement: z.boolean().optional(),
   color: BotAvatarValueSchema.optional(),
@@ -447,6 +451,7 @@ export const UpdateBotInput = z
     /** Ignored; installed mobile apps may still send it. */
     selfUpdateInstructions: z.boolean().optional(),
     notifyOnFinish: z.boolean().optional(),
+    replyMode: BotReplyModeSchema.optional(),
     color: BotAvatarValueSchema.optional(),
     avatarSet: BotAvatarSetSchema.optional(),
     pinned: z.boolean().optional(),
@@ -1350,8 +1355,26 @@ export const MessagingLinkedIdentitySchema = z.object({
   address: z.string(),
   botId: Id,
   botName: z.string(),
+  deliveryReview: z.object({ spaceId: Id, count: z.number().int().nonnegative() }).optional(),
 });
 export type MessagingLinkedIdentity = z.infer<typeof MessagingLinkedIdentitySchema>;
+
+export const MessagingOutboundVersionSchema = z.string().regex(/^[a-f0-9]{64}$/);
+export const MessagingOutboundReviewSchema = z.object({
+  id: Id,
+  version: MessagingOutboundVersionSchema,
+  preview: z.string().max(1000),
+  createdAt: z.string(),
+  attachmentName: z.string().max(200).nullable(),
+});
+export type MessagingOutboundReview = z.infer<typeof MessagingOutboundReviewSchema>;
+export const MessagingOutboundListSchema = z.object({
+  items: z.array(MessagingOutboundReviewSchema).max(20),
+  hasMore: z.boolean(),
+});
+export type MessagingOutboundList = z.infer<typeof MessagingOutboundListSchema>;
+export const MessagingOutboundResolutionSchema = z.enum(["confirmed_sent", "confirmed_not_sent"]);
+export type MessagingOutboundResolution = z.infer<typeof MessagingOutboundResolutionSchema>;
 
 export const MessagingInstallationSummarySchema = z.object({
   id: Id,
@@ -1414,6 +1437,7 @@ export const RunSchema = z.object({
   status: RunStatus,
   trigger: RunTriggerSchema,
   routineId: Id.nullable(),
+  routineName: RunRoutineNameSchema.optional(),
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
   error: z.string().nullable(),

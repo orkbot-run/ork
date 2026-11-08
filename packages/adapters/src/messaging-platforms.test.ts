@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
+// Inherited material remains Apache-2.0; Ork deferred SDK loading and rejection conformance are PolyForm-covered.
 
 import { splitMessage, WhatsAppApiError } from "@chat-adapter/whatsapp";
 import type { AdapterContext } from "@orkbot/adapter-kit";
 import { getLogger } from "@orkbot/logging";
+import { RateLimitError } from "chat";
 import { describe, expect, it, vi } from "vitest";
 import { ChatSdkMessagingSurface } from "./chat-sdk-surface.js";
 import { Domain } from "./lark/thread-id.js";
@@ -617,6 +618,30 @@ describe("permanent send errors", async () => {
   it("treats no Sendblue error as permanent", () => {
     expect(platforms.sendblue!.isPermanentSendError).toBeUndefined();
   });
+
+  it.each([
+    ["slack", slackError("channel_not_found"), true, false],
+    ["slack", new RateLimitError("wait", 1_000), true, false],
+    ["slack", slackError("internal_error"), false, false],
+    ["whatsapp", whatsappError(131047), true, false],
+    ["whatsapp", whatsappError(130429), false, false],
+    ["telegram", permissionError, true, true],
+    ["telegram", new RateLimitError("wait", 1_000), true, true],
+    ["telegram", new Error("response lost"), false, false],
+  ] as const)(
+    "proves a full %s rejection only for an audited atomic send",
+    (provider, error, plain, file) => {
+      const reject = platforms[provider]!.isRejectedSendError!;
+      const request = { threadId: `${provider}:fixture`, body: "fixture" };
+      expect(reject(error, request)).toBe(plain);
+      expect(
+        reject(error, {
+          ...request,
+          attachment: { name: "fixture.txt", mimeType: "text/plain", data: new Uint8Array([1]) },
+        }),
+      ).toBe(file);
+    },
+  );
 });
 
 describe("sendblue client", () => {

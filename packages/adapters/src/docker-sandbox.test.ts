@@ -24,6 +24,29 @@ const context = {
 };
 
 describe("Docker sandbox", () => {
+  it("refuses an older supervisor before invoking its legacy file listing or read route", async () => {
+    const legacyIO = vi.fn();
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/computers/computer/files") {
+        legacyIO();
+        return Response.json([]);
+      }
+      return new Response("Not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const provider = new DockerSandboxProvider("http://legacy.test", "fixture-token");
+    await expect(
+      provider.readTransferFile(
+        { id: "computer", botId: "bot", kind: "docker", providerRef: "computer" },
+        "directory",
+        context,
+        100,
+      ),
+    ).rejects.toThrow();
+    expect(legacyIO).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledOnce();
+  });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();

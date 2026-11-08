@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited runtime dispatch tests are preserved; delegated reader regression coverage is an Ork addition.
+
 import type { AgentToolCompletion, ConnectorTool } from "@orkbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { builtinAgentTools } from "./builtin-tools.js";
@@ -2779,3 +2784,66 @@ describe("Pi connector tool dispatch", () => {
     );
   });
 });
+
+it.each(["message_bot", "handoff_to_bot"])(
+  "resumes a sequential secret pause and its immutable file tail (%s)",
+  async (target) => {
+    const files = ["report.txt"];
+    const fileCall = {
+      type: "toolCall",
+      id: "file-tail",
+      name: "use_tool",
+      arguments: { name: target, arguments: { bot_id: "receiver", message: "Review", files } },
+    };
+    const turnCheckpoint = serializeTurnCheckpoint({
+      version: 1,
+      provider: "test",
+      model: "dispatch-test-model",
+      systemPrompt: "Fixture",
+      pendingToolCallId: "secret-pause",
+      executionMode: "sequential",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "secret-pause",
+              name: "request_secret",
+              arguments: { label: "Token", purpose: "api_key", connectionId: "connection" },
+            },
+            fileCall,
+          ],
+          stopReason: "toolUse",
+        },
+      ] as never,
+    });
+    const calls: Array<{ name: string; args: unknown }> = [];
+    for await (const _event of new PiAgentRuntime().run(
+      {
+        botId: "b",
+        threadId: "t",
+        runId: "file-tail-resume",
+        prompt: "Resume",
+        instructions: "Fixture",
+        history: [],
+        tools: builtinAgentTools.filter((tool) => ["request_secret", target].includes(tool.name)),
+        model: { provider: "test", id: "dispatch-test-model" },
+        turnCheckpoint,
+        executeTool: async (name, args) => {
+          calls.push({ name, args });
+          return { ok: true };
+        },
+      },
+      { signal: new AbortController().signal },
+    )) {
+    }
+    expect(calls).toEqual([
+      {
+        name: "request_secret",
+        args: { label: "Token", purpose: "api_key", connectionId: "connection" },
+      },
+      { name: target, args: { bot_id: "receiver", message: "Review", files } },
+    ]);
+  },
+);

@@ -11,6 +11,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { supportsNativeSsoPopup } from "../lib/desktop";
 
 vi.mock("../lib/desktop", () => ({ supportsNativeSsoPopup: vi.fn(() => false) }));
+vi.mock("../lib/auth", () => ({
+  authClient: {
+    useSession: () => ({
+      data: { session: { id: "fixture-session" }, user: { id: "fixture-user" } },
+    }),
+  },
+}));
 
 const messaging = vi.hoisted(() => ({
   status: vi.fn(),
@@ -40,6 +47,7 @@ vi.mock("../lib/rpc", () => ({
   rpcForSpace: () => api,
   createSpaceRpc: () => api,
   selectedSpaceId: () => null,
+  captureRpcContext: () => ({ client: api, isCurrent: () => true }),
 }));
 vi.mock("./ExternalConversationSettings", () => ({ ExternalConversationSettings: () => null }));
 vi.mock("@lingui/react/macro", () => {
@@ -168,6 +176,19 @@ it("lists a chat app linked from the chat app without reopening the dialog", asy
 
   expect(container.textContent).toContain("424242");
   expect(container.querySelector('[data-testid="messaging-link-code"]')).toBeNull();
+});
+
+it("offers delivery review only for a linked chat with an unresolved outcome", async () => {
+  messaging.status.mockResolvedValue({
+    ...statusWith([identity]),
+    identities: [{ ...identity, deliveryReview: { spaceId: "space-1", count: 1 } }],
+  });
+  await renderOverlay();
+  expect(
+    [...container.querySelectorAll("button")].some(
+      (button) => button.textContent === "Review delivery",
+    ),
+  ).toBe(true);
 });
 
 it("stops polling once the link code expires", async () => {
@@ -577,3 +598,24 @@ it("keeps a teammate's DM link next to the user's own workspace elsewhere", asyn
   await act(async () => links[1]!.click());
   expect(messaging.link.start).toHaveBeenCalledWith({ botId: "bot-1" });
 });
+
+it.each([undefined, 0])(
+  "hides review controls for legacy or settled identities (%s)",
+  async (count) => {
+    messaging.status.mockResolvedValue({
+      ...statusWith([identity]),
+      identities: [
+        {
+          ...identity,
+          deliveryReview: count === undefined ? undefined : { spaceId: "space-1", count },
+        },
+      ],
+    });
+    await renderOverlay();
+    expect(
+      [...container.querySelectorAll("button")].some(
+        (button) => button.textContent === "Review delivery",
+      ),
+    ).toBe(false);
+  },
+);

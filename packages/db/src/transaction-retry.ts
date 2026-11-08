@@ -2,7 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache retry classification is preserved; bounded conflict backoff is an Ork addition.
 
-const MAX_TRANSACTION_ATTEMPTS = 3;
+const MAX_TRANSACTION_ATTEMPTS = 4;
 const RETRYABLE_DATABASE_CODES = new Set(["40001", "40P01"]);
 
 /**
@@ -37,7 +37,7 @@ export async function withTransactionRetry<T>(operation: () => Promise<T>): Prom
       }
       // The failed transaction has rolled back. Give competing commits time to finish before
       // taking another snapshot, with jitter so unrelated callers do not retry in lockstep.
-      const minimumMs = attempt === 1 ? 25 : 75;
+      const minimumMs = 25 * 3 ** (attempt - 1);
       const delayMs = minimumMs + Math.floor(Math.random() * (minimumMs + 1));
       await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
     }

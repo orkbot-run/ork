@@ -4,6 +4,7 @@
 // Inherited material remains Apache-2.0; Ork deferred messaging SDK loading is PolyForm-covered.
 
 import { createCipheriv, createHash } from "node:crypto";
+import { Readable } from "node:stream";
 import type { HttpInstance } from "@larksuiteoapi/node-sdk";
 import type { AdapterContext, MessagingInboundEvent } from "@orkbot/adapter-kit";
 import { Message } from "chat";
@@ -13,7 +14,7 @@ import { LazyLarkAdapter } from "./lark/lazy-adapter.js";
 import { Domain, decodeThreadId, encodeThreadId } from "./lark/thread-id.js";
 import { messagingPlatformsFromEnv } from "./messaging-platforms.js";
 
-const { request } = vi.hoisted(() => ({ request: vi.fn() }));
+const { request, resource } = vi.hoisted(() => ({ request: vi.fn(), resource: vi.fn() }));
 
 // Exercise the real adapter and SDK; replace only outbound HTTP.
 const httpInstance: HttpInstance = {
@@ -110,7 +111,9 @@ function encryptedWebhook(payload: unknown, validSignature = true, pretty = fals
 
 beforeEach(() => {
   request.mockReset();
+  resource.mockReset();
   request.mockImplementation(async ({ url }: { url: string }) => {
+    if (url.includes("/resources/")) return resource();
     if (url.endsWith("/auth/v3/tenant_access_token/internal")) {
       return { code: 0, tenant_access_token: "test-access-token", expire: 7200 };
     }
@@ -130,6 +133,213 @@ beforeEach(() => {
       return { code: 0, data: { chat_id: "oc-test" } };
     }
     throw new Error(`Unexpected HTTP request: ${url}`);
+  });
+});
+
+const png = Buffer.from("89504e470d0a1a0a0102", "hex");
+
+async function inboundImage(encrypted = false) {
+  const result = await createSurface(encrypted);
+  const payload = message();
+  payload.event.message.message_type = "image";
+  payload.event.message.content = JSON.stringify({ image_key: "img-test" });
+  const response = await result.surface.handleWebhook(
+    "lark",
+    encrypted ? encryptedWebhook(payload) : webhook(payload),
+  );
+  expect(response?.status).toBe(200);
+  const event = result.events[0];
+  if (event?.type !== "message") throw new Error("expected image message");
+  return { ...result, event };
+}
+
+describe("inbound image resources", () => {
+  it.each([false, true])(
+    "lazily fetches a scoped authenticated image (encrypted: %s)",
+    async (encrypted) => {
+      resource.mockImplementation(() => ({
+        data: Readable.from([png]),
+        headers: { "content-type": "image/png", "content-length": String(png.length) },
+      }));
+      const { event, surface } = await inboundImage(encrypted);
+      expect(event.content).toBe("");
+      expect(event.attachments).toEqual([
+        { name: "image-1", mimeType: "", fetch: expect.any(Function) },
+      ]);
+      expect(resource).not.toHaveBeenCalled();
+      const fetched = await event.attachments![0]!.fetch();
+      expect(fetched).toEqual({ bytes: new Uint8Array(png), mimeType: "image/png" });
+      expect(request).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: "https://open.feishu.cn/open-apis/im/v1/messages/om-test/resources/img-test",
+          params: { type: "image" },
+          headers: expect.objectContaining({ Authorization: "Bearer test-access-token" }),
+          responseType: "stream",
+          maxRedirects: 0,
+          signal: expect.any(AbortSignal),
+        }),
+      );
+      expect(
+        surface.platforms().find((item) => item.provider === "lark")?.capabilities.files,
+      ).not.toBe(true);
+    },
+  );
+
+  it("uses image nodes from the selected post locale only, in stable deduplicated order", async () => {
+    const { surface, events } = await createSurface();
+    const payload = message();
+    payload.event.message.message_type = "post";
+    payload.event.message.content = JSON.stringify({
+      en_us: {
+        content: [
+          [
+            { tag: "text", text: "ignored" },
+            { tag: "img", image_key: "img-other" },
+          ],
+        ],
+      },
+      zh_cn: {
+        title: "Selected",
+        content: [
+          [
+            { tag: "text", text: "hello" },
+            { tag: "img", image_key: "img-first" },
+            { tag: "img", image_key: "img-first" },
+            { tag: "img", image_key: "img-second" },
+            { tag: "img", image_key: "../invalid" },
+            { tag: "img", image_key: 4 },
+          ],
+        ],
+      },
+    });
+    await surface.handleWebhook("lark", webhook(payload));
+    const event = events[0];
+    if (event?.type !== "message") throw new Error("expected a message");
+    expect(event.content).toBe("# Selected\nhello");
+    expect(event.attachments?.map((file) => file.name)).toEqual(["image-1", "image-2"]);
+    expect(resource).not.toHaveBeenCalled();
+    resource.mockImplementation(() => ({
+      data: Readable.from([png]),
+      headers: { "content-type": "image/png" },
+    }));
+    for (const attachment of event.attachments ?? []) await attachment.fetch();
+    expect(
+      request.mock.calls
+        .filter(([call]) => call.url.includes("/resources/"))
+        .map(([call]) => call.url),
+    ).toEqual([
+      "https://open.feishu.cn/open-apis/im/v1/messages/om-test/resources/img-first",
+      "https://open.feishu.cn/open-apis/im/v1/messages/om-test/resources/img-second",
+    ]);
+  });
+
+  it.each(["image/svg+xml", "text/html", "", "image/jpeg"])(
+    "refuses unsupported or mismatched MIME %s",
+    async (mimeType) => {
+      const stream = Readable.from([png]);
+      resource.mockResolvedValue({ data: stream, headers: { "content-type": mimeType } });
+      const { event } = await inboundImage();
+      await expect(event.attachments![0]!.fetch()).rejects.toThrow();
+      expect(stream.destroyed).toBe(true);
+    },
+  );
+
+  it.each(["empty", "oversize", "read-error"])("refuses and destroys a %s stream", async (kind) => {
+    const stream =
+      kind === "read-error"
+        ? new Readable({
+            read() {
+              this.destroy(new Error("fixture failure"));
+            },
+          })
+        : Readable.from(kind === "empty" ? [] : [png, Buffer.alloc(10 * 1024 * 1024)]);
+    resource.mockResolvedValue({ data: stream, headers: { "content-type": "image/png" } });
+    const { event } = await inboundImage();
+    await expect(event.attachments![0]!.fetch()).rejects.toThrow();
+    expect(stream.destroyed).toBe(true);
+  });
+
+  it("destroys a stalled stream at the shared download deadline", async () => {
+    const { event } = await inboundImage();
+    const stream = new Readable({ read() {} });
+    resource.mockResolvedValue({ data: stream, headers: { "content-type": "image/png" } });
+    vi.useFakeTimers();
+    try {
+      const result = event.attachments![0]!.fetch();
+      const rejected = expect(result).rejects.toThrow("timed out");
+      await vi.advanceTimersByTimeAsync(2_000);
+      await rejected;
+      expect(stream.destroyed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not fetch image resources for rejected webhooks or ignored groups", async () => {
+    const { surface, events } = await createSurface(true);
+    const payload = message();
+    payload.event.message.message_type = "image";
+    payload.event.message.content = JSON.stringify({ image_key: "img-test" });
+    expect((await surface.handleWebhook("lark", encryptedWebhook(payload, false)))?.status).toBe(
+      403,
+    );
+    payload.event.message.chat_type = "group";
+    await surface.handleWebhook("lark", encryptedWebhook(payload));
+    expect(events).toEqual([]);
+    expect(resource).not.toHaveBeenCalled();
+  });
+
+  it.each([null, 4, "", "..", "../other", "https://files.test/image", "a".repeat(257)])(
+    "ignores invalid image identifiers %j",
+    async (key) => {
+      const { surface, events } = await createSurface();
+      const payload = message();
+      payload.event.message.message_type = "image";
+      payload.event.message.content = JSON.stringify({ image_key: key });
+      await surface.handleWebhook("lark", webhook(payload));
+      const event = events[0];
+      if (event?.type === "message") expect(event.attachments).toBeUndefined();
+      expect(resource).not.toHaveBeenCalled();
+    },
+  );
+
+  it("retains the original message and resource scope after the SDK raw object changes", async () => {
+    const { adapter, surface } = await createSurface();
+    await surface.handleWebhook("lark", webhook(message()));
+    const payload = message();
+    payload.event.message.message_type = "image";
+    payload.event.message.content = JSON.stringify({ image_key: "img-origin" });
+    const parsed = adapter.parseMessage(payload.event);
+    payload.event.message.message_id = "om-replaced";
+    payload.event.message.content = JSON.stringify({ image_key: "img-replaced" });
+    resource.mockResolvedValue({
+      data: Readable.from([png]),
+      headers: { "content-type": "image/png" },
+    });
+    await parsed.attachments[0]!.fetchData!();
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://open.feishu.cn/open-apis/im/v1/messages/om-test/resources/img-origin",
+      }),
+    );
+  });
+
+  it.each([
+    ["image", "{not-json"],
+    ["image", "null"],
+    ["post", JSON.stringify({ content: [[{ tag: "img", image_key: "img-test" }], null] })],
+  ])("does not expose keys or partially parse malformed %s content", async (type, content) => {
+    const { surface, events } = await createSurface();
+    const payload = message();
+    payload.event.message.message_type = type;
+    payload.event.message.content = content;
+    await surface.handleWebhook("lark", webhook(payload));
+    const event = events[0];
+    if (event?.type === "message") {
+      expect(event.content).toBe("");
+      expect(event.attachments).toBeUndefined();
+    }
+    expect(resource).not.toHaveBeenCalled();
   });
 });
 

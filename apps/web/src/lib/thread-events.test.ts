@@ -9,31 +9,70 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
+  activeThreadRuns,
   answerableAskMessageIds,
+  applyThreadSendReceipt,
+  clearActiveThreadRuns,
   dismissableAskMessageIds,
+  isThreadSnapshotEvent,
+  mergeThreadSnapshot,
+  reconcileRefreshedThread,
+  reduceThreadSnapshot,
+  threadRunError,
   withLiveStreamingProgress,
 } from "@orkbot/core";
 import { describe, expect, it } from "vitest";
 import {
-  activeThreadRuns,
-  applyThreadSendReceipt,
-  clearActiveThreadRuns,
   computerPanelNeedsMaintenance,
   computerPanelNeedsScreen,
   computerTakeoverBlocked,
-  isThreadSnapshotEvent,
-  mergeThreadSnapshot,
   prependThreadMessagePage,
-  reconcileRefreshedThread,
   reduceComputerStatus,
-  reduceThreadSnapshot,
   screenMissing,
   screenReadLoaded,
-  threadRunError,
   userHoldsComputerControl,
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("shows ordinary handoff attachments immediately while the recipient run continues", () => {
+    const initial = { ...snapshot([]), run: threadRun("receiver-run") };
+    const event: ProductEvent = {
+      id: "handoff-event",
+      spaceId: "space",
+      threadId: initial.threadId,
+      botId: "sender",
+      type: "thread.message.created",
+      seq: 4,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      payload: {
+        messageId: "handoff-message",
+        seq: 7,
+        role: "bot",
+        blocks: [
+          { kind: "handoff", fromBotId: "sender", toBotId: "bot-1", text: "Review" },
+          {
+            kind: "file",
+            artifactId: "artifact",
+            name: "report.txt",
+            mimeType: "text/plain",
+            size: 7,
+          },
+        ],
+      },
+    };
+    expect(isThreadSnapshotEvent(event)).toBe(true);
+    const next = reduceThreadSnapshot(initial, event)!;
+    expect(next.messages[0]).toMatchObject({
+      id: "handoff-message",
+      seq: 7,
+      blocks: [
+        expect.objectContaining({ kind: "handoff" }),
+        expect.objectContaining({ kind: "file", artifactId: "artifact" }),
+      ],
+    });
+    expect(next.run?.status).toBe("running");
+    expect(reduceThreadSnapshot(next, event)?.messages).toHaveLength(1);
+  });
   it("shows a committed direct send as queued before its snapshot refresh returns", () => {
     const initial = snapshot([message("user-1", [{ kind: "text", text: "Continue" }], 4)]);
 
@@ -501,7 +540,7 @@ describe("thread event reduction", () => {
       initial,
       event({
         type: "run.started",
-        seq: 3,
+        seq: 4,
         runId: "run-1",
         payload: { trigger: "user" },
       }),
@@ -856,7 +895,8 @@ describe("thread event reduction", () => {
 
     const reconciled = reconcileRefreshedThread(newer, older, prevComputer);
 
-    expect(reconciled.snapshot).toBe(newer);
+    expect(reconciled.snapshot).toEqual({ ...newer, computer: prevComputer });
+    expect(reconciled.snapshot.messages).toBe(newer.messages);
     expect(reconciled.computer).toBe(prevComputer);
   });
 
@@ -876,7 +916,8 @@ describe("thread event reduction", () => {
       computer({ state: "running", controlHolder: "bot", busyBotName: null }),
     );
 
-    expect(reconciled.snapshot).toBe(newer);
+    expect(reconciled.snapshot).toEqual({ ...newer, computer: older.computer });
+    expect(reconciled.snapshot.messages).toBe(newer.messages);
     expect(reconciled.computer?.busyBotName).toBe("Chief");
   });
 
@@ -1170,9 +1211,13 @@ describe("thread event reduction", () => {
 
     expect(waiting?.run?.status).toBe("waiting_input");
     expect(waiting?.cursor).toBe(6);
-    expect(
-      reduceThreadSnapshot(waiting, event({ type: "run.waiting_input", seq: 7, runId: "run-1" })),
-    ).toBe(waiting);
+    const repeated = reduceThreadSnapshot(
+      waiting,
+      event({ type: "run.waiting_input", seq: 7, runId: "run-1" }),
+    );
+    expect(repeated?.run).toBe(waiting?.run);
+    expect(repeated?.messages).toBe(waiting?.messages);
+    expect(repeated?.cursor).toBe(7);
   });
 
   it("clears live progress when a run waits for input", () => {
@@ -2001,7 +2046,7 @@ describe("stale helper projection", () => {
     };
     const helper = { agentId: "helper", name: "Helper", task: "Check", status: "running" };
     let next = reduceThreadSnapshot(
-      snapshot([]),
+      { ...snapshot([]), cursor: 0 },
       event({ ...base, type: "thread.subagent", payload: helper }),
     );
     next = reduceThreadSnapshot(next, event({ ...base, seq: 2, type, payload: {} }));

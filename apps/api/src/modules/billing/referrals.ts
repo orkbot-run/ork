@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { randomInt } from "node:crypto";
 import type { BillingProvider } from "@orkbot/adapter-kit";
@@ -12,6 +13,7 @@ import {
   extendByokFreePeriod,
   FREE_MONTH_DAYS,
   hasBillingAccess,
+  isUniqueViolation,
   Prisma,
   reconcileCreditPurchase,
 } from "@orkbot/db";
@@ -46,7 +48,7 @@ export function createReferrals(deps: {
         return created.code;
       } catch (error) {
         // A concurrent create for this organization, or a code collision; the next pass settles it.
-        if (!isUniqueViolation(error)) throw error;
+        if (!isReferralUniqueViolation(error)) throw error;
       }
     }
   }
@@ -57,7 +59,7 @@ export function createReferrals(deps: {
     try {
       await prisma.referral.updateMany({ where: undecided, data: { outcome, cardFingerprint } });
     } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
+      if (!isReferralUniqueViolation(error)) throw error;
       // Another referral was already settled with this card.
       await prisma.referral.updateMany({ where: undecided, data: { outcome: "declined" } });
     }
@@ -183,8 +185,8 @@ export function createReferrals(deps: {
   };
 }
 
-function isUniqueViolation(error: unknown) {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+function isReferralUniqueViolation(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && isUniqueViolation(error);
 }
 
 function newCode() {

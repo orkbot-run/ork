@@ -3,6 +3,26 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "New server available": "Neuer Server verfügbar",
+  "Open servers": "Server öffnen",
+  Later: "Später",
+  "Self-hosted": "Selbst gehostet",
+  "Copy command": "Befehl kopieren",
+  "Could not copy the command.": "Der Befehl konnte nicht kopiert werden.",
+  "Run this command on your Linux server, then open the authorization link it prints.":
+    "Führe diesen Befehl auf deinem Linux-Server aus und öffne anschließend den angezeigten Autorisierungslink.",
+  "Routine: {names}": "Routine: {names}",
+  "Routines: {names}": "Routinen: {names}",
+  "Stop {name}": "{name} stoppen",
+  "Stop all": "Alle stoppen",
+  "Review delivery": "Zustellung prüfen",
+  "Mark as sent": "Als gesendet markieren",
+  "Mark as not sent": "Als nicht gesendet markieren",
+  "Check the chat first. Marking the result resumes queued messages without resending this message.":
+    "Zuerst im Chat nachsehen. Das Markieren des Ergebnisses setzt ausstehende Nachrichten fort, ohne diese Nachricht erneut zu senden.",
+  "Reply mode": "Antwortmodus",
+  Chat: "Chat",
+  "Updates and final reply": "Updates und Abschlussantwort",
   "Haptic feedback": "Haptisches Feedback",
   "Check again": "Erneut prüfen",
   "Computers unavailable": "Computer nicht verfügbar",

@@ -86,7 +86,25 @@ def configured(url, env):
     if bool(client.strip()) != bool(secret.strip()):
         raise SetupError("The existing Accounts client is incomplete; keep its credentials and finish its server configuration manually.")
     if not client.strip():
-        return False
+        if env.get("AUTH_ACCOUNTS_ENABLED") != "true":
+            return False
+        bootstrap = env.get("ORKBOT_BOOTSTRAP_SECRET", "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", bootstrap):
+            raise SetupError("Existing native Accounts configuration is missing its initialization secret.")
+        if env.get("OIDC_ISSUER", "") not in ("", ISSUER):
+            raise SetupError("The existing Accounts issuer is invalid; its settings were kept.")
+        if env.get("OIDC_REDIRECT_URI", ""):
+            raise SetupError("Native Accounts cannot use an OIDC callback; keep the existing settings and resolve the conflict.")
+        if any(env.get(key) != url for key in ("BETTER_AUTH_URL", "WEB_ORIGIN", "API_URL")):
+            if STATE.exists() or any(
+                env.get(key, "") not in ("", "http://127.0.0.1:5173", url)
+                for key in ("BETTER_AUTH_URL", "WEB_ORIGIN", "API_URL")
+            ):
+                raise SetupError("The existing installation belongs to another URL; its settings were kept.")
+            return False
+        if env.get("AUTH_PASSWORD_ENABLED", "") not in ("", "false") or env.get("SIGNUPS_ENABLED") != "false":
+            raise SetupError("Native Accounts settings are inconsistent; existing configuration was kept.")
+        return True
     if env.get("OIDC_ISSUER") != ISSUER or any(env.get(key) != url for key in ("BETTER_AUTH_URL", "WEB_ORIGIN", "API_URL")):
         raise SetupError("The existing installation belongs to another URL or issuer; its settings were kept.")
     if env.get("OIDC_REDIRECT_URI", "") not in ("", url + "/api/auth/callback/oidc"):
@@ -278,9 +296,10 @@ def configure(url):
     hostname = origin(url)
     values = {}
     ticket, token = None, None
-    if not configured(url, env):
+    already_configured = configured(url, env)
+    if not already_configured and code and env.get("AUTH_ACCOUNTS_ENABLED") != "true":
         if not re.fullmatch(r"[A-Za-z0-9_-]{43}", code):
-            raise SetupError("A new installation needs a one-use code from Accounts setup.")
+            raise SetupError("Invalid installation code.")
         # Exactly one request. An ambiguous transport failure requires a newly issued code.
         result = request_json(ISSUER + "/api/installations/redeem", {"url": url}, code)
         if (not isinstance(result, dict) or result.get("url") != url or result.get("issuer") != ISSUER or
@@ -292,10 +311,18 @@ def configure(url):
                     not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token)):
                 raise SetupError("Accounts returned an invalid installation status credential.")
         values.update(OIDC_ISSUER=ISSUER, OIDC_CLIENT_ID=result["clientId"], OIDC_CLIENT_SECRET=result["clientSecret"])
+    elif not already_configured:
+        if env.get("AUTH_ACCOUNTS_ENABLED") != "true" or not re.fullmatch(
+            r"[A-Za-z0-9_-]{43}", env.get("ORKBOT_BOOTSTRAP_SECRET", "")
+        ):
+            raise SetupError("Existing configuration cannot be initialized automatically; keep the original credentials.")
+        values.update(AUTH_ACCOUNTS_ENABLED="true", SIGNUPS_ENABLED="false", OIDC_REDIRECT_URI="")
     values.update({
         "BETTER_AUTH_URL": url, "WEB_ORIGIN": url, "API_URL": url, "ORKBOT_HOST": hostname,
-        "OIDC_REDIRECT_URI": url + "/api/auth/callback/oidc", "AUTH_PASSWORD_ENABLED": "false",
+        "AUTH_PASSWORD_ENABLED": "false",
     })
+    if env.get("OIDC_CLIENT_ID") or values.get("OIDC_CLIENT_ID"):
+        values["OIDC_REDIRECT_URI"] = url + "/api/auth/callback/oidc"
     if env.get("SANDBOX_PROVIDER", "docker") == "docker":
         values["SANDBOX_COMPUTER_EGRESS"] = "restricted"
     write_environment(values)
@@ -341,9 +368,14 @@ def ready(url):
                     not isinstance(rpc["json"].get("version"), str) or not isinstance(capabilities, dict)):
                 raise SetupError("The public origin did not respond like an Ork server.")
             sso = capabilities.get("sso")
-            if (capabilities.get("passwordAuth") is not False or not isinstance(sso, dict) or
-                    not isinstance(sso.get("name"), str) or not sso["name"].strip() or sso.get("availability") != "available"):
+            legacy_available = (isinstance(sso, dict) and isinstance(sso.get("name"), str) and
+                                bool(sso["name"].strip()) and sso.get("availability") == "available")
+            if capabilities.get("passwordAuth") is not False or not (capabilities.get("accountsLogin") is True or legacy_available):
                 raise SetupError("Accounts sign-in is not available yet.")
+            if capabilities.get("accountsLogin") is True:
+                keys = request_json(ISSUER + "/api/auth/jwks")
+                if not isinstance(keys, dict) or not isinstance(keys.get("keys"), list) or not keys["keys"]:
+                    raise SetupError("Accounts signing keys are not available yet.")
             return
         except SetupError:
             if time.monotonic() >= deadline:
@@ -365,6 +397,26 @@ def pin_images(base):
     write_environment(values)
 
 
+def initialization_required(url):
+    env = environment()
+    if env.get("AUTH_ACCOUNTS_ENABLED") != "true" or env.get("OIDC_CLIENT_ID"):
+        return False
+    secret = env.get("ORKBOT_BOOTSTRAP_SECRET", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", secret):
+        raise SetupError("The initialization secret is unavailable; keep the existing configuration.")
+    state = request_json(url + "/api/auth/native/initialization")
+    if not isinstance(state, dict) or type(state.get("required")) is not bool:
+        raise SetupError("Could not determine whether server initialization is required.")
+    if state["required"]:
+        challenge = request_json(url + "/api/auth/native/challenge", {})
+        if not isinstance(challenge, dict) or type(challenge.get("bootstrapRequired")) is not bool:
+            raise SetupError("Could not determine whether server authorization is required.")
+        if not challenge["bootstrapRequired"]:
+            return False
+        return True
+    return False
+
+
 def main():
     operation, url = sys.argv[1:3]
     if operation == "server-url":
@@ -382,12 +434,19 @@ def main():
         preflight(url, sys.argv[3] == "true")
     elif operation == "configured":
         print("true" if configured(url, environment()) else "false")
+    elif operation == "auth-mode":
+        env = environment()
+        if not configured(url, env):
+            raise SetupError("Accounts configuration is incomplete.")
+        print("native" if env.get("AUTH_ACCOUNTS_ENABLED") == "true" and not env.get("OIDC_CLIENT_ID") else "oidc")
     elif operation == "provider":
         print(environment().get("SANDBOX_PROVIDER", "docker") or "docker")
     elif operation == "configure":
         configure(url)
     elif operation == "ready":
         ready(url)
+    elif operation == "initialization-required":
+        print("true" if initialization_required(url) else "false")
     else:
         raise SetupError("Unknown server installer operation.")
 

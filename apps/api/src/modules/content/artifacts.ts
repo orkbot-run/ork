@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import { createHash } from "node:crypto";
 import type { ArtifactStore, MessagingInboundAttachment } from "@orkbot/adapter-kit";
@@ -22,7 +23,7 @@ import {
   validateAttachmentMimeType,
 } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
-import { IsolationError, Prisma, withResolvedArtifactVersion } from "@orkbot/db";
+import { IsolationError, isRecordNotFound, Prisma, withResolvedArtifactVersion } from "@orkbot/db";
 
 export async function createOwnedArtifact(
   deps: {
@@ -76,8 +77,8 @@ export async function storeInboundAttachment(
   if (replayed) return createdArtifact(replayed);
   const { attachment } = input;
   const name = attachment.name.slice(0, ARTIFACT_NAME_MAX_LENGTH);
-  const mimeType = inferAttachmentMimeType(name, attachment.mimeType) ?? attachment.mimeType;
-  validateAttachmentMimeType(mimeType);
+  const initialType = inferAttachmentMimeType(name, attachment.mimeType) ?? attachment.mimeType;
+  if (initialType || attachment.mimeType) validateAttachmentMimeType(initialType);
   const maxBytes = deps.maxUploadSizeBytes ?? ATTACHMENT_MAX_BYTES;
   const tooLarge = new AttachmentValidationError(
     `Attachment exceeds the ${attachmentSizeLabel(maxBytes)} limit`,
@@ -92,10 +93,14 @@ export async function storeInboundAttachment(
       timeoutMs,
     );
   });
-  const bytes = await Promise.race([
+  const downloaded = await Promise.race([
     Promise.resolve().then(() => attachment.fetch()),
     timeout,
   ]).finally(() => clearTimeout(timer));
+  const bytes = downloaded instanceof Uint8Array ? downloaded : downloaded.bytes;
+  const mimeType = downloaded instanceof Uint8Array ? initialType : downloaded.mimeType;
+  // Download metadata belongs to these bytes and must not be inferred again from the name.
+  validateAttachmentMimeType(mimeType);
   if (bytes.byteLength === 0) throw new AttachmentValidationError("Attachment content is empty");
   if (bytes.byteLength > maxBytes) throw tooLarge;
   const stored = await storeOwnedArtifact(deps, owner, {
@@ -542,7 +547,7 @@ async function deleteArtifactRootIfChildless(
     try {
       await tx.artifact.delete({ where: { id: root.id } });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error)) {
         outcome = "gone";
         return;
       }
@@ -589,7 +594,7 @@ async function deleteArtifactRowIfPresent(
   try {
     await prisma.artifact.delete({ where: { id } });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return;
+    if (error instanceof Prisma.PrismaClientKnownRequestError && isRecordNotFound(error)) return;
     throw error;
   }
 }

@@ -1,12 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
 
 import type { AccountItem, Actor, AvailabilityKind, SpaceAvailability } from "@orkbot/contracts";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import {
   AVAILABILITY_SELECT,
   availableInSpace,
+  isUniqueViolation,
   runAsSystem,
   runAsSystemInTransaction,
   spaceAvailability,
@@ -382,8 +384,7 @@ export async function rehomeItemsLeaving(prisma: PrismaClient, spaceId: string):
           }
         });
       } catch (error) {
-        if (!(error && typeof error === "object" && "code" in error && error.code === "P2002"))
-          throw error;
+        if (!isUniqueViolation(error)) throw error;
       }
     };
     for (const row of installs) await move("install", row);

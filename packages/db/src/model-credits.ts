@@ -1,6 +1,12 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; Ork changes consolidate database error matching.
+
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, BillingCreditPurchase } from "@orkbot/adapter-kit";
 import type { PrismaClient } from "./client.js";
+import { isUniqueViolation } from "./database-errors.js";
 import { Prisma } from "./generated/prisma/client.js";
 import type { CreditAllocation } from "./model-credit-lots.js";
 import {
@@ -23,7 +29,7 @@ export async function creditAccount(prisma: PrismaClient, organizationId: string
       update: {},
     });
   } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"))
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && isUniqueViolation(error)))
       throw error;
     // Empty-update upserts can race; the organization primary key is the only unique constraint.
     return prisma.modelCreditAccount.findUniqueOrThrow({ where: { organizationId } });

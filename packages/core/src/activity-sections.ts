@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved; shared activity identity follows LICENSE.md.
+
 import type { RunActivityRow } from "@orkbot/contracts";
 import { isRunWaitingOnUser, isRunWorking } from "./run-state.js";
 import { isAgedStuckWork } from "./stuck-work.js";
@@ -18,7 +22,10 @@ export function activityAttention(
   return run.status === "failed" ? "needs_attention" : "unread";
 }
 
-const chatKey = (run: ActivityRun) => (run.groupId ? `group:${run.groupId}` : `bot:${run.botId}`);
+/** A group is one chat regardless of which member bot produced its run. */
+export function activityChatKey(run: Pick<RunActivityRow, "botId" | "groupId">): string {
+  return run.groupId ? `group:${run.groupId}` : `bot:${run.botId}`;
+}
 
 /** Splits activity into what needs the user, what is running, unread chats, and the rest. */
 export function activitySections<
@@ -40,20 +47,20 @@ export function activitySections<
     ...bots.filter((bot) => bot.unread).map((bot) => `bot:${bot.id}`),
     ...groups.filter((group) => group.unread).map((group) => `group:${group.id}`),
   ]);
-  const runUnread = (run: Run) => unreadChats.has(chatKey(run));
+  const runUnread = (run: Run) => unreadChats.has(activityChatKey(run));
   // One run speaks for each chat: a question first, then live work, then the latest outcome
   // (`recent` is newest first).
   const byChat = new Map<string, Run>();
   const waiting = active.filter((run) => activityAttention(run) === "needs_attention");
   for (const run of [...waiting, ...active, ...recent]) {
-    if (!byChat.has(chatKey(run))) byChat.set(chatKey(run), run);
+    if (!byChat.has(activityChatKey(run))) byChat.set(activityChatKey(run), run);
   }
   const latest = [...byChat.values()];
   const attention = latest.filter(
     (run) => activityAttention(run, runUnread(run)) === "needs_attention",
   );
   const working = latest.filter((run) => activityAttention(run, runUnread(run)) === "working");
-  const busy = new Set([...attention, ...working].map(chatKey));
+  const busy = new Set([...attention, ...working].map(activityChatKey));
   return {
     attention,
     working,

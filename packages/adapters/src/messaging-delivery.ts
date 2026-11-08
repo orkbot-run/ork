@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited material remains Apache-2.0; Ork thread-lock budget coverage is PolyForm-covered.
 // Ork deferred messaging SDK loading is PolyForm-covered.
+// Ork adds shared durable direct progress and guarded delivery outcomes.
 
 import type {
   AdapterContext,
@@ -12,10 +13,10 @@ import type {
   MessagingOutboundStatus,
   MessagingSurface,
 } from "@orkbot/adapter-kit";
-import { messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
+import { MessagingSendError, messagingDeliverJob, runContinueJob } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
 import { botMessageHopExhausted, nextBotMessageHop, pageLinksAsTitles } from "@orkbot/core";
-import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
+import type { Prisma, PrismaClient, Run, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
   CrossSpaceCommunicationBlockedError,
@@ -25,7 +26,16 @@ import {
   THREAD_LOCK_TRANSACTION_OPTIONS,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
-import { MessagingSendError } from "./chat-sdk-surface.js";
+import {
+  DIRECT_DELIVERY_VERSION,
+  declareDirectDelivery,
+  declareRejectedDelivery,
+  directDeliverySourceAvailable,
+  MESSAGING_ROW_IN_FLIGHT_MS,
+  quarantineStaleDirectClaims,
+  retireDirectDelivery,
+  retireUnavailableUnknowns,
+} from "./messaging-outbound-state.js";
 import { splitOutboundBody } from "./messaging-platforms.js";
 
 /**
@@ -61,6 +71,7 @@ type MessagingOutboundRow = {
   nextAttemptAt: Date | null;
   sourceMessageId: string | null;
   createdAt: Date;
+  requiredDeliveryVersion?: number;
 };
 
 export interface MessagingDeliveryDeps {
@@ -129,18 +140,55 @@ async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<vo
     return;
   }
 
+  await queueDirectRun(deps, run, false);
+}
+
+/** Admit only durable direct text before the run's first attachment/page barrier. */
+export async function mirrorMessagingProgress(
+  deps: Pick<MessagingDeliveryDeps, "prisma" | "messaging">,
+  runId: string,
+): Promise<boolean> {
+  const run = await deps.prisma.run.findUnique({
+    where: { id: runId },
+    include: { sourceMessage: true },
+  });
+  if (!run || (run.trigger !== "messaging" && run.trigger !== "bot_message")) return false;
+  const source = run.sourceMessage?.blocks;
+  if (
+    Array.isArray(source) &&
+    source.some(
+      (block) =>
+        block !== null &&
+        typeof block === "object" &&
+        !Array.isArray(block) &&
+        block.kind === "channel_message",
+    )
+  )
+    return false;
+  return queueDirectRun(deps, run, true);
+}
+
+async function queueDirectRun(
+  deps: Pick<MessagingDeliveryDeps, "prisma" | "messaging">,
+  run: Pick<Run, "id" | "botId" | "spaceId" | "userId" | "threadId">,
+  progress: boolean,
+): Promise<boolean> {
   const identity = await deps.prisma.messagingIdentity.findUnique({
     where: { botId: run.botId },
   });
-  if (!identity) return;
+  if (!identity || identity.spaceId !== run.spaceId || identity.userId !== run.userId) return false;
 
   // bot_message runs can carry the bot's user-facing reply after a delegate wake.
   // extractText keeps only text and page titles, so inter-bot chatter blocks never leak out.
 
-  const messages = await deps.prisma.message.findMany({
-    where: { runId: run.id, role: "bot" },
+  const committed = await deps.prisma.message.findMany({
+    where: { runId: run.id, threadId: run.threadId, role: "bot" },
     orderBy: { seq: "asc" },
   });
+  const barrier = progress
+    ? committed.findIndex((message) => hasDeliveryBarrier(message.blocks))
+    : -1;
+  const messages = barrier < 0 ? committed : committed.slice(0, barrier);
   const sendsFiles = deps.messaging
     .platforms()
     .some((platform) => platform.provider === identity.provider && platform.capabilities.files);
@@ -161,6 +209,7 @@ async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<vo
             identityId: identity.id,
             body: part,
             sourceMessageId: message.id,
+            requiredDeliveryVersion: DIRECT_DELIVERY_VERSION,
           })),
           ...(sendsFiles ? extractArtifactIds(message.blocks) : []).map((artifactId) => ({
             idempotencyKey: `msg:${message.id}:file:${artifactId}`,
@@ -168,15 +217,26 @@ async function mirrorRun(deps: MessagingDeliveryDeps, runId: string): Promise<vo
             identityId: identity.id,
             body: "",
             sourceMessageId: message.id,
+            requiredDeliveryVersion: DIRECT_DELIVERY_VERSION,
           })),
         ];
       }),
     )
   ).flat();
-  if (rows.length === 0) return;
+  if (rows.length === 0) return false;
   // Atomic dedupe: a concurrent messaging.deliver for the same run loses on
   // the idempotencyKey unique key instead of throwing P2002.
   await insertOutboundRows(deps.prisma, { identityId: identity.id }, rows);
+  return true;
+}
+
+function hasDeliveryBarrier(blocks: unknown): boolean {
+  return (
+    Array.isArray(blocks) &&
+    blocks.some(
+      (block) => block?.kind === "image" || block?.kind === "file" || block?.kind === "page",
+    )
+  );
 }
 
 /**
@@ -203,6 +263,19 @@ export async function insertOutboundRows(
       data: rows.map((row, index) => ({ ...row, createdAt: new Date(base + index) })),
       skipDuplicates: true,
     });
+    const protectedKeys = rows
+      .filter((row) => row.requiredDeliveryVersion === DIRECT_DELIVERY_VERSION)
+      .map((row) => row.idempotencyKey);
+    if (protectedKeys.length)
+      await tx.messagingOutbound.updateMany({
+        where: {
+          ...conversation,
+          status: "pending",
+          requiredDeliveryVersion: { lt: DIRECT_DELIVERY_VERSION },
+          idempotencyKey: { in: protectedKeys },
+        },
+        data: { requiredDeliveryVersion: DIRECT_DELIVERY_VERSION },
+      });
   });
 }
 
@@ -514,8 +587,7 @@ async function lockConversation(tx: Prisma.TransactionClient, conversation: Conv
 }
 
 /**
- * Claims the row for sending, or returns false when the conversation must
- * wait. The blocker check and the claim commit together under the
+ * Claims the row, retires unavailable history, or holds this conversation. The blocker check and the claim commit together under the
  * conversation's lock, so a row another writer commits in between (an intro
  * landing mid-flight) cannot put two sends of one conversation on the wire.
  * The lock is released before any provider call.
@@ -524,15 +596,34 @@ async function claimForSend(
   deps: MessagingDeliveryDeps,
   conversation: Conversation,
   row: MessagingOutboundRow,
-): Promise<boolean> {
+): Promise<"claimed" | "held" | "retired"> {
   return deps.prisma.$transaction(async (tx) => {
     await lockConversation(tx, conversation);
-    if (await hasBlockingRow(tx, conversation, row, Date.now())) return false;
+    const protectedDirect =
+      row.kind === "dm" && conversation.identityId && !connectInvitePair(row.idempotencyKey);
+    if (protectedDirect) {
+      await quarantineStaleDirectClaims(tx, conversation.identityId);
+      const identity = await tx.messagingIdentity.findUnique({
+        where: { id: conversation.identityId },
+      });
+      if (identity) await retireUnavailableUnknowns(tx, identity);
+      if (!identity || !(await directDeliverySourceAvailable(tx, identity, row))) {
+        await retireDirectDelivery(tx, row.id);
+        return "retired";
+      }
+      await declareDirectDelivery(tx);
+    }
+    if (await hasBlockingRow(tx, conversation, row, Date.now())) return "held";
     const claim = await tx.messagingOutbound.updateMany({
       where: { id: row.id, status: "pending" },
-      data: { status: "sent", nextAttemptAt: null },
+      data: {
+        status: "sent",
+        nextAttemptAt: null,
+        ...(protectedDirect ? { requiredDeliveryVersion: DIRECT_DELIVERY_VERSION } : {}),
+      },
     });
-    return claim.count === 1;
+    if (claim.count === 1 && protectedDirect) row.requiredDeliveryVersion = DIRECT_DELIVERY_VERSION;
+    return claim.count === 1 ? "claimed" : "held";
   });
 }
 
@@ -551,10 +642,13 @@ async function deliverLane(
   while (row) {
     const now = Date.now();
     if (row.nextAttemptAt && row.nextAttemptAt.getTime() > now) return;
+    let retired = false;
     if (conversation) {
       // Claim before sending: concurrent drains and crash retries must never
       // deliver the same message twice.
-      if (!(await claimForSend(deps, conversation, row))) return;
+      const claim = await claimForSend(deps, conversation, row);
+      if (claim === "held") return;
+      retired = claim === "retired";
     } else {
       const claim = await deps.prisma.messagingOutbound.updateMany({
         where: { id: row.id, status: "pending" },
@@ -562,7 +656,7 @@ async function deliverLane(
       });
       if (claim.count === 0) return;
     }
-    if (!(await deliverRow(deps, context, row))) return;
+    if (!retired && !(await deliverRow(deps, context, row))) return;
     row = conversation
       ? await deps.prisma.messagingOutbound.findFirst({
           where: { status: "pending", ...conversation },
@@ -580,6 +674,23 @@ async function deliverRow(
 ): Promise<boolean> {
   let attachmentName: string | null = null;
   let accepted = false;
+  let sendStarted = false;
+  const protectedDirect = row.kind === "dm" && (row.requiredDeliveryVersion ?? 0) > 0;
+  const conversation = conversationOf(row);
+  const settleBeforeSend = async (status: "failed" | "pending") => {
+    if (!protectedDirect) {
+      await deps.prisma.messagingOutbound.update({ where: { id: row.id }, data: { status } });
+      return;
+    }
+    await deps.prisma.$transaction(async (tx) => {
+      if (conversation) await lockConversation(tx, conversation);
+      await declareRejectedDelivery(tx);
+      await tx.messagingOutbound.updateMany({
+        where: { id: row.id, status: "sent", providerHandle: null },
+        data: { status },
+      });
+    });
+  };
   try {
     if (row.kind === "group" || row.kind === "intro") {
       if (!row.threadId) {
@@ -604,12 +715,22 @@ async function deliverRow(
       ? await deps.prisma.messagingIdentity.findUnique({ where: { id: row.identityId } })
       : null;
     if (!identity) {
-      await deps.prisma.messagingOutbound.update({
-        where: { id: row.id },
-        data: { status: "failed" },
-      });
+      await settleBeforeSend("failed");
       return true;
     }
+    const sourceAvailable = async () => {
+      if (!protectedDirect) return true;
+      return deps.prisma.$transaction(async (tx) => {
+        await lockConversation(tx, { identityId: identity.id });
+        const claimed = await tx.messagingOutbound.findUnique({ where: { id: row.id } });
+        if (claimed?.status !== "sent" || claimed.providerHandle != null) return false;
+        const current = await tx.messagingIdentity.findUnique({ where: { id: identity.id } });
+        if (current && (await directDeliverySourceAvailable(tx, current, row))) return true;
+        await retireDirectDelivery(tx, row.id);
+        return false;
+      });
+    };
+    if (!(await sourceAvailable())) return true;
     // Sendblue's consecutive-outbound vendor cap; other providers have no
     // equivalent limit, so do not hold Slack/WhatsApp/Telegram DMs.
     if (
@@ -617,10 +738,7 @@ async function deliverRow(
       identity.outboundSinceInbound >= MESSAGING_DM_OUTBOUND_CAP
     ) {
       // Cap holds are not failures: release the claim back to pending.
-      await deps.prisma.messagingOutbound.update({
-        where: { id: row.id },
-        data: { status: "pending" },
-      });
+      await settleBeforeSend("pending");
       return false;
     }
     const threadId = await resolveDirectThread(deps, identity, context);
@@ -652,10 +770,7 @@ async function deliverRow(
       });
       if (!artifact) {
         // Deleted since the reply was mirrored, or not in this Space.
-        await deps.prisma.messagingOutbound.update({
-          where: { id: row.id },
-          data: { status: "failed" },
-        });
+        await settleBeforeSend("failed");
         return true;
       }
       attachmentName = artifact.name;
@@ -666,6 +781,9 @@ async function deliverRow(
       });
       attachment = { name: artifact.name, mimeType: artifact.mimeType, data };
     }
+    // Artifact storage and thread resolution can await external I/O; check the live source again.
+    if (!(await sourceAvailable())) return true;
+    sendStarted = true;
     const sent = await deps.messaging.sendToThread(
       { threadId, body: row.body, ...(attachment ? { attachment } : {}) },
       context,
@@ -691,11 +809,25 @@ async function deliverRow(
     // or an exhausted budget is terminal.
     const failure = error instanceof MessagingSendError ? error : null;
     const attempts = (row.attempts ?? 0) + 1;
+    if (protectedDirect && sendStarted && failure?.outcome !== "rejected") {
+      await deps.prisma.$transaction(async (tx) => {
+        if (conversation) await lockConversation(tx, conversation);
+        await tx.messagingOutbound.updateMany({
+          where: { id: row.id, status: "sent", providerHandle: null },
+          data: { status: "uncertain", attempts, nextAttemptAt: null },
+        });
+      });
+      getLogger().warn("messaging.outbound_uncertain", {
+        "outbound.id": row.id,
+        "identity.id": row.identityId ?? undefined,
+      });
+      return false;
+    }
     const exhausted = failure?.permanent || attempts >= MESSAGING_OUTBOUND_MAX_ATTEMPTS;
     const delayMs = Math.max(messagingOutboundRetryDelayMs(attempts), failure?.retryAfterMs ?? 0);
     const retryAt = exhausted ? null : new Date(Date.now() + delayMs);
     const outcome = {
-      where: { id: row.id },
+      where: { id: row.id, ...(protectedDirect ? { status: "sent", providerHandle: null } : {}) },
       data: {
         attempts,
         status: exhausted ? "failed" : "pending",
@@ -709,7 +841,12 @@ async function deliverRow(
       // given the file's place so later replies wait behind it.
       const name = attachmentName;
       await deps.prisma.$transaction(async (tx) => {
-        await tx.messagingOutbound.updateMany(outcome);
+        if (protectedDirect) {
+          if (conversation) await lockConversation(tx, conversation);
+          await declareRejectedDelivery(tx);
+        }
+        const changed = await tx.messagingOutbound.updateMany(outcome);
+        if (changed.count !== 1) return;
         await tx.messagingOutbound.createMany({
           data: [
             {
@@ -720,6 +857,7 @@ async function deliverRow(
               body: `Could not send "${name}".`,
               sourceMessageId: row.sourceMessageId,
               createdAt: row.createdAt,
+              ...(protectedDirect ? { requiredDeliveryVersion: DIRECT_DELIVERY_VERSION } : {}),
             },
           ],
           skipDuplicates: true,
@@ -728,7 +866,13 @@ async function deliverRow(
       await deps.jobs.enqueue(messagingDeliverJob());
       return false;
     }
-    await deps.prisma.messagingOutbound.updateMany(outcome);
+    if (protectedDirect)
+      await deps.prisma.$transaction(async (tx) => {
+        if (conversation) await lockConversation(tx, conversation);
+        await declareRejectedDelivery(tx);
+        await tx.messagingOutbound.updateMany(outcome);
+      });
+    else await deps.prisma.messagingOutbound.updateMany(outcome);
     if (!exhausted && retryAt) {
       // Propagate an enqueue failure: the messaging.deliver job then fails
       // and the queue's own retry re-runs the drain. Swallowing it would
@@ -741,15 +885,13 @@ async function deliverRow(
   }
 }
 
-/** A claimed row still without a handle after this long is treated as abandoned. */
-const MESSAGING_ROW_IN_FLIGHT_MS = 2 * 60_000;
-
 /**
  * True while the conversation must not start another send: a row that sorts
  * earlier is still pending, or any row is in flight. A row can commit after a
  * later-ordered row already left (a range allocated before it existed), and a
  * second send beside it would arrive unordered, so in flight blocks
- * regardless of order - bounded by the abandoned-claim deadline.
+ * regardless of order. Legacy claims retain their deadline; protected unknown
+ * outcomes stay blocked until an explicit resolution.
  */
 async function hasBlockingRow(
   client: Prisma.TransactionClient,
@@ -761,6 +903,7 @@ async function hasBlockingRow(
     where: {
       ...conversation,
       OR: [
+        { status: "uncertain" },
         {
           status: "pending",
           // SEND_ORDER's notion of earlier, so an equal-createdAt row from a
