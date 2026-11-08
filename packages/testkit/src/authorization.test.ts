@@ -543,6 +543,25 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["messaging/installations/complete", { state: "state", code: "code" }],
       ["messaging/installations/remove"],
       ["messaging/status"],
+      ["messaging/outbound/list", { identityId: "missing-identity" }],
+      [
+        "messaging/outbound/resolve",
+        {
+          identityId: "missing-identity",
+          outboundId: "missing-outbound",
+          version: "a".repeat(64),
+          resolution: "confirmed_sent",
+        },
+      ],
+      [
+        "messaging/outbound/resolve",
+        {
+          identityId: "missing-identity",
+          outboundId: "missing-outbound",
+          version: "a".repeat(64),
+          resolution: "confirmed_not_sent",
+        },
+      ],
       ["messaging/link/start"],
       ["messaging/identities/setBot"],
       ["messaging/identities/unlink"],
