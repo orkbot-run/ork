@@ -109,18 +109,10 @@ RUN set -eux; \
   uvx --version
 # Bookworm has no gh package; pin the upstream binary and verify sha256, same as uv.
 ARG GH_VERSION=2.100.0
-RUN set -eux; \
-  case "$TARGETARCH" in \
-    amd64) gh_arch=amd64; gh_sha256=e4d4bb4498e8d007abe545b6568926793ace1b6447da598294a610018cb164be ;; \
-    arm64) gh_arch=arm64; gh_sha256=ea4e7a581a32ccad6cc7923cb1576ac5859ba4b9a16ab22eb8f8a96e78e2e961 ;; \
-    *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
-  esac; \
-  archive="$(mktemp)"; \
-  curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${gh_arch}.tar.gz" -o "$archive"; \
-  echo "$gh_sha256  $archive" | sha256sum -c -; \
-  tar -xzf "$archive" -C /usr/local/bin --strip-components=2 "gh_${GH_VERSION}_linux_${gh_arch}/bin/gh"; \
-  rm -f "$archive"; \
-  gh --version
+COPY --chmod=755 install-github-cli.sh /tmp/install-github-cli.sh
+RUN /tmp/install-github-cli.sh "$GH_VERSION" "$TARGETARCH" /usr/local/bin \
+  && rm /tmp/install-github-cli.sh \
+  && gh --version
 # The page browser drives the visible Chromium through agent-browser, pinned and checked by sha256.
 COPY --chmod=755 install-agent-browser.sh /tmp/install-agent-browser.sh
 RUN /tmp/install-agent-browser.sh /usr/local/bin && rm /tmp/install-agent-browser.sh \
