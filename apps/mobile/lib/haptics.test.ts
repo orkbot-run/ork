@@ -25,9 +25,7 @@ vi.mock("react-native", () => ({
     },
   },
 }));
-const tick = async () => {
-  for (let i = 0; i < 20; i++) await Promise.resolve();
-};
+const tick = () => vi.dynamicImportSettled();
 beforeEach(() => {
   vi.resetModules();
   fake.os = "ios";
