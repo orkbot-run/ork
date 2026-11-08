@@ -39,6 +39,7 @@ export const COMPUTER_IMAGE_CONTEXT_FILES = [
   "orkbot-page-browser",
   "page_secrets.py",
   "install-agent-browser.sh",
+  "install-github-cli.sh",
   "orkbot-browser.desktop",
   "browser-policy.json",
   "embed.html",
