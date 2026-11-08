@@ -329,11 +329,13 @@ it("offers only protocol-supported effort and clamps the selected effort when pr
     account.load({ needsModel: true, needsSignupSurvey: false, billingEnabled: false }),
   );
   await act(async () => document.querySelector<HTMLElement>('[aria-label="Provider"]')!.click());
-  await act(async () =>
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
-      .find((option) => option.textContent === "OpenAI-compatible")!
-      .click(),
-  );
+  await act(async () => {
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (item) => item.textContent === "OpenAI-compatible",
+    )!;
+    option.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    option.click();
+  });
   await act(async () =>
     [...document.querySelectorAll("button")]
       .find((button) => button.textContent === "Advanced")!
@@ -343,11 +345,14 @@ it("offers only protocol-supported effort and clamps the selected effort when pr
   await act(async () =>
     document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
   );
-  await act(async () =>
-    [...document.querySelectorAll<HTMLElement>('[role="option"]')]
-      .find((option) => option.textContent === "Extra high")!
-      .click(),
-  );
+  await act(async () => {
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+      (item) => item.textContent === "Extra high",
+    )!;
+    option.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    option.click();
+  });
+  expect(document.querySelector('[aria-label="Reasoning effort"]')?.textContent).toBe("Extra high");
   const protocol = document.querySelector<HTMLSelectElement>("select")!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(
