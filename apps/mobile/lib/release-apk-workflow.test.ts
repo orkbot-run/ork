@@ -108,10 +108,15 @@ exit "$TEST_FALLBACK_FAIL"
     }
   });
 
-  it.each(["9.3.1", "8.14.3"])(
-    "prepares the generated Gradle %s distribution offline",
-    (version) => {
-      const result = prepareGradle(version);
+  it.each([
+    ["9.3.1", false],
+    ["9.3.1", true],
+    ["8.14.3", false],
+    ["8.14.3", true],
+  ] as const)(
+    "prepares Gradle %s offline with GitHub CLI failure set to %s",
+    (version, ghFails) => {
+      const result = prepareGradle(version, false, ghFails);
       try {
         expect(result.status, result.stderr).toBe(0);
         expect(result.properties).toContain("distributionUrl=file\\:///");
@@ -119,22 +124,27 @@ exit "$TEST_FALLBACK_FAIL"
         expect(result.properties).toContain("networkTimeout=10000");
         expect(result.requests).toContain(`/releases/tags/v${version}`);
         expect(result.requests).toContain(`/distributions/gradle-${version}-bin.zip.sha256`);
+        expect(result.requests).toContain("gh repos/gradle/gradle-distributions/releases/tags/");
+        expect(result.requests.includes("curl https://api.github.com/")).toBe(ghFails);
       } finally {
         result.cleanup();
       }
     },
   );
 
-  it("rejects a Gradle archive that fails its official checksum", () => {
-    const result = prepareGradle("9.3.1", true);
-    try {
-      expect(result.status).not.toBe(0);
-      expect(result.stderr).toContain("checksum does not match");
-      expect(result.properties).toContain("distributionUrl=https\\://services.gradle.org/");
-    } finally {
-      result.cleanup();
-    }
-  });
+  it.each([false, true])(
+    "rejects a Gradle archive with a bad checksum when GitHub CLI fails: %s",
+    (ghFails) => {
+      const result = prepareGradle("9.3.1", true, ghFails);
+      try {
+        expect(result.status).not.toBe(0);
+        expect(result.stderr).toContain("checksum does not match");
+        expect(result.properties).toContain("distributionUrl=https\\://services.gradle.org/");
+      } finally {
+        result.cleanup();
+      }
+    },
+  );
 
   it("rejects an unexpected generated distribution before downloading anything", () => {
     const result = prepareGradle("9.3.1/../../unexpected");
@@ -185,7 +195,7 @@ exit "$TEST_FALLBACK_FAIL"
   });
 });
 
-function prepareGradle(version: string, badChecksum = false) {
+function prepareGradle(version: string, badChecksum = false, ghFails = false) {
   const root = mkdtempSync(path.join(tmpdir(), "ork-gradle-test-"));
   const bin = path.join(root, "bin");
   const wrapper = path.join(root, "gradle-wrapper.properties");
@@ -193,6 +203,25 @@ function prepareGradle(version: string, badChecksum = false) {
   const archive = "offline fake archive";
   const checksum = createHash("sha256").update(archive).digest("hex");
   mkdirSync(bin);
+  const fakeGh = path.join(bin, "gh");
+  writeFileSync(
+    fakeGh,
+    `#!/bin/sh
+set -eu
+endpoint=""
+for arg in "$@"; do
+  case "$arg" in repos/gradle/gradle-distributions/*) endpoint=$arg ;; esac
+done
+printf 'gh %s\\n' "$endpoint" >> "$TEST_REQUESTS"
+if [ "$TEST_GH_FAIL" = 1 ]; then exit 1; fi
+case "$endpoint" in
+  */releases/tags/*) printf '{"assets":[{"name":"gradle-%s-bin.zip","state":"uploaded","url":"https://api.github.com/repos/gradle/gradle-distributions/releases/assets/123"}]}' "$TEST_VERSION" ;;
+  */releases/assets/123) printf '%s' "$TEST_ARCHIVE" ;;
+  *) exit 22 ;;
+esac
+`,
+  );
+  chmodSync(fakeGh, 0o755);
   const fakeCurl = path.join(bin, "curl");
   writeFileSync(
     fakeCurl,
@@ -205,7 +234,7 @@ while [ "$#" -gt 0 ]; do
     *) shift ;;
   esac
 done
-printf '%s\\n' "$url" >> "$TEST_REQUESTS"
+printf 'curl %s\\n' "$url" >> "$TEST_REQUESTS"
 case "$url" in
   */releases/tags/*) printf '{"assets":[{"name":"gradle-%s-bin.zip","state":"uploaded","url":"https://api.github.com/repos/gradle/gradle-distributions/releases/assets/123"}]}' "$TEST_VERSION" > "$output" ;;
   */releases/assets/123) printf '%s' "$TEST_ARCHIVE" > "$output" ;;
@@ -233,6 +262,7 @@ esac
         RUNNER_TEMP: root,
         TEST_REQUESTS: requests,
         TEST_VERSION: version,
+        TEST_GH_FAIL: ghFails ? "1" : "0",
         TEST_ARCHIVE: archive,
         TEST_CHECKSUM: badChecksum ? "0".repeat(64) : checksum,
       },
