@@ -400,7 +400,9 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     { timeout: 30_000 },
   );
   await page.keyboard.press("Enter");
-  expect((await spawnSend).ok()).toBe(true);
+  const spawnResponse = await spawnSend;
+  expect(spawnResponse.ok()).toBe(true);
+  expect(await spawnResponse.finished()).toBeNull();
   await expect(sidebarBotButton(page, /Scout/)).toBeVisible({
     timeout: 30_000,
   });
@@ -421,7 +423,9 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     { timeout: 30_000 },
   );
   await page.keyboard.press("Enter");
-  expect((await firstSend).ok()).toBe(true);
+  const firstResponse = await firstSend;
+  expect(firstResponse.ok()).toBe(true);
+  expect(await firstResponse.finished()).toBeNull();
   await expect(page.getByRole("button", { name: "Stop", exact: true })).toBeVisible({
     timeout: 30_000,
   });
@@ -445,7 +449,9 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     { timeout: 30_000 },
   );
   await page.keyboard.press("Enter");
-  expect((await steeringSend).ok()).toBe(true);
+  const steeringResponse = await steeringSend;
+  expect(steeringResponse.ok()).toBe(true);
+  expect(await steeringResponse.finished()).toBeNull();
   await expect(
     page.getByTestId("transcript").getByText("Use the newer report and keep the answer short."),
   ).toBeVisible();
