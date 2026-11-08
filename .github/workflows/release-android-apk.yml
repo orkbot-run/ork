@@ -98,7 +98,11 @@ jobs:
       - name: Generate local Android project
         run: pnpm --filter @orkbot/mobile exec expo prebuild --platform android --no-install
       - name: Prepare verified Gradle distribution
-        run: bash .github/scripts/prepare-android-gradle.sh apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash .github/scripts/prepare-android-gradle.test.sh "$PWD/.github/scripts/prepare-android-gradle.sh"
+          bash .github/scripts/prepare-android-gradle.sh apps/mobile/android/gradle/wrapper/gradle-wrapper.properties
       - name: Check Maven Central mirror configuration
         run: bash .github/scripts/android-maven-mirror.test.sh "$PWD/apps/mobile/android/gradlew" "$PWD/.github/scripts/android-maven-mirror.init.gradle"
       - name: Build development-signed standalone APK

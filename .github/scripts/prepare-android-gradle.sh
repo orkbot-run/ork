@@ -27,16 +27,21 @@ archive=$(sed -n '1p' "$work/distribution")
 version=$(sed -n '2p' "$work/distribution")
 curl_opts=(--fail --silent --show-error --location --connect-timeout 15 --max-time 300 --retry 4 --retry-delay 2 --retry-all-errors --proto '=https' --proto-redir '=https')
 
-curl "${curl_opts[@]}" -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/gradle/gradle-distributions/releases/tags/v${version}" \
-  -o "$work/release.json"
+if ! gh api -H 'Accept: application/vnd.github+json' \
+  "repos/gradle/gradle-distributions/releases/tags/v${version}" > "$work/release.json"; then
+  curl "${curl_opts[@]}" -H 'Accept: application/vnd.github+json' \
+    "https://api.github.com/repos/gradle/gradle-distributions/releases/tags/v${version}" \
+    -o "$work/release.json"
+fi
 asset=$(jq -er --arg name "$archive" \
   '[.assets[] | select(.name == $name and .state == "uploaded") | .url] | if length == 1 then .[0] else error("Gradle asset is missing or ambiguous") end' \
   "$work/release.json")
 [[ "$asset" =~ ^https://api\.github\.com/repos/gradle/gradle-distributions/releases/assets/[0-9]+$ ]] || {
   echo 'Gradle asset URL is invalid.' >&2; exit 1;
 }
-curl "${curl_opts[@]}" -H 'Accept: application/octet-stream' "$asset" -o "$work/$archive"
+if ! gh api -H 'Accept: application/octet-stream' "${asset#https://api.github.com/}" > "$work/$archive"; then
+  curl "${curl_opts[@]}" -H 'Accept: application/octet-stream' "$asset" -o "$work/$archive"
+fi
 curl "${curl_opts[@]}" "https://services.gradle.org/distributions/$archive.sha256" -o "$work/sha256"
 checksum=$(tr -d '\r\n' < "$work/sha256")
 [[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || { echo 'Gradle checksum is invalid.' >&2; exit 1; }

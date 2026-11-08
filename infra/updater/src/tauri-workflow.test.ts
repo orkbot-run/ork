@@ -37,6 +37,10 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   );
   expect(helpers.if).toBe("runner.os == 'Linux'");
   expect(helpers.run).toContain("/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1");
+  const packaging = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Prepare verified packaging tools",
+  );
+  expect(packaging.env.GITHUB_TOKEN).toBe(`\${{ github.token }}`);
   expect(signed.run).toContain("linux-webkit.json");
   const diagnostic = build.jobs["diagnostic-build"].steps.find(
     (step: { name?: string }) => step.name === "Build diagnostic installers",

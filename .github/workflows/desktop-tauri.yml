@@ -104,6 +104,8 @@ jobs:
       - name: Prepare verified packaging tools
         if: runner.os == 'Linux' || runner.os == 'Windows'
         shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           node --test .github/scripts/prepare-tauri-tools.test.mjs
           node .github/scripts/prepare-tauri-tools.mjs

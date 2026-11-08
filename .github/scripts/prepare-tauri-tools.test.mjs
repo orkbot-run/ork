@@ -8,11 +8,81 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
+  download,
   installNsisToolset,
   prepareTauriTools,
   tauriCache,
   verifySha256,
 } from "./prepare-tauri-tools.mjs";
+
+test("asset download authenticates without arguments and falls back to the pinned official release", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "ork-tool-download-"));
+  try {
+    const target = path.join(root, "asset");
+    const bytes = Buffer.from("fixture");
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const calls = [];
+    download(
+      ["owner/repo", "123", digest, "https://github.com/owner/repo/releases/download/v1/file"],
+      target,
+      "fixture-token",
+      (command, args, options) => {
+        calls.push({ command, args, options });
+        if (calls.length === 1) throw new Error("simulated outage");
+        writeFileSync(target, bytes);
+      },
+    );
+    assert.equal(calls.length, 2);
+    assert.ok(
+      calls[0].args.includes("https://api.github.com/repos/owner/repo/releases/assets/123"),
+    );
+    assert.ok(calls[0].args.includes("--config"));
+    assert.ok(calls[0].options.input.includes("fixture-token"));
+    assert.ok(!calls[0].args.join(" ").includes("fixture-token"));
+    assert.equal(calls[1].options.input, undefined);
+    assert.ok(calls[1].args.includes("https://github.com/owner/repo/releases/download/v1/file"));
+    assert.equal(readFileSync(target, "utf8"), "fixture");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("rejects corrupted assets without fallback or exposing credentials", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "ork-tool-download-"));
+  try {
+    const target = path.join(root, "asset");
+    let attempts = 0;
+    assert.throws(
+      () =>
+        download(
+          ["owner/repo", "123", "0".repeat(64), "https://github.com/owner/repo/file"],
+          target,
+          "fixture-token",
+          () => {
+            attempts++;
+            writeFileSync(target, "wrong");
+          },
+        ),
+      /checksum mismatch/,
+    );
+    assert.equal(attempts, 1);
+    assert.throws(
+      () =>
+        download(
+          ["owner/repo", "123", "0".repeat(64), "https://github.com/owner/repo/file"],
+          target,
+          "fixture-token",
+          () => {
+            throw new Error("fixture-token");
+          },
+        ),
+      (error) => !error.message.includes("fixture-token"),
+    );
+    assert.throws(() => download([], target, "bad\ntoken", () => {}), /Invalid GitHub token/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("NSIS installation replaces the old cache with the extracted toolset", () => {
   const root = mkdtempSync(path.join(os.tmpdir(), "ork-nsis-test-"));
