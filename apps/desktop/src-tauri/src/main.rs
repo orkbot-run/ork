@@ -774,6 +774,21 @@ fn discovery_session_current(
             .is_some_and(|gate| gate.started && gate.generation == generation)
 }
 
+fn discovery_window<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    label: &str,
+) -> Option<WebviewWindow<R>> {
+    let window = app.get_webview_window(label)?;
+    if !window.is_visible().unwrap_or(false)
+        || app
+            .get_webview_window("setup")
+            .is_some_and(|setup| setup.is_visible().unwrap_or(false))
+    {
+        return None;
+    }
+    Some(window)
+}
+
 /// Poll the account directory without exposing the Accounts bearer to product renderers.
 fn start_server_discovery(app: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -801,13 +816,7 @@ fn start_server_discovery(app: tauri::AppHandle) {
                 }
                 continue;
             };
-            if !app
-                .get_webview_window(&document.label)
-                .is_some_and(|window| window.is_visible().unwrap_or(false))
-                || app
-                    .get_webview_window("setup")
-                    .is_some_and(|window| window.is_visible().unwrap_or(false))
-            {
+            if discovery_window(&app, &document.label).is_none() {
                 if !discovery.has_baseline() {
                     delay = 2;
                 }
@@ -837,25 +846,25 @@ fn start_server_discovery(app: tauri::AppHandle) {
             };
             if !discovery_session_current(&state, generation, &authorization)
                 || !current_server_account(&app, &state, &document, &authorization)
-                || !app
-                    .get_webview_window(&document.label)
-                    .is_some_and(|window| window.is_visible().unwrap_or(false))
-                || app
-                    .get_webview_window("setup")
-                    .is_some_and(|window| window.is_visible().unwrap_or(false))
-                || !discovery.observe(
-                    authorization.account.identity(),
-                    generation,
-                    &servers,
-                    &document.origin.origin().ascii_serialization(),
-                )
             {
+                continue;
+            }
+            let Some(parent) = discovery_window(&app, &document.label) else {
+                continue;
+            };
+            if !discovery.observe(
+                authorization.account.identity(),
+                generation,
+                &servers,
+                &document.origin.origin().ascii_serialization(),
+            ) {
                 continue;
             }
             let (sender, receiver) = tokio::sync::oneshot::channel();
             app.dialog()
                 .message(native_text(&app, "New server available"))
                 .title("Ork")
+                .parent(&parent)
                 .buttons(MessageDialogButtons::OkCancelCustom(
                     native_text(&app, "Open servers"),
                     native_text(&app, "Later"),
@@ -3171,6 +3180,30 @@ mod tests {
             .unwrap();
         *app.state::<DesktopState>().active_window.lock().unwrap() = Some("server-missing".into());
         assert!(!focus_active(app.handle()));
+    }
+
+    #[test]
+    fn discovery_requires_a_visible_product_window_and_no_setup_window() {
+        let app = tauri::test::mock_builder().build(app_context()).unwrap();
+        assert!(discovery_window(app.handle(), "server-missing").is_none());
+        let product = WebviewWindowBuilder::new(
+            &app,
+            "server-1",
+            WebviewUrl::External(Url::parse("https://product.example.test").unwrap()),
+        )
+        .build()
+        .unwrap();
+        assert_eq!(
+            discovery_window(app.handle(), product.label())
+                .unwrap()
+                .label(),
+            product.label()
+        );
+        let _setup = WebviewWindowBuilder::new(&app, "setup", WebviewUrl::App("index.html".into()))
+            .build()
+            .unwrap();
+        // MockRuntime reports every created window as visible.
+        assert!(discovery_window(app.handle(), product.label()).is_none());
     }
 
     #[test]
