@@ -101,6 +101,12 @@ jobs:
         shell: bash
         run: |
           jq -n '{bundle:{linux:{appimage:{files:{"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1":"/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1"}}}}}' > "$RUNNER_TEMP/linux-webkit.json"
+      - name: Prepare verified packaging tools
+        if: runner.os == 'Linux' || runner.os == 'Windows'
+        shell: bash
+        run: |
+          node --test .github/scripts/prepare-tauri-tools.test.mjs
+          node .github/scripts/prepare-tauri-tools.mjs
       - name: Build diagnostic installers
         if: >-
           github.ref != 'refs/heads/main' || github.event_name == 'pull_request' ||
