@@ -95,6 +95,7 @@ async function setup(
       listeners.get("desktop-stack-changed")?.({ payload: { phase, message: null, output } }),
     startup: (value: unknown) => listeners.get("desktop-startup-changed")?.({ payload: value }),
     link: (value: unknown) => listeners.get("desktop-server-link")?.({ payload: value }),
+    changeServer: () => listeners.get("desktop-change-server")?.({ payload: null }),
   };
 }
 
@@ -112,6 +113,33 @@ afterEach(() => {
 });
 
 describe("bundled desktop setup", () => {
+  it.each(["back", "menu"])(
+    "cancels local setup and returns to server selection through %s",
+    async (action) => {
+      const start = deferred<unknown>();
+      const fixture = await continueSetup({
+        invoke: async (name) => {
+          if (name === "setup_accounts_session") return account;
+          if (name === "list_servers") return [];
+          if (name === "connect_local_server") return start.promise;
+          return undefined;
+        },
+      });
+      node("local").click();
+      await flush();
+      expect(screen()).toBe("local");
+      expect(node("back").disabled).toBe(false);
+      if (action === "back") node("back").click();
+      else fixture.changeServer();
+      await flush();
+      expect(fixture.invoke).toHaveBeenCalledWith("cancel_setup_connection");
+      expect(screen()).toBe("servers");
+      start.reject("cancelled");
+      await flush();
+      expect(screen()).toBe("servers");
+      expect(node("status").textContent).not.toContain("cancelled");
+    },
+  );
   it("restores a stored session on startup without opening browser sign-in", async () => {
     const check = deferred<unknown>();
     const { invoke } = await setup({

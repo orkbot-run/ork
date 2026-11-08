@@ -125,7 +125,7 @@ it.each([
       }),
     );
     expect(host.querySelector('[role="status"]')).toBeNull();
-    expect(host.querySelector('a[href="https://ork.run"]')).toBeNull();
+    expect(host.querySelector('a[href="https://ork.run/download/"]')).not.toBeNull();
     expect(host.querySelector("form")).toBeNull();
   },
 );
@@ -195,15 +195,27 @@ it("shows only the native handoff for an initialized server after a fresh page l
   expect(host.querySelector("form")).toBeNull();
   expect(host.querySelector("input")).toBeNull();
   expect(host.querySelector("button")).toBeNull();
-  expect(host.querySelectorAll("a")).toHaveLength(1);
+  expect(host.querySelectorAll("a")).toHaveLength(2);
   expect(host.querySelector("a")?.textContent).toBe("Open in Ork");
   expect(host.querySelector("a")?.getAttribute("href")).toMatch(/^orkbot:\/\/connect/);
+  expect(host.textContent).toContain("Your server is ready");
+  expect(host.querySelector('a[href="https://ork.run/download/"]')?.textContent).toBe(
+    "Need the app? Download Ork",
+  );
   expect(fetcher).toHaveBeenCalledWith(
     "/api/auth/native/initialization",
     expect.objectContaining({ method: "GET", credentials: "omit", cache: "no-store" }),
   );
   await act(async () => vi.advanceTimersByTimeAsync(20_000));
   expect(fetcher).toHaveBeenCalledOnce();
+});
+
+it("shows the ready-server guidance in Polish", async () => {
+  vi.stubGlobal("navigator", { language: "pl-PL" });
+  await remount(vi.fn(async () => Response.json({ required: false })));
+  expect(host.textContent).toContain("Serwer jest gotowy");
+  expect(host.textContent).toContain("Otwórz w Orku");
+  expect(host.textContent).toContain("Nie masz aplikacji? Pobierz Orka");
 });
 
 it("does not flash pairing while initialization state is loading", async () => {
@@ -229,7 +241,7 @@ it("retires pairing when the server is initialized from another page", async () 
   expect(host.querySelector("form")).not.toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(5_000));
   expect(host.querySelector("form")).toBeNull();
-  expect(host.querySelectorAll("a")).toHaveLength(1);
+  expect(host.querySelectorAll("a")).toHaveLength(2);
 });
 
 it("keeps pairing hidden on an unavailable or malformed state and permits a safe retry", async () => {
