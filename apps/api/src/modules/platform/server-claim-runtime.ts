@@ -9,7 +9,7 @@ export function serverClaimInstructions(code: string, workspace = false): string
     throw new Error("Invalid server authorization code.");
   if (workspace)
     return `Enter this code in your workspace dashboard under Server:\n${code}\n\nThe code expires in five minutes. Sign in as this server's current owner.\n`;
-  return `Open this link to authorize the server:\nhttps://accounts.ork.run/account/connect-server#code=${code}\n\nOr enter this code at https://accounts.ork.run/account/connect-server:\n${code}\n\nThe link and code expire in five minutes.\n`;
+  return `Server setup code: ${code}\n\nTo connect a workspace, open your workspace dashboard, choose an organization, and enter the code under Server.\n\nTo connect a personal account instead, open:\nhttps://accounts.ork.run/account/connect-server#code=${code}\n\nApprove the server only in the flow you intend to use. The code expires in five minutes.\n`;
 }
 
 /** The Compose self-host API stores its role environment in a private mounted file. */

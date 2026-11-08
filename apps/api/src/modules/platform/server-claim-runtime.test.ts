@@ -14,15 +14,16 @@ const loader = pathToFileURL(
 ).href;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-it("offers the same one-time code as an Accounts link and manual entry", () => {
+it("distinguishes workspace setup from personal Accounts authorization", () => {
   const instructions = serverClaimInstructions("23456789AB");
   const lines = instructions.trim().split("\n");
-  const link = new URL(lines[1]!);
+  expect(lines[0]).toBe("Server setup code: 23456789AB");
+  expect(instructions).toContain("workspace dashboard");
+  expect(instructions).toContain("personal account instead");
+  const link = new URL(lines.find((line) => line.startsWith("https://"))!);
   expect(link.origin + link.pathname).toBe("https://accounts.ork.run/account/connect-server");
   expect(link.search).toBe("");
   expect(link.hash).toBe("#code=23456789AB");
-  expect(lines[3]).toBe("Or enter this code at https://accounts.ork.run/account/connect-server:");
-  expect(lines.at(-3)).toBe("23456789AB");
   expect(() => serverClaimInstructions("invalid")).toThrow();
 });
 
