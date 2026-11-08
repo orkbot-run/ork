@@ -9,7 +9,12 @@ import { createLocalJWKSet, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { nativeAccountsLogin, nativeLoginStore } from "./native-accounts-login.js";
 import { oidcAccountSubject } from "./oidc.js";
-import { issueServerClaim, processServerClaim, serverClaimProof } from "./server-claim.js";
+import {
+  clearWorkspaceBinding,
+  issueServerClaim,
+  processServerClaim,
+  serverClaimProof,
+} from "./server-claim.js";
 
 const enabled =
   process.env.VERIFY_DATABASE === "1" &&
@@ -143,6 +148,115 @@ describe.skipIf(!enabled)("durable server authorization", () => {
       expect(settings.nativeAccountsOwnerKey).toBe(oidcAccountSubject(issuer, "owner"));
       expect(settings.nativeAccountsOrganizationId).toBe(organizationId);
       await expect(issueServerClaim(prisma!, options)).rejects.toThrow();
+      await expect(clearWorkspaceBinding(prisma!, organizationId)).rejects.toThrow(
+        "still in progress",
+      );
+      await processServerClaim(prisma!, options);
+      await clearWorkspaceBinding(prisma!, organizationId);
+      expect(
+        (await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }))
+          .nativeAccountsOwnerKey,
+      ).toBe(oidcAccountSubject(issuer, "owner"));
+    }));
+
+  it("attaches an existing owner's server only when that same owner approves", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const owner = oidcAccountSubject(issuer, "owner");
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: owner },
+      });
+      const service = broker(id, proofNonce, organizationId);
+      const options = {
+        issuer,
+        origin,
+        bootstrapSecret,
+        request: service.request,
+        keys,
+        mode: "workspace" as const,
+      };
+      await issueServerClaim(prisma!, options);
+      expect(
+        await serverClaimProof(prisma!, id, proofNonce, { origin, bootstrapSecret }),
+      ).toMatchObject({ status: "pending", organizationBinding: true });
+      service.approve();
+      await processServerClaim(prisma!, options);
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({
+        nativeAccountsOwnerKey: owner,
+        nativeAccountsOrganizationId: organizationId,
+      });
+      await expect(issueServerClaim(prisma!, options)).rejects.toThrow();
+    }));
+
+  it("clears only the matching workspace while preserving the owner and permits a fresh claim", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const owner = oidcAccountSubject(issuer, "owner");
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: owner, nativeAccountsOrganizationId: organizationId },
+      });
+      await expect(clearWorkspaceBinding(prisma!, randomUUID())).rejects.toThrow();
+      await clearWorkspaceBinding(prisma!, organizationId);
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({ nativeAccountsOwnerKey: owner, nativeAccountsOrganizationId: null });
+      const service = broker(id, proofNonce, randomUUID());
+      await issueServerClaim(prisma!, {
+        issuer,
+        origin,
+        bootstrapSecret,
+        request: service.request,
+        mode: "workspace",
+      });
+      await expect(clearWorkspaceBinding(prisma!, organizationId)).rejects.toThrow();
+    }));
+
+  it("does not attach another owner's server or accept an account-only grant", async () =>
+    system(async () => {
+      const owner = oidcAccountSubject(issuer, "different-owner");
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: owner },
+      });
+      const service = broker(id, proofNonce, randomUUID());
+      const options = {
+        issuer,
+        origin,
+        bootstrapSecret,
+        request: service.request,
+        keys,
+        mode: "workspace" as const,
+      };
+      await issueServerClaim(prisma!, options);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      await processServerClaim(prisma!, options);
+      expect(service.reports).toEqual([false]);
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({ nativeAccountsOwnerKey: owner, nativeAccountsOrganizationId: null });
+      await prisma!.verification.deleteMany({
+        where: { identifier: "native-server-claim:active" },
+      });
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: oidcAccountSubject(issuer, "owner") },
+      });
+      const legacy = broker();
+      const legacyOptions = { ...options, request: legacy.request };
+      await issueServerClaim(prisma!, legacyOptions);
+      legacy.approve();
+      await processServerClaim(prisma!, legacyOptions);
+      await processServerClaim(prisma!, legacyOptions);
+      expect(legacy.reports).toEqual([false]);
+      expect(
+        (await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }))
+          .nativeAccountsOrganizationId,
+      ).toBeNull();
     }));
 
   it("refuses to claim an installation that already has an organization binding", async () =>

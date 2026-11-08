@@ -19,6 +19,7 @@ const REPORT_MS = 24 * 60 * 60 * 1000;
 
 type Claim = {
   state: "pending" | "claimed" | "failed";
+  mode?: "workspace";
   id: string;
   receipt: string;
   proofNonce: string;
@@ -56,6 +57,7 @@ function parse(value: string): Saved | null {
       !TOKEN.test(record.challenge) ||
       !ID.test(record.bootstrapMac) ||
       !Number.isSafeInteger(record.expiresAt) ||
+      (record.mode !== undefined && record.mode !== "workspace") ||
       (record.state === "claimed" && (!record.grantId || !UUID.test(record.grantId)))
     )
       return null;
@@ -74,7 +76,7 @@ function equals(left: string, right: string): boolean {
 function claimMac(
   claim: Pick<
     Claim,
-    "state" | "id" | "receipt" | "proofNonce" | "challenge" | "expiresAt" | "grantId"
+    "state" | "id" | "receipt" | "proofNonce" | "challenge" | "expiresAt" | "grantId" | "mode"
   >,
   secret: string,
   origin: string,
@@ -90,9 +92,75 @@ function claimMac(
         claim.challenge,
         claim.expiresAt,
         claim.grantId ?? null,
+        ...(claim.mode ? [claim.mode] : []),
       ]),
     )
     .digest("hex");
+}
+
+async function existingOwnerAvailable(
+  tx: PrismaClient,
+  lock = false,
+  expectedOwner?: string,
+): Promise<boolean> {
+  const settings = lock
+    ? await tx.deploymentSettings.upsert({
+        where: { id: "default" },
+        create: { id: "default" },
+        update: {},
+        select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
+      })
+    : await tx.deploymentSettings.findUnique({
+        where: { id: "default" },
+        select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
+      });
+  return (
+    !!settings?.nativeAccountsOwnerKey &&
+    !settings.nativeAccountsOrganizationId &&
+    (!expectedOwner || settings.nativeAccountsOwnerKey === expectedOwner)
+  );
+}
+const claimOwnerAvailable = (
+  tx: PrismaClient,
+  mode: Claim["mode"],
+  lock = false,
+  owner?: string,
+) => (mode === "workspace" ? existingOwnerAvailable(tx, lock, owner) : ownerAvailable(tx, lock));
+
+/** Operator-only local reset; it preserves the server owner, accounts and application data. */
+export async function clearWorkspaceBinding(
+  prisma: PrismaClient,
+  organizationId: string,
+): Promise<void> {
+  if (!UUID.test(organizationId)) throw new Error("Invalid workspace ID.");
+  await prisma.$transaction(async (tx) => {
+    const settings = await tx.deploymentSettings.upsert({
+      where: { id: "default" },
+      create: { id: "default" },
+      update: {},
+      select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
+    });
+    if (
+      !settings.nativeAccountsOwnerKey ||
+      settings.nativeAccountsOrganizationId !== organizationId
+    )
+      throw new Error("Workspace does not match the server's current binding.");
+    const row = await tx.verification.findUnique({ where: { id: KEY } });
+    if (row && row.expiresAt > new Date()) {
+      const claim = parse(row.value);
+      if (!claim || claim.state === "issuing" || !claim.reported || claim.leaseId)
+        throw new Error("Server authorization is still in progress.");
+    }
+    const changed = await tx.deploymentSettings.updateMany({
+      where: {
+        id: "default",
+        nativeAccountsOwnerKey: settings.nativeAccountsOwnerKey,
+        nativeAccountsOrganizationId: organizationId,
+      },
+      data: { nativeAccountsOrganizationId: null },
+    });
+    if (changed.count !== 1) throw new Error("Workspace binding changed.");
+  });
 }
 
 function validClaimMac(claim: Claim, secret: string | undefined, origin: string): boolean {
@@ -135,6 +203,7 @@ export async function issueServerClaim(
     issuer: string;
     bootstrapSecret: string;
     request?: typeof fetch;
+    mode?: "workspace";
   },
 ): Promise<{ code: string; expiresAt: number }> {
   if (options.bootstrapSecret.length < 32 || options.bootstrapSecret.length > 4096)
@@ -146,7 +215,7 @@ export async function issueServerClaim(
   };
   const reservation = JSON.stringify(issuing);
   await prisma.$transaction(async (tx) => {
-    if (!(await ownerAvailable(tx as PrismaClient, true)))
+    if (!(await claimOwnerAvailable(tx as PrismaClient, options.mode, true)))
       throw new Error("This server already has an owner.");
     const existing = await tx.verification.findUnique({ where: { id: KEY } });
     if (existing) {
@@ -155,7 +224,8 @@ export async function issueServerClaim(
         !saved ||
         (saved.state === "issuing" && saved.leaseUntil > Date.now()) ||
         (saved.state !== "issuing" &&
-          (saved.state === "claimed" || (saved.leaseUntil ?? 0) > Date.now()))
+          ((saved.state === "claimed" && !(options.mode === "workspace" && saved.reported)) ||
+            (saved.leaseUntil ?? 0) > Date.now()))
       )
         throw new Error("Another server authorization is in progress.");
       const deleted = await tx.verification.deleteMany({
@@ -207,13 +277,14 @@ export async function issueServerClaim(
       proofNonce: value.proofNonce,
       challenge,
       expiresAt: value.expiresAt,
+      ...(options.mode ? { mode: options.mode } : {}),
     } as const;
     const claim: Claim = {
       ...ticket,
       bootstrapMac: claimMac(ticket, options.bootstrapSecret, options.origin),
     };
     const published = await prisma.$transaction(async (tx) => {
-      if (!(await ownerAvailable(tx as PrismaClient, true))) return false;
+      if (!(await claimOwnerAvailable(tx as PrismaClient, options.mode, true))) return false;
       const changed = await tx.verification.updateMany({
         where: { id: KEY, value: reservation, expiresAt: { gt: new Date() } },
         data: { value: JSON.stringify(claim), expiresAt: new Date(claim.expiresAt * 1000) },
@@ -257,7 +328,10 @@ export async function serverClaimProof(
     return null;
   if (saved.state === "failed") return null;
   if (saved.state === "pending") {
-    if (saved.expiresAt <= Math.floor(Date.now() / 1000) || !(await ownerAvailable(prisma)))
+    if (
+      saved.expiresAt <= Math.floor(Date.now() / 1000) ||
+      !(await claimOwnerAvailable(prisma, saved.mode))
+    )
       return null;
     return { id, proofNonce, status: "pending", organizationBinding: true };
   }
@@ -419,7 +493,10 @@ export async function processServerClaim(
     const boundClaim: Claim = { ...claim, state: "claimed", grantId };
     boundClaim.bootstrapMac = claimMac(boundClaim, options.bootstrapSecret, options.origin);
     await prisma.$transaction(async (tx) => {
-      if (!(await ownerAvailable(tx as PrismaClient, true))) {
+      if (
+        !(await claimOwnerAvailable(tx as PrismaClient, claim.mode, true, owner)) ||
+        (claim.mode === "workspace" && typeof payload.organization_id !== "string")
+      ) {
         const failedClaim: Claim = { ...claim, state: "failed" };
         failedClaim.bootstrapMac = claimMac(failedClaim, options.bootstrapSecret, options.origin);
         const saved = await tx.verification.updateMany({
@@ -430,7 +507,11 @@ export async function processServerClaim(
         return;
       }
       const bound = await tx.deploymentSettings.updateMany({
-        where: { id: "default", nativeAccountsOwnerKey: null, nativeAccountsOrganizationId: null },
+        where: {
+          id: "default",
+          nativeAccountsOwnerKey: claim.mode === "workspace" ? owner : null,
+          nativeAccountsOrganizationId: null,
+        },
         data: {
           nativeAccountsOwnerKey: owner,
           nativeAccountsOrganizationId:
@@ -444,7 +525,8 @@ export async function processServerClaim(
           members: { some: { spaceMemberships: { some: {} } } },
         },
       });
-      if (admitted !== 0) throw new Error("Server owner already exists.");
+      if (claim.mode !== "workspace" && admitted !== 0)
+        throw new Error("Server owner already exists.");
       const saved = await tx.verification.updateMany({
         where: { id: KEY, value: lease.value, expiresAt: { gt: new Date() } },
         data: {

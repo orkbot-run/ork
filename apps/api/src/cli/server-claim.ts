@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
-import { issueServerClaim } from "@orkbot/auth";
+import { clearWorkspaceBinding, issueServerClaim } from "@orkbot/auth";
 import { createDb, runAsSystem } from "@orkbot/db";
 import {
   loadServerClaimRuntime,
@@ -28,10 +28,25 @@ if (url.protocol !== "https:" || url.origin !== origin || url.port || url.userna
   throw new Error("Server authorization requires the server's public HTTPS origin.");
 const { prisma, pool } = createDb(databaseUrl, { keyProvider: contentKeyProviderFromEnv() });
 try {
-  const claim = await runAsSystem("local server authorization", () =>
-    issueServerClaim(prisma, { origin, issuer: "https://api.orkbot.run", bootstrapSecret: secret }),
-  );
-  process.stdout.write(serverClaimInstructions(claim.code));
+  const clearIndex = process.argv.indexOf("--clear-workspace");
+  if (clearIndex !== -1) {
+    const organizationId = process.argv[clearIndex + 1];
+    if (!organizationId) throw new Error("Supply the workspace ID after --clear-workspace.");
+    await runAsSystem("local workspace reset", () => clearWorkspaceBinding(prisma, organizationId));
+    process.stdout.write(
+      "Local workspace binding removed. Existing users and data were preserved.\n",
+    );
+  } else {
+    const claim = await runAsSystem("local server authorization", () =>
+      issueServerClaim(prisma, {
+        origin,
+        issuer: "https://api.orkbot.run",
+        bootstrapSecret: secret,
+        ...(process.argv.includes("--workspace") ? { mode: "workspace" as const } : {}),
+      }),
+    );
+    process.stdout.write(serverClaimInstructions(claim.code, process.argv.includes("--workspace")));
+  }
 } finally {
   await prisma.$disconnect();
   await pool.end();

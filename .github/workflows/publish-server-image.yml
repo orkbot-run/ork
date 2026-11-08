@@ -16,8 +16,7 @@ on:
   push:
     tags: ["v*"]
   workflow_call:
-  # Server and web build manifests only; dependency edits in other apps change the lockfile. A source change that breaks the app's build
-  # fails ci.yml's production builds first, and main still builds every image before it deploys.
+  # Validate images when server, web or authentication code and build inputs change.
   pull_request:
     paths:
       - ".dockerignore"
@@ -30,11 +29,14 @@ on:
       - "patches/**"
       - "package.json"
       - "apps/api/package.json"
+      - "apps/api/src/**"
       - "apps/worker/package.json"
       - "apps/web/package.json"
+      - "apps/web/src/**"
       - "packages/adapter-kit/package.json"
       - "packages/adapters/package.json"
       - "packages/auth/package.json"
+      - "packages/auth/src/**"
       - "packages/chat-ui/package.json"
       - "packages/client-transport/package.json"
       - "packages/contracts/package.json"
