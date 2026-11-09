@@ -1,7 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
@@ -16,6 +23,49 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const CODE = /^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/;
 const LEASE_MS = 30_000;
 const REPORT_MS = 24 * 60 * 60 * 1000;
+
+function workspaceReceiptKey(secret: string): Buffer {
+  if (secret.length < 32 || secret.length > 4096) throw new Error("Invalid server secret.");
+  return createHash("sha256").update("orkbot-workspace-receipt-v1\0").update(secret).digest();
+}
+function sealWorkspaceReceipt(
+  receipt: string,
+  secret: string,
+  organizationId: string,
+  id: string,
+): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", workspaceReceiptKey(secret), iv);
+  cipher.setAAD(Buffer.from(`${organizationId}:${id}`));
+  const encrypted = Buffer.concat([cipher.update(receipt, "utf8"), cipher.final()]);
+  return `v1.${Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64url")}`;
+}
+function openWorkspaceReceipt(
+  sealed: string,
+  secret: string,
+  organizationId: string,
+  id: string,
+): string {
+  if (!/^v1\.[A-Za-z0-9_-]{95}$/.test(sealed)) throw new Error("Invalid workspace credential.");
+  try {
+    const raw = Buffer.from(sealed.slice(3), "base64url");
+    if (raw.length !== 71) throw new Error();
+    const cipher = createDecipheriv(
+      "aes-256-gcm",
+      workspaceReceiptKey(secret),
+      raw.subarray(0, 12),
+    );
+    cipher.setAAD(Buffer.from(`${organizationId}:${id}`));
+    cipher.setAuthTag(raw.subarray(12, 28));
+    const receipt = Buffer.concat([cipher.update(raw.subarray(28)), cipher.final()]).toString(
+      "utf8",
+    );
+    if (!TOKEN.test(receipt)) throw new Error();
+    return receipt;
+  } catch {
+    throw new Error("Invalid workspace credential.");
+  }
+}
 
 type Claim = {
   state: "pending" | "claimed" | "failed";
@@ -157,7 +207,11 @@ export async function clearWorkspaceBinding(
         nativeAccountsOwnerKey: settings.nativeAccountsOwnerKey,
         nativeAccountsOrganizationId: organizationId,
       },
-      data: { nativeAccountsOrganizationId: null },
+      data: {
+        nativeAccountsOrganizationId: null,
+        nativeAccountsWorkspaceClaimId: null,
+        nativeAccountsWorkspaceReceipt: null,
+      },
     });
     if (changed.count !== 1) throw new Error("Workspace binding changed.");
   });
@@ -350,7 +404,7 @@ export async function serverClaimProof(
 
 async function post(
   issuer: string,
-  path: "issue" | "poll" | "report",
+  path: "issue" | "poll" | "report" | "binding" | "disconnect",
   body: object,
   request: typeof fetch = fetch,
 ) {
@@ -363,13 +417,114 @@ async function post(
     redirect: "error",
     signal,
   });
-  if (path === "issue" && response.status === 400) {
+  if (path === "disconnect" && response.status === 409) {
+    await response.body?.cancel().catch(() => {});
+    throw new Error("Workspace connection is still being completed. Try again shortly.");
+  }
+  if (
+    (path === "issue" && response.status === 400) ||
+    ((path === "binding" || path === "disconnect") && response.status === 410)
+  ) {
     await response.body?.cancel().catch(() => {});
     return { status: response.status, body: null };
   }
   const value = await readBoundedJsonResponse<unknown>(response, 24 * 1024, signal);
   if (!response.ok) throw new Error("Accounts server authorization failed.");
   return { status: response.status, body: value };
+}
+
+/** Reconcile only the exact connection identified by the host's private receipt. */
+export async function synchronizeWorkspaceBinding(
+  prisma: PrismaClient,
+  options: {
+    issuer: string;
+    origin?: string;
+    bootstrapSecret?: string;
+    disconnect?: boolean;
+    request?: typeof fetch;
+  },
+): Promise<"unconnected" | "legacy" | "active" | "disconnected"> {
+  const settings = await prisma.deploymentSettings.findUnique({
+    where: { id: "default" },
+    select: {
+      nativeAccountsOrganizationId: true,
+      nativeAccountsWorkspaceClaimId: true,
+      nativeAccountsWorkspaceReceipt: true,
+    },
+  });
+  const organizationId = settings?.nativeAccountsOrganizationId;
+  if (!organizationId) return "unconnected";
+  let id = settings.nativeAccountsWorkspaceClaimId;
+  let sealed = settings.nativeAccountsWorkspaceReceipt;
+  if ((!id || !sealed) && !id && !sealed && options.origin && options.bootstrapSecret) {
+    const saved = await prisma.verification.findUnique({ where: { id: KEY } });
+    const claim = saved ? parse(saved.value) : null;
+    if (
+      claim &&
+      claim.state === "claimed" &&
+      claim.reported &&
+      validClaimMac(claim, options.bootstrapSecret, options.origin)
+    ) {
+      const adoptedReceipt = sealWorkspaceReceipt(
+        claim.receipt,
+        options.bootstrapSecret,
+        organizationId,
+        claim.id,
+      );
+      const adopted = await prisma.deploymentSettings.updateMany({
+        where: {
+          id: "default",
+          nativeAccountsOrganizationId: organizationId,
+          nativeAccountsWorkspaceClaimId: null,
+          nativeAccountsWorkspaceReceipt: null,
+        },
+        data: {
+          nativeAccountsWorkspaceClaimId: claim.id,
+          nativeAccountsWorkspaceReceipt: adoptedReceipt,
+        },
+      });
+      if (adopted.count !== 1) throw new Error("Workspace connection changed during recovery.");
+      id = claim.id;
+      sealed = adoptedReceipt;
+    }
+  }
+  if (!id || !sealed) return "legacy";
+  if (!UUID.test(organizationId) || !ID.test(id) || !options.bootstrapSecret)
+    throw new Error("Invalid workspace connection state.");
+  const receipt = openWorkspaceReceipt(sealed, options.bootstrapSecret, organizationId, id);
+  const result = await post(
+    options.issuer,
+    options.disconnect ? "disconnect" : "binding",
+    { id, receipt },
+    options.request,
+  );
+  if (result.status === 410) return "legacy";
+  if (!result.body || typeof result.body !== "object" || !("status" in result.body))
+    throw new Error("Invalid workspace connection response.");
+  if (result.body.status === "active" && !options.disconnect) return "active";
+  if (result.body.status !== "revoked") throw new Error("Invalid workspace connection response.");
+  const changed = await prisma.deploymentSettings.updateMany({
+    where: {
+      id: "default",
+      nativeAccountsOrganizationId: organizationId,
+      nativeAccountsWorkspaceClaimId: id,
+      nativeAccountsWorkspaceReceipt: sealed,
+    },
+    data: {
+      nativeAccountsOrganizationId: null,
+      nativeAccountsWorkspaceClaimId: null,
+      nativeAccountsWorkspaceReceipt: null,
+    },
+  });
+  if (changed.count !== 1) {
+    const current = await prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+      select: { nativeAccountsOrganizationId: true },
+    });
+    if (!current?.nativeAccountsOrganizationId) return "disconnected";
+    throw new Error("Workspace connection changed during disconnection.");
+  }
+  return "disconnected";
 }
 
 export async function verifyServerClaimGrant(
@@ -530,6 +685,17 @@ export async function processServerClaim(
           nativeAccountsOwnerKey: owner,
           nativeAccountsOrganizationId:
             typeof payload.organization_id === "string" ? payload.organization_id : null,
+          nativeAccountsWorkspaceClaimId:
+            typeof payload.organization_id === "string" ? claim.id : null,
+          nativeAccountsWorkspaceReceipt:
+            typeof payload.organization_id === "string"
+              ? sealWorkspaceReceipt(
+                  claim.receipt,
+                  options.bootstrapSecret,
+                  payload.organization_id,
+                  claim.id,
+                )
+              : null,
         },
       });
       if (bound.count !== 1) throw new Error("Server owner already exists.");
@@ -569,6 +735,7 @@ export function startServerClaimWorker(
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void> | undefined;
+  let lastBindingCheck = 0;
   const tick = () => {
     if (stopped) return;
     let active = false;
@@ -578,6 +745,11 @@ export function startServerClaimWorker(
       })
       .catch(() => {
         active = true;
+      })
+      .then(async () => {
+        if (Date.now() - lastBindingCheck < 30_000) return;
+        lastBindingCheck = Date.now();
+        await synchronizeWorkspaceBinding(prisma, options).catch(() => {});
       })
       .finally(() => {
         running = undefined;

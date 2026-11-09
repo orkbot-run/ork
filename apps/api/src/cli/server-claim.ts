@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { contentKeyProviderFromEnv, unwrapEnvFromKeyManager } from "@orkbot/adapters";
-import { clearWorkspaceBinding, issueServerClaim } from "@orkbot/auth";
+import { clearWorkspaceBinding, issueServerClaim, synchronizeWorkspaceBinding } from "@orkbot/auth";
 import { createDb, runAsSystem } from "@orkbot/db";
 import {
   loadServerClaimRuntime,
@@ -29,7 +29,27 @@ if (url.protocol !== "https:" || url.origin !== origin || url.port || url.userna
 const { prisma, pool } = createDb(databaseUrl, { keyProvider: contentKeyProviderFromEnv() });
 try {
   const clearIndex = process.argv.indexOf("--clear-workspace");
-  if (clearIndex !== -1) {
+  if (process.argv.includes("--disconnect-workspace")) {
+    if (clearIndex !== -1 || process.argv.includes("--workspace"))
+      throw new Error("Use --disconnect-workspace on its own.");
+    const result = await runAsSystem("disconnect workspace", () =>
+      synchronizeWorkspaceBinding(prisma, {
+        issuer: "https://api.orkbot.run",
+        origin,
+        bootstrapSecret: secret,
+        disconnect: true,
+      }),
+    );
+    if (result === "legacy")
+      throw new Error(
+        "This connection predates coordinated disconnection. Remove it from the dashboard, then use --clear-workspace with the workspace ID.",
+      );
+    process.stdout.write(
+      result === "unconnected"
+        ? "This server is not connected to a workspace.\n"
+        : "Workspace disconnected. The server owner and existing data were preserved.\n",
+    );
+  } else if (clearIndex !== -1) {
     const organizationId = process.argv[clearIndex + 1];
     if (!organizationId) throw new Error("Supply the workspace ID after --clear-workspace.");
     await runAsSystem("local workspace reset", () => clearWorkspaceBinding(prisma, organizationId));

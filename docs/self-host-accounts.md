@@ -15,24 +15,41 @@ with `PUBLIC_ORIGIN` set to the public HTTPS origin. Route that domain to `web:5
 The bootstrap job saves generated secrets in private configuration volumes.
 Open the server's address in a browser.
 
-In the signed-in Tauri or mobile app, choose **Pairing key**. Enter its six-character
-key on the server's initialization page and choose **Initialize**. The key expires after
-five minutes.
+Open the API container's console and issue a short-lived server setup code:
 
-The app now shows the server's full address for approval. Check it and approve that
-server. Accounts binds the key to the first server that requests it, so another server
-cannot replace the address while approval is pending. After preparing the owner's
-workspace, the server reports completion and Accounts saves it to the account directory.
-The waiting app connects automatically.
+```sh
+node /app/apps/api/dist/cli/server-claim.js
+```
+
+Choose either the personal Accounts link printed by the command or the workspace
+dashboard's **Server** page. Check the full server address before approving. Wait for
+the server to finish verification; approval alone does not mean it is connected.
+For a server that already has an owner, use `--workspace` and approve with the same
+owner account. The app pairing-key form is temporarily hidden on the server page.
 
 The browser receives no product session. Accounts access tokens stay in the native app,
 and the server receives a separate one-minute proof for its exact origin and random
 challenge. No server OIDC client registration or client secret is required.
 
-Pairing preserves the existing owner. Another account cannot claim an initialized server,
-and matching email addresses never link accounts. Codes can be used once, and cancellation
-invalidates only that app's pending code. Older private initialization links remain
-supported for installations that already use them.
+Workspace setup preserves the existing owner. Another account cannot claim an initialized
+server, and matching email addresses never link accounts. Setup codes are short-lived and
+can be used once. Older private initialization links remain supported for installations
+that already use them.
+
+## Disconnect a workspace server
+
+An operator can disconnect a compatible server from its current workspace with:
+
+```sh
+node /app/apps/api/dist/cli/server-claim.js --disconnect-workspace
+```
+
+The command contacts Accounts before clearing the server's local connection. If Accounts
+is unreachable, it reports an error and preserves the connection. A workspace admin can
+also disconnect it from the dashboard. If the server is offline, it clears its local
+connection after it can reach Accounts again. Existing users and server data are kept;
+the operation does not revoke local sessions. Older connections may require the manual
+`--clear-workspace <organization-id>` command after dashboard removal.
 
 ## Earlier OIDC configuration
 

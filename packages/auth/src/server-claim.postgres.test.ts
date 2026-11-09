@@ -14,6 +14,7 @@ import {
   issueServerClaim,
   processServerClaim,
   serverClaimProof,
+  synchronizeWorkspaceBinding,
 } from "./server-claim.js";
 
 const enabled =
@@ -124,7 +125,12 @@ describe.skipIf(!enabled)("durable server authorization", () => {
       await prisma!.deploymentSettings.upsert({
         where: { id: "default" },
         create: { id: "default" },
-        update: { nativeAccountsOwnerKey: null, nativeAccountsOrganizationId: null },
+        update: {
+          nativeAccountsOwnerKey: null,
+          nativeAccountsOrganizationId: null,
+          nativeAccountsWorkspaceClaimId: null,
+          nativeAccountsWorkspaceReceipt: null,
+        },
       });
       await prisma!.organization.deleteMany({});
       await prisma!.user.deleteMany({ where: { email: { endsWith: "@example.test" } } });
@@ -147,6 +153,9 @@ describe.skipIf(!enabled)("durable server authorization", () => {
       });
       expect(settings.nativeAccountsOwnerKey).toBe(oidcAccountSubject(issuer, "owner"));
       expect(settings.nativeAccountsOrganizationId).toBe(organizationId);
+      expect(settings.nativeAccountsWorkspaceClaimId).toBe(id);
+      expect(settings.nativeAccountsWorkspaceReceipt).toMatch(/^v1\./);
+      expect(settings.nativeAccountsWorkspaceReceipt).not.toContain(receipt);
       await expect(issueServerClaim(prisma!, options)).rejects.toThrow();
       await expect(clearWorkspaceBinding(prisma!, organizationId)).rejects.toThrow(
         "still in progress",
@@ -157,6 +166,130 @@ describe.skipIf(!enabled)("durable server authorization", () => {
         (await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }))
           .nativeAccountsOwnerKey,
       ).toBe(oidcAccountSubject(issuer, "owner"));
+    }));
+
+  it("preserves the binding on network failure and clears only a confirmed revocation", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const service = broker(id, proofNonce, organizationId);
+      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
+      await issueServerClaim(prisma!, options);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      const invalidSecretRequest = vi.fn(async () =>
+        Response.json({ status: "revoked" }),
+      ) as typeof fetch;
+      await expect(
+        synchronizeWorkspaceBinding(prisma!, {
+          issuer,
+          bootstrapSecret: "x".repeat(43),
+          request: invalidSecretRequest,
+        }),
+      ).rejects.toThrow("Invalid workspace credential");
+      expect(invalidSecretRequest).not.toHaveBeenCalled();
+      const failure = vi.fn(async () => {
+        throw new Error("offline");
+      }) as typeof fetch;
+      await expect(
+        synchronizeWorkspaceBinding(prisma!, { issuer, bootstrapSecret, request: failure }),
+      ).rejects.toThrow();
+      expect(
+        (await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }))
+          .nativeAccountsOrganizationId,
+      ).toBe(organizationId);
+      const active = vi.fn(async () => Response.json({ status: "active" })) as typeof fetch;
+      expect(
+        await synchronizeWorkspaceBinding(prisma!, { issuer, bootstrapSecret, request: active }),
+      ).toBe("active");
+      const revoked = vi.fn(async () => Response.json({ status: "revoked" })) as typeof fetch;
+      expect(
+        await synchronizeWorkspaceBinding(prisma!, {
+          issuer,
+          bootstrapSecret,
+          request: revoked,
+          disconnect: true,
+        }),
+      ).toBe("disconnected");
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({
+        nativeAccountsOwnerKey: oidcAccountSubject(issuer, "owner"),
+        nativeAccountsOrganizationId: null,
+        nativeAccountsWorkspaceClaimId: null,
+        nativeAccountsWorkspaceReceipt: null,
+      });
+      expect(await synchronizeWorkspaceBinding(prisma!, { issuer, request: revoked })).toBe(
+        "unconnected",
+      );
+    }));
+
+  it("recovers a recent legacy connection only with a valid local claim proof", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const service = broker(id, proofNonce, organizationId);
+      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
+      await issueServerClaim(prisma!, options);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      await processServerClaim(prisma!, options);
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsWorkspaceClaimId: null, nativeAccountsWorkspaceReceipt: null },
+      });
+      const active = vi.fn(async () => Response.json({ status: "active" })) as typeof fetch;
+      expect(
+        await synchronizeWorkspaceBinding(prisma!, {
+          issuer,
+          origin,
+          bootstrapSecret: "x".repeat(43),
+          request: active,
+        }),
+      ).toBe("legacy");
+      expect(active).not.toHaveBeenCalled();
+      expect(
+        await synchronizeWorkspaceBinding(prisma!, {
+          issuer,
+          origin,
+          bootstrapSecret,
+          request: active,
+        }),
+      ).toBe("active");
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({
+        nativeAccountsOrganizationId: organizationId,
+        nativeAccountsWorkspaceClaimId: id,
+        nativeAccountsWorkspaceReceipt: expect.stringMatching(/^v1\./),
+      });
+    }));
+
+  it("does not clear a replacement binding when an older revocation arrives late", async () =>
+    system(async () => {
+      const original = randomUUID();
+      const replacement = randomUUID();
+      const service = broker(id, proofNonce, original);
+      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
+      await issueServerClaim(prisma!, options);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      const request = vi.fn(async () => {
+        await prisma!.deploymentSettings.update({
+          where: { id: "default" },
+          data: {
+            nativeAccountsOrganizationId: replacement,
+            nativeAccountsWorkspaceClaimId: "b".repeat(64),
+            nativeAccountsWorkspaceReceipt: "t".repeat(43),
+          },
+        });
+        return Response.json({ status: "revoked" });
+      }) as typeof fetch;
+      await expect(
+        synchronizeWorkspaceBinding(prisma!, { issuer, bootstrapSecret, request }),
+      ).rejects.toThrow("changed during disconnection");
+      expect(
+        (await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }))
+          .nativeAccountsOrganizationId,
+      ).toBe(replacement);
     }));
 
   it("attaches an existing owner's server only when that same owner approves", async () =>

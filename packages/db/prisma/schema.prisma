@@ -558,6 +558,9 @@ model DeploymentSettings {
   nativeAccountsOwnerKey           String?
   /// Central organization that authorized the initial server claim, if any.
   nativeAccountsOrganizationId    String?
+  /// Credential for reconciling this specific central workspace binding.
+  nativeAccountsWorkspaceClaimId   String?
+  nativeAccountsWorkspaceReceipt   String?
   modelCreditsEnabled             Boolean  @default(false)
   id                              String   @id @default("default")
   /// Deprecated: retained for rolling-release compatibility; never authorizes app users.
