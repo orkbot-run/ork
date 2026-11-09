@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./server-updates-config": "./src/server-updates-config.ts",
     "./easypanel-server-updates": "./src/easypanel-server-updates.ts",
+    "./standalone-server-updates": "./src/standalone-server-updates.ts",
     "./host-computer-server": "./src/host-computer-server.ts",
     "./host-screen": "./src/host-screen.ts",
     "./model-json": "./src/model-json.ts",

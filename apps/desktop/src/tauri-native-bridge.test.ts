@@ -303,6 +303,7 @@ describe("Tauri native bridge", () => {
     await bridge.update.check();
     await bridge.update.download();
     await bridge.update.install();
+    await bridge.update.setChannel?.("beta");
     await bridge.speech?.start("en-US", 4);
     await bridge.speech?.stop(4);
     await bridge.speech?.abort(4);
@@ -330,6 +331,7 @@ describe("Tauri native bridge", () => {
       { type: "update.check" },
       { type: "update.download" },
       { type: "update.install" },
+      { type: "update.setChannel", channel: "beta" },
       { type: "speech.start", language: "en-US", session: 4 },
       { type: "speech.stop", session: 4 },
       { type: "speech.abort", session: 4 },

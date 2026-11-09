@@ -176,6 +176,7 @@ export interface AppEnv {
   mcpAllowPrivateEndpoint: boolean;
   port: number;
   gitSha: string | undefined;
+  serverVersion: string | undefined;
   /** Oldest client build per kind the API still serves (ORKBOT_MIN_CLIENT_BUILD). */
   minimumClientBuilds?: MinimumClientBuilds;
   /** Browser error reporting, served to the web app at runtime. The DSN is public by design. */
@@ -416,6 +417,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     mcpAllowPrivateEndpoint: source.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
     port: Number(source.API_PORT ?? 3100),
     gitSha: optional(source.GIT_SHA) ?? optional(source.ORKBOT_GIT_SHA),
+    serverVersion: optional(source.ORKBOT_SERVER_VERSION),
     minimumClientBuilds: parseMinimumClientBuilds(source.ORKBOT_MIN_CLIENT_BUILD),
     browserMonitoring: browserMonitoringFromEnv(source),
   };

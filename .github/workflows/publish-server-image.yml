@@ -113,7 +113,9 @@ jobs:
           push: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+          build-args: |
+            ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+            ${{ matrix.name == 'app' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && format('ORKBOT_SERVER_VERSION={0}', github.ref_name) || '' }}
           cache-from: |
             type=gha,scope=pr-${{ github.event.pull_request.number }}-${{ matrix.name }}
             type=gha,scope=${{ matrix.name }}
@@ -188,7 +190,9 @@ jobs:
             type=image,name=ghcr.io/${{ github.repository }}/${{ matrix.name }},push-by-digest=true,name-canonical=true,push=true
             ${{ matrix.name == 'app' && 'type=tar,dest=/tmp/rootfs.tar' || '' }}
           # GET /health can report the exact source commit without a deployment-supplied override.
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+          build-args: |
+            ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+            ${{ matrix.name == 'app' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && format('ORKBOT_SERVER_VERSION={0}', github.ref_name) || '' }}
           cache-from: type=gha,scope=${{ matrix.name }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.name }}-${{ matrix.arch }}
           provenance: mode=max
@@ -274,7 +278,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           # A fork can publish only to its own namespace; no credential can redirect this value.
           outputs: type=image,name=ghcr.io/${{ github.repository }}/${{ matrix.name }},push-by-digest=true,name-canonical=true,push=true
-          build-args: ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+          build-args: |
+            ${{ matrix.name == 'app' && format('GIT_SHA={0}', github.sha) || '' }}
+            ${{ matrix.name == 'app' && github.ref_type == 'tag' && startsWith(github.ref_name, 'v') && format('ORKBOT_SERVER_VERSION={0}', github.ref_name) || '' }}
           provenance: mode=max
           sbom: true
       - id: depot

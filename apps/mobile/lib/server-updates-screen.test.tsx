@@ -12,9 +12,33 @@ import Updates from "../app/(settings)/updates";
 
 const store = vi.hoisted(() => ({
   state: { status: null, busy: null, error: false, uncertain: false } as ServerUpdatesView,
-  updates: { check: vi.fn(), apply: vi.fn(), policy: vi.fn() },
+  updates: { check: vi.fn(), apply: vi.fn(), policy: vi.fn(), channel: vi.fn() },
 }));
 vi.mock("./server-updates", () => ({ useServerUpdates: () => store }));
+vi.mock("@expo/ui/community/menu", () => ({
+  MenuView: ({
+    children,
+    actions,
+    onPressAction,
+  }: {
+    children: ReactNode;
+    actions: { id: string; title: string }[];
+    onPressAction: (event: { nativeEvent: { event: string } }) => void;
+  }) => (
+    <div>
+      {children}
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          onClick={() => onPressAction({ nativeEvent: { event: action.id } })}
+        >
+          {action.title}
+        </button>
+      ))}
+    </div>
+  ),
+}));
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
 vi.mock("./native", () => ({ native: {}, useMobileTokens: () => ({ mutedForeground: "muted" }) }));
 vi.mock("react-native", () => ({
@@ -26,15 +50,18 @@ vi.mock("../components/settings-group", () => ({
   SettingsGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   SettingsRow: ({
     title,
+    value,
     onPress,
     disabled,
   }: {
     title: string;
+    value?: string;
     onPress?: () => void;
     disabled?: boolean;
   }) => (
     <button type="button" disabled={disabled} onClick={onPress}>
       {title}
+      {value}
     </button>
   ),
   SettingsSwitch: ({
@@ -115,4 +142,23 @@ it("shows deployment acknowledgement as a request", async () => {
   });
   expect(host.textContent).toContain("Deployment requested");
   expect(host.textContent).not.toContain("Up to date");
+});
+it("shows completion only when the server confirms it", async () => {
+  const host = await render({
+    lastRequest: {
+      id: "request",
+      revision: status.candidate!.revision,
+      state: "completed",
+      requestedAt: new Date().toISOString(),
+    },
+  });
+  expect(host.textContent).toContain("Server updated");
+});
+it("offers stable and beta channels only when the server supports selecting them", async () => {
+  const host = await render({ channelSelectable: true });
+  expect(host.textContent).toContain("Stable");
+  await act(async () =>
+    [...host.querySelectorAll("button")].find((item) => item.textContent === "Beta")!.click(),
+  );
+  expect(store.updates.channel).toHaveBeenCalledWith("preview");
 });

@@ -4,10 +4,12 @@
 """Bounded Accounts enrollment and readiness checks for the Linux installer."""
 
 import ipaddress
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import secrets
 import shutil
 import socket
 import stat
@@ -226,8 +228,8 @@ def preflight(url, external):
     directories = docker("ps", "-a", "--filter", "label=com.docker.compose.project=orkbot", "--format", '{{.Label "com.docker.compose.project.working_dir"}}').splitlines()
     if any(directory != str(Path.cwd()) for directory in directories):
         raise SetupError("Another Ork Compose installation already uses this Docker host; use its installation directory.")
-    if not ENV.exists() and docker("volume", "ls", "--filter", "label=com.docker.compose.project=orkbot", "-q").strip():
-        raise SetupError("Existing Ork volumes need their original .env; restore it before continuing.")
+    if (not ENV.exists() or not STATE.exists()) and docker("volume", "ls", "--filter", "label=com.docker.compose.project=orkbot", "-q").strip():
+        raise SetupError("Existing Ork volumes need their original installation directory and configuration; restore them before continuing.")
     if shutil.disk_usage(".").free < 5 * 1024 ** 3:
         raise SetupError("At least 5 GiB of free disk space is required before pulling server images.")
     public_dns(hostname)
@@ -435,9 +437,59 @@ def pin_images(base):
         value = os.environ.get(key) or "sha-" + match.group(1)
         if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", value):
             raise SetupError("The configured image tag is invalid.")
+        if value != "sha-" + match.group(1):
+            raise SetupError("The image tags must match the pinned installation source.")
         values[key] = value
     # Explicit mirror image names remain untouched, as do all pre-existing .env files.
     write_environment(values)
+
+
+def configure_updates(base, socket_path, files):
+    deploy_dir = str(Path.cwd().resolve())
+    if not re.fullmatch(r"/[A-Za-z0-9_./-]+", deploy_dir) or not re.fullmatch(r"/[A-Za-z0-9_./-]+", socket_path):
+        raise SetupError("The updater requires a deployment directory and Docker socket without special characters.")
+    if not files or any(not re.fullmatch(r"[A-Za-z0-9_.-]+\.yml", name) for name in files.split(":")):
+        raise SetupError("The updater Compose file list is invalid.")
+    env = environment()
+    match = re.search(r"/([0-9a-f]{40})/infra/compose$", base)
+    if not match:
+        raise SetupError("Server updates require a pinned installation source.")
+    expected = {
+        "COMPOSE_PROJECT_NAME": "orkbot",
+        "ORKBOT_DEPLOY_DIR": deploy_dir,
+        "ORKBOT_DOCKER_SOCKET": socket_path,
+        "ORKBOT_COMPOSE_FILE": files,
+    }
+    for key, value in expected.items():
+        if env.get(key) and env[key] != value:
+            raise SetupError("Existing updater configuration does not match this installation.")
+    token = env.get("ORKBOT_UPDATER_TOKEN") or secrets.token_hex(32)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{32,256}", token):
+        raise SetupError("The existing updater token is invalid.")
+    if any(token == env.get(key) for key in SECRETS):
+        raise SetupError("The updater token must be separate from the application secrets.")
+    tag = env.get("ORKBOT_UPDATER_IMAGE_TAG") or "sha-" + match.group(1)
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+        raise SetupError("The existing updater image tag is invalid.")
+    write_environment({**expected, "ORKBOT_UPDATER_TOKEN": token, "ORKBOT_UPDATER_IMAGE_TAG": tag})
+
+
+def record_compose_state(files):
+    state = Path(".orkbot-compose-state.json")
+    regular(state, private=True)
+    if state.exists():
+        return
+    allowed = {"docker-compose.images.yml", "docker-compose.https.yml", "Caddyfile.prod"}
+    if not files or any(name not in allowed for name in files) or len(files) != len(set(files)):
+        raise SetupError("The installer template list is invalid.")
+    hashes = {}
+    for name in files:
+        path = Path(name)
+        regular(path)
+        if not path.is_file():
+            raise SetupError("An installer template is missing.")
+        hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+    atomic(state, json.dumps({"files": hashes}, sort_keys=True) + "\n")
 
 
 def initialization_required(url):
@@ -467,6 +519,12 @@ def main():
         return
     if operation == "pin-images":
         pin_images(url)
+        return
+    if operation == "configure-updates":
+        configure_updates(url, sys.argv[3], sys.argv[4])
+        return
+    if operation == "record-compose-state":
+        record_compose_state(sys.argv[2:])
         return
     if operation == "ip-edge":
         ip_edge(url)

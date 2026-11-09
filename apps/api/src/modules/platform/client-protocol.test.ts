@@ -30,6 +30,7 @@ function fixture(
     await c.req.json();
     return c.json({ json: { ok: true } });
   });
+  app.post("/rpc/serverUpdates/status", (c) => c.json({ json: { ok: true } }));
   app.post("/rpc/events", (c) => {
     handled += 1;
     return c.body('data: {"json":{"type":"heartbeat"}}\n\n', 200, {
@@ -101,6 +102,22 @@ describe("RPC protocol admission", () => {
     expect((await call(app)).status).toBe(426);
     expect((await call(app, "2")).status).toBe(200);
     expect(handled()).toBe(1);
+  });
+
+  it("keeps only update recovery routes reachable across incompatible versions", async () => {
+    const { app } = fixture({ min: 2, max: 2 }, { mobile: "20261101000000" });
+    const headers = {
+      [CLIENT_PROTOCOL_HEADER]: "1",
+      [CLIENT_BUILD_HEADER]: "mobile/20261031000000",
+    };
+    expect(
+      (await app.request("/rpc/serverUpdates/status", { method: "POST", headers })).status,
+    ).toBe(200);
+    expect(
+      (await app.request("/rpc/serverUpdates/status/extra", { method: "POST", headers })).status,
+    ).toBe(426);
+    expect((await app.request("/rpc/mutate", { method: "POST", headers })).status).toBe(426);
+    expect((await app.request("/rpc/serverUpdates/status", { method: "POST" })).status).toBe(426);
   });
 
   it("applies protocol and timestamp requirements independently", async () => {

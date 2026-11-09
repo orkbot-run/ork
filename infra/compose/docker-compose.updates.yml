@@ -1,0 +1,81 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+services:
+  api:
+    volumes:
+      - updates-configuration:/run/orkbot:ro
+    networks:
+      - control
+
+  updates-init:
+    profiles: [updates-init]
+    image: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}:${ORKBOT_IMAGE_TAG:-edge}
+    user: root
+    network_mode: none
+    restart: "no"
+    environment:
+      ORKBOT_UPDATER_TOKEN: ${ORKBOT_UPDATER_TOKEN:?Set ORKBOT_UPDATER_TOKEN in .env}
+    volumes:
+      - updates-configuration:/configure-updates
+    entrypoint: [node, -e]
+    command:
+      - |
+        const fs = require('node:fs');
+        const crypto = require('node:crypto');
+        const dir = '/configure-updates';
+        const path = dir + '/updates.json';
+        const token = process.env.ORKBOT_UPDATER_TOKEN;
+        if (!/^[A-Za-z0-9_-]{32,256}$/.test(token || '')) throw new Error('Invalid updater token');
+        fs.chownSync(dir, 1000, 1000);
+        fs.chmodSync(dir, 0o700);
+        if (fs.existsSync(path)) {
+          const stat = fs.lstatSync(path);
+          if (!stat.isFile() || stat.uid !== 1000 || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600) throw new Error('Invalid update configuration');
+          const existing = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (existing.adapter?.kind !== 'standalone' || existing.adapter.token !== token) throw new Error('Update configuration does not match the updater');
+        } else {
+          const fd = fs.openSync(path, 'wx', 0o600);
+          try {
+            fs.fchownSync(fd, 1000, 1000);
+            fs.writeFileSync(fd, JSON.stringify({version: 1, installationId: crypto.randomUUID(), controllerAccountKey: null, channel: 'stable', adapter: {kind: 'standalone', token}}) + '\n');
+            fs.fsyncSync(fd);
+          } finally { fs.closeSync(fd); }
+        }
+
+  updater:
+    image: ${ORKBOT_UPDATER_IMAGE:-ghcr.io/orkbot-run/ork/updater}:${ORKBOT_UPDATER_IMAGE_TAG:?Set ORKBOT_UPDATER_IMAGE_TAG in .env}
+    restart: unless-stopped
+    init: true
+    user: root
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    environment:
+      NODE_ENV: production
+      ORKBOT_UPDATER_MODE: standalone
+      ORKBOT_UPDATER_TOKEN: ${ORKBOT_UPDATER_TOKEN:?Set ORKBOT_UPDATER_TOKEN in .env}
+      ORKBOT_UPDATER_HOST: "0.0.0.0"
+      ORKBOT_UPDATER_PORT: "7092"
+      ORKBOT_IMAGE: ${ORKBOT_IMAGE:-ghcr.io/orkbot-run/ork/app}
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?Set COMPOSE_PROJECT_NAME}
+      ORKBOT_DEPLOY_DIR: ${ORKBOT_DEPLOY_DIR:?Set ORKBOT_DEPLOY_DIR in .env}
+      ORKBOT_COMPOSE_FILE: ${ORKBOT_COMPOSE_FILE:?Set ORKBOT_COMPOSE_FILE in .env}
+      ORKBOT_UPDATE_SERVICES: supervisor
+    volumes:
+      - ${ORKBOT_DOCKER_SOCKET:?Set ORKBOT_DOCKER_SOCKET in .env}:/var/run/docker.sock
+      - ${ORKBOT_DEPLOY_DIR:?Set ORKBOT_DEPLOY_DIR in .env}:${ORKBOT_DEPLOY_DIR:?Set ORKBOT_DEPLOY_DIR in .env}
+    networks:
+      - control
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:7092/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  updates-configuration:
+
+networks:
+  control:

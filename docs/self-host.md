@@ -39,8 +39,12 @@ existing deployments.
 
 In Ork setup, sign in to Accounts and choose the self-hosted option. Connect an existing
 server by its HTTPS address, or run the displayed command in a terminal on your Linux
-server. The installer asks for the domain there, installs into `~/orkbot` and pins its
-files to one source revision.
+server. Run the command with `sudo`. The installer asks for the domain, installs into
+the root-owned `/root/orkbot` directory and pins its files to one source revision.
+The directory and its parents must not be writable by other users because the update
+service uses them to manage Docker.
+New installations use the latest stable server release. An operator can select a
+specific source commit with `--revision`; it must have published images.
 
 Point the domain's public DNS records at the server first. Inbound TCP 80 and 443 must
 reach it. The installer supports amd64 and arm64, installs missing prerequisites on
@@ -54,11 +58,13 @@ and admits its owner. The client secret stays in `.env` with mode 600. A separat
 credential in `.orkbot-installation.json`, also mode 600, reports installation progress
 for up to an hour. Keep the copied command private while its code is valid.
 
-For an installer already downloaded from the same pinned source, a code can be supplied
-on stdin instead of a command argument:
+For an installer already downloaded from a pinned source, set `ORKBOT_DOWNLOAD_BASE`
+to that same commit's `infra/compose` directory, replacing `<full-commit>` below.
+A code can be supplied on stdin instead of a command argument:
 
 ```bash
-bash install-images.sh --server --code-stdin
+sudo ORKBOT_DOWNLOAD_BASE='https://raw.githubusercontent.com/orkbot-run/ork/<full-commit>/infra/compose' \
+  bash install-images.sh --server --code-stdin
 ```
 
 Paste the code and press Enter. `ORKBOT_INSTALL_CODE` is also accepted. The installer

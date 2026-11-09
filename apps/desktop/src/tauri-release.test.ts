@@ -7,10 +7,13 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  compareReleaseVersions,
   PLATFORMS,
   previewVersion,
   releaseConfiguration,
   releaseManifest,
+  releaseVersion,
+  stableReleaseVersion,
   stageArtifacts,
   verifiedBuild,
 } from "../scripts/tauri-release.js";
@@ -46,6 +49,38 @@ afterEach(() => {
 });
 
 describe("signed desktop releases", () => {
+  it("accepts only bounded stable release tags", () => {
+    expect(stableReleaseVersion("v2.3.4")).toBe("2.3.4");
+    for (const tag of ["v1.0.0-beta.1", "v01.2.3", "latest", "v1.2.65536"])
+      expect(() => stableReleaseVersion(tag)).toThrow();
+  });
+  it("accepts only numbered beta releases", () => {
+    expect(releaseVersion("v2.3.4-beta.7")).toBe("2.3.4-beta.7");
+    for (const tag of ["v2.3.4-beta", "v2.3.4-beta.0", "v2.3.4-rc.1", "v2.3.4-beta.01"])
+      expect(() => releaseVersion(tag)).toThrow();
+    expect(releaseConfiguration("2.3.4-beta.7", key).version).toBe("2.3.4-beta.7");
+  });
+  it("orders stable releases above their beta and protects newer beta builds", () => {
+    expect(compareReleaseVersions("1.2.0", "1.2.0-beta.9")).toBe(1);
+    expect(compareReleaseVersions("1.2.1-beta.1", "1.2.0")).toBe(1);
+    expect(compareReleaseVersions("1.2.1-beta.9", "1.2.1-beta.10")).toBe(-1);
+    expect(compareReleaseVersions("1.2.0", "1.2.0")).toBe(0);
+    expect(() => compareReleaseVersions("preview", "1.2.0")).toThrow();
+  });
+  it("keeps the beta version for the updater and uses numeric macOS bundle metadata", () => {
+    const root = path.resolve(import.meta.dirname, "../../..");
+    const output = path.join(temporary(), "release.json");
+    execFileSync(process.execPath, ["apps/desktop/scripts/tauri-release.ts", "prepare", output], {
+      cwd: root,
+      env: { ...process.env, TAURI_RELEASE_TAG: "v2.3.4-beta.7", TAURI_UPDATER_PUBLIC_KEY: key },
+    });
+    const config = JSON.parse(readFileSync(output, "utf8"));
+    expect(config.version).toBe("2.3.4-beta.7");
+    expect(config.bundle.macOS.bundleVersion).toBe("2.3.4");
+    const plist = readFileSync(config.bundle.macOS.infoPlist, "utf8");
+    expect(plist).toContain("<key>CFBundleShortVersionString</key><string>2.3.4</string>");
+    expect(plist).toContain("NSMicrophoneUsageDescription");
+  });
   it("accepts only successful same-revision main builds from the publishing repository", () => {
     const run = {
       id: 1,
@@ -115,6 +150,13 @@ describe("signed desktop releases", () => {
     expect(manifest.platforms["darwin-aarch64"]?.url).toBe(
       "https://github.com/example/desktop/releases/download/desktop-preview-1.1.42/darwin-aarch64-app.tar.gz",
     );
+    expect(
+      releaseManifest(entries(), { ...options, releaseTag: "v1.1.42" }).platforms["darwin-aarch64"]
+        ?.url,
+    ).toBe(
+      "https://github.com/example/desktop/releases/download/v1.1.42/darwin-aarch64-app.tar.gz",
+    );
+    expect(() => releaseManifest(entries(), { ...options, releaseTag: "v1.1.41" })).toThrow();
     expect(() => releaseManifest(entries().slice(1), options)).toThrow();
     for (const patch of [
       { revision: "b".repeat(40) },

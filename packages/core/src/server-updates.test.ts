@@ -85,6 +85,20 @@ it("uses an immutable candidate, a fresh UUID and revision-checked policy", asyn
   stop();
 });
 
+it("changes the channel without changing the automatic policy", async () => {
+  const api = client();
+  api.status.mockResolvedValue({ ...base, mode: "automatic", channelSelectable: true });
+  const updates = createServerUpdates(api);
+  const stop = updates.watch();
+  await flush();
+  await updates.channel("stable");
+  expect(api.policy).toHaveBeenCalledWith(
+    { automatic: true, expectedRevision: 2, channel: "stable" },
+    expect.any(AbortSignal),
+  );
+  stop();
+});
+
 it("does not let an older status overwrite a policy mutation", async () => {
   const api = client();
   const updates = createServerUpdates(api);

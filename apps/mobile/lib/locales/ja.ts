@@ -50,6 +50,9 @@ export const JA_MESSAGES: Record<string, string> = {
   "Update server": "サーバーを更新",
   "Automatic updates": "自動アップデート",
   "Deployment requested": "デプロイをリクエストしました",
+  "Server updated": "サーバーを更新しました",
+  Channel: "チャンネル",
+  Stable: "安定版",
   "Check deployment in server panel": "サーバーパネルでデプロイを確認してください",
   "Could not complete the update. Try again.":
     "アップデートを完了できませんでした。もう一度お試しください。",

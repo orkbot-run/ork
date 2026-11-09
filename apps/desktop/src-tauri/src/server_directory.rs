@@ -252,7 +252,7 @@ fn installation_command(
     }
     // Every interpolated field is validated before the shell command is constructed.
     let command = format!(
-        "curl -fsSL https://install.ork.run | sh -s -- --revision '{revision}' --code '{}'",
+        "curl -fsSL https://install.ork.run | sudo -H sh -s -- --revision '{revision}' --code '{}'",
         value.code
     );
     Ok(InstallationCommand {
@@ -593,7 +593,7 @@ mod tests {
         assert!(!result.command.contains(INSTALL_URL));
         assert!(result
             .command
-            .starts_with("curl -fsSL https://install.ork.run | sh -s -- "));
+            .starts_with("curl -fsSL https://install.ork.run | sudo -H sh -s -- "));
         assert!(result
             .command
             .contains(&format!("--revision '{INSTALL_REVISION}'")));

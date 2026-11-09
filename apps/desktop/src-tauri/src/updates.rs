@@ -4,7 +4,9 @@
 // Preserves the inherited DesktopUpdateState contract. The Rust transport follows LICENSE.md.
 
 use std::{
+    fs::{self, OpenOptions},
     future::Future,
+    io::{Read, Write},
     path::Path,
     pin::Pin,
     sync::{
@@ -14,7 +16,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::{Update, UpdaterExt};
@@ -50,12 +52,40 @@ pub struct UpdateState {
     pub percent: Option<f64>,
     pub message: Option<String>,
     pub checked_at: Option<String>,
+    pub channel: UpdateChannel,
+    pub beta_available: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdateChannel {
+    #[default]
+    Stable,
+    Beta,
 }
 
 #[derive(Clone)]
 struct Configuration {
     endpoint: Url,
     key: String,
+    channel: UpdateChannel,
+    stable_endpoint: Url,
+    beta_endpoint: Option<Url>,
+}
+
+impl Configuration {
+    fn select(&mut self, channel: UpdateChannel) -> bool {
+        let endpoint = match channel {
+            UpdateChannel::Stable => Some(&self.stable_endpoint),
+            UpdateChannel::Beta => self.beta_endpoint.as_ref(),
+        };
+        let Some(endpoint) = endpoint else {
+            return false;
+        };
+        self.endpoint = endpoint.clone();
+        self.channel = channel;
+        true
+    }
 }
 
 fn configuration(
@@ -69,14 +99,67 @@ fn configuration(
     let endpoint = endpoint
         .and_then(|value| Url::parse(value).ok())
         .filter(secure_url)
+        .filter(|value| !value.path().contains("/desktop-preview/"))
         .ok_or("An HTTPS update feed is required.")?;
     let key = key
         .filter(|value| !value.trim().is_empty())
         .ok_or("An update verification key is required.")?;
+    let beta = beta_endpoint().filter(|beta| *beta != endpoint);
     Ok(Configuration {
+        stable_endpoint: endpoint.clone(),
         endpoint,
         key: key.to_owned(),
+        channel: UpdateChannel::Stable,
+        beta_endpoint: beta,
     })
+}
+
+fn beta_endpoint() -> Option<Url> {
+    option_env!("TAURI_UPDATER_BETA_ENDPOINT")
+        .and_then(|value| Url::parse(value).ok())
+        .filter(secure_url)
+}
+
+fn channel_path<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|path| path.join("update-channel"))
+}
+
+fn read_channel<R: Runtime>(app: &AppHandle<R>) -> UpdateChannel {
+    let value = channel_path(app).and_then(|path| {
+        if !fs::symlink_metadata(path.parent()?).ok()?.is_dir() {
+            return None;
+        }
+        let metadata = fs::symlink_metadata(&path).ok()?;
+        if !metadata.is_file() || metadata.len() > 16 {
+            return None;
+        }
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.custom_flags(0x0020_0000);
+        }
+        let file = options.open(path).ok()?;
+        if !file.metadata().ok()?.is_file() {
+            return None;
+        }
+        let mut value = String::new();
+        file.take(17).read_to_string(&mut value).ok()?;
+        Some(value)
+    });
+    match value.as_deref() {
+        Some("beta\n") if beta_endpoint().is_some() => UpdateChannel::Beta,
+        _ => UpdateChannel::Stable,
+    }
 }
 
 fn secure_url(url: &Url) -> bool {
@@ -236,7 +319,22 @@ impl Data {
                 option_env!("TAURI_UPDATER_PUBLIC_KEY"),
             )
         };
+        let mut channel = read_channel(app);
+        let configured = configured.map(|mut config| {
+            if channel == UpdateChannel::Beta {
+                if let Some(endpoint) = &config.beta_endpoint {
+                    config.endpoint = endpoint.clone();
+                    config.channel = channel;
+                } else {
+                    channel = UpdateChannel::Stable;
+                }
+            }
+            config
+        });
         let message = configured.as_ref().err().cloned();
+        let beta_available = configured
+            .as_ref()
+            .is_ok_and(|config| config.beta_endpoint.is_some());
         Self {
             state: UpdateState {
                 phase: if message.is_some() {
@@ -249,6 +347,8 @@ impl Data {
                 percent: None,
                 message,
                 checked_at: None,
+                channel,
+                beta_available,
             },
             configuration: configured.ok(),
             last_check: None,
@@ -449,6 +549,55 @@ pub fn state(app: &AppHandle) -> UpdateState {
     app.state::<UpdateCheck>().snapshot(app)
 }
 
+pub async fn set_channel(app: &AppHandle, channel: UpdateChannel) -> Result<UpdateState, String> {
+    let manager = app.state::<UpdateCheck>();
+    {
+        let _operation = manager.operation.lock().await;
+        let supported = manager.mutate(app, |data| {
+            data.configuration.as_ref().is_some_and(|config| {
+                channel == UpdateChannel::Stable || config.beta_endpoint.is_some()
+            })
+        });
+        if !supported {
+            return Err("This update channel is not available.".into());
+        }
+        let path = channel_path(app).ok_or("Could not save the update channel.")?;
+        let directory = path.parent().ok_or("Could not save the update channel.")?;
+        fs::create_dir_all(directory).map_err(|_| "Could not save the update channel.")?;
+        if !fs::symlink_metadata(directory)
+            .map_err(|_| "Could not save the update channel.")?
+            .is_dir()
+        {
+            return Err("Could not save the update channel.".into());
+        }
+        let mut file = tempfile::NamedTempFile::new_in(directory)
+            .map_err(|_| "Could not save the update channel.")?;
+        file.write_all(match channel {
+            UpdateChannel::Stable => b"stable\n",
+            UpdateChannel::Beta => b"beta\n",
+        })
+        .and_then(|_| file.as_file().sync_all())
+        .map_err(|_| "Could not save the update channel.")?;
+        file.persist(path)
+            .map_err(|_| "Could not save the update channel.")?;
+        manager.mutate(app, |data| {
+            if let Some(config) = &mut data.configuration {
+                config.select(channel);
+            }
+            data.state.channel = channel;
+            data.state.phase = UpdatePhase::Idle;
+            data.state.available_version = None;
+            data.state.checked_at = None;
+            data.state.message = None;
+            data.state.percent = None;
+            data.last_check = None;
+            data.artifact = None;
+            data.verified_bytes = None;
+        });
+    }
+    Ok(check_state(app).await)
+}
+
 /// Automatic checks may download a verified package, but never prompt or install it.
 pub fn start_background(app: AppHandle) {
     if app
@@ -480,6 +629,7 @@ pub async fn check_state(app: &AppHandle) -> UpdateState {
     let (state, should_download) = manager
         .discover(app, move |configuration| async move {
             let cleanup = native_app.clone();
+            let channel = configuration.channel;
             let updater = native_app
                 .updater_builder()
                 .endpoints(vec![configuration.endpoint])
@@ -494,6 +644,11 @@ pub async fn check_state(app: &AppHandle) -> UpdateState {
             update
                 .map(|update| {
                     if !secure_url(&update.download_url) {
+                        return Err(Failure::Other);
+                    }
+                    if channel == UpdateChannel::Stable
+                        && update.version.split('+').next().unwrap_or("").contains('-')
+                    {
                         return Err(Failure::Other);
                     }
                     Ok(Arc::new(SignedArtifact(update)) as Arc<dyn Artifact>)
@@ -602,6 +757,25 @@ mod tests {
             Some("key")
         )
         .is_ok());
+        assert!(configuration(
+            Some("1"),
+            Some("https://github.com/example/ork/releases/download/desktop-preview/latest.json"),
+            Some("key")
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn update_channel_selects_only_its_configured_endpoint() {
+        let mut config =
+            configuration(Some("1"), Some("https://example.test/stable"), Some("key")).unwrap();
+        assert!(!config.select(UpdateChannel::Beta));
+        assert_eq!(config.endpoint.as_str(), "https://example.test/stable");
+        config.beta_endpoint = Some(Url::parse("https://example.test/beta").unwrap());
+        assert!(config.select(UpdateChannel::Beta));
+        assert_eq!(config.endpoint.as_str(), "https://example.test/beta");
+        assert!(config.select(UpdateChannel::Stable));
+        assert_eq!(config.endpoint.as_str(), "https://example.test/stable");
     }
 
     #[test]

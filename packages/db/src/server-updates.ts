@@ -12,6 +12,7 @@ export interface ServerUpdateBinding {
   delegatedAccountKey: string;
   channel: "stable" | "preview";
   currentRevision: string | null;
+  channelSelectable?: boolean;
 }
 
 /** Call within runAsSystem; the records are installation-owned, never tenant-authorized. */
@@ -31,7 +32,7 @@ export function serverUpdateStore(prisma: PrismaClient, binding: ServerUpdateBin
       });
       if (
         control.delegatedAccountKey !== binding.delegatedAccountKey ||
-        control.channel !== binding.channel
+        (!binding.channelSelectable && control.channel !== binding.channel)
       )
         throw new ServerUpdateConflict("The operator binding changed");
       return control;
@@ -52,12 +53,13 @@ export function serverUpdateStore(prisma: PrismaClient, binding: ServerUpdateBin
         data: { state: "unknown" },
       });
     },
-    async claimCheck(automatic: boolean, ownerUserId?: string) {
+    async claimCheck(automatic: boolean, ownerUserId?: string, periodic = false) {
       if (automatic && !ownerUserId) return null;
       const token = randomUUID();
       const claimed = await prisma.serverUpdateControl.updateMany({
         where: {
           ...bound,
+          ...(periodic && !automatic ? { nextCheckAt: { lte: new Date() } } : {}),
           ...(automatic
             ? {
                 automatic: true,
@@ -68,7 +70,7 @@ export function serverUpdateStore(prisma: PrismaClient, binding: ServerUpdateBin
             : {}),
           AND: [
             { OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }] },
-            ...(automatic
+            ...(automatic || periodic
               ? []
               : [
                   {
@@ -110,18 +112,59 @@ export function serverUpdateStore(prisma: PrismaClient, binding: ServerUpdateBin
         ).count === 1
       );
     },
-    async policy(automatic: boolean, expectedRevision: number, userId: string) {
-      const changed = await prisma.serverUpdateControl.updateMany({
-        where: { ...bound, policyRevision: expectedRevision },
-        data: {
-          automatic,
-          consentedAccountKey: automatic ? binding.delegatedAccountKey : null,
-          consentedUserId: automatic ? userId : null,
-          policyRevision: { increment: 1 },
-          nextCheckAt: new Date(),
-        },
+    async policy(
+      automatic: boolean,
+      expectedRevision: number,
+      userId: string,
+      channel?: "stable" | "preview",
+    ) {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`server-updates:${binding.installationId}`}))`;
+        const control = await tx.serverUpdateControl.findUniqueOrThrow({ where });
+        if (
+          control.delegatedAccountKey !== binding.delegatedAccountKey ||
+          control.channel !== binding.channel ||
+          control.policyRevision !== expectedRevision ||
+          (channel !== undefined && channel !== control.channel && !binding.channelSelectable)
+        )
+          throw new ServerUpdateConflict("The update policy changed");
+        const changingChannel = channel !== undefined && channel !== control.channel;
+        if (
+          changingChannel &&
+          (await tx.serverUpdateRequest.findFirst({
+            where: {
+              installationId: binding.installationId,
+              OR: [
+                { state: { in: ["queued", "submitting"] } },
+                { createdAt: { gt: new Date(Date.now() - SERVER_UPDATE_COOLDOWN_MS) } },
+              ],
+            },
+          }))
+        )
+          throw new ServerUpdateConflict("A deployment is in progress or was requested recently");
+        await tx.serverUpdateControl.update({
+          where,
+          data: {
+            automatic,
+            consentedAccountKey: automatic ? binding.delegatedAccountKey : null,
+            consentedUserId: automatic ? userId : null,
+            policyRevision: { increment: 1 },
+            nextCheckAt: new Date(),
+            ...(changingChannel
+              ? {
+                  channel,
+                  candidateBaseRevision: null,
+                  candidateRevision: null,
+                  candidateVersion: null,
+                  lastCheckedAt: null,
+                  checkFailed: false,
+                  leaseToken: null,
+                  leaseExpiresAt: null,
+                }
+              : {}),
+          },
+        });
       });
-      if (changed.count !== 1) throw new ServerUpdateConflict("The update policy changed");
     },
     async queue(
       input: { revision: string; idempotencyKey: string } & (

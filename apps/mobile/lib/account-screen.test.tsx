@@ -36,6 +36,9 @@ const { element, account } = vi.hoisted(() => ({
       ),
   account: {
     serverUpdates: false,
+    serverRevision: null as string | null,
+    serverRelease: null as string | null,
+    versionUnavailable: false,
     me: { userId: "user-1", name: "Tester", email: "tester@example.test" } as Record<
       string,
       unknown
@@ -183,7 +186,10 @@ vi.mock("../components/settings-group", () => ({
     createElement("button", { type: "button" }, label),
   useStackedSettings: () => false,
 }));
-vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
+vi.mock("./session", () => ({
+  currentSessionGeneration: () => 1,
+  subscribeSessionGeneration: () => () => undefined,
+}));
 vi.mock("./api", () => ({
   currentApiBase: () => "http://127.0.0.1:3100",
   deleteAccount: vi.fn(),
@@ -191,24 +197,24 @@ vi.mock("./api", () => ({
   loadSessionToken: vi.fn(async () => "token"),
   passwordResetCapabilities: vi.fn(async () => ({})),
   requestAccountDeletionCode: vi.fn(),
-  rpc: vi.fn(async (method: string) =>
-    method === "me"
-      ? account.me
-      : method === "autoReview/get"
-        ? account.approvals
-        : method === "approvalRules/list"
-          ? account.rules
-          : method === "messaging/status"
-            ? account.messaging
-            : {},
-  ),
+  rpc: vi.fn(async (method: string) => {
+    if (method === "me") return account.me;
+    if (method === "serverUpdates/version") {
+      if (account.versionUnavailable) throw new Error("Unsupported procedure");
+      return { revision: account.serverRevision, version: account.serverRelease };
+    }
+    if (method === "autoReview/get") return account.approvals;
+    if (method === "approvalRules/list") return account.rules;
+    if (method === "messaging/status") return account.messaging;
+    return {};
+  }),
   selectedSpaceId: () => "space-1",
   signOut: vi.fn(),
   updateAccountName: vi.fn(),
 }));
 vi.mock("./app-version", () => ({
   formatUpdateLabel: () => "",
-  getAppVersionInfo: () => ({ version: "1.0.0", build: "1" }),
+  getAppVersionInfo: () => ({ nativeLabel: "1.0.0 (1)", update: { kind: "embedded" } }),
 }));
 vi.mock("./appearance", () => ({
   getCachedAppearancePreference: () => "system",
@@ -299,6 +305,9 @@ beforeEach(() => {
   account.me = { userId: "user-1", name: "Tester", email: "tester@example.test" };
   account.rules = [];
   account.serverUpdates = false;
+  account.serverRevision = null;
+  account.serverRelease = null;
+  account.versionUnavailable = false;
   account.messaging = { enabled: true };
   vi.mocked(fetchAccountSecurity).mockResolvedValue(security());
 });
@@ -358,6 +367,22 @@ async function renderAccount() {
     alert: () => screen.querySelector('[role="alert"]')?.textContent ?? null,
   };
 }
+
+it("shows client and server versions even when server updates are unavailable", async () => {
+  account.serverRevision = "abcdef1234567890abcdef1234567890abcdef12";
+  account.serverRelease = "v1.2.3";
+  const view = await renderAccount();
+  expect(view.screen.textContent).toContain("Ork 1.0.0 (1)");
+  expect(view.screen.textContent).toContain("Server v1.2.3 abcdef123456");
+  expect(view.button("Updates")).toBeUndefined();
+});
+
+it("keeps client version visible when an older server does not expose its revision", async () => {
+  account.versionUnavailable = true;
+  const view = await renderAccount();
+  expect(view.screen.textContent).toContain("Ork 1.0.0 (1)");
+  expect(view.screen.textContent).not.toContain("Server abcdef123456");
+});
 
 it("asks for the current password, shows a failed delete, and signs out after a successful one", async () => {
   const view = await renderAccount();

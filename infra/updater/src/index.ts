@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache operator updates are preserved. Standalone deployment control is an Ork addition.
+
 import type { ExecFileException } from "node:child_process";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -13,6 +18,7 @@ import {
   composeUpArgv,
   composeUpdatePlan,
   DEFAULT_UPDATE_REMOTE,
+  equalRegistryManifests,
   forkImageTag,
   gitIndexContentDiffArgv,
   gitStatusArgv,
@@ -27,6 +33,7 @@ import {
   parseGitNameOnly,
   parseGitStatusPorcelain,
   parseLsRemoteReleases,
+  readBoundedJsonResponse,
   repoIdentity,
   resolveTrackedDirtyPaths,
   rollbackTarget,
@@ -40,6 +47,9 @@ import { createRootLogger } from "@orkbot/logging/axiom";
 import { requestLogging } from "@orkbot/logging/hono";
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { reconcileDeploymentFiles, stageDeploymentFiles } from "./deployment-files.js";
+import type { DeploymentOperation } from "./deployment-journal.js";
+import { DeploymentJournal } from "./deployment-journal.js";
 import type { UpdaterConfig } from "./updater-logic.js";
 import {
   missingSecretAssignments,
@@ -188,7 +198,7 @@ export const runHostCommand: UpdaterCommandRunner = (command, args, options) => 
 
 export function createUpdaterApp(
   config: UpdaterConfig,
-  options: { run?: UpdaterCommandRunner; logger?: Logger } = {},
+  options: { run?: UpdaterCommandRunner; logger?: Logger; fetch?: typeof globalThis.fetch } = {},
 ) {
   const app = new Hono();
   app.use("*", requestLogging(options.logger));
@@ -200,6 +210,7 @@ export function createUpdaterApp(
     services: config.updateServices,
   };
   let running = false;
+  const journal = new DeploymentJournal(config.deployDir);
   let planInFlight: Promise<unknown> | null = null;
   /** Survives API recreate so Settings can confirm apply after the proxy drops. */
   let lastRun: ServerUpdateRun | null = null;
@@ -214,6 +225,12 @@ export function createUpdaterApp(
     if (!hasValidBearerToken(c.req.header("authorization"), config.token)) {
       return c.json({ error: "unauthorized" }, 401);
     }
+    if (config.mode === "standalone" && !["/deploy", "/state"].includes(c.req.path)) {
+      return c.json({ error: "unavailable" }, 404);
+    }
+    if (config.mode !== "standalone" && c.req.path === "/deploy") {
+      return c.json({ error: "unavailable" }, 404);
+    }
     await next();
   });
 
@@ -221,6 +238,20 @@ export function createUpdaterApp(
     try {
       const tags = readTagState(await readEnvFile());
       const checkout = await readCheckout();
+      let operation = await journal.read();
+      if (
+        config.mode === "standalone" &&
+        !running &&
+        operation &&
+        ["accepted", "running", "unknown"].includes(operation.state)
+      ) {
+        running = true;
+        try {
+          operation = await reconcileInterrupted(operation, tags.currentTag);
+        } finally {
+          running = false;
+        }
+      }
       return c.json({
         deployDir: config.deployDir,
         composeFiles: config.composeFiles,
@@ -228,6 +259,7 @@ export function createUpdaterApp(
         imageRef: imageRef(config.image, tags.currentTag),
         running,
         lastRun,
+        operation,
         ...tags,
         checkout,
       });
@@ -287,6 +319,83 @@ export function createUpdaterApp(
     }
   });
 
+  // The accepted operation outlives the API container and never holds its HTTP request open.
+  app.post("/deploy", async (c) => {
+    try {
+      const input = (await body(c.req.raw)) as Record<string, unknown>;
+      if (
+        !input ||
+        typeof input !== "object" ||
+        typeof input.revision !== "string" ||
+        !/^[a-f0-9]{40}$/.test(input.revision) ||
+        typeof input.idempotencyKey !== "string" ||
+        !/^[A-Za-z0-9-]{16,64}$/.test(input.idempotencyKey) ||
+        !["stable", "preview"].includes(String(input.channel))
+      )
+        throw new UpdateRefused("Invalid deployment request.");
+      if (running) throw new UpdateRefused("An update is already running.");
+      running = true;
+      try {
+        const previous = await journal.read();
+        if (previous?.idempotencyKey === input.idempotencyKey) {
+          if (previous.revision !== input.revision)
+            throw new UpdateRefused("Operation target changed.");
+          running = false;
+          return c.json(previous, 202);
+        }
+        if (previous && ["accepted", "running", "unknown"].includes(previous.state))
+          throw new UpdateRefused("Resolve the interrupted deployment before trying again.");
+        const operation = {
+          revision: input.revision,
+          idempotencyKey: input.idempotencyKey,
+          state: "accepted" as const,
+        };
+        await verifyPublishedRelease(input.revision, input.channel === "preview");
+        await journal.write(operation);
+        void (async () => {
+          try {
+            await journal.write({ ...operation, state: "running" });
+            const tags = readTagState(await readEnvFile());
+            const templates = await stageDeploymentFiles(
+              config.deployDir,
+              operation.revision,
+              options.fetch,
+            );
+            await templates.apply();
+            const result = await execute({
+              restoreTemplates: templates.restore,
+              request: { repoUrl: "https://github.com/orkbot-run/ork.git", branch: "main" },
+              strategy: "pull",
+              fromTag: tags.currentTag,
+              originalPreviousTag: tags.previousTag,
+              toTag: commitImageTag(operation.revision),
+              fromCommit: null,
+              fromBranch: null,
+              toCommit: operation.revision,
+              restoreRemoteUrl: null,
+              steps: composeUpdatePlan({ strategy: "pull", target: composeTarget }),
+              restartAdvice: "Reconnect and verify the running server revision.",
+            });
+            rememberRun(result);
+            if (result.ok) await templates.commit();
+            else await templates.restore();
+            await journal.write({ ...operation, state: result.ok ? "succeeded" : "failed" });
+          } catch {
+            await journal.write({ ...operation, state: "unknown" }).catch(() => undefined);
+          } finally {
+            running = false;
+          }
+        })();
+        return c.json(operation, 202);
+      } catch (error) {
+        running = false;
+        throw error;
+      }
+    } catch (error) {
+      return refusal(c, error);
+    }
+  });
+
   app.post("/rollback", async (c) => {
     try {
       return c.json(await withRunLock(rollback));
@@ -296,6 +405,177 @@ export function createUpdaterApp(
   });
 
   return app;
+
+  async function reconcileInterrupted(
+    operation: DeploymentOperation,
+    tag: string,
+  ): Promise<DeploymentOperation> {
+    const unknown: DeploymentOperation = { ...operation, state: "unknown" };
+    try {
+      if (
+        tag !== commitImageTag(operation.revision) ||
+        !["api", "worker", "web", "supervisor"].every((name) =>
+          config.updateServices.includes(name),
+        )
+      )
+        throw new Error("Incomplete update target.");
+      const image = await run(
+        "docker",
+        ["image", "inspect", "--format", "{{.Id}}", imageRef(config.image, tag)],
+        { cwd: config.deployDir, timeoutMs: 15_000 },
+      );
+      const imageId = image.stdout.trim();
+      if (!image.ok || !/^sha256:[a-f0-9]{64}$/.test(imageId))
+        throw new Error("Image unavailable.");
+      const compose = composeUpArgv(composeTarget);
+      const prefix = compose.args.slice(0, compose.args.indexOf("up"));
+      for (const service of config.updateServices) {
+        const ids = await run("docker", [...prefix, "ps", "--all", "-q", service], {
+          cwd: config.deployDir,
+          timeoutMs: 15_000,
+        });
+        const containers = ids.stdout.trim().split(/\s+/).filter(Boolean);
+        if (!ids.ok || containers.length !== 1 || !/^[a-f0-9]{12,64}$/.test(containers[0]!))
+          throw new Error("Missing or ambiguous service.");
+        const inspected = await run(
+          "docker",
+          [
+            "inspect",
+            "--format",
+            "{{.Image}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}",
+            containers[0]!,
+          ],
+          { cwd: config.deployDir, timeoutMs: 15_000 },
+        );
+        const [runningImage, state, health] = inspected.stdout.trim().split(/\s+/);
+        if (
+          !inspected.ok ||
+          runningImage !== imageId ||
+          state !== "running" ||
+          (health !== "healthy" && !(service === "web" && health === "none"))
+        )
+          throw new Error("Service not healthy on the target image.");
+      }
+      await reconcileDeploymentFiles(config.deployDir, operation.revision, options.fetch);
+      const succeeded: DeploymentOperation = { ...operation, state: "succeeded" };
+      await journal.write(succeeded);
+      return succeeded;
+    } catch {
+      if (operation.state !== "unknown") await journal.write(unknown);
+      return unknown;
+    }
+  }
+
+  async function verifyPublishedRelease(revision: string, beta: boolean) {
+    const signal = AbortSignal.timeout(10_000);
+    const response = await (options.fetch ?? globalThis.fetch)(
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100",
+      {
+        redirect: "error",
+        signal,
+        headers: { accept: "application/vnd.github+json", "user-agent": "Ork-updater" },
+      },
+    );
+    if (!response.ok) throw new UpdateRefused("Could not verify published releases.");
+    const releases: unknown = await readBoundedJsonResponse(response, 1_048_576, signal);
+    if (!Array.isArray(releases)) throw new UpdateRefused("Invalid release response.");
+    const tags = releases
+      .filter(
+        (release) =>
+          release.draft === false &&
+          (release.prerelease === false || (beta && release.prerelease === true)) &&
+          typeof release.tag_name === "string" &&
+          (release.prerelease
+            ? /^v\d+\.\d+\.\d+-[A-Za-z0-9.-]+$/.test(release.tag_name)
+            : /^v\d+\.\d+\.\d+$/.test(release.tag_name)),
+      )
+      .map((release) => release.tag_name as string);
+    if (!tags.length) throw new UpdateRefused("No published release is available.");
+    const compose = composeUpArgv(composeTarget);
+    const runningRevision = await run(
+      "docker",
+      [
+        ...compose.args.slice(0, compose.args.indexOf("up")),
+        "exec",
+        "-T",
+        "api",
+        "node",
+        "-p",
+        "process.env.GIT_SHA || process.env.ORKBOT_GIT_SHA || ''",
+      ],
+      { cwd: config.deployDir, timeoutMs: 15_000 },
+    );
+    const currentRevision = runningRevision.stdout.trim();
+    if (!runningRevision.ok || !/^[a-f0-9]{40}$/.test(currentRevision))
+      throw new UpdateRefused("Could not verify the running server revision.");
+    const comparison = await (options.fetch ?? globalThis.fetch)(
+      `https://api.github.com/repos/orkbot-run/ork/compare/${currentRevision}...${revision}?per_page=1&page=2`,
+      {
+        redirect: "error",
+        signal,
+        headers: { accept: "application/vnd.github+json", "user-agent": "Ork-updater" },
+      },
+    );
+    if (
+      !comparison.ok ||
+      (await readBoundedJsonResponse<{ status?: string }>(comparison, 65_536, signal)).status !==
+        "ahead"
+    )
+      throw new UpdateRefused("The release is not newer than the running server.");
+
+    const result = await run(
+      "git",
+      [
+        "ls-remote",
+        "--tags",
+        "https://github.com/orkbot-run/ork.git",
+        ...tags.flatMap((tag) => [`refs/tags/${tag}`, `refs/tags/${tag}^{}`]),
+      ],
+      { cwd: config.deployDir, timeoutMs: 30_000 },
+    );
+    const lines = result.stdout.split("\n");
+    const releaseTag = tags.find(
+      (tag) =>
+        lines.includes(`${revision}\trefs/tags/${tag}`) ||
+        lines.includes(`${revision}\trefs/tags/${tag}^{}`),
+    );
+    if (!result.ok || !releaseTag)
+      throw new UpdateRefused("The target is not a published release in this channel.");
+    const published = await equalRegistryManifests({
+      tokenUrl: "https://ghcr.io/token?service=ghcr.io&scope=repository:orkbot-run/ork/app:pull",
+      manifestBase: "https://ghcr.io/v2/orkbot-run/ork/app/manifests",
+      tags: [`sha-${revision}`, releaseTag],
+      signal,
+      fetch: options.fetch ?? globalThis.fetch,
+    });
+    if (!published) throw new UpdateRefused("The release image does not match its revision.");
+    const checks = await (options.fetch ?? globalThis.fetch)(
+      `https://api.github.com/repos/orkbot-run/ork/actions/workflows/ci.yml/runs?head_sha=${revision}&event=push&per_page=100`,
+      {
+        redirect: "error",
+        signal,
+        headers: { accept: "application/vnd.github+json", "user-agent": "Ork-updater" },
+      },
+    );
+    if (!checks.ok) throw new UpdateRefused("Could not verify release checks.");
+    const runs = await readBoundedJsonResponse<{ workflow_runs?: Array<Record<string, unknown>> }>(
+      checks,
+      1_048_576,
+      signal,
+    );
+    if (
+      !Array.isArray(runs.workflow_runs) ||
+      !runs.workflow_runs.some(
+        (run) =>
+          run.head_sha === revision &&
+          run.event === "push" &&
+          run.head_branch === "main" &&
+          run.status === "completed" &&
+          run.conclusion === "success",
+      )
+    )
+      throw new UpdateRefused("Release checks have not passed.");
+  }
 
   async function body(request: Request): Promise<unknown> {
     try {
@@ -610,6 +890,7 @@ export function createUpdaterApp(
     fromBranch: string | null;
     toCommit: string | null;
     restoreRemoteUrl: string | null;
+    restoreTemplates?: () => Promise<void>;
     steps: ComposeUpdateStep[];
     restartAdvice: string;
   }): Promise<ServerUpdateRun> {
@@ -698,7 +979,12 @@ export function createUpdaterApp(
           const primaryError = record.error ?? `${step.label} failed.`;
           // The failed revision may have changed Compose or files it references. The old image
           // must be recreated from the old checkout, using the same configured Compose target.
-          const checkoutRestored = await restoreCheckout();
+          const checkoutRestored =
+            (await restoreCheckout()) &&
+            (await (input.restoreTemplates?.() ?? Promise.resolve()).then(
+              () => true,
+              () => false,
+            ));
           const envRestored = await writeEnvAssignments(revertAssignments).then(
             () => true,
             () => false,
@@ -733,6 +1019,7 @@ export function createUpdaterApp(
       record.restart = "recreated";
       return record;
     } finally {
+      if (!record.ok && input.restoreTemplates) await input.restoreTemplates();
       if (!record.ok && checkoutNeedsRestore && !(await restoreCheckout())) {
         record.restartAdvice = `${record.restartAdvice} The previous checkout also could not be restored; fix it before retrying.`;
       }

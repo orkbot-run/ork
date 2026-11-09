@@ -36,8 +36,10 @@ import {
   CLIENT_PROTOCOL_VERSION,
   CLIENT_UPDATE_REQUIRED_STATUS,
   IncomingBotCallSchema,
+  isServerUpdateRecoveryRequest,
   legacyAccountSecurity,
   legacyAuthCapabilitiesSchema,
+  SERVER_UPDATE_RECOVERY_PROTOCOL,
 } from "@orkbot/contracts";
 import type { ClientThreadEvent, ClientThreadSnapshot, ThreadHistory } from "@orkbot/core";
 import {
@@ -1136,6 +1138,13 @@ async function request(
               origin: "orkbot://",
               ...requestHeaders,
               ...correlation,
+              ...(isServerUpdateRecoveryRequest(
+                `/rpc/${proc}`,
+                "POST",
+                String(SERVER_UPDATE_RECOVERY_PROTOCOL),
+              )
+                ? { [CLIENT_PROTOCOL_HEADER]: String(SERVER_UPDATE_RECOVERY_PROTOCOL) }
+                : {}),
             },
             body: JSON.stringify(encodeRpcJson(body)),
             signal: deadline.signal,

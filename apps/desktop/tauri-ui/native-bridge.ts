@@ -110,6 +110,7 @@ if (
       check: () => call("update.check"),
       download: () => call("update.download"),
       install: () => call("update.install"),
+      setChannel: (channel) => call("update.setChannel", { channel }),
     },
     oauth: {
       open: (url) => call("oauth.open", { url }),

@@ -35,7 +35,7 @@ export function createServerUpdates(client: {
     signal: AbortSignal,
   ) => Promise<ServerUpdatesStatus>;
   policy: (
-    input: { automatic: boolean; expectedRevision: number },
+    input: { automatic: boolean; expectedRevision: number; channel?: "stable" | "preview" },
     signal: AbortSignal,
   ) => Promise<ServerUpdatesStatus>;
   id?: () => string;
@@ -96,7 +96,11 @@ export function createServerUpdates(client: {
       schedule(epoch);
     }
   }
-  async function act(kind: NonNullable<ServerUpdatesView["busy"]>, automatic?: boolean) {
+  async function act(
+    kind: NonNullable<ServerUpdatesView["busy"]>,
+    automatic?: boolean,
+    channel?: "stable" | "preview",
+  ) {
     const epoch = generation;
     if (!current(epoch) || blocked || !state.status?.available || state.busy) return;
     if (kind === "apply" && !serverUpdateCanApply(state)) return;
@@ -110,7 +114,11 @@ export function createServerUpdates(client: {
       if (kind === "check") next = await client.check(controller.signal);
       else if (kind === "policy")
         next = await client.policy(
-          { automatic: automatic!, expectedRevision: status.policyRevision },
+          {
+            automatic: automatic!,
+            expectedRevision: status.policyRevision,
+            ...(channel ? { channel } : {}),
+          },
           controller.signal,
         );
       else {
@@ -175,5 +183,7 @@ export function createServerUpdates(client: {
     check: () => act("check"),
     apply: () => act("apply"),
     policy: (automatic: boolean) => act("policy", automatic),
+    channel: (channel: "stable" | "preview") =>
+      act("policy", state.status?.mode === "automatic", channel),
   };
 }

@@ -17,21 +17,18 @@ while [ "$#" -gt 0 ]; do
   if [ "$1" = -o ]; then output=$2; shift 2; else url=$1; shift; fi
 done
 case "$url" in
-  https://api.github.com/repos/orkbot-run/ork/releases/tags/desktop-preview)
+  'https://api.github.com/repos/orkbot-run/ork/releases?per_page=100')
     if [ "${STUB_API+x}" ]; then
       printf '%s\n' "$STUB_API" >"$output"
     else
-      printf '%s\n' '{"tag_name":"desktop-preview","draft":false,"assets":[{"name":"latest.json","url":"https://api.github.com/repos/orkbot-run/ork/releases/assets/123"}]}' >"$output"
+      printf '%s\n' '[{"tag_name":"desktop-stable","draft":false,"prerelease":false},{"tag_name":"v1.1.142","draft":false,"prerelease":false}]' >"$output"
     fi
     ;;
-  https://api.github.com/repos/orkbot-run/ork/releases/assets/123)
-    if [ "${STUB_MANIFEST+x}" ]; then printf '%s\n' "$STUB_MANIFEST" >"$output"; else printf '%s\n' '{"version":"1.1.142"}' >"$output"; fi
-    ;;
-  https://api.github.com/repos/orkbot-run/ork/releases/tags/desktop-preview-1.1.142)
+  https://api.github.com/repos/orkbot-run/ork/commits/v1.1.142)
     if [ "${STUB_RELEASE+x}" ]; then
       printf '%s\n' "$STUB_RELEASE" >"$output"
     else
-      printf '%s\n' '{"tag_name":"desktop-preview-1.1.142","draft":false,"target_commitish":"a008fbde71f5fec493040fdd6c9d38763d2e2f9d"}' >"$output"
+      printf '%s\n' '{"sha":"a008fbde71f5fec493040fdd6c9d38763d2e2f9d"}' >"$output"
     fi
     ;;
   *) printf '%s\n' '# stub installer' >"$output" ;;
@@ -86,7 +83,7 @@ if cat "$root/install.sh" | STUB_API=invalid sh -s -- --code "$code" >/dev/null 
   echo 'Invalid release metadata was accepted.' >&2
   exit 1
 fi
-if cat "$root/install.sh" | STUB_RELEASE='{"tag_name":"desktop-preview-1.1.142","draft":false,"target_commitish":"main"}' sh -s -- --code "$code" >/dev/null 2>&1; then
+if cat "$root/install.sh" | STUB_RELEASE='{"sha":"main"}' sh -s -- --code "$code" >/dev/null 2>&1; then
   echo 'An unpinned release was accepted.' >&2
   exit 1
 fi

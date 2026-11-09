@@ -345,6 +345,37 @@ async function renderUpdateSettings() {
   );
 }
 
+it("shows the installed version and installs a ready desktop update", async () => {
+  const install = bridge("ready");
+  await renderUpdateSettings();
+  expect(host.textContent).toContain("v0.1.0");
+  const button = [...host.querySelectorAll("button")].find((item) =>
+    item.textContent?.includes("Restart to update"),
+  );
+  expect(button).toBeDefined();
+  await act(async () => button?.click());
+  expect(install).toHaveBeenCalledOnce();
+});
+
+it("switches the desktop update channel when beta is available", async () => {
+  bridge("idle");
+  const update = window.orkbotDesktop!.update;
+  const initial = { ...(await update.state()), channel: "stable" as const, betaAvailable: true };
+  update.state = vi.fn(async () => initial);
+  update.setChannel = vi.fn(async () => ({ ...initial, channel: "beta" as const }));
+  await renderUpdateSettings();
+  const select = host.querySelector<HTMLButtonElement>('[aria-label="Update channel"]');
+  expect(select).not.toBeNull();
+  expect(select?.textContent).toContain("Stable");
+  await act(async () => select!.click());
+  const beta = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (item) => item.textContent === "Beta",
+  );
+  expect(beta).toBeDefined();
+  await act(async () => beta!.click());
+  expect(update.setChannel).toHaveBeenCalledWith("beta");
+});
+
 it("shows the result of a manual check when native rate limiting returns a cached successful check", async () => {
   bridge("idle");
   const state = {

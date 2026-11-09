@@ -52,6 +52,9 @@ export const ES_MESSAGES: Record<string, string> = {
   "Update server": "Actualizar servidor",
   "Automatic updates": "Actualizaciones automáticas",
   "Deployment requested": "Despliegue solicitado",
+  "Server updated": "Servidor actualizado",
+  Channel: "Canal",
+  Stable: "Estable",
   "Check deployment in server panel": "Comprueba el despliegue en el panel del servidor",
   "Could not complete the update. Try again.":
     "No se pudo completar la actualización. Inténtalo de nuevo.",

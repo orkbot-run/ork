@@ -24,11 +24,14 @@ import {
 } from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
+
 import { clearServerConnect, pendingServerConnect, receiveServerConnect } from "./server-connect";
 import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
 import { currentSessionGeneration } from "./session";
 import { continueWithSso } from "./sso";
+
+vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates</div> }));
 
 const state = vi.hoisted(() => ({
   storage: new Map<string, string>(),
@@ -207,6 +210,21 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
+it("mounts only the update screen when the selected server needs an update", async () => {
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  const account = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", account);
+  state.storage.set("orkbot.accounts.selected-server", `${account}:${remote.id}`);
+  vi.mocked(requireAccountsSignIn).mockResolvedValue({
+    accountsLogin: true,
+    needsServerUpdate: true,
+  });
+  await render();
+  expect(host.textContent).toContain("Server updates");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(host.textContent).toContain("Check again");
+});
+
 it("offers newly authorized servers without changing the active server", async () => {
   vi.useFakeTimers();
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
@@ -285,7 +303,7 @@ it("updates the server chooser when a server is authorized", async () => {
   vi.mocked(accountsIdentity).mockResolvedValue(identity);
   vi.mocked(accountServers).mockResolvedValue([]);
   await render();
-  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sudo -H sh");
   vi.mocked(accountServers).mockResolvedValue([remote]);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(15_000);
@@ -518,7 +536,7 @@ it("keeps a verified account at server recovery when the directory is unavailabl
       .click(),
   );
   expect(host.querySelector("input")).toBeNull();
-  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sudo -H sh");
   expect(host.textContent).not.toContain("Pairing code");
 });
 
@@ -883,10 +901,12 @@ it("shows the install command without creating a pairing code", async () => {
   await render();
   expect(host.querySelector("input")).toBeNull();
   expect(beginServerPairing).not.toHaveBeenCalled();
-  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sh");
+  expect(host.textContent).toContain("curl -fsSL https://install.ork.run | sudo -H sh");
   expect(host.textContent).toContain("Copy command");
   await click("Copy command");
-  expect(Clipboard.setStringAsync).toHaveBeenCalledWith("curl -fsSL https://install.ork.run | sh");
+  expect(Clipboard.setStringAsync).toHaveBeenCalledWith(
+    "curl -fsSL https://install.ork.run | sudo -H sh",
+  );
   expect(host.textContent).not.toContain("Approve server");
   expect(saveApiBase).not.toHaveBeenCalled();
 });

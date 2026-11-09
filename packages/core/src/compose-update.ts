@@ -53,7 +53,7 @@ const IMAGE_HOST = /^[a-z0-9]+(?:[.-][a-z0-9]+)*(?::[0-9]{1,5})?$/;
 const COMMIT = /^[0-9a-f]{40,64}$/;
 const ENV_KEY = /^[A-Z][A-Z0-9_]*$/;
 const ENV_VALUE = /^[A-Za-z0-9._:/@+-]{0,256}$/;
-const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;
+const RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?$/;
 /** Compose project names must not start with `-`, or `-p` would treat them as a second flag. */
 const COMPOSE_PROJECT_NAME = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
@@ -140,6 +140,14 @@ export interface ReleaseTag {
 export function parseReleaseTag(tag: string): ReleaseTag | null {
   const match = RELEASE_TAG.exec(tag);
   if (!match) return null;
+  if ([match[1], match[2], match[3]].some((part) => !Number.isSafeInteger(Number(part))))
+    return null;
+  if (
+    match[4]
+      ?.split(".")
+      .some((part) => !part || (/^\d+$/.test(part) && part.length > 1 && part.startsWith("0")))
+  )
+    return null;
   return {
     tag,
     major: Number(match[1]),
@@ -156,7 +164,21 @@ export function compareReleaseTags(a: ReleaseTag, b: ReleaseTag): number {
   if (a.prerelease === b.prerelease) return 0;
   if (a.prerelease === null) return 1;
   if (b.prerelease === null) return -1;
-  return a.prerelease < b.prerelease ? -1 : 1;
+  const left = a.prerelease.split(".");
+  const right = b.prerelease.split(".");
+  for (let i = 0; i < Math.max(left.length, right.length); i++) {
+    const x = left[i];
+    const y = right[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    if (x === y) continue;
+    const xn = /^\d+$/.test(x);
+    const yn = /^\d+$/.test(y);
+    if (xn && yn) return x.length !== y.length ? x.length - y.length : x < y ? -1 : 1;
+    if (xn !== yn) return xn ? -1 : 1;
+    return x < y ? -1 : 1;
+  }
+  return 0;
 }
 
 export function parseLsRemoteTags(stdout: string): string[] {
@@ -203,11 +225,14 @@ export function parseLsRemoteReleases(stdout: string): RemoteRelease[] {
  * The newest stable release. Pre-releases are skipped because "update to latest" should not move a
  * deployment onto a release candidate, and there is no way to opt back out once it has recreated.
  */
-export function selectLatestReleaseTag(tags: readonly string[]): string | null {
+export function selectLatestReleaseTag(
+  tags: readonly string[],
+  includePrerelease = false,
+): string | null {
   let best: ReleaseTag | null = null;
   for (const tag of tags) {
     const parsed = parseReleaseTag(tag);
-    if (!parsed || parsed.prerelease !== null) continue;
+    if (!parsed || (!includePrerelease && parsed.prerelease !== null)) continue;
     if (best === null || compareReleaseTags(parsed, best) > 0) best = parsed;
   }
   return best?.tag ?? null;

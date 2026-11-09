@@ -663,6 +663,10 @@ async fn native_command(
             .map_err(|_| "Update state unavailable.")?),
         Command::UpdateInstall => Ok(serde_json::to_value(updates::install(&app).await)
             .map_err(|_| "Update state unavailable.")?),
+        Command::UpdateSetChannel { channel } => Ok(serde_json::to_value(
+            updates::set_channel(&app, channel).await?,
+        )
+        .map_err(|_| "Update state unavailable.")?),
         Command::OAuthOpen { url } => {
             let expected_owner = owner.clone();
             state

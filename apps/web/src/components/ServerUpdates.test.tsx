@@ -10,12 +10,32 @@ import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ServerUpdateSection } from "./ServerUpdates";
 
+const serverVersion = vi.hoisted(() => vi.fn());
+vi.mock("../lib/rpc", () => ({ rpc: { serverUpdates: { version: serverVersion } } }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
 vi.mock("@orkbot/ui-web", () => ({
   Button: (props: ComponentProps<"button">) => <button type="button" {...props} />,
+  OptionSelect: ({
+    value,
+    options,
+    onValueChange,
+    ...props
+  }: {
+    value: string;
+    options: { value: string; label: string }[];
+    onValueChange: (value: string) => void;
+  }) => (
+    <select value={value} onChange={(event) => onValueChange(event.target.value)} {...props}>
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
   Switch: ({
     checked,
     onCheckedChange,
@@ -48,8 +68,9 @@ afterEach(() => {
   clean();
   vi.unstubAllGlobals();
 });
-async function render(overrides: Partial<ServerUpdatesStatus> = {}) {
+async function render(overrides: Partial<ServerUpdatesStatus> = {}, version: string | null = null) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  serverVersion.mockResolvedValue({ revision: overrides.currentRevision ?? null, version });
   const api = {
     context: () => "server:session",
     status: vi.fn().mockResolvedValue({ ...status, ...overrides }),
@@ -94,10 +115,50 @@ it("shows supported server controls and sends manual check, apply and opt-in pol
     expect.any(AbortSignal),
   );
 });
-it("keeps unsupported deployments hidden", async () => {
-  const view = await render({ available: false });
+it("shows the server revision without update controls when updates are unavailable", async () => {
+  const view = await render({
+    available: false,
+    currentRevision: "a".repeat(40),
+    candidate: null,
+    channel: null,
+  });
+  expect(view.host.textContent).toContain("a".repeat(12));
+  expect(view.host.querySelector("button")).toBeNull();
+  expect(view.host.querySelector("input")).toBeNull();
+  expect(view.api.check).not.toHaveBeenCalled();
+});
+it("shows the release version with its revision when both are known", async () => {
+  const view = await render({ available: false, currentRevision: "a".repeat(40) }, "1.2.3");
+  expect(view.host.textContent).toContain(`v1.2.3 (${"a".repeat(12)})`);
+});
+it("hides unsupported deployments without a known revision", async () => {
+  const view = await render({ available: false, currentRevision: null });
   expect(view.host.textContent).toBe("");
   expect(view.api.check).not.toHaveBeenCalled();
+});
+it("lets the owner select the beta server channel", async () => {
+  const view = await render({ channelSelectable: true, channel: "stable" });
+  const select = view.host.querySelector<HTMLSelectElement>('[aria-label="Update channel"]');
+  expect(select).not.toBeNull();
+  await act(async () => {
+    select!.value = "preview";
+    select!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(view.api.policy).toHaveBeenCalledWith(
+    { automatic: false, expectedRevision: 0, channel: "preview" },
+    expect.any(AbortSignal),
+  );
+});
+it("shows a completed server update", async () => {
+  const view = await render({
+    lastRequest: {
+      id: "request",
+      revision: status.candidate!.revision,
+      state: "completed",
+      requestedAt: new Date().toISOString(),
+    },
+  });
+  expect(view.host.textContent).toContain("Server updated");
 });
 it.each(["requested", "unknown"] as const)(
   "describes %s without claiming an installed update",
@@ -111,7 +172,7 @@ it.each(["requested", "unknown"] as const)(
       },
     });
     expect(view.host.textContent).toContain(
-      state === "requested" ? "Deployment requested" : "Check deployment in server panel",
+      state === "requested" ? "Deployment requested" : "Could not confirm the update",
     );
     expect(view.host.textContent).not.toContain("Up to date");
     expect((view.host.querySelectorAll("button")[1] as HTMLButtonElement).disabled).toBe(true);

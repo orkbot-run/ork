@@ -8,6 +8,8 @@ import {
   CLIENT_PROTOCOL_HEADER,
   CLIENT_PROTOCOL_VERSION,
   formatClientBuild,
+  isServerUpdateRecoveryRequest,
+  SERVER_UPDATE_RECOVERY_PROTOCOL,
 } from "@orkbot/contracts";
 import {
   AiConsentBlocked,
@@ -124,11 +126,20 @@ const link = createRpcLink<RpcClientContext>({
     };
     assertCurrent();
     const request = new Request(input, init);
+    if (
+      isServerUpdateRecoveryRequest(
+        new URL(request.url).pathname,
+        request.method,
+        String(SERVER_UPDATE_RECOVERY_PROTOCOL),
+      )
+    )
+      request.headers.set(CLIENT_PROTOCOL_HEADER, String(SERVER_UPDATE_RECOVERY_PROTOCOL));
     const spaceId = request.headers.get("x-orkbot-space-id");
     let response: Response;
     try {
       response = await fetch(request, {
         ...init,
+        headers: request.headers,
         credentials: "include",
         // Keep cancellation attached directly to fetch rather than only a cloned Request.
         signal: options.signal,

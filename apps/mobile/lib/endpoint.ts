@@ -8,6 +8,7 @@ import {
   CLIENT_PROTOCOL_VERSION,
   isPrivateNetworkHost,
   protocolRangeSchema,
+  SERVER_UPDATE_RECOVERY_PROTOCOL,
 } from "@orkbot/contracts";
 import { cancelResponseBody, readBoundedJsonResponse, withAbort } from "@orkbot/core";
 import { t } from "./i18n";
@@ -20,7 +21,7 @@ export const MAX_API_PROBE_RESPONSE_BYTES = 64 * 1024;
 export async function requireAccountsSignIn(
   url: string,
   headers: Record<string, string> = {},
-): Promise<{ accountsLogin: boolean }> {
+): Promise<{ accountsLogin: boolean; needsServerUpdate?: boolean }> {
   const parsed = normalizeApiBase(url);
   if (!parsed.ok || parsed.url !== url) throw new Error("Invalid server address.");
   const signal = AbortSignal.timeout(API_PROBE_TIMEOUT_MS);
@@ -39,7 +40,7 @@ export async function requireAccountsSignIn(
     MAX_API_PROBE_RESPONSE_BYTES,
     signal,
   );
-  requireSupportedProtocol(value);
+  const needsServerUpdate = requireSupportedProtocol(value, true) === "older";
   if (
     value &&
     typeof value === "object" &&
@@ -48,7 +49,7 @@ export async function requireAccountsSignIn(
     "accountsLogin" in value &&
     value.accountsLogin === true
   )
-    return { accountsLogin: true };
+    return { accountsLogin: true, ...(needsServerUpdate ? { needsServerUpdate } : {}) };
   if (
     !value ||
     typeof value !== "object" ||
@@ -64,18 +65,27 @@ export async function requireAccountsSignIn(
     value.sso.availability !== "available"
   )
     throw new Error("This server must use Accounts sign-in.");
-  return { accountsLogin: false };
+  return { accountsLogin: false, ...(needsServerUpdate ? { needsServerUpdate } : {}) };
 }
 
 /** Discovery describes wire compatibility, independently of the app's release timestamp. */
-export function requireSupportedProtocol(value: unknown): void {
-  if (!value || typeof value !== "object" || !("protocol" in value)) return;
+export function requireSupportedProtocol(
+  value: unknown,
+  allowOlder = false,
+): "compatible" | "older" {
+  if (!value || typeof value !== "object" || !("protocol" in value)) {
+    if (CLIENT_PROTOCOL_VERSION === SERVER_UPDATE_RECOVERY_PROTOCOL) return "compatible";
+    if (allowOlder) return "older";
+    throw new Error(t("Update this server before connecting with this version of Ork."));
+  }
   const parsed = protocolRangeSchema.safeParse(value.protocol);
   if (!parsed.success) throw new Error(t("Could not load sign-in options"));
   if (parsed.data.min > CLIENT_PROTOCOL_VERSION)
     throw new Error(t("Update Ork to connect to this server."));
+  if (parsed.data.max < CLIENT_PROTOCOL_VERSION && allowOlder) return "older";
   if (parsed.data.max < CLIENT_PROTOCOL_VERSION)
     throw new Error(t("Update this server before connecting with this version of Ork."));
+  return "compatible";
 }
 
 /** Read initialization state without sending Accounts or product credentials. */
@@ -188,6 +198,7 @@ export async function probeApiBase(
   input: string,
   fetchImpl: typeof fetch = fetch,
   headers: Record<string, string> = {},
+  protocol: number = CLIENT_PROTOCOL_VERSION,
 ): Promise<EndpointResult> {
   const parsed = normalizeApiBase(input);
   if (!parsed.ok) return parsed;
@@ -200,7 +211,7 @@ export async function probeApiBase(
         ...(Object.keys(headers).length ? { redirect: "error" as const } : {}),
         headers: {
           ...headers,
-          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          [CLIENT_PROTOCOL_HEADER]: String(protocol),
           "content-type": "application/json",
           origin: "orkbot://",
         },

@@ -4,6 +4,7 @@
 """Offline server installer tests. No host packages, Docker daemon or credentials."""
 
 import http.server
+import hashlib
 import importlib.util
 import io
 import json
@@ -63,11 +64,47 @@ class InstallerTests(unittest.TestCase):
         self.assertIn("ORKBOT_IMAGE_TAG='sha-" + commit + "'", installer.ENV.read_text())
         self.assertIn("ORKBOT_COMPUTER_IMAGE_TAG='sha-" + commit + "'", installer.ENV.read_text())
         with patch.dict(os.environ, {"ORKBOT_IMAGE_TAG": "custom-release", "ORKBOT_COMPUTER_IMAGE_TAG": "custom-computer"}):
-            installer.pin_images("https://mirror.example.com/ork/" + commit + "/infra/compose")
-        self.assertIn("ORKBOT_IMAGE_TAG='custom-release'", installer.ENV.read_text())
+            with self.assertRaises(installer.SetupError):
+                installer.pin_images("https://mirror.example.com/ork/" + commit + "/infra/compose")
+        self.assertIn("ORKBOT_IMAGE_TAG='sha-" + commit + "'", installer.ENV.read_text())
         before = installer.ENV.read_bytes()
         installer.pin_images("https://mirror.example.com/ork/main/infra/compose")
         self.assertEqual(before, installer.ENV.read_bytes())
+
+    def test_updates_pin_configuration_and_preserve_token_on_resume(self):
+        files = "docker-compose.images.yml:docker-compose.https.yml:docker-compose.updates.yml"
+        base = "https://mirror.example.com/ork/" + "f" * 40 + "/infra/compose"
+        with patch.object(installer, "environment", return_value={}):
+            installer.configure_updates(base, "/var/run/docker.sock", files)
+        configured = installer.ENV.read_text()
+        self.assertIn("ORKBOT_UPDATER_IMAGE_TAG='sha-" + "f" * 40 + "'", configured)
+        self.assertIn("ORKBOT_COMPOSE_FILE='" + files + "'", configured)
+        token = next(line.split("'", 2)[1] for line in configured.splitlines() if line.startswith("ORKBOT_UPDATER_TOKEN="))
+        with patch.object(installer, "environment", return_value={"ORKBOT_UPDATER_TOKEN": token}):
+            installer.configure_updates(base, "/var/run/docker.sock", files)
+        self.assertIn("ORKBOT_UPDATER_TOKEN='" + token + "'", installer.ENV.read_text())
+
+    def test_updates_reject_conflicting_stack_or_unsafe_socket(self):
+        files = "docker-compose.images.yml:docker-compose.updates.yml"
+        with patch.object(installer, "environment", return_value={"ORKBOT_DEPLOY_DIR": "/other"}):
+            with self.assertRaises(installer.SetupError):
+                installer.configure_updates("https://mirror.example.com/" + "f" * 40 + "/infra/compose", "/var/run/docker.sock", files)
+        with self.assertRaises(installer.SetupError):
+            installer.configure_updates("https://mirror.example.com/main/infra/compose", "/tmp/socket:other", files)
+
+    def test_compose_template_fingerprints_do_not_bless_later_edits(self):
+        template = Path("docker-compose.images.yml")
+        template.write_text("original template\n")
+        installer.record_compose_state([str(template)])
+        state = Path(".orkbot-compose-state.json")
+        self.assertEqual(state.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads(state.read_text()), {
+            "files": {str(template): hashlib.sha256(template.read_bytes()).hexdigest()}
+        })
+        original = state.read_bytes()
+        template.write_text("operator modification\n")
+        installer.record_compose_state([str(template)])
+        self.assertEqual(state.read_bytes(), original)
 
     def test_exact_public_origin_only(self):
         self.assertEqual(installer.origin(URL), "server.example.com")
@@ -329,6 +366,9 @@ class InstallerTests(unittest.TestCase):
         with patch.object(installer, "docker", return_value="/another/installation\n"), self.assertRaises(installer.SetupError):
             installer.preflight(URL, False)
         installer.ENV.unlink()
+        with patch.object(installer, "docker", side_effect=["", "orkbot_pgdata\n"]), self.assertRaises(installer.SetupError):
+            installer.preflight(URL, False)
+        self.write_env()
         with patch.object(installer, "docker", side_effect=["", "orkbot_pgdata\n"]), self.assertRaises(installer.SetupError):
             installer.preflight(URL, False)
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { SERVER_INSTALL_COMMAND } from "@orkbot/contracts";
+import { SERVER_INSTALL_COMMAND, SERVER_UPDATE_RECOVERY_PROTOCOL } from "@orkbot/contracts";
 import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
@@ -17,6 +17,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Updates from "../app/(settings)/updates";
 import type { AccountServer } from "../lib/account-servers";
 import { accountServers, addAccountServer } from "../lib/account-servers";
 import {
@@ -68,6 +69,12 @@ const DIRECTORY_REFRESH_MS = 15_000;
 let ownershipChanges = Promise.resolve();
 const welcomeOrk = welcomeAccountsOrk();
 
+function probeCompatibleServer(url: string, older?: boolean) {
+  return older
+    ? probeApiBase(url, undefined, {}, SERVER_UPDATE_RECOVERY_PROTOCOL)
+    : probeApiBase(url);
+}
+
 type PairingWait = {
   session: MobileServerPairing;
   origin: string | null;
@@ -110,25 +117,25 @@ async function selectServer(
   current: () => boolean,
   expectedSession?: number,
   expectedServer?: string,
-): Promise<boolean> {
+): Promise<"compatible" | "older" | null> {
   return serializeOwnership(async () => {
     const beforeSave = () =>
       current() &&
       (expectedSession === undefined || currentSessionGeneration() === expectedSession) &&
       (expectedServer === undefined || currentApiBase() === expectedServer);
-    if (!beforeSave()) return false;
+    if (!beforeSave()) return null;
     const savedOwner = await SecureStore.getItemAsync(ACCOUNT_KEY);
-    if (!beforeSave() || savedOwner !== account) return false;
-    await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
-    if (!beforeSave()) return false;
+    if (!beforeSave() || savedOwner !== account) return null;
+    const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
+    if (!beforeSave()) return null;
     await loadApiBase();
-    if (!beforeSave()) return false;
+    if (!beforeSave()) return null;
     // Changing the endpoint may itself clear and replace the product session.
     const saved = await saveApiBase(entry.url, serverHeaders(entry.url));
     if (!saved.ok) throw new Error(saved.error);
-    if (!current()) return false;
+    if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
-    return current();
+    return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;
   });
 }
 
@@ -171,6 +178,7 @@ export function AccountsGate({
   const [draft, setDraft] = useState("");
   const [linkNeedsPairing, setLinkNeedsPairing] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [serverRescue, setServerRescue] = useState(false);
   const [pending, setPending] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [readyAt, setReadyAt] = useState({ version: -1, attempt: -1 });
@@ -291,7 +299,13 @@ export function AccountsGate({
         if (generation.current !== current) return;
         const previous = entries.find((entry) => `${account}:${entry.id}` === selected);
         if (previous) {
-          if (await selectServer(previous, account, () => generation.current === current)) {
+          const selected = await selectServer(
+            previous,
+            account,
+            () => generation.current === current,
+          );
+          if (selected) {
+            setServerRescue(selected === "older");
             setReadyAt({ version, attempt });
             setPhase("ready");
           }
@@ -451,11 +465,19 @@ export function AccountsGate({
       setAttempt((value) => value + 1);
       return false;
     }
-    const probe = await probeApiBase(entry.url);
+    const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
+    const probe = await probeCompatibleServer(entry.url, capabilities.needsServerUpdate);
     if (!active() || !sessionCurrent()) return false;
     if (!probe.ok) throw new Error(probe.error);
-    if (!(await selectServer(entry, account, active, handoff?.sessionGeneration, handoff?.server)))
-      return false;
+    const selected = await selectServer(
+      entry,
+      account,
+      active,
+      handoff?.sessionGeneration,
+      handoff?.server,
+    );
+    if (!selected) return false;
+    setServerRescue(selected === "older");
     knownServers.current.add(entry.id);
     confirmServerInitialization(entry.url, account!);
     if (onSelected) onSelected();
@@ -491,10 +513,10 @@ export function AccountsGate({
     const parsed = normalizeApiBase(input);
     if (!parsed.ok) throw new Error(parsed.error);
     const target = parsed.url;
-    const probe = await probeApiBase(target);
+    const capabilities = await requireAccountsSignIn(target, serverHeaders(target));
+    const probe = await probeCompatibleServer(target, capabilities.needsServerUpdate);
     if (!untouched()) return false;
     if (!probe.ok) throw new Error(probe.error);
-    const capabilities = await requireAccountsSignIn(target, serverHeaders(target));
     if (!untouched()) return false;
     await loadApiBase();
     if (!untouched()) return false;
@@ -506,7 +528,7 @@ export function AccountsGate({
       return false;
     if (!currentOperation() || currentApiBase() !== target) return false;
     const sessionGeneration = currentSessionGeneration();
-    const me = await rpc("me");
+    const me = capabilities.needsServerUpdate ? { userId: "authenticated" } : await rpc("me");
     if (
       !me.userId ||
       !currentOperation() ||
@@ -538,9 +560,9 @@ export function AccountsGate({
     const entry = entries.find((value) => value.url === wait.approvedOrigin);
     if (!entry) throw new Error(t("Could not pair this server. Try again."));
     const target = entry.url;
-    const probe = await probeApiBase(target);
-    if (!probe.ok) throw new Error(probe.error);
     const capabilities = await requireAccountsSignIn(target, serverHeaders(target));
+    const probe = await probeCompatibleServer(target, capabilities.needsServerUpdate);
+    if (!probe.ok) throw new Error(probe.error);
     if (!capabilities.accountsLogin)
       throw new Error(t("This server does not support pairing codes. Update it and try again."));
     if (!untouched()) return;
@@ -551,7 +573,7 @@ export function AccountsGate({
     if (!current() || !(await continueWithAccountsServer())) return;
     if (!current() || currentApiBase() !== target) return;
     const sessionGeneration = currentSessionGeneration();
-    const me = await rpc("me");
+    const me = capabilities.needsServerUpdate ? { userId: "authenticated" } : await rpc("me");
     if (
       !me.userId ||
       !current() ||
@@ -705,7 +727,23 @@ export function AccountsGate({
     !linkedServer &&
     children
   )
-    return <>{children}</>;
+    return serverRescue ? (
+      <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
+        <Text>{t("Update this server before connecting with this version of Ork.")}</Text>
+        <Updates />
+        <NativeActionButton
+          label={t("Check again")}
+          onPress={() => setAttempt((value) => value + 1)}
+        />
+        <NativeActionButton
+          label={t("Back")}
+          prominence="secondary"
+          onPress={() => setPhase("servers")}
+        />
+      </SafeAreaView>
+    ) : (
+      children
+    );
   const visiblePhase =
     readyAt.version === version && readyAt.attempt === attempt ? phase : "loading";
   return (

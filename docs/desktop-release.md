@@ -7,6 +7,22 @@
 Windows x64 and Linux x64. Pull requests produce diagnostic installers. Main builds
 can publish signed Preview updates through `desktop-tauri-publish.yml`.
 
+## Stable and beta releases
+
+Publishing a GitHub release with a tag such as `v1.2.3` starts the stable desktop
+build. A published prerelease tagged `v1.3.0-beta.1` starts a beta build. Both use
+the source tag as the updater version. Publication requires successful main CI for
+the same commit and signed artifacts from all four platforms. If CI is still running,
+rerun the desktop workflow after it passes.
+
+The stable and beta manifests use `desktop-stable/latest.json` and
+`desktop-beta/latest.json`. The beta channel also receives stable releases when they
+are newer than its current version. Users can choose a channel in desktop settings. The
+main-branch Preview feed remains separate from both channels. An installed app
+keeps the feed configured when it was built, so an older Preview installation needs
+a new installer before it can use the channel selector. Switching to Stable does not
+install an older version over a newer beta.
+
 Build locally with `pnpm --filter @orkbot/desktop build`. Keep signing credentials
 outside the repository. The macOS screenshot workflow remains manual.
 

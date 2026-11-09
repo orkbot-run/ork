@@ -11,11 +11,16 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   const root = path.resolve(import.meta.dirname, "../../..");
   const build = parse(readFileSync(path.join(root, ".github/workflows/desktop-tauri.yml"), "utf8"));
   const signed = build.jobs["diagnostic-build"].steps.find(
-    (step: { name?: string }) => step.name === "Build signed Preview updates",
+    (step: { name?: string }) => step.name === "Build signed updates",
   );
   expect(signed.if).toContain("github.ref == 'refs/heads/main'");
   expect(signed.if).toContain("github.event_name != 'pull_request'");
   expect(signed.env.ORKBOT_ENABLE_AUTO_UPDATE).toBe("1");
+  expect(signed.env.TAURI_UPDATER_ENDPOINT).toContain("/desktop-stable/latest.json");
+  expect(signed.env.TAURI_UPDATER_BETA_ENDPOINT).toContain("/desktop-beta/latest.json");
+  expect(build.on.release.types).toEqual(["published"]);
+  expect(build.jobs["publish-release"].needs).toBe("diagnostic-build");
+  expect(build.jobs["publish-release"].steps[0].with.ref).toBe("main");
   expect(signed.run).toContain("macos-distribution.ts prepare");
   expect(signed.run).toContain("macos-distribution.ts verify");
   expect(signed.run.indexOf("macos-distribution.ts verify")).toBeLessThan(

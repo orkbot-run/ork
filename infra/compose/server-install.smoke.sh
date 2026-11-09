@@ -51,6 +51,11 @@ test_apt_update() (
   fi
 )
 for scenario in released old-format timeout network mixed; do test_apt_update "$scenario"; done
+if [[ "$EUID" != 0 ]]; then
+  if ( source "$root/server-install.sh"; fail() { exit 1; }; server_secure_directory ) 2>/dev/null; then
+    echo 'An unprivileged server installer was accepted.' >&2; exit 1
+  fi
+fi
 
 real_python=$(command -v python3)
 mkdir -p "$tmp/bin"
@@ -68,6 +73,9 @@ if [[ "$name" == restrict-computer-egress.sh ]]; then
   printf '#!/usr/bin/env bash\nprintf "firewall\\n" >> "$STUB_EVENTS"\nexit "${STUB_EGRESS_FAIL:-0}"\n' > "$out"
 else
   cp "$STUB_ROOT/$name" "$out"
+  if [[ "$name" == server-install.sh ]]; then
+    printf '\nserver_secure_directory() { :; }\n' >> "$out"
+  fi
 fi
 STUB
 cat > "$tmp/bin/docker" <<'STUB'
@@ -95,6 +103,7 @@ case " $* " in
     "$STUB_PYTHON" -c 'from pathlib import Path; print("\n".join(line.split("=",1)[0]+"="+line.split("=",1)[1].strip("\047\042") for line in Path(".env").read_text().splitlines() if "=" in line and not line.startswith("#")))'
     exit 0 ;;
   *' pull '*) echo pull >> "$STUB_EVENTS"; exit "${STUB_PULL_FAIL:-0}" ;;
+  *' run --rm --no-deps --pull never -T updates-init '*) echo updates-init >> "$STUB_EVENTS"; exit 0 ;;
   *' exec -T api node dist/cli/server-claim.js '*)
     echo claim >> "$STUB_EVENTS"
     [[ "${STUB_CLAIM_FAIL:-0}" == 0 ]] || exit 1
@@ -167,7 +176,7 @@ for name in flock iptables; do
 done
 chmod +x "$tmp/bin/"*
 export STUB_ROOT="$root" STUB_PYTHON="$real_python"
-export PATH="$tmp/bin:$PATH" ORKBOT_DOWNLOAD_BASE=https://installer.example.com/pinned/infra/compose
+export PATH="$tmp/bin:$PATH" ORKBOT_DOWNLOAD_BASE=https://installer.example.com/0123456789abcdef0123456789abcdef01234567/infra/compose
 code=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 run_case() {
   local name="$1"
@@ -179,6 +188,11 @@ run_case() {
   [[ -n "${STUB_SERVER_PROMPT:-}" ]] || installer+=(--url https://server.example.com)
   (cd "$tmp/$name"; "${installer[@]}" "$@") > "$tmp/$name/output" 2>&1
 }
+if ORKBOT_DOWNLOAD_BASE=https://installer.example.com/main/infra/compose run_case unpinned; then
+  echo 'An unpinned new server installation was accepted.' >&2; exit 1
+fi
+grep -q 'server setup requires a pinned release' "$tmp/unpinned/output"
+[[ ! -e "$tmp/unpinned/.env" ]]
 run_case fresh --code "$code" || { cat "$tmp/fresh/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/fresh/output"
 [[ "$(head -6 "$tmp/fresh/events")" == $'firewall\nredeem\nprogress-preparing\nprogress-pulling\npull\nprogress-starting' ]]
@@ -193,6 +207,10 @@ grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
 grep -q '^https://accounts.ork.run/account/connect-server#code=23456789AB$' "$tmp/native/output"
 grep -q '^23456789AB$' "$tmp/native/output"
 grep -q '^claim$' "$tmp/native/events"
+grep -q '^updates-init$' "$tmp/native/events"
+grep -q '^ORKBOT_UPDATER_TOKEN=' "$tmp/native/.env"
+grep -q '^ORKBOT_COMPOSE_FILE=.*docker-compose.updates.yml' "$tmp/native/.env"
+[[ -f "$tmp/native/.orkbot-compose-state.json" ]]
 ! grep -q 'orkbot://initialize?' "$tmp/native/output"
 grep -q '^AUTH_ACCOUNTS_ENABLED=' "$tmp/native/.env"
 grep -q '^ORKBOT_BOOTSTRAP_SECRET=' "$tmp/native/.env"

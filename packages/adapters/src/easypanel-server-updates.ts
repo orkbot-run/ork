@@ -2,7 +2,13 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { ServerUpdateAdapter } from "@orkbot/adapter-kit";
-import { cancelResponseBody, readBoundedJsonResponse } from "@orkbot/core";
+import {
+  cancelResponseBody,
+  equalRegistryManifests,
+  parseReleaseTag,
+  readBoundedJsonResponse,
+  selectLatestReleaseTag,
+} from "@orkbot/core";
 import { validateDeploymentTrigger } from "./server-updates-config.js";
 
 const OFFICIAL_API = "https://api.github.com/repos/orkbot-run/ork";
@@ -10,21 +16,16 @@ const REGISTRY = "https://ghcr.io";
 const REPOSITORY = "orkbot-run/ork/app";
 const MAX_BYTES = 65_536;
 const TIMEOUT_MS = 10_000;
-const INDEX_TYPES = [
-  "application/vnd.oci.image.index.v1+json",
-  "application/vnd.docker.distribution.manifest.list.v2+json",
-];
 const failure = () => new Error("Could not contact the deployment service.");
 
-export function createEasypanelServerUpdateAdapter(
+export function createOfficialServerUpdateDiscovery(
   config: {
     channel: "stable" | "preview";
-    deploymentTrigger: string;
     currentRevision: string | null;
+    previewRelease?: boolean;
   },
   dependencies: { fetch?: typeof globalThis.fetch } = {},
-): ServerUpdateAdapter {
-  const trigger = validateDeploymentTrigger(config.deploymentTrigger);
+): ServerUpdateAdapter["check"] {
   const channel = config.channel;
   const currentRevision = config.currentRevision;
   if (channel !== "stable" && channel !== "preview") throw failure();
@@ -48,47 +49,21 @@ export function createEasypanelServerUpdateAdapter(
     }
     return readBoundedJsonResponse(response, MAX_BYTES, signal);
   }
-  async function published(revision: string, signal: AbortSignal): Promise<boolean> {
-    // Anonymous pull capability is fixed to the official public repository, never an operator token.
-    const response = await fetch(
-      `${REGISTRY}/token?service=ghcr.io&scope=repository:${REPOSITORY}:pull`,
-      {
-        redirect: "error",
-        signal,
-      },
-    );
-    if (!response.ok) {
-      cancelResponseBody(response);
-      throw failure();
-    }
-    const auth = await readBoundedJsonResponse<{ token?: unknown }>(response, 16_384, signal);
-    if (typeof auth.token !== "string" || !/^[A-Za-z0-9._~+/-]{1,8192}={0,2}$/.test(auth.token))
-      throw failure();
-    async function digest(tag: string): Promise<string | null> {
-      const manifest = await fetch(`${REGISTRY}/v2/${REPOSITORY}/manifests/${tag}`, {
-        method: "HEAD",
-        redirect: "error",
-        signal,
-        headers: { accept: INDEX_TYPES.join(", "), authorization: `Bearer ${auth.token}` },
-      });
-      cancelResponseBody(manifest);
-      if (manifest.status === 404) return null;
-      if (
-        !manifest.ok ||
-        !INDEX_TYPES.includes(
-          (manifest.headers.get("content-type") ?? "").split(";")[0]?.trim() ?? "",
-        )
-      )
-        throw failure();
-      const value = manifest.headers.get("docker-content-digest");
-      if (!value || !/^sha256:[a-f0-9]{64}$/.test(value)) throw failure();
-      return value;
-    }
-    const [immutable, rolling] = await Promise.all([
-      digest(`sha-${revision}`),
-      digest(channel === "stable" ? "latest" : "edge"),
-    ]);
-    return immutable !== null && immutable === rolling;
+  async function published(
+    revision: string,
+    signal: AbortSignal,
+    version: string,
+  ): Promise<boolean> {
+    return equalRegistryManifests({
+      tokenUrl: `${REGISTRY}/token?service=ghcr.io&scope=repository:${REPOSITORY}:pull`,
+      manifestBase: `${REGISTRY}/v2/${REPOSITORY}/manifests`,
+      tags: [
+        `sha-${revision}`,
+        channel === "stable" ? "latest" : config.previewRelease ? version : "edge",
+      ],
+      signal,
+      fetch,
+    });
   }
   async function check(): ReturnType<ServerUpdateAdapter["check"]> {
     if (!currentRevision || !/^[0-9a-f]{40}$/.test(currentRevision)) return null;
@@ -111,6 +86,21 @@ export function createEasypanelServerUpdateAdapter(
         )
           throw failure();
         version = release.tag_name;
+        ref = version;
+      } else if (config.previewRelease) {
+        const releases = await request("/releases?per_page=100", signal);
+        if (!Array.isArray(releases)) throw failure();
+        const tags = releases.flatMap((item: unknown) => {
+          if (!item || typeof item !== "object") return [];
+          const entry = item as Record<string, unknown>;
+          if (entry.draft !== false || typeof entry.tag_name !== "string") return [];
+          const parsed = parseReleaseTag(entry.tag_name);
+          if (!parsed || entry.prerelease !== (parsed.prerelease !== null)) return [];
+          return [entry.tag_name];
+        });
+        const newest = selectLatestReleaseTag(tags, true);
+        if (!newest) return null;
+        version = newest;
         ref = version;
       }
       const commits = await request(`/commits?sha=${ref}&per_page=1`, signal);
@@ -149,12 +139,27 @@ export function createEasypanelServerUpdateAdapter(
         run.conclusion !== "success"
       )
         return null;
-      if (!(await published(commit.sha, signal))) return null;
+      if (!(await published(commit.sha, signal, version))) return null;
       return { revision: commit.sha, version };
     } catch {
       throw failure();
     }
   }
+  return check;
+}
+
+export function createEasypanelServerUpdateAdapter(
+  config: {
+    channel: "stable" | "preview";
+    currentRevision: string | null;
+    deploymentTrigger: string;
+  },
+  dependencies: { fetch?: typeof globalThis.fetch } = {},
+): ServerUpdateAdapter {
+  const trigger = validateDeploymentTrigger(config.deploymentTrigger);
+  const channel = config.channel;
+  const check = createOfficialServerUpdateDiscovery(config, dependencies);
+  const fetch = dependencies.fetch ?? globalThis.fetch;
   return {
     channel,
     check,

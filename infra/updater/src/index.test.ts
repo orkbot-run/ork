@@ -2,11 +2,13 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache tests are preserved; Ork recovery qualification changes follow LICENSE.md.
 
+import { createHash } from "node:crypto";
 import { chmod, lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { ServerUpdateRun } from "@orkbot/contracts";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DeploymentJournal } from "./deployment-journal.js";
 import type { UpdaterCommandRunner } from "./index.js";
 import {
   commandEnvironment,
@@ -73,6 +75,7 @@ describe("updater HTTP surface", () => {
       ["POST", "/plan"],
       ["POST", "/apply"],
       ["POST", "/rollback"],
+      ["POST", "/deploy"],
     ];
     for (const [method, pathname] of routes) {
       const response = await app.request(pathname, { method });
@@ -184,6 +187,300 @@ describe("updater HTTP surface", () => {
       process.off("unhandledRejection", onUnhandled);
     }
     expect(unhandled).toEqual([]);
+  });
+});
+
+describe("standalone deployment acknowledgements", () => {
+  async function preparedDeployment() {
+    const fixture = await deployment();
+    const template = path.join(fixture.deployDir, "docker-compose.images.yml");
+    const before = "old-compose";
+    const after = "new-compose";
+    const metadata = path.join(fixture.deployDir, ".orkbot-compose-state.json");
+    await writeFile(template, before);
+    await writeFile(
+      metadata,
+      JSON.stringify({
+        files: { "docker-compose.images.yml": createHash("sha256").update(before).digest("hex") },
+      }),
+    );
+    const fetch = async (input: Parameters<typeof globalThis.fetch>[0]) => {
+      const url = String(input);
+      if (url.includes("/releases?"))
+        return Response.json([{ tag_name: "v1.2.3", draft: false, prerelease: false }]);
+      if (url.includes("/compare/")) return Response.json({ status: "ahead" });
+      if (url.includes("/token?")) return Response.json({ token: "fixture-token" });
+      if (url.includes("/manifests/"))
+        return new Response(null, {
+          headers: {
+            "content-type": "application/vnd.oci.image.index.v1+json",
+            "docker-content-digest": `sha256:${"b".repeat(64)}`,
+          },
+        });
+      if (url.includes("/actions/workflows/"))
+        return Response.json({
+          workflow_runs: [
+            {
+              head_sha: targetCommit,
+              event: "push",
+              head_branch: "main",
+              status: "completed",
+              conclusion: "success",
+            },
+          ],
+        });
+      if (url.startsWith("https://raw.githubusercontent.com/")) return new Response(after);
+      throw new Error("Unexpected request");
+    };
+    return { ...fixture, fetch, template, before, after, metadata };
+  }
+
+  it.each(["accepted", "running", "unknown"] as const)(
+    "reconciles %s to success only after all target services and templates match",
+    async (state) => {
+      const fixture = await preparedDeployment();
+      await writeFile(`${fixture.template}.update-backup`, fixture.before);
+      await writeFile(fixture.template, fixture.after);
+      await writeFile(
+        path.join(fixture.deployDir, ".env"),
+        `ORKBOT_IMAGE_TAG=sha-${targetCommit}\n`,
+      );
+      await new DeploymentJournal(fixture.deployDir).write({
+        revision: targetCommit,
+        idempotencyKey: "reconcile-operation-001",
+        state,
+      });
+      const imageId = `sha256:${"d".repeat(64)}`;
+      const run: UpdaterCommandRunner = async (_command, args) => {
+        if (args[0] === "image") return ok(imageId);
+        if (args.includes("ps")) return ok("a".repeat(64));
+        if (args[0] === "inspect") return ok(`${imageId} running healthy`);
+        throw new Error("Unexpected command");
+      };
+      const subject = createUpdaterApp(
+        {
+          ...fixture.config,
+          mode: "standalone",
+          updateServices: ["api", "worker", "web", "supervisor"],
+        },
+        { run, fetch: fixture.fetch },
+      );
+      const response = await subject.request("/state", { headers: authorized });
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { operation: { state: string } }).operation.state).toBe(
+        "succeeded",
+      );
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded");
+      expect(
+        JSON.parse(await readFile(fixture.metadata, "utf8")).files["docker-compose.images.yml"],
+      ).toBe(createHash("sha256").update(fixture.after).digest("hex"));
+      await expect(lstat(`${fixture.template}.update-backup`)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    },
+  );
+
+  it("keeps an interrupted mixed-version runtime unknown without changing templates", async () => {
+    const fixture = await preparedDeployment();
+    await writeFile(`${fixture.template}.update-backup`, fixture.before);
+    await writeFile(fixture.template, fixture.after);
+    await writeFile(path.join(fixture.deployDir, ".env"), `ORKBOT_IMAGE_TAG=sha-${targetCommit}\n`);
+    await new DeploymentJournal(fixture.deployDir).write({
+      revision: targetCommit,
+      idempotencyKey: "reconcile-operation-002",
+      state: "running",
+    });
+    const imageId = `sha256:${"d".repeat(64)}`;
+    let inspected = 0;
+    const run: UpdaterCommandRunner = async (_command, args) => {
+      if (args[0] === "image") return ok(imageId);
+      if (args.includes("ps")) return ok("a".repeat(64));
+      if (args[0] === "inspect")
+        return ok(`${++inspected === 2 ? `sha256:${"e".repeat(64)}` : imageId} running healthy`);
+      throw new Error("Unexpected command");
+    };
+    const subject = createUpdaterApp(
+      {
+        ...fixture.config,
+        mode: "standalone",
+        updateServices: ["api", "worker", "web", "supervisor"],
+      },
+      { run, fetch: fixture.fetch },
+    );
+    const response = await subject.request("/state", { headers: authorized });
+    expect(((await response.json()) as { operation: { state: string } }).operation.state).toBe(
+      "unknown",
+    );
+    expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("unknown");
+    expect(await readFile(`${fixture.template}.update-backup`, "utf8")).toBe(fixture.before);
+    expect(await readFile(fixture.template, "utf8")).toBe(fixture.after);
+  });
+
+  it("acknowledges before a deployment completes and commits the staged templates", async () => {
+    const fixture = await preparedDeployment();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let pullReached!: () => void;
+    const pull = new Promise<void>((resolve) => {
+      pullReached = resolve;
+    });
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
+      if (args.includes("exec")) return ok(currentCommit);
+      if (args.includes("pull")) {
+        pullReached();
+        await gate;
+      }
+      return ok();
+    };
+    const subject = createUpdaterApp(
+      { ...fixture.config, mode: "standalone" },
+      { run, fetch: fixture.fetch },
+    );
+    const response = await request(subject, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "happy-operation-0001",
+      channel: "preview",
+    });
+    expect(response.status).toBe(202);
+    await pull;
+    expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("running");
+    release();
+    await vi.waitFor(async () =>
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded"),
+    );
+    expect(await readFile(fixture.template, "utf8")).toBe(fixture.after);
+    expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
+      `ORKBOT_IMAGE_TAG=sha-${targetCommit}`,
+    );
+    expect(
+      JSON.parse(await readFile(fixture.metadata, "utf8")).files["docker-compose.images.yml"],
+    ).toBe(createHash("sha256").update(fixture.after).digest("hex"));
+  });
+
+  it("restores original templates before attempting cached-image recovery after recreate fails", async () => {
+    const fixture = await preparedDeployment();
+    let recreates = 0;
+    let recoveryTemplate = "";
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
+      if (args.includes("exec")) return ok(currentCommit);
+      if (args.includes("up")) {
+        recreates++;
+        if (recreates === 1) return failed("recreate failed");
+        recoveryTemplate = await readFile(fixture.template, "utf8");
+      }
+      return ok();
+    };
+    const subject = createUpdaterApp(
+      { ...fixture.config, mode: "standalone" },
+      { run, fetch: fixture.fetch },
+    );
+    expect(
+      (
+        await request(subject, "/deploy", {
+          revision: targetCommit,
+          idempotencyKey: "failure-operation-0001",
+          channel: "stable",
+        })
+      ).status,
+    ).toBe(202);
+    await vi.waitFor(async () =>
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("failed"),
+    );
+    expect(recreates).toBe(2);
+    expect(recoveryTemplate).toBe(fixture.before);
+    expect(await readFile(fixture.template, "utf8")).toBe(fixture.before);
+    expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
+      "ORKBOT_IMAGE_TAG=v1.0.0",
+    );
+  });
+  it("refuses a release whose image does not match the revision image", async () => {
+    const { config, deployDir } = await deployment();
+    const instance = createUpdaterApp(
+      { ...config, mode: "standalone" },
+      {
+        run: async (command) =>
+          command === "docker" ? ok("a".repeat(40)) : ok(`${targetCommit}\trefs/tags/v1.2.3\n`),
+        fetch: async (input) => {
+          const url = String(input);
+          if (url.includes("/releases?"))
+            return Response.json([{ tag_name: "v1.2.3", draft: false, prerelease: false }]);
+          if (url.includes("/compare/")) return Response.json({ status: "ahead" });
+          if (url.includes("/token?")) return Response.json({ token: "fixture-token" });
+          if (url.includes("/manifests/"))
+            return new Response(null, {
+              headers: {
+                "content-type": "application/vnd.oci.image.index.v1+json",
+                "docker-content-digest": `sha256:${url.endsWith("v1.2.3") ? "c".repeat(64) : "b".repeat(64)}`,
+              },
+            });
+          throw new Error("Unexpected URL");
+        },
+      },
+    );
+    const response = await request(instance, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "digest-mismatch-0001",
+      channel: "stable",
+    });
+    expect(response.status).toBe(400);
+    expect(await new DeploymentJournal(deployDir).read()).toBeNull();
+  });
+  it("does not replay an acknowledged operation after restarting the updater", async () => {
+    const { config, deployDir } = await deployment();
+    const operation = {
+      revision: targetCommit,
+      idempotencyKey: "operation-restart-0001",
+      state: "running" as const,
+    };
+    await new DeploymentJournal(deployDir).write(operation);
+    let commands = 0;
+    const restarted = createUpdaterApp(
+      { ...config, mode: "standalone" },
+      {
+        run: async () => {
+          commands++;
+          return ok();
+        },
+      },
+    );
+    const response = await request(restarted, "/deploy", { ...operation, channel: "stable" });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual(operation);
+    expect(commands).toBe(0);
+    const other = await request(restarted, "/deploy", {
+      ...operation,
+      idempotencyKey: "different-operation-0001",
+      channel: "stable",
+    });
+    expect(other.status).toBe(400);
+    expect(commands).toBe(0);
+  });
+
+  it("refuses prereleases in the stable channel before executing host commands", async () => {
+    const { config } = await deployment();
+    let commands = 0;
+    const instance = createUpdaterApp(
+      { ...config, mode: "standalone" },
+      {
+        run: async () => {
+          commands++;
+          return ok();
+        },
+        fetch: async () =>
+          Response.json([{ tag_name: "v1.0.0-beta.1", draft: false, prerelease: true }]),
+      },
+    );
+    const response = await request(instance, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "stable-operation-0001",
+      channel: "stable",
+    });
+    expect(response.status).toBe(400);
+    expect(commands).toBe(0);
   });
 });
 

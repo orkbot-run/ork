@@ -13,7 +13,7 @@ import {
 } from "@orkbot/db";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { oidcAccountSubject } from "../../../../../packages/auth/src/oidc.js";
-import { createServerUpdates } from "./service.js";
+import { createPendingServerUpdates, createServerUpdates } from "./service.js";
 
 const enabled =
   process.env.VERIFY_DATABASE === "1" &&
@@ -122,6 +122,130 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
     await Promise.all(services.splice(0).map((item) => item.stop()));
   });
   afterAll(async () => database?.pool.end());
+
+  it("binds a pending standalone installation to the initialized owner once", async () => {
+    const pending = createPendingServerUpdates({
+      prisma: prisma!,
+      adapter: adapter(),
+      installationId,
+      delegatedAccountKey: null,
+      issuer,
+      currentRevision,
+    });
+    services.push(pending);
+    await system(() =>
+      prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: null },
+      }),
+    );
+    expect(await pending.status(actor)).toMatchObject({ available: false });
+    await system(() =>
+      prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: ownerKey },
+      }),
+    );
+    expect(await pending.status(actor)).toMatchObject({ available: true });
+    await system(() =>
+      prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: { nativeAccountsOwnerKey: "f".repeat(64) },
+      }),
+    );
+    await expect(pending.status(actor)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      (
+        await system(() =>
+          prisma!.serverUpdateControl.findUniqueOrThrow({ where: { id: installationId } }),
+        )
+      ).delegatedAccountKey,
+    ).toBe(ownerKey);
+  });
+
+  it("changes a selectable channel and invalidates candidates before applying", async () => {
+    const deployment = { ...adapter(), channelSelectable: true };
+    const updates = service(deployment);
+    const checked = await updates.check(actor);
+    expect(checked.candidate?.revision).toBe(revision);
+    const changed = await updates.policy(actor, {
+      automatic: false,
+      expectedRevision: checked.policyRevision,
+      channel: "stable",
+    });
+    expect(changed).toMatchObject({ channel: "stable", channelSelectable: true, candidate: null });
+    await expect(
+      updates.apply(actor, { candidateRevision: revision, idempotencyKey: randomUUID() }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await updates.check(actor);
+    expect(deployment.check).toHaveBeenLastCalledWith("stable");
+  });
+
+  it("confirms completion only when the running revision matches the successful operation", async () => {
+    const key = randomUUID();
+    const deployment = {
+      ...adapter(),
+      operation: vi.fn(async () => ({
+        revision,
+        idempotencyKey: key,
+        state: "succeeded" as const,
+      })),
+    };
+    const previous = service(deployment);
+    await previous.status(actor);
+    await system(() =>
+      prisma!.serverUpdateRequest.create({
+        data: {
+          installationId,
+          idempotencyKey: key,
+          revision,
+          state: "requested",
+          automatic: false,
+          policyRevision: 0,
+          delegatedAccountKey: ownerKey,
+        },
+      }),
+    );
+    expect((await previous.status(actor)).lastRequest?.state).toBe("requested");
+    const updated = createServerUpdates({
+      prisma: prisma!,
+      adapter: deployment,
+      installationId,
+      delegatedAccountKey: ownerKey,
+      issuer,
+      currentRevision: revision,
+    });
+    services.push(updated);
+    expect((await updated.status(actor)).lastRequest?.state).toBe("completed");
+  });
+
+  it("does not change channels while an old deployment is unresolved", async () => {
+    const key = randomUUID();
+    const deployment = {
+      ...adapter(),
+      channelSelectable: true,
+      operation: vi.fn(async () => ({ revision, idempotencyKey: key, state: "running" as const })),
+    };
+    const updates = service(deployment);
+    await updates.status(actor);
+    await system(() =>
+      prisma!.serverUpdateRequest.create({
+        data: {
+          installationId,
+          idempotencyKey: key,
+          revision,
+          state: "requested",
+          automatic: false,
+          policyRevision: 0,
+          delegatedAccountKey: ownerKey,
+          createdAt: new Date(Date.now() - 2 * 60 * 60_000),
+        },
+      }),
+    );
+    await expect(
+      updates.policy(actor, { automatic: false, expectedRevision: 0, channel: "stable" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
 
   it("requires the exact live native identity, not a role, linked account, or old issuer-only proof", async () => {
     const deployment = adapter();
@@ -240,7 +364,12 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
       ),
     ).toBe(true);
     await vi.waitFor(() => expect(deployment.submit).toHaveBeenCalledOnce());
-    expect(deployment.submit).toHaveBeenCalledWith(revision, expect.any(Function));
+    expect(deployment.submit).toHaveBeenCalledWith(
+      revision,
+      expect.any(Function),
+      input.idempotencyKey,
+      "preview",
+    );
     expect(await system(() => prisma!.session.count())).toBe(1);
     await expect(
       updates.apply(actor, { ...input, idempotencyKey: randomUUID() }),
@@ -334,6 +463,17 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
     await vi.waitFor(() => expect(deployment.check).toHaveBeenCalledTimes(2));
     await resumed.stop();
     expect(deployment.submit).toHaveBeenCalledOnce();
+  });
+
+  it("discovers updates periodically without automatically submitting them", async () => {
+    const deployment = adapter();
+    const updates = service(deployment);
+    updates.start();
+    await vi.waitFor(() => expect(deployment.check).toHaveBeenCalledOnce());
+    await vi.waitFor(async () =>
+      expect((await updates.status(actor)).candidate?.revision).toBe(revision),
+    );
+    expect(deployment.submit).not.toHaveBeenCalled();
   });
 
   it("stops automatic submissions after owner unlink and after consent is revoked during a check", async () => {

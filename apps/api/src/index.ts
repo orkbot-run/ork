@@ -27,13 +27,22 @@ try {
     ? {
         installationId: updates.installationId,
         delegatedAccountKey: updates.controllerAccountKey,
-        adapter: (
-          await import("@orkbot/adapters/easypanel-server-updates")
-        ).createEasypanelServerUpdateAdapter({
-          channel: updates.channel,
-          currentRevision: env.gitSha ?? null,
-          deploymentTrigger: updates.adapter.deploymentTrigger,
-        }),
+        adapter:
+          updates.adapter.kind === "standalone"
+            ? (
+                await import("@orkbot/adapters/standalone-server-updates")
+              ).createStandaloneServerUpdateAdapter({
+                channel: updates.channel,
+                currentRevision: env.gitSha ?? null,
+                token: updates.adapter.token,
+              })
+            : (
+                await import("@orkbot/adapters/easypanel-server-updates")
+              ).createEasypanelServerUpdateAdapter({
+                channel: updates.channel,
+                currentRevision: env.gitSha ?? null,
+                deploymentTrigger: updates.adapter.deploymentTrigger,
+              }),
       }
     : undefined;
   const { app, stop, handleUpgrade } = await createApp({ ...env, logger, serverUpdateSetup });

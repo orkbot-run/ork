@@ -75,5 +75,8 @@ the panel and redeploy there when you need to recover an earlier image. Database
 migrations remain applied, so keep backups and check version compatibility first.
 Channel movement can still race the panel's image pull after this final check.
 An immutable target removes that race.
-For a standalone Compose installation, use the existing private updater instead of
-this panel trigger. Enable one deployment manager for each installation.
+Linux server installations created by the installer use their private updater instead
+of this panel trigger. Enable one deployment manager for each installation. The
+standalone updater deploys the selected stable or beta release, and reports success
+only after the updated server confirms the revision. Image rollback does not reverse
+database migrations.

@@ -52,6 +52,9 @@ export const NL_MESSAGES: Record<string, string> = {
   "Update server": "Server bijwerken",
   "Automatic updates": "Automatische updates",
   "Deployment requested": "Uitrol aangevraagd",
+  "Server updated": "Server bijgewerkt",
+  Channel: "Kanaal",
+  Stable: "Stabiel",
   "Check deployment in server panel": "Controleer de uitrol in het serverpaneel",
   "Could not complete the update. Try again.":
     "De update kon niet worden voltooid. Probeer het opnieuw.",

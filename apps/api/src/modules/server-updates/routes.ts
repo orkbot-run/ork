@@ -8,6 +8,15 @@ import { unavailableServerUpdates } from "./service.js";
 export function serverUpdateRoutes({ deps, authed }: RouterContext) {
   return {
     serverUpdates: {
+      version: authed.serverUpdates.version.handler(() => ({
+        revision: /^[0-9a-f]{7,40}$/.test(deps.env.gitSha ?? "") ? deps.env.gitSha! : null,
+        version:
+          /^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/.test(
+            deps.env.serverVersion ?? "",
+          )
+            ? deps.env.serverVersion!
+            : null,
+      })),
       status: authed.serverUpdates.status.handler(
         ({ context }) =>
           deps.serverUpdates?.status({

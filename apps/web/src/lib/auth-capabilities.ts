@@ -15,6 +15,18 @@ const MAX_RESPONSE_BYTES = 64 * 1024;
 
 let capabilitiesRequest: Promise<AuthCapabilities> | undefined;
 
+export class ProtocolUpdateRequired extends Error {
+  constructor(readonly capabilities: AuthCapabilities) {
+    super("Could not load authentication capabilities");
+  }
+}
+
+/** Authentication remains available on the stable recovery surface. */
+export const fetchRecoveryCapabilities = () => loadAuthCapabilities(true);
+export const resetAuthCapabilities = () => {
+  capabilitiesRequest = undefined;
+};
+
 export function fetchAuthCapabilities(): Promise<AuthCapabilities> {
   // Auth can briefly remount during session refresh; the gate uses the same deployment lookup.
   capabilitiesRequest ??= loadAuthCapabilities().then(
@@ -33,7 +45,7 @@ export function fetchAuthCapabilities(): Promise<AuthCapabilities> {
 }
 
 /** Public deployment capabilities, bounded in time and size so a stalled API cannot hang the UI. */
-async function loadAuthCapabilities(): Promise<AuthCapabilities> {
+async function loadAuthCapabilities(recovery = false): Promise<AuthCapabilities> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -66,8 +78,8 @@ async function loadAuthCapabilities(): Promise<AuthCapabilities> {
       );
     }
     const capabilities = authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
-    if (!supportsProtocolVersion(capabilities.protocol))
-      throw new Error("Could not load authentication capabilities");
+    if (!recovery && !supportsProtocolVersion(capabilities.protocol))
+      throw new ProtocolUpdateRequired(capabilities);
     return capabilities;
   } finally {
     clearTimeout(timer);

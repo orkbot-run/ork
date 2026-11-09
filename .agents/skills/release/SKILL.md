@@ -42,4 +42,7 @@ sha="$(gh pr view <release PR> --json mergeCommit -q .mergeCommit.oid)"
 git fetch origin main && git tag vX.Y.Z "$sha" && git push origin vX.Y.Z
 ```
 
-The tag publishes the server images. Tauri desktop builds currently remain diagnostic Actions artifacts from `desktop-tauri.yml`; signed desktop release publication is not configured.
+The tag publishes the server images. Publishing the matching GitHub release starts signed
+desktop builds. The desktop channel moves only after all platform builds and main CI for
+the tagged commit succeed. Confirm the resulting release and update manifest before
+announcing it.

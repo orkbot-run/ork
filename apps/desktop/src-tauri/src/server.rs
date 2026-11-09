@@ -225,12 +225,8 @@ fn require_client_protocol(range: Option<&Value>) -> Result<(), String> {
     if min > max {
         return Err(INVALID.into());
     }
-    if min > client_protocol_version() {
-        return Err("Update Ork to connect to this server.".into());
-    }
-    if max < client_protocol_version() {
-        return Err("Update this server before connecting with this version of Ork.".into());
-    }
+    // Protocol compatibility is enforced by the renderer recovery gate and API.
+    // A valid address must remain connectable for authentication and updates.
     Ok(())
 }
 
@@ -505,7 +501,7 @@ mod tests {
             (json!({"min": 1, "max": 1}), true),
             (json!({"min": 1.0, "max": 2.0}), true),
             (json!({"min": 1, "max": 9_007_199_254_740_991_u64}), true),
-            (json!({"min": 2, "max": 3}), false),
+            (json!({"min": 2, "max": 3}), true),
             (json!({"min": 2, "max": 1}), false),
             (json!({"min": 0, "max": 1}), false),
             (json!({"min": -1, "max": 1}), false),

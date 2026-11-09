@@ -20,6 +20,40 @@ export const PLATFORMS = [
 ] as const;
 const MAX_BYTES = 256 * 1024 * 1024;
 
+/** A stable desktop build uses the version of its published source release. */
+export function stableReleaseVersion(tag: string) {
+  const match = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/.exec(tag);
+  if (!match || match.slice(1).some((part) => Number(part) > 65535))
+    throw new Error("Invalid stable desktop release tag.");
+  return tag.slice(1);
+}
+
+export function releaseVersion(tag: string) {
+  const beta =
+    /^(v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))-beta\.([1-9][0-9]*)$/.exec(tag);
+  if (!beta) return stableReleaseVersion(tag);
+  stableReleaseVersion(beta[1]!);
+  if (!Number.isSafeInteger(Number(beta[2]))) throw new Error("Invalid beta release tag.");
+  return tag.slice(1);
+}
+
+export function compareReleaseVersions(left: string, right: string) {
+  releaseVersion(`v${left}`);
+  releaseVersion(`v${right}`);
+  const [leftBase, leftBeta] = left.split("-beta.");
+  const [rightBase, rightBeta] = right.split("-beta.");
+  const leftParts = leftBase!.split(".").map(Number);
+  const rightParts = rightBase!.split(".").map(Number);
+  for (let index = 0; index < 3; index++) {
+    if (leftParts[index] !== rightParts[index])
+      return leftParts[index]! < rightParts[index]! ? -1 : 1;
+  }
+  if (leftBeta === rightBeta) return 0;
+  if (leftBeta === undefined) return 1;
+  if (rightBeta === undefined) return -1;
+  return Number(leftBeta) < Number(rightBeta) ? -1 : 1;
+}
+
 /** A workflow run keeps its version across retries and stays within native installer limits. */
 export function previewVersion(run: string) {
   if (!/^[1-9][0-9]*$/.test(run)) throw new Error("Invalid desktop build number.");
@@ -30,7 +64,7 @@ export function previewVersion(run: string) {
 }
 
 export function releaseConfiguration(version: string, key: string) {
-  if (!/^1\.[0-9]+\.[0-9]+$/.test(version)) throw new Error("Invalid desktop version.");
+  releaseVersion(`v${version}`);
   const decoded = Buffer.from(key, "base64").toString("utf8");
   const packet = Buffer.from(decoded.trim().split("\n").at(-1) ?? "", "base64");
   if (!decoded.startsWith("untrusted comment:") || packet.length !== 42)
@@ -134,7 +168,14 @@ export function stageArtifacts(
 /** Platform archives have immutable URLs; only the complete channel manifest is replaced. */
 export function releaseManifest(
   entries: PlatformArtifact[],
-  options: { repository: string; version: string; revision: string; key: string; date: string },
+  options: {
+    repository: string;
+    version: string;
+    revision: string;
+    key: string;
+    date: string;
+    releaseTag?: string;
+  },
 ) {
   if (
     !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(options.repository) ||
@@ -142,6 +183,8 @@ export function releaseManifest(
   )
     throw new Error("Invalid release provenance.");
   releaseConfiguration(options.version, options.key);
+  if (options.releaseTag && releaseVersion(options.releaseTag) !== options.version)
+    throw new Error("Desktop tag does not match its version.");
   if (
     entries.length !== PLATFORMS.length ||
     new Set(entries.map((entry) => entry.platform)).size !== PLATFORMS.length
@@ -162,7 +205,7 @@ export function releaseManifest(
       throw new Error("Desktop artifact provenance does not match this release.");
     platforms[entry.platform] = {
       signature: entry.signature,
-      url: `https://github.com/${options.repository}/releases/download/desktop-preview-${options.version}/${entry.archive}`,
+      url: `https://github.com/${options.repository}/releases/download/${options.releaseTag ?? `desktop-preview-${options.version}`}/${entry.archive}`,
     };
   }
   if (!Number.isFinite(Date.parse(options.date))) throw new Error("Invalid publication date.");
@@ -171,10 +214,23 @@ export function releaseManifest(
 
 function main() {
   const [command, input, output] = process.argv.slice(2);
-  const version = previewVersion(process.env.GITHUB_RUN_NUMBER ?? "");
+  const version = process.env.TAURI_RELEASE_TAG
+    ? releaseVersion(process.env.TAURI_RELEASE_TAG)
+    : previewVersion(process.env.GITHUB_RUN_NUMBER ?? "");
   const key = process.env.TAURI_UPDATER_PUBLIC_KEY ?? "";
   if (command === "prepare" && input) {
-    writeFileSync(input, JSON.stringify(releaseConfiguration(version, key)));
+    const config = releaseConfiguration(version, key);
+    if (version.includes("-beta.")) {
+      const numeric = version.split("-")[0]!;
+      const plist = readFileSync("apps/desktop/src-tauri/Info.plist", "utf8").replace(
+        "</dict>",
+        `<key>CFBundleShortVersionString</key><string>${numeric}</string></dict>`,
+      );
+      const plistPath = `${input}.plist`;
+      writeFileSync(plistPath, plist);
+      Object.assign(config.bundle, { macOS: { bundleVersion: numeric, infoPlist: plistPath } });
+    }
+    writeFileSync(input, JSON.stringify(config));
   } else if (command === "stage" && input && output) {
     stageArtifacts(input, output, {
       platform: process.env.TAURI_RELEASE_PLATFORM ?? "",

@@ -20,9 +20,9 @@ import { dirname, join } from "node:path";
 export interface ServerUpdatesConfig {
   version: 1;
   installationId: string;
-  controllerAccountKey: string;
+  controllerAccountKey: string | null;
   channel: "stable" | "preview";
-  adapter: { kind: "easypanel"; deploymentTrigger: string };
+  adapter: { kind: "easypanel"; deploymentTrigger: string } | { kind: "standalone"; token: string };
 }
 
 const MAX_BYTES = 8192;
@@ -68,26 +68,38 @@ export function parseServerUpdatesConfig(input: unknown): ServerUpdatesConfig {
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
       config.installationId,
     ) ||
-    typeof config.controllerAccountKey !== "string" ||
-    !/^[0-9a-f]{64}$/.test(config.controllerAccountKey) ||
+    !(
+      config.controllerAccountKey === null ||
+      (typeof config.controllerAccountKey === "string" &&
+        /^[0-9a-f]{64}$/.test(config.controllerAccountKey))
+    ) ||
     (config.channel !== "stable" && config.channel !== "preview") ||
     !config.adapter ||
     typeof config.adapter !== "object" ||
-    Array.isArray(config.adapter) ||
-    !exactKeys(config.adapter, ["kind", "deploymentTrigger"])
+    Array.isArray(config.adapter)
   )
     throw invalid();
   const adapter = config.adapter as Record<string, unknown>;
-  if (adapter.kind !== "easypanel") throw invalid();
+  const checkedAdapter =
+    adapter.kind === "easypanel" && exactKeys(adapter, ["kind", "deploymentTrigger"])
+      ? {
+          kind: "easypanel" as const,
+          deploymentTrigger: validateDeploymentTrigger(adapter.deploymentTrigger),
+        }
+      : adapter.kind === "standalone" &&
+          exactKeys(adapter, ["kind", "token"]) &&
+          typeof adapter.token === "string" &&
+          /^[A-Za-z0-9_-]{32,256}$/.test(adapter.token)
+        ? { kind: "standalone" as const, token: adapter.token }
+        : null;
+  if (!checkedAdapter) throw invalid();
+  if (config.controllerAccountKey === null && checkedAdapter.kind !== "standalone") throw invalid();
   return {
     version: 1,
     installationId: config.installationId,
-    controllerAccountKey: config.controllerAccountKey,
+    controllerAccountKey: config.controllerAccountKey as string | null,
     channel: config.channel,
-    adapter: {
-      kind: "easypanel",
-      deploymentTrigger: validateDeploymentTrigger(adapter.deploymentTrigger),
-    },
+    adapter: checkedAdapter,
   };
 }
 
