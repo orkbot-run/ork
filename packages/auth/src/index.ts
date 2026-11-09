@@ -75,7 +75,12 @@ export {
   pluginSubmissionReviewedEmail,
 } from "./plugin-submission-email.js";
 export { referralEmail } from "./referral-email.js";
-export { clearWorkspaceBinding, issueServerClaim, startServerClaimWorker } from "./server-claim.js";
+export {
+  clearWorkspaceBinding,
+  issueServerClaim,
+  startServerClaimWorker,
+  synchronizeWorkspaceBinding,
+} from "./server-claim.js";
 export { welcomeEmail } from "./welcome-email.js";
 
 export interface AuthEnv {
