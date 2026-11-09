@@ -36,9 +36,7 @@ for (const path of ["/", "/sign-in", "/app", "/onboarding"]) {
     await expect(
       page.getByRole("heading", { name: "Connect your server to a workspace" }),
     ).toBeVisible();
-    await expect(
-      page.getByText("node /app/apps/api/dist/cli/server-claim.js", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Generate a code" })).toBeVisible();
     expect([...new Set(productRequests)]).toEqual(["/api/auth/native/initialization"]);
     expect(errors).toEqual([]);
     if (path === "/") await captureScreenshot(page, testInfo, "native-server-handoff");

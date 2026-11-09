@@ -2,15 +2,12 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createServerConnectLink } from "@orkbot/contracts";
-import { Button, Input } from "@orkbot/ui-web";
+import { Button } from "@orkbot/ui-web";
 import {
   ArrowRight,
   ArrowUpRight,
-  Check,
   CircleHelp,
-  Copy,
   Download,
-  Globe,
   LockKeyhole,
   Server,
   ShieldCheck,
@@ -22,8 +19,6 @@ import "./styles.css";
 /** This page identifies its own server. Query strings can never choose a different target. */
 export function BrowserConnect() {
   const polish = navigator.language.toLowerCase().startsWith("pl");
-  const [dashboard, setDashboard] = useState("");
-  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   const [initialization, setInitialization] = useState<
     "loading" | "required" | "complete" | "unavailable"
   >("loading");
@@ -62,35 +57,11 @@ export function BrowserConnect() {
   }, [checkAttempt]);
 
   let link: string | undefined;
-  let dashboardLink: string | undefined;
-  try {
-    const candidate = new URL(dashboard.trim());
-    if (
-      candidate.protocol === "https:" &&
-      !candidate.username &&
-      !candidate.password &&
-      candidate.pathname === "/" &&
-      !candidate.search &&
-      !candidate.hash
-    )
-      dashboardLink = candidate.origin;
-  } catch {
-    // Only a complete HTTPS origin can become a navigation target.
-  }
   try {
     link = createServerConnectLink(window.location.origin);
   } catch {
     // Public plain HTTP cannot safely hand off authentication to a native client.
   }
-  const command = "node /app/apps/api/dist/cli/server-claim.js";
-  const copyCommand = async () => {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopyStatus("copied");
-    } catch {
-      setCopyStatus("failed");
-    }
-  };
   const serverAvailable = initialization === "required" || initialization === "complete";
   return (
     <main className="min-h-full bg-background px-5 text-foreground sm:px-8">
@@ -234,8 +205,8 @@ export function BrowserConnect() {
               </h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {polish
-                  ? "W EasyPanelu otwórz konsolę usługi Compose i wybierz kontener kończący się na -api-1."
-                  : "In EasyPanel, open the Compose console and select the container ending in -api-1."}
+                  ? "Potrzebujesz dostępu do serwera, na którym działa Ork."
+                  : "You need access to the server running Ork."}
               </p>
             </article>
             <article className="rounded-2xl border border-border bg-card p-6">
@@ -246,8 +217,8 @@ export function BrowserConnect() {
               <h3 className="mt-5 font-semibold">{polish ? "Wygeneruj kod" : "Generate a code"}</h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
                 {polish
-                  ? "Uruchom poniższą komendę. Kod wygasa — użyj go od razu i nikomu go nie udostępniaj."
-                  : "Run the command below. The code expires, so use it promptly and keep it private."}
+                  ? "Wygeneruj kod konfiguracji na serwerze. Kod jest ważny przez krótki czas i należy go zachować dla siebie."
+                  : "Generate a setup code on the server. The code expires shortly and should be kept private."}
               </p>
             </article>
             <article className="rounded-2xl border border-border bg-card p-6">
@@ -264,99 +235,6 @@ export function BrowserConnect() {
                   : "Choose your organization, open Server, and enter the code. Check the server address before confirming."}
               </p>
             </article>
-          </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-border p-6">
-              <h3 className="font-semibold">
-                {polish ? "Komenda dla nowego serwera" : "Command for a new server"}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {polish
-                  ? "Użyj jej, jeśli serwer nie ma jeszcze właściciela."
-                  : "Use this if the server does not have an owner yet."}
-              </p>
-              <div className="mt-4 flex items-start gap-3 rounded-lg bg-secondary p-4">
-                <code className="min-w-0 flex-1 break-all text-xs leading-6">{command}</code>
-                <button
-                  type="button"
-                  onClick={() => void copyCommand()}
-                  className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md hover:bg-background"
-                  aria-label={polish ? "Kopiuj komendę" : "Copy command"}
-                >
-                  {copyStatus === "copied" ? (
-                    <Check className="size-4" />
-                  ) : (
-                    <Copy className="size-4" />
-                  )}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground" aria-live="polite">
-                {copyStatus === "copied"
-                  ? polish
-                    ? "Skopiowano"
-                    : "Copied"
-                  : copyStatus === "failed"
-                    ? polish
-                      ? "Nie udało się skopiować. Zaznacz i skopiuj komendę ręcznie."
-                      : "Could not copy. Select and copy the command manually."
-                    : "\u00a0"}
-              </p>
-              <details className="mt-2 text-sm">
-                <summary className="cursor-pointer font-medium">
-                  {polish ? "Serwer ma już właściciela?" : "Does the server already have an owner?"}
-                </summary>
-                <p className="mt-3 leading-6 text-muted-foreground">
-                  {polish
-                    ? "Użyj poniższej komendy i zatwierdź połączenie tym samym kontem Ork, które jest właścicielem serwera i administratorem workspace’u."
-                    : "Use this command and approve with the same Ork account that owns the server and administers the workspace."}
-                </p>
-                <code className="mt-3 block break-all rounded-lg bg-secondary p-4 text-xs leading-6">
-                  {command} --workspace
-                </code>
-              </details>
-            </div>
-            <div className="rounded-2xl border border-border p-6">
-              <div className="flex items-center gap-2">
-                <Globe aria-hidden="true" className="size-5" />
-                <h3 className="font-semibold">
-                  {polish ? "Przejdź do dashboardu" : "Go to your dashboard"}
-                </h3>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                {polish
-                  ? "Wpisz publiczny adres dashboardu swojej organizacji. To oddzielna strona od tego serwera."
-                  : "Enter your organization’s public dashboard address. It is a separate website from this server."}
-              </p>
-              <label htmlFor="workspace-dashboard" className="mt-5 block text-sm font-medium">
-                {polish ? "Adres dashboardu" : "Dashboard address"}
-              </label>
-              <Input
-                id="workspace-dashboard"
-                type="url"
-                value={dashboard}
-                onChange={(event) => setDashboard(event.target.value)}
-                placeholder="https://dashboard.example.com"
-                autoComplete="url"
-                className="mt-2"
-              />
-              {dashboardLink ? (
-                <a
-                  href={dashboardLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-medium underline underline-offset-4"
-                >
-                  {polish ? "Otwórz dashboard" : "Open dashboard"}
-                  <ArrowUpRight aria-hidden="true" className="size-4" />
-                </a>
-              ) : (
-                <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                  {polish
-                    ? "Wpisz pełny adres HTTPS bez ścieżki."
-                    : "Enter a full HTTPS address without a path."}
-                </p>
-              )}
-            </div>
           </div>
         </section>
         <section className="border-t border-border py-12">

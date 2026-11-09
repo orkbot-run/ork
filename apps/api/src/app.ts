@@ -221,6 +221,7 @@ import {
   transcribeInboundVoice,
   voiceAccountErrorStatus,
 } from "#modules/voice/voice";
+import { createServerObserver } from "./server-observation.js";
 
 /**
  * Native clients always send the app scheme, including in Expo Go, so no
@@ -1563,6 +1564,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           issuer: "https://api.orkbot.run",
           origin: env.webOrigin,
           bootstrapSecret: env.bootstrapSecret,
+          observe: createServerObserver(env.dataDir),
         })
       : undefined;
   return {

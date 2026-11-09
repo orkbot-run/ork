@@ -404,7 +404,7 @@ export async function serverClaimProof(
 
 async function post(
   issuer: string,
-  path: "issue" | "poll" | "report" | "binding" | "disconnect",
+  path: "issue" | "poll" | "report" | "binding" | "disconnect" | "observe",
   body: object,
   request: typeof fetch = fetch,
 ) {
@@ -441,6 +441,7 @@ export async function synchronizeWorkspaceBinding(
     origin?: string;
     bootstrapSecret?: string;
     disconnect?: boolean;
+    observe?: () => Promise<object>;
     request?: typeof fetch;
   },
 ): Promise<"unconnected" | "legacy" | "active" | "disconnected"> {
@@ -501,7 +502,22 @@ export async function synchronizeWorkspaceBinding(
   if (result.status === 410) return "legacy";
   if (!result.body || typeof result.body !== "object" || !("status" in result.body))
     throw new Error("Invalid workspace connection response.");
-  if (result.body.status === "active" && !options.disconnect) return "active";
+  if (result.body.status === "active" && !options.disconnect) {
+    if (options.observe) {
+      try {
+        const observation = await Promise.race([
+          options.observe(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Observation timed out")), 2000),
+          ),
+        ]);
+        await post(options.issuer, "observe", { id, receipt, observation }, options.request);
+      } catch {
+        // Telemetry is optional; never block binding reconciliation if it fails.
+      }
+    }
+    return "active";
+  }
   if (result.body.status !== "revoked") throw new Error("Invalid workspace connection response.");
   const changed = await prisma.deploymentSettings.updateMany({
     where: {
@@ -730,7 +746,12 @@ export async function processServerClaim(
 /** Every replica may poll; value CAS ensures only one performs a broker call at a time. */
 export function startServerClaimWorker(
   prisma: PrismaClient,
-  options: { issuer: string; origin: string; bootstrapSecret: string },
+  options: {
+    issuer: string;
+    origin: string;
+    bootstrapSecret: string;
+    observe?: () => Promise<object>;
+  },
 ): () => Promise<void> {
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | undefined;

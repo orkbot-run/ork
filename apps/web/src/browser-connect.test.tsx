@@ -72,23 +72,10 @@ async function submit() {
   );
 }
 
-it("explains workspace setup and accepts only an HTTPS dashboard origin", async () => {
+it("explains workspace setup without deployment-specific instructions", () => {
   expect(host.textContent).toContain("Connect a workspace");
-  expect(host.textContent).toContain("node /app/apps/api/dist/cli/server-claim.js");
-  const input = host.querySelector<HTMLInputElement>("#workspace-dashboard")!;
-  const setDashboard = async (value: string) =>
-    act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-  await setDashboard("http://dashboard.example.test");
-  expect(host.textContent).not.toContain("Open dashboard");
-  await setDashboard("https://dashboard.example.test");
-  expect(
-    host.querySelector<HTMLAnchorElement>('a[href="https://dashboard.example.test"]')?.textContent,
-  ).toBe("Open dashboard");
-  await setDashboard("https://user@dashboard.example.test");
-  expect(host.textContent).not.toContain("Open dashboard");
+  expect(host.textContent).toContain("Generate a code");
+  expect(host.textContent).not.toContain("EasyPanel");
 });
 
 it("checks initialization without a session request and waits for a canonical six-character code", async () => {
@@ -237,7 +224,7 @@ it("shows the native handoff and workspace guidance for an initialized server", 
   expect(host.querySelectorAll("a")).toHaveLength(3);
   expect(host.querySelector('a[href^="orkbot://connect"]')?.textContent).toBe("Open in Ork");
   expect(host.textContent).toContain("Responding");
-  expect(host.textContent).toContain("node /app/apps/api/dist/cli/server-claim.js --workspace");
+  expect(host.textContent).toContain("Generate a code");
   expect(host.querySelector('a[href="https://ork.run/download/"]')?.textContent).toBe(
     "Get the app",
   );
