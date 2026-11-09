@@ -143,6 +143,18 @@ it("shows deployment acknowledgement as a request", async () => {
   expect(host.textContent).toContain("Deployment requested");
   expect(host.textContent).not.toContain("Up to date");
 });
+it("does not report an uncertain update as complete", async () => {
+  const host = await render({
+    lastRequest: {
+      id: "request",
+      revision: status.candidate!.revision,
+      state: "unknown",
+      requestedAt: new Date().toISOString(),
+    },
+  });
+  expect(host.textContent).toContain("Could not confirm the update");
+  expect(host.textContent).not.toContain("Server updated");
+});
 it("shows completion only when the server confirms it", async () => {
   const host = await render({
     lastRequest: {
