@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { ProtocolUpdateRequired } from "../lib/auth-capabilities";
@@ -133,6 +133,40 @@ it("fences compatibility checks by authenticated session", async () => {
   expect(host.textContent).toBe("Loading");
   await act(async () => resolveNew({}));
   expect(host.textContent).toBe("Product workspace");
+});
+
+it("keeps the product mounted during a session refetch that retains its data", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.discover.mockResolvedValue({});
+  const mounted = vi.fn();
+  const unmounted = vi.fn();
+  function Product() {
+    useEffect(() => {
+      mounted();
+      return unmounted;
+    }, []);
+    return <div>Product workspace</div>;
+  }
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  cleanup = () => {
+    act(() => root.unmount());
+  };
+  const show = () =>
+    root.render(
+      <ProtocolRecovery>
+        <Product />
+      </ProtocolRecovery>,
+    );
+  await act(async () => show());
+  expect(mounted).toHaveBeenCalledOnce();
+  state.pending = true;
+  await act(async () => show());
+  state.pending = false;
+  await act(async () => show());
+  expect(mounted).toHaveBeenCalledOnce();
+  expect(unmounted).not.toHaveBeenCalled();
+  expect(state.discover).toHaveBeenCalledOnce();
 });
 
 it("keeps product screens unmounted and exposes server recovery when the server is too old", async () => {
