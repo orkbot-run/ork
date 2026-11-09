@@ -25,7 +25,7 @@ export function PasskeySignIn({
   onError: (message: string | null) => void;
 }) {
   const { t } = useLingui();
-  const supported = usePasskeysSupported();
+  const supported = usePasskeysSupported(true);
   const [pending, setPending] = useState(false);
   const callbacks = useRef({ onSignedIn, onError, t });
   callbacks.current = { onSignedIn, onError, t };

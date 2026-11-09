@@ -11,7 +11,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { signInWithNativeAccounts } from "../lib/accounts-login";
 import { authClient } from "../lib/auth";
 import type { AuthCapabilities } from "../lib/auth-capabilities";
-import { fetchAuthCapabilities } from "../lib/auth-capabilities";
+import { fetchRecoveryCapabilities } from "../lib/auth-capabilities";
 import { clearSpaceSelection } from "../lib/rpc";
 import { AuthPage } from "./Auth";
 
@@ -67,7 +67,7 @@ vi.mock("@orkbot/ui-web", () => ({
     </label>
   ),
 }));
-vi.mock("../lib/auth-capabilities", () => ({ fetchAuthCapabilities: vi.fn() }));
+vi.mock("../lib/auth-capabilities", () => ({ fetchRecoveryCapabilities: vi.fn() }));
 vi.mock("../lib/accounts-login", () => ({ signInWithNativeAccounts: vi.fn() }));
 vi.mock("../lib/auth", () => ({
   authClient: {
@@ -124,7 +124,7 @@ async function submit() {
 it.each(["in", "up", "forgot"] as const)(
   "shows the welcome frame while capabilities load on %s",
   async (mode) => {
-    vi.mocked(fetchAuthCapabilities).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(fetchRecoveryCapabilities).mockReturnValue(new Promise(() => undefined));
     await render(mode);
     expect(host.querySelector("input")).toBeNull();
     expect(host.textContent).toBe("Welcome to Ork");
@@ -133,7 +133,7 @@ it.each(["in", "up", "forgot"] as const)(
   },
 );
 it.each(["in", "up"] as const)("offers SSO and hides credentials on %s", async (mode) => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   await render(mode);
   expect(host.textContent).toContain("Continue with Example");
   expect(host.querySelector("input")).toBeNull();
@@ -142,7 +142,7 @@ it.each(["in", "up"] as const)("offers SSO and hides credentials on %s", async (
   expect(sso.className).toContain("w-full");
 });
 it("retries failed capabilities without exposing a password form", async () => {
-  vi.mocked(fetchAuthCapabilities)
+  vi.mocked(fetchRecoveryCapabilities)
     .mockRejectedValueOnce(new Error())
     .mockResolvedValueOnce(capabilities);
   await render();
@@ -152,11 +152,11 @@ it("retries failed capabilities without exposing a password form", async () => {
     (button) => button.textContent === "Retry",
   )!;
   await act(async () => retry.click());
-  expect(fetchAuthCapabilities).toHaveBeenCalledTimes(2);
+  expect(fetchRecoveryCapabilities).toHaveBeenCalledTimes(2);
   expect(host.textContent).toContain("Get started");
 });
 it.each(["in", "up"] as const)("puts quiet SSO below the primary action on %s", async (mode) => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue({ ...capabilities, passwordAuth: true });
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({ ...capabilities, passwordAuth: true });
   await render(mode);
   const email = host.querySelector('input[name="email"]')!;
   const password = host.querySelector('input[type="password"]')!;
@@ -177,7 +177,7 @@ it.each(["in", "up"] as const)("puts quiet SSO below the primary action on %s", 
 });
 
 it("hides SSO in password recovery", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue({ ...capabilities, passwordAuth: true });
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({ ...capabilities, passwordAuth: true });
   await render("forgot");
   expect(host.textContent).not.toContain("Continue with Example");
 });
@@ -185,7 +185,7 @@ it("hides SSO in password recovery", async () => {
 it.each(["browser", "desktop"])("selects a non-redirecting SSO request on %s", async (surface) => {
   vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
   if (surface === "desktop") window.orkbotDesktop = {} as NonNullable<Window["orkbotDesktop"]>;
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   vi.mocked(authClient.signIn.social).mockResolvedValue({
     data: null,
     error: { message: "Unavailable", status: 503, statusText: "Unavailable" },
@@ -204,7 +204,7 @@ it.each(["browser", "desktop"])("selects a non-redirecting SSO request on %s", a
 it("lets the desktop app change its server from sign in", async () => {
   const change = vi.fn(async () => undefined);
   window.orkbotDesktop = { server: { change } } as unknown as NonNullable<Window["orkbotDesktop"]>;
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   await render();
   await act(async () =>
     host.querySelector<HTMLButtonElement>('[aria-label="Change server"]')!.click(),
@@ -213,7 +213,7 @@ it("lets the desktop app change its server from sign in", async () => {
 });
 
 it("signs in through the native Accounts proof without server OIDC", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue({
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({
     ...capabilities,
     sso: null,
     accountsLogin: true,
@@ -231,7 +231,7 @@ it.each(["REGISTRATION_CLOSED", "SSO_UNAVAILABLE", undefined])(
   "forces provider login only when retrying a registration refusal (%s)",
   async (error) => {
     vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
-    vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+    vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
     vi.mocked(authClient.signIn.social).mockResolvedValue({
       data: null,
       error: { message: "Unavailable", status: 503, statusText: "Unavailable" },
@@ -246,14 +246,14 @@ it.each(["REGISTRATION_CLOSED", "SSO_UNAVAILABLE", undefined])(
 );
 
 it("offers no server change in a browser", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   await render();
   expect(host.querySelector('[aria-label="Change server"]')).toBeNull();
 });
 
 it("keeps SSO available for retry while an authorization request is pending", async () => {
   vi.spyOn(window, "open").mockReturnValue({ close: vi.fn() } as unknown as Window);
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   vi.mocked(authClient.signIn.social).mockReturnValue(new Promise(() => undefined));
   await render();
   const button = Array.from(host.querySelectorAll("button")).find((button) =>
@@ -273,7 +273,7 @@ const codeCapabilities: AuthCapabilities = {
 };
 
 it("signs in with an emailed code when the password is blank", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(codeCapabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(codeCapabilities);
   vi.mocked(authClient.emailOtp.sendVerificationOtp).mockResolvedValue({
     data: { success: true },
     error: null,
@@ -302,7 +302,7 @@ it("signs in with an emailed code when the password is blank", async () => {
 });
 
 it("names a new account and keeps the email when going back from the code", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(codeCapabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(codeCapabilities);
   vi.mocked(authClient.emailOtp.sendVerificationOtp).mockResolvedValue({
     data: { success: true },
     error: null,
@@ -337,7 +337,7 @@ it("names a new account and keeps the email when going back from the code", asyn
 });
 
 it("sends the code on the first Continue but never submits an unfinished code", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(codeCapabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(codeCapabilities);
   vi.mocked(authClient.emailOtp.sendVerificationOtp).mockResolvedValue({
     data: { success: true },
     error: null,
@@ -358,7 +358,7 @@ it("sends the code on the first Continue but never submits an unfinished code", 
 });
 
 it("signs in with a typed password and emails a code when it is blank", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(codeCapabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(codeCapabilities);
   vi.mocked(authClient.signIn.email).mockResolvedValue({ data: {}, error: null } as never);
   await render();
   const password = host.querySelector<HTMLInputElement>('input[type="password"]')!;
@@ -377,7 +377,7 @@ it("signs in with a typed password and emails a code when it is blank", async ()
 });
 
 it("leaves the password form unchanged without email codes", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue({ ...codeCapabilities, emailCode: false });
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue({ ...codeCapabilities, emailCode: false });
   await render();
   expect(host.querySelector('input[type="password"]')).not.toBeNull();
   expect(host.querySelector<HTMLInputElement>('input[type="password"]')!.required).toBe(true);
@@ -385,7 +385,7 @@ it("leaves the password form unchanged without email codes", async () => {
 });
 
 it("introduces Accounts only after Get started without opening authorization as a render side effect", async () => {
-  vi.mocked(fetchAuthCapabilities).mockResolvedValue(capabilities);
+  vi.mocked(fetchRecoveryCapabilities).mockResolvedValue(capabilities);
   await render("up", false);
   expect(host.textContent).toContain("Welcome to Ork");
   expect(host.textContent).not.toContain("Create your Ork");

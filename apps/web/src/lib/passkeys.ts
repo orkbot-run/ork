@@ -6,7 +6,7 @@ import { t } from "@lingui/core/macro";
 import { hostMatchesPasskeyRpId } from "@orkbot/core";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { fetchAuthCapabilities } from "./auth-capabilities";
+import { fetchAuthCapabilities, fetchRecoveryCapabilities } from "./auth-capabilities";
 import type { OrkDesktop } from "./desktop";
 import { desktopBridge } from "./desktop";
 import { authErrorText } from "./user-error";
@@ -61,11 +61,11 @@ export async function passkeysSupported(
 }
 
 /** False until the deployment and browser are known to support passkeys. */
-export function usePasskeysSupported(): boolean {
+export function usePasskeysSupported(recovery = false): boolean {
   const [supported, setSupported] = useState(false);
   useEffect(() => {
     let active = true;
-    void fetchAuthCapabilities()
+    void (recovery ? fetchRecoveryCapabilities() : fetchAuthCapabilities())
       .then((capabilities) => passkeysSupported(capabilities.passkeyRpId))
       .then((value) => {
         if (active) setSupported(value);
@@ -74,7 +74,7 @@ export function usePasskeysSupported(): boolean {
     return () => {
       active = false;
     };
-  }, []);
+  }, [recovery]);
   return supported;
 }
 
