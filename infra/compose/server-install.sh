@@ -89,9 +89,26 @@ server_packages() {
   fi
 }
 
+server_secure_directory() {
+  [[ "$EUID" == 0 ]] || fail "server setup requires root; run the installation command with sudo."
+  local checked_directory="$PWD" directory_owner directory_mode
+  [[ "$checked_directory" == "$(pwd -P)" ]] || fail "the deployment directory must not use symlinks."
+  while :; do
+    [[ ! -L "$checked_directory" ]] || fail "the deployment directory must not use symlinks."
+    directory_owner=$(stat -c %u "$checked_directory") || fail "could not inspect the deployment directory."
+    directory_mode=$(stat -c %a "$checked_directory") || fail "could not inspect the deployment directory."
+    [[ "$directory_owner" == 0 && "$directory_mode" =~ ^[0-7]+$ ]] && (( (8#$directory_mode & 0022) == 0 )) || fail "the deployment directory and its parents must be owned by root and writable only by root."
+    [[ "$checked_directory" != "$PWD" ]] || (( (8#$directory_mode & 0077) == 0 )) || fail "the deployment directory must be private to root."
+    [[ "$checked_directory" != / ]] || break
+    checked_directory="${checked_directory%/*}"
+    [[ -n "$checked_directory" ]] || checked_directory=/
+  done
+}
+
 server_main() {
   # Codes and the redeem response must never be exposed by shell tracing.
   set +x
+  server_secure_directory
   local server_url='' external_proxy=auto read_code=false server_arch
   local code="${server_install_code:-}"
   export -n code
@@ -101,6 +118,7 @@ server_main() {
   unset AUTH_ACCOUNTS_ENABLED ORKBOT_BOOTSTRAP_SECRET SIGNUPS_ENABLED
   unset BETTER_AUTH_URL WEB_ORIGIN API_URL ORKBOT_HOST CADDYFILE_PATH SANDBOX_COMPUTER_EGRESS
   unset POSTGRES_PASSWORD POSTGRES_APP_PASSWORD BETTER_AUTH_SECRET ENCRYPTION_KEY SCREEN_PROXY_SECRET SANDBOX_SUPERVISOR_TOKEN
+  unset ORKBOT_UPDATER_TOKEN ORKBOT_DEPLOY_DIR ORKBOT_DOCKER_SOCKET ORKBOT_COMPOSE_FILE ORKBOT_UPDATER_IMAGE_TAG COMPOSE_PROJECT_NAME
   while (($#)); do
     case "$1" in
       --server) shift ;;
@@ -177,24 +195,38 @@ server_main() {
   server_progress_url="$server_url"
   trap server_cleanup EXIT
   timeout --foreground 60 python3 "$helper" preflight "$server_url" "$external_proxy" || fail "server preflight failed."
+  [[ "$DOWNLOAD_BASE" =~ /[0-9a-f]{40}/infra/compose$ ]] || fail "server setup requires a pinned release; use the Ork installation command."
   # Keep operator files. An installer rerun is a resume, not an implicit upgrade.
   skip_existing=true
+  local -a managed_templates=("$COMPOSE_FILE")
   required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
   for filename in "${required_files[@]}"; do download "$filename"; done
   compose_files=(-f "$COMPOSE_FILE")
   override_present=''
   if [[ -f "$OVERRIDE_FILE" ]]; then compose_files+=(-f "$OVERRIDE_FILE"); override_present=1; fi
   if [[ "$external_proxy" != true ]]; then
+    managed_templates+=(docker-compose.https.yml Caddyfile.prod)
     download docker-compose.https.yml
     download Caddyfile.prod
     python3 "$helper" ip-edge "$server_url" || fail "could not prepare HTTPS for this server."
     compose_files+=(-f docker-compose.https.yml)
   fi
+  if [[ ! -e .orkbot-compose-state.json && ! -L .orkbot-compose-state.json ]]; then
+    local template
+    for template in "${managed_templates[@]}"; do
+      curl_download "${DOWNLOAD_BASE}/${template}" "$server_runtime/$template" || fail "could not verify installation templates against the pinned release."
+      cmp -s -- "$template" "$server_runtime/$template" || fail "installation templates differ from the pinned release; operator maintenance is required."
+    done
+    python3 "$helper" record-compose-state "${managed_templates[@]}" || fail "could not record the verified installation templates."
+  fi
+  python3 "$helper" validate-compose-state "${managed_templates[@]}" || fail "installation templates need operator maintenance before updates can be enabled."
   local created_env=false
   if [[ ! -f .env ]]; then create_env; created_env=true; fi
   export ORKBOT_INSTALL_EXTERNAL_PROXY="$external_proxy"
   if [[ "$created_env" == true ]]; then
     python3 "$helper" pin-images "$DOWNLOAD_BASE" || fail "could not pin the application images."
+  elif [[ ! -e .orkbot-server.json ]]; then
+    python3 "$helper" resume-initial-pin "$DOWNLOAD_BASE" || fail "could not safely resume image pinning."
   fi
   local configured
   configured=$(timeout --foreground 60 python3 "$helper" configured "$server_url") || fail "existing server configuration needs attention."
@@ -217,10 +249,22 @@ server_main() {
   local auth_mode
   auth_mode=$(timeout --foreground 60 python3 "$helper" auth-mode "$server_url") || fail "could not validate Accounts configuration."
   if [[ "$auth_mode" == oidc ]]; then validate_accounts_config; fi
+  if [[ "$auth_mode" == native ]]; then
+    download docker-compose.updates.yml
+    compose_files+=(-f docker-compose.updates.yml)
+    local updater_files="$COMPOSE_FILE"
+    [[ -z "$override_present" ]] || updater_files+=":$OVERRIDE_FILE"
+    [[ "$external_proxy" == true ]] || updater_files+=":docker-compose.https.yml"
+    updater_files+=":docker-compose.updates.yml"
+    python3 "$helper" configure-updates "$DOWNLOAD_BASE" "${endpoint#unix://}" "$updater_files" || fail "could not configure server updates."
+  fi
   validate_required_secrets
   if [[ "$pull_never" != true ]]; then
     server_progress pulling
     timeout --foreground 900 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" pull || fail "image pull failed; credentials were kept. Rerun the same command without --code."
+  fi
+  if [[ "$auth_mode" == native ]]; then
+    timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" --profile updates-init run --rm --no-deps --pull never -T updates-init || fail "could not initialize private server update configuration."
   fi
   server_progress starting
   timeout --foreground 420 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" up -d --pull never --wait --wait-timeout 300 || fail "services did not become healthy; existing data and credentials were kept. Rerun the same command without --code."

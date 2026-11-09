@@ -1066,6 +1066,11 @@ msgstr "Uwierzytelnianie Basic ({username})"
 msgid "Bearer token"
 msgstr "Token Bearer"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr "Beta"
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "Rozliczenia"
@@ -1331,10 +1336,6 @@ msgstr "Czaty"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "Sprawdź ponownie"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "Sprawdź wdrożenie w panelu serwera"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr "Nie udało się zmienić dostępności"
 msgid "Could not change who can view this page. Try again."
 msgstr "Nie udało się zmienić uprawnień do wyświetlania tej strony. Spróbuj ponownie."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr "Nie udało się sprawdzić zgodności z serwerem."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "Nie udało się sprawdzić zapisanych danych uwierzytelniających."
@@ -1960,6 +1965,10 @@ msgstr "Nie udało się dokończyć logowania. Spróbuj ponownie lub poproś adm
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Nie udało się ukończyć aktualizacji. Spróbuj ponownie."
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr "Nie udało się potwierdzić aktualizacji"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5860,6 +5869,10 @@ msgstr "Serwer"
 msgid "Server name"
 msgstr "Nazwa serwera"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr "Serwer zaktualizowany"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr "SSO"
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO jest tymczasowo niedostępne. Spróbuj ponownie."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr "Stabilny"
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "Zaufane witryny"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "Aktualne"
 msgid "Update"
 msgstr "Aktualizuj"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr "Kanał aktualizacji"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Zaktualizuj komputer"
@@ -6852,10 +6876,15 @@ msgstr "Zaktualizować instrukcje?"
 msgid "Update Ork"
 msgstr "Zaktualizuj Orka"
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr "Zaktualizuj Orka, aby połączyć się z tym serwerem."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "Postęp aktualizacji"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "Wymagana aktualizacja"
@@ -6863,6 +6892,10 @@ msgstr "Wymagana aktualizacja"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "Zaktualizuj serwer"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr "Zaktualizuj serwer, aby kontynuować."
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

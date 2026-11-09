@@ -52,7 +52,10 @@ export const RU_MESSAGES: Record<string, string> = {
   "Update server": "Обновить сервер",
   "Automatic updates": "Автоматические обновления",
   "Deployment requested": "Развёртывание запрошено",
-  "Check deployment in server panel": "Проверьте развёртывание в панели сервера",
+  "Server updated": "Сервер обновлён",
+  Channel: "Канал",
+  Stable: "Стабильный",
+  "Could not confirm the update": "Не удалось подтвердить обновление",
   "Could not complete the update. Try again.":
     "Не удалось завершить обновление. Повторите попытку.",
   "Sign in to Accounts to continue.": "Войдите в Accounts, чтобы продолжить.",

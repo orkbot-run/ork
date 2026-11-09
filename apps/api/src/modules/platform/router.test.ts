@@ -205,6 +205,33 @@ describe("account preferences", () => {
     };
   }
 
+  it("reports the server revision to signed-in users without update configuration", async () => {
+    const { deps, actor } = preferencesDeps("robot");
+    deps.env.gitSha = "0123456789abcdef0123456789abcdef01234567";
+    deps.env.serverVersion = "v1.2.3-beta.1";
+    const client = createRouterClient(createRouter(deps), {
+      context: { actor: { ...actor, isDeploymentOwner: false } } as never,
+    });
+    await expect(client.serverUpdates.version()).resolves.toEqual({
+      revision: deps.env.gitSha,
+      version: "v1.2.3-beta.1",
+    });
+    deps.env.gitSha = undefined;
+    deps.env.serverVersion = undefined;
+    await expect(client.serverUpdates.version()).resolves.toEqual({
+      revision: null,
+      version: null,
+    });
+    deps.env.gitSha = "not-a-revision";
+    deps.env.serverVersion = "not-a-release";
+    await expect(client.serverUpdates.version()).resolves.toEqual({
+      revision: null,
+      version: null,
+    });
+    const anonymous = createRouterClient(createRouter(deps), { context: {} as never });
+    await expect(anonymous.serverUpdates.version()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
   it("records only validated screens under the authenticated actor", async () => {
     const { deps, actor } = preferencesDeps("robot");
     const capture = vi.fn();

@@ -57,8 +57,10 @@ WORKDIR /app
 COPY --from=build --chmod=755 /runtime/ ./
 RUN install -d -m 750 -o node -g node /data /app/apps/web/asset-archive
 ARG GIT_SHA
+ARG ORKBOT_SERVER_VERSION
 ENV NODE_ENV=production
 ENV GIT_SHA=$GIT_SHA
+ENV ORKBOT_SERVER_VERSION=$ORKBOT_SERVER_VERSION
 EXPOSE 3100 5173 7091
 USER node
 CMD ["pnpm", "--filter", "@orkbot/api", "start"]

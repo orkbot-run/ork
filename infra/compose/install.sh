@@ -172,43 +172,36 @@ ork_install() {
   fi
   if [ "$revision_set" = false ]; then
     ensure_python3 /etc/os-release
-    curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -o "$ork_runtime/channel.json" 'https://api.github.com/repos/orkbot-run/ork/releases/tags/desktop-preview' || {
-      echo 'Ork setup failed: could not retrieve the release channel.' >&2; return 1;
+    curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -o "$ork_runtime/release.json" 'https://api.github.com/repos/orkbot-run/ork/releases?per_page=100' || {
+      echo 'Ork setup failed: no stable server release is available.' >&2; return 1;
     }
-    asset=$(python3 -c '
+    tag=$(python3 -c '
 import json, re, sys
 try:
-    with open(sys.argv[1], encoding="utf-8") as source: release = json.load(source)
-    if release.get("tag_name") != "desktop-preview" or release.get("draft") is not False: raise ValueError()
-    assets = [a.get("url") for a in release.get("assets", []) if isinstance(a, dict) and a.get("name") == "latest.json"]
-    if len(assets) != 1 or not isinstance(assets[0], str) or not re.fullmatch(r"https://api\.github\.com/repos/orkbot-run/ork/releases/assets/[0-9]+", assets[0]): raise ValueError()
-    print(assets[0])
+    with open(sys.argv[1], encoding="utf-8") as source: releases = json.load(source)
+    if not isinstance(releases, list): raise ValueError()
+    candidates = []
+    for release in releases:
+        if not isinstance(release, dict) or release.get("draft") is not False or release.get("prerelease") is not False: continue
+        tag = release.get("tag_name")
+        match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", tag) if isinstance(tag, str) else None
+        if match: candidates.append((tuple(int(part) for part in match.groups()), tag))
+    if not candidates: raise ValueError()
+    print(max(candidates)[1])
 except (ValueError, TypeError, AttributeError, OSError): sys.exit(1)
-' "$ork_runtime/channel.json") || { echo 'Ork setup failed: the release channel metadata is invalid.' >&2; return 1; }
-    curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -H 'Accept: application/octet-stream' -o "$ork_runtime/latest.json" "$asset" || {
-      echo 'Ork setup failed: could not retrieve the release manifest.' >&2; return 1;
-    }
-    version=$(python3 -c '
-import json, re, sys
-try:
-    with open(sys.argv[1], encoding="utf-8") as source: manifest = json.load(source)
-    version = manifest.get("version")
-    if not isinstance(version, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version): raise ValueError()
-    print(version)
-except (ValueError, TypeError, AttributeError, OSError): sys.exit(1)
-' "$ork_runtime/latest.json") || { echo 'Ork setup failed: the release manifest is invalid.' >&2; return 1; }
-    curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -o "$ork_runtime/release.json" "https://api.github.com/repos/orkbot-run/ork/releases/tags/desktop-preview-$version" || {
-      echo 'Ork setup failed: could not retrieve the promoted release.' >&2; return 1;
+' "$ork_runtime/release.json") || { echo 'Ork setup failed: the stable release metadata is invalid.' >&2; return 1; }
+    curl -fsSL --connect-timeout 15 --max-time 60 --proto '=https' --proto-redir '=https' -H 'User-Agent: Ork-Installer' -o "$ork_runtime/commit.json" "https://api.github.com/repos/orkbot-run/ork/commits/$tag" || {
+      echo 'Ork setup failed: could not resolve the stable release commit.' >&2; return 1;
     }
     revision=$(python3 -c '
 import json, re, sys
 try:
-    with open(sys.argv[1], encoding="utf-8") as source: release = json.load(source)
-    sha = release.get("target_commitish")
-    if release.get("tag_name") != "desktop-preview-" + sys.argv[2] or release.get("draft") is not False or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha): raise ValueError()
+    with open(sys.argv[1], encoding="utf-8") as source: commit = json.load(source)
+    sha = commit.get("sha")
+    if not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{40}", sha): raise ValueError()
     print(sha)
 except (ValueError, TypeError, AttributeError, OSError): sys.exit(1)
-' "$ork_runtime/release.json" "$version") || { echo 'Ork setup failed: the promoted release metadata is invalid.' >&2; return 1; }
+' "$ork_runtime/commit.json") || { echo 'Ork setup failed: the stable release commit is invalid.' >&2; return 1; }
   fi
   base="https://raw.githubusercontent.com/orkbot-run/ork/$revision/infra/compose"
   ork_installer="$ork_runtime/install-images.sh"

@@ -26,6 +26,9 @@ const capability = vi.hoisted(() => ({
   nativePairing: false,
   syncPairing: vi.fn(async () => undefined),
 }));
+vi.mock("./components/ProtocolRecovery", () => ({
+  ProtocolRecovery: ({ children }: { children: ReactNode }) => children,
+}));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),

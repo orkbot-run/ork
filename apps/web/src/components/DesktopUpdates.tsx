@@ -4,7 +4,7 @@
 
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { DesktopUpdateState } from "@orkbot/contracts";
-import { Button, toast } from "@orkbot/ui-web";
+import { Button, OptionSelect, toast } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { desktopBridge } from "../lib/desktop";
@@ -83,7 +83,24 @@ function useDesktopUpdates() {
       setBusy(false);
     }
   }
-  return { state, busy, error, act, confirmedCheck };
+  async function setChannel(channel: "stable" | "beta") {
+    if (!bridge?.setChannel || pending.current) return;
+    pending.current = true;
+    revision.current++;
+    setBusy(true);
+    setError(null);
+    setConfirmedCheck(null);
+    try {
+      setState(await bridge.setChannel(channel));
+    } catch {
+      setError(t`Could not complete the update. Try again.`);
+    } finally {
+      revision.current++;
+      pending.current = false;
+      setBusy(false);
+    }
+  }
+  return { state, busy, error, act, confirmedCheck, setChannel };
 }
 
 const UpdatesContext = createContext<ReturnType<typeof useDesktopUpdates> | null>(null);
@@ -170,9 +187,10 @@ export function useSidebarUpdate() {
 }
 
 export function DesktopUpdateSection() {
+  const { t } = useLingui();
   const updates = useContext(UpdatesContext);
   if (!updates?.state) return null;
-  const { state, busy, error, act, confirmedCheck } = updates;
+  const { state, busy, error, act, confirmedCheck, setChannel } = updates;
   const ready = state.phase === "ready";
   const downloading = state.phase === "available" || state.phase === "downloading";
   return (
@@ -201,6 +219,24 @@ export function DesktopUpdateSection() {
           )}
         </Button>
       </div>
+      {state.betaAvailable ? (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="text-sm text-muted-foreground">
+            <Trans>Update channel</Trans>
+          </span>
+          <OptionSelect
+            aria-label={t`Update channel`}
+            className="w-auto min-w-28"
+            value={state.channel ?? "stable"}
+            options={[
+              { value: "stable", label: t`Stable` },
+              { value: "beta", label: t`Beta` },
+            ]}
+            disabled={busy}
+            onValueChange={(channel) => void setChannel(channel)}
+          />
+        </div>
+      ) : null}
       <p role="status" className="mt-2 text-sm text-muted-foreground">
         {error ??
           state.message ??

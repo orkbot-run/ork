@@ -92,6 +92,7 @@ import {
 } from "../../lib/response-streaming";
 import { promptSectionName } from "../../lib/section-name-prompt";
 import { useServerUpdates } from "../../lib/server-updates";
+import { currentSessionGeneration, subscribeSessionGeneration } from "../../lib/session";
 import { isSettingsLink, openFromSettingsSheet } from "../../lib/settings-sheet";
 import { ACCOUNT_SETTINGS } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
@@ -193,7 +194,39 @@ export default function Account() {
   const versionInfo = getAppVersionInfo();
   const updateLabel = formatUpdateLabel(versionInfo.update, t);
   const serverUpdates = useServerUpdates(false);
-  const versionAccessibility = [versionInfo.nativeLabel, updateLabel].filter(Boolean).join(". ");
+  const clientVersion = versionInfo.nativeLabel ? `Ork ${versionInfo.nativeLabel}` : null;
+  const sessionGeneration = useSyncExternalStore(
+    subscribeSessionGeneration,
+    currentSessionGeneration,
+  );
+  const serverKey = JSON.stringify([currentApiBase(), sessionGeneration]);
+  const [serverVersionInfo, setServerVersionInfo] = useState<{
+    key: string;
+    revision: string | null;
+    version: string | null;
+  } | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void rpc("serverUpdates/version")
+        .then(({ revision, version }) => {
+          if (active) setServerVersionInfo({ key: serverKey, revision, version });
+        })
+        .catch(() => {
+          if (active) setServerVersionInfo(null);
+        });
+      return () => {
+        active = false;
+      };
+    }, [serverKey]),
+  );
+  const serverRevision = serverVersionInfo?.key === serverKey ? serverVersionInfo.revision : null;
+  const serverRelease = serverVersionInfo?.key === serverKey ? serverVersionInfo.version : null;
+  const serverIdentity = [serverRelease, serverRevision?.slice(0, 12)].filter(Boolean).join(" ");
+  const serverVersion = serverIdentity ? `${t("Server")} ${serverIdentity}` : null;
+  const versionAccessibility = [clientVersion, updateLabel, serverVersion]
+    .filter(Boolean)
+    .join(". ");
   const approvals = useApprovalSettings(ACCOUNT_SETTINGS);
   const organizations = useOrganizations().data;
   const settingsLink = ({ title, href }: { title: string; href: Extract<Href, string> }) => (
@@ -759,16 +792,15 @@ export default function Account() {
 
         <View style={styles.about}>
           <AppMark />
-          {versionInfo.nativeLabel || updateLabel ? (
+          {clientVersion || updateLabel || serverVersion ? (
             <View
               accessibilityLabel={versionAccessibility}
               accessibilityRole="summary"
               style={styles.versionFooter}
             >
-              {versionInfo.nativeLabel ? (
-                <Text style={styles.versionLine}>{versionInfo.nativeLabel}</Text>
-              ) : null}
+              {clientVersion ? <Text style={styles.versionLine}>{clientVersion}</Text> : null}
               {updateLabel ? <Text style={styles.versionLine}>{updateLabel}</Text> : null}
+              {serverVersion ? <Text style={styles.versionLine}>{serverVersion}</Text> : null}
             </View>
           ) : null}
         </View>

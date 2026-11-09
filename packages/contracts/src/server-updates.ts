@@ -8,6 +8,7 @@ export const ServerUpdatesStatusSchema = z.object({
   available: z.boolean(),
   mode: z.enum(["manual", "automatic"]),
   channel: z.enum(["stable", "preview"]).nullable(),
+  channelSelectable: z.boolean().optional(),
   currentRevision: z.string().max(128).nullable(),
   candidate: z
     .object({ revision: z.string().regex(/^[a-f0-9]{40}$/), version: z.string().min(1).max(200) })
@@ -19,7 +20,7 @@ export const ServerUpdatesStatusSchema = z.object({
       /** The client's idempotency key correlates a response lost during API restart. */
       id: z.uuid(),
       revision: z.string().regex(/^[a-f0-9]{40}$/),
-      state: z.enum(["submitting", "requested", "unknown", "failed"]),
+      state: z.enum(["submitting", "requested", "completed", "unknown", "failed"]),
       requestedAt: z.iso.datetime(),
     })
     .nullable(),
@@ -36,5 +37,6 @@ export const ServerUpdatesPolicySchema = z
   .object({
     automatic: z.boolean(),
     expectedRevision: z.number().int().nonnegative(),
+    channel: z.enum(["stable", "preview"]).optional(),
   })
   .strict();

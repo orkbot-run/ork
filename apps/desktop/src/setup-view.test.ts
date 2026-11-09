@@ -896,7 +896,7 @@ describe("bundled desktop setup", () => {
     node("selfhost").click();
     await flush();
     const value = node<HTMLTextAreaElement>("install-command").value;
-    expect(value).toBe("curl -fsSL https://install.ork.run | sh");
+    expect(value).toBe("curl -fsSL https://install.ork.run | sudo -H sh");
     expect(node("installation").hidden).toBe(false);
     expect(node("setup").hidden).toBe(true);
     expect(invoke).not.toHaveBeenCalledWith("create_server_installation");

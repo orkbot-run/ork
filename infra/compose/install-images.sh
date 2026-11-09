@@ -249,6 +249,13 @@ create_env() {
       "SANDBOX_SUPERVISOR_TOKEN=")
         printf 'SANDBOX_SUPERVISOR_TOKEN=%s\n' "$(openssl rand -hex 32)"
         ;;
+      "ORKBOT_IMAGE_TAG=edge"|"ORKBOT_COMPUTER_IMAGE_TAG=edge")
+        if [[ "$server_mode" == true && "$DOWNLOAD_BASE" =~ /([0-9a-f]{40})/infra/compose$ ]]; then
+          printf '%s=sha-%s\n' "${line%%=*}" "${BASH_REMATCH[1]}"
+        else
+          printf '%s\n' "$line"
+        fi
+        ;;
       *)
         printf '%s\n' "$line"
         ;;

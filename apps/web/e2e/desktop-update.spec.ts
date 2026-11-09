@@ -18,6 +18,8 @@ test("desktop update can be checked in settings, deferred, and installed from th
       percent: null as number | null,
       message: null as string | null,
       checkedAt: "2026-01-01T00:00:00.000Z",
+      channel: "stable",
+      betaAvailable: true,
     };
     Object.defineProperty(window, "orkbotDesktop", {
       value: {
@@ -31,6 +33,10 @@ test("desktop update can be checked in settings, deferred, and installed from th
         oauth: { onCallback: () => () => {} },
         update: {
           state: async () => state,
+          setChannel: async (channel: string) => {
+            state = { ...state, channel };
+            return state;
+          },
           check: async () => {
             if (++checks === 1) {
               // Native rate limiting can return the latest successful automatic check.
@@ -68,6 +74,14 @@ test("desktop update can be checked in settings, deferred, and installed from th
   await openUserSettings(page, "updates");
   const settings = page.getByTestId("desktop-update-settings");
   await expect(settings.getByText("v0.1.2")).toBeVisible();
+  const channel = settings.getByRole("combobox", { name: "Update channel" });
+  await expect(channel).toContainText("Stable");
+  await channel.click();
+  await page.getByRole("option", { name: "Beta" }).click();
+  await expect(channel).toContainText("Beta");
+  await captureScreenshot(page, testInfo, "desktop-update-channel");
+  await channel.click();
+  await page.getByRole("option", { name: "Stable" }).click();
   await expect(settings.getByText("Up to date", { exact: true })).toHaveCount(0);
   await settings.getByRole("button", { name: "Check for updates" }).click();
   await expect(settings.getByRole("status")).toHaveText("Up to date");

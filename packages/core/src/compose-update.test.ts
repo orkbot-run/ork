@@ -140,6 +140,15 @@ describe("release tag resolution", () => {
     expect(selectLatestReleaseTag(["main", "latest"])).toBeNull();
     expect(selectLatestReleaseTag([])).toBeNull();
   });
+
+  it("orders stable and prereleases by semantic precedence for the preview channel", () => {
+    expect(selectLatestReleaseTag(["v1.2.0-beta.9", "v1.2.0-beta.10"], true)).toBe(
+      "v1.2.0-beta.10",
+    );
+    expect(selectLatestReleaseTag(["v1.2.0-beta.10", "v1.2.0"], true)).toBe("v1.2.0");
+    expect(selectLatestReleaseTag(["v1.2.0", "v1.3.0-beta.1"], true)).toBe("v1.3.0-beta.1");
+    expect(selectLatestReleaseTag(["v1.3.0-beta.01", "v1.2.0"], true)).toBe("v1.2.0");
+  });
 });
 
 describe("strategy and mode selection", () => {

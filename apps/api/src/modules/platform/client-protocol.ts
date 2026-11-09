@@ -6,6 +6,7 @@ import {
   CLIENT_PROTOCOL_HEADER,
   CLIENT_UPDATE_REQUIRED,
   CLIENT_UPDATE_REQUIRED_STATUS,
+  isServerUpdateRecoveryRequest,
   parseClientProtocolHeader,
   SERVER_PROTOCOL_RANGE,
   supportsProtocolVersion,
@@ -17,6 +18,12 @@ export function clientProtocolMiddleware(
   supported: Readonly<ProtocolRange> = SERVER_PROTOCOL_RANGE,
 ): MiddlewareHandler {
   return async (c, next) => {
+    if (
+      isServerUpdateRecoveryRequest(c.req.path, c.req.method, c.req.header(CLIENT_PROTOCOL_HEADER))
+    ) {
+      await next();
+      return;
+    }
     const version = parseClientProtocolHeader(c.req.header(CLIENT_PROTOCOL_HEADER));
     if (version === null || !supportsProtocolVersion(supported, version)) {
       const status = version === null ? 400 : CLIENT_UPDATE_REQUIRED_STATUS;

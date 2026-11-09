@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache configuration is preserved. Standalone isolation is an Ork addition.
+
 import { randomBytes } from "node:crypto";
 import path from "node:path";
 import {
@@ -22,6 +27,7 @@ const UPDATER_SERVICE = "updater";
 export const MAX_STEP_OUTPUT = 8_000;
 
 export interface UpdaterConfig {
+  mode?: "standalone" | "operator";
   /** Bind-mounted at the same absolute path it has on the host, so Compose resolves identically. */
   deployDir: string;
   /** Overlay order, absolute. Each becomes its own `--file`. */
@@ -96,6 +102,7 @@ export function resolveUpdaterConfig(env: NodeJS.ProcessEnv): UpdaterConfig {
     throw new Error("ORKBOT_UPDATER_PORT is not a port number.");
   }
   return {
+    mode: env.ORKBOT_UPDATER_MODE === "standalone" ? "standalone" : "operator",
     deployDir,
     composeFiles: composeFiles.map((composeFile) => path.posix.join(deployDir, composeFile)),
     updateServices,

@@ -6,10 +6,12 @@ import { readFileSync } from "node:fs";
 import type { MinimumClientBuilds } from "@orkbot/contracts";
 import {
   CLIENT_BUILD_HEADER,
+  CLIENT_PROTOCOL_HEADER,
   CLIENT_UPDATE_REQUIRED,
   CLIENT_UPDATE_REQUIRED_STATUS,
   clientUpdateRequired,
   isBuildId,
+  isServerUpdateRecoveryRequest,
   SERVER_BUILD_HEADER,
 } from "@orkbot/contracts";
 import type { MiddlewareHandler } from "hono";
@@ -33,7 +35,14 @@ export function clientBuildMiddleware(options: {
   minimums: MinimumClientBuilds;
 }): MiddlewareHandler {
   return async (c, next) => {
-    if (clientUpdateRequired(c.req.header(CLIENT_BUILD_HEADER), options.minimums)) {
+    if (
+      !isServerUpdateRecoveryRequest(
+        c.req.path,
+        c.req.method,
+        c.req.header(CLIENT_PROTOCOL_HEADER),
+      ) &&
+      clientUpdateRequired(c.req.header(CLIENT_BUILD_HEADER), options.minimums)
+    ) {
       // The oRPC error shape, so web and mobile clients read it like any other RPC failure.
       return c.json(
         {

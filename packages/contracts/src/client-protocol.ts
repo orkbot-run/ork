@@ -6,6 +6,26 @@ import protocolVersion from "./client-protocol-version.json" with { type: "json"
 
 export const CLIENT_PROTOCOL_HEADER = "x-orkbot-protocol";
 export const CLIENT_PROTOCOL_VERSION = protocolVersion;
+/** The update-only recovery protocol stays at version one across future RPC revisions. */
+export const SERVER_UPDATE_RECOVERY_PROTOCOL = 1;
+
+export function isServerUpdateRecoveryRequest(
+  path: string,
+  method: string,
+  header: string | null | undefined,
+): boolean {
+  return (
+    method === "POST" &&
+    header === String(SERVER_UPDATE_RECOVERY_PROTOCOL) &&
+    [
+      "/rpc/serverUpdates/version",
+      "/rpc/serverUpdates/status",
+      "/rpc/serverUpdates/check",
+      "/rpc/serverUpdates/apply",
+      "/rpc/serverUpdates/policy",
+    ].includes(path)
+  );
+}
 
 const protocolVersionSchema = z.number().int().positive();
 

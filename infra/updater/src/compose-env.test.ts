@@ -54,6 +54,7 @@ const NOT_PASSED: Record<string, string> = {
   EMAIL_EMULATOR: "ignored when NODE_ENV=production",
   AWS_KMS_PROFILE: "for maintainer laptops; servers use AWS_KMS_ACCESS_KEY_ID and its secret",
   GIT_SHA: "baked into the image at build time; a pass-through entry would unset it",
+  ORKBOT_SERVER_VERSION: "baked into release images; a pass-through entry would unset it",
   SHELL: "host shell for the desktop computer, which only the desktop app runs",
   CLOUDFLARE_ACCOUNT_ID: "written into Pi's environment from stored gateway settings",
   CLOUDFLARE_GATEWAY_ID: "written into Pi's environment from stored gateway settings",

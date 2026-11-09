@@ -6,6 +6,24 @@
 
 # Upgrading
 
+## Linux server installations
+
+New installations made with the Linux server installer include a separate update
+service. The initialized Accounts owner can check for server updates and request one
+from Ork's Updates settings. Stable is the default channel; Beta offers published
+prereleases. A request is complete only when the updated server confirms the new
+revision. If the result is uncertain, inspect the deployment before retrying.
+
+The updater has access to the Docker socket and the root-owned installation directory.
+Keep that directory and all of its parent directories owned by root and unwritable
+by other users. An installation already managed by a deployment panel must use its
+panel integration instead. Do not enable both deployment managers for one installation.
+
+The updater can restore the previous cached application image after a failed deploy,
+but it does not reverse database migrations. Back up the database, configuration and
+bot data, and check migration compatibility before restoring an older release.
+Installations created before the update service require a separate operator migration.
+
 ## Self-hosted Compose behind a deployment panel
 
 For `docker-compose.selfhost.yml`, keep the panel as the deployment manager.
@@ -250,7 +268,9 @@ docker compose --env-file .env -f infra/compose/docker-compose.prod.yml \
 
 It exposes `/health`, `/state`, `/plan`, `/apply`, and `/rollback` at `http://updater:7092` with
 `ORKBOT_UPDATER_TOKEN`. Operator CLI upgrades above do not need it; the sidecar is for automated
-apply/rollback over that private HTTP API. Only deployment tooling calls it; app accounts have no update endpoint, and the application API does not receive the updater token.
+apply/rollback over that private HTTP API. The production profile leaves it available
+to deployment tooling. Installer-managed Linux servers use a separate scoped deployment
+route, with a private token and an explicit binding to the initialized Accounts owner.
 
 The API cannot update itself — its image has no `.git`, and nothing inside the container would
 restart it — so the work happens in a separate `updater` container that outlives the recreate:

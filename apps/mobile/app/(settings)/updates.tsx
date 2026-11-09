@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { MenuView } from "@expo/ui/community/menu";
 import { serverUpdateCanApply } from "@orkbot/core";
 import { ActivityIndicator, ScrollView, Text } from "react-native";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "../../components/settings-group";
@@ -17,12 +18,14 @@ export default function Updates() {
   const request = status.lastRequest?.state;
   const notice =
     state.uncertain || request === "unknown"
-      ? t("Check deployment in server panel")
-      : request === "requested"
-        ? t("Deployment requested")
-        : state.error || status.error
-          ? t("Could not complete the update. Try again.")
-          : null;
+      ? t("Could not confirm the update")
+      : request === "completed"
+        ? t("Server updated")
+        : request === "requested"
+          ? t("Deployment requested")
+          : state.error || status.error
+            ? t("Could not complete the update. Try again.")
+            : null;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: native.groupedPage }}
@@ -31,7 +34,30 @@ export default function Updates() {
       <SettingsGroup label={t("Server")}>
         <SettingsRow title={t("Server")} value={status.currentRevision?.slice(0, 12)} />
         {status.candidate ? <SettingsRow title={status.candidate.version} /> : null}
-        {status.channel === "preview" ? <SettingsRow title={t("Preview")} /> : null}
+        {status.channelSelectable ? (
+          <MenuView
+            title={t("Channel")}
+            actions={[
+              { id: "stable", title: t("Stable") },
+              { id: "preview", title: "Beta" },
+            ]}
+            onPressAction={(event) => {
+              const channel = event.nativeEvent.event;
+              if (!state.busy && (channel === "stable" || channel === "preview"))
+                void updates.channel(channel);
+            }}
+          >
+            <SettingsRow
+              title={t("Channel")}
+              value={status.channel === "preview" ? "Beta" : t("Stable")}
+              accessibilityRole="button"
+              disabled={Boolean(state.busy)}
+              chevron="down"
+            />
+          </MenuView>
+        ) : status.channel === "preview" ? (
+          <SettingsRow title={t("Preview")} />
+        ) : null}
         <SettingsRow
           title={t("Check for updates")}
           accessibilityRole="button"

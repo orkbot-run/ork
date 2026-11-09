@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { describe, expect, it, vi } from "vitest";
-import { createEasypanelServerUpdateAdapter } from "./easypanel-server-updates.js";
+import {
+  createEasypanelServerUpdateAdapter,
+  createOfficialServerUpdateDiscovery,
+} from "./easypanel-server-updates.js";
 
 const trigger = "https://panel.example.test/api/compose/deploy/fixture-deploy-token";
 const revision = "a".repeat(40);
@@ -61,6 +64,37 @@ function fixture(
 }
 
 describe("configured channel deployment adapter", () => {
+  it("offers a newer stable release on the beta channel", async () => {
+    const { fetch } = fixture("preview", {
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100": () =>
+        Response.json([
+          { tag_name: "v1.2.3-beta.10", prerelease: true, draft: false },
+          { tag_name: "v1.2.3", prerelease: false, draft: false },
+          { tag_name: "v1.2.3-beta.2", prerelease: true, draft: false },
+        ]),
+    });
+    const check = createOfficialServerUpdateDiscovery(
+      { channel: "preview", currentRevision: "9".repeat(40), previewRelease: true },
+      { fetch },
+    );
+    await expect(check()).resolves.toEqual({ revision, version: "v1.2.3" });
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/manifests/v1.2.3"))).toBe(true);
+  });
+  it("uses a published prerelease tag for standalone beta instead of edge", async () => {
+    const { fetch } = fixture("preview", {
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100": () =>
+        Response.json([{ tag_name: "v2.0.0-beta.1", prerelease: true, draft: false }]),
+    });
+    const check = createOfficialServerUpdateDiscovery(
+      { channel: "preview", currentRevision: "9".repeat(40), previewRelease: true },
+      { fetch },
+    );
+    await expect(check()).resolves.toEqual({ revision, version: "v2.0.0-beta.1" });
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/manifests/v2.0.0-beta.1"))).toBe(
+      true,
+    );
+    expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/manifests/edge"))).toBe(false);
+  });
   it("checks official stable release, full commit and matching published rolling/immutable manifests", async () => {
     const { adapter, fetch } = fixture();
     await expect(adapter.check()).resolves.toEqual({ revision, version: "v1.2.3" });

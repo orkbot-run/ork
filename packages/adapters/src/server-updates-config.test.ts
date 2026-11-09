@@ -42,16 +42,27 @@ afterEach(() => {
 });
 
 describe("private operator update configuration", () => {
+  it("permits a pending owner only for a standalone installer", () => {
+    const pending = {
+      ...config,
+      controllerAccountKey: null,
+      adapter: { kind: "standalone", token: "a".repeat(32) },
+    };
+    expect(parseServerUpdatesConfig(pending)).toEqual(pending);
+    expect(() => parseServerUpdatesConfig({ ...config, controllerAccountKey: null })).toThrow();
+    expect(() =>
+      parseServerUpdatesConfig({ ...pending, adapter: { ...pending.adapter, token: "short" } }),
+    ).toThrow();
+  });
   it.each(["/api/compose/deploy/", "/api/deploy/"])(
     "accepts the scoped HTTPS deployment trigger at %s",
     (path) => {
       const deploymentTrigger = `https://panel.example.test${path}fixture-deploy-token`;
-      expect(
-        parseServerUpdatesConfig({
-          ...config,
-          adapter: { ...config.adapter, deploymentTrigger },
-        }).adapter.deploymentTrigger,
-      ).toBe(deploymentTrigger);
+      const parsed = parseServerUpdatesConfig({
+        ...config,
+        adapter: { ...config.adapter, deploymentTrigger },
+      });
+      expect(parsed.adapter).toEqual({ kind: "easypanel", deploymentTrigger });
     },
   );
   it("is disabled when absent and atomically persists separate private configuration", () => {

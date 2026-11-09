@@ -31,6 +31,8 @@ export interface DesktopUpdateState {
   percent: number | null;
   message: string | null;
   checkedAt: string | null;
+  channel?: "stable" | "beta";
+  betaAvailable?: boolean;
 }
 
 export interface OrkDesktopUpdate {
@@ -39,6 +41,7 @@ export interface OrkDesktopUpdate {
   download: () => Promise<DesktopUpdateState>;
   /** Quits and relaunches into the downloaded release; only useful once `phase` is `ready`. */
   install: () => Promise<DesktopUpdateState>;
+  setChannel?: (channel: "stable" | "beta") => Promise<DesktopUpdateState>;
 }
 
 export interface OrkDesktopOAuthCallback {

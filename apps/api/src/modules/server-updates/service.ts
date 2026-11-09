@@ -39,7 +39,20 @@ export function createServerUpdates(options: {
   )
     throw new Error("Invalid update control binding");
   const { prisma, adapter, delegatedAccountKey } = options;
-  const store = serverUpdateStore(prisma, { ...options, channel: adapter.channel });
+  const storeFor = (channel: "stable" | "preview") =>
+    serverUpdateStore(prisma, {
+      ...options,
+      channel,
+      channelSelectable: adapter.channelSelectable === true,
+    });
+  const store = storeFor(adapter.channel);
+  async function channelStore() {
+    const control = await store.control();
+    if (control.channel !== "stable" && control.channel !== "preview")
+      throw new ServerUpdateConflict("Invalid channel");
+    const channel: "stable" | "preview" = control.channel;
+    return { channel, store: storeFor(channel) };
+  }
   const pending = new Set<Promise<unknown>>();
   let timer: ReturnType<typeof setInterval> | undefined;
   let stopped = false;
@@ -90,7 +103,21 @@ export function createServerUpdates(options: {
       control.candidateRevision !== options.currentRevision
         ? { revision: control.candidateRevision, version: control.candidateVersion }
         : null;
-    const state = last?.state === "queued" ? "submitting" : last?.state;
+    let state = last?.state === "queued" ? "submitting" : last?.state;
+    if (last && adapter.operation && ["requested", "unknown", "submitting"].includes(state ?? "")) {
+      const operation = await adapter.operation();
+      if (
+        operation?.idempotencyKey === last.idempotencyKey &&
+        operation.revision === last.revision
+      ) {
+        if (operation.state === "succeeded" && options.currentRevision === last.revision)
+          state = "completed";
+        else if (operation.state === "failed") state = "failed";
+        else if (operation.state === "unknown") state = "unknown";
+        else if (operation.state === "accepted" || operation.state === "running")
+          state = "requested";
+      }
+    }
     return {
       available: true,
       mode:
@@ -100,7 +127,8 @@ export function createServerUpdates(options: {
         currentOwnerId
           ? "automatic"
           : "manual",
-      channel: adapter.channel,
+      channel: control.channel as "stable" | "preview",
+      channelSelectable: adapter.channelSelectable === true,
       currentRevision: options.currentRevision,
       candidate,
       lastCheckedAt: control.lastCheckedAt?.toISOString() ?? null,
@@ -120,13 +148,14 @@ export function createServerUpdates(options: {
           : null,
     };
   }
-  async function checkCandidate(automatic: boolean) {
+  async function checkCandidate(automatic: boolean, periodic = false) {
     const ownerUserId = automatic ? await owner() : undefined;
     if (automatic && !ownerUserId) return false;
-    const lease = await store.claimCheck(automatic, ownerUserId ?? undefined);
+    const active = await channelStore();
+    const lease = await active.store.claimCheck(automatic, ownerUserId ?? undefined, periodic);
     if (!lease) return false;
     try {
-      const candidate = await adapter.check();
+      const candidate = await adapter.check(active.channel);
       if (
         candidate &&
         (!/^[a-f0-9]{40}$/.test(candidate.revision) ||
@@ -134,9 +163,9 @@ export function createServerUpdates(options: {
           candidate.version.length > 200)
       )
         throw new Error("Invalid update candidate");
-      return store.finishCheck(lease, candidate, false);
+      return active.store.finishCheck(lease, candidate, false);
     } catch {
-      await store.finishCheck(lease, null, true);
+      await active.store.finishCheck(lease, null, true);
       return false;
     }
   }
@@ -147,7 +176,8 @@ export function createServerUpdates(options: {
     const control = await store.control();
     if (
       control.delegatedAccountKey !== request.delegatedAccountKey ||
-      control.channel !== adapter.channel ||
+      (!adapter.channelSelectable && control.channel !== adapter.channel) ||
+      control.policyRevision !== request.policyRevision ||
       (request.automatic &&
         (!control.automatic ||
           control.consentedAccountKey !== delegatedAccountKey ||
@@ -169,10 +199,16 @@ export function createServerUpdates(options: {
     // The adapter rechecks eligibility outside transactions, then checks live authority before POST.
     let submissionAuthorized = false;
     try {
-      await adapter.submit(request.revision, async () => {
-        await authorizeSubmission(request, actor);
-        submissionAuthorized = true;
-      });
+      const { channel } = await channelStore();
+      await adapter.submit(
+        request.revision,
+        async () => {
+          await authorizeSubmission(request, actor);
+          submissionAuthorized = true;
+        },
+        request.idempotencyKey,
+        channel,
+      );
       await store.settle(request.id, "requested");
     } catch {
       await store.settle(request.id, submissionAuthorized ? "unknown" : "failed");
@@ -184,6 +220,10 @@ export function createServerUpdates(options: {
     await store.ensure();
     await store.recover();
     const control = await store.control();
+    if (!control.automatic) {
+      await checkCandidate(false, true);
+      return;
+    }
     if (
       !control.automatic ||
       control.consentedAccountKey !== delegatedAccountKey ||
@@ -200,7 +240,8 @@ export function createServerUpdates(options: {
       !options.currentRevision
     )
       return;
-    const queued = await store.queue({
+    const active = await channelStore();
+    const queued = await active.store.queue({
       revision: updated.candidateRevision,
       idempotencyKey: randomUUID(),
       automatic: true,
@@ -236,7 +277,8 @@ export function createServerUpdates(options: {
     ) =>
       action(actor, async () => {
         // The candidate is only a hint: this adapter redeploys its operator-configured channel.
-        const queued = await store.queue({
+        const active = await channelStore();
+        const queued = await active.store.queue({
           revision: input.candidateRevision,
           idempotencyKey: input.idempotencyKey,
           automatic: false,
@@ -244,9 +286,32 @@ export function createServerUpdates(options: {
         if (queued?.created) track(system(() => dispatch(queued.request, { ...actor })));
         return snapshot();
       }),
-    policy: (actor: ServerUpdateActor, input: { automatic: boolean; expectedRevision: number }) =>
+    policy: (
+      actor: ServerUpdateActor,
+      input: { automatic: boolean; expectedRevision: number; channel?: "stable" | "preview" },
+    ) =>
       action(actor, async () => {
-        await store.policy(input.automatic, input.expectedRevision, actor.userId);
+        const active = await channelStore();
+        if (input.channel && input.channel !== active.channel) {
+          const last = await store.latest();
+          if (last && ["queued", "submitting", "requested", "unknown"].includes(last.state)) {
+            const operation = await adapter.operation?.();
+            if (
+              !operation ||
+              operation.idempotencyKey !== last.idempotencyKey ||
+              operation.revision !== last.revision ||
+              (operation.state !== "failed" &&
+                !(operation.state === "succeeded" && options.currentRevision === last.revision))
+            )
+              throw new ServerUpdateConflict("The last deployment has not been resolved");
+          }
+        }
+        await active.store.policy(
+          input.automatic,
+          input.expectedRevision,
+          actor.userId,
+          input.channel,
+        );
         return snapshot();
       }),
     start() {
@@ -264,3 +329,76 @@ export function createServerUpdates(options: {
   };
 }
 export type ServerUpdatesService = ReturnType<typeof createServerUpdates>;
+
+/** Bind the initialized Accounts owner once for a locally installed standalone server. */
+export function createPendingServerUpdates(
+  options: Omit<Parameters<typeof createServerUpdates>[0], "delegatedAccountKey"> & {
+    delegatedAccountKey: null;
+  },
+): ServerUpdatesService {
+  let active: ServerUpdatesService | undefined;
+  let pending: Promise<ServerUpdatesService | null> | undefined;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let stopped = false;
+  async function resolve(): Promise<ServerUpdatesService | null> {
+    if (stopped) return null;
+    if (active) return active;
+    pending ??= runAsSystem("bind initialized standalone update owner", async () => {
+      const previous = await options.prisma.serverUpdateControl.findUnique({
+        where: { id: options.installationId },
+      });
+      const ownerKey =
+        previous?.delegatedAccountKey ??
+        (
+          await options.prisma.deploymentSettings.findUnique({
+            where: { id: "default" },
+            select: { nativeAccountsOwnerKey: true },
+          })
+        )?.nativeAccountsOwnerKey;
+      if (!ownerKey || !/^[a-f0-9]{64}$/.test(ownerKey)) return null;
+      const bound = await options.prisma.serverUpdateControl.upsert({
+        where: { id: options.installationId },
+        create: {
+          id: options.installationId,
+          delegatedAccountKey: ownerKey,
+          channel: options.adapter.channel,
+        },
+        update: {},
+      });
+      if (stopped) return null;
+      // Upsert preserves the first binding even when independent API instances race.
+      active = createServerUpdates({ ...options, delegatedAccountKey: bound.delegatedAccountKey });
+      active.start();
+      return active;
+    }).finally(() => {
+      pending = undefined;
+    });
+    return pending;
+  }
+  return {
+    status: async (...args) => (await resolve())?.status(...args) ?? unavailableServerUpdates(),
+    check: async (...args) => (await resolve())?.check(...args) ?? unavailableServerUpdates(),
+    apply: async (...args) => {
+      const service = await resolve();
+      if (!service) throw new ORPCError("FORBIDDEN");
+      return service.apply(...args);
+    },
+    policy: async (...args) => {
+      const service = await resolve();
+      if (!service) throw new ORPCError("FORBIDDEN");
+      return service.policy(...args);
+    },
+    start() {
+      if (timer || stopped) return;
+      void resolve().catch(() => undefined);
+      timer = setInterval(() => void resolve().catch(() => undefined), 60_000);
+      timer.unref?.();
+    },
+    async stop() {
+      stopped = true;
+      if (timer) clearInterval(timer);
+      await pending?.catch(() => undefined);
+      await active?.stop();
+    },
+  };
+}

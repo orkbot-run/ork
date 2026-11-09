@@ -83,6 +83,10 @@ pub enum Command {
     UpdateDownload,
     #[serde(rename = "update.install")]
     UpdateInstall,
+    #[serde(rename = "update.setChannel")]
+    UpdateSetChannel {
+        channel: crate::updates::UpdateChannel,
+    },
     #[serde(rename = "oauth.open")]
     OAuthOpen { url: String },
     #[serde(rename = "oauth.cancel")]

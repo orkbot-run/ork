@@ -456,6 +456,9 @@ export const appContract = {
   },
   /** Operator-delegated channel updates. Acknowledgement confirms a deployment request. */
   serverUpdates: {
+    version: oc.output(
+      z.object({ revision: z.string().nullable(), version: z.string().nullable() }),
+    ),
     status: oc.output(ServerUpdatesStatusSchema),
     check: oc.input(ServerUpdatesCheckSchema).output(ServerUpdatesStatusSchema),
     apply: oc.input(ServerUpdatesApplySchema).output(ServerUpdatesStatusSchema),

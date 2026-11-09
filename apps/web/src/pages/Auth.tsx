@@ -30,7 +30,7 @@ import { PasskeySignIn } from "../components/PasskeySignIn";
 import { signInWithNativeAccounts } from "../lib/accounts-login";
 import { authClient } from "../lib/auth";
 import type { AuthCapabilities } from "../lib/auth-capabilities";
-import { fetchAuthCapabilities } from "../lib/auth-capabilities";
+import { fetchAuthCapabilities, fetchRecoveryCapabilities } from "../lib/auth-capabilities";
 import { desktopBridge } from "../lib/desktop";
 import { clearSpaceSelection } from "../lib/rpc";
 import { runSsoFlow } from "../lib/sso-flow";
@@ -43,7 +43,7 @@ const fieldClass = "mt-2 h-12 rounded-xl px-4 text-base md:text-base";
 const CODE_LENGTH = 6;
 export const submitClass = "mt-3 h-12 w-full rounded-xl text-base";
 
-export function AuthPage({ mode }: { mode: AuthMode }) {
+export function AuthPage({ mode, recovery = false }: { mode: AuthMode; recovery?: boolean }) {
   const { t } = useLingui();
   const [searchParams, setSearchParams] = useSearchParams();
   const [welcomeOrk] = useState(welcomeOrkId);
@@ -94,7 +94,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     setReset(null);
     setCapabilityError(false);
     let active = true;
-    void fetchAuthCapabilities()
+    void (recovery ? fetchRecoveryCapabilities() : fetchAuthCapabilities())
       .then((capabilities) => {
         if (active) setReset(capabilities);
       })
@@ -108,7 +108,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       // keeps its own time bound.
       active = false;
     };
-  }, [mode, capabilityAttempt]);
+  }, [mode, capabilityAttempt, recovery]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();

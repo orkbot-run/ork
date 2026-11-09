@@ -18,8 +18,7 @@ Start with the workflows in `.github/workflows/`. They use Ork repository paths 
 | `publish-playwright-report.yml` | Publishes report links only after relevant browser test runs. S3 galleries are optional. |
 | `desktop-macos-screenshot.yml` | Manual Tauri setup screenshot on a disposable macOS runner. |
 | `mobile-android-screenshots.yml` | Diagnostic Android screenshots and artifacts. S3 publication is explicit. |
-| `desktop-tauri.yml` | Tauri checks, native builds and optional signed Preview artifacts. |
-| `desktop-tauri-publish.yml` | Publishes a complete Preview channel after CI and all native desktop builds pass. |
+| `desktop-tauri.yml` | Tauri checks and diagnostic builds, plus signed stable and beta releases. |
 | `release-android-apk.yml` | A development-signed diagnostic APK on a GitHub runner by default. EAS production publication is explicit. |
 | `release-mobile.yml` | Android diagnostic build by default. iOS submission is an explicit option requiring Expo and Apple accounts. |
 | `model-catalog-bump.yml` | Update the model catalog and verify it. PR creation requires the repository/organization bot policy below or a dedicated PAT. |
@@ -70,12 +69,11 @@ Choose the iOS submission input explicitly. Missing Expo or Apple configuration 
 ## Tauri desktop builds and updates
 
 `desktop-tauri.yml` builds macOS Apple Silicon and Intel, Windows x64 and Linux x64.
-Pull requests produce diagnostic artifacts. Enable signed Preview builds from main
-with `TAURI_PREVIEW_RELEASE_ENABLED=true`, the `TAURI_UPDATER_PUBLIC_KEY` variable,
-and the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets.
-
-`desktop-tauri-publish.yml` promotes the update manifest after CI and every native
-build pass for the same main revision. Installed Preview apps check hourly and
+Main and pull requests produce diagnostic artifacts. Signed releases require the
+`TAURI_UPDATER_PUBLIC_KEY` variable and the `TAURI_SIGNING_PRIVATE_KEY` and
+`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secrets. A published stable or beta release
+starts the builds and promotes its update manifest after CI and every native build
+pass for the same revision. Installed apps check hourly and
 download new versions automatically, then ask before restarting to install them.
 macOS publication requires Developer ID signing, notarization and Gatekeeper checks.
 Configure the six Apple signing secrets listed in the desktop release guide.

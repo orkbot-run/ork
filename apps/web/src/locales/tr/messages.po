@@ -1066,6 +1066,11 @@ msgstr "Temel kimlik doğrulama ({username})"
 msgid "Bearer token"
 msgstr "Bearer token"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "Faturalandırma"
@@ -1331,10 +1336,6 @@ msgstr "Sohbetler"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "Tekrar kontrol et"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "Sunucu panelinde dağıtımı kontrol edin"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr "Kullanılabilir alanlar değiştirilemedi"
 msgid "Could not change who can view this page. Try again."
 msgstr "Bu sayfayı kimin görebileceği değiştirilemedi. Tekrar deneyin."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "Kayıtlı kimlik bilgileri kontrol edilemedi."
@@ -1960,6 +1965,10 @@ msgstr ""
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Güncelleme tamamlanamadı. Tekrar dene."
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5860,6 +5869,10 @@ msgstr "Sunucu"
 msgid "Server name"
 msgstr "Sunucu adı"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr "SSO"
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO geçici olarak kullanılamıyor. Yeniden deneyin."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "Güvenilen siteler"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "Güncel"
 msgid "Update"
 msgstr "Güncelle"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Bilgisayarı güncelle"
@@ -6852,10 +6876,15 @@ msgstr "Talimatlar güncellensin mi?"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "İlerlemeyi güncelle"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "Güncelleme gerekli"
@@ -6863,6 +6892,10 @@ msgstr "Güncelleme gerekli"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "Sunucuyu güncelle"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

@@ -52,6 +52,7 @@ fn main() {
         "ORKBOT_ENABLE_AUTO_UPDATE",
         "ORKBOT_DISABLE_AUTO_UPDATE",
         "TAURI_UPDATER_ENDPOINT",
+        "TAURI_UPDATER_BETA_ENDPOINT",
         "TAURI_UPDATER_PUBLIC_KEY",
     ] {
         println!("cargo:rerun-if-env-changed={variable}");

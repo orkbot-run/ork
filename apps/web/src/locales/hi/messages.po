@@ -1066,6 +1066,11 @@ msgstr ""
 msgid "Bearer token"
 msgstr "बियरर टोकन"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr ""
@@ -1331,10 +1336,6 @@ msgstr "चैट"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr ""
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "सर्वर पैनल में डिप्लॉयमेंट जाँचें"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "यह नहीं बदला जा सका कि इस पेज को कौन देख सकता है। फिर कोशिश करें।"
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "संग्रहीत क्रेडेंशियल जाँचे नहीं जा सके।"
@@ -1959,6 +1964,10 @@ msgstr ""
 #: src/components/DesktopUpdates.tsx
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
+msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -5860,6 +5869,10 @@ msgstr "सर्वर"
 msgid "Server name"
 msgstr "सर्वर का नाम"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO अस्थायी रूप से उपलब्ध नहीं है। फिर कोशिश करें।"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "विश्वसनीय साइटें"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr ""
 msgid "Update"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "कंप्यूटर अपडेट करें"
@@ -6852,10 +6876,15 @@ msgstr "निर्देश अपडेट करें?"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "अपडेट आवश्यक है"
@@ -6863,6 +6892,10 @@ msgstr "अपडेट आवश्यक है"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "सर्वर अपडेट करें"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

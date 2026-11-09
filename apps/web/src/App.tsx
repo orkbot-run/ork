@@ -21,6 +21,7 @@ import { CallLayout } from "./components/call/CallLayout";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { MarkdownLinkPrompt } from "./components/markdown-link-prompt";
 import { PageLoading } from "./components/PageLoading";
+import { ProtocolRecovery } from "./components/ProtocolRecovery";
 import { SubscriptionGate } from "./components/SubscriptionGate";
 import { authClient } from "./lib/auth";
 import { getTicketBoardEnabled, subscribeTicketBoardEnabled } from "./lib/bootstrap";
@@ -101,7 +102,9 @@ export function App() {
           ) : window.location.pathname === "/integrations/callback" ? (
             <IntegrationCallbackPage />
           ) : (
-            <SessionApp />
+            <ProtocolRecovery>
+              <SessionApp />
+            </ProtocolRecovery>
           )}
         </ErrorBoundary>
       </LinkFaviconsContext.Provider>

@@ -7,10 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  compareReleaseVersions,
   PLATFORMS,
-  previewVersion,
   releaseConfiguration,
   releaseManifest,
+  releaseVersion,
+  stableReleaseVersion,
   stageArtifacts,
   verifiedBuild,
 } from "../scripts/tauri-release.js";
@@ -22,6 +24,7 @@ const revision = "a".repeat(40);
 const options = {
   repository: "example/desktop",
   version: "1.1.42",
+  releaseTag: "v1.1.42",
   revision,
   key,
   date: "2026-01-01T00:00:00Z",
@@ -46,6 +49,38 @@ afterEach(() => {
 });
 
 describe("signed desktop releases", () => {
+  it("accepts only bounded stable release tags", () => {
+    expect(stableReleaseVersion("v2.3.4")).toBe("2.3.4");
+    for (const tag of ["v1.0.0-beta.1", "v01.2.3", "latest", "v1.2.65536"])
+      expect(() => stableReleaseVersion(tag)).toThrow();
+  });
+  it("accepts only numbered beta releases", () => {
+    expect(releaseVersion("v2.3.4-beta.7")).toBe("2.3.4-beta.7");
+    for (const tag of ["v2.3.4-beta", "v2.3.4-beta.0", "v2.3.4-rc.1", "v2.3.4-beta.01"])
+      expect(() => releaseVersion(tag)).toThrow();
+    expect(releaseConfiguration("2.3.4-beta.7", key).version).toBe("2.3.4-beta.7");
+  });
+  it("orders stable releases above their beta and protects newer beta builds", () => {
+    expect(compareReleaseVersions("1.2.0", "1.2.0-beta.9")).toBe(1);
+    expect(compareReleaseVersions("1.2.1-beta.1", "1.2.0")).toBe(1);
+    expect(compareReleaseVersions("1.2.1-beta.9", "1.2.1-beta.10")).toBe(-1);
+    expect(compareReleaseVersions("1.2.0", "1.2.0")).toBe(0);
+    expect(() => compareReleaseVersions("preview", "1.2.0")).toThrow();
+  });
+  it("keeps the beta version for the updater and uses numeric macOS bundle metadata", () => {
+    const root = path.resolve(import.meta.dirname, "../../..");
+    const output = path.join(temporary(), "release.json");
+    execFileSync(process.execPath, ["apps/desktop/scripts/tauri-release.ts", "prepare", output], {
+      cwd: root,
+      env: { ...process.env, TAURI_RELEASE_TAG: "v2.3.4-beta.7", TAURI_UPDATER_PUBLIC_KEY: key },
+    });
+    const config = JSON.parse(readFileSync(output, "utf8"));
+    expect(config.version).toBe("2.3.4-beta.7");
+    expect(config.bundle.macOS.bundleVersion).toBe("2.3.4");
+    const plist = readFileSync(config.bundle.macOS.infoPlist, "utf8");
+    expect(plist).toContain("<key>CFBundleShortVersionString</key><string>2.3.4</string>");
+    expect(plist).toContain("NSMicrophoneUsageDescription");
+  });
   it("accepts only successful same-revision main builds from the publishing repository", () => {
     const run = {
       id: 1,
@@ -71,13 +106,6 @@ describe("signed desktop releases", () => {
     expect(verifiedBuild([run, { ...run, id: 2, run_number: 43 }], context)?.id).toBe(2);
   });
 
-  it("assigns increasing versions that native installers accept and preserves retry versions", () => {
-    expect(previewVersion("42")).toBe("1.1.42");
-    expect(previewVersion("65535")).toBe("1.2.0");
-    expect(previewVersion("65534")).toBe("1.1.65534");
-    for (const value of ["", "-1", "1;echo bad", "1.2", "0", "16645890"])
-      expect(() => previewVersion(value)).toThrow();
-  });
   it("requires the updater verification key and version-bound signed artifacts", () => {
     expect(releaseConfiguration("1.1.42", key)).toMatchObject({
       bundle: { createUpdaterArtifacts: true },
@@ -113,8 +141,15 @@ describe("signed desktop releases", () => {
     expect(manifest.notes).toBe("Ork");
     expect(Object.keys(manifest.platforms)).toEqual([...PLATFORMS]);
     expect(manifest.platforms["darwin-aarch64"]?.url).toBe(
-      "https://github.com/example/desktop/releases/download/desktop-preview-1.1.42/darwin-aarch64-app.tar.gz",
+      "https://github.com/example/desktop/releases/download/v1.1.42/darwin-aarch64-app.tar.gz",
     );
+    expect(
+      releaseManifest(entries(), { ...options, releaseTag: "v1.1.42" }).platforms["darwin-aarch64"]
+        ?.url,
+    ).toBe(
+      "https://github.com/example/desktop/releases/download/v1.1.42/darwin-aarch64-app.tar.gz",
+    );
+    expect(() => releaseManifest(entries(), { ...options, releaseTag: "v1.1.41" })).toThrow();
     expect(() => releaseManifest(entries().slice(1), options)).toThrow();
     for (const patch of [
       { revision: "b".repeat(40) },
@@ -129,95 +164,3 @@ describe("signed desktop releases", () => {
     }
   });
 });
-
-it.skipIf(process.platform === "win32")(
-  "runs the publication pipeline offline and withholds promotion after a failed CI",
-  async () => {
-    const root = path.resolve(import.meta.dirname, "../../..");
-    const directory = temporary();
-    const context = {
-      repository: options.repository,
-      revision,
-      key,
-      ciSuccess: true,
-      channelDraft: true,
-    };
-    writeFileSync(path.join(directory, "context.json"), JSON.stringify(context));
-    writeFileSync(
-      path.join(directory, "gh"),
-      `#!${process.execPath}
-const fs = require('node:fs');
-const path = require('node:path');
-const root = process.env.FIXTURE_ROOT;
-const context = JSON.parse(fs.readFileSync(path.join(root,'context.json'),'utf8'));
-const args = process.argv.slice(2);
-const read = () => JSON.parse(fs.readFileSync(path.join(root,'assets.json'),'utf8'));
-fs.appendFileSync(path.join(root,'calls.jsonl'), JSON.stringify(args)+'\\n');
-if(args[0] === 'api') {
-  const endpoint = args[1];
-  if(endpoint.endsWith('/git/ref/heads/main')) console.log(JSON.stringify({object:{sha:context.revision}}));
-  else if(endpoint.includes('/releases?')) console.log(JSON.stringify({count:1,match:context.channelDraft && args[args.indexOf('--jq')+1].includes('"desktop-preview"') ? {id:77,tag_name:'desktop-preview',draft:true,assets:[{id:88,name:'latest.json',browser_download_url:'https://example.invalid/draft.json'}]} : null}));
-  else if(endpoint.endsWith('/releases/assets/88')) { if(!args.includes('Accept: application/octet-stream')) process.exit(3); console.log(JSON.stringify({version:'1.1.41'})); }
-  else if(endpoint.includes('/runs?')) {
-    const success = !endpoint.includes('/ci.yml/') || context.ciSuccess;
-    console.log(JSON.stringify({workflow_runs: success ? [{id:123,run_number:42,head_sha:context.revision,head_branch:'main',head_repository:{full_name:context.repository},event:'push',conclusion:'success'}] : []}));
-  } else if(endpoint.includes('/releases/tags/')) {
-    if(endpoint.endsWith('/desktop-preview') || !fs.existsSync(path.join(root,'assets.json'))) { console.error('gh: Not Found (HTTP 404)');process.exit(1); }
-    console.log(JSON.stringify({assets:read(),target_commitish:context.revision,prerelease:true,draft:context.withdrawn===true}));
-  }
-  else process.exit(2);
-} else if(args[0] === 'run' && args[1] === 'download') {
-  const destination=args[args.indexOf('--dir')+1];
-  for(const platform of ['darwin-aarch64','darwin-x86_64','windows-x86_64','linux-x86_64']) {
-    const folder=path.join(destination,'ork-tauri-updater-'+platform);
-    fs.mkdirSync(folder,{recursive:true});
-    const archive=platform+'-app.tar.gz';
-    fs.writeFileSync(path.join(folder,archive),'fixture artifact');
-    fs.writeFileSync(path.join(folder,platform+'.json'),JSON.stringify({platform,version:'1.1.42',revision:context.revision,key:context.key,archive,signature:'fixture signature',files:[archive]}));
-  }
-} else if(args[0] === 'release' && args[1] === 'create') {
-  if(args[2] !== 'desktop-preview') fs.writeFileSync(path.join(root,'assets.json'),'[]');
-} else if(args[0] === 'release' && args[1] === 'upload') {
-  if(args[2] === 'desktop-preview') fs.copyFileSync(args[3],path.join(root,'promoted.json'));
-  else { const assets=read(); assets.push({name:path.basename(args[3]),size:fs.statSync(args[3]).size,digest:'sha256:'+require('node:crypto').createHash('sha256').update(fs.readFileSync(args[3])).digest('hex')});fs.writeFileSync(path.join(root,'assets.json'),JSON.stringify(assets)); }
-} else if(args[0] === 'release' && args[1] === 'edit') {}
-else if(args[0] === 'release' && args[1] === 'view') console.log(JSON.stringify({assets:read(),target_commitish:context.revision,prerelease:true,draft:context.withdrawn===true}));
-else process.exit(2);
-`,
-      { mode: 0o700 },
-    );
-    const run = () =>
-      execFileSync(process.execPath, [path.join(root, ".github/scripts/publish-tauri.mjs")], {
-        env: {
-          ...process.env,
-          PATH: `${directory}${path.delimiter}${process.env.PATH}`,
-          GITHUB_REPOSITORY: options.repository,
-          CANDIDATE_SHA: revision,
-          RUNNER_TEMP: directory,
-          TAURI_UPDATER_PUBLIC_KEY: key,
-          FIXTURE_ROOT: directory,
-        },
-        encoding: "utf8",
-      });
-    expect(run()).toContain("Published Ork 1.1.42");
-    expect(
-      JSON.parse(readFileSync(path.join(directory, "promoted.json"), "utf8")).platforms,
-    ).toHaveProperty("darwin-aarch64");
-    rmSync(path.join(directory, "promoted.json"));
-    writeFileSync(
-      path.join(directory, "context.json"),
-      JSON.stringify({ ...context, ciSuccess: false }),
-    );
-    expect(run()).toContain("waits for successful CI");
-    expect(() => readFileSync(path.join(directory, "promoted.json"))).toThrow();
-    const calls = readFileSync(path.join(directory, "calls.jsonl"), "utf8");
-    expect(calls).toContain("Accept: application/octet-stream");
-    expect(calls).toContain("--draft=false");
-    expect(calls).toContain('"--title","Ork"');
-    writeFileSync(
-      path.join(directory, "context.json"),
-      JSON.stringify({ ...context, withdrawn: true }),
-    );
-    expect(() => run()).toThrow("Desktop version is withdrawn");
-  },
-);

@@ -214,7 +214,7 @@ import { createRouter } from "#modules/platform/router";
 import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
 import { createAuthResponseAudit } from "#modules/security/security-audit";
-import { createServerUpdates } from "#modules/server-updates/service";
+import { createPendingServerUpdates, createServerUpdates } from "#modules/server-updates/service";
 import { createSpeechSummarizer } from "#modules/voice/speech-summary";
 import {
   mountVoiceHttpRoutes,
@@ -269,7 +269,7 @@ type CreateAppOverrides = Partial<AppEnv> & {
   serverUpdateSetup?: {
     adapter: ServerUpdateAdapter;
     installationId: string;
-    delegatedAccountKey: string;
+    delegatedAccountKey: string | null;
   };
   prisma?: PrismaClient;
   realtime?: RealtimeFanout;
@@ -843,12 +843,21 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   );
 
   const serverUpdates = serverUpdateSetup
-    ? createServerUpdates({
-        prisma,
-        ...serverUpdateSetup,
-        issuer: "https://api.orkbot.run",
-        currentRevision: env.gitSha ?? null,
-      })
+    ? serverUpdateSetup.delegatedAccountKey === null
+      ? createPendingServerUpdates({
+          prisma,
+          ...serverUpdateSetup,
+          delegatedAccountKey: null,
+          issuer: "https://api.orkbot.run",
+          currentRevision: env.gitSha ?? null,
+        })
+      : createServerUpdates({
+          prisma,
+          ...serverUpdateSetup,
+          delegatedAccountKey: serverUpdateSetup.delegatedAccountKey,
+          issuer: "https://api.orkbot.run",
+          currentRevision: env.gitSha ?? null,
+        })
     : undefined;
   serverUpdates?.start();
 
@@ -928,6 +937,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       screenProxySecret: env.screenProxySecret,
       sandboxProvider: env.sandboxProvider,
       gitSha: env.gitSha,
+      serverVersion: env.serverVersion,
       integrationsCatalogUrl: env.integrationsCatalogUrl,
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
       desktopHostChoiceEnabled: Boolean(env.desktopStackToken),

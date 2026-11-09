@@ -44,7 +44,10 @@ export const PL_MESSAGES: Record<string, string> = {
     "Zaktualizuj serwer, aby połączyć się z nim w tej wersji Ork.",
   "Automatic updates": "Aktualizacje automatyczne",
   "Deployment requested": "Zlecono wdrożenie",
-  "Check deployment in server panel": "Sprawdź wdrożenie w panelu serwera",
+  "Server updated": "Serwer zaktualizowany",
+  Channel: "Kanał",
+  Stable: "Stabilny",
+  "Could not confirm the update": "Nie udało się potwierdzić aktualizacji",
   "Could not complete the update. Try again.":
     "Nie udało się dokończyć aktualizacji. Spróbuj ponownie.",
   "Get started": "Rozpocznij",
