@@ -191,6 +191,27 @@ describe("updater HTTP surface", () => {
 });
 
 describe("standalone deployment acknowledgements", () => {
+  it("does not let the application token reach operator commands or fork builds", async () => {
+    const { config } = await deployment();
+    let commands = 0;
+    const subject = createUpdaterApp(
+      { ...config, mode: "standalone" },
+      {
+        run: async () => {
+          commands++;
+          return ok();
+        },
+      },
+    );
+    for (const pathname of ["/plan", "/apply", "/rollback"]) {
+      const response = await request(subject, pathname, {
+        repoUrl: "https://github.com/example/fork",
+        branch: "main",
+      });
+      expect(response.status).toBe(404);
+    }
+    expect(commands).toBe(0);
+  });
   async function preparedDeployment() {
     const fixture = await deployment();
     const template = path.join(fixture.deployDir, "docker-compose.images.yml");
