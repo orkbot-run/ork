@@ -247,7 +247,7 @@ export async function issueServerClaim(
     const response = await post(
       options.issuer,
       "issue",
-      { origin: options.origin, challenge },
+      { origin: options.origin, challenge, lifetimeSeconds: 600 },
       options.request,
     );
     const value = response.body as Record<string, unknown>;
@@ -267,7 +267,7 @@ export async function issueServerClaim(
       typeof value.expiresAt !== "number" ||
       !Number.isSafeInteger(value.expiresAt) ||
       value.expiresAt <= now ||
-      value.expiresAt > now + 305
+      value.expiresAt > now + 605
     )
       throw new Error("Accounts returned an invalid authorization.");
     const ticket = {

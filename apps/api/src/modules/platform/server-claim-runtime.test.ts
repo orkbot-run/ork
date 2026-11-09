@@ -17,13 +17,16 @@ afterAll(() => rmSync(root, { recursive: true, force: true }));
 it("distinguishes workspace setup from personal Accounts authorization", () => {
   const instructions = serverClaimInstructions("23456789AB");
   const lines = instructions.trim().split("\n");
-  expect(lines[0]).toBe("Server setup code: 23456789AB");
+  expect(lines[0]).toBe("Connect your server");
   expect(instructions).toContain("workspace dashboard");
-  expect(instructions).toContain("personal account instead");
-  const link = new URL(lines.find((line) => line.startsWith("https://"))!);
+  expect(instructions).toContain("Personal account");
+  const link = new URL(lines.find((line) => line.trim().includes("#code="))!.trim());
   expect(link.origin + link.pathname).toBe("https://accounts.ork.run/account/connect-server");
   expect(link.search).toBe("");
   expect(link.hash).toBe("#code=23456789AB");
+  expect(lines).toContain("   https://accounts.ork.run/account/connect-server");
+  expect(instructions).toContain("Setup code: 23456789AB");
+  expect(instructions).toContain("expires in 10 minutes");
   expect(() => serverClaimInstructions("invalid")).toThrow();
 });
 
@@ -32,6 +35,7 @@ it("sends an existing server's owner to the workspace dashboard", () => {
   expect(instructions).toContain("workspace dashboard");
   expect(instructions).toContain("23456789AB");
   expect(instructions).toContain("current owner");
+  expect(instructions).toContain("expires in 10 minutes");
   expect(instructions).not.toContain("connect-server#code");
 });
 

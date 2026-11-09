@@ -6,6 +6,7 @@ import { createLocalJWKSet, SignJWT } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { createNativeGrantVerifier } from "./native-accounts-login.js";
 import {
+  issueServerClaim,
   serverClaimProof,
   startServerClaimWorker,
   verifyServerClaimGrant,
@@ -19,6 +20,64 @@ const proofNonce = "b".repeat(43);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const keys = createLocalJWKSet({
   keys: [{ ...publicKey.export({ format: "jwk" }), alg: "RS256", use: "sig", kid: "test" }],
+});
+
+describe("server claim lifetime", () => {
+  function fixture(seconds: number) {
+    const tx = {
+      deploymentSettings: { upsert: vi.fn(async () => ({ nativeAccountsOwnerKey: null })) },
+      user: { count: vi.fn(async () => 0) },
+      verification: {
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async () => ({})),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+        deleteMany: vi.fn(async () => ({ count: 1 })),
+      },
+    };
+    const db = {
+      ...tx,
+      $transaction: async (run: (value: typeof tx) => Promise<unknown>) => run(tx),
+    };
+    const expiresAt = Math.floor(Date.now() / 1000) + seconds;
+    const request = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      Response.json(
+        { id, origin, receipt: "c".repeat(43), proofNonce, code: "23456789AB", expiresAt },
+        { status: 201 },
+      ),
+    );
+    return { tx, db: db as never, request, expiresAt };
+  }
+
+  it("requests and accepts a ten-minute code", async () => {
+    const f = fixture(600);
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ code: "23456789AB", expiresAt: f.expiresAt });
+    expect(JSON.parse(String(f.request.mock.calls[0]![1]!.body))).toMatchObject({
+      origin,
+      lifetimeSeconds: 600,
+    });
+    expect(f.tx.verification.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a response exceeding the permitted lifetime", async () => {
+    const f = fixture(620);
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("Accounts returned an invalid authorization.");
+    expect(f.tx.verification.updateMany).not.toHaveBeenCalled();
+    expect(f.tx.verification.deleteMany).toHaveBeenCalledOnce();
+  });
 });
 
 function signed(changes: Record<string, unknown> = {}) {
