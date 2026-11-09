@@ -14,12 +14,8 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 const MAX_PROBE_BYTES: usize = 64 * 1024;
 const MAX_SAFE_PROTOCOL_VERSION: f64 = 9_007_199_254_740_991.0;
 
-fn client_protocol_version() -> f64 {
-    include_str!("../../../../packages/contracts/src/client-protocol-version.json")
-        .trim()
-        .parse()
-        .expect("The shared client protocol version must be numeric")
-}
+// The public health probe is part of the frozen version-one recovery protocol.
+const RECOVERY_PROTOCOL_VERSION: &str = "1";
 
 /// Match the desktop's existing server-origin policy, including private HTTP servers.
 pub fn normalize_server_url(input: &str) -> Result<Url, String> {
@@ -114,7 +110,7 @@ pub async fn probe_server(server: &Url) -> Result<(), String> {
     let mut response = client
         .post(target)
         .header(reqwest::header::CACHE_CONTROL, "no-store")
-        .header("x-orkbot-protocol", client_protocol_version().to_string())
+        .header("x-orkbot-protocol", RECOVERY_PROTOCOL_VERSION)
         .json(&json!({ "json": {} }))
         .send()
         .await
