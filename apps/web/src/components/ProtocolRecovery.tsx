@@ -24,11 +24,20 @@ export function ProtocolRecovery({ children }: { children: ReactNode }) {
   const session = authClient.useSession();
   const userId = session.data?.user?.id;
   if (!userId) return children;
-  const key = JSON.stringify([userId, session.data?.session?.id ?? null]);
-  return <AuthenticatedProtocolRecovery key={key}>{children}</AuthenticatedProtocolRecovery>;
+  return (
+    <AuthenticatedProtocolRecovery key={userId} sessionId={session.data?.session?.id ?? null}>
+      {children}
+    </AuthenticatedProtocolRecovery>
+  );
 }
 
-function AuthenticatedProtocolRecovery({ children }: { children: ReactNode }) {
+function AuthenticatedProtocolRecovery({
+  children,
+  sessionId,
+}: {
+  children: ReactNode;
+  sessionId: string | null;
+}) {
   const [state, setState] = useState<
     AuthCapabilities | null | "loading" | "unavailable" | "client"
   >("loading");
@@ -73,7 +82,7 @@ function AuthenticatedProtocolRecovery({ children }: { children: ReactNode }) {
       clearInterval(timer);
       stop();
     };
-  }, [attempt]);
+  }, [attempt, sessionId]);
   if (state === "loading") return <PageLoading />;
   if (state === "client") return <ClientRecovery />;
   if (state === "unavailable")
