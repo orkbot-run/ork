@@ -16,6 +16,7 @@ import { PL_MESSAGES } from "./locales/pl.js";
 
 type Account = { userinfo: { name?: string; email?: string; ork_avatar?: string } };
 type Server = { id: string; url: string; kind: "local" | "selfhosted"; isDefault?: boolean };
+type Workspace = { id: string; name: string; url: string };
 type StackState = { phase: string; message: string | null; output: string[] };
 type Startup = {
   phase: "checking" | "opening" | "idle" | "failed";
@@ -57,6 +58,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   const output = element("output");
   const details = element<HTMLDetailsElement>("details");
   const servers = element("servers");
+  const workspaces = element("workspaces");
   const command = element<HTMLTextAreaElement>("install-command");
   const steps = [...doc.querySelectorAll<HTMLElement>("[data-step]")];
   const phases = [...doc.querySelectorAll<HTMLElement>("[data-phase]")];
@@ -77,7 +79,14 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let generation = 0;
   let disposed = false;
   let startup: Startup = { phase: "checking" };
-  let failedServer: { id: string; local: boolean } | null = null;
+  let failedServer: {
+    id: string;
+    local: boolean;
+    command: "connect_saved_server" | "connect_workspace";
+  } | null = null;
+  let workspaceCount: number | null = null;
+  let workspaceSnapshot = "";
+  let workspaceProbeGeneration = 0;
   let directoryOwner: Account | null = null;
   let directoryServers = new Set<string>();
   let directoryReady = false;
@@ -305,11 +314,132 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     });
   }
 
+  async function loadWorkspaces(version: number, owner: Account | null, refreshStatus = false) {
+    let timeout: number | undefined;
+    try {
+      const entries = await Promise.race([
+        transport.invoke<Workspace[]>("list_workspaces"),
+        new Promise<never>((_, reject) => {
+          timeout = win?.setTimeout(() => reject(new Error("Workspace directory timed out")), 4000);
+        }),
+      ]);
+      if (!current(version) || account !== owner) return;
+      const valid = Array.isArray(entries) ? entries : [];
+      workspaceCount = valid.length;
+      element("workspaces-error").hidden = true;
+      element("workspaces-section").hidden = valid.length === 0;
+      const snapshot = JSON.stringify(valid);
+      if (snapshot === workspaceSnapshot) {
+        if (refreshStatus) checkWorkspaces(valid, version, owner, snapshot);
+        return;
+      }
+      workspaceSnapshot = snapshot;
+      workspaces.replaceChildren();
+      for (const entry of valid) {
+        const button = doc.createElement("button");
+        button.type = "button";
+        button.className = "choice workspace-choice";
+        const icon = doc.createElement("span");
+        icon.className = "workspace-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.textContent = entry.name.trim().charAt(0).toUpperCase();
+        const text = doc.createElement("span");
+        const name = doc.createElement("strong");
+        name.textContent = entry.name;
+        const meta = doc.createElement("span");
+        meta.className = "workspace-meta";
+        const label = doc.createElement("small");
+        label.textContent = t("Team workspace");
+        const availability = doc.createElement("small");
+        availability.className = "workspace-availability";
+        availability.dataset.workspaceId = entry.id;
+        setWorkspaceStatus(availability, "checking");
+        const arrow = doc.createElement("span");
+        arrow.setAttribute("aria-hidden", "true");
+        arrow.textContent = "→";
+        meta.append(label, availability);
+        text.append(name, meta);
+        button.append(icon, text, arrow);
+        button.addEventListener("click", () => void connect("connect_workspace", { id: entry.id }));
+        workspaces.append(button);
+      }
+      controls();
+      checkWorkspaces(valid, version, owner, snapshot);
+    } catch {
+      if (!current(version) || account !== owner) return;
+      workspaceProbeGeneration++;
+      workspaceCount = null;
+      workspaceSnapshot = "";
+      workspaces.replaceChildren();
+      element("workspaces-section").hidden = true;
+      element("workspaces-error").hidden = false;
+    } finally {
+      win?.clearTimeout(timeout);
+    }
+  }
+
+  function setWorkspaceStatus(
+    label: HTMLElement,
+    state: "checking" | "online" | "offline" | "unknown",
+  ) {
+    const details = {
+      checking: ["Checking", "Checking server status"],
+      online: ["Online", "Server online"],
+      offline: ["Offline", "Server unavailable or unreachable. Refresh or contact an admin."],
+      unknown: ["Unknown", "Server status unavailable"],
+    } as const;
+    label.dataset.status = state;
+    label.textContent = t(details[state][0]);
+    label.title = t(details[state][1]);
+    label.setAttribute("aria-label", t(details[state][1]));
+  }
+
+  function checkWorkspaces(
+    entries: Workspace[],
+    version: number,
+    owner: Account | null,
+    snapshot: string,
+  ) {
+    const probe = ++workspaceProbeGeneration;
+    let index = 0;
+    const active = () =>
+      current(version) &&
+      account === owner &&
+      workspaceSnapshot === snapshot &&
+      workspaceProbeGeneration === probe;
+    async function worker() {
+      while (active() && index < entries.length) {
+        const entry = entries[index++];
+        if (!entry) return;
+        const label = [...workspaces.querySelectorAll<HTMLElement>(".workspace-availability")].find(
+          (node) => node.dataset.workspaceId === entry.id,
+        );
+        if (!label) continue;
+        setWorkspaceStatus(label, "checking");
+        try {
+          const online = await transport.invoke<boolean>("check_workspace", { id: entry.id });
+          if (!active()) return;
+          setWorkspaceStatus(
+            label,
+            online === true ? "online" : online === false ? "offline" : "unknown",
+          );
+        } catch {
+          if (!active()) return;
+          setWorkspaceStatus(label, "unknown");
+        }
+      }
+    }
+    for (let i = 0; i < Math.min(entries.length, 3); i++) void worker();
+  }
+
   async function loadServers(version: number): Promise<Server[]> {
+    const owner = account;
+    const request = loadWorkspaces(version, owner, true);
     const entries = await transport.invoke<Server[]>("list_servers");
     if (!current(version)) return [];
     renderServers(entries);
-    return entries;
+    await request;
+    return current(version) ? entries : [];
   }
 
   function renderServers(entries: Server[]) {
@@ -401,6 +531,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         entries.some((entry) => entry.kind === "selfhosted" && !previous.has(entry.id));
       if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot)
         renderServers(entries);
+      void loadWorkspaces(version, owner);
       if (found && activeScreen === "selfhost") show("servers");
     } catch {
       // A directory outage does not interrupt the current setup screen.
@@ -428,8 +559,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     try {
       await transport.invoke(name, args);
     } catch (error) {
-      if (current(version) && name === "connect_saved_server" && typeof args?.id === "string") {
-        failedServer = { id: args.id, local };
+      if (
+        current(version) &&
+        (name === "connect_saved_server" || name === "connect_workspace") &&
+        typeof args?.id === "string"
+      ) {
+        failedServer = { id: args.id, local, command: name };
       }
       throw error;
     }
@@ -445,7 +580,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     await run(
       local ? "local" : "connect",
       (version) => openServer(version, name, args, local),
-      local ? "local" : name === "connect_saved_server" ? "servers" : "selfhost",
+      local
+        ? "local"
+        : name === "connect_saved_server" || name === "connect_workspace"
+          ? "servers"
+          : "selfhost",
     );
   }
 
@@ -457,7 +596,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       show("servers", false);
       if (startup.phase === "failed") {
         failedServer = startup.serverId
-          ? { id: startup.serverId, local: startup.kind === "local" }
+          ? {
+              id: startup.serverId,
+              local: startup.kind === "local",
+              command: "connect_saved_server",
+            }
           : null;
         errorMessage(startup.message);
         controls();
@@ -663,7 +806,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       return;
     }
     const selected =
-      entries.find((entry) => entry.isDefault) ?? (entries.length === 1 ? entries[0] : undefined);
+      workspaceCount === 0
+        ? (entries.find((entry) => entry.isDefault) ??
+          (entries.length === 1 ? entries[0] : undefined))
+        : undefined;
     if (selected)
       await openServer(
         version,
@@ -746,7 +892,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   on("retry-local", "click", () => void connect("connect_local_server", undefined, true));
   on("retry-server", "click", () => {
     if (failedServer)
-      void connect("connect_saved_server", { id: failedServer.id }, failedServer.local);
+      void connect(failedServer.command, { id: failedServer.id }, failedServer.local);
   });
   on("refresh", "click", () => void run("directory", loadServers, "servers"));
   on("setup", "submit", (event) => {
@@ -772,6 +918,12 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     input.value = "";
     element("account").textContent = "";
     servers.replaceChildren();
+    workspaces.replaceChildren();
+    workspaceCount = null;
+    workspaceSnapshot = "";
+    workspaceProbeGeneration++;
+    element("workspaces-section").hidden = true;
+    element("workspaces-error").hidden = true;
     clearPairing();
     show("welcome");
     await run(

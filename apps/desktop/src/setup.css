@@ -434,3 +434,79 @@ footer {
 .pairing-origin {
   overflow-wrap: anywhere;
 }
+
+.workspaces-section {
+  margin: 0 0 12px;
+  text-align: left;
+}
+.workspaces-section h2 {
+  margin: 0 0 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 600;
+}
+.workspace-list {
+  display: grid;
+  gap: 8px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.workspace-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--background);
+  font-size: 14px;
+  font-weight: 600;
+}
+.workspace-choice {
+  padding: 12px 16px;
+}
+.workspace-choice strong {
+  overflow-wrap: anywhere;
+}
+.workspace-choice small.workspace-availability[data-status="online"] {
+  color: var(--success);
+}
+.workspace-choice small.workspace-availability[data-status="offline"] {
+  color: var(--destructive);
+}
+.choice-secondary {
+  padding: 9px 16px;
+  background: transparent;
+}
+.choice-secondary .choice-icon svg {
+  width: 20px;
+  height: 20px;
+  margin: auto;
+}
+.choice-secondary strong {
+  font-size: 14px;
+}
+.choice-secondary small {
+  font-size: 12px;
+}
+.workspace-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.workspace-choice small.workspace-availability {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.workspace-availability::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: currentColor;
+}
