@@ -115,14 +115,20 @@ jobs:
         run: node .github/scripts/prepare-windows-signing-tools.mjs
       - name: Check Windows signing tools
         if: runner.os == 'Windows'
-        shell: powershell
+        shell: bash
         run: |
-          if (-not (Test-Path -LiteralPath $env:WINDOWS_SIGNTOOL_PATH -PathType Leaf) -or
-              -not (Test-Path -LiteralPath $env:WINDOWS_SIGNING_DLIB_PATH -PathType Leaf)) {
-            throw 'Windows signing tools are unavailable.'
-          }
-          & $env:WINDOWS_SIGNTOOL_PATH /? *> $null
-          if ($LASTEXITCODE -ne 0) { throw 'Windows SignTool could not run.' }
+          node -e '
+            const fs = require("node:fs");
+            const { spawnSync } = require("node:child_process");
+            for (const name of ["WINDOWS_SIGNTOOL_PATH", "WINDOWS_SIGNING_DLIB_PATH"]) {
+              if (!process.env[name] || !fs.statSync(process.env[name]).isFile()) throw new Error("Windows signing tools are unavailable.");
+            }
+            const result = spawnSync(process.env.WINDOWS_SIGNTOOL_PATH, ["/?"], { encoding: "utf8", timeout: 30000, windowsHide: true });
+            if (result.error || ![0, 1].includes(result.status) || !/Usage:\s+signtool\b/i.test(result.stdout + result.stderr)) {
+              throw new Error("Windows SignTool could not run.");
+            }
+            console.log("SignTool help exit code:", result.status);
+          '
       - name: Configure Linux WebKit helpers
         if: runner.os == 'Linux'
         shell: bash

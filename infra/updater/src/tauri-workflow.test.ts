@@ -4,6 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -59,7 +60,9 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
     (step: { name?: string }) => step.name === "Check Windows signing tools",
   );
   expect(windowsToolCheck.if).toBe("runner.os == 'Windows'");
-  expect(windowsToolCheck.run).toContain("WINDOWS_SIGNTOOL_PATH /?");
+  expect(windowsToolCheck.run).toContain('spawnSync(process.env.WINDOWS_SIGNTOOL_PATH, ["/?"]');
+  expect(windowsToolCheck.run).toContain("Usage:");
+  expect(windowsToolCheck.run).toContain("result.status");
   expect(windowsToolCheck.run).toContain("WINDOWS_SIGNING_DLIB_PATH");
   const helpers = build.jobs["diagnostic-build"].steps.find(
     (step: { name?: string }) => step.name === "Configure Linux WebKit helpers",
@@ -176,4 +179,30 @@ it("limits cloud signing credentials to the protected Windows release job", () =
   expect(workflow.on.pull_request.paths).toContain(
     ".github/scripts/prepare-windows-signing-tools.mjs",
   );
+});
+
+it("accepts only a real SignTool help response from the Windows preflight", () => {
+  const root = path.resolve(import.meta.dirname, "../../..");
+  const workflow = parse(
+    readFileSync(path.join(root, ".github/workflows/desktop-tauri.yml"), "utf8"),
+  );
+  const step = workflow.jobs["diagnostic-build"].steps.find(
+    (item: { name?: string }) => item.name === "Check Windows signing tools",
+  );
+  const script = step.run.match(/node -e '\n([\s\S]*?)\n\s*'/)?.[1];
+  expect(script).toBeTruthy();
+  const run = (result: { status: number | null; stdout: string; stderr: string; error?: Error }) =>
+    runInNewContext(script, {
+      process: { env: { WINDOWS_SIGNTOOL_PATH: "tool", WINDOWS_SIGNING_DLIB_PATH: "dlib" } },
+      console: { log: () => {} },
+      require: (module: string) =>
+        module === "node:fs"
+          ? { statSync: () => ({ isFile: () => true }) }
+          : { spawnSync: () => result },
+    });
+  expect(() => run({ status: 1, stdout: "", stderr: "Usage: signtool [options]" })).not.toThrow();
+  expect(() => run({ status: 0, stdout: "Usage: signtool [options]", stderr: "" })).not.toThrow();
+  expect(() => run({ status: 1, stdout: "", stderr: "DLL missing" })).toThrow();
+  expect(() => run({ status: 2, stdout: "", stderr: "Usage: signtool" })).toThrow();
+  expect(() => run({ status: null, stdout: "", stderr: "", error: new Error("spawn") })).toThrow();
 });

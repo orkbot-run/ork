@@ -159,3 +159,39 @@ it("loads the PowerShell signing entry point and rejects missing tools", {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Windows SignTool is unavailable/);
 });
+
+it("accepts a successful tool that writes stderr without exposing its output", {
+  skip: process.platform !== "win32",
+}, () => {
+  const fake = path.join(temp(), "fake tool.exe");
+  const compile = spawnSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `Add-Type -TypeDefinition 'public class FakeTool { public static int Main(string[] args) { System.Console.Error.WriteLine("private-marker"); return 0; } }' -OutputAssembly $env:TEST_FAKE_TOOL -OutputType ConsoleApplication`,
+    ],
+    { encoding: "utf8", env: { ...process.env, TEST_FAKE_TOOL: fake } },
+  );
+  assert.equal(compile.status, 0, compile.stderr);
+  const result = spawnSync(
+    "powershell.exe",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      fileURLToPath(new URL("./windows-distribution.ps1", import.meta.url)),
+      "-Mode",
+      "verify",
+      "-Path",
+      fake,
+    ],
+    { encoding: "utf8", env: { ...process.env, WINDOWS_SIGNTOOL_PATH: fake } },
+  );
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Windows signature or timestamp is invalid/);
+  assert.doesNotMatch(result.stdout + result.stderr, /private-marker|NativeCommandError/);
+});
