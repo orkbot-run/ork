@@ -8,6 +8,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   CLIENT_BUILD_HEADER,
+  CLIENT_PROTOCOL_HEADER,
   CLIENT_UPDATE_REQUIRED,
   SERVER_BUILD_HEADER,
 } from "@orkbot/contracts";
@@ -55,6 +56,38 @@ describe("client build handshake", () => {
     expect((await call(hono, "web/20261022000000")).status).toBe(200);
     expect((await call(hono, "mobile/20200101000000")).status).toBe(200);
     expect((await call(hono)).status).toBe(200);
+  });
+
+  it("exempts only the version-one POST health probe from the minimum build", async () => {
+    const hono = new Hono();
+    hono.use(
+      "/rpc/*",
+      clientBuildMiddleware({ webBuild: undefined, minimums: { mobile: "20261101000000" } }),
+    );
+    hono.all("/rpc/*", (c) => c.json({ ok: true }));
+    const headers = {
+      [CLIENT_BUILD_HEADER]: "mobile/20261031000000",
+      [CLIENT_PROTOCOL_HEADER]: "1",
+    };
+    expect((await hono.request("/rpc/health", { method: "POST", headers })).status).toBe(200);
+    expect((await hono.request("/rpc/health", { method: "GET", headers })).status).toBe(426);
+    expect((await hono.request("/rpc/health/extra", { method: "POST", headers })).status).toBe(426);
+    expect(
+      (
+        await hono.request("/rpc/health", {
+          method: "POST",
+          headers: { ...headers, [CLIENT_PROTOCOL_HEADER]: "2" },
+        })
+      ).status,
+    ).toBe(426);
+    expect(
+      (
+        await hono.request("/rpc/health", {
+          method: "POST",
+          headers: { [CLIENT_BUILD_HEADER]: headers[CLIENT_BUILD_HEADER] },
+        })
+      ).status,
+    ).toBe(426);
   });
 
   it("reads the web build id written beside the web assets", () => {

@@ -18,6 +18,7 @@ export function isServerUpdateRecoveryRequest(
     method === "POST" &&
     header === String(SERVER_UPDATE_RECOVERY_PROTOCOL) &&
     [
+      "/rpc/health",
       "/rpc/serverUpdates/version",
       "/rpc/serverUpdates/status",
       "/rpc/serverUpdates/check",
