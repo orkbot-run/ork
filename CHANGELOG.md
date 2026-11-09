@@ -9,43 +9,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-11-06
-
-Prepared for release. Publication is pending the licensing rollout review.
+## [1.2.0] - 2026-11-09
 
 ### Security
 
-- Native Accounts sign-in uses PKCE and secure credential storage. Account credentials stay separate from server sessions, and switching accounts retires the previous session and pending operations.
-- Group roster updates with implausible future timestamps are ignored, so they cannot change membership or prevent later updates from taking effect.
+- Native Accounts sign-in uses PKCE and secure credential storage. Accounts credentials stay separate from server sessions, and switching accounts retires the previous session and pending operations.
+- Group roster updates with implausible future timestamps are ignored so they cannot change membership or prevent later updates.
+- The self-hosted server updater accepts update requests from the delegated Accounts owner. Its control interface is private, and the updater has access to the host Docker socket.
 
 ### Added
 
-- A Tauri desktop preview for macOS, Windows and Linux, with a local Docker server and connections to existing servers.
-- Computer sharing on macOS and Linux. Bots need native consent before using the host computer, and access can be revoked.
-- An Accounts server directory shared across desktop and mobile, with saved servers associated with the signed-in account.
-- Guided server setup and a personal Ork in the account's original Space. New Spaces and organizations receive their own bot.
-- Memory browsing and editing on mobile, along with richer routine scheduling and run history.
-- Deterministic generated avatars and refreshed Ork artwork.
+- View the installed app version and connected server version in settings. Choose Stable or Beta for desktop updates and supported self-hosted server updates. Beta also receives newer stable releases.
+- Check for and request server updates from desktop or mobile on supported installations. The server owner can opt into automatic updates.
+- When the app and server cannot use the same protocol, open an update screen instead of the workspace.
+- Use the Tauri desktop app on macOS, Windows and Linux with a local Docker server or a connection to an existing server. On macOS and Linux, bots can use the app-managed host computer after native consent. Access can be revoked.
+- Connect and authorize self-hosted servers through Accounts, including existing servers that already contain a workspace. The Accounts server directory is shared across desktop and mobile.
+- Set up a server with the Linux installer or pair an existing server with a native app. New Spaces and organizations finish onboarding with their own bot.
+- Browse and edit memory on mobile, schedule routines and inspect their run history. Active routines can also appear in conversations.
+- Transfer files between bot conversations, choose a bot reply mode and receive images from chat integrations.
+- Use deterministic generated avatars and refreshed Ork artwork.
 
 ### Changed
 
-- New Ork work uses PolyForm Noncommercial 1.0.0, with a separate commercial license. The commercial agreement sets monthly billing per named user across web, desktop and mobile. Bots do not require seats. Existing Apache and third-party rights remain unchanged. See [licensing](LICENSE.md) for scope and commercial agreement status.
-- Model OAuth refreshes are coordinated across server instances, preventing simultaneous use of the same rotating refresh token.
-- Interrupted organization deletions can resume, and stalled housekeeping no longer holds up recovery of queued work, routines or message deliveries.
+- Ork is source-available. Existing Apache-licensed material and third-party notices remain in place. New original Ork work is covered by PolyForm Noncommercial 1.0.0. See [licensing](LICENSE.md) for the scope and terms. The commercial agreement and contributor agreement remain drafts.
+- OAuth refreshes for models are coordinated across server instances. Interrupted organization deletions can resume, and stalled housekeeping no longer holds up recovery of queued work, routines or message deliveries.
 
 ### Fixed
 
-- Mobile keeps unsent messages after session rejection.
+- Mobile keeps unsent messages when a session is rejected.
 - Repeated bot settings are treated as reads, and history tools accept common argument shapes produced by models.
 - Compatible model endpoints can retry a request when they reject an explicit disabled reasoning effort.
-- The updater image includes the workspace dependency needed at startup, avoiding a missing-module failure before it can process updates.
+- Linux desktop AppImages include the WebKit helper processes needed on Ubuntu 22.04.
 
 ### Self-host upgrade notes
 
-- Configure the registered public Accounts client before starting a local server. See [Accounts sign-in](docs/accounts-native.md#local-server-sign-in).
-- The optional updater installs stable server releases using their full source-commit image tags. Its private API must be invoked by deployment tooling. Enabling the profile does not schedule updates. See [upgrading](docs/self-host-upgrading.md).
-- Keep the previous application image cached for rollback. Rollback does not reverse database migrations.
-- Desktop downloads remain unsigned diagnostic artifacts. Signed native releases and their update channel still need configuration and platform testing.
+- New Linux installer deployments prepare a private updater in a root-owned installation directory. Keep that directory and all parent directories owned by root and unwritable by untrusted users. Existing installations without the updater need a separate operator migration before in-app updates are available. See [upgrading](docs/self-host-upgrading.md).
+- Back up the database, server configuration and bot data before upgrading. Keep the previous application image cached and check compatibility before returning to it. Restoring an image does not reverse database migrations.
+- A signed desktop Preview can receive a newer Stable release through its existing feed when the signing key matches. Diagnostic builds have updates disabled and require a new installer. Switching to Stable does not replace a newer installed beta with an older release.
 
 ## [0.7.0] - 2026-11-04
 
