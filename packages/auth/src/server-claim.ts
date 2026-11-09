@@ -244,12 +244,22 @@ export async function issueServerClaim(
   });
   try {
     const challenge = randomBytes(32).toString("base64url");
-    const response = await post(
+    let response = await post(
       options.issuer,
       "issue",
       { origin: options.origin, challenge, lifetimeSeconds: 600 },
       options.request,
     );
+    let maxLifetime = 605;
+    if (response.status === 400) {
+      response = await post(
+        options.issuer,
+        "issue",
+        { origin: options.origin, challenge },
+        options.request,
+      );
+      maxLifetime = 305;
+    }
     const value = response.body as Record<string, unknown>;
     const now = Math.floor(Date.now() / 1000);
     if (
@@ -267,7 +277,7 @@ export async function issueServerClaim(
       typeof value.expiresAt !== "number" ||
       !Number.isSafeInteger(value.expiresAt) ||
       value.expiresAt <= now ||
-      value.expiresAt > now + 605
+      value.expiresAt > now + maxLifetime
     )
       throw new Error("Accounts returned an invalid authorization.");
     const ticket = {
@@ -353,6 +363,10 @@ async function post(
     redirect: "error",
     signal,
   });
+  if (path === "issue" && response.status === 400) {
+    await response.body?.cancel().catch(() => {});
+    return { status: response.status, body: null };
+  }
   const value = await readBoundedJsonResponse<unknown>(response, 24 * 1024, signal);
   if (!response.ok) throw new Error("Accounts server authorization failed.");
   return { status: response.status, body: value };

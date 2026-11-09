@@ -78,6 +78,68 @@ describe("server claim lifetime", () => {
     expect(f.tx.verification.updateMany).not.toHaveBeenCalled();
     expect(f.tx.verification.deleteMany).toHaveBeenCalledOnce();
   });
+
+  it("retries without the lifetime field when an older Accounts server returns 400", async () => {
+    const f = fixture(300);
+    f.request.mockImplementationOnce(
+      async () => new Response("Invalid claim request", { status: 400 }),
+    );
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).resolves.toEqual({ code: "23456789AB", expiresAt: f.expiresAt });
+    expect(f.request).toHaveBeenCalledTimes(2);
+    const first = JSON.parse(String(f.request.mock.calls[0]![1]!.body));
+    const second = JSON.parse(String(f.request.mock.calls[1]![1]!.body));
+    expect(first.lifetimeSeconds).toBe(600);
+    expect(second).toEqual({ origin, challenge: first.challenge });
+  });
+
+  it.each([403, 429, 500, 503])("does not retry other Accounts errors (%s)", async (status) => {
+    const f = fixture(300);
+    f.request.mockImplementationOnce(async () => Response.json({}, { status }));
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow();
+    expect(f.request).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a long lifetime from a legacy fallback", async () => {
+    const f = fixture(320);
+    f.request.mockImplementationOnce(async () => new Response(null, { status: 400 }));
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("Accounts returned an invalid authorization.");
+    expect(f.request).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry a network failure", async () => {
+    const f = fixture(300);
+    f.request.mockRejectedValueOnce(new Error("Network unavailable"));
+    await expect(
+      issueServerClaim(f.db, {
+        issuer,
+        origin,
+        bootstrapSecret: "s".repeat(43),
+        request: f.request as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow("Network unavailable");
+    expect(f.request).toHaveBeenCalledOnce();
+  });
 });
 
 function signed(changes: Record<string, unknown> = {}) {

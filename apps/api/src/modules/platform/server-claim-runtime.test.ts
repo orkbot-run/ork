@@ -15,7 +15,7 @@ const loader = pathToFileURL(
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 it("distinguishes workspace setup from personal Accounts authorization", () => {
-  const instructions = serverClaimInstructions("23456789AB");
+  const instructions = serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) + 600);
   const lines = instructions.trim().split("\n");
   expect(lines[0]).toBe("Connect your server");
   expect(instructions).toContain("workspace dashboard");
@@ -27,16 +27,32 @@ it("distinguishes workspace setup from personal Accounts authorization", () => {
   expect(lines).toContain("   https://accounts.ork.run/account/connect-server");
   expect(instructions).toContain("Setup code: 23456789AB");
   expect(instructions).toContain("expires in 10 minutes");
-  expect(() => serverClaimInstructions("invalid")).toThrow();
+  expect(() => serverClaimInstructions("invalid", Math.floor(Date.now() / 1000) + 600)).toThrow();
 });
 
 it("sends an existing server's owner to the workspace dashboard", () => {
-  const instructions = serverClaimInstructions("23456789AB", true);
+  const instructions = serverClaimInstructions(
+    "23456789AB",
+    Math.floor(Date.now() / 1000) + 600,
+    true,
+  );
   expect(instructions).toContain("workspace dashboard");
   expect(instructions).toContain("23456789AB");
   expect(instructions).toContain("current owner");
   expect(instructions).toContain("expires in 10 minutes");
   expect(instructions).not.toContain("connect-server#code");
+});
+
+it.each([false, true])("shows the actual fallback lifetime for workspace %s", (workspace) => {
+  const instructions = serverClaimInstructions(
+    "23456789AB",
+    Math.floor(Date.now() / 1000) + 300,
+    workspace,
+  );
+  expect(instructions).toContain("expires in 5 minutes");
+  expect(() =>
+    serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) - 1, workspace),
+  ).toThrow();
 });
 
 it("loads a private Compose role file using the production runtime loader", async () => {

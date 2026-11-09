@@ -45,7 +45,9 @@ try {
         ...(process.argv.includes("--workspace") ? { mode: "workspace" as const } : {}),
       }),
     );
-    process.stdout.write(serverClaimInstructions(claim.code, process.argv.includes("--workspace")));
+    process.stdout.write(
+      serverClaimInstructions(claim.code, claim.expiresAt, process.argv.includes("--workspace")),
+    );
   }
 } finally {
   await prisma.$disconnect();
