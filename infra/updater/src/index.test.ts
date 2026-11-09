@@ -256,6 +256,66 @@ describe("standalone deployment acknowledgements", () => {
     return { ...fixture, fetch, template, before, after, metadata };
   }
 
+  it("verifies a large five-page release list without reading a sixth page", async () => {
+    const fixture = await preparedDeployment();
+    const pages: string[] = [];
+    const fetch: typeof globalThis.fetch = async (input) => {
+      const url = String(input);
+      if (url.includes("/releases?")) {
+        pages.push(url);
+        const page = Number(new URL(url).searchParams.get("page"));
+        return Response.json(
+          Array.from({ length: 20 }, (_, index) => ({
+            tag_name: page === 5 && index === 19 ? "v1.2.3" : `desktop-feed-${page}-${index}`,
+            draft: false,
+            prerelease: page !== 5 || index !== 19,
+            body: "x".repeat(16_000),
+          })),
+        );
+      }
+      return fixture.fetch(input);
+    };
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
+      if (args.includes("exec")) return ok(currentCommit);
+      return ok();
+    };
+    const subject = createUpdaterApp({ ...fixture.config, mode: "standalone" }, { run, fetch });
+    const response = await request(subject, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "paged-operation-0001",
+      channel: "preview",
+    });
+    expect(response.status).toBe(202);
+    await vi.waitFor(async () =>
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded"),
+    );
+    expect(pages).toHaveLength(5);
+    expect(pages.every((url, index) => url.endsWith(`per_page=20&page=${index + 1}`))).toBe(true);
+  });
+
+  it.each([
+    () => new Response("x".repeat(2 * 1024 * 1024 + 1)),
+    () => Response.json(Array.from({ length: 21 }, () => ({}))),
+  ])(
+    "refuses an oversized or overfull release page before touching the deployment",
+    async (page) => {
+      const fixture = await preparedDeployment();
+      const run = vi.fn<UpdaterCommandRunner>(async () => ok());
+      const fetch: typeof globalThis.fetch = async () => page();
+      const subject = createUpdaterApp({ ...fixture.config, mode: "standalone" }, { run, fetch });
+      const response = await request(subject, "/deploy", {
+        revision: targetCommit,
+        idempotencyKey: "oversize-operation-01",
+        channel: "preview",
+      });
+      expect(response.ok).toBe(false);
+      expect(run).not.toHaveBeenCalled();
+      expect(await new DeploymentJournal(fixture.deployDir).read()).toBeNull();
+      expect(await readFile(fixture.template, "utf8")).toBe(fixture.before);
+    },
+  );
+
   it("marks a template download failure as failed and permits a later request", async () => {
     const fixture = await preparedDeployment();
     let failTemplate = true;

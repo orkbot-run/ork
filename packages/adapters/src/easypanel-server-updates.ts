@@ -15,6 +15,9 @@ const OFFICIAL_API = "https://api.github.com/repos/orkbot-run/ork";
 const REGISTRY = "https://ghcr.io";
 const REPOSITORY = "orkbot-run/ork/app";
 const MAX_BYTES = 65_536;
+const MAX_RELEASE_PAGE_BYTES = 2 * 1024 * 1024;
+const RELEASE_PAGE_SIZE = 20;
+const MAX_RELEASE_PAGES = 5;
 const TIMEOUT_MS = 10_000;
 const failure = () => new Error("Could not contact the deployment service.");
 
@@ -30,7 +33,11 @@ export function createOfficialServerUpdateDiscovery(
   const currentRevision = config.currentRevision;
   if (channel !== "stable" && channel !== "preview") throw failure();
   const fetch = dependencies.fetch ?? globalThis.fetch;
-  async function request(path: string, signal: AbortSignal): Promise<unknown | null> {
+  async function request(
+    path: string,
+    signal: AbortSignal,
+    maxBytes = MAX_BYTES,
+  ): Promise<unknown | null> {
     const response = await fetch(`${OFFICIAL_API}${path}`, {
       redirect: "error",
       signal,
@@ -47,7 +54,7 @@ export function createOfficialServerUpdateDiscovery(
       cancelResponseBody(response);
       throw failure();
     }
-    return readBoundedJsonResponse(response, MAX_BYTES, signal);
+    return readBoundedJsonResponse(response, maxBytes, signal);
   }
   async function published(
     revision: string,
@@ -88,8 +95,17 @@ export function createOfficialServerUpdateDiscovery(
         version = release.tag_name;
         ref = version;
       } else if (config.previewRelease) {
-        const releases = await request("/releases?per_page=100", signal);
-        if (!Array.isArray(releases)) throw failure();
+        const releases: unknown[] = [];
+        for (let page = 1; page <= MAX_RELEASE_PAGES; page++) {
+          const batch = await request(
+            `/releases?per_page=${RELEASE_PAGE_SIZE}&page=${page}`,
+            signal,
+            MAX_RELEASE_PAGE_BYTES,
+          );
+          if (!Array.isArray(batch) || batch.length > RELEASE_PAGE_SIZE) throw failure();
+          releases.push(...batch);
+          if (batch.length < RELEASE_PAGE_SIZE) break;
+        }
         const tags = releases.flatMap((item: unknown) => {
           if (!item || typeof item !== "object") return [];
           const entry = item as Record<string, unknown>;

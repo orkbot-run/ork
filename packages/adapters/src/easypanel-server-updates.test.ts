@@ -64,9 +64,76 @@ function fixture(
 }
 
 describe("configured channel deployment adapter", () => {
+  it("accepts a realistic large release page while ignoring non-product feeds", async () => {
+    const releases = Array.from({ length: 16 }, (_, index) => ({
+      tag_name: `desktop-feed-${index}`,
+      draft: false,
+      prerelease: true,
+      body: "x".repeat(18_000),
+    }));
+    releases.push({
+      tag_name: "v1.2.3",
+      draft: false,
+      prerelease: false,
+      body: "x".repeat(18_000),
+    });
+    expect(Buffer.byteLength(JSON.stringify(releases))).toBeGreaterThan(291_000);
+    const { fetch } = fixture("preview", {
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=1": () =>
+        Response.json(releases),
+    });
+    const check = createOfficialServerUpdateDiscovery(
+      { channel: "preview", currentRevision: "9".repeat(40), previewRelease: true },
+      { fetch },
+    );
+    await expect(check()).resolves.toEqual({ revision, version: "v1.2.3" });
+  });
+
+  it("checks up to five pages and selects the highest published version", async () => {
+    const overrides: Record<string, () => Response> = {};
+    for (let page = 1; page <= 5; page++) {
+      overrides[`https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=${page}`] =
+        () =>
+          Response.json(
+            Array.from({ length: 20 }, (_, index) => ({
+              tag_name:
+                page === 5 && index === 19 ? "v2.0.0-beta.10" : `desktop-feed-${page}-${index}`,
+              draft: false,
+              prerelease: true,
+            })),
+          );
+    }
+    const { fetch } = fixture("preview", overrides);
+    const check = createOfficialServerUpdateDiscovery(
+      { channel: "preview", currentRevision: "9".repeat(40), previewRelease: true },
+      { fetch },
+    );
+    await expect(check()).resolves.toEqual({ revision, version: "v2.0.0-beta.10" });
+    const pageCalls = fetch.mock.calls.filter(([url]) => String(url).includes("/releases?"));
+    expect(pageCalls).toHaveLength(5);
+    expect(new Set(pageCalls.map(([, init]) => init?.signal)).size).toBe(1);
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("page=6"))).toBe(false);
+  });
+
+  it("rejects oversized or overfull release pages before offering a candidate", async () => {
+    for (const replacement of [
+      () => new Response("x".repeat(2 * 1024 * 1024 + 1)),
+      () => Response.json(Array.from({ length: 21 }, () => ({}))),
+    ]) {
+      const { fetch } = fixture("preview", {
+        "https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=1": replacement,
+      });
+      const check = createOfficialServerUpdateDiscovery(
+        { channel: "preview", currentRevision: "9".repeat(40), previewRelease: true },
+        { fetch },
+      );
+      await expect(check()).rejects.toThrow("Could not contact the deployment service.");
+      expect(fetch.mock.calls.some(([url]) => String(url).includes("/commits?"))).toBe(false);
+    }
+  });
   it("offers a newer stable release on the beta channel", async () => {
     const { fetch } = fixture("preview", {
-      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100": () =>
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=1": () =>
         Response.json([
           { tag_name: "v1.2.3-beta.10", prerelease: true, draft: false },
           { tag_name: "v1.2.3", prerelease: false, draft: false },
@@ -82,7 +149,7 @@ describe("configured channel deployment adapter", () => {
   });
   it("uses a published prerelease tag for standalone beta instead of edge", async () => {
     const { fetch } = fixture("preview", {
-      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100": () =>
+      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=1": () =>
         Response.json([{ tag_name: "v2.0.0-beta.1", prerelease: true, draft: false }]),
     });
     const check = createOfficialServerUpdateDiscovery(
