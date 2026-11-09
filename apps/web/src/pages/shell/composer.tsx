@@ -240,7 +240,7 @@ const ComposerBody = memo(function Composer({
   externalDraft.current = (next) => {
     if (!mountedRef.current || draftKeyRef.current !== draftKey) return;
     commitComposition({ text: next.text, bindings: [...next.bindings] }, false);
-    pendingCaret.current = { start: next.text.length, end: next.text.length };
+    pendingCaret.current = { start: next.text.length, end: next.text.length, preserveFocus: true };
     setMentionHighlightKey(null);
     refreshDraftPickers(next.text, next.bindings, next.text.length);
   };
@@ -297,7 +297,7 @@ const ComposerBody = memo(function Composer({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [textareaRef]);
-  const pendingCaret = useRef<ComposerMentionRange | null>(null);
+  const pendingCaret = useRef<(ComposerMentionRange & { preserveFocus?: boolean }) | null>(null);
   const completedSelection = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (pendingCaret.current === null) return;
@@ -305,7 +305,7 @@ const ComposerBody = memo(function Composer({
     pendingCaret.current = null;
     completedSelection.current = selection.start === selection.end ? selection.start : null;
     textareaRef.current?.setSelectionRange(selection.start, selection.end);
-    textareaRef.current?.focus();
+    if (!selection.preserveFocus) textareaRef.current?.focus();
   });
   // A reply button on the open page adds its text here for the user to send, about that page
   // rather than a message picked before it.

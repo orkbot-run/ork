@@ -673,6 +673,26 @@ describe("Composer", () => {
     expect(textarea.value).toBe("");
   });
 
+  it("does not steal focus when a pending send completes", async () => {
+    let finishSend = (_sent: boolean) => {};
+    const textarea = renderComposer(
+      () =>
+        new Promise<boolean>((resolve) => {
+          finishSend = resolve;
+        }),
+    );
+    const opener = document.createElement("button");
+    document.body.append(opener);
+    act(() => textarea.focus());
+    type(textarea, "hello");
+    pressEnter(textarea);
+    act(() => opener.focus());
+    await act(async () => finishSend(true));
+    expect(document.activeElement).toBe(opener);
+    expect(textarea.value).toBe("");
+    opener.remove();
+  });
+
   it("keeps the draft cleared when the send callback rejects", async () => {
     const onSend = vi
       .fn()
@@ -1507,6 +1527,7 @@ it("answers the page, not an earlier picked message, when the page's reply butto
   act(() => session.offerReply("Mark task 3 done"));
   expect(onClearReply).toHaveBeenCalledTimes(1);
   expect(container?.querySelector("textarea")?.value).toBe("Mark task 3 done");
+  expect(document.activeElement).toBe(container?.querySelector("textarea"));
 });
 
 it("keeps a newer skill and both mention bindings when a failed skill send is merged", async () => {
