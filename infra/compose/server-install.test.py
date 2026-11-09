@@ -101,10 +101,28 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(json.loads(state.read_text()), {
             "files": {str(template): hashlib.sha256(template.read_bytes()).hexdigest()}
         })
+        with self.assertRaises(installer.SetupError):
+            installer.validate_compose_state([str(template), "docker-compose.https.yml"])
         original = state.read_bytes()
         template.write_text("operator modification\n")
         installer.record_compose_state([str(template)])
         self.assertEqual(state.read_bytes(), original)
+        with self.assertRaises(installer.SetupError):
+            installer.validate_compose_state([str(template)])
+
+    def test_interrupted_native_image_pin_resumes_without_replacing_secrets(self):
+        commit = "f" * 40
+        self.env.update(AUTH_ACCOUNTS_ENABLED="true", ORKBOT_IMAGE_TAG="edge", ORKBOT_COMPUTER_IMAGE_TAG="edge")
+        self.write_env()
+        with patch.object(installer, "environment", return_value=self.env):
+            installer.resume_initial_pin("https://mirror.example.com/" + commit + "/infra/compose")
+        content = installer.ENV.read_text()
+        self.assertIn("ORKBOT_IMAGE_TAG='sha-" + commit + "'", content)
+        self.assertIn("ORKBOT_COMPUTER_IMAGE_TAG='sha-" + commit + "'", content)
+        self.assertIn("ENCRYPTION_KEY=keep-this-key", content)
+        self.env["ORKBOT_IMAGE_TAG"] = "custom"
+        with patch.object(installer, "environment", return_value=self.env), self.assertRaises(installer.SetupError):
+            installer.resume_initial_pin("https://mirror.example.com/" + commit + "/infra/compose")
 
     def test_exact_public_origin_only(self):
         self.assertEqual(installer.origin(URL), "server.example.com")

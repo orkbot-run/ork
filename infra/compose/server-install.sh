@@ -198,29 +198,35 @@ server_main() {
   [[ "$DOWNLOAD_BASE" =~ /[0-9a-f]{40}/infra/compose$ ]] || fail "server setup requires a pinned release; use the Ork installation command."
   # Keep operator files. An installer rerun is a resume, not an implicit upgrade.
   skip_existing=true
-  local -a downloaded_templates=()
-  [[ -e "$COMPOSE_FILE" ]] || downloaded_templates+=("$COMPOSE_FILE")
+  local -a managed_templates=("$COMPOSE_FILE")
   required_files=("$COMPOSE_FILE" "$ENV_EXAMPLE")
   for filename in "${required_files[@]}"; do download "$filename"; done
   compose_files=(-f "$COMPOSE_FILE")
   override_present=''
   if [[ -f "$OVERRIDE_FILE" ]]; then compose_files+=(-f "$OVERRIDE_FILE"); override_present=1; fi
   if [[ "$external_proxy" != true ]]; then
-    [[ -e docker-compose.https.yml ]] || downloaded_templates+=(docker-compose.https.yml)
-    [[ -e Caddyfile.prod ]] || downloaded_templates+=(Caddyfile.prod)
+    managed_templates+=(docker-compose.https.yml Caddyfile.prod)
     download docker-compose.https.yml
     download Caddyfile.prod
     python3 "$helper" ip-edge "$server_url" || fail "could not prepare HTTPS for this server."
     compose_files+=(-f docker-compose.https.yml)
   fi
+  if [[ ! -e .orkbot-compose-state.json && ! -L .orkbot-compose-state.json ]]; then
+    local template
+    for template in "${managed_templates[@]}"; do
+      curl_download "${DOWNLOAD_BASE}/${template}" "$server_runtime/$template" || fail "could not verify installation templates against the pinned release."
+      cmp -s -- "$template" "$server_runtime/$template" || fail "installation templates differ from the pinned release; operator maintenance is required."
+    done
+    python3 "$helper" record-compose-state "${managed_templates[@]}" || fail "could not record the verified installation templates."
+  fi
+  python3 "$helper" validate-compose-state "${managed_templates[@]}" || fail "installation templates need operator maintenance before updates can be enabled."
   local created_env=false
   if [[ ! -f .env ]]; then create_env; created_env=true; fi
   export ORKBOT_INSTALL_EXTERNAL_PROXY="$external_proxy"
   if [[ "$created_env" == true ]]; then
     python3 "$helper" pin-images "$DOWNLOAD_BASE" || fail "could not pin the application images."
-    if (( ${#downloaded_templates[@]} )); then
-      python3 "$helper" record-compose-state "${downloaded_templates[@]}" || fail "could not record the downloaded Compose templates."
-    fi
+  elif [[ ! -e .orkbot-server.json ]]; then
+    python3 "$helper" resume-initial-pin "$DOWNLOAD_BASE" || fail "could not safely resume image pinning."
   fi
   local configured
   configured=$(timeout --foreground 60 python3 "$helper" configured "$server_url") || fail "existing server configuration needs attention."

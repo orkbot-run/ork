@@ -256,6 +256,45 @@ describe("standalone deployment acknowledgements", () => {
     return { ...fixture, fetch, template, before, after, metadata };
   }
 
+  it("marks a template download failure as failed and permits a later request", async () => {
+    const fixture = await preparedDeployment();
+    let failTemplate = true;
+    const fetch: typeof globalThis.fetch = async (input) => {
+      if (String(input).startsWith("https://raw.githubusercontent.com/") && failTemplate) {
+        failTemplate = false;
+        return new Response(null, { status: 503 });
+      }
+      return fixture.fetch(input);
+    };
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
+      if (args.includes("exec")) return ok(currentCommit);
+      return ok();
+    };
+    const subject = createUpdaterApp({ ...fixture.config, mode: "standalone" }, { run, fetch });
+    const first = await request(subject, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "first-operation-0001",
+      channel: "stable",
+    });
+    expect(first.status).toBe(202);
+    await vi.waitFor(async () => {
+      const state = await subject.request("/state", { headers: authorized });
+      expect(await state.json()).toMatchObject({ running: false, operation: { state: "failed" } });
+    });
+    expect(await readFile(fixture.template, "utf8")).toBe(fixture.before);
+    const second = await request(subject, "/deploy", {
+      revision: targetCommit,
+      idempotencyKey: "second-operation-0001",
+      channel: "stable",
+    });
+    expect(second.status).toBe(202);
+    await vi.waitFor(async () =>
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded"),
+    );
+    expect(await readFile(fixture.template, "utf8")).toBe(fixture.after);
+  });
+
   it.each(["accepted", "running", "unknown"] as const)(
     "reconciles %s to success only after all target services and templates match",
     async (state) => {

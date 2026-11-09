@@ -492,6 +492,41 @@ def record_compose_state(files):
     atomic(state, json.dumps({"files": hashes}, sort_keys=True) + "\n")
 
 
+def validate_compose_state(files):
+    state = Path(".orkbot-compose-state.json")
+    regular(state, private=True)
+    try:
+        manifest = json.loads(state.read_text())
+    except (OSError, ValueError):
+        raise SetupError("The installation template manifest is unavailable or invalid; operator maintenance is required.") from None
+    allowed = {"docker-compose.images.yml", "docker-compose.https.yml", "Caddyfile.prod"}
+    if (not isinstance(manifest, dict) or set(manifest) != {"files"} or
+            not isinstance(manifest["files"], dict) or not set(files).issubset(manifest["files"]) or
+            not set(manifest["files"]).issubset(allowed)):
+        raise SetupError("The installation template manifest is incomplete; operator maintenance is required.")
+    for name, expected in manifest["files"].items():
+        path = Path(name)
+        regular(path)
+        if (not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected) or
+                not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != expected):
+            raise SetupError("An installation template was modified; operator maintenance is required.")
+
+
+def resume_initial_pin(base):
+    match = re.search(r"/([0-9a-f]{40})/infra/compose$", base)
+    if not match:
+        raise SetupError("Server setup requires a pinned installation source.")
+    env = environment()
+    tag = "sha-" + match.group(1)
+    keys = ("ORKBOT_IMAGE_TAG", "ORKBOT_COMPUTER_IMAGE_TAG")
+    if all(env.get(key) == tag for key in keys):
+        return
+    if (STATE.exists() or env.get("AUTH_ACCOUNTS_ENABLED") != "true" or
+            any(env.get(key) not in ("", "edge", tag) for key in keys)):
+        raise SetupError("Existing image pins do not match the installer; operator maintenance is required.")
+    write_environment({key: tag for key in keys})
+
+
 def initialization_required(url):
     env = environment()
     if env.get("AUTH_ACCOUNTS_ENABLED") != "true" or env.get("OIDC_CLIENT_ID"):
@@ -525,6 +560,12 @@ def main():
         return
     if operation == "record-compose-state":
         record_compose_state(sys.argv[2:])
+        return
+    if operation == "validate-compose-state":
+        validate_compose_state(sys.argv[2:])
+        return
+    if operation == "resume-initial-pin":
+        resume_initial_pin(url)
         return
     if operation == "ip-edge":
         ip_edge(url)

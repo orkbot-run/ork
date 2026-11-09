@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   endCall: vi.fn(),
   declineIncomingCall: vi.fn(),
 }));
+vi.mock("./components/ProtocolRecovery", () => ({
+  ProtocolRecovery: ({ children }: { children: ReactNode }) => children,
+}));
 
 vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 vi.mock("@lingui/react/macro", () => ({

@@ -353,6 +353,7 @@ export function createUpdaterApp(
         await verifyPublishedRelease(input.revision, input.channel === "preview");
         await journal.write(operation);
         void (async () => {
+          let mutationMayHaveStarted = false;
           try {
             await journal.write({ ...operation, state: "running" });
             const tags = readTagState(await readEnvFile());
@@ -361,6 +362,7 @@ export function createUpdaterApp(
               operation.revision,
               options.fetch,
             );
+            mutationMayHaveStarted = true;
             await templates.apply();
             const result = await execute({
               restoreTemplates: templates.restore,
@@ -381,7 +383,9 @@ export function createUpdaterApp(
             else await templates.restore();
             await journal.write({ ...operation, state: result.ok ? "succeeded" : "failed" });
           } catch {
-            await journal.write({ ...operation, state: "unknown" }).catch(() => undefined);
+            await journal
+              .write({ ...operation, state: mutationMayHaveStarted ? "unknown" : "failed" })
+              .catch(() => undefined);
           } finally {
             running = false;
           }

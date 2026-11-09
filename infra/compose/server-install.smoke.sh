@@ -215,6 +215,25 @@ grep -q '^ORKBOT_COMPOSE_FILE=.*docker-compose.updates.yml' "$tmp/native/.env"
 grep -q '^AUTH_ACCOUNTS_ENABLED=' "$tmp/native/.env"
 grep -q '^ORKBOT_BOOTSTRAP_SECRET=' "$tmp/native/.env"
 ! grep -q '^redeem$' "$tmp/native/events"
+cp -R "$tmp/native" "$tmp/modified-template"
+rm "$tmp/modified-template/.orkbot-compose-state.json"
+printf '\n# changed by the operator\n' >> "$tmp/modified-template/docker-compose.images.yml"
+if STUB_NATIVE_ACCOUNTS=1 run_case modified-template; then echo 'Modified untracked templates were accepted' >&2; exit 1; fi
+grep -q 'templates differ from the pinned release' "$tmp/modified-template/output"
+! grep -q -e '^updates-init$' -e '^up$' "$tmp/modified-template/events"
+rm "$tmp/native/.orkbot-compose-state.json" "$tmp/native/.orkbot-server.json"
+"$real_python" - "$tmp/native/.env" <<'PY'
+from pathlib import Path
+import re, sys
+path = Path(sys.argv[1])
+content = path.read_text()
+content = re.sub(r"(?m)^(ORKBOT_(?:COMPUTER_)?IMAGE_TAG)=.*$", r"\1=edge", content)
+path.write_text(content)
+PY
+STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
+grep -q "^ORKBOT_IMAGE_TAG='sha-0123456789abcdef0123456789abcdef01234567'" "$tmp/native/.env"
+[[ -f "$tmp/native/.orkbot-compose-state.json" ]]
+grep -q '^updates-init$' "$tmp/native/events"
 native_before=$(cksum "$tmp/native/.env")
 STUB_NATIVE_ACCOUNTS=1 STUB_ALREADY_INITIALIZED=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 ! grep -q '^claim$' "$tmp/native/events"
