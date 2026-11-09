@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   serverUpdates: vi.fn(() => ({ state: {}, updates: {} })),
   signedIn: true,
   pending: false,
+  userId: "user-a",
   sessionId: "session-a",
   response: undefined as ((response: Response) => void) | undefined,
 }));
@@ -28,7 +29,9 @@ vi.mock("../lib/auth", () => ({
   authClient: {
     useSession: () => ({
       isPending: state.pending,
-      data: state.signedIn ? { user: { id: "user" }, session: { id: state.sessionId } } : null,
+      data: state.signedIn
+        ? { user: { id: state.userId }, session: { id: state.sessionId } }
+        : null,
     }),
   },
 }));
@@ -61,6 +64,7 @@ afterEach(() => {
   vi.useRealTimers();
   state.signedIn = true;
   state.pending = false;
+  state.userId = "user-a";
   state.sessionId = "session-a";
 });
 
@@ -167,6 +171,110 @@ it("keeps the product mounted during a session refetch that retains its data", a
   expect(mounted).toHaveBeenCalledOnce();
   expect(unmounted).not.toHaveBeenCalled();
   expect(state.discover).toHaveBeenCalledOnce();
+});
+
+it("preserves product state while checking a rotated session for the same user", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.discover.mockResolvedValueOnce({});
+  let resolveNew!: (value: object) => void;
+  state.discover.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveNew = resolve;
+      }),
+  );
+  const mounted = vi.fn();
+  const unmounted = vi.fn();
+  function Product() {
+    useEffect(() => {
+      mounted();
+      return unmounted;
+    }, []);
+    return <input defaultValue="Password updated" />;
+  }
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  cleanup = () => act(() => root.unmount());
+  const show = () =>
+    root.render(
+      <ProtocolRecovery>
+        <Product />
+      </ProtocolRecovery>,
+    );
+  await act(async () => show());
+  const input = host.querySelector("input");
+  expect(input).not.toBeNull();
+  input!.value = "Saved confirmation";
+  state.sessionId = "session-b";
+  await act(async () => show());
+  expect(host.querySelector("input")).toBe(input);
+  expect(input!.value).toBe("Saved confirmation");
+  expect(unmounted).not.toHaveBeenCalled();
+  expect(state.discover).toHaveBeenCalledTimes(2);
+  await act(async () => resolveNew({}));
+  expect(mounted).toHaveBeenCalledOnce();
+  expect(host.querySelector("input")).toBe(input);
+});
+
+it("unmounts the verified product and checks again when the user changes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.discover.mockResolvedValueOnce({});
+  let resolveNew!: (value: object) => void;
+  state.discover.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveNew = resolve;
+      }),
+  );
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  cleanup = () => act(() => root.unmount());
+  const show = () =>
+    root.render(
+      <ProtocolRecovery>
+        <input />
+      </ProtocolRecovery>,
+    );
+  await act(async () => show());
+  const oldInput = host.querySelector("input");
+  expect(oldInput).not.toBeNull();
+  state.userId = "user-b";
+  await act(async () => show());
+  expect(host.textContent).toBe("Loading");
+  expect(host.querySelector("input")).toBeNull();
+  await act(async () => resolveNew({}));
+  expect(host.querySelector("input")).not.toBe(oldInput);
+});
+
+it("keeps the recovery gate closed during session rotation", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.discover.mockRejectedValueOnce(
+    new ProtocolUpdateRequired({ protocol: { min: 1, max: 1 } } as never),
+  );
+  let resolveNew!: (value: object) => void;
+  state.discover.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveNew = resolve;
+      }),
+  );
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  cleanup = () => act(() => root.unmount());
+  const show = () =>
+    root.render(
+      <ProtocolRecovery>
+        <div>Product workspace</div>
+      </ProtocolRecovery>,
+    );
+  await act(async () => show());
+  expect(host.textContent).toContain("Server updater");
+  state.sessionId = "session-b";
+  await act(async () => show());
+  expect(host.textContent).toContain("Server updater");
+  expect(host.textContent).not.toContain("Product workspace");
+  await act(async () => resolveNew({}));
+  expect(host.textContent).toContain("Product workspace");
 });
 
 it("keeps product screens unmounted and exposes server recovery when the server is too old", async () => {
