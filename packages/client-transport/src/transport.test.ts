@@ -43,6 +43,14 @@ async function collect(events: AsyncIterable<unknown>) {
 }
 
 describe("shared RPC wire transport", () => {
+  it("does not cancel a fully consumed unary response", async () => {
+    const body = Response.json({ json: { ok: true } });
+    const cancel = vi.spyOn(body.body!, "cancel");
+    const link = createRpcLink({ url: "https://server.example.test/rpc", fetch: async () => body });
+    await expect(link.call(["read"], {}, { context: {} })).resolves.toEqual({ ok: true });
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
   it("interoperates with the real oRPC handler for metadata, errors and streaming", async () => {
     const date = new Date("2026-11-01T00:00:00.000Z");
     const handler = new RPCHandler({

@@ -13,17 +13,22 @@ import {
   ProtocolUpdateRequired,
   resetAuthCapabilities,
 } from "../lib/auth-capabilities";
-import { lazyComponent } from "../lib/preload-recovery";
 import { onRpcResponse } from "../lib/rpc";
 import { useServerUpdates } from "../lib/server-updates";
 import { DesktopUpdateSection } from "./DesktopUpdates";
 import { PageLoading } from "./PageLoading";
 import { ServerUpdateSection } from "./ServerUpdates";
 
-const AuthPage = lazyComponent(() => import("../pages/Auth").then((module) => module.AuthPage));
-
 /** Keep incompatible product screens unmounted while preserving authenticated update access. */
 export function ProtocolRecovery({ children }: { children: ReactNode }) {
+  const session = authClient.useSession();
+  const userId = session.data?.user?.id;
+  if (!userId) return children;
+  const key = JSON.stringify([userId, session.data?.session?.id ?? null]);
+  return <AuthenticatedProtocolRecovery key={key}>{children}</AuthenticatedProtocolRecovery>;
+}
+
+function AuthenticatedProtocolRecovery({ children }: { children: ReactNode }) {
   const [state, setState] = useState<
     AuthCapabilities | null | "loading" | "unavailable" | "client"
   >("loading");
@@ -106,9 +111,6 @@ function ClientRecovery() {
 }
 
 function ServerRecovery() {
-  const session = authClient.useSession();
-  if (session.isPending) return <PageLoading />;
-  if (!session.data) return <AuthPage mode="in" recovery />;
   return <ServerRecoveryControls />;
 }
 
