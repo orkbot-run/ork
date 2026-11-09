@@ -12,8 +12,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/desktop-tauri.yml"
-      - ".github/workflows/desktop-tauri-publish.yml"
-      - ".github/scripts/publish-tauri.mjs"
+      - ".github/scripts/publish-tauri-release.mjs"
       - "apps/desktop/**"
       - "apps/web/**"
       - "packages/contracts/**"
@@ -116,10 +115,7 @@ jobs:
           node --test .github/scripts/prepare-tauri-tools.test.mjs
           node .github/scripts/prepare-tauri-tools.mjs
       - name: Build diagnostic installers
-        if: >-
-          github.event_name != 'release' &&
-          (github.ref != 'refs/heads/main' || github.event_name == 'pull_request' ||
-          vars.TAURI_PREVIEW_RELEASE_ENABLED != 'true')
+        if: github.event_name != 'release'
         shell: bash
         run: |
           if [[ "$RUNNER_OS" == Linux ]]; then
@@ -129,10 +125,8 @@ jobs:
           fi
       - name: Build signed updates
         if: >-
-          (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
-          (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))) ||
-          (github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-          vars.TAURI_PREVIEW_RELEASE_ENABLED == 'true')
+          github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
+          (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))
         shell: bash
         env:
           ORKBOT_ENABLE_AUTO_UPDATE: "1"
@@ -178,10 +172,8 @@ jobs:
           node apps/desktop/scripts/tauri-release.ts stage apps/desktop/src-tauri/target/release/bundle "$RUNNER_TEMP/updater"
       - name: Upload signed update artifacts
         if: >-
-          (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
-          (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))) ||
-          (github.ref == 'refs/heads/main' && github.event_name != 'pull_request' &&
-          vars.TAURI_PREVIEW_RELEASE_ENABLED == 'true')
+          github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
+          (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ork-tauri-updater-${{ matrix.platform }}
@@ -214,8 +206,9 @@ jobs:
       (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))
     needs: diagnostic-build
     concurrency:
-      group: desktop-tauri-stable-publish
+      group: desktop-tauri-release-publish
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

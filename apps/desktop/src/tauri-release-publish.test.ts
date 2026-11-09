@@ -29,8 +29,10 @@ if (args[0] === 'api') {
   else if (endpoint.endsWith('/releases/tags/' + process.env.TAURI_RELEASE_TAG)) console.log(JSON.stringify({tag_name:process.env.TAURI_RELEASE_TAG, draft:false, prerelease:process.env.TAURI_RELEASE_TAG.includes('-beta.'), assets:assets()}));
   else if (endpoint.includes('/ci.yml/runs?')) console.log(JSON.stringify({workflow_runs:process.env.FIXTURE_NO_CI ? [] : [{id:4,run_number:1,head_sha:revision,head_branch:'main',head_repository:{full_name:process.env.GITHUB_REPOSITORY},event:'push',conclusion:'success'}]}));
   else if (endpoint.endsWith('/releases/tags/desktop-beta') && process.env.FIXTURE_BETA_VERSION) console.log(JSON.stringify({assets:[{name:'latest.json',id:42}]}));
+  else if (endpoint.endsWith('/releases/tags/desktop-preview') && process.env.FIXTURE_LEGACY_VERSION) console.log(JSON.stringify({assets:[{name:'latest.json',id:43}]}));
   else if (endpoint.endsWith('/releases/assets/42')) console.log(JSON.stringify({version:process.env.FIXTURE_BETA_VERSION}));
-  else if (endpoint.endsWith('/releases/tags/desktop-stable') || endpoint.endsWith('/releases/tags/desktop-beta')) { console.error('gh: Not Found (HTTP 404)'); process.exit(1); }
+  else if (endpoint.endsWith('/releases/assets/43')) console.log(JSON.stringify({version:process.env.FIXTURE_LEGACY_VERSION}));
+  else if (endpoint.endsWith('/releases/tags/desktop-stable') || endpoint.endsWith('/releases/tags/desktop-beta') || endpoint.endsWith('/releases/tags/desktop-preview')) { console.error('gh: Not Found (HTTP 404)'); process.exit(1); }
   else process.exit(2);
 } else if (args[0] === 'run' && args[1] === 'download') {
   const destination = args[args.indexOf('--dir') + 1];
@@ -40,7 +42,7 @@ if (args[0] === 'api') {
     fs.writeFileSync(path.join(folder, platform + '.json'),JSON.stringify({platform,version:process.env.TAURI_RELEASE_TAG.slice(1),revision,key:process.env.TAURI_UPDATER_PUBLIC_KEY,archive,signature:'signature',files:[archive]}));
   }
 } else if (args[0] === 'release' && args[1] === 'upload') {
-  if (args[2] === 'desktop-stable' || args[2] === 'desktop-beta') { fs.copyFileSync(args[3], path.join(root,'promoted.json')); fs.appendFileSync(path.join(root,'channels.txt'), args[2]+'\\n'); }
+  if (['desktop-stable', 'desktop-beta', 'desktop-preview'].includes(args[2])) { fs.copyFileSync(args[3], path.join(root,'promoted.json')); fs.appendFileSync(path.join(root,'channels.txt'), args[2]+'\\n'); }
   else { const current = assets(), file = args[3]; current.push({name:path.basename(file),size:fs.statSync(file).size,digest:'sha256:'+crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')}); fs.writeFileSync(path.join(root,'assets.json'),JSON.stringify(current)); }
 } else if (!(args[0] === 'release' && args[1] === 'create')) process.exit(2);
 `,
@@ -72,7 +74,7 @@ if (args[0] === 'api') {
       expect(() => run({ FIXTURE_BAD_TAG: "1" })).toThrow();
       expect(run()).toContain("Published stable Ork 1.2.3");
       expect(readFileSync(path.join(directory, "channels.txt"), "utf8")).toBe(
-        "desktop-stable\ndesktop-beta\n",
+        "desktop-stable\ndesktop-beta\ndesktop-preview\n",
       );
       expect(
         JSON.parse(readFileSync(path.join(directory, "promoted.json"), "utf8")).platforms[
@@ -93,7 +95,15 @@ if (args[0] === 'api') {
       writeFileSync(path.join(directory, "assets.json"), "[]");
       writeFileSync(path.join(directory, "channels.txt"), "");
       run({ FIXTURE_BETA_VERSION: "1.3.0-beta.2" });
-      expect(readFileSync(path.join(directory, "channels.txt"), "utf8")).toBe("desktop-stable\n");
+      expect(readFileSync(path.join(directory, "channels.txt"), "utf8")).toBe(
+        "desktop-stable\ndesktop-preview\n",
+      );
+      writeFileSync(path.join(directory, "assets.json"), "[]");
+      writeFileSync(path.join(directory, "channels.txt"), "");
+      run({ FIXTURE_LEGACY_VERSION: "1.3.0" });
+      expect(readFileSync(path.join(directory, "channels.txt"), "utf8")).toBe(
+        "desktop-stable\ndesktop-beta\n",
+      );
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

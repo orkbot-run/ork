@@ -158,6 +158,7 @@ function promote(channelTag) {
 }
 if (!beta) promote("desktop-stable");
 promote("desktop-beta");
+if (!beta) promote("desktop-preview");
 console.log(
   `Published ${beta ? "beta" : "stable"} Ork ${version} for ${entries.length} platforms.`,
 );

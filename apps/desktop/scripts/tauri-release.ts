@@ -54,15 +54,6 @@ export function compareReleaseVersions(left: string, right: string) {
   return Number(leftBeta) < Number(rightBeta) ? -1 : 1;
 }
 
-/** A workflow run keeps its version across retries and stays within native installer limits. */
-export function previewVersion(run: string) {
-  if (!/^[1-9][0-9]*$/.test(run)) throw new Error("Invalid desktop build number.");
-  const number = Number(run);
-  if (!Number.isSafeInteger(number) || number >= 254 * 65535)
-    throw new Error("Desktop build number exceeds installer limits.");
-  return `1.${1 + Math.floor(number / 65535)}.${number % 65535}`;
-}
-
 export function releaseConfiguration(version: string, key: string) {
   releaseVersion(`v${version}`);
   const decoded = Buffer.from(key, "base64").toString("utf8");
@@ -174,7 +165,7 @@ export function releaseManifest(
     revision: string;
     key: string;
     date: string;
-    releaseTag?: string;
+    releaseTag: string;
   },
 ) {
   if (
@@ -183,7 +174,7 @@ export function releaseManifest(
   )
     throw new Error("Invalid release provenance.");
   releaseConfiguration(options.version, options.key);
-  if (options.releaseTag && releaseVersion(options.releaseTag) !== options.version)
+  if (releaseVersion(options.releaseTag) !== options.version)
     throw new Error("Desktop tag does not match its version.");
   if (
     entries.length !== PLATFORMS.length ||
@@ -205,7 +196,7 @@ export function releaseManifest(
       throw new Error("Desktop artifact provenance does not match this release.");
     platforms[entry.platform] = {
       signature: entry.signature,
-      url: `https://github.com/${options.repository}/releases/download/${options.releaseTag ?? `desktop-preview-${options.version}`}/${entry.archive}`,
+      url: `https://github.com/${options.repository}/releases/download/${options.releaseTag}/${entry.archive}`,
     };
   }
   if (!Number.isFinite(Date.parse(options.date))) throw new Error("Invalid publication date.");
@@ -214,9 +205,7 @@ export function releaseManifest(
 
 function main() {
   const [command, input, output] = process.argv.slice(2);
-  const version = process.env.TAURI_RELEASE_TAG
-    ? releaseVersion(process.env.TAURI_RELEASE_TAG)
-    : previewVersion(process.env.GITHUB_RUN_NUMBER ?? "");
+  const version = releaseVersion(process.env.TAURI_RELEASE_TAG ?? "");
   const key = process.env.TAURI_UPDATER_PUBLIC_KEY ?? "";
   if (command === "prepare" && input) {
     const config = releaseConfiguration(version, key);
