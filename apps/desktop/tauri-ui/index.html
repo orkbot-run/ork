@@ -37,7 +37,6 @@
             <div id="workspaces" class="workspace-list"></div>
           </section>
           <p id="workspaces-error" class="hint" role="status" hidden data-copy="Couldn't load workspaces. Try refreshing.">Couldn't load workspaces. Try refreshing.</p>
-          <section id="servers" class="server-list" aria-label="Your servers"></section>
           <div class="choices">
             <button id="local" class="choice" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></span><span><strong data-copy="This computer">This computer</strong><small data-copy="Run Ork here with Docker.">Run Ork here with Docker.</small></span><span aria-hidden="true">→</span></button>
             <button id="selfhost" class="choice choice-secondary" type="button"><span class="choice-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="8" rx="2"/><rect x="4" y="13" width="16" height="8" rx="2"/><path d="M8 7h.01M8 17h.01"/></svg></span><span><strong data-copy="Self-hosted">Self-hosted</strong><small data-copy="Connect or install on your own server.">Connect or install on your own server.</small></span><span aria-hidden="true">→</span></button>
@@ -47,6 +46,7 @@
         </section>
         <section data-step="selfhost" hidden>
           <h1 data-copy="Connect your server">Connect your server</h1>
+          <section id="servers" class="server-list" aria-label="Your servers"></section>
           <form id="setup">
             <div id="legacy-target" hidden>
               <label class="field-label" for="server-url" data-copy="Server address">Server address</label>

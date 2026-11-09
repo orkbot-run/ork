@@ -88,8 +88,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   let workspaceSnapshot = "";
   let workspaceProbeGeneration = 0;
   let directoryOwner: Account | null = null;
-  let directoryServers = new Set<string>();
-  let directoryReady = false;
   let directoryPolling = false;
   let directorySnapshot = "";
   const cleanups: (() => void)[] = [];
@@ -444,8 +442,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
 
   function renderServers(entries: Server[]) {
     directoryOwner = account;
-    directoryServers = new Set(entries.map((entry) => entry.id));
-    directoryReady = true;
     directorySnapshot = JSON.stringify(entries);
     servers.replaceChildren();
     for (const entry of entries) {
@@ -471,7 +467,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
             await transport.invoke("set_default_server", { id: entry.isDefault ? null : entry.id });
             if (current(version)) await loadServers(version);
           },
-          "servers",
+          "selfhost",
         );
       });
       const remove = doc.createElement("button");
@@ -486,7 +482,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
             await transport.invoke("remove_server", { id: entry.id });
             if (current(version)) await loadServers(version);
           },
-          "servers",
+          "selfhost",
         );
       });
       row.append(open, preferred, remove);
@@ -512,7 +508,6 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     const owner = account;
     const version = generation;
     const activeScreen = screen;
-    const previous = directoryOwner === owner && directoryReady ? directoryServers : null;
     directoryPolling = true;
     try {
       const entries = await transport.invoke<Server[]>("list_servers");
@@ -526,13 +521,9 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         pairingRequest
       )
         return;
-      const found =
-        previous !== null &&
-        entries.some((entry) => entry.kind === "selfhosted" && !previous.has(entry.id));
       if (directoryOwner !== owner || JSON.stringify(entries) !== directorySnapshot)
         renderServers(entries);
       void loadWorkspaces(version, owner);
-      if (found && activeScreen === "selfhost") show("servers");
     } catch {
       // A directory outage does not interrupt the current setup screen.
     } finally {
