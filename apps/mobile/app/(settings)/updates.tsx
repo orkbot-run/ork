@@ -2,12 +2,26 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { MenuView } from "@expo/ui/community/menu";
-import { serverUpdateCanApply } from "@orkbot/core";
-import { ActivityIndicator, ScrollView, Text } from "react-native";
+import type { ServerUpdateDisplayPhase } from "@orkbot/core";
+import { serverUpdateCanApply, serverUpdateProgressPhase } from "@orkbot/core";
+import { ScrollView, Text, View } from "react-native";
+import { ServerUpdateProgress } from "../../components/server-update-progress";
 import { SettingsGroup, SettingsRow, SettingsSwitch } from "../../components/settings-group";
 import { useI18n } from "../../lib/i18n";
 import { native, useMobileTokens } from "../../lib/native";
 import { useServerUpdates } from "../../lib/server-updates";
+
+const phaseLabels: Record<ServerUpdateDisplayPhase, string> = {
+  checking: "Checking for updates…",
+  preparing: "Preparing update…",
+  downloading: "Downloading update…",
+  restarting: "Restarting server…",
+  verifying: "Verifying update…",
+  recovering: "Restoring previous version…",
+  updating: "Updating server…",
+  waiting: "Waiting for update status…",
+  reconnecting: "Reconnecting…",
+};
 
 export default function Updates() {
   const { t } = useI18n();
@@ -16,16 +30,15 @@ export default function Updates() {
   const status = state.status;
   if (!status?.available) return null;
   const request = status.lastRequest?.state;
+  const phase = serverUpdateProgressPhase(state);
   const notice =
     state.uncertain || request === "unknown"
       ? t("Could not confirm the update")
       : request === "completed"
         ? t("Server updated")
-        : request === "requested"
-          ? t("Deployment requested")
-          : state.error || status.error
-            ? t("Could not complete the update. Try again.")
-            : null;
+        : state.error || status.error
+          ? t("Could not complete the update. Try again.")
+          : null;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: native.groupedPage }}
@@ -63,11 +76,6 @@ export default function Updates() {
           accessibilityRole="button"
           disabled={Boolean(state.busy)}
           onPress={() => void updates.check()}
-          trailing={
-            state.busy === "check" ? (
-              <ActivityIndicator color={tokens.mutedForeground} />
-            ) : undefined
-          }
         />
         {status.candidate ? (
           <SettingsRow
@@ -75,11 +83,6 @@ export default function Updates() {
             accessibilityRole="button"
             disabled={!serverUpdateCanApply(state)}
             onPress={() => void updates.apply()}
-            trailing={
-              state.busy === "apply" ? (
-                <ActivityIndicator color={tokens.mutedForeground} />
-              ) : undefined
-            }
           />
         ) : null}
         <SettingsSwitch
@@ -89,7 +92,14 @@ export default function Updates() {
           onChange={(value) => void updates.policy(value)}
         />
       </SettingsGroup>
-      {notice ? (
+      {phase ? (
+        <View style={{ gap: 8 }}>
+          <Text accessibilityLiveRegion="polite" style={{ color: tokens.mutedForeground }}>
+            {t(phaseLabels[phase])}
+          </Text>
+          <ServerUpdateProgress label={t(phaseLabels[phase])} />
+        </View>
+      ) : notice ? (
         <Text accessibilityLiveRegion="polite" style={{ color: tokens.mutedForeground }}>
           {notice}
         </Text>

@@ -1388,6 +1388,11 @@ msgstr ""
 msgid "Checking connection…"
 msgstr "Vérification de la connexion…"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Checking for updates…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -2750,10 +2755,6 @@ msgstr "Refusé"
 msgid "Deny"
 msgstr "Refuser"
 
-#: src/components/ServerUpdates.tsx
-msgid "Deployment requested"
-msgstr "Déploiement demandé"
-
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2926,6 +2927,11 @@ msgstr "Télécharger le CSV"
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Download PDF"
 msgstr "Télécharger le PDF"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Downloading update…"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
@@ -3584,6 +3590,10 @@ msgstr "Entrées"
 #: src/components/SidebarFooter.tsx
 msgid "Install update"
 msgstr "Installer la mise à jour"
+
+#: src/components/DesktopUpdates.tsx
+msgid "Installing update…"
+msgstr ""
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Installing…"
@@ -4993,6 +5003,11 @@ msgstr "POST vers"
 msgid "Preferences"
 msgstr "Préférences"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Preparing update…"
+msgstr ""
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5130,6 +5145,10 @@ msgstr "Reconnecter OAuth"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "Reconnexion en cours"
+
+#: src/components/ServerUpdates.tsx
+msgid "Reconnecting…"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -5445,6 +5464,10 @@ msgstr ""
 msgid "Restart to update"
 msgstr "Redémarrez pour mettre à jour"
 
+#: src/components/ServerUpdates.tsx
+msgid "Restarting server…"
+msgstr ""
+
 #: src/components/InstructionSettings.tsx
 #: src/pages/shell/archived-chats.tsx
 msgid "Restore"
@@ -5461,6 +5484,10 @@ msgstr "Restaurez le dernier espace de travail enregistré. Les travaux non enre
 #: src/components/AskCard.tsx
 msgid "Restored"
 msgstr "Restauré"
+
+#: src/components/ServerUpdates.tsx
+msgid "Restoring previous version…"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
@@ -6910,6 +6937,10 @@ msgstr "Avancement et réponse finale"
 msgid "Updating {0}’s Computer"
 msgstr "Mise à jour de l'ordinateur de {0}"
 
+#: src/components/ServerUpdates.tsx
+msgid "Updating server…"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Updating Team Computer"
 msgstr "Mise à jour de l'ordinateur d'équipe"
@@ -7052,6 +7083,10 @@ msgstr "Coffre"
 msgid "Verify and add"
 msgstr "Vérifier et ajouter"
 
+#: src/components/ServerUpdates.tsx
+msgid "Verifying update…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "Vérification en cours…"
@@ -7082,6 +7117,10 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "Patientez un instant et testez à nouveau."
+
+#: src/components/ServerUpdates.tsx
+msgid "Waiting for update status…"
+msgstr ""
 
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"

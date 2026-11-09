@@ -1388,6 +1388,11 @@ msgstr ""
 msgid "Checking connection…"
 msgstr "कनेक्शन जाँचा जा रहा है…"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Checking for updates…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -2750,10 +2755,6 @@ msgstr "अस्वीकृत"
 msgid "Deny"
 msgstr "अस्वीकार करें"
 
-#: src/components/ServerUpdates.tsx
-msgid "Deployment requested"
-msgstr "डिप्लॉयमेंट का अनुरोध भेजा गया"
-
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2926,6 +2927,11 @@ msgstr "CSV डाउनलोड करें"
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Download PDF"
 msgstr "PDF डाउनलोड करें"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Downloading update…"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
@@ -3584,6 +3590,10 @@ msgstr "इनपुट"
 #: src/components/SidebarFooter.tsx
 msgid "Install update"
 msgstr "अपडेट इंस्टॉल करें"
+
+#: src/components/DesktopUpdates.tsx
+msgid "Installing update…"
+msgstr ""
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Installing…"
@@ -4993,6 +5003,11 @@ msgstr ""
 msgid "Preferences"
 msgstr "प्राथमिकताएँ"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Preparing update…"
+msgstr ""
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5130,6 +5145,10 @@ msgstr "OAuth पुनः कनेक्ट करें"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "पुनः कनेक्ट हो रहा है"
+
+#: src/components/ServerUpdates.tsx
+msgid "Reconnecting…"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -5445,6 +5464,10 @@ msgstr ""
 msgid "Restart to update"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Restarting server…"
+msgstr ""
+
 #: src/components/InstructionSettings.tsx
 #: src/pages/shell/archived-chats.tsx
 msgid "Restore"
@@ -5461,6 +5484,10 @@ msgstr "अंतिम सहेजे गए वर्कस्पेस क�
 #: src/components/AskCard.tsx
 msgid "Restored"
 msgstr "बहाल किया गया"
+
+#: src/components/ServerUpdates.tsx
+msgid "Restoring previous version…"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
@@ -6910,6 +6937,10 @@ msgstr "प्रगति और अंतिम जवाब"
 msgid "Updating {0}’s Computer"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Updating server…"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Updating Team Computer"
 msgstr ""
@@ -7052,6 +7083,10 @@ msgstr "वॉल्ट"
 msgid "Verify and add"
 msgstr "पुष्टि करके जोड़ें"
 
+#: src/components/ServerUpdates.tsx
+msgid "Verifying update…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "पुष्टि की जा रही है…"
@@ -7082,6 +7117,10 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "थोड़ी देर रुकें और फिर से परीक्षण करें।"
+
+#: src/components/ServerUpdates.tsx
+msgid "Waiting for update status…"
+msgstr ""
 
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"

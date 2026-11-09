@@ -206,7 +206,10 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
         },
       }),
     );
-    expect((await previous.status(actor)).lastRequest?.state).toBe("requested");
+    expect((await previous.status(actor)).lastRequest).toMatchObject({
+      state: "requested",
+      phase: "verifying",
+    });
     const updated = createServerUpdates({
       prisma: prisma!,
       adapter: deployment,
@@ -216,7 +219,81 @@ describe.skipIf(!enabled)("operator-delegated configured-channel server updates"
       currentRevision: revision,
     });
     services.push(updated);
-    expect((await updated.status(actor)).lastRequest?.state).toBe("completed");
+    const completed = (await updated.status(actor)).lastRequest;
+    expect(completed?.state).toBe("completed");
+    expect(completed?.phase).toBeUndefined();
+  });
+
+  it("reports progress only for the matching active deployment", async () => {
+    const key = randomUUID();
+    const deployment = {
+      ...adapter(),
+      operation: vi.fn(async () => ({
+        revision,
+        idempotencyKey: key,
+        state: "running" as const,
+        phase: "downloading" as const,
+      })),
+    };
+    const updates = service(deployment);
+    await updates.status(actor);
+    await system(() =>
+      prisma!.serverUpdateRequest.create({
+        data: {
+          installationId,
+          idempotencyKey: key,
+          revision,
+          state: "requested",
+          automatic: false,
+          policyRevision: 0,
+          delegatedAccountKey: ownerKey,
+        },
+      }),
+    );
+    expect((await updates.status(actor)).lastRequest).toMatchObject({
+      state: "requested",
+      phase: "downloading",
+    });
+    deployment.operation.mockResolvedValueOnce({
+      revision: "c".repeat(40),
+      idempotencyKey: key,
+      state: "running",
+      phase: "downloading",
+    });
+    expect((await updates.status(actor)).lastRequest?.phase).toBeUndefined();
+    deployment.operation.mockResolvedValueOnce({
+      revision,
+      idempotencyKey: randomUUID(),
+      state: "running",
+      phase: "downloading",
+    });
+    expect((await updates.status(actor)).lastRequest?.phase).toBeUndefined();
+  });
+
+  it("uses confirmed operation states when an older updater does not report a phase", async () => {
+    const key = randomUUID();
+    const operation = vi.fn<NonNullable<ServerUpdateAdapter["operation"]>>();
+    const updates = service({ ...adapter(), operation });
+    await updates.status(actor);
+    await system(() =>
+      prisma!.serverUpdateRequest.create({
+        data: {
+          installationId,
+          idempotencyKey: key,
+          revision,
+          state: "requested",
+          automatic: false,
+          policyRevision: 0,
+          delegatedAccountKey: ownerKey,
+        },
+      }),
+    );
+    operation.mockResolvedValueOnce({ revision, idempotencyKey: key, state: "accepted" });
+    expect((await updates.status(actor)).lastRequest?.phase).toBe("preparing");
+    operation.mockResolvedValueOnce({ revision, idempotencyKey: key, state: "running" });
+    expect((await updates.status(actor)).lastRequest?.phase).toBe("updating");
+    operation.mockResolvedValueOnce(null);
+    expect((await updates.status(actor)).lastRequest?.phase).toBeUndefined();
   });
 
   it("does not change channels while an old deployment is unresolved", async () => {

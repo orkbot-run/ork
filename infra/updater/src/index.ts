@@ -10,7 +10,7 @@ import { access, lstat, open, readFile, rename, unlink } from "node:fs/promises"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import type { ServerUpdateRun } from "@orkbot/contracts";
+import type { ServerUpdatePhase, ServerUpdateRun } from "@orkbot/contracts";
 import type { ComposeUpdateStep } from "@orkbot/core";
 import {
   chooseUpdateStrategy,
@@ -349,6 +349,7 @@ export function createUpdaterApp(
           revision: input.revision,
           idempotencyKey: input.idempotencyKey,
           state: "accepted" as const,
+          phase: "preparing" as const,
         };
         await verifyPublishedRelease(input.revision, input.channel === "preview");
         await journal.write(operation);
@@ -366,6 +367,7 @@ export function createUpdaterApp(
             await templates.apply();
             const result = await execute({
               restoreTemplates: templates.restore,
+              onPhase: (phase) => journal.write({ ...operation, state: "running", phase }),
               request: { repoUrl: "https://github.com/orkbot-run/ork.git", branch: "main" },
               strategy: "pull",
               fromTag: tags.currentTag,
@@ -379,12 +381,24 @@ export function createUpdaterApp(
               restartAdvice: "Reconnect and verify the running server revision.",
             });
             rememberRun(result);
+            if (result.ok)
+              await journal
+                .write({ ...operation, state: "running", phase: "verifying" })
+                .catch(() => undefined);
             if (result.ok) await templates.commit();
             else await templates.restore();
-            await journal.write({ ...operation, state: result.ok ? "succeeded" : "failed" });
+            await journal.write({
+              revision: operation.revision,
+              idempotencyKey: operation.idempotencyKey,
+              state: result.ok ? "succeeded" : "failed",
+            });
           } catch {
             await journal
-              .write({ ...operation, state: mutationMayHaveStarted ? "unknown" : "failed" })
+              .write({
+                revision: operation.revision,
+                idempotencyKey: operation.idempotencyKey,
+                state: mutationMayHaveStarted ? "unknown" : "failed",
+              })
               .catch(() => undefined);
           } finally {
             running = false;
@@ -906,6 +920,7 @@ export function createUpdaterApp(
     toCommit: string | null;
     restoreRemoteUrl: string | null;
     restoreTemplates?: () => Promise<void>;
+    onPhase?: (phase: ServerUpdatePhase) => Promise<void>;
     steps: ComposeUpdateStep[];
     restartAdvice: string;
   }): Promise<ServerUpdateRun> {
@@ -990,8 +1005,11 @@ export function createUpdaterApp(
       if (record.toCommit !== null) composeEnv.GIT_SHA = record.toCommit;
 
       for (const step of composeSteps) {
+        if (step.id === "pull") await input.onPhase?.("downloading").catch(() => undefined);
+        if (step.id === "recreate") await input.onPhase?.("restarting").catch(() => undefined);
         if (!(await runStep(record, step, composeEnv))) {
           const primaryError = record.error ?? `${step.label} failed.`;
+          if (step.id === "recreate") await input.onPhase?.("recovering").catch(() => undefined);
           // The failed revision may have changed Compose or files it references. The old image
           // must be recreated from the old checkout, using the same configured Compose target.
           const checkoutRestored =

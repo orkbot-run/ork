@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { ServerUpdateAdapter } from "@orkbot/adapter-kit";
 import { verifiedNativeSessionIdentity } from "@orkbot/auth";
-import type { ServerUpdatesStatus } from "@orkbot/contracts";
+import type { ServerUpdatePhase, ServerUpdatesStatus } from "@orkbot/contracts";
 import type { PrismaClient, ServerUpdateRequest } from "@orkbot/db";
 import { runAsSystem, ServerUpdateConflict, serverUpdateStore } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
@@ -104,6 +104,7 @@ export function createServerUpdates(options: {
         ? { revision: control.candidateRevision, version: control.candidateVersion }
         : null;
     let state = last?.state === "queued" ? "submitting" : last?.state;
+    let phase: ServerUpdatePhase | undefined;
     if (last && adapter.operation && ["requested", "unknown", "submitting"].includes(state ?? "")) {
       const operation = await adapter.operation();
       if (
@@ -116,6 +117,9 @@ export function createServerUpdates(options: {
         else if (operation.state === "unknown") state = "unknown";
         else if (operation.state === "accepted" || operation.state === "running")
           state = "requested";
+        if (operation.state === "accepted" || operation.state === "running")
+          phase = operation.phase ?? (operation.state === "accepted" ? "preparing" : "updating");
+        else if (operation.state === "succeeded" && state !== "completed") phase = "verifying";
       }
     }
     return {
@@ -139,6 +143,7 @@ export function createServerUpdates(options: {
             revision: last.revision,
             state: state as NonNullable<ServerUpdatesStatus["lastRequest"]>["state"],
             requestedAt: last.createdAt.toISOString(),
+            ...(phase ? { phase } : {}),
           }
         : null,
       error: control.checkFailed

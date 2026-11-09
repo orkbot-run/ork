@@ -8,17 +8,21 @@ import { Button, OptionSelect, toast } from "@orkbot/ui-web";
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { desktopBridge } from "../lib/desktop";
+import { UpdateProgress } from "./UpdateProgress";
 
 function useDesktopUpdates() {
   const { t } = useLingui();
   const bridge = desktopBridge()?.update;
   const [state, setState] = useState<DesktopUpdateState | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [operation, setOperation] = useState<"check" | "install" | "channel" | null>(null);
   const [confirmedCheck, setConfirmedCheck] = useState<string | null>(null);
   const [manualCheckRequested, setManualCheckRequested] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pending = useRef(false);
+  const pending = useRef<"check" | "install" | "channel" | null>(null);
   const revision = useRef(0);
+  const pollRevision = useRef(0);
+  const previousCheckedAt = useRef<string | null>(null);
+  const busy = operation !== null;
 
   useEffect(() => {
     if (!bridge) return;
@@ -28,7 +32,20 @@ function useDesktopUpdates() {
       const started = revision.current;
       try {
         const next = await bridge!.state();
-        if (!stopped && started === revision.current && !pending.current) {
+        if (
+          !stopped &&
+          started === revision.current &&
+          (!pending.current || pending.current === "check")
+        ) {
+          if (
+            pending.current === "check" &&
+            (next.phase === "available" ||
+              next.phase === "downloading" ||
+              next.phase === "ready" ||
+              (next.checkedAt !== null && next.checkedAt !== previousCheckedAt.current))
+          ) {
+            pollRevision.current++;
+          }
           setState((current) =>
             current &&
             Object.entries(next).every(
@@ -61,9 +78,11 @@ function useDesktopUpdates() {
 
   async function act(action: "check" | "install") {
     if (!bridge || pending.current) return;
-    pending.current = true;
+    pending.current = action;
     revision.current++;
-    setBusy(true);
+    const startedPoll = pollRevision.current;
+    previousCheckedAt.current = state?.checkedAt ?? null;
+    setOperation(action);
     setError(null);
     if (action === "check") {
       setConfirmedCheck(null);
@@ -71,23 +90,24 @@ function useDesktopUpdates() {
     }
     try {
       const next = await bridge[action]();
-      setState(next);
-      if (next.phase === "error" || action === "install") {
-        setError(next.message);
+      if (action !== "check" || startedPoll === pollRevision.current) {
+        setState(next);
+        if (next.phase === "error" || action === "install") setError(next.message);
       }
     } catch {
-      setError(t`Could not complete the update. Try again.`);
+      if (action !== "check" || startedPoll === pollRevision.current)
+        setError(t`Could not complete the update. Try again.`);
     } finally {
       revision.current++;
-      pending.current = false;
-      setBusy(false);
+      pending.current = null;
+      setOperation(null);
     }
   }
   async function setChannel(channel: "stable" | "beta") {
     if (!bridge?.setChannel || pending.current) return;
-    pending.current = true;
+    pending.current = "channel";
     revision.current++;
-    setBusy(true);
+    setOperation("channel");
     setError(null);
     setConfirmedCheck(null);
     try {
@@ -96,11 +116,26 @@ function useDesktopUpdates() {
       setError(t`Could not complete the update. Try again.`);
     } finally {
       revision.current++;
-      pending.current = false;
-      setBusy(false);
+      pending.current = null;
+      setOperation(null);
     }
   }
-  return { state, busy, error, act, confirmedCheck, setChannel };
+  return { state, busy, operation, error, act, confirmedCheck, setChannel };
+}
+
+function useUpdateProgress(
+  state: DesktopUpdateState | null,
+  operation: "check" | "install" | "channel" | null,
+) {
+  const { t } = useLingui();
+  if (!state) return null;
+  if (operation === "install") return { label: t`Installing update…`, percent: null };
+  if (state.phase === "downloading")
+    return { label: t`Downloading update…`, percent: state.percent };
+  if (state.phase === "available") return { label: t`Preparing update…`, percent: null };
+  if (state.phase === "checking" || operation === "check")
+    return { label: t`Checking for updates…`, percent: null };
+  return null;
 }
 
 const UpdatesContext = createContext<ReturnType<typeof useDesktopUpdates> | null>(null);
@@ -144,8 +179,10 @@ export function DesktopUpdatesProvider({ children }: { children: ReactNode }) {
 function DesktopUpdatePrompt({ onLater }: { onLater: (version: string | null) => void }) {
   const { t } = useLingui();
   const updates = useContext(UpdatesContext);
+  const activeProgress = useUpdateProgress(updates?.state ?? null, updates?.operation ?? null);
   if (!updates?.state) return null;
   const { state, busy, error, act } = updates;
+  const progress = error && !busy ? null : activeProgress;
   return (
     <aside
       aria-label={t`Desktop update`}
@@ -166,7 +203,8 @@ function DesktopUpdatePrompt({ onLater }: { onLater: (version: string | null) =>
           <Trans>Later</Trans>
         </Button>
       </div>
-      {error || state.message ? (
+      {progress ? <UpdateProgress {...progress} /> : null}
+      {!progress && (error || state.message) ? (
         <p role="status" className="mt-2 text-sm">
           {error ?? state.message}
         </p>
@@ -189,10 +227,19 @@ export function useSidebarUpdate() {
 export function DesktopUpdateSection() {
   const { t } = useLingui();
   const updates = useContext(UpdatesContext);
+  const activeProgress = useUpdateProgress(updates?.state ?? null, updates?.operation ?? null);
   if (!updates?.state) return null;
   const { state, busy, error, act, confirmedCheck, setChannel } = updates;
   const ready = state.phase === "ready";
   const downloading = state.phase === "available" || state.phase === "downloading";
+  const checking = state.phase === "checking" && !error;
+  const progress = error && !busy ? null : activeProgress;
+  const notice =
+    error ??
+    state.message ??
+    (state.phase === "idle" && confirmedCheck && state.checkedAt === confirmedCheck ? (
+      <Trans>Up to date</Trans>
+    ) : null);
   return (
     <section
       data-testid="desktop-update-settings"
@@ -205,14 +252,14 @@ export function DesktopUpdateSection() {
         <span className="text-sm text-muted-foreground">v{state.currentVersion}</span>
         <Button
           variant="outline"
-          disabled={busy || downloading || state.phase === "checking"}
+          disabled={busy || downloading || checking}
           onClick={() => void act(ready ? "install" : "check")}
         >
           {ready ? (
             <Trans>Restart to update</Trans>
           ) : downloading ? (
             <Trans>Downloading…</Trans>
-          ) : busy || state.phase === "checking" ? (
+          ) : busy || checking ? (
             <Trans>Checking…</Trans>
           ) : (
             <Trans>Check for updates</Trans>
@@ -237,15 +284,12 @@ export function DesktopUpdateSection() {
           />
         </div>
       ) : null}
-      <p role="status" className="mt-2 text-sm text-muted-foreground">
-        {error ??
-          state.message ??
-          (downloading ? (
-            `${state.percent ?? 0}%`
-          ) : state.phase === "idle" && confirmedCheck && state.checkedAt === confirmedCheck ? (
-            <Trans>Up to date</Trans>
-          ) : null)}
-      </p>
+      {progress ? <UpdateProgress {...progress} /> : null}
+      {notice && !progress ? (
+        <p role="status" className="mt-2 text-sm text-muted-foreground">
+          {notice}
+        </p>
+      ) : null}
     </section>
   );
 }

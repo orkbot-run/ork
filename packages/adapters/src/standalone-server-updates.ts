@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { ServerUpdateAdapter } from "@orkbot/adapter-kit";
+import { ServerUpdatePhaseSchema } from "@orkbot/contracts";
 import { cancelResponseBody, readBoundedJsonResponse } from "@orkbot/core";
 import { createOfficialServerUpdateDiscovery } from "./easypanel-server-updates.js";
 
@@ -50,10 +51,14 @@ export function createStandaloneServerUpdateAdapter(
           !["accepted", "running", "succeeded", "failed", "unknown"].includes(value.state)
         )
           return null;
+        const phase = ServerUpdatePhaseSchema.safeParse(value.phase);
         return {
           revision: value.revision,
           idempotencyKey: value.idempotencyKey,
           state: value.state as "accepted" | "running" | "succeeded" | "failed" | "unknown",
+          ...(phase.success && (value.state === "accepted" || value.state === "running")
+            ? { phase: phase.data }
+            : {}),
         };
       } catch {
         return null;

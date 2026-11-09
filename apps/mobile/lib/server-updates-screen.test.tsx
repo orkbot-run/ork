@@ -44,7 +44,13 @@ vi.mock("./native", () => ({ native: {}, useMobileTokens: () => ({ mutedForegrou
 vi.mock("react-native", () => ({
   ActivityIndicator: () => null,
   ScrollView: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
+}));
+vi.mock("../components/server-update-progress", () => ({
+  ServerUpdateProgress: ({ label }: { label: string }) => (
+    <div role="progressbar" aria-label={label} />
+  ),
 }));
 vi.mock("../components/settings-group", () => ({
   SettingsGroup: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -131,7 +137,7 @@ it("hides unsupported and unauthorized controls", async () => {
   const host = await render({ available: false });
   expect(host.textContent).toBe("");
 });
-it("shows deployment acknowledgement as a request", async () => {
+it("waits for status after a request is acknowledged", async () => {
   const host = await render({
     lastRequest: {
       id: "request",
@@ -140,7 +146,8 @@ it("shows deployment acknowledgement as a request", async () => {
       requestedAt: new Date().toISOString(),
     },
   });
-  expect(host.textContent).toContain("Deployment requested");
+  expect(host.textContent).toContain("Waiting for update status…");
+  expect(host.querySelector('[role="progressbar"]')).not.toBeNull();
   expect(host.textContent).not.toContain("Up to date");
 });
 it("does not report an uncertain update as complete", async () => {
@@ -173,4 +180,44 @@ it("offers stable and beta channels only when the server supports selecting them
     [...host.querySelectorAll("button")].find((item) => item.textContent === "Beta")!.click(),
   );
   expect(store.updates.channel).toHaveBeenCalledWith("preview");
+});
+
+it("renders current phases, reconnects on network loss, and stops on terminal states", async () => {
+  const request = {
+    id: "request",
+    revision: status.candidate!.revision,
+    state: "requested" as const,
+    requestedAt: new Date().toISOString(),
+    phase: "downloading" as const,
+  };
+  const host = await render({ lastRequest: request });
+  expect(host.textContent).toContain("Downloading update…");
+  expect(host.querySelector('[role="progressbar"]')).not.toBeNull();
+
+  cleanup();
+  const restart = await render({ lastRequest: { ...request, phase: "restarting" } });
+  expect(restart.textContent).toContain("Restarting server…");
+  cleanup();
+
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  store.state = {
+    status: { ...status, lastRequest: request },
+    busy: null,
+    error: true,
+    uncertain: false,
+  };
+  const container = document.createElement("div");
+  const networkRoot = createRoot(container);
+  await act(async () => networkRoot.render(<Updates />));
+  expect(container.textContent).toContain("Reconnecting…");
+  expect(container.textContent).not.toContain("Could not complete");
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  await act(async () => networkRoot.unmount());
+
+  for (const state of ["completed", "failed", "unknown"] as const) {
+    const terminal = await render({ lastRequest: { ...request, state } });
+    expect(terminal.querySelector('[role="progressbar"]')).toBeNull();
+    cleanup();
+  }
+  cleanup = () => {};
 });
