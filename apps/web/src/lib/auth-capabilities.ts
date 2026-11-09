@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Shared framed response consumption is an Ork addition.
+
 import type { AuthCapabilities } from "@orkbot/contracts";
 import {
   authCapabilitiesSchema,
@@ -6,7 +11,7 @@ import {
   legacyAuthCapabilitiesSchema,
   supportsProtocolVersion,
 } from "@orkbot/contracts";
-import { ResponseBodyTooLargeError, readBoundedJsonResponse } from "@orkbot/core";
+import { readBoundedJsonResponse } from "@orkbot/core";
 
 export type { AuthCapabilities } from "@orkbot/contracts";
 
@@ -54,29 +59,12 @@ async function loadAuthCapabilities(recovery = false): Promise<AuthCapabilities>
       headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
     });
     if (!response.ok) throw new Error("Could not load authentication capabilities");
-    const length = Number(response.headers.get("content-length") ?? Number.NaN);
-    let body: unknown;
-    if (
-      response.type === "basic" &&
-      !response.headers.has("content-encoding") &&
-      Number.isSafeInteger(length) &&
-      length >= 0 &&
-      length <= MAX_RESPONSE_BYTES
-    ) {
-      // For an uncompressed same-origin fetch, HTTP framing bounds the body by Content-Length.
-      // Native consumption avoids Chromium cancelling a completed manually read response stream.
-      const bytes = await response.arrayBuffer();
-      if (bytes.byteLength > MAX_RESPONSE_BYTES) {
-        throw new ResponseBodyTooLargeError(MAX_RESPONSE_BYTES);
-      }
-      body = JSON.parse(new TextDecoder().decode(bytes));
-    } else {
-      body = await readBoundedJsonResponse<unknown>(
-        response,
-        MAX_RESPONSE_BYTES,
-        controller.signal,
-      );
-    }
+    const body = await readBoundedJsonResponse<unknown>(
+      response,
+      MAX_RESPONSE_BYTES,
+      controller.signal,
+      { nativeFramed: true },
+    );
     const capabilities = authCapabilitiesSchema.or(legacyAuthCapabilitiesSchema).parse(body);
     if (!recovery && !supportsProtocolVersion(capabilities.protocol))
       throw new ProtocolUpdateRequired(capabilities);
