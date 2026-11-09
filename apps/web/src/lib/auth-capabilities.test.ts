@@ -63,6 +63,17 @@ it.each([
   );
 });
 
+it("keeps sign-in capabilities available for a server with an incompatible product protocol", async () => {
+  const { fetchRecoveryCapabilities } = await import("./auth-capabilities");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ ...capability, protocol: { min: 2, max: 2 } })),
+  );
+  await expect(fetchRecoveryCapabilities()).resolves.toMatchObject({
+    protocol: { min: 2, max: 2 },
+  });
+});
+
 it.each([
   null,
   {},

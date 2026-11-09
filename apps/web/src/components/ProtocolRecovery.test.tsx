@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   discover: vi.fn(),
   serverUpdates: vi.fn(() => ({ state: {}, updates: {} })),
   signedIn: true,
+  pending: false,
+  sessionId: "session-a",
   response: undefined as ((response: Response) => void) | undefined,
 }));
 vi.mock("@lingui/react/macro", () => ({
@@ -23,7 +25,12 @@ vi.mock("@orkbot/contracts", async (original) => ({
   CLIENT_PROTOCOL_VERSION: 2,
 }));
 vi.mock("../lib/auth", () => ({
-  authClient: { useSession: () => ({ isPending: false, data: state.signedIn ? {} : null }) },
+  authClient: {
+    useSession: () => ({
+      isPending: state.pending,
+      data: state.signedIn ? { user: { id: "user" }, session: { id: state.sessionId } } : null,
+    }),
+  },
 }));
 vi.mock("../lib/auth-capabilities", () => ({
   fetchAuthCapabilities: state.discover,
@@ -52,6 +59,9 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   vi.useRealTimers();
+  state.signedIn = true;
+  state.pending = false;
+  state.sessionId = "session-a";
 });
 
 async function render() {
@@ -74,6 +84,55 @@ async function render() {
 it("opens the product only after compatible discovery", async () => {
   state.discover.mockResolvedValue({});
   expect((await render()).textContent).toBe("Product workspace");
+});
+
+it("leaves pending and anonymous session lifecycle to the app without discovery", async () => {
+  state.signedIn = false;
+  state.pending = true;
+  const view = await render();
+  expect(view.textContent).toBe("Product workspace");
+  expect(state.discover).not.toHaveBeenCalled();
+});
+
+it("fences compatibility checks by authenticated session", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.signedIn = false;
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  cleanup = () => {
+    act(() => root.unmount());
+  };
+  const show = () =>
+    root.render(
+      <ProtocolRecovery>
+        <div>Product workspace</div>
+      </ProtocolRecovery>,
+    );
+  await act(async () => show());
+  expect(host.textContent).toContain("Product workspace");
+  let resolveOld!: (value: object) => void;
+  state.discover.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  state.signedIn = true;
+  await act(async () => show());
+  expect(host.textContent).toBe("Loading");
+  let resolveNew!: (value: object) => void;
+  state.discover.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveNew = resolve;
+      }),
+  );
+  state.sessionId = "session-b";
+  await act(async () => show());
+  await act(async () => resolveOld({}));
+  expect(host.textContent).toBe("Loading");
+  await act(async () => resolveNew({}));
+  expect(host.textContent).toBe("Product workspace");
 });
 
 it("keeps product screens unmounted and exposes server recovery when the server is too old", async () => {
