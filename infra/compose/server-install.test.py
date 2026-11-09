@@ -412,13 +412,17 @@ class InstallerTests(unittest.TestCase):
         class Opener:
             def __init__(self):
                 self.paths = []
+                self.protocol_headers = {}
 
             def open(self, request, timeout):
                 path = urllib.parse.urlsplit(request.full_url).path
                 self.paths.append(path)
+                self.protocol_headers[path] = request.get_header("X-orkbot-protocol")
                 if path == "/health":
                     return Response(b"<!doctype html><html><body>Ork</body></html>")
                 if path == "/rpc/health":
+                    if request.get_header("X-orkbot-protocol") != "1":
+                        raise urllib.error.HTTPError(request.full_url, 426, "Update required", {}, None)
                     self.rpc_method, self.rpc_body = request.get_method(), json.loads(request.data)
                     return Response(b'{"json":{"ok":true,"version":"test"}}')
                 if path == "/api/auth/capabilities":
@@ -431,6 +435,7 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(opener.paths, ["/rpc/health", "/api/auth/capabilities"])
         self.assertEqual(opener.rpc_method, "POST")
         self.assertEqual(opener.rpc_body, {"json": {}})
+        self.assertEqual(opener.protocol_headers, {"/rpc/health": "1", "/api/auth/capabilities": None})
 
     def test_readiness_checks_actual_rpc_and_accounts_contract(self):
         responses = [{"json": {"ok": True, "version": "test"}}, {"passwordAuth": False, "sso": {"name": "Accounts", "availability": "available"}}]
@@ -462,6 +467,7 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(installer.request_json(installer.ISSUER + "/api/installations/redeem", {"url": URL}, CODE), {})
             self.assertEqual(opener.timeout, 15)
             self.assertEqual(opener.request.headers["Authorization"], "Bearer " + CODE)
+            self.assertIsNone(opener.request.get_header("X-orkbot-protocol"))
             self.assertEqual(json.loads(opener.request.data), {"url": URL})
             opener.response = b"x" * (installer.MAX_RESPONSE + 1)
             with self.assertRaises(installer.SetupError):

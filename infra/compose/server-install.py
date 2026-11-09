@@ -304,6 +304,9 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 def request_json(url, payload=None, bearer=None):
     headers = {"Accept": "application/json", "User-Agent": "Ork-Server-Installer", "Cache-Control": "no-store"}
+    # The public health probe uses the fixed recovery protocol even when RPC versions advance.
+    if urllib.parse.urlsplit(url).path == "/rpc/health" and payload == {"json": {}} and bearer is None:
+        headers["x-orkbot-protocol"] = "1"
     if bearer:
         headers["Authorization"] = "Bearer " + bearer
     if payload is not None:
