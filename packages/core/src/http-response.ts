@@ -1,3 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache material is preserved. Native framed response consumption is an Ork addition.
+
+import { withAbort } from "./async.js";
+
 export class ResponseBodyTooLargeError extends Error {
   constructor(maxBytes: number) {
     super(`Response body exceeds ${maxBytes} bytes`);
@@ -9,6 +16,10 @@ export async function readBoundedJsonResponse<T>(
   response: Response,
   maxBytes: number,
   signal?: AbortSignal,
+  options?: {
+    /** Enable only when the supplied signal was also passed to the originating fetch. */
+    nativeFramed?: boolean;
+  },
 ): Promise<T> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
     throw new Error("Response body limit must be a positive integer");
@@ -18,7 +29,34 @@ export async function readBoundedJsonResponse<T>(
     cancelResponseBody(response);
     throw new ResponseBodyTooLargeError(maxBytes);
   }
+  if (signal?.aborted) {
+    cancelResponseBody(response);
+    throw signal.reason ?? new Error("Request aborted");
+  }
   if (!response.body) return JSON.parse("") as T;
+
+  if (
+    options?.nativeFramed === true &&
+    response.type === "basic" &&
+    !response.headers.has("content-encoding") &&
+    Number.isSafeInteger(declared) &&
+    declared >= 0 &&
+    declared <= maxBytes
+  ) {
+    // Opt in only when the signal also belongs to fetch: native consumption locks the body.
+    // HTTP framing bounds uncompressed same-origin bodies with a declared content length.
+    // Native consumption avoids Chromium cancelling a completed manually read stream.
+    const abort = () => cancelResponseBody(response);
+    signal?.addEventListener("abort", abort, { once: true });
+    try {
+      const pending = response.arrayBuffer();
+      const bytes = signal ? await withAbort(pending, signal) : await pending;
+      if (bytes.byteLength > maxBytes) throw new ResponseBodyTooLargeError(maxBytes);
+      return JSON.parse(new TextDecoder().decode(bytes)) as T;
+    } finally {
+      signal?.removeEventListener("abort", abort);
+    }
+  }
 
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

@@ -76,7 +76,10 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
               return response;
             });
           const response = await withAbort(pending, options.signal!, "Request canceled");
-          finalizers.push(() => cancelResponseBody(response));
+          let complete = false;
+          finalizers.push(() => {
+            if (!complete) cancelResponseBody(response);
+          });
           try {
             config.onResponse?.(response, call);
           } catch (error) {
@@ -115,7 +118,9 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
                     response,
                     config.maxResponseBytes ?? RPC_MAX_BYTES,
                     options.signal,
+                    { nativeFramed: true },
                   );
+                  complete = true;
                 } catch (error) {
                   if (options.signal?.aborted) throw options.signal.reason;
                   if (response.ok || !(error instanceof SyntaxError)) throw error;
