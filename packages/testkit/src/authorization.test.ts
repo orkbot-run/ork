@@ -247,6 +247,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["updater/status"],
       ["updater/check", {}],
       ["updater/apply", {}],
+      ["serverUpdates/version"],
       ["serverUpdates/status"],
       ["serverUpdates/check", {}],
       [
