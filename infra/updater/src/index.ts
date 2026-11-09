@@ -472,20 +472,31 @@ export function createUpdaterApp(
 
   async function verifyPublishedRelease(revision: string, beta: boolean) {
     const signal = AbortSignal.timeout(10_000);
-    const response = await (options.fetch ?? globalThis.fetch)(
-      "https://api.github.com/repos/orkbot-run/ork/releases?per_page=100",
-      {
-        redirect: "error",
-        signal,
-        headers: { accept: "application/vnd.github+json", "user-agent": "Ork-updater" },
-      },
-    );
-    if (!response.ok) throw new UpdateRefused("Could not verify published releases.");
-    const releases: unknown = await readBoundedJsonResponse(response, 1_048_576, signal);
-    if (!Array.isArray(releases)) throw new UpdateRefused("Invalid release response.");
+    const releases: unknown[] = [];
+    for (let page = 1; page <= 5; page++) {
+      const response = await (options.fetch ?? globalThis.fetch)(
+        `https://api.github.com/repos/orkbot-run/ork/releases?per_page=20&page=${page}`,
+        {
+          redirect: "error",
+          signal,
+          headers: { accept: "application/vnd.github+json", "user-agent": "Ork-updater" },
+        },
+      );
+      if (!response.ok) throw new UpdateRefused("Could not verify published releases.");
+      const batch: unknown = await readBoundedJsonResponse(response, 2 * 1024 * 1024, signal);
+      if (!Array.isArray(batch) || batch.length > 20)
+        throw new UpdateRefused("Invalid release response.");
+      releases.push(...batch);
+      if (batch.length < 20) break;
+    }
     const tags = releases
       .filter(
         (release) =>
+          release !== null &&
+          typeof release === "object" &&
+          "draft" in release &&
+          "prerelease" in release &&
+          "tag_name" in release &&
           release.draft === false &&
           (release.prerelease === false || (beta && release.prerelease === true)) &&
           typeof release.tag_name === "string" &&
@@ -493,7 +504,7 @@ export function createUpdaterApp(
             ? /^v\d+\.\d+\.\d+-[A-Za-z0-9.-]+$/.test(release.tag_name)
             : /^v\d+\.\d+\.\d+$/.test(release.tag_name)),
       )
-      .map((release) => release.tag_name as string);
+      .map((release) => (release as { tag_name: string }).tag_name);
     if (!tags.length) throw new UpdateRefused("No published release is available.");
     const compose = composeUpArgv(composeTarget);
     const runningRevision = await run(
