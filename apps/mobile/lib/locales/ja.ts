@@ -53,7 +53,7 @@ export const JA_MESSAGES: Record<string, string> = {
   "Server updated": "サーバーを更新しました",
   Channel: "チャンネル",
   Stable: "安定版",
-  "Check deployment in server panel": "サーバーパネルでデプロイを確認してください",
+  "Could not confirm the update": "更新を確認できませんでした",
   "Could not complete the update. Try again.":
     "アップデートを完了できませんでした。もう一度お試しください。",
   "Sign in to Accounts to continue.": "続けるにはAccountsにログインしてください。",

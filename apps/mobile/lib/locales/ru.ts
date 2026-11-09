@@ -55,7 +55,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Server updated": "Сервер обновлён",
   Channel: "Канал",
   Stable: "Стабильный",
-  "Check deployment in server panel": "Проверьте развёртывание в панели сервера",
+  "Could not confirm the update": "Не удалось подтвердить обновление",
   "Could not complete the update. Try again.":
     "Не удалось завершить обновление. Повторите попытку.",
   "Sign in to Accounts to continue.": "Войдите в Accounts, чтобы продолжить.",

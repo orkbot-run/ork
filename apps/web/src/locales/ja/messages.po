@@ -1066,6 +1066,11 @@ msgstr "Basic認証（{username}）"
 msgid "Bearer token"
 msgstr "Bearerトークン"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "請求"
@@ -1331,10 +1336,6 @@ msgstr "チャット"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "再確認"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "サーバーパネルでデプロイを確認してください"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "このページを閲覧できる人を変更できませんでした。もう一度お試しください。"
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "保存された認証情報を確認できませんでした。"
@@ -1960,6 +1965,10 @@ msgstr ""
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "アップデートを完了できませんでした。もう一度お試しください。"
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5860,6 +5869,10 @@ msgstr "サーバー"
 msgid "Server name"
 msgstr "サーバー名"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSOは一時的に利用できません。もう一度お試しください。"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "信頼済みサイト"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "最新です"
 msgid "Update"
 msgstr "更新"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "コンピューターを更新"
@@ -6852,10 +6876,15 @@ msgstr "指示を更新しますか？"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "更新の進行状況"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "アップデートが必要です"
@@ -6863,6 +6892,10 @@ msgstr "アップデートが必要です"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "サーバーを更新"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

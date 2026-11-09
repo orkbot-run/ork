@@ -47,7 +47,7 @@ export const PL_MESSAGES: Record<string, string> = {
   "Server updated": "Serwer zaktualizowany",
   Channel: "Kanał",
   Stable: "Stabilny",
-  "Check deployment in server panel": "Sprawdź wdrożenie w panelu serwera",
+  "Could not confirm the update": "Nie udało się potwierdzić aktualizacji",
   "Could not complete the update. Try again.":
     "Nie udało się dokończyć aktualizacji. Spróbuj ponownie.",
   "Get started": "Rozpocznij",

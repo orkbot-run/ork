@@ -1066,6 +1066,11 @@ msgstr "Basic auth ({username})"
 msgid "Bearer token"
 msgstr "Bearer token"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr "Beta"
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "Billing"
@@ -1331,10 +1336,6 @@ msgstr "Chats"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "Check again"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "Check deployment in server panel"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr "Could not change where this is available"
 msgid "Could not change who can view this page. Try again."
 msgstr "Could not change who can view this page. Try again."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr "Could not check server compatibility."
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "Could not check stored credentials."
@@ -1960,6 +1965,10 @@ msgstr "Could not complete sign-in. Retry or ask your administrator to check acc
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "Could not complete the update. Try again."
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr "Could not confirm the update"
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5860,6 +5869,10 @@ msgstr "Server"
 msgid "Server name"
 msgstr "Server name"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr "Server updated"
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr "SSO"
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO is temporarily unavailable. Try again."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr "Stable"
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "Trusted sites"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "Up to date"
 msgid "Update"
 msgstr "Update"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr "Update channel"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Update computer"
@@ -6852,10 +6876,15 @@ msgstr "Update instructions?"
 msgid "Update Ork"
 msgstr "Update Ork"
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr "Update Ork to connect to this server."
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "Update progress"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "Update required"
@@ -6863,6 +6892,10 @@ msgstr "Update required"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "Update server"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr "Update this server to continue."
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

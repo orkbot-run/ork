@@ -52,7 +52,7 @@ export const ZH_TW_MESSAGES: Record<string, string> = {
   "Server updated": "伺服器已更新",
   Channel: "頻道",
   Stable: "穩定版",
-  "Check deployment in server panel": "請在伺服器面板中檢查部署",
+  "Could not confirm the update": "無法確認更新",
   "Could not complete the update. Try again.": "無法完成更新，請再試一次。",
   "Sign in to Accounts to continue.": "請先登入 Accounts 以繼續。",
   "Too many attempts. Try again later.": "嘗試次數過多，請稍後再試。",

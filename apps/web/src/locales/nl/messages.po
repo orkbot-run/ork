@@ -1066,6 +1066,11 @@ msgstr "Basisauthenticatie ({username})"
 msgid "Bearer token"
 msgstr "Bearer-token"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "Facturatie"
@@ -1331,10 +1336,6 @@ msgstr "Chats"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "Opnieuw controleren"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "Controleer de uitrol in het serverpaneel"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "Kon niet wijzigen wie deze pagina kan bekijken. Probeer het opnieuw."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "De opgeslagen gegevens konden niet worden gecontroleerd."
@@ -1960,6 +1965,10 @@ msgstr ""
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "De update kon niet worden voltooid. Probeer het opnieuw."
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5860,6 +5869,10 @@ msgstr "Server"
 msgid "Server name"
 msgstr "Servernaam"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO is tijdelijk niet beschikbaar. Probeer het opnieuw."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "Vertrouwde sites"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "Actueel"
 msgid "Update"
 msgstr "Bijwerken"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Computer bijwerken"
@@ -6852,10 +6876,15 @@ msgstr "Instructies bijwerken?"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "Updatevoortgang"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "Update vereist"
@@ -6863,6 +6892,10 @@ msgstr "Update vereist"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "Server bijwerken"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

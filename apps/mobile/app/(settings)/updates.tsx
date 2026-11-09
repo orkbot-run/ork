@@ -18,7 +18,7 @@ export default function Updates() {
   const request = status.lastRequest?.state;
   const notice =
     state.uncertain || request === "unknown"
-      ? t("Check deployment in server panel")
+      ? t("Could not confirm the update")
       : request === "completed"
         ? t("Server updated")
         : request === "requested"

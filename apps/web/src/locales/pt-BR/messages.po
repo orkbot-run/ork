@@ -1066,6 +1066,11 @@ msgstr ""
 msgid "Bearer token"
 msgstr "Token portador"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr ""
@@ -1331,10 +1336,6 @@ msgstr "Conversas"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr ""
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "Verifique a implantação no painel do servidor"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "Não foi possível mudar quem pode ver esta página. Tente de novo."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "Não foi possível verificar as credenciais armazenadas."
@@ -1959,6 +1964,10 @@ msgstr ""
 #: src/components/DesktopUpdates.tsx
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
+msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -5860,6 +5869,10 @@ msgstr "Servidor"
 msgid "Server name"
 msgstr "Nome do servidor"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO está temporariamente indisponível. Tente novamente."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "Sites confiáveis"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr ""
 msgid "Update"
 msgstr ""
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Atualizar computador"
@@ -6852,10 +6876,15 @@ msgstr "Atualizar instruções?"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "Atualização necessária"
@@ -6863,6 +6892,10 @@ msgstr "Atualização necessária"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "Atualizar servidor"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

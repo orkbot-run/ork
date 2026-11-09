@@ -55,7 +55,7 @@ export const NL_MESSAGES: Record<string, string> = {
   "Server updated": "Server bijgewerkt",
   Channel: "Kanaal",
   Stable: "Stabiel",
-  "Check deployment in server panel": "Controleer de uitrol in het serverpaneel",
+  "Could not confirm the update": "De update kon niet worden bevestigd",
   "Could not complete the update. Try again.":
     "De update kon niet worden voltooid. Probeer het opnieuw.",
   "Sign in to Accounts to continue.": "Meld je aan bij Accounts om door te gaan.",

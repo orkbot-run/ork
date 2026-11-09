@@ -53,7 +53,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Server updated": "服务器已更新",
   Channel: "渠道",
   Stable: "稳定版",
-  "Check deployment in server panel": "请在服务器面板中检查部署",
+  "Could not confirm the update": "无法确认更新",
   "Could not complete the update. Try again.": "无法完成更新，请重试。",
   "Sign in to Accounts to continue.": "请先登录 Accounts 以继续。",
   "Too many attempts. Try again later.": "尝试次数过多，请稍后重试。",

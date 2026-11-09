@@ -1066,6 +1066,11 @@ msgstr ""
 msgid "Bearer token"
 msgstr "Bearer 토큰"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr ""
@@ -1331,10 +1336,6 @@ msgstr "채팅"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr ""
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "서버 패널에서 배포 확인"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1932,6 +1933,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "이 페이지를 볼 수 있는 사람을 변경하지 못했습니다. 다시 시도하세요."
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "저장된 인증 정보를 확인하지 못했습니다."
@@ -1959,6 +1964,10 @@ msgstr ""
 #: src/components/DesktopUpdates.tsx
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
+msgstr ""
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
 msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
@@ -5860,6 +5869,10 @@ msgstr "서버"
 msgid "Server name"
 msgstr "서버 이름"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6140,6 +6153,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO를 일시적으로 사용할 수 없습니다. 다시 시도하세요."
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6754,6 +6772,7 @@ msgstr "신뢰할 수 있는 사이트"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6828,6 +6847,11 @@ msgstr "최신 상태"
 msgid "Update"
 msgstr "업데이트"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "컴퓨터 업데이트"
@@ -6852,10 +6876,15 @@ msgstr "지침을 업데이트할까요?"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "업데이트가 필요합니다"
@@ -6863,6 +6892,10 @@ msgstr "업데이트가 필요합니다"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "서버 업데이트"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"

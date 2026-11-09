@@ -1067,6 +1067,11 @@ msgstr "基本驗證（{username}）"
 msgid "Bearer token"
 msgstr "Bearer 權杖"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Beta"
+msgstr ""
+
 #: src/pages/settings-nav.ts
 msgid "Billing"
 msgstr "帳務"
@@ -1332,10 +1337,6 @@ msgstr "聊天"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Check again"
 msgstr "再次檢查"
-
-#: src/components/ServerUpdates.tsx
-msgid "Check deployment in server panel"
-msgstr "請在伺服器面板中檢查部署"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Check every"
@@ -1933,6 +1934,10 @@ msgstr ""
 msgid "Could not change who can view this page. Try again."
 msgstr "無法變更誰可以檢視此頁面。請再試一次。"
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Could not check server compatibility."
+msgstr ""
+
 #: src/lib/model-connection-preflight.ts
 msgid "Could not check stored credentials."
 msgstr "無法檢查已儲存的憑證。"
@@ -1961,6 +1966,10 @@ msgstr ""
 #: src/components/ServerUpdates.tsx
 msgid "Could not complete the update. Try again."
 msgstr "無法完成更新，請再試一次。"
+
+#: src/components/ServerUpdates.tsx
+msgid "Could not confirm the update"
+msgstr ""
 
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5861,6 +5870,10 @@ msgstr "伺服器"
 msgid "Server name"
 msgstr "伺服器名稱"
 
+#: src/components/ServerUpdates.tsx
+msgid "Server updated"
+msgstr ""
+
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/compatible-model-fields.tsx
@@ -6141,6 +6154,11 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "SSO is temporarily unavailable. Try again."
 msgstr "SSO 暫時不可用，請重試。"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Stable"
+msgstr ""
 
 #: src/components/GitHubStarPrompt.tsx
 msgid "Star on GitHub"
@@ -6755,6 +6773,7 @@ msgstr "受信任的網站"
 
 #: src/components/pages/PageNotice.tsx
 #: src/components/pages/PagesList.tsx
+#: src/components/ProtocolRecovery.tsx
 #: src/pages/ActivityList.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/SpaceSearch.tsx
@@ -6829,6 +6848,11 @@ msgstr "已是最新"
 msgid "Update"
 msgstr "更新"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Update channel"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "更新電腦"
@@ -6853,10 +6877,15 @@ msgstr "更新指令？"
 msgid "Update Ork"
 msgstr ""
 
+#: src/components/ProtocolRecovery.tsx
+msgid "Update Ork to connect to this server."
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Update progress"
 msgstr "更新進度"
 
+#: src/components/ProtocolRecovery.tsx
 #: src/lib/client-update.ts
 msgid "Update required"
 msgstr "需要更新"
@@ -6864,6 +6893,10 @@ msgstr "需要更新"
 #: src/components/ServerUpdates.tsx
 msgid "Update server"
 msgstr "更新伺服器"
+
+#: src/components/ProtocolRecovery.tsx
+msgid "Update this server to continue."
+msgstr ""
 
 #: src/pages/settings-nav.ts
 msgid "Updates"
