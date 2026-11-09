@@ -206,6 +206,7 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).toEqual([
       "setup_state",
       "setup_accounts_session",
+      "list_workspaces",
       "list_servers",
     ]);
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
@@ -222,6 +223,68 @@ describe("bundled desktop setup", () => {
     expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[1]!.id });
     expect(invoke.mock.calls.filter(([name]) => name === "connect_saved_server")).toHaveLength(1);
     expect(invoke.mock.calls.map(([name]) => name)).not.toContain("setup_accounts_sign_in");
+  });
+
+  it("offers company workspaces beside local and self-hosted choices and opens the selected workspace", async () => {
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [{ ...saved[0], isDefault: true }];
+        if (name === "list_workspaces")
+          return [
+            { id: "workspace-a", name: "Studio", url: "https://studio.example.com" },
+            { id: "workspace-b", name: "Team", url: "https://team.example.com" },
+          ];
+        return undefined;
+      },
+    });
+    expect(screen()).toBe("servers");
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+    expect(node("workspaces-section").hidden).toBe(false);
+    expect(node("workspaces").textContent).toContain("Studio");
+    expect(node("workspaces").textContent).toContain("Team workspace");
+    expect(node("local").hidden).toBe(false);
+    expect(node("selfhost").hidden).toBe(false);
+    node("workspaces").querySelector<HTMLButtonElement>("button")!.click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_workspace", { id: "workspace-a" });
+  });
+
+  it("keeps an unreachable workspace visible and lets the user refresh its status", async () => {
+    let online = false;
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "list_workspaces")
+          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        if (name === "check_workspace") return online;
+        return undefined;
+      },
+    });
+    expect(node("workspaces-section").hidden).toBe(false);
+    expect(node("workspaces").textContent).toContain("Offline");
+    expect(node("workspaces").textContent).toContain("Studio");
+    online = true;
+    node("refresh").click();
+    await flush();
+    expect(node("workspaces").textContent).toContain("Online");
+    expect(invoke).toHaveBeenCalledWith("check_workspace", { id: "workspace-a" });
+  });
+
+  it("keeps the picker available and reports a workspace directory failure", async () => {
+    await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [saved[0]];
+        if (name === "list_workspaces") throw new Error("unavailable");
+        return undefined;
+      },
+    });
+    expect(screen()).toBe("servers");
+    expect(node("workspaces-error").hidden).toBe(false);
+    expect(node("local").hidden).toBe(false);
+    expect(node("selfhost").hidden).toBe(false);
   });
 
   it.each(["local", "selfhosted"])("opens a sole %s server after restoring login", async (kind) => {

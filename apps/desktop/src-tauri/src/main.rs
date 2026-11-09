@@ -1304,6 +1304,50 @@ async fn list_servers<R: tauri::Runtime>(
         .collect())
 }
 
+#[tauri::command]
+async fn list_workspaces<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+) -> Result<Vec<server_directory::Workspace>, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let workspaces = server_directory::Directory::new()?
+        .workspaces(authorization.directory_bearer()?)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(workspaces)
+}
+
+#[tauri::command]
+async fn check_workspace<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    id: String,
+) -> Result<bool, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let workspace = server_directory::Directory::new()?
+        .workspaces(authorization.directory_bearer()?)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.id == id)
+        .ok_or("That workspace is no longer available.")?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let target = server::normalize_server_url(&workspace.url)?;
+    let reachable = server::probe_server(&target).await.is_ok();
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(reachable)
+}
+
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DirectoryEntry {
@@ -1617,6 +1661,47 @@ async fn connect_saved_server(
         &authorization,
         &directory,
         &device,
+    )
+    .await
+}
+
+#[tauri::command]
+async fn connect_workspace(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    state: State<'_, DesktopState>,
+    id: String,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let _switch = state
+        .switching
+        .try_lock()
+        .map_err(|_| "A connection is already in progress.")?;
+    // Re-fetch from the authenticated directory so the renderer cannot choose an arbitrary URL.
+    let workspace = server_directory::Directory::new()?
+        .workspaces(authorization.directory_bearer()?)
+        .await?
+        .into_iter()
+        .find(|workspace| workspace.id == id)
+        .ok_or("That workspace is no longer available.")?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    let target = server::normalize_server_url(&workspace.url)?;
+    server::probe_server(&target).await?;
+    open_server(
+        &window,
+        &app,
+        &state,
+        settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: target,
+            account: None,
+        },
+        &authorization,
     )
     .await
 }
@@ -2657,6 +2742,17 @@ async fn restore_saved_server(
     let entries = directory
         .list(authorization.directory_bearer()?, &device)
         .await?;
+    // Do not silently open a personal server when there are company workspaces to choose from.
+    if let Ok(Ok(workspaces)) = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        directory.workspaces(authorization.directory_bearer()?),
+    )
+    .await
+    {
+        if !workspaces.is_empty() {
+            return Ok(false);
+        }
+    }
     require_account(&state, &authorization)?;
     let server = {
         let choice = state
@@ -2923,6 +3019,8 @@ fn main() {
             setup_accounts_sign_in,
             setup_accounts_logout,
             list_servers,
+            list_workspaces,
+            check_workspace,
             set_default_server,
             create_server_installation,
             get_server_installation,
@@ -2934,6 +3032,7 @@ fn main() {
             cancel_setup_connection,
             remove_server,
             connect_saved_server,
+            connect_workspace,
             connect_server,
             connect_local_server,
             local_stack_state,
@@ -3695,6 +3794,8 @@ mod tests {
                 local_stack_state,
                 setup_accounts_session,
                 list_servers,
+                list_workspaces,
+                check_workspace,
                 set_default_server,
                 create_server_installation,
                 get_server_installation,
@@ -3787,6 +3888,9 @@ mod tests {
             for command in [
                 "setup_accounts_session",
                 "list_servers",
+                "list_workspaces",
+                "check_workspace",
+                "connect_workspace",
                 "set_default_server",
                 "create_server_installation",
                 "get_server_installation",

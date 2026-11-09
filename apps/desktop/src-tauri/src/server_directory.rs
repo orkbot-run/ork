@@ -34,6 +34,37 @@ pub struct Server {
     pub device_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Workspace {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+}
+
+impl Workspace {
+    fn validate(&self) -> Result<(), String> {
+        let url = normalize_server_url(&self.url)?;
+        if !uuid(&self.id)
+            || self.name.trim() != self.name
+            || self.name.is_empty()
+            || self.name.chars().count() > 100
+            || self.name.chars().any(char::is_control)
+            || url.scheme() != "https"
+            || self.url != url.origin().ascii_serialization()
+        {
+            return Err(ERROR.into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceList {
+    workspaces: Vec<Workspace>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Preference {
@@ -311,6 +342,26 @@ impl Directory {
             }
         }
         Ok(list.servers)
+    }
+
+    pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
+        let endpoint = self
+            .endpoint
+            .join("/api/servers/workspaces")
+            .map_err(|_| ERROR)?;
+        let list: WorkspaceList =
+            json(self.send(Method::GET, endpoint, token, None).await?).await?;
+        if list.workspaces.len() > 1000 {
+            return Err(ERROR.into());
+        }
+        let mut ids = std::collections::HashSet::new();
+        for workspace in &list.workspaces {
+            workspace.validate()?;
+            if !ids.insert(&workspace.id) {
+                return Err(ERROR.into());
+            }
+        }
+        Ok(list.workspaces)
     }
 
     pub async fn create_installation(&self, token: &str) -> Result<InstallationCommand, String> {
@@ -835,6 +886,32 @@ mod tests {
                 .installation_status(CENTRAL_BEARER, DEVICE)
                 .await
                 .is_err());
+            wire.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn workspace_directory_validates_membership_response_before_exposing_servers() {
+        let workspace =
+            serde_json::json!({"id": DEVICE, "name": "Studio", "url": "https://team.example.com"});
+        let (directory, wire) = response(
+            "200 OK",
+            serde_json::json!({"workspaces": [workspace.clone()]}).to_string(),
+            "",
+        )
+        .await;
+        let list = directory.workspaces("private-fixture-token").await.unwrap();
+        assert_eq!(list[0].name, "Studio");
+        let request = wire.await.unwrap();
+        assert!(request.starts_with("GET /api/servers/workspaces HTTP/1.1\r\n"));
+        for invalid in [
+            serde_json::json!({"workspaces": [workspace.clone(), workspace.clone()]}),
+            serde_json::json!({"workspaces": [{"id": DEVICE, "name": "Studio", "url": "https://user@team.example.com"}]}),
+            serde_json::json!({"workspaces": [{"id": DEVICE, "name": "Studio\nAdmin", "url": "https://team.example.com"}]}),
+            serde_json::json!({"workspaces": [{"id": "bad", "name": "Studio", "url": "https://team.example.com"}]}),
+        ] {
+            let (directory, wire) = response("200 OK", invalid.to_string(), "").await;
+            assert!(directory.workspaces("private-fixture-token").await.is_err());
             wire.await.unwrap();
         }
     }
