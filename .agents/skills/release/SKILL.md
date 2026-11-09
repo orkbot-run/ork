@@ -35,12 +35,21 @@ Bump `apps/desktop/package.json` to the new version in the same branch and open 
 
 ## 4. Tag
 
-After the PR merges, tag its merge commit and push the tag:
+After the PR merges, wait for the `ci.yml` push run on `main` for its merge commit
+to finish successfully, including server-image publication. Then tag that commit
+and push the tag. Main and release builds both write `sha-<commit>` image tags,
+so publishing the release images last keeps those tags matched to the versioned
+release images.
 
 ```sh
 sha="$(gh pr view <release PR> --json mergeCommit -q .mergeCommit.oid)"
 git fetch origin main && git tag vX.Y.Z "$sha" && git push origin vX.Y.Z
 ```
+
+If the tag workflow ran before main CI finished, wait for both runs to finish
+and compare the SHA and versioned image indexes. Rerun the tag workflow if they
+differ or the versioned images are missing. Keep the existing tag pointed at the
+same commit.
 
 The tag publishes the server images. Publishing the matching GitHub release starts signed
 desktop builds. The desktop channel moves only after all platform builds and main CI for
