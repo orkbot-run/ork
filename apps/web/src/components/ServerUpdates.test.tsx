@@ -17,6 +17,9 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
 vi.mock("@orkbot/ui-web", () => ({
+  Progress: ({ value, ...props }: { value: number | null }) => (
+    <div role="progressbar" {...(value === null ? {} : { "aria-valuenow": value })} {...props} />
+  ),
   Button: (props: ComponentProps<"button">) => <button type="button" {...props} />,
   OptionSelect: ({
     value,
@@ -223,9 +226,46 @@ it.each(["requested", "unknown"] as const)(
       },
     });
     expect(view.host.textContent).toContain(
-      state === "requested" ? "Deployment requested" : "Could not confirm the update",
+      state === "requested" ? "Waiting for update status…" : "Could not confirm the update",
     );
     expect(view.host.textContent).not.toContain("Up to date");
     expect((view.host.querySelectorAll("button")[1] as HTMLButtonElement).disabled).toBe(true);
   },
 );
+
+it.each([
+  ["preparing", "Preparing update…"],
+  ["downloading", "Downloading update…"],
+  ["restarting", "Restarting server…"],
+  ["verifying", "Verifying update…"],
+  ["recovering", "Restoring previous version…"],
+  ["updating", "Updating server…"],
+] as const)("shows %s without inventing a percentage", async (phase, label) => {
+  const view = await render({
+    lastRequest: {
+      id: "request",
+      revision: status.candidate!.revision,
+      state: "requested",
+      phase,
+      requestedAt: new Date().toISOString(),
+    },
+  });
+  const bar = view.host.querySelector('[role="progressbar"]');
+  expect(bar?.getAttribute("aria-label")).toBe(label);
+  expect(bar?.hasAttribute("aria-valuenow")).toBe(false);
+  expect(view.host.querySelector('[role="status"]')?.textContent).toBe(label);
+  expect(view.host.textContent).not.toContain("%");
+});
+
+it.each(["completed", "failed", "unknown"] as const)("stops progress after %s", async (state) => {
+  const view = await render({
+    lastRequest: {
+      id: "request",
+      revision: status.candidate!.revision,
+      state,
+      phase: "restarting",
+      requestedAt: new Date().toISOString(),
+    },
+  });
+  expect(view.host.querySelector('[role="progressbar"]')).toBeNull();
+});

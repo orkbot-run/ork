@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import type { ServerUpdatePhase } from "@orkbot/contracts";
+
 /** Redeploy the operator-configured channel; this does not select an immutable target. */
 export interface ServerUpdateAdapter {
   readonly channel: "stable" | "preview";
@@ -10,6 +12,7 @@ export interface ServerUpdateAdapter {
     revision: string;
     idempotencyKey: string;
     state: "accepted" | "running" | "succeeded" | "failed" | "unknown";
+    phase?: ServerUpdatePhase;
   } | null>;
   /**
    * Call the guard once after eligibility checks, immediately before the irreversible request.

@@ -1388,6 +1388,11 @@ msgstr "正在检查电脑设置…"
 msgid "Checking connection…"
 msgstr "正在检查连接…"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Checking for updates…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -2750,10 +2755,6 @@ msgstr "已拒绝"
 msgid "Deny"
 msgstr "拒绝"
 
-#: src/components/ServerUpdates.tsx
-msgid "Deployment requested"
-msgstr "已请求部署"
-
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2926,6 +2927,11 @@ msgstr "下载 CSV"
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Download PDF"
 msgstr "下载 PDF"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Downloading update…"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
@@ -3584,6 +3590,10 @@ msgstr "输入"
 #: src/components/SidebarFooter.tsx
 msgid "Install update"
 msgstr "安装更新"
+
+#: src/components/DesktopUpdates.tsx
+msgid "Installing update…"
+msgstr ""
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Installing…"
@@ -4993,6 +5003,11 @@ msgstr "POST 到"
 msgid "Preferences"
 msgstr "偏好设置"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Preparing update…"
+msgstr ""
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5130,6 +5145,10 @@ msgstr "重新连接 OAuth"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "正在重新连接"
+
+#: src/components/ServerUpdates.tsx
+msgid "Reconnecting…"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -5445,6 +5464,10 @@ msgstr ""
 msgid "Restart to update"
 msgstr "重启后更新"
 
+#: src/components/ServerUpdates.tsx
+msgid "Restarting server…"
+msgstr ""
+
 #: src/components/InstructionSettings.tsx
 #: src/pages/shell/archived-chats.tsx
 msgid "Restore"
@@ -5461,6 +5484,10 @@ msgstr "还原上次保存的工作区。电脑上未保存的工作会丢失。
 #: src/components/AskCard.tsx
 msgid "Restored"
 msgstr "已恢复"
+
+#: src/components/ServerUpdates.tsx
+msgid "Restoring previous version…"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
@@ -6910,6 +6937,10 @@ msgstr "进度更新和最终回复"
 msgid "Updating {0}’s Computer"
 msgstr "正在更新 {0} 的电脑"
 
+#: src/components/ServerUpdates.tsx
+msgid "Updating server…"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Updating Team Computer"
 msgstr "正在更新团队电脑"
@@ -7052,6 +7083,10 @@ msgstr "保管库"
 msgid "Verify and add"
 msgstr "校验并添加"
 
+#: src/components/ServerUpdates.tsx
+msgid "Verifying update…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "正在校验…"
@@ -7082,6 +7117,10 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "请稍候并重新测试。"
+
+#: src/components/ServerUpdates.tsx
+msgid "Waiting for update status…"
+msgstr ""
 
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"

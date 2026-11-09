@@ -4,11 +4,14 @@
 import { randomUUID } from "node:crypto";
 import { open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
+import type { ServerUpdatePhase } from "@orkbot/contracts";
+import { ServerUpdatePhaseSchema } from "@orkbot/contracts";
 
 export type DeploymentOperation = {
   idempotencyKey: string;
   revision: string;
   state: "accepted" | "running" | "succeeded" | "failed" | "unknown";
+  phase?: ServerUpdatePhase;
 };
 
 /** A durable acknowledgement prevents a lost HTTP response from replaying a deployment. */
@@ -26,7 +29,15 @@ export class DeploymentJournal {
         !["accepted", "running", "succeeded", "failed", "unknown"].includes(value.state)
       )
         throw new Error("Invalid deployment journal.");
-      return value as DeploymentOperation;
+      const phase = ServerUpdatePhaseSchema.safeParse(value.phase);
+      return {
+        revision: value.revision,
+        idempotencyKey: value.idempotencyKey,
+        state: value.state,
+        ...(phase.success && ["accepted", "running"].includes(value.state)
+          ? { phase: phase.data }
+          : {}),
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw error;

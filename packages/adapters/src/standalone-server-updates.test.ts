@@ -79,4 +79,44 @@ describe("standalone server update adapter", () => {
     });
     await expect(adapter.operation?.()).resolves.toBeNull();
   });
+
+  it("preserves valid active phases and drops unknown or terminal phases", async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          operation: { revision, idempotencyKey, state: "running", phase: "downloading" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          operation: { revision, idempotencyKey, state: "running", phase: "future-phase" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          operation: { revision, idempotencyKey, state: "succeeded", phase: "restarting" },
+        }),
+      );
+    const adapter = createStandaloneServerUpdateAdapter(
+      { channel: "stable", currentRevision: null, token },
+      { fetch },
+    );
+    await expect(adapter.operation?.()).resolves.toEqual({
+      revision,
+      idempotencyKey,
+      state: "running",
+      phase: "downloading",
+    });
+    await expect(adapter.operation?.()).resolves.toEqual({
+      revision,
+      idempotencyKey,
+      state: "running",
+    });
+    await expect(adapter.operation?.()).resolves.toEqual({
+      revision,
+      idempotencyKey,
+      state: "succeeded",
+    });
+  });
 });

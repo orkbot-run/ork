@@ -3,6 +3,16 @@
 
 import { z } from "zod";
 
+export const ServerUpdatePhaseSchema = z.enum([
+  "updating",
+  "preparing",
+  "downloading",
+  "restarting",
+  "verifying",
+  "recovering",
+]);
+export type ServerUpdatePhase = z.infer<typeof ServerUpdatePhaseSchema>;
+
 export const ServerUpdatesCheckSchema = z.object({}).strict();
 export const ServerUpdatesStatusSchema = z.object({
   available: z.boolean(),
@@ -22,6 +32,8 @@ export const ServerUpdatesStatusSchema = z.object({
       revision: z.string().regex(/^[a-f0-9]{40}$/),
       state: z.enum(["submitting", "requested", "completed", "unknown", "failed"]),
       requestedAt: z.iso.datetime(),
+      /** Optional because an independently pinned deployment service may not report phases. */
+      phase: ServerUpdatePhaseSchema.optional(),
     })
     .nullable(),
   error: z.enum(["check-failed", "request-failed"]).nullable(),

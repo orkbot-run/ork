@@ -87,6 +87,9 @@ test("desktop update can be checked in settings, deferred, and installed from th
   await expect(settings.getByRole("status")).toHaveText("Up to date");
   await settings.getByRole("button", { name: "Check for updates" }).click();
   await expect(settings.getByRole("button", { name: "Downloading…" })).toBeDisabled();
+  const progress = settings.getByRole("progressbar", { name: "Downloading update…" });
+  await expect(progress).toHaveAttribute("aria-valuenow", "50");
+  await captureScreenshot(page, testInfo, "desktop-update-downloading");
   await page.keyboard.press("Escape");
   const prompt = page.getByRole("complementary", { name: "Desktop update" });
   await expect(prompt).toBeVisible({ timeout: 10_000 });

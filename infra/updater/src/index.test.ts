@@ -31,6 +31,7 @@ const targetCommit = "2".repeat(40);
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
+  vi.restoreAllMocks();
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true })),
   );
@@ -438,6 +439,7 @@ describe("standalone deployment acknowledgements", () => {
 
   it("acknowledges before a deployment completes and commits the staged templates", async () => {
     const fixture = await preparedDeployment();
+    const writes = vi.spyOn(DeploymentJournal.prototype, "write");
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -446,12 +448,24 @@ describe("standalone deployment acknowledgements", () => {
     const pull = new Promise<void>((resolve) => {
       pullReached = resolve;
     });
+    let finishRecreate!: () => void;
+    const recreateGate = new Promise<void>((resolve) => {
+      finishRecreate = resolve;
+    });
+    let recreateReached!: () => void;
+    const recreate = new Promise<void>((resolve) => {
+      recreateReached = resolve;
+    });
     const run: UpdaterCommandRunner = async (command, args) => {
       if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
       if (args.includes("exec")) return ok(currentCommit);
       if (args.includes("pull")) {
         pullReached();
         await gate;
+      }
+      if (args.includes("up")) {
+        recreateReached();
+        await recreateGate;
       }
       return ok();
     };
@@ -466,11 +480,31 @@ describe("standalone deployment acknowledgements", () => {
     });
     expect(response.status).toBe(202);
     await pull;
-    expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("running");
+    expect(await new DeploymentJournal(fixture.deployDir).read()).toMatchObject({
+      state: "running",
+      phase: "downloading",
+    });
     release();
+    await recreate;
+    expect(await new DeploymentJournal(fixture.deployDir).read()).toMatchObject({
+      state: "running",
+      phase: "restarting",
+    });
+    finishRecreate();
     await vi.waitFor(async () =>
       expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded"),
     );
+    expect(
+      writes.mock.calls.some(
+        ([operation]) => operation.state === "running" && operation.phase === "preparing",
+      ),
+    ).toBe(true);
+    expect(
+      writes.mock.calls.some(
+        ([operation]) => operation.state === "running" && operation.phase === "verifying",
+      ),
+    ).toBe(true);
+    expect((await new DeploymentJournal(fixture.deployDir).read())?.phase).toBeUndefined();
     expect(await readFile(fixture.template, "utf8")).toBe(fixture.after);
     expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
       `ORKBOT_IMAGE_TAG=sha-${targetCommit}`,
@@ -484,12 +518,22 @@ describe("standalone deployment acknowledgements", () => {
     const fixture = await preparedDeployment();
     let recreates = 0;
     let recoveryTemplate = "";
+    let releaseRecovery!: () => void;
+    const recoveryGate = new Promise<void>((resolve) => {
+      releaseRecovery = resolve;
+    });
+    let reachedRecovery!: () => void;
+    const recovery = new Promise<void>((resolve) => {
+      reachedRecovery = resolve;
+    });
     const run: UpdaterCommandRunner = async (command, args) => {
       if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
       if (args.includes("exec")) return ok(currentCommit);
       if (args.includes("up")) {
         recreates++;
         if (recreates === 1) return failed("recreate failed");
+        reachedRecovery();
+        await recoveryGate;
         recoveryTemplate = await readFile(fixture.template, "utf8");
       }
       return ok();
@@ -507,6 +551,12 @@ describe("standalone deployment acknowledgements", () => {
         })
       ).status,
     ).toBe(202);
+    await recovery;
+    expect(await new DeploymentJournal(fixture.deployDir).read()).toMatchObject({
+      state: "running",
+      phase: "recovering",
+    });
+    releaseRecovery();
     await vi.waitFor(async () =>
       expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("failed"),
     );
@@ -515,6 +565,40 @@ describe("standalone deployment acknowledgements", () => {
     expect(await readFile(fixture.template, "utf8")).toBe(fixture.before);
     expect(await readFile(path.join(fixture.deployDir, ".env"), "utf8")).toContain(
       "ORKBOT_IMAGE_TAG=v1.0.0",
+    );
+  });
+
+  it("continues a deployment when a progress-only journal write fails", async () => {
+    const fixture = await preparedDeployment();
+    const originalWrite = DeploymentJournal.prototype.write;
+    vi.spyOn(DeploymentJournal.prototype, "write").mockImplementation(function (
+      this: DeploymentJournal,
+      operation,
+    ) {
+      if (operation.state === "running" && operation.phase === "downloading")
+        return Promise.reject(new Error("progress unavailable"));
+      return originalWrite.call(this, operation);
+    });
+    const run: UpdaterCommandRunner = async (command, args) => {
+      if (command === "git") return ok(`${targetCommit}\trefs/tags/v1.2.3\n`);
+      if (args.includes("exec")) return ok(currentCommit);
+      return ok();
+    };
+    const subject = createUpdaterApp(
+      { ...fixture.config, mode: "standalone" },
+      { run, fetch: fixture.fetch },
+    );
+    expect(
+      (
+        await request(subject, "/deploy", {
+          revision: targetCommit,
+          idempotencyKey: "phase-write-failure-01",
+          channel: "stable",
+        })
+      ).status,
+    ).toBe(202);
+    await vi.waitFor(async () =>
+      expect((await new DeploymentJournal(fixture.deployDir).read())?.state).toBe("succeeded"),
     );
   });
   it("refuses a release whose image does not match the revision image", async () => {

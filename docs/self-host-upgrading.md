@@ -14,6 +14,14 @@ from Ork's Updates settings. Stable is the default channel; Beta offers publishe
 prereleases. A request is complete only when the updated server confirms the new
 revision. If the result is uncertain, inspect the deployment before retrying.
 
+Updates settings show the deployment stage. Server progress has no percentage because
+the updater does not expose Docker pull progress. During an API interruption, the app
+shows "Reconnecting".
+
+Detailed stages require an updater image that reports them. Older updaters show a
+general status. The updater is pinned separately, so upgrade it with the operator steps
+below to enable these stages.
+
 The updater has access to the Docker socket and the root-owned installation directory.
 Keep that directory and all of its parent directories owned by root and unwritable
 by other users. An installation already managed by a deployment panel must use its

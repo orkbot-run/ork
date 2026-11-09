@@ -3,4 +3,5 @@ SPDX-FileCopyrightText: 2026 Rakazo contributors
 SPDX-FileCopyrightText: 2026 Ork contributors
 Modified by Ork contributors to declare the package's mixed license scope after
 adding the new Ork avatar artwork and rendering changes.
+The imported shadcn/ui progress component retains its MIT license and notice.
 Inherited material remains Apache-2.0. New changes follow LICENSE.md.

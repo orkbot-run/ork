@@ -2,12 +2,17 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { Trans, useLingui } from "@lingui/react/macro";
-import type { createServerUpdates, ServerUpdatesView } from "@orkbot/core";
-import { serverUpdateCanApply } from "@orkbot/core";
+import type {
+  createServerUpdates,
+  ServerUpdateDisplayPhase,
+  ServerUpdatesView,
+} from "@orkbot/core";
+import { serverUpdateCanApply, serverUpdateProgressPhase } from "@orkbot/core";
 import { Button, OptionSelect, Switch } from "@orkbot/ui-web";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { SettingsGroup, SettingsRow } from "./SettingsRows";
+import { UpdateProgress } from "./UpdateProgress";
 
 export function ServerUpdateSection({
   updates,
@@ -17,6 +22,18 @@ export function ServerUpdateSection({
   state: ServerUpdatesView;
 }) {
   const { t } = useLingui();
+  const phaseLabels: Record<ServerUpdateDisplayPhase, string> = {
+    checking: t`Checking for updates…`,
+    preparing: t`Preparing update…`,
+    downloading: t`Downloading update…`,
+    restarting: t`Restarting server…`,
+    verifying: t`Verifying update…`,
+    recovering: t`Restoring previous version…`,
+    updating: t`Updating server…`,
+    waiting: t`Waiting for update status…`,
+    reconnecting: t`Reconnecting…`,
+  };
+  const phase = serverUpdateProgressPhase(state);
   const status = state.status;
   const [serverVersion, setServerVersion] = useState<{
     revision: string | null;
@@ -88,17 +105,19 @@ export function ServerUpdateSection({
             <Trans>Preview</Trans>
           </p>
         ) : null}
-        <p role="status" className="text-sm text-muted-foreground">
-          {state.uncertain || request === "unknown" ? (
-            <Trans>Could not confirm the update</Trans>
-          ) : request === "completed" ? (
-            <Trans>Server updated</Trans>
-          ) : request === "requested" ? (
-            <Trans>Deployment requested</Trans>
-          ) : state.error || status?.error ? (
-            <Trans>Could not complete the update. Try again.</Trans>
-          ) : null}
-        </p>
+        {phase ? (
+          <UpdateProgress label={phaseLabels[phase]} />
+        ) : (
+          <p role="status" className="text-sm text-muted-foreground">
+            {state.uncertain || request === "unknown" ? (
+              <Trans>Could not confirm the update</Trans>
+            ) : request === "completed" ? (
+              <Trans>Server updated</Trans>
+            ) : state.error || status?.error ? (
+              <Trans>Could not complete the update. Try again.</Trans>
+            ) : null}
+          </p>
+        )}
       </SettingsRow>
       {status?.available && status.channelSelectable ? (
         <SettingsRow

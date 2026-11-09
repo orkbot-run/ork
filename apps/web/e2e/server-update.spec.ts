@@ -46,6 +46,7 @@ test("server updates require an explicit request and automatic updates are opt-i
           id: body.idempotencyKey,
           revision: body.candidateRevision,
           state: "requested",
+          phase: "downloading",
           requestedAt: new Date().toISOString(),
         },
       };
@@ -62,7 +63,20 @@ test("server updates require an explicit request and automatic updates are opt-i
   await panel.getByRole("switch", { name: "Automatic updates" }).click();
   await expect(panel.getByRole("switch", { name: "Automatic updates" })).toBeChecked();
   await panel.getByRole("button", { name: "Update server" }).click();
-  await expect(panel.getByRole("status")).toHaveText("Deployment requested");
+  await expect(panel.getByRole("status")).toHaveText("Downloading update…");
   await expect(panel.getByRole("button", { name: "Update server" })).toBeDisabled();
-  await captureScreenshot(page, testInfo, "server-update-requested");
+  await expect(panel.getByRole("progressbar", { name: "Downloading update…" })).toBeVisible();
+  await expect(panel.getByRole("progressbar")).not.toHaveAttribute("aria-valuenow");
+  await captureScreenshot(page, testInfo, "server-update-downloading");
+  state = { ...state, lastRequest: { ...state.lastRequest!, phase: "restarting" } };
+  await expect(panel.getByRole("status")).toHaveText("Restarting server…");
+  await captureScreenshot(page, testInfo, "server-update-restarting");
+  state = {
+    ...state,
+    currentRevision: state.lastRequest!.revision,
+    candidate: null,
+    lastRequest: { ...state.lastRequest!, state: "completed" },
+  };
+  await expect(panel.getByRole("status")).toHaveText("Server updated");
+  await expect(panel.getByRole("progressbar")).toHaveCount(0);
 });

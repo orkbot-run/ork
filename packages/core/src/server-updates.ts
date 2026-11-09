@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { ServerUpdatesStatus } from "@orkbot/contracts";
+import type { ServerUpdatePhase, ServerUpdatesStatus } from "@orkbot/contracts";
 import { newClientId } from "./client-id.js";
 import { errorStatus } from "./retry-policy.js";
 
@@ -11,6 +11,21 @@ export type ServerUpdatesView = {
   error: boolean;
   uncertain: boolean;
 };
+
+export type ServerUpdateDisplayPhase = ServerUpdatePhase | "checking" | "waiting" | "reconnecting";
+
+/** Keep native surfaces aligned without treating an acknowledgement as completed work. */
+export function serverUpdateProgressPhase(
+  state: ServerUpdatesView,
+): ServerUpdateDisplayPhase | null {
+  if (state.uncertain) return null;
+  if (state.busy === "apply") return "preparing";
+  const request = state.status?.lastRequest;
+  if (request?.state === "submitting") return "preparing";
+  if (request?.state === "requested")
+    return state.error ? "reconnecting" : (request.phase ?? "waiting");
+  return state.busy === "check" ? "checking" : null;
+}
 
 export function serverUpdateCanApply(state: ServerUpdatesView, now = Date.now()): boolean {
   const status = state.status;

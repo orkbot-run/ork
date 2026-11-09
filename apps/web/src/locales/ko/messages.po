@@ -1388,6 +1388,11 @@ msgstr ""
 msgid "Checking connection…"
 msgstr "연결 확인 중…"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Checking for updates…"
+msgstr ""
+
 #: src/components/ComputersUnavailableHint.tsx
 #: src/components/DesktopUpdates.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -2750,10 +2755,6 @@ msgstr "거부됨"
 msgid "Deny"
 msgstr "거부"
 
-#: src/components/ServerUpdates.tsx
-msgid "Deployment requested"
-msgstr "배포 요청됨"
-
 #: src/pages/Board.tsx
 #: src/pages/shell/agent-import.tsx
 msgid "Description"
@@ -2926,6 +2927,11 @@ msgstr "CSV 다운로드"
 #: src/components/pages/DownloadPdfButton.tsx
 msgid "Download PDF"
 msgstr "PDF 다운로드"
+
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Downloading update…"
+msgstr ""
 
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
@@ -3584,6 +3590,10 @@ msgstr "입력값"
 #: src/components/SidebarFooter.tsx
 msgid "Install update"
 msgstr "업데이트 설치"
+
+#: src/components/DesktopUpdates.tsx
+msgid "Installing update…"
+msgstr ""
 
 #: src/components/McpServerHealthLine.tsx
 msgid "Installing…"
@@ -4993,6 +5003,11 @@ msgstr "POST 대상"
 msgid "Preferences"
 msgstr "환경설정"
 
+#: src/components/DesktopUpdates.tsx
+#: src/components/ServerUpdates.tsx
+msgid "Preparing update…"
+msgstr ""
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5130,6 +5145,10 @@ msgstr "OAuth 다시 연결"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Reconnecting"
 msgstr "다시 연결 중"
+
+#: src/components/ServerUpdates.tsx
+msgid "Reconnecting…"
+msgstr ""
 
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Recording may have started, but the view could not refresh"
@@ -5445,6 +5464,10 @@ msgstr ""
 msgid "Restart to update"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Restarting server…"
+msgstr ""
+
 #: src/components/InstructionSettings.tsx
 #: src/pages/shell/archived-chats.tsx
 msgid "Restore"
@@ -5461,6 +5484,10 @@ msgstr "마지막으로 저장된 작업 공간을 복원합니다. 컴퓨터에
 #: src/components/AskCard.tsx
 msgid "Restored"
 msgstr "복원됨"
+
+#: src/components/ServerUpdates.tsx
+msgid "Restoring previous version…"
+msgstr ""
 
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Restoring your workspace"
@@ -6910,6 +6937,10 @@ msgstr "진행 상황 및 최종 답변"
 msgid "Updating {0}’s Computer"
 msgstr ""
 
+#: src/components/ServerUpdates.tsx
+msgid "Updating server…"
+msgstr ""
+
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Updating Team Computer"
 msgstr ""
@@ -7052,6 +7083,10 @@ msgstr "보관함"
 msgid "Verify and add"
 msgstr "확인 후 추가"
 
+#: src/components/ServerUpdates.tsx
+msgid "Verifying update…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verifying…"
 msgstr "확인 중…"
@@ -7082,6 +7117,10 @@ msgstr ""
 #: src/lib/model-connection-preflight.ts
 msgid "Wait a moment and test again."
 msgstr "잠시 기다린 뒤 다시 테스트하세요."
+
+#: src/components/ServerUpdates.tsx
+msgid "Waiting for update status…"
+msgstr ""
 
 #: src/lib/roster-status.ts
 msgid "Waiting in line…"
