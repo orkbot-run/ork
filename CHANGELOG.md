@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-11-09
+
+### Changed
+
+- Incremented the version to test desktop and server updates from 1.2.1.
+
 ## [1.2.1] - 2026-11-09
 
 ### Security
