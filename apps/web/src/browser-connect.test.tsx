@@ -3,7 +3,7 @@
 // @vitest-environment jsdom
 
 import type { ComponentProps, ReactElement } from "react";
-import { act, cloneElement } from "react";
+import { act, cloneElement, useState } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -19,6 +19,22 @@ vi.mock("@orkbot/ui-web", () => ({
 }));
 
 import { BrowserConnect } from "./browser-connect";
+import { BrowserPairing } from "./browser-pairing";
+
+function PairingHarness() {
+  const [paired, setPaired] = useState(false);
+  return paired ? (
+    <a href="https://ork.run/download/">Download</a>
+  ) : (
+    <BrowserPairing
+      polish={navigator.language.toLowerCase().startsWith("pl")}
+      onPaired={() => setPaired(true)}
+    />
+  );
+}
+async function showPairing() {
+  await act(async () => root.render(<PairingHarness />));
+}
 
 let host: HTMLDivElement;
 let root: Root;
@@ -76,6 +92,8 @@ it("explains workspace setup and accepts only an HTTPS dashboard origin", async 
 });
 
 it("checks initialization without a session request and waits for a canonical six-character code", async () => {
+  expect(host.querySelector("#pairing-code")).toBeNull();
+  await showPairing();
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
   expect(host.querySelector("label")?.textContent).toBe("Pairing key");
@@ -104,7 +122,7 @@ it.each([
   "sends only the normalized code and renders a sessionless result in $language",
   async ({ language, label, action, pending }) => {
     vi.stubGlobal("navigator", { language });
-    await act(async () => root.render(<BrowserConnect />));
+    await showPairing();
     expect(host.querySelector("label")?.textContent).toBe(label);
     expect(host.querySelector("button")?.textContent).toBe(action);
     const fetcher = vi
@@ -150,6 +168,7 @@ it.each([
 );
 
 it("keeps failed pairing retryable and never renders response details", async () => {
+  await showPairing();
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(
@@ -174,6 +193,7 @@ it("keeps failed pairing retryable and never renders response details", async ()
 });
 
 it("sends only one request while pending and aborts it when the page unmounts", async () => {
+  await showPairing();
   const fetcher = vi.fn(() => new Promise<Response>(() => {}));
   vi.stubGlobal("fetch", fetcher);
   await code("ABC234");
@@ -188,6 +208,7 @@ it("sends only one request while pending and aborts it when the page unmounts", 
 });
 
 it("stops approval polling when the page is retired", async () => {
+  await showPairing();
   const fetcher = vi.fn(async () =>
     Response.json({ pending: true, pairingId: "p".repeat(43) }, { status: 202 }),
   );
@@ -213,14 +234,12 @@ it("shows the native handoff and workspace guidance for an initialized server", 
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
   expect(host.querySelector('input[id="pairing-code"]')).toBeNull();
-  expect(host.querySelector("button")).toBeNull();
-  expect(host.querySelectorAll("a")).toHaveLength(2);
-  expect(host.querySelector("a")?.textContent).toBe("Open in Ork");
-  expect(host.querySelector("a")?.getAttribute("href")).toMatch(/^orkbot:\/\/connect/);
-  expect(host.textContent).toContain("Your server is ready");
+  expect(host.querySelectorAll("a")).toHaveLength(3);
+  expect(host.querySelector('a[href^="orkbot://connect"]')?.textContent).toBe("Open in Ork");
+  expect(host.textContent).toContain("Responding");
   expect(host.textContent).toContain("node /app/apps/api/dist/cli/server-claim.js --workspace");
   expect(host.querySelector('a[href="https://ork.run/download/"]')?.textContent).toBe(
-    "Need the app? Download Ork",
+    "Get the app",
   );
   expect(fetcher).toHaveBeenCalledWith(
     "/api/auth/native/initialization",
@@ -233,9 +252,9 @@ it("shows the native handoff and workspace guidance for an initialized server", 
 it("shows the ready-server guidance in Polish", async () => {
   vi.stubGlobal("navigator", { language: "pl-PL" });
   await remount(vi.fn(async () => Response.json({ required: false })));
-  expect(host.textContent).toContain("Serwer jest gotowy");
+  expect(host.textContent).toContain("Odpowiada");
   expect(host.textContent).toContain("Otwórz w Orku");
-  expect(host.textContent).toContain("Nie masz aplikacji? Pobierz Orka");
+  expect(host.textContent).toContain("Pobierz aplikację");
 });
 
 it("does not flash pairing while initialization state is loading", async () => {
@@ -258,22 +277,23 @@ it("retires pairing when the server is initialized from another page", async () 
     .mockResolvedValueOnce(Response.json({ required: true }))
     .mockResolvedValueOnce(Response.json({ required: false }));
   await remount(fetcher);
-  expect(host.querySelector("form")).not.toBeNull();
+  expect(host.querySelector("form")).toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(5_000));
   expect(host.querySelector("form")).toBeNull();
-  expect(host.querySelectorAll("a")).toHaveLength(2);
+  expect(host.textContent).toContain("Responding");
 });
 
 it("keeps pairing hidden on an unavailable or malformed state and permits a safe retry", async () => {
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ required: "false", token: "private" }))
+    .mockResolvedValueOnce(Response.json({ required: "false", token: "secret-fixture-token" }))
     .mockResolvedValueOnce(Response.json({ required: true }));
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
-  expect(host.textContent).not.toContain("private");
+  expect(host.textContent).not.toContain("secret-fixture-token");
   const retry = host.querySelector("button")!;
   expect(retry.textContent).toBe("Retry");
   await act(async () => retry.click());
-  expect(host.querySelector("form")).not.toBeNull();
+  expect(host.querySelector("form")).toBeNull();
+  expect(host.textContent).toContain("Responding");
 });
