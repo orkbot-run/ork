@@ -13,6 +13,8 @@ on:
     paths:
       - ".github/workflows/desktop-tauri.yml"
       - ".github/scripts/publish-tauri-release.mjs"
+      - ".github/scripts/prepare-windows-signing-tools.mjs"
+      - ".github/scripts/prepare-windows-signing-tools.test.mjs"
       - "apps/desktop/**"
       - "apps/web/**"
       - "packages/contracts/**"
@@ -62,15 +64,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-26
-            platform: darwin-aarch64
-          - os: macos-26-intel
-            platform: darwin-x86_64
-          - os: windows-2022
-            platform: windows-x86_64
-          - os: ubuntu-22.04
-            platform: linux-x86_64
+        include: >-
+          ${{ fromJSON(github.event_name == 'release' && '[{"os":"macos-26","platform":"darwin-aarch64"},{"os":"macos-26-intel","platform":"darwin-x86_64"},{"os":"ubuntu-22.04","platform":"linux-x86_64"}]' || '[{"os":"macos-26","platform":"darwin-aarch64"},{"os":"macos-26-intel","platform":"darwin-x86_64"},{"os":"windows-2022","platform":"windows-x86_64"},{"os":"ubuntu-22.04","platform":"linux-x86_64"}]') }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -101,6 +96,33 @@ jobs:
         run: pnpm --filter @orkbot/desktop tauri:test
       - name: Check native code
         run: pnpm --filter @orkbot/desktop tauri:check
+      - name: Test Windows signing helpers offline
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          node --test apps/desktop/scripts/windows-distribution.test.mjs
+          node --test .github/scripts/prepare-windows-signing-tools.test.mjs
+      - name: Parse Windows signing script
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'apps/desktop/scripts/windows-distribution.ps1').Path, [ref]$tokens, [ref]$errors)
+          if ($errors.Count -gt 0) { throw 'Windows signing script has invalid syntax.' }
+      - name: Prepare verified Windows signing tools
+        if: runner.os == 'Windows'
+        run: node .github/scripts/prepare-windows-signing-tools.mjs
+      - name: Check Windows signing tools
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          if (-not (Test-Path -LiteralPath $env:WINDOWS_SIGNTOOL_PATH -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $env:WINDOWS_SIGNING_DLIB_PATH -PathType Leaf)) {
+            throw 'Windows signing tools are unavailable.'
+          }
+          & $env:WINDOWS_SIGNTOOL_PATH /? *> $null
+          if ($LASTEXITCODE -ne 0) { throw 'Windows SignTool could not run.' }
       - name: Configure Linux WebKit helpers
         if: runner.os == 'Linux'
         shell: bash
@@ -200,11 +222,135 @@ jobs:
             ${{ runner.temp }}/tauri-artifact-sizes.json
           if-no-files-found: error
           retention-days: 7
+  windows-signed-release:
+    if: >-
+      github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
+      (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))
+    name: Signed Windows release
+    runs-on: windows-2022
+    environment: desktop-windows-signing
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ORKBOT_ENABLE_AUTO_UPDATE: "1"
+      ORK_ACCOUNTS_ISSUER: https://api.orkbot.run
+      ORK_ACCOUNTS_DESKTOP_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_DESKTOP_CLIENT_ID }}
+      WINDOWS_SIGNING_ENDPOINT: ${{ vars.WINDOWS_SIGNING_ENDPOINT }}
+      WINDOWS_SIGNING_ACCOUNT: ${{ vars.WINDOWS_SIGNING_ACCOUNT }}
+      WINDOWS_SIGNING_PROFILE: ${{ vars.WINDOWS_SIGNING_PROFILE }}
+    steps:
+      - name: Validate signing configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          for name in WINDOWS_SIGNING_ENDPOINT WINDOWS_SIGNING_ACCOUNT WINDOWS_SIGNING_PROFILE AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID TAURI_SIGNING_PRIVATE_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              printf 'Missing required signing configuration: %s\n' "$name" >&2
+              exit 1
+            fi
+          done
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - run: pnpm install --frozen-lockfile
+      - name: Run native unit tests
+        run: pnpm --filter @orkbot/desktop tauri:test
+      - name: Check native code
+        run: pnpm --filter @orkbot/desktop tauri:check
+      - name: Prepare verified packaging tools
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --test .github/scripts/prepare-tauri-tools.test.mjs
+          node .github/scripts/prepare-tauri-tools.mjs
+      - name: Prepare verified Windows signing tools
+        shell: bash
+        run: |
+          node --test .github/scripts/prepare-windows-signing-tools.test.mjs
+          node .github/scripts/prepare-windows-signing-tools.mjs
+      - name: Prepare Windows signing configuration
+        shell: bash
+        env:
+          WINDOWS_SIGNING_RECORD_PATH: ${{ runner.temp }}/windows-signing-record.json
+        run: |
+          printf 'WINDOWS_SIGNING_RECORD_PATH=%s\n' "$WINDOWS_SIGNING_RECORD_PATH" >> "$GITHUB_ENV"
+          node apps/desktop/scripts/windows-distribution.ts prepare "$RUNNER_TEMP/windows-signing.json" "$RUNNER_TEMP/windows-metadata.json"
+      - name: Azure login
+        uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5 # v2.3.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Build and verify signed Windows update
+        shell: bash
+        env:
+          TAURI_UPDATER_ENDPOINT: https://github.com/${{ github.repository }}/releases/download/desktop-stable/latest.json
+          TAURI_UPDATER_BETA_ENDPOINT: https://github.com/${{ github.repository }}/releases/download/desktop-beta/latest.json
+          TAURI_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          TAURI_UPDATER_PUBLIC_KEY: ${{ vars.TAURI_UPDATER_PUBLIC_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          TAURI_RELEASE_PLATFORM: windows-x86_64
+        run: |
+          set -euo pipefail
+          trap 'rm -f "$RUNNER_TEMP/windows-signing.json" "$RUNNER_TEMP/windows-metadata.json" "$WINDOWS_SIGNING_RECORD_PATH"' EXIT
+          node apps/desktop/scripts/tauri-release.ts prepare "$RUNNER_TEMP/tauri-release.json"
+          jq -s '.[0] * .[1]' "$RUNNER_TEMP/tauri-release.json" "$RUNNER_TEMP/windows-signing.json" > "$RUNNER_TEMP/windows-release.json"
+          pnpm --filter @orkbot/desktop tauri:build --bundles nsis --config "$RUNNER_TEMP/windows-release.json"
+          node apps/desktop/scripts/windows-distribution.ts verify apps/desktop/src-tauri/target/release/bundle apps/desktop/src-tauri/target/release/orkbot-desktop-preview.exe
+          node apps/desktop/scripts/tauri-release.ts stage apps/desktop/src-tauri/target/release/bundle "$RUNNER_TEMP/updater"
+      - name: Remove Windows signing metadata
+        if: always()
+        shell: powershell
+        run: |
+          Remove-Item -LiteralPath "$env:RUNNER_TEMP/windows-signing.json", "$env:RUNNER_TEMP/windows-metadata.json", $env:WINDOWS_SIGNING_RECORD_PATH -Force -ErrorAction SilentlyContinue
+      - name: Upload signed update artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-tauri-updater-windows-x86_64
+          path: ${{ runner.temp }}/updater/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Record installer sizes
+        shell: bash
+        run: >-
+          node apps/desktop/scripts/tauri-metrics.mjs apps/desktop/src-tauri/target/release/bundle
+          > "$RUNNER_TEMP/tauri-artifact-sizes.json"
+      - name: Upload installers and size report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-tauri-build-windows-x86_64-${{ github.run_id }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/**/*.exe
+            ${{ runner.temp }}/tauri-artifact-sizes.json
+          if-no-files-found: error
+          retention-days: 7
   publish-release:
     if: >-
       github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
       (github.event.release.prerelease == false || contains(github.event.release.tag_name, '-beta.'))
-    needs: diagnostic-build
+    needs: [diagnostic-build, windows-signed-release]
     concurrency:
       group: desktop-tauri-release-publish
       cancel-in-progress: false

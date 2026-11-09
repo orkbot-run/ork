@@ -99,6 +99,34 @@ Updater signatures and Apple distribution signing are separate from Windows code
 signing and macOS passkey provisioning. Before wider distribution, install the app
 on each platform and test updating it from a previous build.
 
+## Windows publisher signing
+
+Windows releases require Authenticode signatures for the application and NSIS installer.
+Diagnostics remain unsigned. The release job authenticates to Artifact Signing through
+OIDC, uses Tauri's signing hook before updater signatures are generated, then extracts
+the installer without running it to check the packaged application.
+
+Create the GitHub environment `desktop-windows-signing` and restrict deployments to
+release tags matching `v*`. Configure these environment entries:
+
+| Type | Name | Value |
+| --- | --- | --- |
+| Secret | `AZURE_CLIENT_ID` | Signing application's client ID. |
+| Secret | `AZURE_TENANT_ID` | Directory containing that application. |
+| Secret | `AZURE_SUBSCRIPTION_ID` | Subscription containing the signing account. |
+| Variable | `WINDOWS_SIGNING_ENDPOINT` | HTTPS endpoint for the account's region. |
+| Variable | `WINDOWS_SIGNING_ACCOUNT` | Artifact Signing account name. |
+| Variable | `WINDOWS_SIGNING_PROFILE` | Approved Public Trust certificate profile name. |
+
+Assign the application's service principal the Artifact Signing Certificate Profile Signer
+role for that profile. Its federated credential must trust the issuer
+`https://token.actions.githubusercontent.com`, the audience
+`api://AzureADTokenExchange`, and the subject
+`repo:<owner>/<repo>:environment:desktop-windows-signing`.
+
+Missing configuration or invalid application, installer or timestamp signatures stop
+publication. The existing updater key stays separate from Windows publisher signing.
+
 ## Signing keys and local builds
 
 Generate a signing pair on a trusted operator machine:

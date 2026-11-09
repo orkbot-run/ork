@@ -21,7 +21,10 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   expect(signed.env.TAURI_UPDATER_ENDPOINT).toContain("/desktop-stable/latest.json");
   expect(signed.env.TAURI_UPDATER_BETA_ENDPOINT).toContain("/desktop-beta/latest.json");
   expect(build.on.release.types).toEqual(["published"]);
-  expect(build.jobs["publish-release"].needs).toBe("diagnostic-build");
+  expect(build.jobs["publish-release"].needs).toEqual([
+    "diagnostic-build",
+    "windows-signed-release",
+  ]);
   expect(build.jobs["publish-release"].steps[0].with.ref).toBe("main");
   expect(signed.run).toContain("macos-distribution.ts prepare");
   expect(signed.run).toContain("macos-distribution.ts verify");
@@ -30,15 +33,34 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   );
   expect(signed.env.APPLE_CERTIFICATE).toContain("runner.os == 'macOS'");
   expect(build.permissions).toEqual({ contents: "read" });
+  const matrix = build.jobs["diagnostic-build"].strategy.matrix.include as string;
+  const branches = [...matrix.matchAll(/'([[][^']+)'/g)].map((match) => JSON.parse(match[1]!));
+  expect(branches).toHaveLength(2);
+  expect(branches[0].map((entry: { platform: string }) => entry.platform)).toEqual([
+    "darwin-aarch64",
+    "darwin-x86_64",
+    "linux-x86_64",
+  ]);
+  expect(branches[1].map((entry: { platform: string }) => entry.platform)).toEqual([
+    "darwin-aarch64",
+    "darwin-x86_64",
+    "windows-x86_64",
+    "linux-x86_64",
+  ]);
   expect(
-    build.jobs["diagnostic-build"].strategy.matrix.include.map(
-      (entry: { platform: string }) => entry.platform,
-    ),
-  ).toEqual(["darwin-aarch64", "darwin-x86_64", "windows-x86_64", "linux-x86_64"]);
-  const linux = build.jobs["diagnostic-build"].strategy.matrix.include.find(
-    (entry: { platform: string }) => entry.platform === "linux-x86_64",
+    branches[0].find((entry: { platform: string }) => entry.platform === "linux-x86_64").os,
+  ).toBe("ubuntu-22.04");
+  const windowsTools = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Prepare verified Windows signing tools",
   );
-  expect(linux.os).toBe("ubuntu-22.04");
+  expect(windowsTools.if).toBe("runner.os == 'Windows'");
+  expect(windowsTools.run).toContain("prepare-windows-signing-tools.mjs");
+  const windowsToolCheck = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Check Windows signing tools",
+  );
+  expect(windowsToolCheck.if).toBe("runner.os == 'Windows'");
+  expect(windowsToolCheck.run).toContain("WINDOWS_SIGNTOOL_PATH /?");
+  expect(windowsToolCheck.run).toContain("WINDOWS_SIGNING_DLIB_PATH");
   const helpers = build.jobs["diagnostic-build"].steps.find(
     (step: { name?: string }) => step.name === "Configure Linux WebKit helpers",
   );
@@ -49,6 +71,17 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   );
   expect(packaging.env.GITHUB_TOKEN).toBe(`\${{ github.token }}`);
   expect(signed.run).toContain("linux-webkit.json");
+  const windowsOffline = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Test Windows signing helpers offline",
+  );
+  expect(windowsOffline.if).toBe("runner.os == 'Windows'");
+  expect(windowsOffline.run).toContain("windows-distribution.test.mjs");
+  expect(windowsOffline.run).toContain("prepare-windows-signing-tools.test.mjs");
+  const windowsParser = build.jobs["diagnostic-build"].steps.find(
+    (step: { name?: string }) => step.name === "Parse Windows signing script",
+  );
+  expect(windowsParser.if).toBe("runner.os == 'Windows'");
+  expect(windowsParser.run).toContain("Language.Parser]::ParseFile");
   const diagnostic = build.jobs["diagnostic-build"].steps.find(
     (step: { name?: string }) => step.name === "Build diagnostic installers",
   );
@@ -83,4 +116,64 @@ it("keeps signing secrets out of PR builds and publishes only after both exact-r
   }
   expect(build.jobs["publish-release"].concurrency.queue).toBe("max");
   expect(build.jobs["publish-release"].concurrency["cancel-in-progress"]).toBe(false);
+});
+
+it("limits cloud signing credentials to the protected Windows release job", () => {
+  const root = path.resolve(import.meta.dirname, "../../..");
+  const workflow = parse(
+    readFileSync(path.join(root, ".github/workflows/desktop-tauri.yml"), "utf8"),
+  );
+  const job = workflow.jobs["windows-signed-release"];
+  expect(job.if).toContain("github.event_name == 'release'");
+  expect(job.environment).toBe("desktop-windows-signing");
+  expect(job.permissions).toEqual({ contents: "read", "id-token": "write" });
+  expect(workflow.jobs["diagnostic-build"].permissions?.["id-token"]).toBeUndefined();
+  const steps = job.steps as {
+    name?: string;
+    uses?: string;
+    run?: string;
+    with?: Record<string, string>;
+    env?: Record<string, string>;
+  }[];
+  const validate = steps.findIndex((step) => step.name === "Validate signing configuration");
+  const login = steps.findIndex((step) => step.uses?.startsWith("azure/login@"));
+  const prepare = steps.findIndex((step) => step.name === "Prepare Windows signing configuration");
+  const build = steps.findIndex((step) => step.name === "Build and verify signed Windows update");
+  expect(validate).toBeGreaterThanOrEqual(0);
+  expect(prepare).toBeGreaterThan(validate);
+  expect(login).toBeGreaterThan(prepare);
+  expect(build).toBeGreaterThan(login);
+  expect(steps[login]!.uses).toBe("azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5");
+  for (const key of [
+    "WINDOWS_SIGNING_ENDPOINT",
+    "WINDOWS_SIGNING_ACCOUNT",
+    "WINDOWS_SIGNING_PROFILE",
+    "AZURE_CLIENT_ID",
+    "AZURE_TENANT_ID",
+    "AZURE_SUBSCRIPTION_ID",
+    "TAURI_SIGNING_PRIVATE_KEY",
+  ]) {
+    expect(steps[validate]!.run).toContain(key);
+  }
+  const cleanup = steps.find((step) => step.name === "Remove Windows signing metadata") as
+    | { if?: string; run?: string }
+    | undefined;
+  expect(cleanup?.if).toBe("always()");
+  expect(cleanup?.run).toContain("WINDOWS_SIGNING_RECORD_PATH");
+  expect(cleanup?.run).toContain("windows-metadata.json");
+  const run = steps[build]!.run!;
+  expect(run).toContain("WINDOWS_SIGNING_RECORD_PATH");
+  expect(steps[prepare]!.env?.WINDOWS_SIGNING_RECORD_PATH).toContain("runner.temp");
+  expect(steps[prepare]!.run).toContain("GITHUB_ENV");
+  expect(steps[prepare]!.run!.indexOf("GITHUB_ENV")).toBeLessThan(
+    steps[prepare]!.run!.indexOf("windows-distribution.ts prepare"),
+  );
+  expect(run).toContain("windows-distribution.ts verify");
+  expect(run.indexOf("windows-distribution.ts verify")).toBeLessThan(
+    run.indexOf("tauri-release.ts stage"),
+  );
+  expect(steps.some((step) => step.run?.includes("prepare-windows-signing-tools.mjs"))).toBe(true);
+  expect(workflow.on.pull_request.paths).toContain(
+    ".github/scripts/prepare-windows-signing-tools.mjs",
+  );
 });

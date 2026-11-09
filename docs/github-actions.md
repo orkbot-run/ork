@@ -77,7 +77,10 @@ pass for the same revision. Installed apps check hourly and
 download new versions automatically, then ask before restarting to install them.
 macOS publication requires Developer ID signing, notarization and Gatekeeper checks.
 Configure the six Apple signing secrets listed in the desktop release guide.
-Platform signing uses separate keys. See [Desktop releases](desktop-release.md)
+Windows publication also requires the `desktop-windows-signing` environment with
+Artifact Signing credentials and a Public Trust profile. Its OIDC access is limited
+to the Windows release job. Platform signing uses separate keys.
+See [Desktop releases](desktop-release.md)
 for setup, first installation and verification limits.
 
 ## Optional hosted report galleries
