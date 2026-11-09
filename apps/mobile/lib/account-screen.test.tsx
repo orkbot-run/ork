@@ -39,6 +39,8 @@ const { element, account } = vi.hoisted(() => ({
     serverRevision: null as string | null,
     serverRelease: null as string | null,
     versionUnavailable: false,
+    pendingVersion: null as Promise<{ revision: string | null; version: string | null }> | null,
+    focusListeners: new Set<(focused: boolean) => void>(),
     me: { userId: "user-1", name: "Tester", email: "tester@example.test" } as Record<
       string,
       unknown
@@ -128,7 +130,19 @@ vi.mock("@expo/ui/community/menu", () => ({
 vi.mock("expo-router", () => {
   const router = { push: account.push, back: () => undefined };
   return {
-    useFocusEffect: (effect: () => undefined | (() => void)) => useEffect(effect, [effect]),
+    useFocusEffect: (effect: () => undefined | (() => void)) =>
+      useEffect(() => {
+        let cleanup = effect();
+        const listener = (focused: boolean) => {
+          cleanup?.();
+          cleanup = focused ? effect() : undefined;
+        };
+        account.focusListeners.add(listener);
+        return () => {
+          account.focusListeners.delete(listener);
+          cleanup?.();
+        };
+      }, [effect]),
     useLocalSearchParams: () => ({}),
     useRouter: () => router,
   };
@@ -201,6 +215,7 @@ vi.mock("./api", () => ({
     if (method === "me") return account.me;
     if (method === "serverUpdates/version") {
       if (account.versionUnavailable) throw new Error("Unsupported procedure");
+      if (account.pendingVersion) return account.pendingVersion;
       return { revision: account.serverRevision, version: account.serverRelease };
     }
     if (method === "autoReview/get") return account.approvals;
@@ -308,6 +323,7 @@ beforeEach(() => {
   account.serverRevision = null;
   account.serverRelease = null;
   account.versionUnavailable = false;
+  account.pendingVersion = null;
   account.messaging = { enabled: true };
   vi.mocked(fetchAccountSecurity).mockResolvedValue(security());
 });
@@ -375,6 +391,32 @@ it("shows client and server versions even when server updates are unavailable", 
   expect(view.screen.textContent).toContain("Ork 1.0.0 (1)");
   expect(view.screen.textContent).toContain("Server v1.2.3 abcdef123456");
   expect(view.button("Updates")).toBeUndefined();
+});
+
+it("refreshes the server version after returning and ignores an earlier response", async () => {
+  account.serverRevision = "a".repeat(40);
+  account.serverRelease = "v1.0.0";
+  const view = await renderAccount();
+  expect(view.screen.textContent).toContain("Server v1.0.0 aaaaaaaaaaaa");
+
+  let finishEarlier!: (value: { revision: string; version: string }) => void;
+  account.pendingVersion = new Promise((resolve) => {
+    finishEarlier = resolve;
+  });
+  const focus = (focused: boolean) => {
+    for (const listener of account.focusListeners) listener(focused);
+  };
+  await act(async () => focus(false));
+  await act(async () => focus(true));
+  await act(async () => focus(false));
+  account.pendingVersion = null;
+  account.serverRevision = "b".repeat(40);
+  account.serverRelease = "v1.1.0";
+  await act(async () => focus(true));
+  expect(view.screen.textContent).toContain("Server v1.1.0 bbbbbbbbbbbb");
+  await act(async () => finishEarlier({ revision: "c".repeat(40), version: "v0.9.0" }));
+  expect(view.screen.textContent).toContain("Server v1.1.0 bbbbbbbbbbbb");
+  expect(view.screen.textContent).not.toContain("v0.9.0");
 });
 
 it("keeps client version visible when an older server does not expose its revision", async () => {

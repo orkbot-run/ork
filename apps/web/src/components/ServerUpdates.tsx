@@ -22,27 +22,40 @@ export function ServerUpdateSection({
     revision: string | null;
     version: string | null;
   } | null>(null);
+  const statusRevision = status?.currentRevision ?? null;
   useEffect(() => {
     let active = true;
-    void rpc.serverUpdates.version().then(
-      (value) => {
-        if (active) setServerVersion(value);
-      },
-      () => {},
-    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const load = () => {
+      void rpc.serverUpdates.version().then(
+        (value) => {
+          if (!active) return;
+          if (statusRevision && value.revision !== statusRevision) {
+            timer = setTimeout(load, 2_000);
+            return;
+          }
+          setServerVersion(value);
+        },
+        () => {},
+      );
+    };
+    load();
     return () => {
       active = false;
+      clearTimeout(timer);
     };
-  }, []);
-  const currentRevision = status?.currentRevision ?? serverVersion?.revision;
-  if (!status?.available && !currentRevision && !serverVersion?.version) return null;
+  }, [statusRevision]);
+  const currentRevision = statusRevision ?? serverVersion?.revision;
+  const version =
+    !statusRevision || serverVersion?.revision === statusRevision ? serverVersion?.version : null;
+  if (!status?.available && !currentRevision && !version) return null;
   const request = status?.lastRequest?.state;
   return (
     <SettingsGroup title={<Trans>Server</Trans>} data-testid="server-update-settings">
       <SettingsRow
         label={
-          serverVersion?.version
-            ? `v${serverVersion.version}${currentRevision ? ` (${currentRevision.slice(0, 12)})` : ""}`
+          version
+            ? `${version.startsWith("v") ? version : `v${version}`}${currentRevision ? ` (${currentRevision.slice(0, 12)})` : ""}`
             : (currentRevision?.slice(0, 12) ?? <Trans>Server</Trans>)
         }
         control={

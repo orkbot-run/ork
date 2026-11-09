@@ -67,6 +67,7 @@ let clean = () => {};
 afterEach(() => {
   clean();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 async function render(overrides: Partial<ServerUpdatesStatus> = {}, version: string | null = null) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -128,8 +129,58 @@ it("shows the server revision without update controls when updates are unavailab
   expect(view.api.check).not.toHaveBeenCalled();
 });
 it("shows the release version with its revision when both are known", async () => {
-  const view = await render({ available: false, currentRevision: "a".repeat(40) }, "1.2.3");
+  const view = await render({ available: false, currentRevision: "a".repeat(40) }, "v1.2.3");
   expect(view.host.textContent).toContain(`v1.2.3 (${"a".repeat(12)})`);
+  expect(view.host.textContent).not.toContain("vv1.2.3");
+});
+it("refreshes the release version after deployment and refuses a stale revision", async () => {
+  vi.useFakeTimers();
+  const oldRevision = "a".repeat(40);
+  const newRevision = "b".repeat(40);
+  const view = await render({ currentRevision: oldRevision }, "1.2.3");
+  expect(view.host.textContent).toContain(`v1.2.3 (${"a".repeat(12)})`);
+  serverVersion.mockResolvedValueOnce({ revision: oldRevision, version: "1.2.3" });
+  serverVersion.mockResolvedValueOnce({ revision: newRevision, version: "1.2.4" });
+  view.api.check.mockResolvedValueOnce({
+    ...status,
+    currentRevision: newRevision,
+    candidate: null,
+  });
+  await act(async () => view.updates.check());
+  await view.show();
+  expect(view.host.textContent).toContain("b".repeat(12));
+  expect(view.host.textContent).not.toContain("v1.2.3");
+  await act(async () => vi.advanceTimersByTimeAsync(2_000));
+  expect(view.host.textContent).toContain(`v1.2.4 (${"b".repeat(12)})`);
+});
+it("ignores a delayed version response after another deployment", async () => {
+  const view = await render({ currentRevision: "a".repeat(40) }, "1.2.3");
+  let resolvePrevious!: (value: { revision: string; version: string }) => void;
+  serverVersion.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolvePrevious = resolve;
+      }),
+  );
+  view.api.check.mockResolvedValueOnce({
+    ...status,
+    currentRevision: "b".repeat(40),
+    candidate: null,
+  });
+  await act(async () => view.updates.check());
+  await view.show();
+  serverVersion.mockResolvedValueOnce({ revision: "c".repeat(40), version: "1.2.5" });
+  view.api.check.mockResolvedValueOnce({
+    ...status,
+    currentRevision: "c".repeat(40),
+    candidate: null,
+  });
+  await act(async () => view.updates.check());
+  await view.show();
+  expect(view.host.textContent).toContain("v1.2.5");
+  await act(async () => resolvePrevious({ revision: "b".repeat(40), version: "1.2.4" }));
+  expect(view.host.textContent).toContain(`v1.2.5 (${"c".repeat(12)})`);
+  expect(view.host.textContent).not.toContain("v1.2.4");
 });
 it("hides unsupported deployments without a known revision", async () => {
   const view = await render({ available: false, currentRevision: null });
