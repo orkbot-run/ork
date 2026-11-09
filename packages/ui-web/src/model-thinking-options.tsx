@@ -1,3 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Rakazo contributors
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Modified by Ork contributors to preserve selection when effort options change.
+// Inherited material remains Apache-2.0.
+
 import { MAX_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "@orkbot/contracts";
 import type { ReactNode } from "react";
 import { useId } from "react";
@@ -87,6 +93,7 @@ export function ModelThinkingOptions({
         <Field orientation="horizontal" className="mt-3">
           <FieldLabel htmlFor={thinkingLevelId}>{thinkingLevelLabel}</FieldLabel>
           <OptionSelect
+            key={thinkingLevelOptions.map((option) => option.value).join("|")}
             id={thinkingLevelId}
             value={thinkingLevel ?? ""}
             onValueChange={(next) => onThinkingLevelChange(next || null)}

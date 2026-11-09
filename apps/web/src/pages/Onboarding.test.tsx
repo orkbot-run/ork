@@ -353,6 +353,14 @@ it("offers only protocol-supported effort and clamps the selected effort when pr
     option.click();
   });
   expect(document.querySelector('[aria-label="Reasoning effort"]')?.textContent).toBe("Extra high");
+  await act(async () =>
+    document.querySelector<HTMLElement>('[aria-label="Reasoning effort"]')!.click(),
+  );
+  expect(
+    [...document.querySelectorAll('[role="option"]')].some(
+      (option) => option.textContent === "Extra high",
+    ),
+  ).toBe(true);
   const protocol = document.querySelector<HTMLSelectElement>("select")!;
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(
