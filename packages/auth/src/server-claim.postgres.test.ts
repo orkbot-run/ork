@@ -140,6 +140,25 @@ describe.skipIf(!enabled)("durable server authorization", () => {
     await database?.pool.end();
   });
 
+  it("connects a fresh server directly to a workspace without a personal claim", async () =>
+    system(async () => {
+      const organizationId = randomUUID();
+      const service = broker(id, proofNonce, organizationId);
+      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
+      const issued = await issueServerClaim(prisma!, { ...options, mode: "workspace" });
+      expect(issued.code).toBe(code);
+      service.approve();
+      await processServerClaim(prisma!, options);
+      await processServerClaim(prisma!, options);
+      expect(
+        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
+      ).toMatchObject({
+        nativeAccountsOwnerKey: oidcAccountSubject(issuer, "owner"),
+        nativeAccountsOrganizationId: organizationId,
+      });
+      expect(service.reports).toEqual([true]);
+    }));
+
   it("persists the signed organization and owner together and refuses a second claim", async () =>
     system(async () => {
       const organizationId = randomUUID();

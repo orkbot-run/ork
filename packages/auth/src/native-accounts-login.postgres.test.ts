@@ -47,7 +47,12 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
       await prisma!.deploymentSettings.upsert({
         where: { id: "default" },
         create: { id: "default" },
-        update: { nativeAccountsOwnerKey: null },
+        update: {
+          nativeAccountsOwnerKey: null,
+          nativeAccountsOrganizationId: null,
+          nativeAccountsWorkspaceClaimId: null,
+          nativeAccountsWorkspaceReceipt: null,
+        },
       });
       await prisma!.organization.deleteMany({});
       await prisma!.user.deleteMany({ where: { email: { endsWith: "@example.test" } } });
@@ -56,6 +61,88 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
   afterAll(async () => {
     await database?.pool.end();
   });
+
+  it("provisions a verified workspace member into the owner's existing space", async () =>
+    system(async () => {
+      const workspaceId = randomUUID();
+      await prisma!.deploymentSettings.update({
+        where: { id: "default" },
+        data: {
+          nativeAccountsOwnerKey: oidcAccountSubject(issuer, "owner"),
+          nativeAccountsOrganizationId: workspaceId,
+        },
+      });
+      const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+      const jwk = {
+        ...publicKey.export({ format: "jwk" }),
+        kid: "workspace-test",
+        alg: "RS256",
+        use: "sig",
+      };
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => Response.json({ keys: [jwk] })),
+      );
+      const auth = createAuth(prisma!, {
+        secret: "offline-native-server-session-secret-with-32-characters",
+        baseURL: origin,
+        webOrigin: origin,
+        passwordAuth: false,
+        signupsEnabled: "false",
+        signupAllowlist: "",
+        nativeAccounts: { issuer, bootstrapSecret: secret },
+      });
+      const request = (path: string, body: object) =>
+        auth.handler(
+          new Request(`${origin}/api/auth/native/${path}`, {
+            method: "POST",
+            headers: { origin, "content-type": "application/json" },
+            body: JSON.stringify(body),
+          }),
+        );
+      const login = async (subject: string, org: string) => {
+        const { challenge } = (await (await request("challenge", {})).json()) as {
+          challenge: string;
+        };
+        const now = Math.floor(Date.now() / 1000);
+        const grant = await new SignJWT({
+          iss: issuer,
+          aud: origin,
+          sub: subject,
+          nonce: challenge,
+          jti: randomUUID(),
+          purpose: "orkbot-server-login-v1",
+          iat: now,
+          exp: now + 60,
+          email: `${subject}@example.test`,
+          email_verified: true,
+          name: subject,
+          organization_id: org,
+        })
+          .setProtectedHeader({ alg: "RS256", kid: "workspace-test" })
+          .sign(privateKey);
+        return request("complete", { challenge, grant });
+      };
+      try {
+        const owner = await login("owner", workspaceId);
+        expect(owner.status, await owner.clone().text()).toBe(200);
+        const ownerId = ((await owner.json()) as { user: { id: string } }).user.id;
+        const wrong = await login("wrong", randomUUID());
+        expect(wrong.status).toBe(403);
+        const member = await login("member", workspaceId);
+        expect(member.status, await member.clone().text()).toBe(200);
+        const memberId = ((await member.json()) as { user: { id: string } }).user.id;
+        const ownerSpace = await prisma!.spaceMember.findFirstOrThrow({
+          where: { userId: ownerId },
+        });
+        const memberSpaces = await prisma!.spaceMember.findMany({ where: { userId: memberId } });
+        expect(memberSpaces).toHaveLength(1);
+        expect(memberSpaces[0]).toMatchObject({ spaceId: ownerSpace.spaceId, role: "member" });
+      } finally {
+        auth.disposeOidcDiscovery();
+        vi.unstubAllGlobals();
+      }
+    }));
 
   it("atomically admits only one first owner across independent store instances", async () =>
     system(async () => {

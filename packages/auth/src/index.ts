@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 authentication is preserved. OIDC-only session enforcement is an Ork addition.
 
+import { randomUUID } from "node:crypto";
 import { expo } from "@better-auth/expo";
 import { passkey } from "@better-auth/passkey";
 import type { ProductAnalytics, TransactionalEmailProvider } from "@orkbot/adapter-kit";
@@ -76,6 +77,7 @@ export {
 } from "./plugin-submission-email.js";
 export { referralEmail } from "./referral-email.js";
 export {
+  authorizeWorkspaceSession,
   clearWorkspaceBinding,
   issueServerClaim,
   startServerClaimWorker,
@@ -255,6 +257,67 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         code: "EMAIL_VERIFICATION_REQUIRED",
         message: "Email verification required",
       });
+    }
+    const native = nativeLoginProof();
+    if (native?.workspaceId && !env.singleAccount) {
+      const settings = await prisma.deploymentSettings.findUnique({
+        where: { id: "default" },
+        select: { nativeAccountsOwnerKey: true, nativeAccountsOrganizationId: true },
+      });
+      const key = oidcAccountSubject(native.issuer, native.subject);
+      if (
+        !settings?.nativeAccountsOwnerKey ||
+        settings.nativeAccountsOrganizationId !== native.workspaceId
+      )
+        throw new APIError("FORBIDDEN", {
+          code: "REGISTRATION_CLOSED",
+          message: "Registration is closed",
+        });
+      if (settings.nativeAccountsOwnerKey !== key) {
+        const owner = await prisma.account.findFirst({
+          where: { providerId: "oidc", accountId: settings.nativeAccountsOwnerKey },
+          select: { userId: true },
+        });
+        const space =
+          owner &&
+          (await prisma.space.findFirst({
+            where: { createdByUserId: owner.userId, isDefault: true, deletingAt: null },
+            orderBy: { createdAt: "asc" },
+            select: { id: true, organizationId: true },
+          }));
+        if (!space)
+          throw new APIError("FORBIDDEN", {
+            code: "REGISTRATION_CLOSED",
+            message: "Workspace is not initialized",
+          });
+        await prisma.$transaction(async (tx) => {
+          await tx.member.upsert({
+            where: {
+              organizationId_userId: { organizationId: space.organizationId, userId: user.id },
+            },
+            create: {
+              id: randomUUID(),
+              organizationId: space.organizationId,
+              userId: user.id,
+              role: "member",
+              createdAt: new Date(),
+            },
+            update: {},
+          });
+          await tx.spaceMember.upsert({
+            where: { spaceId_userId: { spaceId: space.id, userId: user.id } },
+            create: {
+              id: randomUUID(),
+              spaceId: space.id,
+              organizationId: space.organizationId,
+              userId: user.id,
+              role: "member",
+              createdAt: new Date(),
+            },
+            update: {},
+          });
+        });
+      }
     }
     // Only admitted identities provision a workspace; never assign administration.
     const membership = await prisma.spaceMember.findFirst({ where: { userId: user.id } });

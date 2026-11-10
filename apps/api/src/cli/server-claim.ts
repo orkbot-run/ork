@@ -62,12 +62,10 @@ try {
         origin,
         issuer: "https://api.orkbot.run",
         bootstrapSecret: secret,
-        ...(process.argv.includes("--workspace") ? { mode: "workspace" as const } : {}),
+        mode: "workspace",
       }),
     );
-    process.stdout.write(
-      serverClaimInstructions(claim.code, claim.expiresAt, process.argv.includes("--workspace")),
-    );
+    process.stdout.write(serverClaimInstructions(claim.code, claim.expiresAt, true));
   }
 } finally {
   await prisma.$disconnect();

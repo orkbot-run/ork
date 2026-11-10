@@ -26,11 +26,12 @@ afterEach(() => {
 });
 
 it("sends the central bearer only to the fixed directory without a device ID", async () => {
-  const fetcher = vi.fn().mockResolvedValue(Response.json({ servers: [remote] }));
+  const workspace = { id: remote.id, url: remote.url, name: "Team" };
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ workspaces: [workspace] }));
   vi.stubGlobal("fetch", fetcher);
-  expect(await accountServers()).toEqual([remote]);
+  expect(await accountServers()).toEqual([{ ...remote, name: "Team" }]);
   expect(fetcher).toHaveBeenCalledWith(
-    "https://api.orkbot.run/api/servers",
+    "https://api.orkbot.run/api/servers/workspaces",
     expect.objectContaining({
       headers: { authorization: "Bearer central-bearer" },
       credentials: "omit",
@@ -38,24 +39,22 @@ it("sends the central bearer only to the fixed directory without a device ID", a
     }),
   );
 });
-it("never returns another device's local server", async () => {
+it("never accepts a local computer as a workspace server", async () => {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockResolvedValue(
       Response.json({
-        servers: [
+        workspaces: [
           {
             id: "desktop",
             url: "http://127.0.0.1:45173",
-            kind: "local",
-            deviceId: "desktop-device",
+            name: "Desktop",
           },
-          remote,
         ],
       }),
     ),
   );
-  expect(await accountServers()).toEqual([remote]);
+  await expect(accountServers()).rejects.toThrow("Could not load your servers");
 });
 it("does not contact any endpoint without an Accounts session", async () => {
   vi.mocked(accountsAuthorization).mockResolvedValue(null);
@@ -121,8 +120,10 @@ it("stores a normalized bookmark without contacting the proposed product server"
   );
 });
 it.each([
-  { servers: [{ ...remote, url: "https://user:secret@server.example.test/path" }] },
-  { servers: "invalid" },
+  {
+    workspaces: [{ ...remote, name: "Team", url: "https://user:secret@server.example.test/path" }],
+  },
+  { workspaces: "invalid" },
 ])("rejects malformed directory response %j", async (response) => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(response)));
   await expect(accountServers()).rejects.toThrow("Could not load your servers");

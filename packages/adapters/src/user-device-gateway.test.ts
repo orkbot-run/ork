@@ -33,6 +33,7 @@ interface DeviceRow {
   createdAt?: Date;
   revokedAt: Date | null;
   lastSeenAt: Date | null;
+  sessionId?: string | null;
 }
 interface ConnectionRow {
   deviceId: string;
@@ -50,8 +51,10 @@ function fakePrisma() {
     typeof where.id === "string" ? [where.id] : (where.id?.in ?? [...devices.keys()]);
   const prisma = {
     userDevice: {
-      findUnique: async ({ where }: { where: { tokenHash: string } }) =>
-        [...devices.values()].find((row) => row.tokenHash === where.tokenHash) ?? null,
+      findUnique: async ({ where }: { where: { tokenHash?: string; id?: string } }) =>
+        [...devices.values()].find((row) =>
+          where.id ? row.id === where.id : row.tokenHash === where.tokenHash,
+        ) ?? null,
       update: async ({ where, data }: { where: { id: string }; data: Partial<DeviceRow> }) =>
         Object.assign(devices.get(where.id)!, data),
       updateMany: async ({ where, data }: { where: { id: { in: string[] } }; data: object }) => {
@@ -61,7 +64,7 @@ function fakePrisma() {
       findMany: async ({ where }: { where: { id: { in: string[] } } }) =>
         ids(where)
           .map((id) => devices.get(id))
-          .filter((row) => row?.revokedAt),
+          .filter(Boolean),
       findFirst: async ({ where }: { where: { userId: string; revokedAt: null } }) =>
         [...devices.values()].find((row) => row.userId === where.userId && !row.revokedAt) ?? null,
     },
@@ -104,8 +107,14 @@ function fakePrisma() {
     },
     // Every test user is signed in.
     session: {
-      findMany: async ({ where }: { where: { userId: { in: string[] } } }) =>
-        where.userId.in.map((userId) => ({ userId })),
+      findMany: async ({
+        where,
+      }: {
+        where: { userId?: { in: string[] }; id?: { in: string[] } };
+      }) =>
+        where.userId
+          ? where.userId.in.map((userId) => ({ userId }))
+          : (where.id?.in ?? []).map((id) => ({ id })),
     },
     $transaction: (run: (tx: unknown) => Promise<unknown>) => run(prisma),
   };
@@ -336,6 +345,34 @@ describe("user device gateway in the holding process", () => {
     await vi.advanceTimersByTimeAsync(50);
     expect(socket.sent).toContainEqual({ type: "revoked" });
     expect(socket.closed?.code).toBe(4001);
+  });
+
+  it("disconnects an existing device when workspace membership is removed", async () => {
+    vi.useFakeTimers();
+    const db = fakePrisma();
+    const token = "a".repeat(64);
+    db.deviceRows.set(device.id, {
+      ...device,
+      tokenHash: hashUserDeviceToken(token),
+      revokedAt: null,
+      lastSeenAt: null,
+      sessionId: "session",
+    });
+    const authorizeSession = vi.fn(async () => true);
+    const hub = new UserDeviceHub({
+      prisma: db.prisma,
+      address: "http://a",
+      pingIntervalMs: 50,
+      authorizeSession,
+    });
+    hubs.push(hub);
+    expect(await hub.authenticate(`Bearer ${token}`)).not.toBeNull();
+    const socket = new FakeSocket();
+    await hub.attach(device, socket);
+    authorizeSession.mockResolvedValue(false);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(socket.closed?.code).toBe(1001);
+    expect(await hub.authenticate(`Bearer ${token}`)).toBeNull();
   });
 
   it("terminates a socket that stopped answering pings", async () => {

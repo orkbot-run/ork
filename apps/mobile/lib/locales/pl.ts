@@ -70,6 +70,8 @@ export const PL_MESSAGES: Record<string, string> = {
   Later: "Później",
   "Run this command on your Linux server, then open the authorization link it prints.":
     "Uruchom polecenie na serwerze z Linuxem, a następnie otwórz wyświetlony link autoryzacyjny.",
+  "Install Ork on your server, then connect it in your workspace dashboard.":
+    "Zainstaluj Orka na serwerze, a następnie połącz go w panelu workspace’u.",
   "Copy command": "Kopiuj polecenie",
   "Could not copy the command.": "Nie udało się skopiować polecenia.",
   "Enter this code on your server's initialization page.":

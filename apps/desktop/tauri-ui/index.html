@@ -47,7 +47,8 @@
         <section data-step="selfhost" hidden>
           <h1 data-copy="Connect your server">Connect your server</h1>
           <section id="servers" class="server-list" aria-label="Your servers"></section>
-          <form id="setup">
+          <!-- Personal server pairing is disabled while workspace connections are in use. -->
+          <form id="setup" hidden>
             <div id="legacy-target" hidden>
               <label class="field-label" for="server-url" data-copy="Server address">Server address</label>
               <input id="server-url" class="field" type="url" spellcheck="false" autocomplete="off" placeholder="https://orkbot.example.com" />
@@ -66,7 +67,7 @@
             <div class="command-actions"><button id="approve-pairing" class="button button-primary" type="button" data-copy="Approve">Approve</button><button id="cancel-pairing" class="link" type="button" data-copy="Cancel">Cancel</button></div>
           </section>
           <section id="installation" class="installation-panel">
-            <p class="hint" data-copy="Run this command on your Linux server, then open the authorization link it prints.">Run this command on your Linux server, then open the authorization link it prints.</p>
+            <p class="hint" data-copy="Install Ork on your server, then connect it in your workspace dashboard.">Install Ork on your server, then connect it in your workspace dashboard.</p>
             <label class="sr-only" for="install-command" data-copy="Install command">Install command</label>
             <textarea id="install-command" class="command" rows="2" readonly spellcheck="false"></textarea>
             <div class="command-actions"><button id="copy" class="link" type="button" data-copy="Copy command">Copy command</button></div>

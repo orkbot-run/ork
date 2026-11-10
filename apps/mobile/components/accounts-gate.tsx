@@ -66,6 +66,8 @@ import { NativeActionButton } from "./native-action-button";
 const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
 const DIRECTORY_REFRESH_MS = 15_000;
+// Personal server pairing is temporarily disabled; workspace membership grants access.
+const PERSONAL_SERVER_CONNECTION_ENABLED = false;
 let ownershipChanges = Promise.resolve();
 const welcomeOrk = welcomeAccountsOrk();
 
@@ -255,7 +257,11 @@ export function AccountsGate({
       directoryReady = true;
       setAdding(Boolean(linkedServer) || entries.length === 0);
       if (linkedServer) setDraft(linkedServer);
-      if (linkedServer && !hasPendingServerInitialization(linkedServer)) {
+      if (
+        PERSONAL_SERVER_CONNECTION_ENABLED &&
+        linkedServer &&
+        !hasPendingServerInitialization(linkedServer)
+      ) {
         const currentLink = () =>
           generation.current === current &&
           accountsVersion() === version &&
@@ -803,13 +809,15 @@ export function AccountsGate({
                 {servers.map((entry) => (
                   <NativeActionButton
                     key={entry.id}
-                    label={displayApiHost(entry.url)}
+                    label={entry.name ?? displayApiHost(entry.url)}
                     busy={pending}
                     disabled={Boolean(pairing)}
                     onPress={() => void action(() => select(entry))}
                   />
                 ))}
-                {adding && (linkedServer || pairing || hasPendingServerInitialization(draft)) ? (
+                {PERSONAL_SERVER_CONNECTION_ENABLED &&
+                adding &&
+                (linkedServer || pairing || hasPendingServerInitialization(draft)) ? (
                   <>
                     {hasPendingServerInitialization(draft) ? (
                       <TextInput
@@ -930,7 +938,7 @@ export function AccountsGate({
                   <>
                     <Text style={{ color: tokens.mutedForeground, textAlign: "center" }}>
                       {t(
-                        "Run this command on your Linux server, then open the authorization link it prints.",
+                        "Install Ork on your server, then connect it in your workspace dashboard.",
                       )}
                     </Text>
                     <Text selectable style={{ color: tokens.foreground, textAlign: "center" }}>
