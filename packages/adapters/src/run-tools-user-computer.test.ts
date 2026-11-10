@@ -8,6 +8,7 @@ import {
   userComputerOwner,
   userComputerShell,
 } from "./run-tools-user-computer.js";
+import { SHELL_STREAM_IDLE_MS } from "./shell-command-stream.js";
 import type { UserDeviceGateway } from "./user-device-protocol.js";
 
 const environment = { platform: "darwin", home: "/Users/fake", shell: "/bin/zsh" };
@@ -170,7 +171,9 @@ describe("userComputerShell", () => {
         yield { type: "exit", code: 0 };
       });
       const pending = userComputerShell(ctx, call({ command: "gh auth login" }));
-      await vi.advanceTimersByTimeAsync(1_500);
+      await vi.advanceTimersByTimeAsync(SHELL_STREAM_IDLE_MS - 1);
+      expect(onShellStillRunning).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
       expect(await pending).toMatchObject({ stdout: "Enter code ABCD\n", running: true });
       expect(onShellStillRunning).toHaveBeenCalledOnce();
       finish();

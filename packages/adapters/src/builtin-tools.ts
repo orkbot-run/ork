@@ -1433,18 +1433,18 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "run_subagent",
     description:
-      "Run a helper for this task. By default it completes inside this turn. Set background to true for longer work that should continue while you remain free to answer. A helper is not a bot and cannot use a computer or message other agents when running in the background. Never use this when the user asks to create a bot; use spawn_bot instead.",
+      "Run a task helper in this turn, or set background for longer work. A background helper cannot use a computer or message agents. A helper is not a bot; to create one, use spawn_bot.",
     inputSchema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Short label shown in the thread, e.g. scout or reviewer.",
+          description: "Short label shown in the thread.",
         },
         task: { type: "string", description: "The work the helper should complete." },
         background: {
           type: "boolean",
-          description: "Continue this helper independently of the current turn.",
+          description: "Continue independently of this turn.",
         },
         instructions: {
           type: "string",
