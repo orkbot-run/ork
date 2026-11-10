@@ -13,7 +13,10 @@ import { readBoundedJsonResponse } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
-import { verifiedNativeSessionIdentity } from "./native-session-identity.js";
+import {
+  verifiedNativeSessionIdentity,
+  workspaceSessionMembershipKey,
+} from "./native-session-identity.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const KEY = "native-server-claim:active";
@@ -480,8 +483,20 @@ export async function authorizeWorkspaceSession(
       !result.body ||
       typeof result.body !== "object" ||
       !("role" in result.body) ||
-      !["admin", "manager", "member"].includes(String(result.body.role))
+      !["admin", "manager", "member"].includes(String(result.body.role)) ||
+      !("membershipVersion" in result.body) ||
+      typeof result.body.membershipVersion !== "string" ||
+      !/^\d{1,24}$/.test(result.body.membershipVersion)
     )
+      return false;
+    const membership = await prisma.verification.findFirst({
+      where: {
+        identifier: workspaceSessionMembershipKey(options.sessionId),
+        expiresAt: { gt: new Date() },
+      },
+      select: { value: true },
+    });
+    if (membership?.value !== JSON.stringify([organizationId, result.body.membershipVersion]))
       return false;
     const current = await prisma.deploymentSettings.findUnique({
       where: { id: "default" },

@@ -27,6 +27,7 @@ export interface NativeLoginIdentity {
   subject: string;
   allowProvision?: boolean;
   workspaceId?: string;
+  workspaceMembership?: string;
 }
 export interface NativeLoginGrant extends NativeLoginIdentity {
   email: string;
@@ -124,12 +125,21 @@ export function createNativeGrantVerifier(options: {
         ))
     )
       throw denied();
+    if (
+      payload.organization_id !== undefined &&
+      (typeof payload.workspace_membership !== "string" ||
+        !/^\d{1,24}$/.test(payload.workspace_membership))
+    )
+      throw denied();
     return {
       ...(options.purpose === SERVER_PAIRING_PURPOSE ? { allowProvision: true } : {}),
       issuer: options.issuer,
       subject: payload.sub,
       ...(typeof payload.organization_id === "string"
-        ? { workspaceId: payload.organization_id }
+        ? {
+            workspaceId: payload.organization_id,
+            workspaceMembership: payload.workspace_membership as string,
+          }
         : {}),
       email: payload.email.toLowerCase(),
       name: payload.name,

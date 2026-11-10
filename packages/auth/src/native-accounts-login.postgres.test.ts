@@ -118,6 +118,7 @@ describe.skipIf(!enabled)("persistent native login authorization", () => {
           email_verified: true,
           name: subject,
           organization_id: org,
+          workspace_membership: "123456",
         })
           .setProtectedHeader({ alg: "RS256", kid: "workspace-test" })
           .sign(privateKey);

@@ -35,7 +35,11 @@ function fixture() {
     deploymentSettings: { findUnique: vi.fn(async () => settings) },
     session: { findFirst: vi.fn(async () => ({ id: "session" })) },
     verification: {
-      findFirst: vi.fn(async () => ({ value: JSON.stringify([issuer, "user", accountKey]) })),
+      findFirst: vi.fn(async ({ where }: { where: { identifier: string } }) => ({
+        value: where.identifier.startsWith("workspace-session-membership-v1:")
+          ? JSON.stringify([organizationId, "123"])
+          : JSON.stringify([issuer, "user", accountKey]),
+      })),
     },
     account: {
       findFirst: vi.fn(async (input: { where: { userId?: string } }) =>
@@ -47,7 +51,7 @@ function fixture() {
       fn({ member: { updateMany: updateMember }, spaceMember: { updateMany: updateSpace } }),
   };
   const request = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-    Response.json({ role: "member" }),
+    Response.json({ role: "member", membershipVersion: "123" }),
   );
   const run = () =>
     authorizeWorkspaceSession(prisma as unknown as PrismaClient, {
@@ -86,12 +90,12 @@ describe("workspace session authorization", () => {
   });
   it("applies changed administrator permissions on the next request", async () => {
     const f = fixture();
-    f.request.mockResolvedValueOnce(Response.json({ role: "admin" }));
+    f.request.mockResolvedValueOnce(Response.json({ role: "admin", membershipVersion: "123" }));
     expect(await f.run()).toBe(true);
     expect(f.updateMember).toHaveBeenLastCalledWith(
       expect.objectContaining({ data: { role: "admin" } }),
     );
-    f.request.mockResolvedValueOnce(Response.json({ role: "manager" }));
+    f.request.mockResolvedValueOnce(Response.json({ role: "manager", membershipVersion: "123" }));
     expect(await f.run()).toBe(true);
     expect(f.updateMember).toHaveBeenLastCalledWith(
       expect.objectContaining({ data: { role: "member" } }),
@@ -103,8 +107,21 @@ describe("workspace session authorization", () => {
     expect(await f.run()).toBe(false);
     f.request.mockImplementationOnce(async () => {
       f.settings.nativeAccountsWorkspaceClaimId = "b".repeat(64);
-      return Response.json({ role: "admin" });
+      return Response.json({ role: "admin", membershipVersion: "123" });
     });
+    expect(await f.run()).toBe(false);
+  });
+  it("does not revive an old session when the user rejoins", async () => {
+    const f = fixture();
+    f.request.mockResolvedValueOnce(Response.json({ role: "member", membershipVersion: "456" }));
+    expect(await f.run()).toBe(false);
+    expect(f.updateMember).not.toHaveBeenCalled();
+  });
+  it("requires existing workspace sessions to authenticate again", async () => {
+    const f = fixture();
+    f.prisma.verification.findFirst
+      .mockResolvedValueOnce({ value: JSON.stringify([issuer, "user", accountKey]) })
+      .mockResolvedValueOnce(null as never);
     expect(await f.run()).toBe(false);
   });
 });

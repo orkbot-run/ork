@@ -46,7 +46,10 @@ import type { EmailLocaleOf } from "./email.js";
 import { emailLocale, passwordResetEmail, signInCodeEmail, verificationEmail } from "./email.js";
 import { hasRecentIdentityConfirmation, identityConfirmation } from "./identity-confirmation.js";
 import { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
-import { nativeSessionIdentityKey } from "./native-session-identity.js";
+import {
+  nativeSessionIdentityKey,
+  workspaceSessionMembershipKey,
+} from "./native-session-identity.js";
 import type { OidcConfig } from "./oidc.js";
 import { isCurrentOidcAccount, oidcAccountSubject, oidcDiscovery } from "./oidc.js";
 import { passkeyRelyingParty } from "./passkey.js";
@@ -864,6 +867,13 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
                 ]),
                 expiresAt: session.expiresAt,
               });
+              if (native.workspaceId && native.workspaceMembership) {
+                await ctx.context.internalAdapter.createVerificationValue({
+                  identifier: workspaceSessionMembershipKey(session.id),
+                  value: JSON.stringify([native.workspaceId, native.workspaceMembership]),
+                  expiresAt: session.expiresAt,
+                });
+              }
             }
             await env.afterSignIn?.(session.userId, ctx?.headers);
             env.analytics?.capture(
