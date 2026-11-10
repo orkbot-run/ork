@@ -99,6 +99,8 @@ export const PL_MESSAGES: Record<string, string> = {
     "Lub uruchom to polecenie na serwerze z Linuxem. Instalator zapyta tam o domenę.",
   "Run this command on your Linux server, then open the authorization link it prints.":
     "Uruchom polecenie na serwerze z Linuxem, a następnie otwórz wyświetlony link autoryzacyjny.",
+  "Install Ork on your server, then connect it in your workspace dashboard.":
+    "Zainstaluj Orka na serwerze, a następnie połącz go w panelu workspace’u.",
   "Run the command on your Linux server.": "Uruchom polecenie na serwerze z Linuxem.",
   "Server setup failed. Run the command again on your server.":
     "Instalacja nie powiodła się. Uruchom polecenie ponownie na serwerze.",

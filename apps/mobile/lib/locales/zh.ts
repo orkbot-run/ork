@@ -11,6 +11,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not copy the command.": "无法复制命令。",
   "Run this command on your Linux server, then open the authorization link it prints.":
     "在 Linux 服务器上运行此命令，然后打开它显示的授权链接。",
+  "Install Ork on your server, then connect it in your workspace dashboard.":
+    "在服务器上安装 Ork，然后在工作区控制面板中连接服务器。",
   "Routine: {names}": "例行任务：{names}",
   "Routines: {names}": "例行任务：{names}",
   "Stop {name}": "停止{name}",

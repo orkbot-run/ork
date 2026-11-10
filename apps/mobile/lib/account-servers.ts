@@ -8,7 +8,13 @@ import { normalizeApiBase } from "./endpoint";
 
 const DIRECTORY = "https://api.orkbot.run/api/servers";
 
-export type AccountServer = { id: string; url: string; kind: "selfhosted"; deviceId: null };
+export type AccountServer = {
+  id: string;
+  url: string;
+  kind: "selfhosted";
+  deviceId: null;
+  name?: string;
+};
 
 function server(value: unknown): AccountServer {
   if (!value || typeof value !== "object") throw new Error("Could not load your servers.");
@@ -27,7 +33,12 @@ function server(value: unknown): AccountServer {
   return { id: item.id, url: parsed.url, kind: "selfhosted", deviceId: null };
 }
 
-async function request(method: "GET" | "POST", body?: unknown, expectedOwner?: string) {
+async function request(
+  method: "GET" | "POST",
+  body?: unknown,
+  expectedOwner?: string,
+  workspace = false,
+) {
   const version = accountsVersion();
   const authorization = await accountsAuthorization();
   if (
@@ -37,7 +48,7 @@ async function request(method: "GET" | "POST", body?: unknown, expectedOwner?: s
       expectedOwner !== JSON.stringify([authorization.issuer, authorization.subject]))
   )
     throw new Error("Sign in to Accounts to continue.");
-  const response = await fetch(DIRECTORY, {
+  const response = await fetch(workspace ? `${DIRECTORY}/workspaces` : DIRECTORY, {
     method,
     headers: {
       authorization: `Bearer ${authorization.accessToken}`,
@@ -53,21 +64,19 @@ async function request(method: "GET" | "POST", body?: unknown, expectedOwner?: s
 }
 
 export async function accountServers(expectedOwner?: string): Promise<AccountServer[]> {
-  const result = await request("GET", undefined, expectedOwner);
+  const result = await request("GET", undefined, expectedOwner, true);
   if (
     !result ||
     typeof result !== "object" ||
-    !("servers" in result) ||
-    !Array.isArray(result.servers)
+    !("workspaces" in result) ||
+    !Array.isArray(result.workspaces)
   )
     throw new Error("Could not load your servers.");
-  // A desktop loopback entry must never become this phone's localhost.
-  return result.servers
-    .filter(
-      (item: unknown) =>
-        !!item && typeof item === "object" && "kind" in item && item.kind !== "local",
-    )
-    .map(server);
+  return result.workspaces.map((item: unknown) => {
+    if (!item || typeof item !== "object" || !("name" in item) || typeof item.name !== "string")
+      throw new Error("Could not load your servers.");
+    return { ...server({ ...item, kind: "selfhosted", deviceId: null }), name: item.name };
+  });
 }
 
 export async function addAccountServer(

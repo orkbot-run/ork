@@ -252,6 +252,16 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
 
   function showPendingServer() {
     if (!pendingServer || !account) return;
+    // Personal server links are disabled while workspaces own remote connections.
+    discardPendingServer();
+    show("servers");
+    if (operation) {
+      const version = generation;
+      void loadServers(version).catch((error) => {
+        if (current(version)) errorMessage(error);
+      });
+    } else void run("directory", loadServers, "servers");
+    /*
     input.value = pendingServer;
     startup = { phase: "idle" };
     show("selfhost");
@@ -308,8 +318,9 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         !pendingServer &&
         !operation
       )
-        void createPairing();
+        void _createPairing();
     });
+    */
   }
 
   async function loadWorkspaces(version: number, owner: Account | null, refreshStatus = false) {
@@ -678,7 +689,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       pairingPoll = win?.setTimeout(() => void pollPairing(value, requestId, version), 2000);
   }
 
-  async function createPairing() {
+  async function _createPairing() {
     if (!account || operation || screen !== "selfhost" || pendingInitialization) return;
     discardPendingServer();
     clearPairing();

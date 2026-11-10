@@ -104,6 +104,7 @@ import {
   withSecretPersistence,
 } from "@orkbot/adapters";
 import {
+  authorizeWorkspaceSession,
   createAuth,
   isBlockedAuthPath,
   loopbackTwinOrigins,
@@ -580,7 +581,25 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     });
   const userDeviceSecret = userDeviceForwardSecret(env.encryptionKey);
   const userDeviceHub = env.userDevicesEnabled
-    ? new UserDeviceHub({ prisma, address: userDeviceInternalAddress(env.apiHost, env.port) })
+    ? new UserDeviceHub({
+        prisma,
+        address: userDeviceInternalAddress(env.apiHost, env.port),
+        ...(env.accountsEnabled && !env.desktopAccountKey
+          ? {
+              authorizeSession: (userId: string, sessionId: string) =>
+                env.bootstrapSecret
+                  ? runAsSystem("verify device workspace membership", () =>
+                      authorizeWorkspaceSession(prisma, {
+                        issuer: "https://api.orkbot.run",
+                        bootstrapSecret: env.bootstrapSecret!,
+                        userId,
+                        sessionId,
+                      }),
+                    )
+                  : Promise.resolve(false),
+            }
+          : {}),
+      })
     : undefined;
   const userDevices = userDeviceHub
     ? new UserDevices({ prisma, forwardSecret: userDeviceSecret, hub: userDeviceHub })
@@ -974,6 +993,38 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       c.header("cache-control", "no-store");
     });
   }
+  const workspaceSessionAllowed = async (session: {
+    user: { id: string };
+    session: { id: string };
+  }) => {
+    if (!env.accountsEnabled || env.desktopAccountKey) return true;
+    if (!env.bootstrapSecret) return false;
+    return runAsSystem("verify workspace membership", () =>
+      authorizeWorkspaceSession(prisma, {
+        issuer: "https://api.orkbot.run",
+        bootstrapSecret: env.bootstrapSecret!,
+        sessionId: session.session.id,
+        userId: session.user.id,
+      }),
+    );
+  };
+  app.use("*", async (c, next) => {
+    if (
+      !env.accountsEnabled ||
+      env.desktopAccountKey ||
+      c.req.path.startsWith("/rpc/") ||
+      c.req.path.startsWith("/api/auth/native/") ||
+      c.req.path === "/api/auth/sign-out"
+    )
+      return next();
+    if (!c.req.header("cookie") && !c.req.header("authorization")) return next();
+    const session = await runAsSystem("workspace session", () =>
+      auth.api.getSession({ headers: c.req.raw.headers }),
+    );
+    if (session?.user && !(await workspaceSessionAllowed(session)))
+      return c.json({ error: "Workspace access unavailable" }, 403);
+    return next();
+  });
   app.get("/api/auth/capabilities", (c) => {
     return c.json({
       protocol: SERVER_PROTOCOL_RANGE,
@@ -1064,6 +1115,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     // The bearer plugin turns a signed `Authorization: Bearer` into the session cookie.
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user) return null;
+    if (!(await workspaceSessionAllowed(session))) return null;
     const actor = await actorFromMembership(
       requireMembership(
         prisma,

@@ -11,6 +11,8 @@ export const ES_MESSAGES: Record<string, string> = {
   "Could not copy the command.": "No se pudo copiar el comando.",
   "Run this command on your Linux server, then open the authorization link it prints.":
     "Ejecuta este comando en tu servidor Linux y luego abre el enlace de autorización que aparece.",
+  "Install Ork on your server, then connect it in your workspace dashboard.":
+    "Instala Ork en tu servidor y conéctalo desde el panel de tu espacio de trabajo.",
   "Routine: {names}": "Rutina: {names}",
   "Routines: {names}": "Rutinas: {names}",
   "Stop {name}": "Detener {name}",

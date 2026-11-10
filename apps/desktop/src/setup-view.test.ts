@@ -112,6 +112,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// These cases exercise temporarily disabled personal account pairing.
+const xit = it.skip;
+
 describe("bundled desktop setup", () => {
   it.each(["back", "menu"])(
     "cancels local setup and returns to server selection through %s",
@@ -250,6 +253,34 @@ describe("bundled desktop setup", () => {
     expect(invoke).toHaveBeenCalledWith("connect_workspace", { id: "workspace-a" });
   });
 
+  it("discards a personal server link and presents the available workspaces", async () => {
+    const { invoke } = await setup({
+      pendingServer: pairingOrigin,
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [];
+        if (name === "list_workspaces")
+          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        return undefined;
+      },
+    });
+    expect(screen()).toBe("servers");
+    expect(node("workspaces").textContent).toContain("Studio");
+    expect(invoke).toHaveBeenCalledWith("clear_server_link", { rawUrl: pairingOrigin });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+  });
+
+  it("does not start personal pairing when a link arrives while signed in", async () => {
+    const { invoke, link } = await continueSetup({ session: account });
+    link(pairingOrigin);
+    await flush();
+    expect(screen()).toBe("servers");
+    expect(invoke).toHaveBeenCalledWith("clear_server_link", { rawUrl: pairingOrigin });
+    expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
+  });
+
   it("keeps saved server addresses out of the workspace picker but accessible under self-hosted", async () => {
     const { invoke } = await setup({
       invoke: async (name) => {
@@ -324,7 +355,7 @@ describe("bundled desktop setup", () => {
     await flush();
   });
 
-  it("prioritizes a cold server link over the restored account's default", async () => {
+  xit("prioritizes a cold server link over the restored account's default", async () => {
     const { invoke } = await setup({
       pendingServer: saved[1]!.url,
       invoke: async (name) => {
@@ -350,7 +381,7 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).not.toContain("connect_saved_server");
   });
 
-  it("retains a cold-start server link through Accounts sign-in without opening a saved default", async () => {
+  xit("retains a cold-start server link through Accounts sign-in without opening a saved default", async () => {
     const { invoke } = await setup({ pendingServer: "https://new.example.com" });
     expect(screen()).toBe("welcome");
     node("get-started").click();
@@ -368,7 +399,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
-  it("opens the exact saved server from a cold handoff after the user starts Accounts", async () => {
+  xit("opens the exact saved server from a cold handoff after the user starts Accounts", async () => {
     const { invoke } = await setup({ pendingServer: saved[1]!.url });
     expect(invoke).not.toHaveBeenCalledWith("list_servers", undefined);
     expect(invoke).not.toHaveBeenCalledWith("setup_accounts_session", undefined);
@@ -381,7 +412,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
   });
 
-  it("opens a warm handoff's exact bookmark instead of generating another pairing key", async () => {
+  xit("opens a warm handoff's exact bookmark instead of generating another pairing key", async () => {
     const { invoke, link } = await continueSetup({ session: account });
     link(saved[1]!.url);
     await flush();
@@ -391,7 +422,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("server_initialization_required", expect.anything());
   });
 
-  it.each([true, false])(
+  xit.each([true, false])(
     "routes an unlisted origin using its authoritative initialization state: %s",
     async (required) => {
       const { invoke, link } = await continueSetup({
@@ -420,7 +451,7 @@ describe("bundled desktop setup", () => {
     },
   );
 
-  it("keeps a foreign initialized server behind ordinary login rejection without reinitializing it", async () => {
+  xit("keeps a foreign initialized server behind ordinary login rejection without reinitializing it", async () => {
     const { invoke, link } = await continueSetup({
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
@@ -438,7 +469,7 @@ describe("bundled desktop setup", () => {
     expect(node("pairing").hidden).toBe(true);
   });
 
-  it("does not open an old origin when another link arrives during its initialization probe", async () => {
+  xit("does not open an old origin when another link arrives during its initialization probe", async () => {
     const oldProbe = deferred<unknown>();
     const { invoke, link } = await continueSetup({
       invoke: async (name) => {
@@ -458,7 +489,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
   });
 
-  it("ignores an old link lookup when a newer target arrives", async () => {
+  xit("ignores an old link lookup when a newer target arrives", async () => {
     const oldDirectory = deferred<unknown>();
     let lookups = 0;
     const { invoke, link } = await continueSetup({
@@ -478,7 +509,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
   });
 
-  it("cannot open an old account's bookmark after logout and a new account starts", async () => {
+  xit("cannot open an old account's bookmark after logout and a new account starts", async () => {
     const oldDirectory = deferred<unknown>();
     const other = { userinfo: { name: "Another account" } };
     const others = saved.map((entry) => ({
@@ -531,7 +562,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("create_server_pairing", expect.anything());
   });
 
-  it("proposes a warm link for confirmation and discards it on Back", async () => {
+  xit("proposes a warm link for confirmation and discards it on Back", async () => {
     const { invoke, link } = await continueSetup({ session: account });
     link("https://new.example.com");
     expect(screen()).toBe("selfhost");
@@ -739,7 +770,7 @@ describe("bundled desktop setup", () => {
     expect(node("account").textContent).toBe("");
   });
 
-  it("generates a key without an address and opens only the explicitly approved domain after ready", async () => {
+  xit("generates a key without an address and opens only the explicitly approved domain after ready", async () => {
     vi.useFakeTimers();
     const ticket = pairingTicket();
     let approved = false;
@@ -794,7 +825,7 @@ describe("bundled desktop setup", () => {
     expect(node<HTMLInputElement>("pairing-code").value).toBe("");
   });
 
-  it.each(["approved", "ready"])(
+  xit.each(["approved", "ready"])(
     "refuses remote %s before any explicit local approval",
     async (status) => {
       vi.useFakeTimers();
@@ -818,7 +849,7 @@ describe("bundled desktop setup", () => {
     },
   );
 
-  it("does not replace the displayed domain when a claim changes", async () => {
+  xit("does not replace the displayed domain when a claim changes", async () => {
     vi.useFakeTimers();
     const ticket = pairingTicket();
     let origin = pairingOrigin;
@@ -847,7 +878,7 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
   });
 
-  it.each(["back", "sign-out", "cancel-pairing", "dispose"])(
+  xit.each(["back", "sign-out", "cancel-pairing", "dispose"])(
     "ignores an approval response after %s",
     async (action) => {
       vi.useFakeTimers();
@@ -886,7 +917,7 @@ describe("bundled desktop setup", () => {
     },
   );
 
-  it("does not open a completed approval if a new link arrives during directory refresh", async () => {
+  xit("does not open a completed approval if a new link arrives during directory refresh", async () => {
     vi.useFakeTimers();
     const ticket = pairingTicket();
     const refresh = deferred<unknown>();
@@ -925,7 +956,7 @@ describe("bundled desktop setup", () => {
     expect(screen()).toBe("selfhost");
   });
 
-  it("cancels an in-flight key on Back and ignores its late result after returning", async () => {
+  xit("cancels an in-flight key on Back and ignores its late result after returning", async () => {
     const pending = deferred<unknown>();
     let calls = 0;
     const { invoke, link } = await continueSetup({
@@ -952,7 +983,7 @@ describe("bundled desktop setup", () => {
     expect(node<HTMLInputElement>("pairing-code").value).toBe("5D6E7F");
   });
 
-  it("expires a key without a target and stops polling", async () => {
+  xit("expires a key without a target and stops polling", async () => {
     vi.useFakeTimers();
     const ticket = { ...pairingTicket(), expiresAt: Math.floor(Date.now() / 1000) + 3 };
     const { invoke, link } = await continueSetup({
@@ -1039,7 +1070,7 @@ describe("bundled desktop setup", () => {
     expect(node("servers").textContent).not.toContain("new.example.com");
   });
 
-  it("preserves a pending legacy initialization link", async () => {
+  xit("preserves a pending legacy initialization link", async () => {
     const { invoke } = await setup({
       session: account,
       pendingServer: pairingOrigin,

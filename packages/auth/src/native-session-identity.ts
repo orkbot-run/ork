@@ -6,6 +6,8 @@ import type { PrismaClient } from "@orkbot/db";
 export const NATIVE_SESSION_IDENTITY_PREFIX = "native-session-identity-v1:";
 export const nativeSessionIdentityKey = (sessionId: string) =>
   NATIVE_SESSION_IDENTITY_PREFIX + sessionId;
+export const workspaceSessionMembershipKey = (sessionId: string) =>
+  `workspace-session-membership-v1:${sessionId}`;
 
 /** A linked identity alone never proves which account authenticated a particular session. */
 export async function verifiedNativeSessionIdentity(

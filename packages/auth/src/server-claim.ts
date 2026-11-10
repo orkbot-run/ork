@@ -13,6 +13,10 @@ import { readBoundedJsonResponse } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import {
+  verifiedNativeSessionIdentity,
+  workspaceSessionMembershipKey,
+} from "./native-session-identity.js";
 import { oidcAccountSubject } from "./oidc.js";
 
 const KEY = "native-server-claim:active";
@@ -170,12 +174,15 @@ async function existingOwnerAvailable(
     (!expectedOwner || settings.nativeAccountsOwnerKey === expectedOwner)
   );
 }
-const claimOwnerAvailable = (
+const claimOwnerAvailable = async (
   tx: PrismaClient,
   mode: Claim["mode"],
   lock = false,
   owner?: string,
-) => (mode === "workspace" ? existingOwnerAvailable(tx, lock, owner) : ownerAvailable(tx, lock));
+) =>
+  mode === "workspace"
+    ? (await existingOwnerAvailable(tx, lock, owner)) || (await ownerAvailable(tx, lock))
+    : ownerAvailable(tx, lock);
 
 /** Operator-only local reset; it preserves the server owner, accounts and application data. */
 export async function clearWorkspaceBinding(
@@ -404,7 +411,7 @@ export async function serverClaimProof(
 
 async function post(
   issuer: string,
-  path: "issue" | "poll" | "report" | "binding" | "disconnect" | "observe",
+  path: "issue" | "poll" | "report" | "binding" | "disconnect" | "observe" | "member",
   body: object,
   request: typeof fetch = fetch,
 ) {
@@ -431,6 +438,111 @@ async function post(
   const value = await readBoundedJsonResponse<unknown>(response, 24 * 1024, signal);
   if (!response.ok) throw new Error("Accounts server authorization failed.");
   return { status: response.status, body: value };
+}
+
+/** Check every workspace session against the current central membership. */
+export async function authorizeWorkspaceSession(
+  prisma: PrismaClient,
+  options: {
+    issuer: string;
+    bootstrapSecret: string;
+    sessionId: string;
+    userId: string;
+    request?: typeof fetch;
+  },
+): Promise<boolean> {
+  const settings = await prisma.deploymentSettings.findUnique({
+    where: { id: "default" },
+    select: {
+      nativeAccountsOrganizationId: true,
+      nativeAccountsWorkspaceClaimId: true,
+      nativeAccountsWorkspaceReceipt: true,
+      nativeAccountsOwnerKey: true,
+    },
+  });
+  const organizationId = settings?.nativeAccountsOrganizationId;
+  const id = settings?.nativeAccountsWorkspaceClaimId;
+  const sealed = settings?.nativeAccountsWorkspaceReceipt;
+  if (!organizationId || !UUID.test(organizationId) || !id || !ID.test(id) || !sealed) return false;
+  const accountKey = await verifiedNativeSessionIdentity(
+    prisma,
+    options.sessionId,
+    options.userId,
+    options.issuer,
+  );
+  if (!accountKey) return false;
+  try {
+    const receipt = openWorkspaceReceipt(sealed, options.bootstrapSecret, organizationId, id);
+    const result = await post(
+      options.issuer,
+      "member",
+      { id, receipt, accountKey },
+      options.request,
+    );
+    if (
+      !result.body ||
+      typeof result.body !== "object" ||
+      !("role" in result.body) ||
+      !["admin", "manager", "member"].includes(String(result.body.role)) ||
+      !("membershipVersion" in result.body) ||
+      typeof result.body.membershipVersion !== "string" ||
+      !/^\d{1,24}$/.test(result.body.membershipVersion)
+    )
+      return false;
+    const membership = await prisma.verification.findFirst({
+      where: {
+        identifier: workspaceSessionMembershipKey(options.sessionId),
+        expiresAt: { gt: new Date() },
+      },
+      select: { value: true },
+    });
+    if (membership?.value !== JSON.stringify([organizationId, result.body.membershipVersion]))
+      return false;
+    const current = await prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+      select: {
+        nativeAccountsOrganizationId: true,
+        nativeAccountsWorkspaceClaimId: true,
+        nativeAccountsWorkspaceReceipt: true,
+      },
+    });
+    if (
+      current?.nativeAccountsOrganizationId !== organizationId ||
+      current.nativeAccountsWorkspaceClaimId !== id ||
+      current.nativeAccountsWorkspaceReceipt !== sealed
+    )
+      return false;
+    if (settings.nativeAccountsOwnerKey !== accountKey) {
+      const owner =
+        settings.nativeAccountsOwnerKey &&
+        (await prisma.account.findFirst({
+          where: { providerId: "oidc", accountId: settings.nativeAccountsOwnerKey },
+          select: { userId: true },
+        }));
+      const space =
+        owner &&
+        (await prisma.space.findFirst({
+          where: { createdByUserId: owner.userId, isDefault: true, deletingAt: null },
+          orderBy: { createdAt: "asc" },
+          select: { id: true, organizationId: true },
+        }));
+      if (!space) return false;
+      const role = result.body.role === "admin" ? "admin" : "member";
+      await prisma.$transaction(async (tx) => {
+        await tx.member.updateMany({
+          where: { organizationId: space.organizationId, userId: options.userId },
+          data: { role },
+        });
+        await tx.spaceMember.updateMany({
+          where: { spaceId: space.id, userId: options.userId },
+          data: { role },
+        });
+      });
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Reconcile only the exact connection identified by the host's private receipt. */
@@ -694,7 +806,9 @@ export async function processServerClaim(
       const bound = await tx.deploymentSettings.updateMany({
         where: {
           id: "default",
-          nativeAccountsOwnerKey: claim.mode === "workspace" ? owner : null,
+          ...(claim.mode === "workspace"
+            ? { OR: [{ nativeAccountsOwnerKey: owner }, { nativeAccountsOwnerKey: null }] }
+            : { nativeAccountsOwnerKey: null }),
           nativeAccountsOrganizationId: null,
         },
         data: {

@@ -26,6 +26,8 @@ export interface NativeLoginIdentity {
   issuer: string;
   subject: string;
   allowProvision?: boolean;
+  workspaceId?: string;
+  workspaceMembership?: string;
 }
 export interface NativeLoginGrant extends NativeLoginIdentity {
   email: string;
@@ -115,10 +117,30 @@ export function createNativeGrantVerifier(options: {
       payload.name.length > 200
     )
       throw denied();
+    if (
+      payload.organization_id !== undefined &&
+      (typeof payload.organization_id !== "string" ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
+          payload.organization_id,
+        ))
+    )
+      throw denied();
+    if (
+      payload.organization_id !== undefined &&
+      (typeof payload.workspace_membership !== "string" ||
+        !/^\d{1,24}$/.test(payload.workspace_membership))
+    )
+      throw denied();
     return {
       ...(options.purpose === SERVER_PAIRING_PURPOSE ? { allowProvision: true } : {}),
       issuer: options.issuer,
       subject: payload.sub,
+      ...(typeof payload.organization_id === "string"
+        ? {
+            workspaceId: payload.organization_id,
+            workspaceMembership: payload.workspace_membership as string,
+          }
+        : {}),
       email: payload.email.toLowerCase(),
       name: payload.name,
       ...(isPersonalOrkId(payload.ork_avatar) ? { orkAvatar: payload.ork_avatar } : {}),
@@ -193,6 +215,22 @@ export function nativeLoginStore(
       try {
         return await prisma.$transaction(async (tx) => {
           let allowProvision = Boolean(options.expectedOwnerKey);
+          const workspace = input.identity.workspaceId
+            ? await tx.deploymentSettings.findUnique({
+                where: { id: "default" },
+                select: { nativeAccountsOrganizationId: true, nativeAccountsOwnerKey: true },
+              })
+            : null;
+          if (
+            input.identity.workspaceId &&
+            (!workspace?.nativeAccountsOwnerKey ||
+              workspace.nativeAccountsOrganizationId !== input.identity.workspaceId ||
+              options.expectedOwnerKey)
+          )
+            throw denied();
+          const workspaceMember = Boolean(
+            workspace && workspace.nativeAccountsOwnerKey !== accountKey,
+          );
           const account = await tx.account.findFirst({
             where: { providerId: "oidc", accountId: accountKey },
             select: { userId: true },
@@ -204,9 +242,14 @@ export function nativeLoginStore(
                 members: { some: { spaceMemberships: { some: {} } } },
               },
             });
-            if (admitted > 0) throw denied();
+            if (admitted > 0 && !workspaceMember) throw denied();
           }
-          if ((!account || input.identity.allowProvision === true) && !options.expectedOwnerKey) {
+          if (workspaceMember) allowProvision = true;
+          if (
+            (!account || input.identity.allowProvision === true) &&
+            !options.expectedOwnerKey &&
+            !workspaceMember
+          ) {
             const settings = await tx.deploymentSettings.upsert({
               where: { id: "default" },
               create: { id: "default" },

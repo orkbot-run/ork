@@ -210,6 +210,7 @@ export class UserDeviceHub {
       prisma: PrismaClient;
       address: string;
       pingIntervalMs?: number;
+      authorizeSession?: (userId: string, sessionId: string) => Promise<boolean>;
     },
   ) {
     this.address = deps.address;
@@ -248,6 +249,11 @@ export class UserDeviceHub {
     if (device.revokedAt) return { reason: revokeReason(device.revokedBy) };
     if ((await revokeSignedOut(this.deps.prisma, [device])).length)
       return { reason: "session-ended" };
+    if (
+      this.deps.authorizeSession &&
+      (!device.sessionId || !(await this.deps.authorizeSession(device.userId, device.sessionId)))
+    )
+      return {};
     return {
       device: {
         id: device.id,
@@ -337,6 +343,11 @@ export class UserDeviceHub {
     if (current?.revokedAt) this.disconnect(device.id, revokeReason(current.revokedBy));
     else if (current && (await revokeSignedOut(this.deps.prisma, [current])).length)
       this.disconnect(device.id, "session-ended");
+    else if (
+      this.deps.authorizeSession &&
+      (!current?.sessionId || !(await this.deps.authorizeSession(device.userId, current.sessionId)))
+    )
+      this.drop(entry, DISCONNECTED_MESSAGE, [1001, "Workspace unavailable"]);
     return connectionId;
   }
 
@@ -512,6 +523,23 @@ export class UserDeviceHub {
         devices.filter((device) => !device.revokedAt),
       );
       for (const id of signedOut) this.disconnect(id, "session-ended");
+      if (this.deps.authorizeSession) {
+        await Promise.all(
+          devices
+            .filter((device) => !device.revokedAt)
+            .map(async (device) => {
+              const authorized =
+                device.sessionId &&
+                (await this.deps.authorizeSession!(device.userId, device.sessionId).catch(
+                  () => false,
+                ));
+              if (!authorized) {
+                const entry = this.live.get(device.id);
+                if (entry) this.drop(entry, DISCONNECTED_MESSAGE, [1001, "Workspace unavailable"]);
+              }
+            }),
+        );
+      }
     } catch (error) {
       getLogger().warn("user device heartbeat failed", { error });
     }
