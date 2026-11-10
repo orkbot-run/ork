@@ -252,14 +252,6 @@ export function ShellSidebar({
                   groups={groups}
                   toggledSections={collapsedSidebarSections}
                   onToggleSection={toggleSidebarSection}
-                  onOpenBot={(bot) => {
-                    setMobileOpen(false);
-                    navigate(`/app/${bot.id}`);
-                  }}
-                  onOpenGroup={(group) => {
-                    setMobileOpen(false);
-                    navigate(`/app/g/${group.id}`);
-                  }}
                   filters={activityFilters}
                   onFiltersChange={setActivityFilters}
                   filtersExpanded={activityFiltersExpanded}

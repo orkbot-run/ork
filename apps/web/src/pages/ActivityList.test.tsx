@@ -48,8 +48,6 @@ const listProps = {
   toggledSections: new Set<string>(),
   onToggleSection: () => undefined,
   onOpenRun: () => undefined,
-  onOpenBot: () => undefined,
-  onOpenGroup: () => undefined,
   filters: emptyActivityFilters(),
   onFiltersChange: () => undefined,
   filtersExpanded: false,
@@ -101,7 +99,7 @@ it("reopens with cached runs and refreshes them in the background", async () => 
   }
 });
 
-it("groups attention, work and unread chats under folding headers", async () => {
+it("shows attention, work and recent runs without unread chats", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   runs.list.mockImplementation(async ({ filter }: { filter: string }) => ({
     runs:
@@ -116,12 +114,12 @@ it("groups attention, work and unread chats under folding headers", async () => 
             },
             { ...run, runId: "work", botId: "research", botName: "Research", status: "running" },
           ]
-        : [],
+        : [{ ...run, runId: "writer-run", botId: "writer", botName: "Writer" }],
   }));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const container = document.createElement("div");
   const root = createRoot(container);
-  const openBot = vi.fn();
+  const openRun = vi.fn();
   const writer = {
     id: "writer",
     name: "Writer",
@@ -135,12 +133,7 @@ it("groups attention, work and unread chats under folding headers", async () => 
     await act(async () =>
       root.render(
         <QueryClientProvider client={client}>
-          <ActivityList
-            {...listProps}
-            bots={[writer as never]}
-            toggledSections={new Set(["activity:unread"])}
-            onOpenBot={openBot}
-          />
+          <ActivityList {...listProps} bots={[writer as never]} onOpenRun={openRun} />
         </QueryClientProvider>,
       ),
     );
@@ -148,18 +141,17 @@ it("groups attention, work and unread chats under folding headers", async () => 
     const section = (name: string) => container.querySelector(`section[aria-label="${name}"]`)!;
     expect(section("Needs attention").textContent).toContain("Marketing");
     expect(section("Working").textContent).toContain("Research");
-    expect(section("Unread").textContent).toContain("Writer");
-    expect(container.querySelector('section[aria-label="Recent"]')).toBeNull();
+    expect(container.querySelector('section[aria-label="Unread"]')).toBeNull();
+    expect(section("Recent").textContent).toContain("Writer");
     expect(section("Needs attention").querySelector("[data-open]")!.getAttribute("data-open")).toBe(
       "true",
     );
     expect(section("Working").querySelector("[data-open]")!.getAttribute("data-open")).toBe(
       "false",
     );
-    expect(section("Unread").querySelector("[data-open]")!.getAttribute("data-open")).toBe("true");
     expect(container.textContent).not.toContain("Needs input");
-    await act(async () => section("Unread").querySelectorAll("button")[1]!.click());
-    expect(openBot).toHaveBeenCalledWith(expect.objectContaining({ id: "writer" }));
+    await act(async () => section("Recent").querySelectorAll("button")[1]!.click());
+    expect(openRun).toHaveBeenCalledWith(expect.objectContaining({ runId: "writer-run" }));
   } finally {
     await act(async () => root.unmount());
     client.clear();
