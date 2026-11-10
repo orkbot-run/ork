@@ -250,6 +250,26 @@ describe("bundled desktop setup", () => {
     expect(invoke).toHaveBeenCalledWith("connect_workspace", { id: "workspace-a" });
   });
 
+  it("keeps saved server addresses out of the workspace picker but accessible under self-hosted", async () => {
+    const { invoke } = await setup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "list_servers") return [saved[0]];
+        if (name === "list_workspaces")
+          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        return undefined;
+      },
+    });
+    const picker = document.querySelector<HTMLElement>('[data-step="servers"]')!;
+    expect(picker.textContent).not.toContain(saved[0]!.url);
+    node("selfhost").click();
+    expect(screen()).toBe("selfhost");
+    expect(node("servers").textContent).toContain(saved[0]!.url);
+    node("servers").querySelector<HTMLButtonElement>(".server-open")!.click();
+    await flush();
+    expect(invoke).toHaveBeenCalledWith("connect_saved_server", { id: saved[0]!.id });
+  });
+
   it("keeps an unreachable workspace visible and lets the user refresh its status", async () => {
     let online = false;
     const { invoke } = await setup({
@@ -988,7 +1008,7 @@ describe("bundled desktop setup", () => {
       { id: "new-server", kind: "selfhosted", url: "https://new.example.com", isDefault: false },
     ];
     await vi.advanceTimersByTimeAsync(15_000);
-    expect(screen()).toBe("servers");
+    expect(screen()).toBe("selfhost");
     expect(node("servers").textContent).toContain("https://new.example.com");
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", { id: "new-server" });
     expect(invoke).not.toHaveBeenCalledWith("connect_server", expect.anything());
