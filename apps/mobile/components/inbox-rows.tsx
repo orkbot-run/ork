@@ -3,10 +3,11 @@
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
 
 import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
-import { isRunWorking } from "@orkbot/core";
+import type { SnoozePreset } from "@orkbot/core";
+import { isRunWorking, threadSnoozeState } from "@orkbot/core";
 import { botColors } from "@orkbot/ui-tokens";
 import type { ReactNode } from "react";
-import { createContext, memo, useContext, useEffect, useState } from "react";
+import { createContext, memo, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
 import Animated, {
   Easing,
@@ -20,8 +21,10 @@ import { AvatarRow } from "../lib/avatar-life";
 import { useI18n } from "../lib/i18n";
 import { formatThreadTime } from "../lib/inbox";
 import type { PinnedChat } from "../lib/inbox-spaces";
+import { inboxBotNeedsAttention } from "../lib/inbox-spaces";
 import type { InboxChatKind, InboxRowAction } from "../lib/inbox-swipe";
 import { INBOX_ROW_ACTIONS, inboxRowActionList } from "../lib/inbox-swipe";
+import { mobileLogoAvatarActivity } from "../lib/logo-avatar-activity";
 import { native, useThemedStyles } from "../lib/native";
 import { previewSnippet } from "../lib/preview";
 import { androidRipple } from "../lib/ripple";
@@ -44,6 +47,7 @@ export function ConversationRow({
   time,
   avatar,
   unread,
+  woken,
   onPress,
   onLongPress,
   actions = [],
@@ -57,6 +61,7 @@ export function ConversationRow({
   time: string;
   avatar: ReactNode;
   unread?: boolean;
+  woken?: boolean;
   onPress: () => void;
   onLongPress?: () => void;
   actions?: InboxRowAction[];
@@ -76,7 +81,7 @@ export function ConversationRow({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={woken ? `${accessibilityLabel}, ${t("Woken")}` : accessibilityLabel}
       accessibilityHint={accessibilityHint}
       // Screen readers access swipe actions through the row.
       accessibilityActions={rowActions.length > 0 ? rowActions : undefined}
@@ -105,6 +110,7 @@ export function ConversationRow({
             </Text>
           </View>
           <View style={styles.rowMeta}>
+            {woken ? <Text style={styles.time}>{t("Woken")}</Text> : null}
             {time ? <Text style={styles.time}>{time}</Text> : null}
             {unread ? <View accessibilityElementsHidden style={styles.unreadDot} /> : null}
           </View>
@@ -222,6 +228,15 @@ export const PinnedTiles = memo(function PinnedTiles({
   const { t } = useI18n();
   const styles = useThemedStyles(createHomeStyles);
   const selectedId = useContext(SelectedChatContext);
+  useSyncExternalStore(mobileLogoAvatarActivity.subscribe, () =>
+    chats
+      .map((chat) =>
+        chat.kind === "bot"
+          ? mobileLogoAvatarActivity.getActivity(chat.bot.id, chat.bot.status)
+          : "",
+      )
+      .join("|"),
+  );
   // Three tiles share the row, so a narrow pane shrinks the avatars instead of overlapping them.
   const [rowWidth, setRowWidth] = useState(0);
   const avatarSize = rowWidth > 0 ? Math.min(84, Math.floor((rowWidth - 16) / 3 - 8)) : 84;
@@ -234,6 +249,11 @@ export const PinnedTiles = memo(function PinnedTiles({
         const id = chat.kind === "bot" ? chat.bot.id : chat.group.id;
         const name = chat.kind === "bot" ? chat.bot.name : chat.group.name;
         const unread = chat.kind === "bot" ? chat.bot.unread : chat.group.unread;
+        const attention = chat.kind === "bot" && inboxBotNeedsAttention(chat.bot);
+        const woken =
+          threadSnoozeState(
+            chat.kind === "bot" ? chat.bot.snoozedUntil : chat.group.snoozedUntil,
+          ) === "woken";
         const actions = inboxRowActionList(chat.kind === "bot" ? chat.bot : chat.group);
         const runAction = (action: InboxRowAction) =>
           chat.kind === "bot" ? onBotAction(action, chat.bot) : onGroupAction(action, chat.group);
@@ -243,7 +263,13 @@ export const PinnedTiles = memo(function PinnedTiles({
           <Pressable
             key={`${chat.kind}-${id}`}
             accessibilityRole="button"
-            accessibilityLabel={name}
+            accessibilityLabel={[
+              name,
+              attention ? t("Needs attention") : null,
+              woken ? t("Woken") : null,
+            ]
+              .filter(Boolean)
+              .join(", ")}
             accessibilityState={{ selected: selectedId === id }}
             accessibilityActions={actions.map((action) => ({
               name: action,
@@ -261,23 +287,35 @@ export const PinnedTiles = memo(function PinnedTiles({
               pressed && styles.rowPressed,
             ]}
           >
-            {chat.kind === "bot" ? (
-              <BotAvatar
-                color={chat.bot.color || FALLBACK_COLOR}
-                avatarSet={chat.bot.avatarSet}
-                identity={chat.bot.id}
-                avatarSeed={chat.bot.avatarSeed}
-                size={avatarSize}
-                status={chat.bot.status}
-                muted={chat.bot.notifyOnFinish === false}
-                motion="lazy"
-              />
-            ) : (
-              <GroupAvatar members={chat.group.members} size={avatarSize} />
-            )}
-            <Text style={[styles.pinnedName, unread && styles.pinnedUnread]} numberOfLines={1}>
+            <View style={{ position: "relative" }}>
+              {chat.kind === "bot" ? (
+                <BotAvatar
+                  color={chat.bot.color || FALLBACK_COLOR}
+                  avatarSet={chat.bot.avatarSet}
+                  identity={chat.bot.id}
+                  avatarSeed={chat.bot.avatarSeed}
+                  size={avatarSize}
+                  status={chat.bot.status}
+                  muted={chat.bot.notifyOnFinish === false}
+                  motion="lazy"
+                />
+              ) : (
+                <GroupAvatar members={chat.group.members} size={avatarSize} />
+              )}
+              {attention ? (
+                <View
+                  accessibilityElementsHidden
+                  style={[styles.unreadDot, { position: "absolute", top: 0, right: 0 }]}
+                />
+              ) : null}
+            </View>
+            <Text
+              style={[styles.pinnedName, (unread || attention) && styles.pinnedUnread]}
+              numberOfLines={1}
+            >
               {name}
             </Text>
+            {woken ? <Text style={styles.time}>{t("Woken")}</Text> : null}
           </Pressable>
         );
       })}
@@ -297,6 +335,11 @@ type RowMenuProps = {
     chat: MobileBot | MobileGroup | SpaceBot | SpaceGroup,
     mode: "create" | "rename",
   ) => void;
+  onSnooze?: (
+    kind: InboxChatKind,
+    chat: MobileBot | MobileGroup | SpaceBot | SpaceGroup,
+    preset: SnoozePreset,
+  ) => void;
 };
 
 export const BotRow = memo(function BotRow({
@@ -308,6 +351,7 @@ export const BotRow = memo(function BotRow({
   sections,
   onOrganize,
   onEditSection,
+  onSnooze,
 }: {
   bot: MobileBot | SpaceBot;
   day: number;
@@ -319,11 +363,16 @@ export const BotRow = memo(function BotRow({
   const preview = previewSnippet(bot.preview, 40) || t("No messages yet");
   const time = bot.updatedAt ? formatThreadTime(bot.updatedAt, new Date(day)) : "";
   const working = isRunWorking(bot.status);
+  useSyncExternalStore(mobileLogoAvatarActivity.subscribe, () =>
+    mobileLogoAvatarActivity.getActivity(bot.id, bot.status),
+  );
+  const attention = inboxBotNeedsAttention(bot);
   // Spelled out because an explicit label replaces the one built from the row's children.
   const label = [
     bot.name,
     working ? t("Working…") : null,
     bot.notifyOnFinish === false ? t("notifications silenced") : null,
+    attention ? t("Needs attention") : null,
     bot.unread ? t("unread") : null,
     time,
     preview,
@@ -337,7 +386,8 @@ export const BotRow = memo(function BotRow({
       title={bot.name}
       preview={preview}
       time={time}
-      unread={bot.unread}
+      unread={bot.unread || attention}
+      woken={threadSnoozeState(bot.snoozedUntil) === "woken"}
       accessibilityLabel={label}
       accessibilityHint={
         onLongPress || onAction ? t("Long press to pin, move, or silence notifications") : undefined
@@ -386,6 +436,7 @@ export const BotRow = memo(function BotRow({
       onAction={runAction}
       onOrganize={(update) => onOrganize("bot", bot, update)}
       onEditSection={(mode) => onEditSection("bot", bot, mode)}
+      onSnooze={onSnooze ? (preset) => onSnooze("bot", bot, preset) : undefined}
     >
       {row}
     </InboxSwipeRow>
@@ -403,6 +454,7 @@ export const GroupRow = memo(function GroupRow({
   sections,
   onOrganize,
   onEditSection,
+  onSnooze,
 }: {
   group: MobileGroup | SpaceGroup;
   day: number;
@@ -422,6 +474,7 @@ export const GroupRow = memo(function GroupRow({
       preview={preview}
       time={time}
       unread={group.unread}
+      woken={threadSnoozeState(group.snoozedUntil) === "woken"}
       accessibilityLabel={[group.name, group.unread ? t("unread") : null, time, preview]
         .filter(Boolean)
         .join(", ")}
@@ -450,6 +503,7 @@ export const GroupRow = memo(function GroupRow({
       onAction={runAction}
       onOrganize={(update) => onOrganize("group", group, update)}
       onEditSection={(mode) => onEditSection("group", group, mode)}
+      onSnooze={onSnooze ? (preset) => onSnooze("group", group, preset) : undefined}
     >
       {row}
     </InboxSwipeRow>

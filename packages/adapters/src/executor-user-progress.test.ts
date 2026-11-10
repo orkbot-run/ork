@@ -156,6 +156,7 @@ async function runTurn(
   const savedEvents: AppendEventInput[] = [];
   let failMessage = options.failMessageOnce;
   const prisma = {
+    threadSnooze: { findFirst: vi.fn(async () => null) },
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),

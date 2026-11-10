@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 
@@ -41,6 +42,22 @@ vi.mock("../components/inbox-rows", () => ({
   ),
   ConversationRow: ({ title }: { title: string }) => <p>{title}</p>,
 }));
+vi.mock("../components/inbox-swipe-row", () => ({
+  InboxSwipeRow: ({
+    children,
+    onAction,
+  }: {
+    children: ReactNode;
+    onAction: (action: string) => void;
+  }) => (
+    <div>
+      {children}
+      <button type="button" onClick={() => onAction("archive")}>
+        Archive
+      </button>
+    </div>
+  ),
+}));
 
 import { ActivitySection } from "../components/inbox-activity";
 
@@ -67,4 +84,45 @@ it("opens Needs attention and folds Working and Unread until the user opens them
   expect(markup).toContain("Marketing");
   expect(markup).not.toContain("Research");
   expect(markup).toContain("Writer");
+});
+
+it("offers the same archive action on activity rows", () => {
+  const archive = vi.fn();
+  const bot = {
+    id: "marketing",
+    name: "Marketing",
+    status: "waiting_input",
+    color: "red",
+    unread: false,
+  };
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  act(() =>
+    root.render(
+      createElement(ActivitySection, {
+        activity: {
+          active: [
+            { runId: "ask", botId: bot.id, botName: bot.name, status: "waiting_input" },
+          ] as never,
+          recent: [],
+        },
+        bots: [bot] as never,
+        groups: [],
+        toggledSections: new Set<string>(),
+        onToggleSection: () => undefined,
+        openChat: () => undefined,
+        botAction: archive,
+        groupAction: vi.fn(),
+        organizeFromMenu: vi.fn(),
+        editSectionFromMenu: vi.fn(),
+      }),
+    ),
+  );
+  act(() =>
+    [...container.querySelectorAll("button")]
+      .find((button) => button.textContent === "Archive")!
+      .click(),
+  );
+  expect(archive).toHaveBeenCalledWith("archive", bot);
+  act(() => root.unmount());
 });

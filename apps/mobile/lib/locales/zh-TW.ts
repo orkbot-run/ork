@@ -3,6 +3,12 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "Snooze": "稍後提醒",
+  "1 hour": "1小時",
+  "3 hours": "3小時",
+  "Tomorrow at 9": "明天9點",
+  "Monday at 9": "週一9點",
+  "Woken": "已恢復",
   "Stopped.": "已停止。",
   "New server available": "有新伺服器可用",
   "Open servers": "開啟伺服器清單",

@@ -26,6 +26,7 @@ model AiDataConsent {
 }
 
 model User {
+  threadSnoozes ThreadSnooze[]
   serverUpdateConsents ServerUpdateControl[]
   aiDataConsents AiDataConsent[]
   pages          Page[]
@@ -919,6 +920,7 @@ model Thread {
   /// Highest message seq the user has read; the "New" divider goes after it. -1 = none read.
   lastReadSeq                 Int        @default(-1)
   messages                    Message[]
+  snoozes                     ThreadSnooze[]
   events                      Event[]
   tasks                       Task[]
   runs                        Run[]
@@ -929,6 +931,19 @@ model Thread {
   @@unique([parentRunId, helperCallId])
   @@index([parentThreadId])
   @@map("threads")
+}
+
+model ThreadSnooze {
+  threadId String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  until DateTime? @db.Timestamptz(3)
+  suppressCompletedThrough DateTime @default(now()) @db.Timestamptz(3)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+  @@index([userId, until])
+  @@map("thread_snoozes")
 }
 
 model Message {

@@ -104,6 +104,7 @@ const rpc = {
 const fixtureBots = [{ id: "bot-b", name: "Scout", notifyOnFinish: true }] as Bot[];
 let callbacks: ReturnType<typeof useBrowserNotifications>;
 let currentRpc = rpc;
+let snoozed: Set<string>;
 
 function Harness({ botId, groupId }: { botId?: string; groupId?: string }) {
   callbacks = useBrowserNotifications(
@@ -113,6 +114,7 @@ function Harness({ botId, groupId }: { botId?: string; groupId?: string }) {
       rpc: currentRpc,
       activeBotId: { current: botId },
       activeGroupId: { current: groupId },
+      isSnoozed: (bot, group) => snoozed.has(group ?? bot),
       openChat,
     },
   );
@@ -157,6 +159,7 @@ beforeEach(() => {
   context.server = "server-1";
   context.spaceId = "space-1";
   currentRpc = rpc;
+  snoozed = new Set();
   FakeNotification.permission = "granted";
   FakeNotification.shown = [];
   streams = [];
@@ -179,6 +182,32 @@ afterEach(() => {
 });
 
 describe("useBrowserNotifications chat alerts", () => {
+  it("suppresses and closes completion notices for a snoozed chat but keeps failures", async () => {
+    await open({ botId: "bot-a" });
+    await send({ groupId: "group-g", threadId: "thread-g" });
+    await send({ groupId: "group-g", threadId: "thread-g", kind: "failure" });
+    snoozed.add("group-g");
+    await open({ botId: "bot-a" });
+    expect(FakeNotification.shown[0]?.closed).toBe(true);
+    expect(FakeNotification.shown[1]?.closed).toBe(false);
+    await send({ groupId: "group-g", threadId: "thread-g" });
+    expect(FakeNotification.shown).toHaveLength(2);
+    focused = false;
+    notify("group-g");
+    expect(FakeNotification.shown).toHaveLength(2);
+  });
+
+  it("does not release a queued completion after the chat is snoozed", async () => {
+    FakeNotification.permission = "default";
+    focused = false;
+    await open({ botId: "bot-b" });
+    notify();
+    snoozed.add("bot-b");
+    await open({ botId: "bot-b" });
+    FakeNotification.permission = "granted";
+    callbacks.flushPendingBrowserNotifications();
+    expect(FakeNotification.shown).toHaveLength(0);
+  });
   it("alerts for every kind in another chat while the app is focused", async () => {
     await open({ botId: "bot-a" });
     await send({});

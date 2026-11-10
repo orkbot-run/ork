@@ -10,6 +10,8 @@ import type { PrismaClient } from "./client.js";
 import { createRepos } from "./repos.js";
 import { IsolationError } from "./scope.js";
 
+vi.mock("./thread-snoozes.js", () => ({ loadThreadSnoozes: async () => new Map() }));
+
 const actor: Actor = {
   userId: "user-1",
   spaceId: "ws-1",

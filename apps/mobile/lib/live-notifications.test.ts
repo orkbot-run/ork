@@ -130,18 +130,23 @@ describe("notification thread targeting", () => {
     ).resolves.toMatchObject({ shouldShowBanner: true, shouldShowList: true });
   });
 
-  it.each(["help", "takeover", "failure"])("still presents %s from another chat", async (kind) => {
-    await setOpenNotificationThread({ botId: "bot-1" });
-    await expect(
-      foregroundHandler()?.handleNotification({
-        request: { content: { data: { sessionScope: NOTIFICATION_SCOPE, kind, botId: "bot-2" } } },
-      } as never),
-    ).resolves.toMatchObject({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldSetBadge: false,
-    });
-  });
+  it.each(["help", "takeover", "failure"])(
+    "still presents %s from another chat",
+    async (kind) => {
+      await setOpenNotificationThread({ botId: "bot-1" });
+      await expect(
+        foregroundHandler()?.handleNotification({
+          request: {
+            content: { data: { sessionScope: NOTIFICATION_SCOPE, kind, botId: "bot-2" } },
+          },
+        } as never),
+      ).resolves.toMatchObject({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldSetBadge: false,
+      });
+    },
+  );
 
   it("dismisses a group's notifications without dismissing its bots' direct chats", async () => {
     vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([
@@ -177,6 +182,21 @@ describe("notification thread targeting", () => {
       ["group"],
       ["native-group"],
     ]);
+  });
+
+  it("dismisses only completion notifications when a chat is snoozed", async () => {
+    vi.mocked(Notifications.getPresentedNotificationsAsync).mockResolvedValue([
+      { request: { identifier: "done", content: { data: { groupId: "g", kind: "completion" } } } },
+      { request: { identifier: "help", content: { data: { groupId: "g", kind: "help" } } } },
+      {
+        request: {
+          identifier: "other",
+          content: { data: { groupId: "other", kind: "completion" } },
+        },
+      },
+    ] as never);
+    await dismissThreadNotifications({ groupId: "g" }, "completion");
+    expect(vi.mocked(Notifications.dismissNotificationAsync).mock.calls).toEqual([["done"]]);
   });
 
   it("hides only foreground notifications for the open agent", async () => {

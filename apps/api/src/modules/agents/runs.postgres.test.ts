@@ -122,6 +122,39 @@ describe.skipIf(!enabled)("recent activity by chat (PostgreSQL)", () => {
   }
   const recent = () => runAsTenant(actor, () => listSpaceRuns(prisma, actor, "recent"));
 
+  it("reports the viewer's active snooze without muting failure notifications", async () => {
+    const failed = await run(initial, 5, { status: "failed" });
+    await system.threadSnooze.create({
+      data: {
+        threadId: initial.threadId,
+        userId: actor.userId,
+        until: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const row = (await recent()).find((candidate) => candidate.runId === failed.id);
+    expect(row).toMatchObject({ snoozed: true, notificationsEnabled: true, status: "failed" });
+  });
+
+  it("suppresses an offline completion after wake and read, then permits a later completion", async () => {
+    const completed = await run(initial, 15);
+    await system.threadSnooze.create({
+      data: {
+        threadId: initial.threadId,
+        userId: actor.userId,
+        until: at(20),
+        suppressCompletedThrough: at(10),
+      },
+    });
+    expect((await recent()).find((row) => row.runId === completed.id)?.snoozed).toBe(true);
+    await system.threadSnooze.update({
+      where: { threadId_userId: { threadId: initial.threadId, userId: actor.userId } },
+      data: { until: null, suppressCompletedThrough: at(20) },
+    });
+    expect((await recent()).find((row) => row.runId === completed.id)?.snoozed).toBe(true);
+    const later = await run(initial, 25);
+    expect((await recent()).find((row) => row.runId === later.id)?.snoozed).toBe(false);
+  });
+
   it.each(["bot", "group"] as const)(
     "selects each chat before the limit when one %s has more than twenty newer runs",
     async (kind) => {

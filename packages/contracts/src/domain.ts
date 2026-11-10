@@ -120,6 +120,7 @@ export const BotSchema = z.object({
   sectionId: Id.nullable(),
   archivedAt: z.string().nullable(),
   unread: z.boolean(),
+  snoozedUntil: z.string().nullable().optional(),
   parentBotId: Id.nullable(),
   memoryScope: MemoryScopeSchema.nullable(),
   threadId: Id,
@@ -232,6 +233,7 @@ export const GroupSchema = z.object({
   threadId: Id,
   preview: z.string(),
   unread: z.boolean(),
+  snoozedUntil: z.string().nullable().optional(),
   updatedAt: z.string(),
   createdAt: z.string(),
 });
@@ -293,6 +295,7 @@ export const SpaceBotSchema = BotSchema.pick({
   pinned: true,
   sectionId: true,
   unread: true,
+  snoozedUntil: true,
   parentBotId: true,
   preview: true,
   status: true,
@@ -311,6 +314,7 @@ export const SpaceGroupSchema = GroupSchema.pick({
   members: true,
   preview: true,
   unread: true,
+  snoozedUntil: true,
   updatedAt: true,
 });
 export type SpaceGroup = z.infer<typeof SpaceGroupSchema>;

@@ -15,6 +15,7 @@ export function confirmDeleteBot(
   requestContext?: ApiRequestContext,
 ) {
   const remove = async (deleteMemories: boolean) => {
+    if (!current()) return;
     try {
       if (requestContext) {
         await rpc(
@@ -25,8 +26,10 @@ export function confirmDeleteBot(
       } else {
         await rpc("bots/remove", { botId: bot.id, deleteMemories });
       }
-      removeFromSearchInbox(bot.id);
-      onDeleted();
+      if (current()) {
+        removeFromSearchInbox(bot.id);
+        onDeleted();
+      }
     } catch (error) {
       if (current()) Alert.alert(t("Could not delete bot"), errorText(error, t("Try again.")));
     }
@@ -49,21 +52,39 @@ export function confirmDeleteBot(
   );
 }
 
-export function confirmDeleteGroup(group: { id: string; name: string }, onDeleted: () => void) {
+export function confirmDeleteGroup(
+  group: { id: string; name: string },
+  onDeleted: () => void,
+  requestContext?: ApiRequestContext,
+  current: () => boolean = () => true,
+) {
   Alert.alert(t("Delete {name}?", { name: group.name }), t("Bots and their own chats stay."), [
     { text: t("Cancel"), style: "cancel" },
     {
       text: t("Delete"),
       style: "destructive",
-      onPress: () =>
-        void rpc("groups/remove", { groupId: group.id })
+      onPress: () => {
+        if (!current()) return;
+        void (
+          requestContext
+            ? rpc(
+                "groups/remove",
+                { groupId: group.id },
+                { requestContext, skipSpaceAuthRecovery: true },
+              )
+            : rpc("groups/remove", { groupId: group.id })
+        )
           .then(() => {
-            removeFromSearchInbox(group.id);
-            onDeleted();
+            if (current()) {
+              removeFromSearchInbox(group.id);
+              onDeleted();
+            }
           })
-          .catch((err) =>
-            Alert.alert(t("Could not delete group"), errorText(err, t("Try again."))),
-          ),
+          .catch((err) => {
+            if (current())
+              Alert.alert(t("Could not delete group"), errorText(err, t("Try again.")));
+          });
+      },
     },
   ]);
 }

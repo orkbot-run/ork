@@ -7361,3 +7361,36 @@ msgstr "Klucz dostawcy głosu został odrzucony."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Kod pocztowy"
+
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1 godzina"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3 godziny"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "W poniedziałek o 9:00"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "Drzemka"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "W drzemce"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "Jutro o 9:00"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "Wybudź {0}"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "Obudzono"

@@ -7361,3 +7361,36 @@ msgstr "Ваш голосовой провайдер отклонил ключ."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1 час"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3 часа"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "В понедельник в 9:00"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "Отложить"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "Отложенные"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "Завтра в 9:00"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "Возобновить {0}"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "Возобновлено"

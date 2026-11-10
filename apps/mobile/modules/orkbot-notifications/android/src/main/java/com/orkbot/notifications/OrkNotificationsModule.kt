@@ -87,6 +87,13 @@ class OrkNotificationsModule : Module() {
       resume(endpoint, token, spaceId, locale, headers, mutedBotId = botId)
     }
 
+    AsyncFunction("snoozeChat") { spaceId: String, botId: String?, groupId: String? ->
+      val context = context()
+      if (NotificationStorage(context).settings.liveConnection) {
+        OrkNotificationService.snoozeChat(context, spaceId, botId, groupId)
+      }
+    }
+
     AsyncFunction("stop") { clearSession: Boolean ->
       val context = context()
       if (clearSession) {

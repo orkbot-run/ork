@@ -26,6 +26,7 @@ type ChatAlertOptions = {
   activeBotId: RefObject<string | undefined>;
   activeGroupId: RefObject<string | undefined>;
   openChat: (alert: ChatAlert) => void;
+  isSnoozed?: (botId: string, groupId?: string) => boolean;
 };
 
 /**
@@ -35,16 +36,18 @@ type ChatAlertOptions = {
 export function useBrowserNotifications(
   bots: Bot[],
   botsRef: RefObject<Bot[]>,
-  { rpc, activeBotId, activeGroupId, openChat }: ChatAlertOptions,
+  { rpc, activeBotId, activeGroupId, openChat, isSnoozed }: ChatAlertOptions,
 ) {
   useEffect(() => prepareNotificationIcons(bots), [bots]);
   const openChatRef = useRef(openChat);
   openChatRef.current = openChat;
+  const snoozedRef = useRef(isSnoozed);
+  snoozedRef.current = isSnoozed;
   const source = useMemo(() => ({ ...captureRpcContext(), rpc }), [rpc]);
   type Lifetime = {
     source: typeof source;
     active: boolean;
-    shown: Set<Notification>;
+    shown: Map<Notification, ChatAlert>;
     notified: Set<string>;
     pending: Map<string, PendingBrowserNotification>;
   };
@@ -57,7 +60,7 @@ export function useBrowserNotifications(
     const owner: Lifetime = {
       source,
       active: true,
-      shown: new Set(),
+      shown: new Map(),
       notified: new Set(),
       pending: new Map(),
     };
@@ -66,7 +69,7 @@ export function useBrowserNotifications(
       owner.active = false;
       owner.pending.clear();
       owner.notified.clear();
-      for (const notification of owner.shown) {
+      for (const notification of owner.shown.keys()) {
         notification.onclick = null;
         notification.onclose = null;
         notification.close();
@@ -84,7 +87,7 @@ export function useBrowserNotifications(
         tag,
         ...(icon ? { icon } : {}),
       });
-      owner.shown.add(notification);
+      owner.shown.set(notification, target);
       const release = () => {
         owner.shown.delete(notification);
         notification.onclick = null;
@@ -107,12 +110,33 @@ export function useBrowserNotifications(
   useEffect(() => {
     const owner = currentLifetime();
     if (!owner) return;
+    for (const [notification, alert] of owner.shown) {
+      if (alert.kind !== "completion" || !snoozedRef.current?.(alert.botId, alert.groupId))
+        continue;
+      owner.shown.delete(notification);
+      notification.onclick = null;
+      notification.onclose = null;
+      notification.close();
+    }
+    for (const [threadId, pending] of owner.pending) {
+      if (
+        pending.event.type === "thread.message.created" &&
+        snoozedRef.current?.(pending.botId, pending.groupId)
+      ) {
+        owner.pending.delete(threadId);
+      }
+    }
+  });
+  useEffect(() => {
+    const owner = currentLifetime();
+    if (!owner) return;
     let active = true;
     let controller: AbortController | undefined;
     let cancelRetry: (() => void) | undefined;
     const current = () => active && currentLifetime() === owner;
     const show = (alert: ChatAlert) => {
       if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+      if (alert.kind === "completion" && snoozedRef.current?.(alert.botId, alert.groupId)) return;
       const isOpen = alert.groupId
         ? alert.groupId === activeGroupId.current
         : !activeGroupId.current && alert.botId === activeBotId.current;
@@ -171,6 +195,11 @@ export function useBrowserNotifications(
     (pending: PendingBrowserNotification): boolean => {
       const owner = currentLifetime();
       if (!owner) return true;
+      if (
+        pending.event.type === "thread.message.created" &&
+        snoozedRef.current?.(pending.botId, pending.groupId)
+      )
+        return true;
       const currentBot = botsRef.current.find((bot) => bot.id === pending.botId);
       if (!currentBot || typeof Notification === "undefined") return true;
       const result = deliverNativeBrowserNotification(
@@ -233,6 +262,7 @@ export function useBrowserNotifications(
       if (!owner) return;
       const botId = event.botId;
       if (typeof botId !== "string") return;
+      if (event.type === "thread.message.created" && snoozedRef.current?.(botId, groupId)) return;
       const eligible = shouldNotifyBrowser(event, {
         subscribedThreadId: subscribedThreadId ?? "",
         initialCursor,

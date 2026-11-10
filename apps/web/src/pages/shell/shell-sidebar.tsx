@@ -26,6 +26,7 @@ import { ActivityList } from "../ActivityList";
 import { SpaceSearchResults } from "../SpaceSearch";
 import type { SettingsSection } from "../shell-overlay";
 import { SidebarHeader } from "./sidebar-header";
+import type { SnoozedChat } from "./snoozed-chats";
 import type { SidebarSearch } from "./use-sidebar-search";
 
 /** Focuses the search box once it renders, its text selected so typing replaces it. */
@@ -53,6 +54,7 @@ export function ShellSidebar({
   search,
   bots,
   groups,
+  snoozedChats,
   collapsedSidebarSections,
   toggleSidebarSection,
   setPanel,
@@ -61,6 +63,7 @@ export function ShellSidebar({
   setCreateBotOpen,
   roster,
   archived,
+  snoozed,
   footerLogos,
   user,
   ticketBoardEnabled,
@@ -82,6 +85,7 @@ export function ShellSidebar({
   search: SidebarSearch;
   bots: Bot[];
   groups: Group[];
+  snoozedChats: SnoozedChat[];
   collapsedSidebarSections: ReadonlySet<string>;
   toggleSidebarSection: (key: string) => void;
   setPanel: (panel: Panel) => void;
@@ -90,6 +94,7 @@ export function ShellSidebar({
   setCreateBotOpen: (open: boolean) => void;
   roster: ReactNode;
   archived: ReactNode;
+  snoozed: ReactNode;
   footerLogos: Array<{ name: string; logo?: string | null }>;
   user: User | undefined;
   ticketBoardEnabled: boolean;
@@ -250,6 +255,7 @@ export function ShellSidebar({
                 <ActivityList
                   bots={bots}
                   groups={groups}
+                  snoozedChats={snoozedChats}
                   toggledSections={collapsedSidebarSections}
                   onToggleSection={toggleSidebarSection}
                   filters={activityFilters}
@@ -266,7 +272,10 @@ export function ShellSidebar({
               {roster}
             </>
           )}
-          <div className={mini ? "hidden" : "contents"}>{archived}</div>
+          <div className={mini ? "hidden" : "contents"}>
+            {snoozed}
+            {archived}
+          </div>
         </div>
         <div className={mini ? "hidden" : "contents"}>
           <PasskeyOffer />

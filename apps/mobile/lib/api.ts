@@ -1329,6 +1329,7 @@ export type MobileBot = Pick<
   | "sectionId"
   | "archivedAt"
   | "unread"
+  | "snoozedUntil"
   | "updatedAt"
   | "computerMode"
   | "modelProvider"
@@ -1381,6 +1382,7 @@ export type MobileGroup = Pick<
   | "sectionId"
   | "archivedAt"
   | "unread"
+  | "snoozedUntil"
   | "updatedAt"
   | "members"
 > &

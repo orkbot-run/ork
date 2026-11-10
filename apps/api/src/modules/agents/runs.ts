@@ -61,6 +61,22 @@ export function activityNotificationsEnabled(
   return groupId !== null || notifyOnFinish;
 }
 
+export function snoozedCompletion(
+  snooze: { until: Date | null; suppressCompletedThrough: Date } | undefined,
+  status: string,
+  completedAt: Date | null,
+  now: number,
+): boolean {
+  if (!snooze) return false;
+  const until = snooze.until?.getTime();
+  if (until !== undefined && until > now) return true;
+  if (status !== "completed") return false;
+  // Legacy completed runs may have no timestamp; do not resurrect an unknown old notice.
+  if (!completedAt) return true;
+  const cutoff = Math.max(snooze.suppressCompletedThrough.getTime(), Math.min(until ?? 0, now));
+  return completedAt.getTime() <= cutoff;
+}
+
 export async function listSpaceRuns(
   prisma: PrismaClient,
   actor: Actor,
@@ -120,6 +136,14 @@ export async function listSpaceRuns(
         : [{ completedAt: "desc" }, { updatedAt: "desc" }, { id: "desc" }],
   });
 
+  const snoozes = rows.length
+    ? await prisma.threadSnooze.findMany({
+        where: { userId: actor.userId, threadId: { in: rows.map((row) => row.threadId) } },
+        select: { threadId: true, until: true, suppressCompletedThrough: true },
+      })
+    : [];
+  const snoozedThreads = new Map(snoozes.map((row) => [row.threadId, row]));
+  const now = Date.now();
   return rows.map((row) => ({
     runId: row.id,
     botId: row.botId,
@@ -130,6 +154,7 @@ export async function listSpaceRuns(
     status: row.status as RunActivityRow["status"],
     trigger: row.trigger as RunActivityRow["trigger"],
     notificationsEnabled: activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish),
+    snoozed: snoozedCompletion(snoozedThreads.get(row.threadId), row.status, row.completedAt, now),
     ...activityPreview({
       trigger: row.trigger,
       prompt: row.task.prompt,

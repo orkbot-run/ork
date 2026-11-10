@@ -16,6 +16,7 @@ import { formatThreadTime } from "./inbox";
 import { retainInboxValue } from "./inbox-retention";
 import type { InboxItem, InboxSpace } from "./inbox-spaces";
 import { inboxItemKey, spaceInboxItems } from "./inbox-spaces";
+import { mobileLogoAvatarActivity } from "./logo-avatar-activity";
 import { useCollapsedSections } from "./use-collapsed-sections";
 import { useInboxDay } from "./use-inbox-day";
 import { usePublishSearchInbox } from "./use-publish-search-inbox";
@@ -32,6 +33,7 @@ const ui = vi.hoisted(() => ({
   push: vi.fn(),
   menus: [] as MenuProps[],
   swipeRows: [] as string[],
+  swipeSections: [] as Array<{ rowKey: string; ids: string[] }>,
   avatars: [] as string[],
   chevronStarts: [] as number[],
   chevronTargets: [] as number[],
@@ -57,7 +59,13 @@ vi.mock("react-native", () => {
     PlatformColor: (name: string) => name,
     StyleSheet: { create: <T,>(styles: T) => styles },
     useWindowDimensions: () => ({ width: 400, height: 800, fontScale: 1 }),
-    View: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+    View: ({
+      children,
+      accessibilityElementsHidden,
+    }: {
+      children?: ReactNode;
+      accessibilityElementsHidden?: boolean;
+    }) => <div data-hidden={accessibilityElementsHidden ? "true" : undefined}>{children}</div>,
     Text: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
     Pressable: ({
       children,
@@ -185,8 +193,17 @@ vi.mock("../components/bot-avatar", () => ({
 vi.mock("../components/group-avatar", () => ({ GroupAvatar: () => null }));
 // Rows in the current space carry the iOS swipe host and its long-press menu.
 vi.mock("../components/inbox-swipe-row", () => ({
-  InboxSwipeRow: ({ rowKey, children }: { rowKey: string; children: ReactElement }) => {
+  InboxSwipeRow: ({
+    rowKey,
+    children,
+    sections,
+  }: {
+    rowKey: string;
+    children: ReactElement;
+    sections: Array<{ id: string }>;
+  }) => {
     ui.swipeRows.push(rowKey);
+    ui.swipeSections.push({ rowKey, ids: sections.map((section) => section.id) });
     return children;
   },
 }));
@@ -206,10 +223,12 @@ const callbacks = {
   openGroup: action,
   organizeBot: action,
   organizeFromMenu: action,
+  snoozeFromMenu: action,
   organizeGroup: action,
   sharing: false,
   spaceBusy: false,
   spaceRecoveryId: null,
+  spaces: [],
   toggleCollapsed: action,
 };
 
@@ -248,6 +267,7 @@ beforeEach(() => {
     previews: 0,
     menus: [],
     swipeRows: [],
+    swipeSections: [],
     avatars: [],
     chevronStarts: [],
     chevronTargets: [],
@@ -408,7 +428,7 @@ it("renders saved bot rows without a notification setting", () => {
   expect(avatars.every((avatar) => (avatar as HTMLElement).dataset.motion === "lazy")).toBe(true);
 });
 
-it("says working only while the bot works, and shows nothing beside the time", () => {
+it("announces when a bot is working or needs attention", () => {
   const bots = ["running", "waiting_takeover", "waiting_input", "idle"].map(
     (status) => ({ id: status, name: "Helper", preview: "Hi", status }) as MobileBot,
   );
@@ -426,7 +446,13 @@ it("says working only while the bot works, and shows nothing beside the time", (
     )),
   );
   // A "Needs you" computer card or an ask card is the state; the row must not claim work.
-  expect(rowLabels()).toEqual(["Helper, Working…, Hi", "Helper, Hi", "Helper, Hi", "Helper, Hi"]);
+  expect(rowLabels()).toEqual([
+    "Helper, Working…, Hi",
+    "Helper, Needs attention, Hi",
+    "Helper, Needs attention, Hi",
+    "Helper, Hi",
+  ]);
+  expect(container.querySelectorAll('[data-hidden="true"]').length).toBe(2);
   // The avatar's motion and corner dot are the only working sign; the time stands alone.
   expect(Array.from(container.querySelectorAll("button"), (row) => row.textContent)).toEqual([
     "HelperHi",
@@ -440,6 +466,72 @@ it("ties the pinned tiles' avatars to the pinned row, so they freeze when it scr
   const bot = { id: "bot-p", name: "Pinned", preview: "", pinned: true } as MobileBot;
   render(<List items={[{ type: "pinned", chats: [{ kind: "bot", bot }] }]} />);
   expect(container.querySelector('[data-row="pinned"] b[data-identity="bot-p"]')).not.toBeNull();
+});
+
+it("marks a pinned waiting bot as needing attention", () => {
+  const bot = {
+    id: "bot-wait",
+    name: "Pinned",
+    preview: "",
+    pinned: true,
+    status: "waiting_input",
+    unread: false,
+  } as MobileBot;
+  render(<List items={[{ type: "pinned", chats: [{ kind: "bot", bot }] }]} />);
+  expect(container.querySelector('button[aria-label="Pinned, Needs attention"]')).not.toBeNull();
+  expect(container.querySelector('[data-hidden="true"]')).not.toBeNull();
+});
+
+it("marks a chat whose snooze has elapsed", () => {
+  const bot = {
+    id: "bot-awake",
+    name: "Ada",
+    preview: "Hi",
+    status: "idle",
+    unread: false,
+    snoozedUntil: "2000-01-01T00:00:00Z",
+  } as MobileBot;
+  render(
+    <BotRow
+      bot={bot}
+      day={0}
+      onPress={action}
+      sections={[]}
+      onOrganize={action}
+      onEditSection={action}
+    />,
+  );
+  expect(container.textContent).toContain("Woken");
+  expect(rowLabels()[0]).toContain("Woken");
+});
+
+it("uses live activity when the stored waiting status is stale", () => {
+  mobileLogoAvatarActivity.hydrate("test", {
+    threadId: "live-thread",
+    botId: "live-bot",
+    cursor: 1,
+    run: { id: "run", botId: "live-bot", status: "running", trigger: "user" },
+  });
+  const bot = {
+    id: "live-bot",
+    name: "Helper",
+    preview: "",
+    status: "waiting_input",
+    unread: false,
+  } as MobileBot;
+  render(
+    <BotRow
+      bot={bot}
+      day={0}
+      onPress={action}
+      sections={[]}
+      onOrganize={action}
+      onEditSection={action}
+    />,
+  );
+  expect(rowLabels()[0]).not.toContain("Needs attention");
+  expect(container.querySelector('[data-hidden="true"]')).toBeNull();
+  act(() => mobileLogoAvatarActivity.clear());
 });
 
 it("collapses a section from its heading and keeps the choice for the account", async () => {
@@ -573,7 +665,7 @@ it("waits for a saved or live inbox before publishing a remounted session's sear
   expect(publish).toHaveBeenLastCalledWith([]);
 });
 
-it("gives the long-press menu, and with it Delete, only to chats in the current space", () => {
+it("gives the long-press menu to chats across spaces", () => {
   const chat = (id: string, spaceId: string) => ({
     id,
     spaceId,
@@ -581,15 +673,34 @@ it("gives the long-press menu, and with it Delete, only to chats in the current 
     preview: "",
     members: [],
   });
-  // Chats listed from another space have no row menu, as with Archive.
   const items = [
     { type: "bot", bot: chat("current-bot", "space-current") },
     { type: "group", group: chat("current-group", "space-current") },
     { type: "bot", bot: chat("other-bot", "space-other") },
     { type: "group", group: chat("other-group", "space-other") },
   ] as unknown as InboxItem[];
-  render(<List items={items} spaceId="space-current" />);
-  expect(ui.swipeRows).toEqual(["bot:current-bot", "group:current-group"]);
+  render(
+    <List
+      items={items}
+      spaceId="space-current"
+      options={{
+        botSections: [{ id: "current-section" }] as never,
+        spaces: [{ id: "space-other", botSections: [{ id: "other-section" }] }] as never,
+      }}
+    />,
+  );
+  expect(ui.swipeRows).toEqual([
+    "bot:current-bot",
+    "group:current-group",
+    "bot:other-bot",
+    "group:other-group",
+  ]);
+  expect(ui.swipeSections).toEqual([
+    { rowKey: "bot:current-bot", ids: ["current-section"] },
+    { rowKey: "group:current-group", ids: ["current-section"] },
+    { rowKey: "bot:other-bot", ids: ["other-section"] },
+    { rowKey: "group:other-group", ids: ["other-section"] },
+  ]);
 });
 
 it("offers every space heading's Settings, and Delete only where the member may delete it", () => {

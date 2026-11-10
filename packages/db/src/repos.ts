@@ -45,6 +45,7 @@ import {
   threadRunStatus,
   withLatestBotRuns,
 } from "./thread-listing.js";
+import { loadThreadSnoozes } from "./thread-snoozes.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 /** Newest messages loaded for sidebar preview; enough to skip a short peer-run tail. */
@@ -228,6 +229,11 @@ export function createRepos(
       orderBy: [{ pinned: "desc" }, { position: "asc" }, { createdAt: "asc" }],
     });
     const bots = await withNewestThreadMessages(prisma, await withLatestBotRuns(prisma, rows), 1);
+    const snoozes = await loadThreadSnoozes(
+      prisma,
+      actor.userId,
+      bots.flatMap((bot) => bot.thread?.id ?? []),
+    );
     return bots.map((bot) => {
       if (!bot.thread) throw new IsolationError("Bot is missing its thread");
       const activeRun = primaryActiveRun(bot.runs);
@@ -243,6 +249,7 @@ export function createRepos(
         pinned: bot.pinned,
         sectionId: bot.sectionId,
         unread: bot.thread.unread,
+        ...(snoozes.has(bot.thread.id) ? { snoozedUntil: snoozes.get(bot.thread.id) } : {}),
         parentBotId: bot.parentBotId,
         preview: previewFromBlocks(bot.thread.messages[0]?.blocks),
         status: activeRun?.status ?? "idle",
@@ -429,6 +436,11 @@ export function createRepos(
           })
         : [];
       const callsByThread = new Map(callMessages.map((message) => [message.threadId, message]));
+      const snoozes = await loadThreadSnoozes(
+        prisma,
+        actor.userId,
+        bots.flatMap((bot) => bot.thread?.id ?? []),
+      );
       const candidateRunIds = [
         ...new Set(
           bots.flatMap((bot) =>
@@ -509,7 +521,11 @@ export function createRepos(
                 : [],
             ),
           );
-          return { ...mapped, threadStatus: threadRunStatus(bot.runs, mapped.threadId) };
+          return {
+            ...mapped,
+            ...(snoozes.has(mapped.threadId) ? { snoozedUntil: snoozes.get(mapped.threadId) } : {}),
+            threadStatus: threadRunStatus(bot.runs, mapped.threadId),
+          };
         }),
       );
     },

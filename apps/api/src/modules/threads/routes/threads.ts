@@ -698,6 +698,12 @@ export function threadsRoutes(ctx: RouterContext) {
       markRead: authed.threads.markRead.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         const unreadAfterSeq = await markThreadRead(deps.prisma, context.actor, target);
+        await deps.prisma.$executeRaw`
+          UPDATE thread_snoozes SET
+            "suppressCompletedThrough" = GREATEST("suppressCompletedThrough", LEAST("until", clock_timestamp())),
+            "until" = NULL
+          WHERE "threadId" = ${target.threadId} AND "userId" = ${context.actor.userId}
+            AND "until" <= clock_timestamp()`;
         return { ok: true as const, unreadAfterSeq };
       }),
       markUnread: authed.threads.markUnread.handler(async ({ context, input }) => {
@@ -707,6 +713,30 @@ export function threadsRoutes(ctx: RouterContext) {
         } else {
           await setThreadUnreadState(deps.prisma, context.actor, target, true);
         }
+        return { ok: true as const };
+      }),
+      snooze: authed.threads.snooze.handler(async ({ context, input }) => {
+        const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        const until = new Date(input.until);
+        if (!Number.isFinite(until.getTime()) || until.getTime() <= Date.now()) {
+          throw new ORPCError("BAD_REQUEST", { message: "Snooze time must be in the future" });
+        }
+        await deps.prisma.$executeRaw`
+          INSERT INTO thread_snoozes ("threadId", "userId", "until", "suppressCompletedThrough")
+          VALUES (${target.threadId}, ${context.actor.userId}, ${until}, clock_timestamp())
+          ON CONFLICT ("threadId", "userId") DO UPDATE SET
+            "until" = EXCLUDED."until",
+            "suppressCompletedThrough" = GREATEST(thread_snoozes."suppressCompletedThrough", clock_timestamp())`;
+        return { ok: true as const };
+      }),
+      unsnooze: authed.threads.unsnooze.handler(async ({ context, input }) => {
+        const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        await deps.prisma.$executeRaw`
+          UPDATE thread_snoozes SET
+            "suppressCompletedThrough" = GREATEST("suppressCompletedThrough", LEAST("until", clock_timestamp())),
+            "until" = NULL
+          WHERE "threadId" = ${target.threadId} AND "userId" = ${context.actor.userId}
+            AND "until" IS NOT NULL`;
         return { ok: true as const };
       }),
     },

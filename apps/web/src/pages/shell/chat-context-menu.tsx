@@ -1,6 +1,8 @@
 import type { Bot, BotSection, Group } from "@orkbot/contracts";
+import { snoozeUntil } from "@orkbot/core";
 import { lazyOverlay } from "../../components/ErrorBoundary";
 import type { createSpaceRpc } from "../../lib/rpc";
+import { errorText } from "../../lib/user-error";
 import type { ShellDialogsState } from "./shell-dialogs";
 import type { useChatRead } from "./use-chat-read";
 
@@ -23,6 +25,7 @@ export function ChatContextMenu({
   dialogs,
   openChatSettings,
   navigate,
+  onError,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
   bot: Bot | undefined;
@@ -35,6 +38,7 @@ export function ChatContextMenu({
   dialogs: ShellDialogsState;
   openChatSettings: (kind: "bot" | "group", id: string) => void;
   navigate: (path: string) => void;
+  onError: (error: string) => void;
 }) {
   const chat = bot ?? group;
   if (!chat) return null;
@@ -65,6 +69,16 @@ export function ChatContextMenu({
         } else {
           read.toggleGroupUnread(group!.id, unread);
         }
+      }}
+      onSnooze={(preset) => {
+        onClose();
+        void rpc.threads
+          .snooze({
+            ...(bot ? { botId: bot.id } : { groupId: group!.id }),
+            until: snoozeUntil(preset).toISOString(),
+          })
+          .then(() => refreshBots())
+          .catch((error: unknown) => onError(errorText(error)));
       }}
       onMoveToSection={(sectionId) => {
         onClose();

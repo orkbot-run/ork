@@ -12,6 +12,7 @@ internal data class RunRecord(
   val prompt: String,
   val trigger: String,
   val notificationsEnabled: Boolean,
+  val snoozed: Boolean = false,
 )
 
 internal class PollCompletions(private val seen: MutableSet<String>) {
@@ -28,6 +29,14 @@ internal class PollCompletions(private val seen: MutableSet<String>) {
       seen.add(run.runId)
     }
     if (muted.isNotEmpty()) persistSeen()
+  }
+
+  fun snoozeChat(botId: String?, groupId: String?, persistSeen: () -> Unit) {
+    val discarded = pending.values.filter {
+      if (groupId != null) it.groupId == groupId else it.groupId == null && it.botId == botId
+    }
+    discarded.forEach { run -> pending.remove(run.runId); seen.add(run.runId) }
+    if (discarded.isNotEmpty()) persistSeen()
   }
 
   fun useSession(endpoint: String, spaceId: String, token: String, epoch: Long) {
@@ -60,6 +69,7 @@ internal class PollCompletions(private val seen: MutableSet<String>) {
               true
             }
             run.status != "completed" -> true
+            run.snoozed -> true
             run.trigger == "routine" && !settings.scheduledTasks -> true
             run.trigger != "routine" && !settings.messages -> true
             else -> {

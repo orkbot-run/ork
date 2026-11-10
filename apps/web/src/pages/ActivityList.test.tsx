@@ -62,6 +62,36 @@ const run = {
   updatedAt: new Date().toISOString(),
 };
 
+it("hides runs belonging to snoozed chats from activity", async () => {
+  runs.list.mockImplementation(async ({ filter }: { filter: string }) => ({
+    runs: filter === "recent" ? [run] : [],
+  }));
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(
+      <QueryClientProvider client={client}>
+        <ActivityList
+          {...listProps}
+          snoozedChats={[
+            {
+              kind: "bot",
+              id: "bot-1",
+              name: "Scout",
+              spaceId: "space",
+              until: "2030-01-01T10:00:00Z",
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    ),
+  );
+  await vi.waitFor(() => expect(runs.list).toHaveBeenCalled());
+  expect(container.textContent).not.toContain("Scout");
+  await act(async () => root.unmount());
+});
+
 it("reopens with cached runs and refreshes them in the background", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   runs.list.mockImplementation(async ({ filter }: { filter: string }) => ({

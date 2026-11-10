@@ -9,6 +9,8 @@ import type { PrismaClient } from "./client.js";
 import { createGroupRepos } from "./groups.js";
 import { IsolationError } from "./scope.js";
 
+vi.mock("./thread-snoozes.js", () => ({ loadThreadSnoozes: async () => new Map() }));
+
 describe("listSpaceGroupsForSpaces", () => {
   it("loads and maps compact cross-space group fields", async () => {
     const findMany = vi.fn(async (_query: { where: unknown; select: Record<string, unknown> }) => [

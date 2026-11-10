@@ -7361,3 +7361,36 @@ msgstr "Ses sağlayıcınız anahtarı reddetti."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "Posta kodu"
+
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1 saat"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3 saat"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "Pazartesi 09.00"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "Ertele"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "Ertelenenler"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "Yarın 09.00"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "{0} sohbetini uyandır"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "Uyandı"

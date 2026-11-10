@@ -19,6 +19,8 @@ export function countUnreadInboxChats(
       JOIN member_spaces m ON m."spaceId" = t."spaceId"
       WHERE t.unread AND t."userId" = ${userId}
         AND t."externalConversationId" IS NULL
+        AND NOT EXISTS (SELECT 1 FROM thread_snoozes s WHERE s."threadId" = t.id
+          AND s."userId" = ${userId} AND s."until" > now())
         AND (
           EXISTS (SELECT 1 FROM bots b WHERE b.id = t."botId"
             AND b."spaceId" = t."spaceId" AND b."userId" = ${userId} AND b."archivedAt" IS NULL)

@@ -3,6 +3,12 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Snooze": "Отложить",
+  "1 hour": "1 час",
+  "3 hours": "3 часа",
+  "Tomorrow at 9": "Завтра в 9:00",
+  "Monday at 9": "В понедельник в 9:00",
+  "Woken": "Возобновлено",
   "Stopped.": "Остановлено.",
   "New server available": "Доступен новый сервер",
   "Open servers": "Открыть серверы",

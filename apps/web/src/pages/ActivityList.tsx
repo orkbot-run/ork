@@ -33,6 +33,7 @@ import {
 } from "../lib/activity-list-filters";
 import { useSpaceQueries } from "../lib/query";
 import { formatRelativeTime } from "../lib/relative-time";
+import type { SnoozedChat } from "./shell/snoozed-chats";
 
 export function statusTone(status: RunActivityRow["status"]): string {
   if (status === "failed") return "text-destructive";
@@ -55,6 +56,7 @@ type ActivityListProps = {
   onFiltersChange: (next: ActivityListFilters) => void;
   filtersExpanded: boolean;
   filtersId: string;
+  snoozedChats?: SnoozedChat[];
 };
 
 export function ActivityList({
@@ -67,6 +69,7 @@ export function ActivityList({
   onFiltersChange,
   filtersExpanded,
   filtersId,
+  snoozedChats = [],
 }: ActivityListProps) {
   const { t } = useLingui();
   const queries = useSpaceQueries();
@@ -77,8 +80,16 @@ export function ActivityList({
   } as const;
   const active = useQuery(queries.runs.list.queryOptions({ input: { filter: "active" }, ...poll }));
   const recent = useQuery(queries.runs.list.queryOptions({ input: { filter: "recent" }, ...poll }));
-  const activeRuns = active.data?.runs ?? NO_RUNS;
-  const recentRuns = recent.data?.runs ?? NO_RUNS;
+  const hiddenBots = new Set(
+    snoozedChats.filter((chat) => chat.kind === "bot").map((chat) => chat.id),
+  );
+  const hiddenGroups = new Set(
+    snoozedChats.filter((chat) => chat.kind === "group").map((chat) => chat.id),
+  );
+  const visibleRun = (run: RunActivityRow) =>
+    run.groupId ? !hiddenGroups.has(run.groupId) : !hiddenBots.has(run.botId);
+  const activeRuns = (active.data?.runs ?? NO_RUNS).filter(visibleRun);
+  const recentRuns = (recent.data?.runs ?? NO_RUNS).filter(visibleRun);
   // "Try again" shows its progress in place of the error it answers.
   const [retrying, setRetrying] = useState(false);
   const loading = active.isPending || recent.isPending || retrying;

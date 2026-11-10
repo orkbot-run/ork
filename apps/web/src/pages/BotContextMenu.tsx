@@ -1,5 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import type { Bot, BotSection } from "@orkbot/contracts";
+import type { SnoozePreset } from "@orkbot/core";
 import {
   ContextMenuContent,
   ContextMenuItem,
@@ -13,6 +14,7 @@ import {
   Bell,
   BellDot,
   Check,
+  Clock,
   Copy,
   Eraser,
   Folder,
@@ -38,6 +40,7 @@ export function BotContextMenu({
   onClear,
   onArchive,
   onDelete,
+  onSnooze,
 }: {
   bot: ChatMenuTarget;
   onClose: () => void;
@@ -52,6 +55,7 @@ export function BotContextMenu({
   onClear: () => void;
   onArchive: () => void;
   onDelete: () => void;
+  onSnooze?: (preset: SnoozePreset) => void;
 }) {
   const { t } = useLingui();
 
@@ -99,6 +103,22 @@ export function BotContextMenu({
         {bot.unread ? <BellDot /> : <Bell />}
         {bot.unread ? t`Mark as Read` : t`Mark as Unread`}
       </ContextMenuItem>
+      {onSnooze ? (
+        <ContextMenuSub>
+          <ContextMenuSubTrigger>
+            <Clock />
+            {t`Snooze`}
+          </ContextMenuSubTrigger>
+          <ContextMenuSubContent>
+            <ContextMenuItem onClick={() => onSnooze("hour_1")}>{t`1 hour`}</ContextMenuItem>
+            <ContextMenuItem onClick={() => onSnooze("hour_3")}>{t`3 hours`}</ContextMenuItem>
+            <ContextMenuItem
+              onClick={() => onSnooze("tomorrow_9")}
+            >{t`Tomorrow at 9`}</ContextMenuItem>
+            <ContextMenuItem onClick={() => onSnooze("monday_9")}>{t`Monday at 9`}</ContextMenuItem>
+          </ContextMenuSubContent>
+        </ContextMenuSub>
+      ) : null}
       <ContextMenuSeparator />
       <ContextMenuItem onClick={onEdit}>
         <Pencil />

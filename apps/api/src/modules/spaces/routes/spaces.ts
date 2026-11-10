@@ -347,6 +347,7 @@ async function memberSpaceNavigation(
           pinned: bot.pinned,
           sectionId: bot.sectionId,
           unread: bot.unread,
+          snoozedUntil: bot.snoozedUntil,
           preview: bot.preview,
           status: bot.status,
           threadStatus: bot.threadStatus,
@@ -362,6 +363,7 @@ async function memberSpaceNavigation(
           members: group.members,
           preview: group.preview,
           unread: group.unread,
+          snoozedUntil: group.snoozedUntil,
           updatedAt: group.updatedAt,
         })),
         externalConversations: externalConversations.filter(

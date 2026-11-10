@@ -770,6 +770,10 @@ export const appContract = {
     markUnread: oc
       .input(threadTarget.and(z.object({ messageId: Id.optional() })))
       .output(z.object({ ok: z.literal(true) })),
+    snooze: oc
+      .input(threadTarget.and(z.object({ until: z.iso.datetime({ offset: true }) })))
+      .output(z.object({ ok: z.literal(true) })),
+    unsnooze: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
   computer: {
     status: oc.input(botId).output(ComputerStatusSchema),
