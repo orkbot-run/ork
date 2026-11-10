@@ -11,6 +11,8 @@ export const JA_MESSAGES: Record<string, string> = {
   "Could not copy the command.": "コマンドをコピーできませんでした。",
   "Run this command on your Linux server, then open the authorization link it prints.":
     "Linuxサーバーでこのコマンドを実行し、表示された認証リンクを開いてください。",
+  "Install Ork on your server, then connect it in your workspace dashboard.":
+    "サーバーにOrkをインストールし、ワークスペースのダッシュボードで接続してください。",
   "Routine: {names}": "ルーティン: {names}",
   "Routines: {names}": "ルーティン: {names}",
   "Stop {name}": "{name}を停止",
