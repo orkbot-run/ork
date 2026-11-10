@@ -86,6 +86,8 @@ async function runTurn(
     group?: { optional: boolean; namedWhileRunning?: boolean };
     /** The run already put a message in the chat, such as an ask card answered by its button. */
     priorBotMessage?: boolean;
+    repliesToRequest?: boolean;
+    enableNotifications?: boolean;
   } = {},
 ) {
   vi.mocked(loadBotMessageContext).mockResolvedValue({
@@ -95,7 +97,7 @@ async function runTurn(
     text: "Look again",
     intent,
     hop: 1,
-    repliesToRequest: false,
+    repliesToRequest: options.repliesToRequest ?? false,
   });
   const run = {
     id: "run-1",
@@ -158,6 +160,10 @@ async function runTurn(
     run: {
       findUnique: vi.fn(async () => run),
       findUniqueOrThrow: vi.fn(async () => run),
+      findFirst: vi.fn(async () => ({
+        bot: { id: run.botId, name: "Assistant", color: "blue", notifyOnFinish: true },
+        thread: { groupId: null },
+      })),
       updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         Object.assign(run, data);
         return { count: 1 };
@@ -337,6 +343,7 @@ async function runTurn(
     continuationRunId: null,
   }));
   vision.seesImages = options.graphical ?? false;
+  const sendNotification = vi.fn(async () => undefined);
   const executor = createRunExecutor({
     deploymentModelKey: "fixture-model-key",
     prisma,
@@ -369,6 +376,7 @@ async function runTurn(
       notify: vi.fn(async () => undefined),
     },
     jobs: { enqueue: vi.fn(async () => undefined) },
+    ...(options.enableNotifications ? { notifications: { send: sendNotification } } : {}),
     secrets,
     ...(options.connectorTools
       ? {
@@ -400,8 +408,50 @@ async function runTurn(
   expect(runtimeRun).toHaveBeenCalled();
   if (!options.runtimeFailure && !options.allowFailure)
     expect(finalizeRun).not.toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed" }));
-  return { finalizeRun, append, pauseRunForInput, messages, savedEvents, prisma, runtimeRun, run };
+  return {
+    finalizeRun,
+    append,
+    pauseRunForInput,
+    messages,
+    savedEvents,
+    prisma,
+    runtimeRun,
+    run,
+    sendNotification,
+  };
 }
+
+describe("bot-to-bot completion notifications", () => {
+  it.each([false, true])(
+    "matches the unread decision when repliesToRequest is %s",
+    async (repliesToRequest) => {
+      const { finalizeRun, sendNotification } = await runTurn(
+        "Finished the task.",
+        true,
+        "",
+        [],
+        "fyi",
+        {
+          trigger: "bot_message",
+          repliesToRequest,
+          enableNotifications: true,
+        },
+      );
+      expect(finalizeRun).toHaveBeenCalledWith(
+        expect.objectContaining({ markUnread: repliesToRequest }),
+      );
+      if (repliesToRequest) {
+        expect(sendNotification).toHaveBeenCalledOnce();
+        expect(sendNotification).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: "completion", body: "Finished the task." }),
+          expect.anything(),
+        );
+      } else {
+        expect(sendNotification).not.toHaveBeenCalled();
+      }
+    },
+  );
+});
 
 describe("explicit replies", () => {
   it("does not complete a delegated tool-only request by turning notes into its outcome", async () => {

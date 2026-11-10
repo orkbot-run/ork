@@ -1517,7 +1517,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           .join(" ");
         const workspaceInstruction =
           computerMode === "team"
-            ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
+            ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. From the shell, put intentionally shared work under ../../shared/. Other bots' folders are under ../; treat them as their working areas.`
             : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
 
         const reply = await createReplyState(deps, run, runSecrets);

@@ -966,7 +966,13 @@ export async function completeRun(ctx: RunContext) {
     ).catch((error) => getLogger().error("bot message result return", error));
   }
   const notifyBody = completionNotificationPreview(text);
-  if (runSendsFinishNotification(run.trigger) && notifyBody && !completed.continuationRunId) {
+  if (
+    runSendsFinishNotification(run.trigger) &&
+    !groupSilentEnd &&
+    completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true) &&
+    notifyBody &&
+    !completed.continuationRunId
+  ) {
     await notifyRun(deps, run, {
       kind: "completion",
       title: `${displayName(bot.name, "Bot")} finished`,
