@@ -107,7 +107,7 @@ case " $* " in
   *' exec -T api node dist/cli/server-claim.js '*)
     echo claim >> "$STUB_EVENTS"
     [[ "${STUB_CLAIM_FAIL:-0}" == 0 ]] || exit 1
-    printf 'Open this link to authorize the server:\nhttps://accounts.ork.run/account/connect-server#code=23456789AB\n\nOr enter this code at https://accounts.ork.run/account/connect-server:\n23456789AB\n'
+    printf 'Enter this code in your workspace dashboard under Server:\n23456789AB\n\nThe code expires in 10 minutes.\n'
     exit 0 ;;
   *' up '*)
     echo up >> "$STUB_EVENTS"
@@ -204,7 +204,7 @@ run_case fresh || { cat "$tmp/fresh/output"; exit 1; }
 [[ "$(cksum "$tmp/fresh/.env")" == "$checksum" ]]
 STUB_NATIVE_ACCOUNTS=1 run_case native || { cat "$tmp/native/output"; exit 1; }
 grep -q '^Ork is ready at https://server.example.com$' "$tmp/native/output"
-grep -q '^https://accounts.ork.run/account/connect-server#code=23456789AB$' "$tmp/native/output"
+grep -q '^Enter this code in your workspace dashboard under Server:$' "$tmp/native/output"
 grep -q '^23456789AB$' "$tmp/native/output"
 grep -q '^claim$' "$tmp/native/events"
 grep -q '^updates-init$' "$tmp/native/events"
