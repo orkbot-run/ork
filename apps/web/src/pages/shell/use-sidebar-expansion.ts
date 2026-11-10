@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { safeLocalStorage } from "../../lib/storage";
 
 function collapsedSidebarSectionsStorageKey(userId: string | null | undefined): string | null {
   if (!userId) return null;
@@ -8,7 +9,7 @@ function collapsedSidebarSectionsStorageKey(userId: string | null | undefined): 
 function readCollapsedIdSet(storageKey: string | null): Set<string> {
   if (!storageKey) return new Set();
   try {
-    const value = window.localStorage.getItem(storageKey);
+    const value = safeLocalStorage.getItem(storageKey);
     const keys: unknown = value ? JSON.parse(value) : [];
     return new Set(
       Array.isArray(keys) ? keys.filter((key): key is string => typeof key === "string") : [],
@@ -28,7 +29,7 @@ function toggleCollapsedIdSet(
   else next.add(id);
   if (storageKey) {
     try {
-      window.localStorage.setItem(storageKey, JSON.stringify([...next]));
+      safeLocalStorage.setItem(storageKey, JSON.stringify([...next]));
     } catch {
       // Keep the UI usable when storage is unavailable.
     }

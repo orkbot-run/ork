@@ -10,10 +10,11 @@ import {
   usePasskeysSupported,
   usePasskeysVersion,
 } from "../lib/passkeys";
+import { safeLocalStorage } from "../lib/storage";
 
 function readDismissed(key: string): boolean {
   try {
-    return window.localStorage.getItem(key) !== null;
+    return safeLocalStorage.getItem(key) !== null;
   } catch {
     return false;
   }
@@ -21,7 +22,7 @@ function readDismissed(key: string): boolean {
 
 function writeDismissed(key: string) {
   try {
-    window.localStorage.setItem(key, "1");
+    safeLocalStorage.setItem(key, "1");
   } catch {
     // Storage can be unavailable; the offer still closes for this page.
   }

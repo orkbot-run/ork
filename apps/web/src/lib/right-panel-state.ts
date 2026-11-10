@@ -1,3 +1,5 @@
+import { safeLocalStorage } from "./storage";
+
 export type Panel =
   | "computer"
   | "routines"
@@ -32,7 +34,7 @@ export function rightPanelStorageKey(
 
 export function readRightPanelState(key: string): RightPanelState {
   try {
-    const value: unknown = JSON.parse(localStorage.getItem(key) ?? "null");
+    const value: unknown = JSON.parse(safeLocalStorage.getItem(key) ?? "null");
     if (
       !value ||
       typeof value !== "object" ||
@@ -58,7 +60,7 @@ export function writeRightPanelState(key: string, panel: Panel, routineId?: stri
   // Keep the last durable preference while create-group or an import is open.
   if (panel === "create-group" || panel === "import-agent") return;
   try {
-    localStorage.setItem(
+    safeLocalStorage.setItem(
       key,
       JSON.stringify({ panel, ...(panel === "routine" && routineId ? { routineId } : {}) }),
     );

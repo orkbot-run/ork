@@ -53,6 +53,7 @@ import { desktopBridge } from "../lib/desktop";
 import { useSpaceQueries } from "../lib/query";
 import { formatRelativeTime } from "../lib/relative-time";
 import { rpc } from "../lib/rpc";
+import { safeLocalStorage } from "../lib/storage";
 import { useObjectUrl } from "../lib/use-object-url";
 import { errorText } from "../lib/user-error";
 import { WindowChrome } from "./WindowChrome";
@@ -68,7 +69,7 @@ const NO_BOTS: Bot[] = [];
 
 function readViewMode(): ViewMode {
   try {
-    return window.localStorage.getItem(VIEW_MODE_STORAGE_KEY) === "list" ? "list" : "grid";
+    return safeLocalStorage.getItem(VIEW_MODE_STORAGE_KEY) === "list" ? "list" : "grid";
   } catch {
     return "grid";
   }
@@ -76,7 +77,7 @@ function readViewMode(): ViewMode {
 
 function writeViewMode(mode: ViewMode): void {
   try {
-    window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    safeLocalStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
   } catch {
     // Preference only; ignore storage failures.
   }
