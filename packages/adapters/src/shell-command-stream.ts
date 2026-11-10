@@ -5,12 +5,19 @@ import { automated } from "./automated-messages.js";
 import { shortenPlainText } from "./context-selection.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 
-/**
- * Device-code logins print a code and then wait. Once that output goes quiet,
- * return it while the process is still running so the bot can show the code.
- * Fast commands that exit inside this window are unchanged.
- */
-export const SHELL_STREAM_IDLE_MS = 1_000;
+export const SHELL_STREAM_IDLE_MS = 10_000;
+const DEVICE_CODE_IDLE_MS = 1_000;
+
+// A device login has both a URL and a labeled code. A URL alone is common in
+// normal command output and must not shorten the idle window.
+function hasDeviceCode(output: string): boolean {
+  return (
+    /https?:\/\/\S+/i.test(output) &&
+    /\bcode\b[^\n\r]{0,80}\b(?:[A-Z0-9]{3,8}-[A-Z0-9]{3,8}|(?=[A-Z0-9]{6,8}\b)(?=[A-Z0-9]*\d)[A-Z0-9]+)\b/i.test(
+      output,
+    )
+  );
+}
 
 export const SHELL_STILL_RUNNING_NOTICE =
   "Still running. Tell the user any one-time code or sign-in URL in the output.";
@@ -126,7 +133,6 @@ export async function observeShellCommand(
   result: ShellCommandResult;
   completion?: Promise<FinishedShellCommand>;
 }> {
-  const idleMs = options.idleMs ?? SHELL_STREAM_IDLE_MS;
   let stdout = "";
   let stderr = "";
   let code: number | undefined;
@@ -147,6 +153,9 @@ export async function observeShellCommand(
 
   const armIdle = () => {
     clearIdle();
+    const idleMs =
+      options.idleMs ??
+      (hasDeviceCode(`${stdout}\n${stderr}`) ? DEVICE_CODE_IDLE_MS : SHELL_STREAM_IDLE_MS);
     if (idleMs <= 0) {
       resolveIdle?.("idle");
       return;
