@@ -4780,6 +4780,13 @@ describe("claimSteering", () => {
     text: "Hello",
   });
   it.each([
+    [
+      "a background helper",
+      "helper_result",
+      "user-1",
+      [{ kind: "text", text: "Result" }],
+      "helper",
+    ],
     ["a webhook", "webhook", "user-1", [{ kind: "text", text: "Hello" }], "webhook"],
     ["the run's person in their connected chat", "messaging", "user-1", [], "user"],
     ["someone else's connected chat", "messaging", "user-2", [], "messaging"],

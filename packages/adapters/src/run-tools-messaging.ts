@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited messaging behavior is preserved; bounded delegated files are an Ork addition.
 
+import { runContinueJob } from "@orkbot/adapter-kit";
 import { isBackgroundRunTrigger, redactSecrets } from "@orkbot/core";
+import { createBackgroundHelper, findBackgroundHelper } from "@orkbot/db";
 import {
   connectAgent,
   messageConnectedAgent,
@@ -12,6 +14,7 @@ import {
 import { messageBot } from "./bot-messages.js";
 import { endCallFromTool, requestUserCall } from "./call-request.js";
 import { handoffToGroupBot } from "./group-handoff.js";
+import { isRunTainted } from "./run-context.js";
 import { publishMessage } from "./run-messages.js";
 import {
   canPostLongTaskHeadsUp,
@@ -69,8 +72,63 @@ export const messagingTools: ToolHandlers = {
   async request_takeover() {
     return { ok: true };
   },
-  async run_subagent(_ctx, call) {
+  async run_subagent(ctx, call) {
     const { args } = call;
+    if (args.background === true) {
+      if (
+        !ctx.source.ownerStartedRun ||
+        ctx.source.messagingChannelRun ||
+        ctx.run.userId !== ctx.bot.userId
+      ) {
+        return call.finish({
+          error: "Background helpers are available only in the bot owner's app conversation.",
+        });
+      }
+      const helperInput = {
+        spaceId: ctx.run.spaceId,
+        parentThreadId: ctx.thread.id,
+        parentRunId: ctx.runId,
+        parentLease: { owner: ctx.workerId, fence: ctx.fence },
+        callId: call.effectKey,
+      };
+      const existing = await findBackgroundHelper(ctx.deps.prisma, helperInput);
+      if (existing) {
+        await ctx.deps.jobs.enqueue(runContinueJob(existing.runId)).catch(() => undefined);
+        return call.finish({
+          ok: true,
+          agentId: existing.runId,
+          note: "The helper is working in the background. Its result will return to this conversation.",
+        });
+      }
+      if (await isRunTainted(ctx)) {
+        return call.finish({
+          error: "Background helpers cannot start after outside content enters this run.",
+        });
+      }
+      if (args.model_provider || args.model_id) {
+        return call.finish({ error: "Background helpers use the parent bot's configured model." });
+      }
+      const name = redactSecrets(String(args.name ?? ""), ctx.secrets);
+      const task = redactSecrets(String(args.task ?? ""), ctx.secrets);
+      const instructions = redactSecrets(String(args.instructions ?? ""), ctx.secrets).trim();
+      if (!name.trim() || !task.trim()) return call.finish({ error: "name and task are required" });
+      const helper = await createBackgroundHelper(ctx.deps.prisma, {
+        ...helperInput,
+        name,
+        task: instructions
+          ? `${task}\n\nAdditional instructions from the parent bot:\n${instructions}`
+          : task,
+      });
+      if (helper.eventSeq !== null) {
+        await ctx.deps.events.notify(ctx.thread.id, helper.eventSeq).catch(() => undefined);
+      }
+      await ctx.deps.jobs.enqueue(runContinueJob(helper.runId)).catch(() => undefined);
+      return call.finish({
+        ok: true,
+        agentId: helper.runId,
+        note: "The helper is working in the background. Its result will return to this conversation.",
+      });
+    }
     return {
       ok: true,
       result: String(args.task ?? "done."),

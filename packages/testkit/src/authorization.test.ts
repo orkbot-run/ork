@@ -332,6 +332,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         { botId: "missing-bot", clientNonce: "nope", routineIds: ["missing-routine"] },
       ],
       ["threads/stop", { botId: "missing-bot" }],
+      ["threads/stopHelper", { botId: "missing-bot", agentId: "missing-helper" }],
       ["threads/clear", { botId: "missing-bot" }],
       ["threads/followUp", { botId: "missing-bot", text: "Nope" }],
       [
@@ -721,6 +722,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["threads/send", { botId: ownerBot.id, text: "intruder message" }],
       ["threads/send", { botId: ownerBot.id, artifactIds: [ownerArtifact.id] }],
       ["threads/stop", { botId: ownerBot.id }],
+      ["threads/stopHelper", { botId: ownerBot.id, agentId: ownerRun.id }],
       ["threads/clear", { botId: ownerBot.id }],
       ["threads/followUp", { botId: ownerBot.id, text: "intruder follow-up" }],
       [
@@ -782,6 +784,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["threads/subscribe", { groupId: ownerGroup.id, cursor: -1 }],
       ["threads/send", { groupId: ownerGroup.id, text: "intruder group message" }],
       ["threads/stop", { groupId: ownerGroup.id }],
+      ["threads/stopHelper", { groupId: ownerGroup.id, agentId: ownerRun.id }],
       ["threads/followUp", { groupId: ownerGroup.id, text: "intruder follow-up" }],
       ["threads/markRead", { groupId: ownerGroup.id }],
       ["threads/markUnread", { groupId: ownerGroup.id }],

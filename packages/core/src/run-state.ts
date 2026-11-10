@@ -32,6 +32,7 @@ const NON_CONVERSATIONAL_RUN_TRIGGERS = new Set([
   "created",
   "tickets",
   "bot_message",
+  "background_helper",
 ]);
 
 /**
@@ -44,7 +45,7 @@ export const BACKGROUND_RUN_TRIGGERS = ["tickets"] as const;
 const BACKGROUND_RUN_TRIGGER_SET = new Set<string>(BACKGROUND_RUN_TRIGGERS);
 
 export function isBackgroundRunTrigger(trigger: string | null | undefined): boolean {
-  return BACKGROUND_RUN_TRIGGER_SET.has(trigger ?? "");
+  return trigger === "background_helper" || BACKGROUND_RUN_TRIGGER_SET.has(trigger ?? "");
 }
 
 const allowed: Record<RunStatus, RunStatus[]> = {

@@ -49,6 +49,21 @@ function notifications() {
 }
 
 describe("reconcileStuckWork", () => {
+  it("does not send reminders for an aged background helper", async () => {
+    const helper = {
+      ...candidate("queued", 5),
+      trigger: "tickets",
+      thread: { groupId: null, parentThreadId: "parent-thread" },
+    };
+    const prisma = {
+      run: { findMany: vi.fn(async () => [helper]) },
+      event: { findMany: vi.fn(async () => []) },
+    } as unknown as PrismaClient;
+    const { jobs } = publisher();
+    const { provider, send } = notifications();
+    await reconcileStuckWork({ prisma, jobs, notifications: provider, now, batchSize: 100 });
+    expect(send).not.toHaveBeenCalled();
+  });
   it("ignores a young queue and a row the scan cannot classify", async () => {
     const eventFindMany = vi.fn(async () => []);
     const prisma = {

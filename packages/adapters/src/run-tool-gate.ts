@@ -533,6 +533,11 @@ export async function gateToolCall(
   }
 
   const needsApproval = gateDecision === "ask";
+  if (needsApproval && run.trigger === "background_helper") {
+    return {
+      result: { error: "This action needs approval and cannot run in a background helper." },
+    };
+  }
   const call = createToolCall(ctx, {
     name,
     args,

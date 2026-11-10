@@ -186,7 +186,7 @@ export interface ClaimedSteeringMessage {
    * Who sent it: the run's own person (in the app or a connected chat), another member of the
    * chat, someone else in a connected chat, or a webhook.
    */
-  origin: "user" | "member" | "messaging" | "webhook";
+  origin: "user" | "member" | "messaging" | "webhook" | "helper";
 }
 
 export interface FinalizeRunResult {
@@ -449,12 +449,31 @@ export async function clearThread(
       },
       select: { id: true, taskId: true, userId: true, spaceId: true },
     });
+    // A helper belongs to this conversation even though its own run has a separate thread.
+    // Locking the parent first also serializes this with admission and result delivery.
+    const children = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM threads WHERE "parentThreadId" = ${input.threadId}
+        AND "spaceId" = ${input.spaceId} ORDER BY id FOR UPDATE`;
+    if (children.length) {
+      const childRuns = await tx.run.findMany({
+        where: {
+          spaceId: input.spaceId,
+          threadId: { in: children.map((child) => child.id) },
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        select: { id: true, taskId: true, userId: true, spaceId: true },
+      });
+      activeRuns.push(...childRuns);
+    }
     const now = new Date();
     const runIds = (await cancelRunsInTransaction(tx, activeRuns, now)).map((run) => run.id);
     // Expire as tombstones so a still-open provider screen claim cannot reset fencing to 1.
     await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
     await tx.message.deleteMany({ where: { threadId: input.threadId } });
     await tx.event.deleteMany({ where: { threadId: input.threadId } });
+    if (children.length) {
+      await tx.thread.deleteMany({ where: { id: { in: children.map((child) => child.id) } } });
+    }
     if (thread.nextMessageSeq > 0) {
       // nextMessageSeq is not reset, so mark every deleted message as already compacted.
       // Leaving the cursor behind would let compaction re-summarize deleted history (or, reset
@@ -840,16 +859,28 @@ async function claimSteeringOnce(
     return steering.map((item) => ({
       id: item.id,
       messageId: item.messageId,
-      text: blocksToAgentHistoryText(item.message.blocks as MessageBlock[]),
+      text:
+        item.originTrigger === "helper_result"
+          ? (item.message.blocks as MessageBlock[])
+              .filter(
+                (block): block is Extract<MessageBlock, { kind: "subagent" }> =>
+                  block.kind === "subagent",
+              )
+              .map((block) => block.result ?? "")
+              .filter(Boolean)
+              .join("\n")
+          : blocksToAgentHistoryText(item.message.blocks as MessageBlock[]),
       blocks: item.message.blocks as MessageBlock[],
       origin:
-        item.originTrigger === "webhook"
-          ? ("webhook" as const)
-          : sentByRunPerson(item)
-            ? ("user" as const)
-            : item.originTrigger === "messaging"
-              ? ("messaging" as const)
-              : ("member" as const),
+        item.originTrigger === "helper_result"
+          ? ("helper" as const)
+          : item.originTrigger === "webhook"
+            ? ("webhook" as const)
+            : sentByRunPerson(item)
+              ? ("user" as const)
+              : item.originTrigger === "messaging"
+                ? ("messaging" as const)
+                : ("member" as const),
     }));
   }, THREAD_LOCK_TRANSACTION_OPTIONS);
 }
@@ -2078,7 +2109,9 @@ export async function createPendingSteeringRun(
       prompt:
         origin === "webhook"
           ? blocksToAgentHistoryText(source.message.blocks as MessageBlock[])
-          : STEERING_CONTINUATION_PROMPT,
+          : origin === "helper"
+            ? "Review the result returned by your helper and continue your task."
+            : STEERING_CONTINUATION_PROMPT,
       status: "queued",
     },
   });
@@ -2096,12 +2129,14 @@ export async function createPendingSteeringRun(
       trigger:
         origin === "webhook"
           ? "webhook"
-          : origin === "private" &&
-              batch.every(
-                (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
-              )
+          : origin === "helper"
             ? "follow_up"
-            : "messaging",
+            : origin === "private" &&
+                batch.every(
+                  (item) => item.originTrigger === null && !hasChannelMessage(item.message.blocks),
+                )
+              ? "follow_up"
+              : "messaging",
       sourceMessageId: source.message.id,
       ...(modelPin ?? {}),
     },
@@ -2145,6 +2180,7 @@ function steeringOrigin(item: {
   originTrigger: string | null;
   message: { blocks: unknown };
 }): string {
+  if (item.originTrigger === "helper_result") return "helper";
   if (item.originTrigger === "webhook") return "webhook";
   if (item.originTrigger !== "messaging") return "private";
   const channelId = messagingChannelId(item.message.blocks as MessageBlock[] | undefined);

@@ -5,9 +5,10 @@ import type { ComponentProps, ReactNode, Ref } from "react";
 import { act, createContext } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
-import { Linking } from "react-native";
+import { Alert, Linking } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobileMessage } from "./api";
+import * as api from "./api";
 
 vi.mock("react-native", async () => {
   const { createElement, useImperativeHandle } = await import("react");
@@ -105,7 +106,19 @@ vi.mock("../components/native-symbol", () => ({
   NativeSymbol: ({ ios }: { ios: string }) => <i data-symbol={ios} />,
 }));
 vi.mock("../components/native-action-button", () => ({
-  NativeActionButton: ({ label }: { label: string }) => <button type="button">{label}</button>,
+  NativeActionButton: ({
+    label,
+    onPress,
+    disabled,
+  }: {
+    label: string;
+    onPress?: () => void;
+    disabled?: boolean;
+  }) => (
+    <button type="button" onClick={onPress} disabled={disabled}>
+      {label}
+    </button>
+  ),
 }));
 // Cards this file doesn't exercise; each has its own tests.
 vi.mock("../components/thread/ask-block", () => ({ AskBlock: () => null }));
@@ -210,6 +223,47 @@ describe("thread cards", () => {
       ),
     );
   }
+
+  it.each([false, true])(
+    "stops only a background helper in the selected %s group context",
+    async (group) => {
+      const stop = vi.spyOn(api, "rpc").mockResolvedValue({ ok: true } as never);
+      const running = {
+        ...helper("helper-run"),
+        status: "running",
+        background: true,
+      } as MessageBlock;
+      renderBlocks([running], group ? { groupId: "group-1" } : {});
+      const button = [...container.querySelectorAll("button")].find(
+        (item) => item.textContent === "Stop helper-run",
+      )!;
+      expect(button).toBeDefined();
+      await act(async () => button.click());
+      expect(stop).toHaveBeenCalledWith("threads/stopHelper", {
+        ...(group ? { groupId: "group-1" } : { botId: "bot-1" }),
+        agentId: "helper-run",
+      });
+      expect(button.disabled).toBe(false);
+      await act(async () => button.click());
+      expect(stop).toHaveBeenCalledTimes(2);
+      renderBlocks([{ ...running, status: "failed", stopped: true } as MessageBlock]);
+      expect(container.textContent).toContain("Stopped.");
+      expect(container.textContent).not.toContain("Stop helper-run");
+      stop.mockRestore();
+    },
+  );
+
+  it("shows a stop error and allows retry on mobile", async () => {
+    const stop = vi.spyOn(api, "rpc").mockRejectedValue(new Error("offline"));
+    renderBlocks([{ ...helper("retry"), status: "running", background: true } as MessageBlock]);
+    const button = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Stop retry",
+    )!;
+    await act(async () => button.click());
+    expect(Alert.alert).toHaveBeenCalledWith("Something went wrong. Try again.");
+    expect(button.disabled).toBe(false);
+    stop.mockRestore();
+  });
 
   it.each(["user", "bot"] as const)(
     "keeps %s image attachments outside the caption and file bubbles",

@@ -20,12 +20,14 @@ import type { Prisma } from "@orkbot/db";
 import {
   AnswerTooLongError,
   appendEventInTransaction,
+  cancelBackgroundHelper,
   createExternalConversationRepos,
   createThreadMessageInTransaction,
   IsolationError,
   isUniqueViolation,
   lockOwnedGroup,
   lockSpaceForWork,
+  returnBackgroundHelperOutcome,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   touchGroupUpdatedAt,
 } from "@orkbot/db";
@@ -328,6 +330,31 @@ export function threadsRoutes(ctx: RouterContext) {
       stop: authed.threads.stop.handler(async ({ context, input }) => {
         const target = await resolveThreadTarget(deps.prisma, context.actor, input);
         await stopThreadRuns(deps, context.actor, target);
+        return { ok: true as const };
+      }),
+      stopHelper: authed.threads.stopHelper.handler(async ({ context, input }) => {
+        const target = await resolveThreadTarget(deps.prisma, context.actor, input);
+        const stopped = await cancelBackgroundHelper(deps.prisma, {
+          spaceId: context.actor.spaceId,
+          parentThreadId: target.threadId,
+          runId: input.agentId,
+        });
+        if (!stopped.found) throw new IsolationError();
+        if (stopped.cancelled) {
+          await deps.jobs.cancel(runJobKey(input.agentId)).catch((error) => {
+            getLogger().error("background helper job cancellation", error);
+          });
+        }
+        const result = await returnBackgroundHelperOutcome(deps.prisma, {
+          spaceId: context.actor.spaceId,
+          runId: input.agentId,
+        });
+        if (result) {
+          await deps.events.notify(result.threadId, result.eventSeq).catch(() => undefined);
+          if (result.wakeRunId) {
+            await deps.jobs.enqueue(runContinueJob(result.wakeRunId)).catch(() => undefined);
+          }
+        }
         return { ok: true as const };
       }),
       clear: authed.threads.clear.handler(async ({ context, input }) => {

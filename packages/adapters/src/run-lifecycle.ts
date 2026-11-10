@@ -2,6 +2,7 @@ import { runContinueJob } from "@orkbot/adapter-kit";
 import { displayName } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { sleepDeferReason } from "./computer-idle.js";
 import { withComputerScreenAvailability } from "./computer-screens.js";
@@ -17,7 +18,7 @@ import { TAKEOVER_RESUME_CHECKPOINTS } from "./takeover-resume.js";
  */
 export function createRunWorkspaceCheckpoint(
   checkpoint: () => Promise<unknown>,
-  computer: { id: string; kind: string },
+  computer: { id: string; kind: string } | null,
   signal?: AbortSignal,
 ) {
   let dirty = false;
@@ -38,8 +39,7 @@ export function createRunWorkspaceCheckpoint(
         dirty = true;
         if (signal?.aborted) throw error;
         getLogger().warn("computer.checkpoint_deferred", {
-          "computer.id": computer.id,
-          provider: computer.kind,
+          ...(computer ? { "computer.id": computer.id, provider: computer.kind } : {}),
           reason: sleepDeferReason(error),
           error,
         });
@@ -88,6 +88,11 @@ export async function failRunBeforeTurn(
     error: message,
   });
   if (!failed) return false;
+  if (run.trigger === "background_helper") {
+    await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId: run.id }).catch(
+      (error) => getLogger().error("background helper result delivery", error),
+    );
+  }
   if (failed.continuationRunId) {
     await deps.jobs
       .enqueue(runContinueJob(failed.continuationRunId))

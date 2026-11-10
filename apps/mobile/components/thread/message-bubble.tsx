@@ -166,6 +166,8 @@ function MessageBubbleBody(props: ComponentProps<typeof MessageBubbleContent>) {
         bots={props.bots}
         members={props.members}
         onOpenBot={props.onOpenBot}
+        botId={props.botId}
+        groupId={props.groupId}
         onHelperToggle={props.onHelperToggle}
         userBubble={props.userBubble}
       />

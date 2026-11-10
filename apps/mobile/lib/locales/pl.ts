@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Stopped.": "Zatrzymano.",
   "Routine: {names}": "Rutyna: {names}",
   "Routines: {names}": "Rutyny: {names}",
   "Stop {name}": "Zatrzymaj {name}",

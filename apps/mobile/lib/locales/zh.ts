@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_MESSAGES: Record<string, string> = {
+  "Stopped.": "已停止。",
   "New server available": "有新服务器可用",
   "Open servers": "打开服务器列表",
   Later: "稍后",

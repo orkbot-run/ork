@@ -12,7 +12,7 @@ import { noteComputerTaskStep } from "./run-progress.js";
 import type { ToolHandler } from "./run-tool-gate.js";
 import { auditToolCall, gateToolCall } from "./run-tool-gate.js";
 import { prepareToolRequest, resolveToolRequest } from "./run-tool-request.js";
-import { PAGE_BROWSER_TOOL_NAMES } from "./run-tool-selection.js";
+import { backgroundHelperToolAllowed, PAGE_BROWSER_TOOL_NAMES } from "./run-tool-selection.js";
 import { computerTools, pageBrowserTool } from "./run-tools-computer.js";
 import { feedbackTools } from "./run-tools-feedback.js";
 import { fileTools } from "./run-tools-files.js";
@@ -74,6 +74,13 @@ export async function applyTool(
   let resolvedArgs = args;
   try {
     ctx.context.signal.throwIfAborted();
+    // Enforce the helper boundary before request preparation, including connector lookup.
+    if (
+      !backgroundHelperToolAllowed(ctx.run.trigger, name) ||
+      (ctx.run.trigger === "background_helper" && ctx.tools.connector.has(name))
+    ) {
+      return { error: "This tool is unavailable to background helpers." };
+    }
     if (!strategicInitiativeToolAllowed(name, ctx.run)) {
       return { error: "Daily check-ins can only ask or message the user." };
     }
@@ -115,7 +122,10 @@ export async function applyTool(
   } finally {
     // A replay's stored target decides whether the result came from this bot or another one.
     const ownProfile = name === "update_bot" && !argumentGiven(resolvedArgs.bot_id);
-    if (toolResultTaintsRun(name) && !ownProfile) ctx.state.tainted = true;
+    // Starting a durable helper returns only its id; the eventual helper output is
+    // separately marked as outside content when it enters the parent run.
+    const backgroundStart = name === "run_subagent" && resolvedArgs.background === true;
+    if (toolResultTaintsRun(name) && !ownProfile && !backgroundStart) ctx.state.tainted = true;
   }
 }
 

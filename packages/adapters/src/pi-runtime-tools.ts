@@ -533,6 +533,7 @@ function toAgentTool(
         return {
           name: String(raw.name ?? "helper"),
           task: String(raw.task ?? ""),
+          background: raw.background === true,
           instructions: raw.instructions ? String(raw.instructions) : "",
           model_provider: raw.model_provider ? String(raw.model_provider) : "",
           model_id: raw.model_id ? String(raw.model_id) : "",
@@ -703,6 +704,24 @@ function toAgentTool(
                 };
               }
               if (tool.name === "run_subagent") {
+                if (args.background === true) {
+                  if (!host.request.executeTool) {
+                    return {
+                      content: [{ type: "text", text: "Background helpers are unavailable." }],
+                      details: { error: "no executor" },
+                    };
+                  }
+                  const result = await host.request.executeTool(
+                    tool.name,
+                    args,
+                    executionId,
+                    tool.route,
+                  );
+                  return {
+                    content: [{ type: "text", text: JSON.stringify(result) }],
+                    details: result,
+                  };
+                }
                 const result = await executeSubagent(host, executionId, args);
                 return {
                   content: [{ type: "text", text: result }],

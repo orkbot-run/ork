@@ -276,3 +276,56 @@ describe("daily check-in dispatch restriction", () => {
     expect(audited).toEqual([]);
   });
 });
+
+describe("background helper dispatch boundary", () => {
+  it("does not taint a run merely because it requested a background helper", async () => {
+    const base = dispatchContext(false);
+    const ctx = {
+      ...base,
+      run: { ...base.run, trigger: "user" },
+      source: { ownerStartedRun: false, messagingChannelRun: false },
+    };
+    await applyTool(
+      ctx as unknown as Parameters<typeof applyTool>[0],
+      "run_subagent",
+      { background: true, name: "helper", task: "work" },
+      "call-1",
+    );
+    expect(ctx.state.tainted).toBe(false);
+  });
+  it.each([
+    "shell",
+    "computer_act",
+    "message_bot",
+    "connect_agent",
+    "run_subagent",
+    "catalog_execute",
+  ])("rejects %s before resolving or preparing it", async (name) => {
+    const base = dispatchContext(false);
+    const ctx = { ...base, run: { ...base.run, trigger: "background_helper" } };
+    const result = await applyTool(
+      ctx as unknown as Parameters<typeof applyTool>[0],
+      name,
+      {},
+      "call-1",
+    );
+    expect(result).toEqual({ error: "This tool is unavailable to background helpers." });
+    expect(audited).toHaveLength(0);
+  });
+
+  it("refuses a connector that shadows an allowed built-in name", async () => {
+    const base = dispatchContext(false);
+    const ctx = {
+      ...base,
+      run: { ...base.run, trigger: "background_helper" },
+      tools: { ...base.tools, connector: new Map([["web_search", {}]]) },
+    };
+    const result = await applyTool(
+      ctx as unknown as Parameters<typeof applyTool>[0],
+      "web_search",
+      {},
+      "call-1",
+    );
+    expect(result).toEqual({ error: "This tool is unavailable to background helpers." });
+  });
+});

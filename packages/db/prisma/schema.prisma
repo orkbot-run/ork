@@ -901,6 +901,12 @@ model Thread {
   externalConversationId      String?    @unique
   externalConversation        ExternalConversation? @relation(fields: [externalConversationId], references: [id], onDelete: Cascade)
   userId                      String
+  parentThreadId              String?
+  parentThread                Thread?    @relation("HelperThreads", fields: [parentThreadId], references: [id], onDelete: Cascade)
+  helperThreads               Thread[]   @relation("HelperThreads")
+  parentRunId                 String?
+  parentRun                   Run?       @relation("HelperParentRun", fields: [parentRunId], references: [id], onDelete: Cascade)
+  helperCallId                String?
   createdAt                   DateTime   @default(now())
   nextEventSeq                Int        @default(0)
   nextMessageSeq              Int        @default(0)
@@ -920,6 +926,8 @@ model Thread {
 
   @@index([spaceId])
   @@index([spaceId, userId])
+  @@unique([parentRunId, helperCallId])
+  @@index([parentThreadId])
   @@map("threads")
 }
 
@@ -998,6 +1006,7 @@ model Run {
   bot                  Bot               @relation(fields: [botId], references: [id], onDelete: Cascade)
   threadId             String
   thread               Thread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  helperThreads        Thread[]          @relation("HelperParentRun")
   taskId               String
   task                 Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
   userId               String

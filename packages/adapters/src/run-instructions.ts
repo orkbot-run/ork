@@ -365,7 +365,7 @@ export function userTurnInstructions(parts: {
     offeredBuiltinClause(
       parts.disabledBuiltinTools,
       "run_subagent",
-      "run_subagent is a short helper inside this turn only. It is not a bot, has no thread, and does not show in the list. Use it for parallel work you will summarize here.",
+      "run_subagent is a helper, not a bot. By default it works inside this turn. Set background to true for longer work that should continue while you remain free to answer; its result returns to this conversation. Background work is available only in the owner's app conversation before outside content enters the run. Background helpers cannot use a computer or contact other agents.",
     ),
     parts.botDirectory,
     offeredBuiltinClause(

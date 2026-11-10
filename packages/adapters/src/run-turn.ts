@@ -28,10 +28,11 @@ import {
   userRunError,
   withoutLastToolStepNotes,
 } from "@orkbot/core";
-import { RunHistoryWriteError, recordUsage } from "@orkbot/db";
+import { RunHistoryWriteError, recordUsage, updateBackgroundHelperProgress } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import { sanitizedError } from "@orkbot/logging/monitoring";
 import { isToolPauseResult } from "./approval-effect.js";
+import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { holdComputerExecutionLeaseForTakeover } from "./computer-lifecycle.js";
@@ -125,6 +126,7 @@ export async function consumeRunEvents(
   const { deps, run, runId, bot } = ctx;
   const { reply } = ctx.state;
   let thinking = false;
+  let lastHelperProgressAt = 0;
   const publishThinking = async (active: boolean) => {
     if (thinking === active) return;
     thinking = active;
@@ -205,6 +207,25 @@ export async function consumeRunEvents(
         await pauseForTakeover(ctx, event);
         return true;
       } else if (event.type === "tool") {
+        if (run.trigger === "background_helper" && Date.now() - lastHelperProgressAt >= 1_000) {
+          lastHelperProgressAt = Date.now();
+          const progress =
+            event.name === "web_search"
+              ? "Searching the web"
+              : event.name === "web_fetch"
+                ? "Reading a page"
+                : event.name === "skill_read"
+                  ? "Reading instructions"
+                  : "Working";
+          const updated = await updateBackgroundHelperProgress(deps.prisma, {
+            spaceId: run.spaceId,
+            runId,
+            lease: { owner: ctx.workerId, fence: ctx.fence },
+            progress,
+          }).catch(() => null);
+          if (updated)
+            await deps.events.notify(updated.threadId, updated.eventSeq).catch(() => undefined);
+        }
         if (await onToolCalled(ctx, event)) return true;
       } else if (event.type === "subagent") {
         await publishSubagent(ctx, event);
@@ -214,7 +235,9 @@ export async function consumeRunEvents(
           botId: bot.id,
           userId: run.userId,
           runId,
-          parentRunId: runId,
+          parentRunId:
+            run.trigger === "background_helper" ? (ctx.thread.parentRunId ?? runId) : runId,
+          ...(run.trigger === "background_helper" ? { operationKind: "subagent" as const } : {}),
           operationId: runId,
         });
       } else if (event.type === "done") {
@@ -667,6 +690,11 @@ async function stopStuckToolLoop(ctx: RunContext, toolName: string) {
     blocks: isBackgroundRunTrigger(run.trigger) ? [] : [{ kind: "text", text: stuckText }],
   });
   if (!stopped) return;
+  if (run.trigger === "background_helper") {
+    await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId }).catch((error) =>
+      getLogger().error("background helper result delivery", error),
+    );
+  }
   ctx.stopHeartbeatAfterCompletion();
   if (run.trigger === "routine" && run.routineId) {
     await clearRoutineBackoff(deps, run.routineId);
@@ -893,7 +921,9 @@ export async function completeRun(ctx: RunContext) {
       allowSilentEmpty:
         ctx.allowSilentEmptyRun || reply.publishedMidTurnUserMessage || groupSilentEnd,
       emptyResponseText: ctx.emptyResponseText,
-      suppressOutput: ctx.state.handedOff || isBackgroundRunTrigger(run.trigger),
+      suppressOutput:
+        ctx.state.handedOff ||
+        (isBackgroundRunTrigger(run.trigger) && run.trigger !== "background_helper"),
       skipEmptyFallback: reply.publishedTerminalSubagent || reply.publishedMidTurnUserMessage,
     });
   }
@@ -941,6 +971,11 @@ export async function completeRun(ctx: RunContext) {
       completionMarksUnread(run.trigger, text, ctx.source.peerMessage?.repliesToRequest === true),
   });
   if (!completed) return;
+  if (run.trigger === "background_helper") {
+    await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId }).catch((error) =>
+      getLogger().error("background helper result delivery", error),
+    );
+  }
   ctx.stopHeartbeatAfterCompletion();
   if (run.trigger === "routine" && run.routineId) {
     await clearRoutineBackoff(deps, run.routineId);
@@ -1080,6 +1115,11 @@ export async function failRun(
     ...(partialReply.length > 0 ? { partialReply } : {}),
   });
   if (!failed) return;
+  if (run.trigger === "background_helper") {
+    await deliverBackgroundHelperOutcome(deps, { spaceId: run.spaceId, runId }).catch((error) =>
+      getLogger().error("background helper result delivery", error),
+    );
+  }
   if (
     error instanceof TransientModelError ||
     error instanceof ModelAccountError ||

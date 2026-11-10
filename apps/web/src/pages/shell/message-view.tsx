@@ -435,7 +435,15 @@ export const MessageView = memo(function MessageView({
             );
           }
           if (block.kind === "subagent") {
-            return <SubagentCard key={i} block={block} />;
+            return (
+              <SubagentCard
+                key={i}
+                block={block}
+                onStop={async () => {
+                  await rpc.threads.stopHelper({ ...artifactTarget, agentId: block.agentId });
+                }}
+              />
+            );
           }
           if (block.kind === "child_bot") {
             return (

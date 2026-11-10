@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Stopped.": "停止しました。",
   "New server available": "新しいサーバーが利用可能です",
   "Open servers": "サーバーを開く",
   Later: "後で",

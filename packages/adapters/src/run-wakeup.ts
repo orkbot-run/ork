@@ -380,6 +380,8 @@ export class RunWorkerHost implements JobWorkerHost {
         createdAt: true,
         botId: true,
         status: true,
+        trigger: true,
+        thread: { select: { parentThreadId: true } },
         bot: { select: { computerId: true } },
       },
     });

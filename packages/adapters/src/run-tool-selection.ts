@@ -38,6 +38,17 @@ export const FLEET_WRITE_TOOL_NAMES_SET: ReadonlySet<string> = new Set(FLEET_WRI
  */
 const CREATED_RUN_TOOL_NAMES = new Set(["ask_user", "update_bot"]);
 
+/** Background helpers cannot hold a computer or send messages to other agents. */
+export const BACKGROUND_HELPER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "web_search",
+  "web_fetch",
+  "skill_read",
+]);
+
+export function backgroundHelperToolAllowed(trigger: string, name: string): boolean {
+  return trigger !== "background_helper" || BACKGROUND_HELPER_TOOL_NAMES.has(name);
+}
+
 export function selectBuiltinToolsForRun(options: {
   ticketBoardEnabled?: boolean;
   phoneCallsEnabled?: boolean;
@@ -89,6 +100,7 @@ export function selectBuiltinToolsForRun(options: {
   ).filter(
     (tool) =>
       !disabled.has(tool.name) &&
+      backgroundHelperToolAllowed(options.trigger, tool.name) &&
       (options.trigger !== "created" || CREATED_RUN_TOOL_NAMES.has(tool.name)) &&
       (!FLEET_TOOL_NAMES_SET.has(tool.name) ||
         (Boolean(options.fleetManagement) && ownerStartedRun)) &&

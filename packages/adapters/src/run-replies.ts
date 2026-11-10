@@ -19,7 +19,11 @@ export const REACTION_SILENT_REPLY_GUIDANCE = `The user reacted with an emoji to
 export const GROUP_UNADDRESSED_REPLY_GUIDANCE = `This message went to every member of the group and names nobody. Members decide at about the same time, so do not count on seeing the others' replies. Before using any tools, decide whether it is for you. Answer when it falls within your own description, or when it asks each member to reply. Stay silent when it fits another member's description better, or when no member's description fits it and you are not the first member listed. To stay silent, the entire final assistant reply must be exactly ${NO_RESPONSE}, with no tool calls, never a dot, a placeholder or an empty message.`;
 
 export function runAllowsSilentEmpty(trigger: string): boolean {
-  return trigger === "reaction" || trigger === "routine" || isBackgroundRunTrigger(trigger);
+  return (
+    trigger === "reaction" ||
+    trigger === "routine" ||
+    (isBackgroundRunTrigger(trigger) && trigger !== "background_helper")
+  );
 }
 
 /**
@@ -48,6 +52,8 @@ export function runReplyGuidance(trigger: string, replyMode = "chat"): string {
 
 function chatReplyGuidance(trigger: string): string {
   if (trigger === "reaction") return REACTION_SILENT_REPLY_GUIDANCE;
+  if (trigger === "background_helper")
+    return "Return the complete result to the parent bot in your final response.";
   if (isBackgroundRunTrigger(trigger)) return TICKET_SILENT_REPLY_GUIDANCE;
   return runAllowsSilentEmpty(trigger) ? ROUTINE_SILENT_REPLY_GUIDANCE : longWorkProgressGuidance();
 }

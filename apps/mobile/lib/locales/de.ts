@@ -3,6 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Stopped.": "Gestoppt.",
   "New server available": "Neuer Server verfügbar",
   "Open servers": "Server öffnen",
   Later: "Später",

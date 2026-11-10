@@ -60,6 +60,7 @@ async function runRoutine(
     /** User stop already flipped the run to cancelled before the turn ends. */
     cancelRun?: boolean;
     onRunStarted?: () => void;
+    backgroundHelperWithoutComputer?: boolean;
   } = {},
 ) {
   const attachment: Extract<MessageBlock, { kind: "file" | "image" }> = {
@@ -77,8 +78,9 @@ async function runRoutine(
     spaceId: "space-1",
     userId: "user-1",
     status: "queued" as string,
-    trigger:
-      options.delegation === "direct"
+    trigger: options.backgroundHelperWithoutComputer
+      ? "tickets"
+      : options.delegation === "direct"
         ? "bot_message"
         : options.delegation === "group"
           ? "follow_up"
@@ -87,6 +89,7 @@ async function runRoutine(
             : "routine",
     sourceMessageId:
       options.delegation || (options.attachments && !options.steering) ? "message-1" : null,
+    thread: { parentThreadId: options.backgroundHelperWithoutComputer ? "parent-thread" : null },
     routineId: "routine-1",
     retryOfRunId: null,
     leaseOwner: null as string | null,
@@ -185,15 +188,17 @@ async function runRoutine(
         modelProvider: null,
         modelId: null,
         thinkingLevel: null,
-        computerId: "computer-1",
+        computerId: options.backgroundHelperWithoutComputer ? null : "computer-1",
         computerSwitching: false,
         memoryScope: null,
-        computer: {
-          id: "computer-1",
-          scope: "dedicated",
-          kind: options.native ? "desktop" : "e2b",
-          homeKey: "home-1",
-        },
+        computer: options.backgroundHelperWithoutComputer
+          ? null
+          : {
+              id: "computer-1",
+              scope: "dedicated",
+              kind: options.native ? "desktop" : "e2b",
+              homeKey: "home-1",
+            },
       })),
       findUnique: vi.fn(async () => ({ name: "Assistant" })),
       findMany: vi.fn(async () => []),
@@ -448,6 +453,14 @@ afterEach(() => {
 });
 
 describe("run computer provisioning", () => {
+  it("runs a background helper without a computer or connector discovery", async () => {
+    const result = await runRoutine([], { backgroundHelperWithoutComputer: true });
+    expect(result.runtimeRun).toHaveBeenCalledOnce();
+    expect(result.finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "completed" }),
+    );
+    expect(provisionComputer).not.toHaveBeenCalled();
+  });
   it.each([undefined, "abort", "recover"] as const)(
     "finishes an account-refused lazy computer once even when tool failure is handled as %s",
     async (toolFailure) => {
