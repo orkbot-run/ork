@@ -304,3 +304,15 @@ it("retains quoted proposal detail in pending and answered history, excluding pr
     );
   }
 });
+
+describe("tool activity in agent history", () => {
+  it("keeps tool labels and bounded notes as unverified prior calls", () => {
+    const text = blocksToAgentHistoryText([
+      { kind: "steps", steps: [{ label: "Read file", count: 2, note: "x".repeat(500) }] },
+    ]);
+    expect(text).toContain("Read file (2 times)");
+    expect(text).toContain("intent, not verified results");
+    expect(text).not.toContain("x".repeat(301));
+    expect(blocksToAgentHistoryText([{ kind: "steps", steps: [] }])).toBe("");
+  });
+});

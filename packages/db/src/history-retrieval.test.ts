@@ -350,6 +350,14 @@ describe("local history retrieval", () => {
       ]),
     ).toBe("visible");
   });
+  it("includes bounded tool call labels and notes in history without asserting success", () => {
+    const result = historyMessageText([
+      { kind: "steps", steps: [{ label: "Search", count: 1, note: "Find the report" }] },
+    ]);
+    expect(result).toContain("Search: Find the report");
+    expect(result).toContain("intent, not verified results");
+    expect(historyMessageText([{ kind: "steps", steps: [] }])).toBe("");
+  });
   it("validates dates, query size and pagination before accessing the database", async () => {
     const { mock, prisma } = db();
     await expect(searchHistory(prisma, scope, { query: "x", before: "invalid" })).rejects.toThrow(

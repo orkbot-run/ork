@@ -527,6 +527,34 @@ describe("recordHistoryCompactAttemptsExhausted", () => {
 });
 
 describe("compactHistory", () => {
+  it("passes tool steps to the summarizer and carries its summary into the following history", async () => {
+    const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, seq) => ({
+      seq,
+      role: seq === 0 ? "bot" : "user",
+      blocks:
+        seq === 0
+          ? [{ kind: "steps", steps: [{ label: "Read archive", count: 1, note: "Check atlas" }] }]
+          : [{ kind: "text", text: `message ${seq}` }],
+    }));
+    const harness = compactionHarness({ messages, deploymentModelKey: "test-key" });
+    harness.runtime.run.mockImplementation(async function* (request) {
+      expect(request.prompt).toContain("Read archive: Check atlas");
+      yield { type: "done", text: "Earlier: Read archive, checking atlas." };
+    });
+    await compactHistory(harness.deps, "thread-1");
+    const selected = selectCompactedHistory({
+      summary: harness.thread.historyCompactionSummary,
+      historyCompactedUpToSeq: harness.thread.historyCompactedUpToSeq,
+      messages: messages.map((message) => ({
+        seq: message.seq,
+        role: message.role === "bot" ? "assistant" : "user",
+        content: `message ${message.seq}`,
+      })),
+    });
+    expect(selected.usedLocalSummary).toBe(true);
+    expect(selected.summary).toContain("Read archive");
+    expect(selected.history[0]?.seq).toBe(50);
+  });
   it("summarizes the next batch, saves it through the provider, and advances the cursor", async () => {
     const harness = compactionHarness({ deploymentModelKey: "openrouter-key" });
 

@@ -1,4 +1,5 @@
 import type { MessageBlock } from "@orkbot/contracts";
+import { toolStepsHistoryText } from "@orkbot/core";
 import type { Prisma } from "./client.js";
 
 function objectBlocks(blocks: Prisma.JsonValue): MessageBlock[] {
@@ -8,10 +9,12 @@ function objectBlocks(blocks: Prisma.JsonValue): MessageBlock[] {
   ) as MessageBlock[];
 }
 
-/** Text only: progress, commands, secret prompts and tool traces are not retrieval content. */
+/** Searchable conversational text and bounded tool activity, excluding secret prompts. */
 export function historyMessageText(blocks: Prisma.JsonValue): string {
   return objectBlocks(blocks)
     .flatMap((block) => {
+      if (block.kind === "steps" && Array.isArray(block.steps))
+        return [toolStepsHistoryText(block)];
       if (block.kind === "subagent") return [block.task, block.result ?? ""].filter(Boolean);
       return [
         "text",

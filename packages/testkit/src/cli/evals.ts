@@ -58,6 +58,12 @@ import {
 import type { ObservedToolCall, ObservedToolList } from "../evals/tool-calls.js";
 import { loadToolChoiceCases, TOOL_CHOICE_FIXTURE_VERSION } from "../evals/tool-choice.js";
 import { TOOL_CHOICE_CASES } from "../evals/tool-choice-cases.js";
+import {
+  TOOL_HISTORY_CASES,
+  TOOL_HISTORY_FIXTURE_VERSION,
+  TOOL_HISTORY_JUDGE_CALIBRATION,
+  TOOL_HISTORY_JUDGE_VERSION,
+} from "../evals/tool-history.js";
 import type { DiagnosticWireObservation } from "../evals/wire-observer.js";
 import { diagnosticWireFetch } from "../evals/wire-observer.js";
 import { runApprovalSuite } from "./approval-eval.js";
@@ -111,6 +117,11 @@ async function main() {
   > = {
     product: { cases: EVAL_CASES, fixtureVersion: "product-v1" },
     history: { cases: HISTORY_EVAL_CASES, fixtureVersion: HISTORY_FIXTURE_VERSION },
+    "tool-history": {
+      cases: TOOL_HISTORY_CASES,
+      fixtureVersion: TOOL_HISTORY_FIXTURE_VERSION,
+      judge: { version: TOOL_HISTORY_JUDGE_VERSION, calibration: TOOL_HISTORY_JUDGE_CALIBRATION },
+    },
     silence: {
       cases: SILENCE_EVAL_CASES,
       fixtureVersion: SILENCE_FIXTURE_VERSION,
@@ -149,7 +160,7 @@ async function main() {
   };
   if (!Object.hasOwn(suites, values.suite!))
     throw new Error(
-      "Unknown suite; use product, history, group, group-routing, silence, initiative, deliberation, memory, recall, tool-choice, or approval",
+      "Unknown suite; use product, history, tool-history, group, group-routing, silence, initiative, deliberation, memory, recall, tool-choice, or approval",
     );
   const suite = suites[values.suite!]!;
   const suiteJudge = suite.judge;

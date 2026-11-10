@@ -169,10 +169,29 @@ export function promptTextForAttachments(
   return [caption, ...notes].filter(Boolean).join("\n\n") || "See attached files.";
 }
 
+/** Bounded record of tool activity; notes describe intent, not verified results. */
+export function toolStepsHistoryText(block: Extract<MessageBlock, { kind: "steps" }>): string {
+  const lines = block.steps.slice(0, 20).flatMap((step) => {
+    if (!step || typeof step.label !== "string" || !step.label.trim()) return [];
+    const label = step.label.trim().slice(0, 120);
+    const note = typeof step.note === "string" ? step.note.trim().slice(0, 300) : "";
+    return [
+      `- ${label}${step.count > 1 ? ` (${step.count} times)` : ""}${note ? `: ${note}` : ""}`,
+    ];
+  });
+  return lines.length
+    ? `[Previous tool calls; notes describe intent, not verified results]\n${lines.join("\n")}`.slice(
+        0,
+        2500,
+      )
+    : "";
+}
+
 export function blocksToAgentHistoryText(blocks: MessageBlock[]): string {
   return blocks
     .map((block) => {
       if (block.kind === "text") return block.text;
+      if (block.kind === "steps") return toolStepsHistoryText(block);
       if (block.kind === "chart") return `[chart: ${block.name}]`;
       if (block.kind === "image") return `[image: ${block.name}]`;
       // The id lets a later turn, or another chat, update this page instead of making a new one.

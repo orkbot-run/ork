@@ -41,6 +41,7 @@ interface HistoryRow {
   botId?: string | null;
   chatName?: string;
   indexed?: boolean;
+  ordinaryMatch?: boolean;
 }
 /** Bounds the scan when blind-index collisions keep producing false candidates. */
 const MAX_SEARCH_SCANS = 20;
@@ -113,12 +114,13 @@ function bounded<T extends { messages: ReturnType<typeof reference>[] }>(respons
   return response;
 }
 /**
- * Matches the expression of messages_history_search_files_idx: conversational text plus
+ * Matches the expression of messages_history_search_steps_idx: conversational text plus
  * attachment names. The parser keeps a name like "q3-report.pdf" as one token, so its
  * separators become spaces first, as searchTerms splits them.
  */
-const searchableText = Prisma.sql`jsonb_path_query_array(m.blocks,
+const ordinarySearchableText = Prisma.sql`jsonb_path_query_array(m.blocks,
   '$[*] ? (@.kind == "text" || @.kind == "channel_message" || @.kind == "bot_message_received" || @.kind == "bot_message_sent" || @.kind == "handoff").text')::text || jsonb_path_query_array(m.blocks, '$[*] ? (@.kind == "subagent").task')::text || jsonb_path_query_array(m.blocks, '$[*] ? (@.kind == "subagent").result')::text || translate(jsonb_path_query_array(m.blocks, '$[*] ? (@.kind == "file" || @.kind == "image").name')::text, '._-', '   ')`;
+const searchableText = Prisma.sql`${ordinarySearchableText} || jsonb_path_query_array(m.blocks, '$[*] ? (@.kind == "steps").steps[*].label')::text || jsonb_path_query_array(m.blocks, '$[*] ? (@.kind == "steps").steps[*].note')::text`;
 const columns = Prisma.sql`m.id, m.seq, m.role, m."runId", m."replyToMessageId", m."createdAt", m.blocks, m."threadId", t."groupId" AS "groupId"`;
 
 function visible(scope: HistoryScope, myChats = false, targetThreadId?: string): Prisma.Sql {
@@ -195,8 +197,19 @@ async function historyMatch(
   const tokenSets = (await encryption.messageSearchTokens(spaceId, query, "word")).filter(
     (tokens) => tokens.length,
   );
+  // Older encrypted messages indexed all strings as prefixes, but did not index step notes as
+  // history words. Prefixes supply candidates for those rows; the decrypted text is checked below.
+  const prefixSets = searchTerms(query).every((term) => term.length >= 2)
+    ? (await encryption.messageSearchTokens(spaceId, query, "prefix")).filter(
+        (tokens) => tokens.length,
+      )
+    : [];
   const encrypted = tokenSets.map((tokens) => Prisma.sql`m."searchTokens" @> ${tokens}::int[]`);
-  return Prisma.sql`(${Prisma.join([...encrypted, Prisma.sql`(${UNINDEXED_MESSAGE} AND ${fullText})`], " OR ")})`;
+  const legacySteps = prefixSets.map(
+    (tokens) =>
+      Prisma.sql`(m."searchTokens" @> ${tokens}::int[] AND m.blocks @> '[{"kind":"steps"}]'::jsonb)`,
+  );
+  return Prisma.sql`(${Prisma.join([...encrypted, ...legacySteps, Prisma.sql`(${UNINDEXED_MESSAGE} AND ${fullText})`], " OR ")})`;
 }
 function pageSize(value = 10): number {
   if (!Number.isInteger(value) || value < 1)
@@ -356,7 +369,7 @@ export async function searchHistory(
             ? Prisma.sql`jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "bot_message_sent" || @.kind == "bot_message_received" || @.kind == "handoff")')`
             : kind === "user_messages"
               ? Prisma.sql`m.role = 'user' AND jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "text" || @.kind == "channel_message" || @.kind == "file" || @.kind == "image")')`
-              : Prisma.sql`m.role = 'bot' AND jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "text")')`,
+              : Prisma.sql`m.role = 'bot' AND jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "text" || @.kind == "steps")')`,
         ),
         " OR ",
       )})`
@@ -383,6 +396,15 @@ export async function searchHistory(
   // False candidates are skipped and the scan continues, so pages stay full.
   const terms = queries.map(searchTerms);
   const indexed = contentEncryptionOf(prisma) ? INDEXED_MESSAGE : Prisma.sql`false`;
+  const ordinaryMatch = Prisma.sql`(${Prisma.join(
+    queries.map(
+      (
+        q,
+      ) => Prisma.sql`(to_tsvector('simple', ${ordinarySearchableText}) @@ plainto_tsquery('simple', ${q})
+      OR to_tsvector('simple', ${ordinarySearchableText}) @@ plainto_tsquery('simple', translate(${q}, '._-', '   ')))`,
+    ),
+    " OR ",
+  )})`;
   const rows: Array<HistoryRow & { matchedQueryIndexes: number[]; nextOffset: number }> = [];
   let cursor = beforeSeq;
   let scanned = offset;
@@ -397,13 +419,13 @@ export async function searchHistory(
       prisma,
       byOffset
         ? Prisma.sql`
-    SELECT ${columns}, ${indexed} AS indexed, COALESCE(b.name, g.name) AS "chatName"
+    SELECT ${columns}, ${indexed} AS indexed, ${ordinaryMatch} AS "ordinaryMatch", COALESCE(b.name, g.name) AS "chatName"
     FROM messages m JOIN threads t ON t.id = m."threadId"
     LEFT JOIN bots b ON b.id = t."botId" LEFT JOIN chat_groups g ON g.id = t."groupId"
     WHERE ${filters}
     ORDER BY m."createdAt" DESC, m.id DESC LIMIT ${limit + 1} OFFSET ${scanned}`
         : Prisma.sql`
-    SELECT ${columns}, ${indexed} AS indexed
+    SELECT ${columns}, ${indexed} AS indexed, ${ordinaryMatch} AS "ordinaryMatch"
     FROM messages m JOIN threads t ON t.id = m."threadId"
     WHERE ${filters}
       ${Number.isFinite(cursor) ? Prisma.sql`AND m.seq < ${cursor}` : Prisma.empty}
@@ -415,7 +437,15 @@ export async function searchHistory(
       const matchedQueryIndexes = terms.flatMap((words, index) =>
         words.every((word) => text.has(word)) ? [index] : [],
       );
-      if (!row.indexed || matchedQueryIndexes.length)
+      // SQL indexes complete step fields, whereas the exposed history deliberately caps them.
+      // Verify step-containing plaintext rows too, so truncated material never becomes a hit.
+      const hasSteps =
+        Array.isArray(row.blocks) &&
+        row.blocks.some(
+          (block) =>
+            block && typeof block === "object" && !Array.isArray(block) && block.kind === "steps",
+        );
+      if ((!row.indexed && (!hasSteps || row.ordinaryMatch)) || matchedQueryIndexes.length)
         rows.push({ ...row, matchedQueryIndexes, nextOffset: scanned });
     }
     if (batch.length <= limit) break;

@@ -9,6 +9,8 @@ export type HistoryMessage = {
   /** Empty when the message carries only a file. */
   text: string;
   subagentResult?: string;
+  /** Synthetic recorded tool activity from a previous bot message. */
+  toolSteps?: Array<{ label: string; count: number; note?: string }>;
   /** A synthetic file the user attached, uploaded through the product before seeding. */
   file?: { name: string; mimeType: string; content: string };
   createdAt: Date;
