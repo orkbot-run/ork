@@ -421,9 +421,17 @@ msgstr "@{0}"
 msgid "/ month"
 msgstr "/ 월"
 
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1시간"
+
 #: src/components/integrations/space-availability.tsx
 msgid "1 space"
 msgstr ""
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3시간"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -4195,6 +4203,10 @@ msgstr "모델 목록이 정상입니다. {modelCount, plural, one {모델 #개}
 msgid "Monday"
 msgstr "월요일"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "월요일 9시"
+
 #: src/lib/billing.ts
 msgid "month"
 msgstr ""
@@ -6106,6 +6118,14 @@ msgstr ""
 msgid "Slide up to lock"
 msgstr ""
 
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "잠시 미루기"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "미룬 항목"
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Some plugins could not be loaded."
@@ -6116,7 +6136,9 @@ msgid "Some settings are not imported"
 msgstr "일부 설정은 가져오지 않습니다"
 
 #: src/App.tsx
+#: src/components/SubagentCard.tsx
 #: src/lib/user-error.ts
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Something went wrong. Try again."
 msgstr "문제가 발생했습니다. 다시 시도하세요."
 
@@ -6251,12 +6273,18 @@ msgstr ""
 msgid "Steps"
 msgstr "실행 단계"
 
+#: src/components/SubagentCard.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "중지"
+
+#. placeholder {0}: block.name
+#: src/components/SubagentCard.tsx
+msgid "Stop {0}"
+msgstr ""
 
 #: src/pages/shell/composer.tsx
 msgid "Stop {name}"
@@ -6285,6 +6313,7 @@ msgid "Stop teaching"
 msgstr "가르치기 종료"
 
 #. js-lingui-explicit-id
+#: src/components/SubagentCard.tsx
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "중지되었습니다."
@@ -6727,6 +6756,10 @@ msgstr "사이드바 표시/숨기기"
 msgid "Tokens"
 msgstr "토큰"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "내일 9시"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Tool"
 msgstr "도구"
@@ -6856,10 +6889,6 @@ msgstr "음소거 해제"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "고정 해제"
-
-#: src/pages/ActivityList.tsx
-msgid "Unread"
-msgstr "읽지 않음"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/shell/use-composer-actions.ts
@@ -7131,8 +7160,14 @@ msgid "Waiting…"
 msgstr "기다리는 중…"
 
 #: src/pages/shell/computer-panel.tsx
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Wake"
 msgstr "깨우기"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "{0} 다시 표시"
 
 #: src/pages/settings-nav.ts
 msgid "Wallet"
@@ -7239,6 +7274,10 @@ msgstr "언제 사용할지"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot을 어디에서 실행할까요?"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "다시 표시됨"
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
@@ -7400,36 +7439,3 @@ msgstr "음성 서비스에서 키를 거부했습니다."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/BotContextMenu.tsx
-msgid "1 hour"
-msgstr "1시간"
-
-#: src/pages/BotContextMenu.tsx
-msgid "3 hours"
-msgstr "3시간"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Monday at 9"
-msgstr "월요일 9시"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Snooze"
-msgstr "잠시 미루기"
-
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Snoozed"
-msgstr "미룬 항목"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Tomorrow at 9"
-msgstr "내일 9시"
-
-#. placeholder {0}: chat.name
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Wake {0}"
-msgstr "{0} 다시 표시"
-
-#: src/pages/shell/sidebar-roster.tsx
-msgid "Woken"
-msgstr "다시 표시됨"

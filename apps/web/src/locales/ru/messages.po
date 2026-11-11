@@ -421,9 +421,17 @@ msgstr "@{0}"
 msgid "/ month"
 msgstr "/ месяц"
 
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1 час"
+
 #: src/components/integrations/space-availability.tsx
 msgid "1 space"
 msgstr ""
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3 часа"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -4195,6 +4203,10 @@ msgstr "Список моделей в порядке. {modelCount, plural, one 
 msgid "Monday"
 msgstr "понедельник"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "В понедельник в 9:00"
+
 #: src/lib/billing.ts
 msgid "month"
 msgstr ""
@@ -6106,6 +6118,14 @@ msgstr "Slack не включен"
 msgid "Slide up to lock"
 msgstr "Проведите вверх, чтобы закрепить"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "Отложить"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "Отложенные"
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Some plugins could not be loaded."
@@ -6116,7 +6136,9 @@ msgid "Some settings are not imported"
 msgstr "Некоторые настройки не импортируются"
 
 #: src/App.tsx
+#: src/components/SubagentCard.tsx
 #: src/lib/user-error.ts
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Something went wrong. Try again."
 msgstr "Что-то пошло не так. Попробуйте ещё раз."
 
@@ -6251,12 +6273,18 @@ msgstr ""
 msgid "Steps"
 msgstr "Шаги"
 
+#: src/components/SubagentCard.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Остановить"
+
+#. placeholder {0}: block.name
+#: src/components/SubagentCard.tsx
+msgid "Stop {0}"
+msgstr ""
 
 #: src/pages/shell/composer.tsx
 msgid "Stop {name}"
@@ -6285,6 +6313,7 @@ msgid "Stop teaching"
 msgstr "Остановить обучение"
 
 #. js-lingui-explicit-id
+#: src/components/SubagentCard.tsx
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Остановлено."
@@ -6727,6 +6756,10 @@ msgstr "Показать или скрыть боковую панель"
 msgid "Tokens"
 msgstr "Токены"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "Завтра в 9:00"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Tool"
 msgstr "Инструмент"
@@ -6856,10 +6889,6 @@ msgstr "Включить микрофон"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "Открепить"
-
-#: src/pages/ActivityList.tsx
-msgid "Unread"
-msgstr "Непрочитанные"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/shell/use-composer-actions.ts
@@ -7131,8 +7160,14 @@ msgid "Waiting…"
 msgstr "Ожидание…"
 
 #: src/pages/shell/computer-panel.tsx
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Wake"
 msgstr "Разбудить"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "Возобновить {0}"
 
 #: src/pages/settings-nav.ts
 msgid "Wallet"
@@ -7239,6 +7274,10 @@ msgstr "Когда использовать"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Где должны работать боты?"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "Возобновлено"
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
@@ -7400,36 +7439,3 @@ msgstr "Ваш голосовой провайдер отклонил ключ."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/BotContextMenu.tsx
-msgid "1 hour"
-msgstr "1 час"
-
-#: src/pages/BotContextMenu.tsx
-msgid "3 hours"
-msgstr "3 часа"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Monday at 9"
-msgstr "В понедельник в 9:00"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Snooze"
-msgstr "Отложить"
-
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Snoozed"
-msgstr "Отложенные"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Tomorrow at 9"
-msgstr "Завтра в 9:00"
-
-#. placeholder {0}: chat.name
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Wake {0}"
-msgstr "Возобновить {0}"
-
-#: src/pages/shell/sidebar-roster.tsx
-msgid "Woken"
-msgstr "Возобновлено"

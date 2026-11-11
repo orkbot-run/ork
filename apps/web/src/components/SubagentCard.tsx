@@ -70,7 +70,7 @@ export function SubagentCard({
             ) : failed ? (
               <Trans>Failed</Trans>
             ) : stopped ? (
-              <Trans>Stopped.</Trans>
+              <Trans id="Stopped.">Stopped.</Trans>
             ) : (
               <Trans>Completed</Trans>
             )}

@@ -421,9 +421,17 @@ msgstr "@{0}"
 msgid "/ month"
 msgstr "/ month"
 
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1 hour"
+
 #: src/components/integrations/space-availability.tsx
 msgid "1 space"
 msgstr "1 space"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3 hours"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -4195,6 +4203,10 @@ msgstr "Models list OK. {modelCount, plural, one {# model} other {# models}} ava
 msgid "Monday"
 msgstr "Monday"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "Monday at 9"
+
 #: src/lib/billing.ts
 msgid "month"
 msgstr "month"
@@ -6106,6 +6118,14 @@ msgstr "Slack not enabled"
 msgid "Slide up to lock"
 msgstr "Slide up to lock"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "Snooze"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "Snoozed"
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Some plugins could not be loaded."
@@ -6116,7 +6136,9 @@ msgid "Some settings are not imported"
 msgstr "Some settings are not imported"
 
 #: src/App.tsx
+#: src/components/SubagentCard.tsx
 #: src/lib/user-error.ts
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Something went wrong. Try again."
 msgstr "Something went wrong. Try again."
 
@@ -6251,12 +6273,18 @@ msgstr "Status"
 msgid "Steps"
 msgstr "Steps"
 
+#: src/components/SubagentCard.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "Stop"
+
+#. placeholder {0}: block.name
+#: src/components/SubagentCard.tsx
+msgid "Stop {0}"
+msgstr "Stop {0}"
 
 #: src/pages/shell/composer.tsx
 msgid "Stop {name}"
@@ -6285,6 +6313,7 @@ msgid "Stop teaching"
 msgstr "Stop teaching"
 
 #. js-lingui-explicit-id
+#: src/components/SubagentCard.tsx
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "Stopped."
@@ -6727,6 +6756,10 @@ msgstr "Toggle sidebar"
 msgid "Tokens"
 msgstr "Tokens"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "Tomorrow at 9"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Tool"
 msgstr "Tool"
@@ -6856,10 +6889,6 @@ msgstr "Unmute"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "Unpin"
-
-#: src/pages/ActivityList.tsx
-msgid "Unread"
-msgstr "Unread"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/shell/use-composer-actions.ts
@@ -7131,8 +7160,14 @@ msgid "Waiting…"
 msgstr "Waiting…"
 
 #: src/pages/shell/computer-panel.tsx
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Wake"
 msgstr "Wake"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "Wake {0}"
 
 #: src/pages/settings-nav.ts
 msgid "Wallet"
@@ -7239,6 +7274,10 @@ msgstr "When to use"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Where should bots run?"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "Woken"
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
@@ -7400,36 +7439,3 @@ msgstr "Your voice provider key was rejected."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr "ZIP or postal code"
-
-#: src/pages/BotContextMenu.tsx
-msgid "1 hour"
-msgstr "1 hour"
-
-#: src/pages/BotContextMenu.tsx
-msgid "3 hours"
-msgstr "3 hours"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Monday at 9"
-msgstr "Monday at 9"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Snooze"
-msgstr "Snooze"
-
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Snoozed"
-msgstr "Snoozed"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Tomorrow at 9"
-msgstr "Tomorrow at 9"
-
-#. placeholder {0}: chat.name
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Wake {0}"
-msgstr "Wake {0}"
-
-#: src/pages/shell/sidebar-roster.tsx
-msgid "Woken"
-msgstr "Woken"

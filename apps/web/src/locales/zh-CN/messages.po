@@ -421,9 +421,17 @@ msgstr "@{0}"
 msgid "/ month"
 msgstr "/ 月"
 
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1小时"
+
 #: src/components/integrations/space-availability.tsx
 msgid "1 space"
 msgstr "1 个工作区"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3小时"
 
 #: src/pages/shell/message-cards.tsx
 msgid "A bit of everything"
@@ -4195,6 +4203,10 @@ msgstr "模型列表正常。{modelCount, plural, one {# 个模型} other {# 个
 msgid "Monday"
 msgstr "周一"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "周一9点"
+
 #: src/lib/billing.ts
 msgid "month"
 msgstr "月"
@@ -6106,6 +6118,14 @@ msgstr "未启用 Slack"
 msgid "Slide up to lock"
 msgstr "上滑锁定"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "稍后提醒"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "已稍后提醒"
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Some plugins could not be loaded."
@@ -6116,7 +6136,9 @@ msgid "Some settings are not imported"
 msgstr "部分设置不会导入"
 
 #: src/App.tsx
+#: src/components/SubagentCard.tsx
 #: src/lib/user-error.ts
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Something went wrong. Try again."
 msgstr "出了点问题。请重试。"
 
@@ -6251,12 +6273,18 @@ msgstr "状态"
 msgid "Steps"
 msgstr "步骤"
 
+#: src/components/SubagentCard.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/composer.tsx
 #: src/pages/shell/computer-overlay.tsx
 #: src/pages/shell/message-view.tsx
 msgid "Stop"
 msgstr "停止"
+
+#. placeholder {0}: block.name
+#: src/components/SubagentCard.tsx
+msgid "Stop {0}"
+msgstr ""
 
 #: src/pages/shell/composer.tsx
 msgid "Stop {name}"
@@ -6285,6 +6313,7 @@ msgid "Stop teaching"
 msgstr "停止示范"
 
 #. js-lingui-explicit-id
+#: src/components/SubagentCard.tsx
 #: src/lib/browser-notifications.ts
 msgid "Stopped."
 msgstr "已停止。"
@@ -6727,6 +6756,10 @@ msgstr "显示或隐藏侧边栏"
 msgid "Tokens"
 msgstr "Token"
 
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "明天9点"
+
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Tool"
 msgstr "工具"
@@ -6856,10 +6889,6 @@ msgstr "取消静音"
 #: src/pages/BotContextMenu.tsx
 msgid "Unpin"
 msgstr "取消置顶"
-
-#: src/pages/ActivityList.tsx
-msgid "Unread"
-msgstr "未读"
 
 #. placeholder {0}: pending.file.name
 #: src/pages/shell/use-composer-actions.ts
@@ -7131,8 +7160,14 @@ msgid "Waiting…"
 msgstr "等待中…"
 
 #: src/pages/shell/computer-panel.tsx
+#: src/pages/shell/snoozed-chats.tsx
 msgid "Wake"
 msgstr "唤醒"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "唤醒 {0}"
 
 #: src/pages/settings-nav.ts
 msgid "Wallet"
@@ -7239,6 +7274,10 @@ msgstr "何时使用"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Where should bots run?"
 msgstr "Bot 应在哪里运行？"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "已恢复"
 
 #: src/lib/ticket-status.ts
 msgid "Won't do"
@@ -7400,36 +7439,3 @@ msgstr "你的语音提供方拒绝了该密钥。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
-
-#: src/pages/BotContextMenu.tsx
-msgid "1 hour"
-msgstr "1小时"
-
-#: src/pages/BotContextMenu.tsx
-msgid "3 hours"
-msgstr "3小时"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Monday at 9"
-msgstr "周一9点"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Snooze"
-msgstr "稍后提醒"
-
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Snoozed"
-msgstr "已稍后提醒"
-
-#: src/pages/BotContextMenu.tsx
-msgid "Tomorrow at 9"
-msgstr "明天9点"
-
-#. placeholder {0}: chat.name
-#: src/pages/shell/snoozed-chats.tsx
-msgid "Wake {0}"
-msgstr "唤醒 {0}"
-
-#: src/pages/shell/sidebar-roster.tsx
-msgid "Woken"
-msgstr "已恢复"
