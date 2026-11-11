@@ -195,8 +195,7 @@ export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv 
       throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
     return loadEnv({ ...source, AUTH_PASSWORD_ENABLED: "false" });
   }
-  if (issuer !== "https://api.ork.run")
-    throw new Error("OIDC_ISSUER must be https://api.ork.run");
+  if (issuer !== "https://api.ork.run") throw new Error("OIDC_ISSUER must be https://api.ork.run");
   if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
     throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
   const clientId = required(source, "OIDC_CLIENT_ID");
