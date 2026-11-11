@@ -85,6 +85,7 @@ it("refuses a signed-out caller before querying the board", async () => {
 
 it.each([false, true])("includes the board capability in me (%s)", async (ticketBoardEnabled) => {
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     user: {
       findUniqueOrThrow: vi.fn(async () => ({
         email: "user@orkbot.test",
