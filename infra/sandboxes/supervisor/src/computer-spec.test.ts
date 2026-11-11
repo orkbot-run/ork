@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; Python isolation test adjustments are Ork additions.
+
 import { spawn, spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -1613,10 +1617,11 @@ describe("graphical computer spec", () => {
           [
             "-c",
             [
-              "import importlib.util, sys",
+              "import importlib.util, os, sys",
               "spec = importlib.util.spec_from_file_location('control', sys.argv[1])",
               "module = importlib.util.module_from_spec(spec)",
               "spec.loader.exec_module(module)",
+              "module.TRUSTED_PATH = os.environ['PATH']",
               "argv = ['env', 'DISPLAY=:1', 'orkbot-browser', sys.argv[2]]",
               "try:",
               "    module.run_control_argv(argv, ':1')",
@@ -1948,7 +1953,7 @@ describe("graphical computer spec", () => {
           "launcher = os.path.join(slow, 'orkbot-browser')",
           "open(launcher, 'w').write('#!/bin/sh\\nsleep 0.25\\nexit 1\\n')",
           "os.chmod(launcher, 0o755)",
-          "os.environ['PATH'] = slow + os.pathsep + os.environ.get('PATH', '')",
+          "module.TRUSTED_PATH = slow + os.pathsep + module.TRUSTED_PATH",
           "try:",
           "  module.run_control_argv(['env', 'DISPLAY=:1', 'orkbot-browser'], ':1')",
           "  raise SystemExit('slow failure looked successful')",

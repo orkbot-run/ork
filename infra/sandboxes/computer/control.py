@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 material is preserved; Python isolation changes are Ork additions.
 """Token-auth desktop control for the Ork supervisor."""
 
 import base64
@@ -13,6 +16,7 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 TOKEN = os.environ.get("ORKBOT_COMPUTER_CONTROL_TOKEN", "")
+TRUSTED_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 MAX_BODY_BYTES = 256 * 1024
 MAX_ARGV = 32
 MAX_ARG_LEN = 16_384
@@ -256,9 +260,18 @@ def launch_spawn_poll_sec(argv):
     return LAUNCH_SPAWN_POLL_SEC
 
 
+def child_environment(display):
+    """Do not pass the supervisor credential or a writable executable path to children."""
+    env = dict(os.environ)
+    env.pop("ORKBOT_COMPUTER_CONTROL_TOKEN", None)
+    env["PATH"] = TRUSTED_PATH
+    env["DISPLAY"] = display
+    return env
+
+
 def run_control_argv(argv, display):
     """Run a fallback control command without holding the lock forever."""
-    env = {**os.environ, "DISPLAY": display}
+    env = child_environment(display)
     if argv[control_command_index(argv)] == FOCUS_OR_LAUNCH:
         try:
             result = subprocess.run(argv, env=env, timeout=FOCUS_COMPLETION_SEC)
@@ -301,7 +314,7 @@ def run_computer_step(display, argv):
 
 
 def capture(display):
-    env = {**os.environ, "DISPLAY": display}
+    env = child_environment(display)
 
     def output(argv, fallback=""):
         return subprocess.run(argv, env=env, capture_output=True, text=True).stdout.strip() or fallback
