@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; top-level hook checks are Ork additions.
+
 import { PAGE_SOURCE_MAX_BYTES } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { pageViewerCode } from "./compile.js";
@@ -5,6 +9,56 @@ import { PAGE_HELPERS, PAGE_KIT_COMPONENTS } from "./components.js";
 import { checkPageSource, PAGE_KIT_GUIDE } from "./validate.js";
 
 const page = (body: string) => `${body}\nexport default App;\n`;
+
+describe("top-level hook calls", () => {
+  it.each([
+    ["const value = useTheme();", "line 1"],
+    ["const data = { value: useThing() };", "line 1"],
+    ["if (true) { useState(1); }", "line 1"],
+    ["const x = React.useState(1);", "line 1"],
+    ["const x = React?.useState(1);", "line 1"],
+    ["const x = (React.useState)(1);", "line 1"],
+    ["const x = (useState)(1);", "line 1"],
+    ["const x = React['useState'](1);", "line 1"],
+    ["const x = React.use(Promise.resolve(1));", "line 1"],
+    ["const x = (() => useState(1))();", "line 1"],
+    ["const x = ((() => useState(1)))();", "line 1"],
+    ["const x = (function named() { return useState(1); })();", "line 1"],
+    ["const x = void function() { useState(1); }();", "line 1"],
+    ["const x = (() => useState(1))?.();", "line 1"],
+    ["const x = (async value => useState(value))(1);", "line 1"],
+    ["const x = (() => { (() => useState(1))(); })();", "line 1"],
+    ["const x = useThing?.();", "line 1"],
+    ["const x = 1;\nconst theme = useTheme();", "line 2"],
+  ])("rejects %s", (body, line) => {
+    const result = checkPageSource(`${body}\nconst App = () => <Text />;\nexport default App;`);
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.errors.some((error) => error.includes(line) && error.includes("hooks"))).toBe(
+        true,
+      );
+  });
+  it.each([
+    "function App() { const theme = useTheme(); return <Text />; }",
+    "const App = () => useThing();",
+    "const App = () => ({ value: useThing() });",
+    "const App = () => { function nested() { return useThing(); } return <Text />; };",
+    "const ref = useTheme; const App = () => <Text />;",
+    "const x = { useThing() { return 1; } }; const App = () => <Text />;",
+    "const x = object.useThing(); const App = () => <Text />;",
+    "const f = () => useState(1); const App = () => <Text />;",
+    "const f = () => ((() => useState(1))()); const App = () => <Text />;",
+    "const f = consume(() => useState(1)); const App = () => <Text />;",
+    "const f = consume(() => useState(1))(); const App = () => <Text />;",
+    "const f = object.consume(() => useState(1))(); const App = () => <Text />;",
+    "const f = (() => () => useState(1))(); const App = () => <Text />;",
+    "const f = (function* () { useState(1); })(); const App = () => <Text />;",
+    "const f = (function () { const callback = () => useState(1); return callback; })(); const App = () => <Text />;",
+  ])("allows hooks inside functions and references: %s", (body) => {
+    const result = checkPageSource(`${body}\nexport default App;`);
+    expect(result.ok).toBe(true);
+  });
+});
 
 describe("checkPageSource", () => {
   it("accepts the guide's own example, so the help text never teaches a rejected page", () => {
