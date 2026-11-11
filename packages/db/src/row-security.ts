@@ -109,6 +109,7 @@ export const ROW_SECURITY_MODELS: ReadonlySet<string> = new Set([
   "CallPushDevice",
   "EmailSend",
   "Thread",
+  "ThreadSnooze",
   "Message",
   "Event",
   "MemoryDocument",

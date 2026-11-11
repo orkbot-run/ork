@@ -1,3 +1,5 @@
+import { safeLocalStorage } from "./storage";
+
 const STORAGE_PREFIX = "orkbot:bots-sidebar-collapsed:";
 
 export function botsSidebarCollapsedStorageKey(userId: string | null | undefined): string | null {
@@ -9,7 +11,7 @@ export function readBotsSidebarCollapsed(userId: string | null | undefined): boo
   const storageKey = botsSidebarCollapsedStorageKey(userId);
   if (!storageKey) return false;
   try {
-    return window.localStorage.getItem(storageKey) === "1";
+    return safeLocalStorage.getItem(storageKey) === "1";
   } catch {
     return false;
   }
@@ -22,8 +24,8 @@ export function writeBotsSidebarCollapsed(
   const storageKey = botsSidebarCollapsedStorageKey(userId);
   if (!storageKey) return;
   try {
-    if (collapsed) window.localStorage.setItem(storageKey, "1");
-    else window.localStorage.removeItem(storageKey);
+    if (collapsed) safeLocalStorage.setItem(storageKey, "1");
+    else safeLocalStorage.removeItem(storageKey);
   } catch {
     // Ignore quota / private-mode failures; in-memory state still applies.
   }
@@ -55,7 +57,7 @@ export function readBotsSidebarWidth(userId: string | null | undefined): number 
   const key = botsSidebarWidthStorageKey(userId);
   if (!key) return BOTS_SIDEBAR_DEFAULT_WIDTH;
   try {
-    const saved = Number(window.localStorage.getItem(key));
+    const saved = Number(safeLocalStorage.getItem(key));
     return Number.isFinite(saved) && saved >= BOTS_SIDEBAR_MIN_WIDTH
       ? clampBotsSidebarWidth(saved)
       : BOTS_SIDEBAR_DEFAULT_WIDTH;
@@ -68,7 +70,7 @@ export function writeBotsSidebarWidth(userId: string | null | undefined, width: 
   const key = botsSidebarWidthStorageKey(userId);
   if (!key || !Number.isFinite(width)) return;
   try {
-    window.localStorage.setItem(key, String(clampBotsSidebarWidth(width)));
+    safeLocalStorage.setItem(key, String(clampBotsSidebarWidth(width)));
   } catch {
     // Keep resizing usable when storage is unavailable.
   }

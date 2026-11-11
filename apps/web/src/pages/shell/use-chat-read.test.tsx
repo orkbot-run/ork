@@ -95,9 +95,21 @@ afterEach(() => {
   act(() => root.unmount());
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  delete botA.snoozedUntil;
+  delete groupG.snoozedUntil;
 });
 
 describe("useChatRead automatic reads", () => {
+  it("clears a woken bot or group after a successful read", async () => {
+    botA.snoozedUntil = "2000-01-01T00:00:00Z";
+    groupG.snoozedUntil = "2000-01-01T00:00:00Z";
+    await open({ active: botA });
+    await settle(0);
+    expect(latest.bots.find((bot) => bot.id === botA.id)?.snoozedUntil).toBeNull();
+    await open({ group: groupG });
+    await settle(1);
+    expect(latest.groups.find((group) => group.id === groupG.id)?.snoozedUntil).toBeNull();
+  });
   it("reads an open bot and clears its unread flag", async () => {
     await open({ active: botA });
     expect(sent()).toEqual([["markRead", "bot-a"]]);

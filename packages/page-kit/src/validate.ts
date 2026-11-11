@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 validation is preserved; top-level hook checks are Ork additions.
+
 /// <reference path="./sucrase-parser.d.ts" />
 import { PAGE_SOURCE_MAX_BYTES, pageSourceBytes } from "@orkbot/contracts";
 // Sucrase's own parser, pinned with it, so the check reads the same tokens the compiler does.
@@ -58,13 +62,19 @@ export function checkPageSource(source: string): PageSourceCheck {
     };
   }
   const lineOf = lineLocator(source);
-  let tokens: ReturnType<typeof parse>["tokens"];
+  let parsed: ReturnType<typeof parse>;
   try {
-    tokens = parse(source, true, false, false).tokens;
+    parsed = parse(source, true, false, false);
   } catch (error) {
     return { ok: false, errors: [syntaxErrorText(error)] };
   }
+  const tokens = parsed.tokens;
   const errors: string[] = [];
+  for (const token of topLevelHookCalls(parsed, source)) {
+    errors.push(
+      `line ${lineOf(token.start)}: call hooks inside a component or hook, not at the top level.`,
+    );
+  }
   const warnings: string[] = [];
   const declared = new Set<string>();
   const tags = new Map<string, number>();
@@ -185,6 +195,153 @@ export function checkPageSource(source: string): PageSourceCheck {
   return warnings.length
     ? { ok: true, code, warnings: warnings.slice(0, MAX_REPORTED_ERRORS) }
     : { ok: true, code };
+}
+
+type ParsedPage = ReturnType<typeof parse>;
+
+/** Function scopes include expression-bodied arrows and parameter defaults, unlike brace depth. */
+function topLevelHookCalls(parsed: ParsedPage, source: string): ParsedPage["tokens"] {
+  const { tokens, scopes } = parsed;
+  // Match grouping parentheses so a callback argument is never mistaken for an IIFE.
+  const parenPairs = new Map<number, number>();
+  const parenStack: number[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    if (tokens[index]!.type === TokenType.parenL) parenStack.push(index);
+    else if (tokens[index]!.type === TokenType.parenR) {
+      const open = parenStack.pop();
+      if (open !== undefined) {
+        parenPairs.set(open, index);
+        parenPairs.set(index, open);
+      }
+    }
+  }
+  const word = (index: number) => {
+    const token = tokens[index];
+    return token ? source.slice(token.start, token.end) : "";
+  };
+  const immediatelyInvoked = new Map<number, Array<[number, number]>>();
+  for (const scope of scopes.slice(0, -1)) {
+    if (!scope.isFunctionScope) continue;
+    const start = scope.startTokenIndex;
+    let expressionStart = start;
+    let parameters = start;
+    let bodyStart: number;
+    // A named function has an additional scope starting at its name.
+    if (word(start - 1) === "function") expressionStart = start - 1;
+    else if (word(start - 2) === "function") expressionStart = start - 2;
+    if (word(expressionStart) === "function") {
+      // Calling a generator only creates its iterator; its body remains deferred.
+      if (tokens[expressionStart + 1]?.type === TokenType.star) continue;
+      if (word(expressionStart - 1) === "async") expressionStart -= 1;
+      if (tokens[parameters]?.type !== TokenType.parenL) parameters += 1;
+      if (tokens[parameters]?.type !== TokenType.parenL) continue;
+      const close = parenPairs.get(parameters);
+      if (close === undefined || tokens[close + 1]?.type !== TokenType.braceL) continue;
+      bodyStart = close + 1;
+    } else {
+      if (word(parameters) === "async" && tokens[parameters + 1]?.type !== TokenType.arrow)
+        parameters += 1;
+      else if (word(start - 1) === "async") expressionStart -= 1;
+      const close =
+        tokens[parameters]?.type === TokenType.parenL ? parenPairs.get(parameters) : parameters;
+      if (close === undefined || tokens[close + 1]?.type !== TokenType.arrow) continue;
+      // For expression bodies, do not mistake a nested arrow sharing the end for this function.
+      bodyStart = tokens[close + 2]?.type === TokenType.braceL ? close + 2 : close + 1;
+    }
+    let left = expressionStart;
+    let right = scope.endTokenIndex;
+    while (tokens[right]?.type === TokenType.parenR && parenPairs.get(right) === left - 1) {
+      // The parentheses in consume(() => hook()) belong to the call, not to the callback.
+      const beforeOpen = tokens[left - 2];
+      if (
+        beforeOpen?.type === TokenType.name ||
+        beforeOpen?.type === TokenType.parenR ||
+        beforeOpen?.type === TokenType.bracketR ||
+        beforeOpen?.type === TokenType.questionDot
+      )
+        break;
+      left -= 1;
+      right += 1;
+    }
+    if (
+      tokens[right]?.type !== TokenType.parenL &&
+      !(
+        tokens[right]?.type === TokenType.questionDot &&
+        tokens[right + 1]?.type === TokenType.parenL
+      )
+    )
+      continue;
+    const ranges = immediatelyInvoked.get(scope.endTokenIndex) ?? [];
+    ranges.push([start, bodyStart]);
+    immediatelyInvoked.set(scope.endTokenIndex, ranges);
+  }
+  // Named function expressions have multiple overlapping Sucrase scopes, including
+  // one for their body. Merge only the header/body ranges of a proven IIFE.
+  for (const ranges of immediatelyInvoked.values()) ranges.sort((a, b) => a[0] - b[0]);
+  const belongsToIife = (start: number, end: number) => {
+    const ranges = immediatelyInvoked.get(end);
+    if (!ranges) return false;
+    // Nested arrow bodies sharing an end are not included unless their own
+    // range was proved immediately invoked.
+    let low = 0;
+    let high = ranges.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (ranges[middle]![0] <= start) low = middle + 1;
+      else high = middle;
+    }
+    return low > 0 && ranges[low - 1]![1] >= start;
+  };
+  const boundaries = new Int32Array(tokens.length + 1);
+  // Sucrase appends the enclosing program scope last; it is not a callable function.
+  for (const scope of scopes.slice(0, -1)) {
+    if (!scope.isFunctionScope || belongsToIife(scope.startTokenIndex, scope.endTokenIndex))
+      continue;
+    boundaries[scope.startTokenIndex]! += 1;
+    boundaries[scope.endTokenIndex]! -= 1;
+  }
+  const found: ParsedPage["tokens"] = [];
+  let depth = 0;
+  for (let index = 0; index < tokens.length; index++) {
+    depth += boundaries[index]!;
+    const token = tokens[index]!;
+    if (depth || (token.type !== TokenType.name && token.type !== TokenType.string)) continue;
+    const text = source.slice(token.start, token.end);
+    const name = token.type === TokenType.string ? text.slice(1, -1) : text;
+    const previous = tokens[index - 1];
+    const member =
+      token.type === TokenType.name &&
+      (previous?.type === TokenType.dot || previous?.type === TokenType.questionDot) &&
+      source.slice(tokens[index - 2]?.start, tokens[index - 2]?.end) === "React";
+    const computed =
+      token.type === TokenType.string &&
+      previous?.type === TokenType.bracketL &&
+      tokens[index + 1]?.type === TokenType.bracketR &&
+      source.slice(tokens[index - 2]?.start, tokens[index - 2]?.end) === "React";
+    const direct = token.type === TokenType.name && token.identifierRole === IdentifierRole.Access;
+    if (
+      (!/^use[A-Z]/.test(name) && !(name === "use" && (member || computed))) ||
+      (!direct && !member && !computed)
+    )
+      continue;
+    let left = member || computed ? index - 2 : index;
+    let right = computed ? index + 1 : index;
+    // Parentheses around a function do not defer its invocation: (useState)(0).
+    while (
+      tokens[left - 1]?.type === TokenType.parenL &&
+      tokens[right + 1]?.type === TokenType.parenR
+    ) {
+      left -= 1;
+      right += 1;
+    }
+    const next = tokens[right + 1];
+    if (
+      next?.type === TokenType.parenL ||
+      (next?.type === TokenType.questionDot && tokens[right + 2]?.type === TokenType.parenL)
+    )
+      found.push(token);
+  }
+  return found;
 }
 
 type Tokens = ReturnType<typeof parse>["tokens"];

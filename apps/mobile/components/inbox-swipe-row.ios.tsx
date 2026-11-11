@@ -48,6 +48,7 @@ export function InboxSwipeRow({
   sections,
   preview,
   onAction,
+  onSnooze,
   onOrganize,
   onEditSection,
   children,
@@ -138,6 +139,14 @@ export function InboxSwipeRow({
                     onPress={() => onOrganize({ notifyOnFinish: !notifyOnFinish })}
                   />
                 )}
+                {onSnooze ? (
+                  <Menu label={t("Snooze")} systemImage="clock">
+                    <Button label={t("1 hour")} onPress={() => onSnooze("hour_1")} />
+                    <Button label={t("3 hours")} onPress={() => onSnooze("hour_3")} />
+                    <Button label={t("Tomorrow at 9")} onPress={() => onSnooze("tomorrow_9")} />
+                    <Button label={t("Monday at 9")} onPress={() => onSnooze("monday_9")} />
+                  </Menu>
+                ) : null}
                 <Menu label={t("Move to")} systemImage="folder">
                   {sections.map((section) => (
                     <Toggle
@@ -171,7 +180,7 @@ export function InboxSwipeRow({
               </ContextMenu.Items>
             </ContextMenu>
             <SwipeActions.Actions edge="leading">{button(actions.leading)}</SwipeActions.Actions>
-            <SwipeActions.Actions edge="trailing" allowsFullSwipe={false}>
+            <SwipeActions.Actions edge="trailing" allowsFullSwipe>
               {actions.trailing.map((action) => button(action))}
             </SwipeActions.Actions>
           </SwipeActions>

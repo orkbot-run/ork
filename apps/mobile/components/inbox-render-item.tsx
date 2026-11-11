@@ -3,7 +3,7 @@ import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
 import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Platform, Pressable, Text, View } from "react-native";
-import type { MobileBot, MobileBotSection, MobileGroup } from "../lib/api";
+import type { MobileBot, MobileBotSection, MobileGroup, MobileSpace } from "../lib/api";
 import type { ResolvedAppearance } from "../lib/appearance";
 import { AvatarRow } from "../lib/avatar-life";
 import { useI18n } from "../lib/i18n";
@@ -60,10 +60,17 @@ export function useInboxRenderItem({
   sharing,
   spaceBusy,
   spaceRecoveryId,
+  spaces,
+  snoozeFromMenu,
   toggleCollapsed,
 }: Pick<
   ChatActions,
-  "botAction" | "groupAction" | "organizeFromMenu" | "editSectionFromMenu" | "deleteSection"
+  | "botAction"
+  | "groupAction"
+  | "organizeFromMenu"
+  | "editSectionFromMenu"
+  | "deleteSection"
+  | "snoozeFromMenu"
 > & {
   appearance: ResolvedAppearance;
   botSections: MobileBotSection[];
@@ -80,6 +87,7 @@ export function useInboxRenderItem({
   sharing: boolean;
   spaceBusy: boolean;
   spaceRecoveryId: string | null;
+  spaces: MobileSpace[];
   toggleCollapsed: (key: string) => void;
 }) {
   const styles = useThemedStyles(createHomeStyles);
@@ -209,11 +217,16 @@ export function useInboxRenderItem({
           group={item.group}
           day={day}
           onPress={openGroup}
-          onLongPress={!SWIPE_ROWS ? organizeGroup : undefined}
-          onAction={SWIPE_ROWS && item.group.spaceId === spaceId ? groupAction : undefined}
-          sections={botSections}
+          onLongPress={!sharing && !SWIPE_ROWS ? organizeGroup : undefined}
+          onAction={!sharing && SWIPE_ROWS ? groupAction : undefined}
+          sections={
+            item.group.spaceId === spaceId
+              ? botSections
+              : (spaces.find((space) => space.id === item.group.spaceId)?.botSections ?? [])
+          }
           onOrganize={organizeFromMenu}
           onEditSection={editSectionFromMenu}
+          onSnooze={snoozeFromMenu}
         />
       ) : (
         <BotRow
@@ -221,10 +234,15 @@ export function useInboxRenderItem({
           day={day}
           onPress={openBot}
           onLongPress={!sharing && !SWIPE_ROWS ? organizeBot : undefined}
-          onAction={!sharing && SWIPE_ROWS && item.bot.spaceId === spaceId ? botAction : undefined}
-          sections={botSections}
+          onAction={!sharing && SWIPE_ROWS ? botAction : undefined}
+          sections={
+            item.bot.spaceId === spaceId
+              ? botSections
+              : (spaces.find((space) => space.id === item.bot.spaceId)?.botSections ?? [])
+          }
           onOrganize={organizeFromMenu}
           onEditSection={editSectionFromMenu}
+          onSnooze={snoozeFromMenu}
         />
       ),
     [
@@ -247,6 +265,8 @@ export function useInboxRenderItem({
       sharing,
       spaceBusy,
       spaceRecoveryId,
+      spaces,
+      snoozeFromMenu,
       styles,
       t,
       toggleCollapsed,

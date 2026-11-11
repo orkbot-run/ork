@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 history retrieval is preserved; tool-work lookup changes are Ork additions.
+
 import { HistorySearchInputSchema } from "@orkbot/contracts";
 import { escapeJsonSearchWildcards } from "@orkbot/core";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -42,7 +46,7 @@ postgres("history retrieval (PostgreSQL)", () => {
         jsonb_build_array(jsonb_build_object('kind','text','text', CASE WHEN n = 100 THEN 'exports use batching' ELSE 'filler exchange ' || n END))
         FROM generate_series(1,10000) n;
       CREATE INDEX synthetic_history_fts ON messages USING GIN (to_tsvector('simple',jsonb_path_query_array(blocks,
-        '$[*] ? (@.kind == "text" || @.kind == "channel_message" || @.kind == "bot_message_received" || @.kind == "bot_message_sent" || @.kind == "handoff").text')::text || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "subagent").task')::text || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "subagent").result')::text || translate(jsonb_path_query_array(blocks, '$[*] ? (@.kind == "file" || @.kind == "image").name')::text, '._-', '   ')));
+        '$[*] ? (@.kind == "text" || @.kind == "channel_message" || @.kind == "bot_message_received" || @.kind == "bot_message_sent" || @.kind == "handoff").text')::text || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "subagent").task')::text || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "subagent").result')::text || translate(jsonb_path_query_array(blocks, '$[*] ? (@.kind == "file" || @.kind == "image").name')::text, '._-', '   ') || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "steps").steps[*].label')::text || jsonb_path_query_array(blocks, '$[*] ? (@.kind == "steps").steps[*].note')::text));
       CREATE INDEX synthetic_history_seq ON messages ("threadId",seq);
       ANALYZE messages;
       ALTER TABLE bots ADD COLUMN name text DEFAULT 'History bot';
@@ -52,6 +56,136 @@ postgres("history retrieval (PostgreSQL)", () => {
   afterAll(async () => {
     await prisma?.$disconnect();
     await pool?.end();
+  });
+  it("finds labels and notes from previous tool calls", async () => {
+    await pool.query(`INSERT INTO messages VALUES ('tool-history','synthetic-thread',10001,'bot',NULL,NULL,
+      '2026-01-02', '[{"kind":"steps","steps":[{"label":"Inspect telescope","count":1,"note":"Investigate nebula"}]}]')`);
+    const byLabel = await searchHistory(prisma, scope, { query: "telescope" });
+    const byNote = await searchHistory(prisma, scope, { query: "nebula" });
+    const botReplies = await searchHistory(prisma, scope, {
+      query: "nebula",
+      kinds: ["bot_replies"],
+    });
+    const userMessages = await searchHistory(prisma, scope, {
+      query: "nebula",
+      kinds: ["user_messages"],
+    });
+    expect(byLabel.messages.map((message) => message.messageId)).toContain("tool-history");
+    expect(byNote.messages.map((message) => message.messageId)).toContain("tool-history");
+    expect(byNote.messages[0]?.text).toContain("Inspect telescope: Investigate nebula");
+    expect(botReplies.messages.map((message) => message.messageId)).toContain("tool-history");
+    expect(userMessages.messages).toEqual([]);
+    await pool.query(`DELETE FROM messages WHERE id = 'tool-history'`);
+  });
+  it("uses the deployed partial tool-work index and finds work in other authorized chats", async () => {
+    await pool.query(`
+      CREATE INDEX synthetic_tool_work ON messages ("threadId", seq)
+        WHERE role = 'bot' AND jsonb_path_exists(blocks, '$[*] ? (@.kind == "steps")');
+      INSERT INTO bots VALUES ('other-bot','synthetic-space','synthetic-user',NULL,'Other bot');
+      INSERT INTO threads VALUES ('other-thread','synthetic-space','synthetic-user','other-bot',NULL);
+      INSERT INTO messages VALUES ('other-tool','other-thread',1,'bot',NULL,NULL,
+        '2026-01-02', '[{"kind":"steps","steps":[{"label":"Inspect telescope","count":1}]}]');
+    `);
+    try {
+      const predicates = await pool.query<{ name: string; predicate: string }>(`
+        SELECT c.relname AS name, pg_get_expr(i.indpred, i.indrelid) AS predicate
+        FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE (n.nspname = 'public' AND c.relname = 'messages_tool_work_idx')
+          OR (n.oid = pg_my_temp_schema() AND c.relname = 'synthetic_tool_work')
+      `);
+      expect(predicates.rows).toHaveLength(2);
+      expect(predicates.rows.find((r) => r.name === "messages_tool_work_idx")?.predicate).toBe(
+        predicates.rows.find((r) => r.name === "synthetic_tool_work")?.predicate,
+      );
+      await pool.query("SET enable_seqscan = off");
+      const plan = await pool.query<{ "QUERY PLAN": string }>(`EXPLAIN SELECT seq FROM messages
+        WHERE "threadId" = 'other-thread' AND role = 'bot'
+          AND jsonb_path_exists(blocks, '$[*] ? (@.kind == "steps")')`);
+      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).toContain("synthetic_tool_work");
+      await pool.query("RESET enable_seqscan");
+      const cross = { ...scope, allowMyChats: true, searchAt: new Date("2026-02-01") };
+      const missing = await searchHistory(prisma, cross, {
+        query: "notpresentanywhere",
+        scope: "my_chats",
+      });
+      expect(missing).toMatchObject({ suggestedSearch: { toolWork: true, scope: "my_chats" } });
+      const listing = await searchHistory(prisma, cross, { toolWork: true, scope: "my_chats" });
+      expect(listing.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ messageId: "other-tool", threadId: "other-thread" }),
+        ]),
+      );
+      const filtered = await searchHistory(prisma, cross, {
+        toolWork: true,
+        scope: "my_chats",
+        botId: "synthetic-bot",
+      });
+      expect(filtered.messages.map((message) => message.messageId)).not.toContain("other-tool");
+      const after = await searchHistory(prisma, cross, {
+        toolWork: true,
+        scope: "my_chats",
+        after: "2026-01-03",
+      });
+      expect(after.messages.map((message) => message.messageId)).not.toContain("other-tool");
+      await expect(
+        searchHistory(prisma, scope, { toolWork: true, scope: "my_chats" }),
+      ).rejects.toThrow("my_chats");
+      const old = await searchHistory(
+        prisma,
+        { ...cross, searchAt: new Date("2026-01-01") },
+        { query: "notpresentanywhere", scope: "my_chats" },
+      );
+      expect(old).not.toHaveProperty("suggestedSearch");
+    } finally {
+      await pool.query("RESET enable_seqscan");
+      await pool.query(
+        "DELETE FROM messages WHERE id = 'other-tool'; DELETE FROM threads WHERE id = 'other-thread'; DELETE FROM bots WHERE id = 'other-bot'; DROP INDEX synthetic_tool_work",
+      );
+    }
+  });
+  it("does not match text omitted by the bounded step representation", async () => {
+    const steps = Array.from({ length: 21 }, (_, index) => ({
+      label: index === 20 ? "unseenstepword" : `Step ${index}`,
+      count: 1,
+      note: index === 0 ? `${"x".repeat(300)} unseennoteword` : "",
+    }));
+    await pool.query(
+      `INSERT INTO messages VALUES ('truncated-tool-history','synthetic-thread',10001,'bot',NULL,NULL,
+        '2026-01-02', $1::jsonb)`,
+      [JSON.stringify([{ kind: "steps", steps }])],
+    );
+    expect((await searchHistory(prisma, scope, { query: "unseenstepword" })).messages).toEqual([]);
+    expect((await searchHistory(prisma, scope, { query: "unseennoteword" })).messages).toEqual([]);
+    await pool.query(`DELETE FROM messages WHERE id = 'truncated-tool-history'`);
+  });
+  it("preserves PostgreSQL full-text matches in ordinary text on messages with steps", async () => {
+    await pool.query(
+      `INSERT INTO messages VALUES ('ordinary-step-history','synthetic-thread',10001,'bot',NULL,NULL,
+        '2026-01-02', $1::jsonb)`,
+      [
+        JSON.stringify([
+          { kind: "text", text: "visible\n" },
+          { kind: "steps", steps: [{ label: "Inspect", count: 1 }] },
+        ]),
+      ],
+    );
+    const result = await searchHistory(prisma, scope, { query: "n" });
+    expect(result.messages.map((message) => message.messageId)).toContain("ordinary-step-history");
+    await pool.query(`DELETE FROM messages WHERE id = 'ordinary-step-history'`);
+  });
+  it("uses the same expression in the deployed index and the tested query plan", async () => {
+    const indexes = await pool.query<{ name: string; expression: string }>(`
+      SELECT c.relname AS name, pg_get_expr(i.indexprs, i.indrelid) AS expression
+      FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE (n.nspname = 'public' AND c.relname = 'messages_history_search_steps_idx')
+         OR (n.oid = pg_my_temp_schema() AND c.relname = 'synthetic_history_fts')
+    `);
+    expect(indexes.rows).toHaveLength(2);
+    expect(
+      indexes.rows.find((row) => row.name === "messages_history_search_steps_idx")?.expression,
+    ).toBe(indexes.rows.find((row) => row.name === "synthetic_history_fts")?.expression);
   });
   it("hides waiting messages per bot in searches, anchors and neighbors until assigned", async () => {
     await pool.query(`

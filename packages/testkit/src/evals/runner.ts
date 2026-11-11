@@ -351,6 +351,7 @@ export async function runTrial(
             role: m.role,
             blocks: [
               ...(m.text ? [{ kind: "text", text: m.text }] : []),
+              ...(m.toolSteps ? [{ kind: "steps", steps: m.toolSteps }] : []),
               ...(files.has(m.seq) ? [files.get(m.seq)!] : []),
               ...(m.subagentResult
                 ? [

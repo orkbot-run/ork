@@ -1,5 +1,5 @@
 import type { SpaceBot, SpaceGroup } from "@orkbot/contracts";
-import { botAvatarActivity, groupBotsForSidebar, logoAvatarNeedsAttention } from "@orkbot/core";
+import { groupBotsForSidebar, logoAvatarNeedsAttention } from "@orkbot/core";
 import type { MobileBot, MobileGroup, MobileSpace } from "./api";
 import { adoptDeletedSpaceFallback, rpc, selectedSpaceId, selectSpace } from "./api";
 import { t } from "./i18n";
@@ -35,19 +35,19 @@ export type PinnedChat =
   | { kind: "group"; group: MobileGroup | SpaceGroup };
 export type InboxItem = InboxSpaceItem | { type: "pinned"; chats: PinnedChat[] };
 
+export function inboxBotNeedsAttention(bot: MobileBot | SpaceBot): boolean {
+  return (
+    (!("archivedAt" in bot) || !bot.archivedAt) &&
+    logoAvatarNeedsAttention(mobileLogoAvatarActivity.getActivity(bot.id, bot.status))
+  );
+}
+
 /** What a chat adds to the off-screen unread pills: unread, and a bot waiting on you. */
 function chatSignal(chat: PinnedChat): InboxSignal {
   return chat.kind === "bot"
     ? {
         unread: chat.bot.unread ? 1 : 0,
-        attention: logoAvatarNeedsAttention(
-          botAvatarActivity(
-            chat.bot,
-            mobileLogoAvatarActivity.getActivity(chat.bot.id, chat.bot.status),
-          ),
-        )
-          ? 1
-          : 0,
+        attention: inboxBotNeedsAttention(chat.bot) ? 1 : 0,
       }
     : { unread: chat.group.unread ? 1 : 0, attention: 0 };
 }

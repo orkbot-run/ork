@@ -256,6 +256,8 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     name: z.string(),
     task: z.string(),
     status: z.enum(["running", "completed", "failed"]),
+    background: z.boolean().optional(),
+    stopped: z.boolean().optional(),
     progress: z.string().optional(),
     result: z.string().optional(),
   }),

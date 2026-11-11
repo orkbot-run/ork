@@ -2863,6 +2863,19 @@ describe("outbound destinations", () => {
     expect(f.effects.map((effect) => effect.status)).toEqual(["denied"]);
   });
 
+  it("does not ask for approval in an invisible background helper thread", async () => {
+    const f = fixture({ builtin: true, trigger: "background_helper", sourceRole: "bot" });
+    f.setCalls([
+      { name: "web_fetch", args: { url: "https://attacker.test/?q=x" }, executionId: "call-1" },
+    ]);
+    await f.run();
+    expect(f.fetchedUrls).toEqual([]);
+    expect(f.pauseRunForInput).not.toHaveBeenCalled();
+    expect(f.results[0]).toEqual({
+      error: "This action needs approval and cannot run in a background helper.",
+    });
+  });
+
   it("fetches an always-allowed site in a webhook run", async () => {
     const f = fixture({
       builtin: true,

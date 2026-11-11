@@ -3,7 +3,13 @@ import type { PrismaClient } from "@orkbot/db";
 import { expireComputerExecutionLeases } from "@orkbot/db";
 import { EXECUTION_LEASE_MS } from "./computer-lifecycle.js";
 
-type RecoveryRun = { id: string; botId: string; bot: { computerId: string | null } };
+type RecoveryRun = {
+  id: string;
+  botId: string;
+  trigger?: string;
+  thread?: { parentThreadId: string | null };
+  bot: { computerId: string | null };
+};
 
 /**
  * Leave resource waits untouched so recovery preserves their age and execution history.
@@ -31,6 +37,7 @@ export async function findRunRecoveryBlockers(
   }
   const blockers = new Map<string, string>();
   for (const run of runs) {
+    if (run.trigger === "tickets" && run.thread?.parentThreadId) continue;
     const lease = leases.find(
       (lease) =>
         lease.botId === run.botId &&

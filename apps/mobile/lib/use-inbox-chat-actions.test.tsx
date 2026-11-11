@@ -9,7 +9,11 @@ import { notifyArchivedChatsChanged } from "./archived-chats";
 import { confirmDeleteBot, confirmDeleteGroup } from "./bot-lifecycle";
 import type { InboxRowAction } from "./inbox-swipe";
 import { applyUnreadOverrides, withoutArchiving } from "./inbox-swipe";
-import { afterChatNotifyChange, dismissThreadNotifications } from "./live-notifications";
+import {
+  afterChatNotifyChange,
+  discardSnoozedNotifications,
+  dismissThreadNotifications,
+} from "./live-notifications";
 import { removeFromSearchInbox } from "./search-inbox";
 import { useInboxChatActions } from "./use-inbox-chat-actions";
 
@@ -36,6 +40,7 @@ vi.mock("./i18n", () => {
 });
 vi.mock("./live-notifications", () => ({
   afterChatNotifyChange: vi.fn(async () => {}),
+  discardSnoozedNotifications: vi.fn(async () => {}),
   dismissThreadNotifications: vi.fn(async () => {}),
 }));
 vi.mock("./search-inbox", () => ({ removeFromSearchInbox: vi.fn() }));
@@ -106,6 +111,8 @@ async function handlers(
     },
     runRowAction: (kind: "bot" | "group", chat: Chat, action: InboxRowAction) =>
       current().runRowAction(kind, chat as MobileBot, action),
+    snoozeChat: (kind: "bot" | "group", chat: Chat) =>
+      current().snoozeChat(kind, chat as MobileBot, "hour_1"),
     updateChat: (
       kind: "bot" | "group",
       chat: Chat,
@@ -113,6 +120,32 @@ async function handlers(
     ) => current().updateChat(kind, chat as MobileBot, change),
   };
 }
+
+it("snoozes in the chat's own space and records the deadline locally", async () => {
+  const h = await handlers(async () => ({ ok: true }));
+  const start = Date.now();
+  await h.snoozeChat("bot", { id: "x", spaceId: "space-b" });
+  const [procedure, body, options] = vi.mocked(rpc).mock.calls[0]!;
+  expect(procedure).toBe("threads/snooze");
+  expect(body).toMatchObject({ botId: "x", until: expect.any(String) });
+  expect(Date.parse((body as { until: string }).until)).toBeGreaterThanOrEqual(start + 3_600_000);
+  expect(options).toMatchObject({
+    requestContext: { headers: { "x-orkbot-space-id": "space-b" } },
+  });
+  expect(h.state.spaces[1]!.bots[0]).toMatchObject({
+    snoozedUntil: (body as { until: string }).until,
+  });
+  expect(h.loadBots).toHaveBeenCalledOnce();
+  expect(dismissThreadNotifications).toHaveBeenCalledWith({ botId: "x" }, "completion");
+  expect(discardSnoozedNotifications).toHaveBeenCalledWith("space-b", "bot", "x");
+});
+
+it("dismisses only the snoozed group's completion notifications", async () => {
+  const h = await handlers(async () => ({ ok: true }));
+  await h.snoozeChat("group", { id: "g1", spaceId: "space-b" });
+  expect(dismissThreadNotifications).toHaveBeenCalledWith({ groupId: "g1" }, "completion");
+  expect(discardSnoozedNotifications).toHaveBeenCalledWith("space-b", "group", "g1");
+});
 
 it("reports a saved bot mute even when its inbox row has no thread id", async () => {
   const actions = await handlers(async () => undefined);
@@ -269,9 +302,37 @@ it.each([
     // Nothing is removed until the alert is confirmed.
     expect(rpc).not.toHaveBeenCalled();
     expect(h.loadBots).not.toHaveBeenCalled();
-    expect(confirm).toHaveBeenCalledWith({ id: "x", name: "Ada" }, expect.any(Function));
+    expect(confirm).toHaveBeenCalledWith(
+      { id: "x", name: "Ada" },
+      expect.any(Function),
+      ...(kind === "bot" ? [expect.any(Function)] : []),
+      expect.objectContaining({
+        headers: expect.objectContaining({ "x-orkbot-space-id": "space-a" }),
+      }),
+      ...(kind === "group" ? [expect.any(Function)] : []),
+    );
     vi.mocked(confirm).mock.calls[0]![1]!();
     expect(h.loadBots).toHaveBeenCalledTimes(1);
+  },
+);
+
+it.each(["bot", "group"] as const)(
+  "binds %s deletion to its original space and session",
+  async (kind) => {
+    const h = await handlers(async () => ({ ok: true }));
+    await h.runRowAction(kind, { id: "x", name: "Ada", spaceId: "space-b" }, "delete");
+    const call =
+      kind === "bot"
+        ? vi.mocked(confirmDeleteBot).mock.calls[0]!
+        : vi.mocked(confirmDeleteGroup).mock.calls[0]!;
+    const context = kind === "bot" ? call[3] : call[2];
+    const current = kind === "bot" ? call[2] : call[3];
+    expect(context).toMatchObject({ headers: { "x-orkbot-space-id": "space-b" } });
+    expect((current as () => boolean)()).toBe(true);
+    session.space = "space-c";
+    expect((current as () => boolean)()).toBe(true);
+    session.generation++;
+    expect((current as () => boolean)()).toBe(false);
   },
 );
 

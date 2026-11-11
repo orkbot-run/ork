@@ -26,6 +26,7 @@ import {
   memberName,
   newClientId,
   routineWorkContext,
+  threadSnoozeState,
 } from "@orkbot/core";
 import { fetchFresh, writeSaved } from "@orkbot/core/query";
 import type { GroupAvatarMember } from "@orkbot/ui-web";
@@ -102,6 +103,7 @@ import { focusSidebarSearch, ShellSidebar } from "./shell/shell-sidebar";
 import { ShellSidePanel } from "./shell/side-panel";
 import { BotsSidebarLayout } from "./shell/sidebar-layout";
 import { SidebarRoster } from "./shell/sidebar-roster";
+import { SnoozedChats } from "./shell/snoozed-chats";
 import { commitSpaceRename, countUnreadChats, sidebarGroupsForSpaces } from "./shell/space-sidebar";
 import { Transcript } from "./shell/transcript";
 import { useBrowserNotifications } from "./shell/use-browser-notifications";
@@ -118,6 +120,7 @@ import { useRoutineEditor } from "./shell/use-routine-editor";
 import { useShellNavigation } from "./shell/use-shell-navigation";
 import { useSidebarExpansion } from "./shell/use-sidebar-expansion";
 import { useSidebarSearch } from "./shell/use-sidebar-search";
+import { useSnoozeClock } from "./shell/use-snooze-clock";
 import { useRosterDrop, useSpaceBootstrap, useSpaceRoster } from "./shell/use-space-roster";
 import { useOpenSpaceChat } from "./shell/use-space-switch";
 import { useThreadState } from "./shell/use-thread-state";
@@ -452,6 +455,12 @@ function SpaceShell() {
       rpc,
       activeBotId,
       activeGroupId,
+      isSnoozed: (botId, targetGroupId) =>
+        threadSnoozeState(
+          targetGroupId
+            ? groups.find((group) => group.id === targetGroupId)?.snoozedUntil
+            : bots.find((bot) => bot.id === botId)?.snoozedUntil,
+        ) === "snoozed",
       openChat: (alert) => {
         setMobileSidebarOpen(false);
         navigate(alert.groupId ? `/app/g/${alert.groupId}` : `/app/${alert.botId}`);
@@ -530,7 +539,7 @@ function SpaceShell() {
         []);
   const recordingSkill = activeTaughtSkills.find((skill) => skill.status === "recording") ?? null;
 
-  const sidebarSpaces = useMemo(
+  const allSidebarSpaces = useMemo(
     () =>
       spaces.length > 0
         ? spaces.map((space) =>
@@ -552,6 +561,54 @@ function SpaceShell() {
             ]
           : [],
     [bootstrapMe, botSections, bots, groups, spaces],
+  );
+  const snoozeDeadlines = useMemo(
+    () =>
+      allSidebarSpaces.flatMap((space) =>
+        [...space.bots, ...space.groups].map((chat) => chat.snoozedUntil),
+      ),
+    [allSidebarSpaces],
+  );
+  const refreshSnoozes = useCallback(() => {
+    if (userId) void refreshBots().catch(() => undefined);
+  }, [userId, refreshBots]);
+  const snoozeNow = useSnoozeClock(snoozeDeadlines, refreshSnoozes);
+  const sidebarSpaces = useMemo(
+    () =>
+      allSidebarSpaces.map((space) => ({
+        ...space,
+        bots: space.bots.filter(
+          (bot) => threadSnoozeState(bot.snoozedUntil, snoozeNow) !== "snoozed",
+        ),
+        groups: space.groups.filter(
+          (group) => threadSnoozeState(group.snoozedUntil, snoozeNow) !== "snoozed",
+        ),
+      })),
+    [allSidebarSpaces, snoozeNow],
+  );
+  const snoozedChats = useMemo(
+    () =>
+      allSidebarSpaces.flatMap((space) => [
+        ...space.bots
+          .filter((bot) => threadSnoozeState(bot.snoozedUntil, snoozeNow) === "snoozed")
+          .map((bot) => ({
+            kind: "bot" as const,
+            id: bot.id,
+            name: bot.name,
+            spaceId: space.id,
+            until: bot.snoozedUntil!,
+          })),
+        ...space.groups
+          .filter((group) => threadSnoozeState(group.snoozedUntil, snoozeNow) === "snoozed")
+          .map((group) => ({
+            kind: "group" as const,
+            id: group.id,
+            name: group.name,
+            spaceId: space.id,
+            until: group.snoozedUntil!,
+          })),
+      ]),
+    [allSidebarSpaces, snoozeNow],
   );
   const sidebarGroups = useMemo(
     () =>
@@ -983,6 +1040,7 @@ function SpaceShell() {
         dialogs={dialogs}
         openChatSettings={openChatSettings}
         navigate={navigate}
+        onError={composer.setSendError}
       />
     ) : null;
   const shell = (
@@ -1018,6 +1076,7 @@ function SpaceShell() {
         search={search}
         bots={bots}
         groups={groups}
+        snoozedChats={snoozedChats}
         collapsedSidebarSections={collapsedSidebarSections}
         toggleSidebarSection={toggleSidebarSection}
         setPanel={setPanel}
@@ -1068,6 +1127,7 @@ function SpaceShell() {
             setDeleteGroupTarget={dialogs.setDeleteGroupTarget}
           />
         }
+        snoozed={<SnoozedChats chats={snoozedChats} refresh={refreshBots} />}
         footerLogos={footerLogos}
         user={session.data?.user}
         ticketBoardEnabled={Boolean(bootstrapMe?.ticketBoardEnabled)}

@@ -1,12 +1,15 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 material is preserved; Python isolation changes are Ork additions.
 set -uo pipefail
+# Startup must not resolve executables through the bot-writable home directory.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 source /usr/local/lib/orkbot-user-env.sh
 export DISPLAY="${DISPLAY:-:1}"
 export HOME="${HOME:-/home/orkbot}"
 AGENT_HOME="$HOME"
 mkdir -p "$AGENT_HOME" "$AGENT_HOME/.local/bin" "$AGENT_HOME/.config" /tmp/orkbot /tmp/.X11-unix /tmp/fluxbox-home
-# Login shells re-apply ~/.local/bin from /etc/profile.d/orkbot-local-bin.sh.
-export PATH="$AGENT_HOME/.local/bin:/usr/local/bin:$PATH"
 export NPM_CONFIG_PREFIX="$AGENT_HOME/.local"
 export PIP_USER=1
 cd "$AGENT_HOME"
@@ -34,6 +37,10 @@ if [[ -n "${ORKBOT_COMPUTER_CONTROL_TOKEN:-}" ]]; then
     sleep 1
   done >/tmp/orkbot/control.log 2>&1 &
 fi
+# Only the control daemon's background subshell needs this credential.
+unset ORKBOT_COMPUTER_CONTROL_TOKEN
+# Login shells re-apply ~/.local/bin from /etc/profile.d/orkbot-local-bin.sh.
+export PATH="$AGENT_HOME/.local/bin:/usr/local/bin:$PATH"
 
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 
@@ -121,7 +128,7 @@ if [[ ! -f "$NOVNC_ROOT/mobile-keyboard.js" ]]; then
   exit 1
 fi
 # The screen proxy reaches this isolated container through its bridge interface.
-websockify --heartbeat=30 --web="$NOVNC_ROOT" --token-plugin=TokenFile --token-source=/tmp/orkbot/view-target-1 0.0.0.0:6080 >/tmp/orkbot/novnc.log 2>&1 &
+/usr/bin/env -u PYTHONPATH PYTHONNOUSERSITE=1 PYTHONSAFEPATH=1 /usr/bin/websockify --heartbeat=30 --web="$NOVNC_ROOT" --token-plugin=TokenFile --token-source=/tmp/orkbot/view-target-1 0.0.0.0:6080 >/tmp/orkbot/novnc.log 2>&1 &
 
 wait "$XVFB_PID"
 echo "Xvfb exited" >&2

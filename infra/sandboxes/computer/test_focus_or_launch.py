@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 tests are preserved; Python isolation tests are Ork additions.
 """Offline regressions for computer startup, focus-or-launch and control argv."""
 import base64
 import ctypes
@@ -35,6 +38,76 @@ LISTING = """\
 0x0400000f -1 99999993 N/A.N/A             box  dock
 0x04400010  0
 """
+
+
+class PythonIsolationTest(unittest.TestCase):
+    def test_helpers_ignore_user_python_startup_and_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            marker = root / "injected"
+            hostile = root / "hostile"
+            hostile.mkdir()
+            command = f"open({str(marker)!r}, 'w').write('injected')"
+            (hostile / "sitecustomize.py").write_text(command)
+            (hostile / "json.py").write_text(command)
+            fake_python = hostile / "python3"
+            fake_python.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 1\n")
+            fake_python.chmod(0o755)
+            userbase = root / "userbase"
+            version = subprocess.check_output(["/usr/bin/python3", "-I", "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"], text=True).strip()
+            packages = userbase / "lib" / f"python{version}" / "site-packages"
+            packages.mkdir(parents=True)
+            (packages / "hostile.pth").write_text(f"import builtins; {command}\n")
+            env = {**os.environ, "HOME": str(root), "PYTHONUSERBASE": str(userbase), "PYTHONPATH": str(hostile), "PATH": str(hostile)}
+            for name in ("orkbot-page-browser", "orkbot-focus-or-launch", "control.py"):
+                script = Path(__file__).with_name(name).resolve()
+                self.assertEqual(script.read_text().splitlines()[0], "#!/usr/bin/python3 -I")
+                # Loading avoids starting the control server while exercising each helper's imports.
+                result = subprocess.run(["/usr/bin/python3", "-I", "-c", "import runpy,sys; runpy.run_path(sys.argv[1], run_name='isolation_test')", str(script)], cwd=hostile, env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(marker.exists(), name)
+            # Run the executable as installed so an env-based shebang cannot pick the fake interpreter.
+            result = subprocess.run([str(Path(__file__).with_name("orkbot-focus-or-launch").resolve())], cwd=hostile, env=env, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(marker.exists())
+
+
+class ScreenProxyIsolationTest(unittest.TestCase):
+    def test_control_token_only_reaches_control_subshell(self):
+        script = Path(__file__).with_name("start.sh").read_text()
+        self.assertEqual(script.splitlines()[0], "#!/bin/bash")
+        start = script.index('if [[ -n "${ORKBOT_COMPUTER_CONTROL_TOKEN:-}" ]]')
+        end = script.index("\nrm -f /tmp/.X1-lock", start)
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            token_file = root / "control-token"
+            env_file = root / "desktop-environment"
+            helper = root / "control"
+            helper.write_text(f"#!/bin/sh\nprintf %s \"$ORKBOT_COMPUTER_CONTROL_TOKEN\" > '{token_file}'\n")
+            helper.chmod(0o755)
+            fragment = script[start:end].replace("while true; do", "for _ in 1; do")
+            fragment = fragment.replace("/usr/local/bin/orkbot-computer-control", str(helper))
+            fragment = fragment.replace("sleep 1", ":")
+            fragment = fragment.replace("/tmp/orkbot/control.log", str(root / "control.log"))
+            program = f"export ORKBOT_COMPUTER_CONTROL_TOKEN=fixture-token\nAGENT_HOME='{root}'\n{fragment}\nwait\n/usr/bin/env > '{env_file}'\n"
+            subprocess.run(["/bin/bash", "-c", program], check=True, timeout=5)
+            self.assertEqual(token_file.read_text(), "fixture-token")
+            self.assertNotIn("ORKBOT_COMPUTER_CONTROL_TOKEN=", env_file.read_text())
+
+    def test_proxy_start_does_not_search_user_path_for_env(self):
+        script = Path(__file__).with_name("start.sh").read_text()
+        line = next(line for line in script.splitlines() if "--heartbeat=30" in line)
+        self.assertTrue(line.startswith("/usr/bin/env -u PYTHONPATH "))
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "hijacked"
+            fake = Path(tmp) / "env"
+            fake.write_text(f"#!/bin/sh\ntouch '{marker}'\nexit 1\n")
+            fake.chmod(0o755)
+            # Exercise the actual env prefix while replacing the service with a harmless system binary.
+            prefix = line.split(" /usr/bin/websockify", 1)[0]
+            result = subprocess.run(prefix + " /usr/bin/true", shell=True, env={**os.environ, "PATH": tmp}, timeout=5)
+            self.assertEqual(result.returncode, 0)
+            self.assertFalse(marker.exists())
 
 
 class WmClassTest(unittest.TestCase):
@@ -601,6 +674,14 @@ class ControlArgvTest(unittest.TestCase):
         argv = ["env", "DISPLAY=:1", "orkbot-focus-or-launch", "xterm"]
         self.assertEqual(control.launch_spawn_poll_sec(argv), control.LAUNCH_SPAWN_POLL_SEC)
 
+    def test_control_children_do_not_inherit_token_or_untrusted_path(self):
+        with patch.dict(os.environ, {"ORKBOT_COMPUTER_CONTROL_TOKEN": "secret", "PATH": "/tmp/hostile", "HOME": "/home/test"}):
+            env = control.child_environment(":3")
+        self.assertNotIn("ORKBOT_COMPUTER_CONTROL_TOKEN", env)
+        self.assertEqual(env["PATH"], control.TRUSTED_PATH)
+        self.assertEqual(env["DISPLAY"], ":3")
+        self.assertEqual(env["HOME"], "/home/test")
+
     def test_focus_waits_for_the_wrapper_instead_of_the_spawn_poll(self):
         argv = [
             "env",
@@ -624,7 +705,7 @@ class ControlArgvTest(unittest.TestCase):
             script.write_text(f"#!/bin/sh\nsleep 0.5\ntouch {marker}\n")
             script.chmod(script.stat().st_mode | stat.S_IEXEC)
             argv = ["env", "DISPLAY=:1", "orkbot-focus-or-launch", "xterm"]
-            with patch.dict(os.environ, {"PATH": f"{tmp}{os.pathsep}{os.environ.get('PATH', '')}"}):
+            with patch.object(control, "TRUSTED_PATH", f"{tmp}{os.pathsep}{control.TRUSTED_PATH}"):
                 started = time.monotonic()
                 control.run_control_argv(argv, ":1")
                 elapsed = time.monotonic() - started

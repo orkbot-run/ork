@@ -193,6 +193,7 @@ export function createRunTrustLoaders(
           runId,
           claimedAt: { not: null },
           OR: [
+            { userId: { not: run.userId } },
             { originTrigger: { not: null } },
             { message: { blocks: { array_contains: [{ kind: "channel_message" }] } } },
           ],

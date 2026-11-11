@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 billing code is preserved; credit authentication changes are Ork additions.
+
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type {
   BillingByokCheckoutRequest,
@@ -213,6 +217,8 @@ export class StripeBillingProvider implements BillingProvider {
         customer: input.customerId,
         mode: input.monthly ? "subscription" : "payment",
         allowed_payment_method_types: ["card"],
+        // Credits can be spent like cash; request card authentication when available.
+        payment_method_options: { card: { request_three_d_secure: "any" } },
         adaptive_pricing: { enabled: false },
         line_items: [
           input.monthly

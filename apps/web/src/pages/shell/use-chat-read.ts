@@ -1,6 +1,6 @@
 import type { Bot, Group } from "@orkbot/contracts";
 import type { ReadBoundary } from "@orkbot/core";
-import { createChatQueues, settleReadBoundary } from "@orkbot/core";
+import { createChatQueues, settleReadBoundary, threadSnoozeState } from "@orkbot/core";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { autoReadStillWanted } from "../../lib/auto-read";
@@ -63,6 +63,7 @@ export function useChatRead({
   // automatic read answering after the user marked the chat unread can't undo the hold.
   const markBotRead = useCallback(
     async (id: string, stillWanted?: () => boolean) => {
+      const readStartedAt = Date.now();
       if (!stillWanted) {
         manuallyUnread.current.delete(id);
         if (readVisit.current.chat === `bot:${id}`) setMarkedUnread(null);
@@ -72,6 +73,13 @@ export function useChatRead({
       );
       if (!answer) return undefined;
       if (!manuallyUnread.current.has(id)) updateBotUnread(id, false);
+      setBots((current) =>
+        current.map((bot) =>
+          bot.id === id && threadSnoozeState(bot.snoozedUntil, readStartedAt) === "woken"
+            ? { ...bot, snoozedUntil: null }
+            : bot,
+        ),
+      );
       return answer.unreadAfterSeq;
     },
     [readInOrder, updateBotUnread],
@@ -125,6 +133,7 @@ export function useChatRead({
       )
         return;
       readVisibleGroups.current.add(groupId);
+      const readStartedAt = Date.now();
       const visit = readVisit.current.visit;
       void readInOrder(`group:${groupId}`, () =>
         !manuallyUnread.current.has(groupId) && autoReadStillWanted(readVisit.current.visit, visit)
@@ -139,9 +148,18 @@ export function useChatRead({
           captureReadBoundary(visit, answer.unreadAfterSeq);
           setGroups((current) => {
             const group = current.find((candidate) => candidate.id === groupId);
-            if (!group?.unread) return current;
+            if (!group?.unread && threadSnoozeState(group?.snoozedUntil, readStartedAt) !== "woken")
+              return current;
             return current.map((candidate) =>
-              candidate.id === groupId ? { ...candidate, unread: false } : candidate,
+              candidate.id === groupId
+                ? {
+                    ...candidate,
+                    unread: false,
+                    ...(threadSnoozeState(candidate.snoozedUntil, readStartedAt) === "woken"
+                      ? { snoozedUntil: null }
+                      : {}),
+                  }
+                : candidate,
             );
           });
         })
@@ -211,6 +229,7 @@ export function useChatRead({
 
   /** Mark as Read or Unread from the chat list. */
   function toggleGroupUnread(groupId: string, unread: boolean) {
+    const readStartedAt = Date.now();
     if (unread) manuallyUnread.current.add(groupId);
     else {
       manuallyUnread.current.delete(groupId);
@@ -222,7 +241,17 @@ export function useChatRead({
     void request
       .then(() =>
         setGroups((current) =>
-          current.map((group) => (group.id === groupId ? { ...group, unread } : group)),
+          current.map((group) =>
+            group.id === groupId
+              ? {
+                  ...group,
+                  unread,
+                  ...(!unread && threadSnoozeState(group.snoozedUntil, readStartedAt) === "woken"
+                    ? { snoozedUntil: null }
+                    : {}),
+                }
+              : group,
+          ),
         ),
       )
       .catch(() => {

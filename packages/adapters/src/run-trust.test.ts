@@ -1,5 +1,31 @@
-import { describe, expect, it } from "vitest";
-import { connectorTrustKeys } from "./run-trust.js";
+import { describe, expect, it, vi } from "vitest";
+import type { ExecutorDeps } from "./executor-deps.js";
+import { connectorTrustKeys, createRunTrustLoaders } from "./run-trust.js";
+
+it("treats a claimed message from another group member as outside content", async () => {
+  const findFirst = vi.fn(async () => ({ id: "member-message" }));
+  const deps = { prisma: { steeringMessage: { findFirst } } } as unknown as ExecutorDeps;
+  const trust = createRunTrustLoaders(deps, {
+    run: { userId: "owner", spaceId: "space", trigger: "user" },
+    runId: "run",
+    botId: "bot",
+    taskPrompt: "task",
+    ownerStartedRun: true,
+    messagingChannelRun: false,
+    sourceMessage: null,
+    connectedPlugins: [],
+  });
+  expect(await trust.receivedOutsideMessage()).toBe(true);
+  expect(findFirst).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({
+        runId: "run",
+        claimedAt: { not: null },
+        OR: expect.arrayContaining([{ userId: { not: "owner" } }]),
+      }),
+    }),
+  );
+});
 
 describe("connectorTrustKeys", () => {
   const providers = ["gmail", "slack"];

@@ -111,6 +111,7 @@ export const RunActivityRowSchema = z.object({
   status: RunStatus,
   trigger: RunTriggerSchema,
   notificationsEnabled: z.boolean(),
+  snoozed: z.boolean().optional(),
   promptSnippet: z.string(),
   agentMessage: z
     .discriminatedUnion("kind", [

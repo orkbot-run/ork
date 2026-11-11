@@ -27,11 +27,13 @@ function deps({
   notifyOnFinish = true,
   groupId = null as string | null,
   publish = vi.fn(async () => undefined),
+  snoozed = false,
 } = {}) {
   const send = vi.fn(async () => undefined);
   const value = {
     prisma: {
       routine: { findUnique: async () => null },
+      threadSnooze: { findFirst: async () => (snoozed ? { threadId: "thread-1" } : null) },
       run: {
         findFirst: async () => ({
           bot: { id: "bot-1", name: "Scout", color: "#000000", avatarSet: "", notifyOnFinish },
@@ -46,6 +48,15 @@ function deps({
 }
 
 describe("notifyRun chat alerts", () => {
+  it("suppresses completion during snooze while preserving help and failure alerts", async () => {
+    const { value, publish, send } = deps({ snoozed: true });
+    await notifyRun(value, run, message);
+    expect(publish).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    await notifyRun(value, run, { ...message, kind: "help" });
+    await notifyRun(value, run, { ...message, kind: "failure" });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
   it("publishes the alert for open apps alongside the push", async () => {
     const { value, publish, send } = deps();
     await notifyRun(value, run, message);

@@ -1,4 +1,6 @@
 import type { RpcInput, RpcPath, SpaceBot, SpaceGroup } from "@orkbot/contracts";
+import type { SnoozePreset } from "@orkbot/core";
+import { snoozeUntil } from "@orkbot/core";
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useState } from "react";
 import { Alert } from "react-native";
@@ -24,7 +26,11 @@ import { confirmDeleteSection } from "./confirm-delete-section";
 import { useI18n } from "./i18n";
 import type { InboxChatKind, InboxRowAction } from "./inbox-swipe";
 import { chatTarget, createLatestQueue, unreadOverrideKey } from "./inbox-swipe";
-import { afterChatNotifyChange, dismissThreadNotifications } from "./live-notifications";
+import {
+  afterChatNotifyChange,
+  discardSnoozedNotifications,
+  dismissThreadNotifications,
+} from "./live-notifications";
 import { removeFromSearchInbox } from "./search-inbox";
 import { promptSectionName } from "./section-name-prompt";
 import { currentSessionGeneration } from "./session";
@@ -59,12 +65,14 @@ export function useInboxChatActions({
   setGroups,
   setSpaces,
   botSections,
+  spaces = [],
 }: {
   loadBots: () => Promise<unknown>;
   setBots: ListUpdate<MobileBot>;
   setGroups: ListUpdate<MobileGroup>;
   setSpaces: ListUpdate<MobileSpace>;
   botSections: MobileBotSection[];
+  spaces?: MobileSpace[];
 }) {
   const { t } = useI18n();
   const [unreadOverrides, setUnreadOverrides] = useState<ReadonlyMap<string, boolean>>(
@@ -74,6 +82,65 @@ export function useInboxChatActions({
   const [archiving, setArchiving] = useState<ReadonlySet<string>>(() => new Set());
   // One path for the long-press sheet and the swipe actions.
   const [sendReadState] = useState(() => createLatestQueue<boolean>());
+  const snoozeChat = useCallback(
+    async (
+      kind: InboxChatKind,
+      chat: MobileBot | MobileGroup | SpaceBot | SpaceGroup,
+      preset: SnoozePreset,
+    ) => {
+      const context = await captureApiRequestContext();
+      const spaceId = chat.spaceId ?? context.headers["x-orkbot-space-id"];
+      const requestContext = {
+        ...context,
+        headers: { ...context.headers, ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}) },
+      };
+      const until = snoozeUntil(preset).toISOString();
+      await rpc(
+        "threads/snooze",
+        { ...chatTarget(kind, chat.id), until },
+        { requestContext, skipSpaceAuthRecovery: true },
+      );
+      if (currentSessionGeneration() !== context.sessionGeneration) return;
+      void discardSnoozedNotifications(spaceId, kind, chat.id).catch(() => undefined);
+      void dismissThreadNotifications(
+        kind === "group"
+          ? { groupId: chat.id }
+          : "threadId" in chat && chat.threadId
+            ? { threadId: chat.threadId }
+            : { botId: chat.id },
+        "completion",
+      ).catch(() => undefined);
+      const update = <T extends { id: string }>(chats: T[]) =>
+        chats.map((item) => (item.id === chat.id ? { ...item, snoozedUntil: until } : item));
+      if (kind === "bot") setBots(update);
+      else setGroups(update);
+      setSpaces((current) =>
+        current.map((space) =>
+          space.id !== spaceId
+            ? space
+            : kind === "bot"
+              ? { ...space, bots: update(space.bots) }
+              : { ...space, groups: update(space.groups) },
+        ),
+      );
+      await loadBots();
+    },
+    [loadBots, setBots, setGroups, setSpaces],
+  );
+  const snoozeFromMenu = useCallback(
+    (
+      kind: InboxChatKind,
+      chat: MobileBot | MobileGroup | SpaceBot | SpaceGroup,
+      preset: SnoozePreset,
+    ) => {
+      const session = currentSessionGeneration();
+      void snoozeChat(kind, chat, preset).catch((error) => {
+        if (session === currentSessionGeneration())
+          Alert.alert(t("Could not update chat"), errorText(error, t("Try again.")));
+      });
+    },
+    [snoozeChat, t],
+  );
   const updateChat = useCallback(
     async (
       kind: InboxChatKind,
@@ -85,7 +152,7 @@ export function useInboxChatActions({
         await afterChatNotifyChange(
           currentApiBase(),
           await loadSessionToken(),
-          selectedSpaceId() ?? "",
+          chat.spaceId ?? selectedSpaceId() ?? "",
           {
             botId: chat.id,
             threadId: "threadId" in chat ? chat.threadId : undefined,
@@ -198,8 +265,28 @@ export function useInboxChatActions({
           notifyArchivedChatsChanged();
           void loadBots();
         };
-        if (kind === "bot") confirmDeleteBot({ id: chat.id, name: chat.name }, deleted);
-        else confirmDeleteGroup({ id: chat.id, name: chat.name }, deleted);
+        const context = await captureApiRequestContext();
+        const requestContext = {
+          ...context,
+          headers: {
+            ...context.headers,
+            ...(chat.spaceId ? { "x-orkbot-space-id": chat.spaceId } : {}),
+          },
+        };
+        if (kind === "bot")
+          confirmDeleteBot(
+            { id: chat.id, name: chat.name },
+            deleted,
+            () => currentSessionGeneration() === context.sessionGeneration,
+            requestContext,
+          );
+        else
+          confirmDeleteGroup(
+            { id: chat.id, name: chat.name },
+            deleted,
+            requestContext,
+            () => currentSessionGeneration() === context.sessionGeneration,
+          );
         return;
       }
       await updateChat(kind, chat, { pinned: action === "pin" }).catch((err) =>
@@ -249,8 +336,12 @@ export function useInboxChatActions({
       chat: MobileBot | MobileGroup | SpaceBot | SpaceGroup,
       mode: "create" | "rename",
     ) => {
+      const sections =
+        chat.spaceId && chat.spaceId !== selectedSpaceId()
+          ? (spaces.find((space) => space.id === chat.spaceId)?.botSections ?? [])
+          : botSections;
       const current =
-        mode === "rename" ? botSections.find((section) => section.id === chat.sectionId) : null;
+        mode === "rename" ? sections.find((section) => section.id === chat.sectionId) : null;
       if (mode === "rename" && !current) return;
       promptSectionName({
         title: current ? t("Rename section") : t("New section"),
@@ -259,13 +350,15 @@ export function useInboxChatActions({
         defaultValue: current?.name,
         onSubmit: (name) =>
           void (
-            current ? renameSection(current.id, name) : createSection(kind, chat.id, name)
+            current
+              ? renameSection(current.id, name, chat.spaceId)
+              : createSection(kind, chat.id, name, chat.spaceId)
           ).catch((err) =>
             Alert.alert(t("Could not update chat"), errorText(err, t("Try again."))),
           ),
       });
     },
-    [botSections, createSection, renameSection, t],
+    [botSections, spaces, createSection, renameSection, t],
   );
 
   const deleteSection = useCallback(
@@ -295,5 +388,7 @@ export function useInboxChatActions({
     organizeFromMenu,
     editSectionFromMenu,
     deleteSection,
+    snoozeChat,
+    snoozeFromMenu,
   };
 }

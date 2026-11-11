@@ -356,9 +356,11 @@ export class PiAgentRuntime implements AgentRuntime {
           prompt = request.prompt,
         ) =>
           initialSteering.length
-            ? `${prompt}\n\nAdditional user context:\n${initialSteering.map(text).join("\n")}`
+            ? `${prompt}\n\n${initialSteering.some((item) => item.origin === "helper") ? "Additional context" : "Additional user context"}:\n${initialSteering.map(text).join("\n")}`
             : prompt;
-        const initialPrompt = promptWithSteering((item) => item.text);
+        const initialPrompt = promptWithSteering((item) =>
+          item.origin === "helper" ? midTaskMessageFromPrompt(item.text, "helper") : item.text,
+        );
         const systemPrompt =
           restored?.systemPrompt ??
           (request.instructions ||

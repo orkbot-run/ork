@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved; decision-card and cross-chat routine guidance changes are Ork additions.
+// Inherited Apache-2.0 material is preserved; decision-card, cross-chat routine guidance, and tool-work lookup changes are Ork additions.
 
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
@@ -969,7 +969,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "search_history",
     description:
-      "Search literal keywords in earlier messages and their file names (default this_chat); every word of a query must match the same message. Provide exactly one of query or queries. To find an earlier conversation, fan out 2–4 keyword variants via queries with scope my_chats; narrow by date or botId when hinted. my_chats requires a direct human app run. Returns at most five matches, newest first, grouped by chat; matchedQueryIndexes are zero-based indexes into queries. Then read_history around the best hits using their threadId. When nextSearch is present, call search_history with those arguments to continue. Coverage applies only to the requested literal query and range; an empty narrower query does not exhaust an unfinished broader query. Use read_history to check surrounding messages and corrections. Read a listed attachment at its path and name it in your answer.",
+      "Search literal keywords in earlier messages and their file names (default this_chat); every word of a query must match the same message. Provide exactly one of query, queries or toolWork. Set toolWork to true to list previous tool activity without a keyword. To find an earlier conversation, fan out 2–4 keyword variants via queries with scope my_chats; narrow by date or botId when hinted. my_chats requires a direct human app run. Returns at most five matches, newest first, grouped by chat; matchedQueryIndexes are zero-based indexes into queries. Then read_history around the best hits using their threadId. When nextSearch is present, call search_history with those arguments to continue. Coverage applies only to the requested literal query and range; an empty narrower query does not exhaust an unfinished broader query. Use read_history to check surrounding messages and corrections. Read a listed attachment at its path and name it in your answer.",
     inputSchema: {
       type: "object",
       properties: {
@@ -986,6 +986,11 @@ export const builtinAgentTools: ConnectorTool[] = [
           items: { type: "string", minLength: 1, maxLength: 500 },
           minItems: 1,
           maxItems: 5,
+        },
+        toolWork: {
+          type: "boolean",
+          enum: [true],
+          description: "List earlier bot replies with tool steps, without a keyword.",
         },
         scope: { type: "string", enum: ["this_chat", "my_chats"] },
         botId: { type: "string" },
@@ -1019,6 +1024,11 @@ export const builtinAgentTools: ConnectorTool[] = [
         limit: { type: "integer", minimum: 1, maximum: 5 },
       },
       oneOf: [
+        {
+          type: "object",
+          properties: { toolWork: { type: "boolean", enum: [true] } },
+          required: ["toolWork"],
+        },
         { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
         {
           type: "object",
@@ -1433,15 +1443,19 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "run_subagent",
     description:
-      "Run a short-lived helper inside this turn only. It is not a bot: no list entry, no thread, no computer of its own, and it disappears when this turn ends. Never call this because the user asked to create a bot — that is spawn_bot, and spawn_bot alone.",
+      "Run a task helper in this turn, or set background for longer work. A background helper cannot use a computer or message agents. A helper is not a bot; to create one, use spawn_bot.",
     inputSchema: {
       type: "object",
       properties: {
         name: {
           type: "string",
-          description: "Short label shown in the thread, e.g. scout or reviewer.",
+          description: "Short label shown in the thread.",
         },
         task: { type: "string", description: "The work the helper should complete." },
+        background: {
+          type: "boolean",
+          description: "Continue independently of this turn.",
+        },
         instructions: {
           type: "string",
           description: "Optional extra system instructions for the helper.",

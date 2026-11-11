@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 material is preserved. Personal Ork changes follow LICENSE.md.
 
 import type { JobPublisher, NotificationMessage, NotificationProvider } from "@orkbot/adapter-kit";
-import { runContinueJob } from "@orkbot/adapter-kit";
+import { runContinueJob, runJobKey } from "@orkbot/adapter-kit";
 import type { StuckWorkStatus } from "@orkbot/core";
 import {
   isStuckWorkStatus,
@@ -18,11 +18,13 @@ import {
 import type { Prisma, PrismaClient, ThreadEvents } from "@orkbot/db";
 import {
   appendEventInTransaction,
+  expireStuckBackgroundHelper,
   expireStuckRun,
   THREAD_LOCK_TRANSACTION_OPTIONS,
   withTransactionRetry,
 } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
+import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
 import { ExpoPushProvider } from "./expo-push.js";
 import { notificationIdentity } from "./notification-identity.js";
 import { publishChatAlert } from "./run-notifications.js";
@@ -38,6 +40,7 @@ type StuckCandidate = {
   botId: string;
   userId: string;
   taskId: string;
+  trigger?: string;
   bot: {
     name: string;
     color: string;
@@ -45,7 +48,7 @@ type StuckCandidate = {
     avatarSeed?: string | null;
     notifyOnFinish: boolean;
   };
-  thread: { groupId: string | null };
+  thread: { groupId: string | null; parentThreadId?: string | null };
 };
 
 /**
@@ -101,6 +104,7 @@ export async function reconcileStuckWork(deps: {
       botId: true,
       userId: true,
       taskId: true,
+      trigger: true,
       bot: {
         select: {
           name: true,
@@ -110,7 +114,7 @@ export async function reconcileStuckWork(deps: {
           notifyOnFinish: true,
         },
       },
-      thread: { select: { groupId: true } },
+      thread: { select: { groupId: true, parentThreadId: true } },
     },
   });
 
@@ -139,7 +143,26 @@ export async function reconcileStuckWork(deps: {
       alreadyNotified,
     });
     try {
-      if (action === "notify") await remindStuckRun(deps, run);
+      if (run.trigger === "tickets" && run.thread.parentThreadId) {
+        if (action === "expire") {
+          const expired = await expireStuckBackgroundHelper(deps.prisma, {
+            spaceId: run.spaceId,
+            parentThreadId: run.thread.parentThreadId,
+            runId: run.id,
+            status: run.status,
+            updatedAt: run.updatedAt,
+            now: deps.now,
+          });
+          if (expired) {
+            await deps.jobs.cancel(runJobKey(run.id)).catch(() => undefined);
+            if (deps.events)
+              await deliverBackgroundHelperOutcome(
+                { prisma: deps.prisma, jobs: deps.jobs, events: deps.events },
+                { spaceId: run.spaceId, runId: run.id },
+              );
+          }
+        }
+      } else if (action === "notify") await remindStuckRun(deps, run);
       else if (action === "expire") await expireOne(deps, run);
     } catch (error) {
       getLogger().error("stuck work", error);
@@ -169,6 +192,7 @@ function readyStuckRun(
     botId: run.botId,
     userId: run.userId,
     taskId: run.taskId,
+    trigger: run.trigger,
     bot: run.bot,
     thread: run.thread,
   };

@@ -9,6 +9,25 @@ import org.junit.Test
 
 class NotificationPollingTest {
   @Test
+  fun `snooze suppresses completions while preserving failures and pending other chats`() {
+    val seen = mutableSetOf<String>()
+    val completions = PollCompletions(seen)
+    val target = run("target").copy(groupId = "group")
+    val other = run("other").copy(groupId = "other")
+    completions.page(listOf(target, other))
+    var persisted = 0
+    completions.snoozeChat(null, "group") { persisted++ }
+    assertEquals(1, persisted)
+    val posted = mutableListOf<String>()
+    completions.complete(target, alreadyPosted = { false }) { posted += target.runId }
+    completions.complete(other, alreadyPosted = { false }) { posted += other.runId }
+    assertEquals(listOf("other"), posted)
+    assertTrue(completions.page(listOf(run("later").copy(snoozed = true))).isEmpty())
+    val failures = mutableListOf<RunRecord>()
+    completions.prepare(listOf(run("failed").copy(status = "failed", snoozed = true)), true, NotificationSettings(), { false }) { failures += it }
+    assertEquals(listOf("failed"), failures.map { it.runId })
+  }
+  @Test
   fun `restart retains a reply missing from the next full recent page and posts it once`() {
     val seen = mutableSetOf<String>()
     val completions = PollCompletions(seen)

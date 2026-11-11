@@ -86,6 +86,15 @@ class OrkNotificationService : Service() {
           if (ownsStoredHistory(stored, historySpaceId)) persistCompleted(seeded = true)
         }
       }
+      val snoozeSpace = intent?.getStringExtra(EXTRA_SNOOZE_SPACE)
+      val snoozeBot = intent?.getStringExtra(EXTRA_SNOOZE_BOT)
+      val snoozeGroup = intent?.getStringExtra(EXTRA_SNOOZE_GROUP)
+      if (snoozeSpace != null && snoozeSpace == historySpaceId && (snoozeBot != null || snoozeGroup != null)) {
+        completions.snoozeChat(snoozeBot, snoozeGroup) {
+          val stored = getSharedPreferences(STATE_PREFERENCES, MODE_PRIVATE).getString(SEEN_RUNS_SPACE_ID, null)
+          if (ownsStoredHistory(stored, historySpaceId)) persistCompleted(seeded = true)
+        }
+      }
       sessionGeneration.incrementAndGet().also {
         if (intent?.action == ACTION_THREAD_CHANGED && (openBotId != null || openThreadId != null)) {
           clearLive()
@@ -279,6 +288,8 @@ class OrkNotificationService : Service() {
         putString("orkbot.spaceId", run.spaceId)
         putString("orkbot.botId", run.botId)
         putString("orkbot.threadId", run.threadId)
+        if (run.groupId != null) putString("orkbot.groupId", run.groupId)
+        if (run.status == "completed") putString("kind", "completion")
       })
       .setAutoCancel(true)
       .setCategory(Notification.CATEGORY_MESSAGE)
@@ -400,6 +411,9 @@ class OrkNotificationService : Service() {
     private const val RECENT_LIMIT = 20 // Keep in sync with apps/api/src/modules/agents/runs.ts.
     private const val EXTRA_RESET_TOKEN = "com.orkbot.notifications.RESET_TOKEN"
     private const val EXTRA_MUTED_BOT_ID = "com.orkbot.notifications.MUTED_BOT_ID"
+    private const val EXTRA_SNOOZE_SPACE = "com.orkbot.notifications.SNOOZE_SPACE"
+    private const val EXTRA_SNOOZE_BOT = "com.orkbot.notifications.SNOOZE_BOT"
+    private const val EXTRA_SNOOZE_GROUP = "com.orkbot.notifications.SNOOZE_GROUP"
     private const val STATE_PREFERENCES = "com.orkbot.notification_state"
     private const val SEEN_RUNS = "seen_runs"
     private const val SEEN_RUNS_SEEDED = "seen_runs_seeded"
@@ -419,6 +433,15 @@ class OrkNotificationService : Service() {
       if (mutedBotId != null) intent.putExtra(EXTRA_MUTED_BOT_ID, mutedBotId)
       runCatching { context.startService(intent) }
         .onFailure { error -> Log.w(TAG, "Could not start notification poller", error) }
+    }
+
+    fun snoozeChat(context: Context, spaceId: String, botId: String?, groupId: String?) {
+      val intent = Intent(context, OrkNotificationService::class.java)
+        .putExtra(EXTRA_SNOOZE_SPACE, spaceId)
+      if (botId != null) intent.putExtra(EXTRA_SNOOZE_BOT, botId)
+      if (groupId != null) intent.putExtra(EXTRA_SNOOZE_GROUP, groupId)
+      runCatching { context.startService(intent) }
+        .onFailure { error -> Log.w(TAG, "Could not update notification poller", error) }
     }
 
     fun stop(context: Context) {
@@ -529,6 +552,7 @@ private fun runs(
       prompt = row.optString("promptSnippet"),
       trigger = row.requiredString("trigger"),
       notificationsEnabled = row.optBoolean("notificationsEnabled", true),
+      snoozed = row.optBoolean("snoozed", false),
     )
   }
 }

@@ -6,6 +6,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { Bot, BotSection, Group, Me, Space, ThreadSnapshot } from "@orkbot/contracts";
+import { threadSnoozeState } from "@orkbot/core";
 import {
   BotAvatar,
   Button,
@@ -339,6 +340,9 @@ export function SidebarRoster({
                             compactStatusLabel
                               ? `roster-status-${item.kind}-${item.chat.id}`
                               : null,
+                            threadSnoozeState(item.chat.snoozedUntil) === "woken"
+                              ? `roster-woken-${item.kind}-${item.chat.id}`
+                              : null,
                           ]
                             .filter(Boolean)
                             .join(" ") || undefined
@@ -425,6 +429,14 @@ export function SidebarRoster({
                             {compactStatusLabel}
                           </span>
                         ) : null}
+                        {threadSnoozeState(item.chat.snoozedUntil) === "woken" ? (
+                          <span
+                            className="sr-only"
+                            id={`roster-woken-${item.kind}-${item.chat.id}`}
+                          >
+                            <Trans>Woken</Trans>
+                          </span>
+                        ) : null}
                         {item.chat.unread ? (
                           <>
                             <span
@@ -460,6 +472,11 @@ export function SidebarRoster({
                             {item.chat.unread ? (
                               <span className="sr-only">
                                 <Trans> (unread)</Trans>
+                              </span>
+                            ) : null}
+                            {threadSnoozeState(item.chat.snoozedUntil) === "woken" ? (
+                              <span className="shrink-0 text-xs text-muted-foreground">
+                                <Trans>Woken</Trans>
                               </span>
                             ) : null}
                           </div>

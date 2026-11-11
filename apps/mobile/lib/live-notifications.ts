@@ -51,6 +51,7 @@ type NativeNotifications = {
     headers: string,
     botId: string,
   ): Promise<void>;
+  snoozeChat?(spaceId: string, botId: string | null, groupId: string | null): Promise<void>;
   stop(clearSession: boolean): Promise<void>;
   setOpenThread(botId: string | null, threadId: string | null): Promise<void>;
   openSettings(): Promise<void>;
@@ -212,16 +213,32 @@ export async function setOpenNotificationThread(
   }
 }
 
-export async function dismissThreadNotifications(target: NotificationThreadTarget): Promise<void> {
+export async function dismissThreadNotifications(
+  target: NotificationThreadTarget,
+  kind?: string,
+): Promise<void> {
   if (!target.botId && !target.threadId && !target.groupId) return;
   const presented = await Notifications.getPresentedNotificationsAsync();
   await Promise.all(
     presented
       .filter(({ request }) => {
         const data = request.content.data ?? {};
-        return notificationTargetsThread(data, target);
+        return notificationTargetsThread(data, target) && (!kind || data.kind === kind);
       })
       .map(({ request }) => Notifications.dismissNotificationAsync(request.identifier)),
+  );
+}
+
+export async function discardSnoozedNotifications(
+  spaceId: string | undefined,
+  kind: "bot" | "group",
+  id: string,
+): Promise<void> {
+  if (!spaceId || !nativeNotifications?.snoozeChat) return;
+  await nativeNotifications.snoozeChat(
+    spaceId,
+    kind === "bot" ? id : null,
+    kind === "group" ? id : null,
   );
 }
 

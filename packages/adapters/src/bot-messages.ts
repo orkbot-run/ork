@@ -109,7 +109,7 @@ export async function messageBot(
   if (message.length > BOT_MESSAGE_MAX_LENGTH) {
     return {
       ok: false as const,
-      error: `message exceeds the ${BOT_MESSAGE_MAX_LENGTH} character limit`,
+      error: `message exceeds the ${BOT_MESSAGE_MAX_LENGTH} character limit; save longer content to a file and pass its path using files`,
     };
   }
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { automated } from "./automated-messages.js";
 import { TOOL_RESULT_TEXT_LIMIT } from "./pi-runtime-limits.js";
 import {
@@ -10,6 +10,41 @@ import {
 } from "./shell-command-stream.js";
 
 describe("observeShellCommand", () => {
+  it.each([
+    ["ordinary output https://example.com/docs", 10_000],
+    ["code: ABCD-1234\nhttps://example.com/device", 1_000],
+  ])("waits for the appropriate idle period for %s", async (output, delay) => {
+    vi.useFakeTimers();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      let returned = false;
+      const observation = observeShellCommand(
+        (async function* () {
+          yield { type: "stdout" as const, data: output };
+          await gate;
+          yield { type: "exit" as const, code: 0 };
+        })(),
+        { secrets: [] },
+      ).then((result) => {
+        returned = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(delay - 1);
+      expect(returned).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      const observed = await observation;
+      expect(isRunningShellCommand(observed.result)).toBe(true);
+      release();
+      await observed.completion;
+    } finally {
+      release();
+      vi.useRealTimers();
+    }
+  });
+
   it("redacts provider errors before they reach the runtime", async () => {
     const secret = "fake-shell-error-secret";
     const error = await observeShellCommand(

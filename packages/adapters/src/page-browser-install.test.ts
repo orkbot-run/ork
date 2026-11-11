@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 installer coverage is preserved; bounded download recovery follows LICENSE.md.
+// Inherited Apache-2.0 installer coverage is preserved; bounded download recovery and Python isolation coverage follow LICENSE.md.
 
 import { execFile, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -43,6 +43,7 @@ function runUnder(script: string, folder: string) {
 }
 
 it("writes this release's page-browser files once, and again when they differ", () => {
+  expect(installPageBrowserFilesCommand()).toContain("/usr/bin/python3 -I -c");
   root = mkdtempSync(path.join(tmpdir(), "page-browser-install-"));
   execFileSync("mkdir", ["-p", `${root}/usr/local/bin`]);
   const wrapper = `${root}/usr/local/bin/orkbot-page-browser`;

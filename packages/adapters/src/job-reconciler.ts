@@ -12,6 +12,7 @@ import type { Pool, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { reconcileComputerRuns } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
 import type { PoolClient } from "pg";
+import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { reconcileCallRequests } from "./call-request.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
@@ -236,6 +237,8 @@ export function createJobReconciler(
           select: {
             id: true,
             status: true,
+            trigger: true,
+            thread: { select: { parentThreadId: true } },
             updatedAt: true,
             botId: true,
             bot: { select: { computerId: true } },
@@ -258,6 +261,34 @@ export function createJobReconciler(
 
       const events = deps.events;
       if (events) {
+        const helperOutcomes = await deps.prisma.run.findMany({
+          where: {
+            trigger: "tickets",
+            clientNonce: { startsWith: "background-helper:" },
+            thread: { parentThreadId: { not: null } },
+            status: { in: ["completed", "failed", "cancelled"] },
+            botOutcomeReturnedAt: null,
+          },
+          orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
+          take: batchSize,
+          select: { id: true, spaceId: true },
+        });
+        await Promise.all(
+          helperOutcomes.map(async (run) => {
+            try {
+              await deliverBackgroundHelperOutcome(
+                { ...deps, events },
+                { spaceId: run.spaceId, runId: run.id },
+              );
+            } catch (error) {
+              getLogger().error("background helper outcome reconciliation", error);
+              await deps.prisma.run.updateMany({
+                where: { id: run.id, botOutcomeReturnedAt: null },
+                data: { updatedAt: new Date() },
+              });
+            }
+          }),
+        );
         const outcomes = await deps.prisma.run.findMany({
           where: {
             trigger: "bot_message",

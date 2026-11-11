@@ -1,6 +1,7 @@
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { ChatMarkdown } from "@orkbot/chat-ui/web";
 import type { ThreadMessage } from "@orkbot/contracts";
+import { Button } from "@orkbot/ui-web";
 import {
   Collapsible,
   CollapsibleContent,
@@ -20,10 +21,20 @@ const openHelpers = new Set<string>();
  * brief or report does not fill the chat. The header opens it to the full task and the result
  * or progress.
  */
-export function SubagentCard({ block }: { block: SubagentBlock }) {
+export function SubagentCard({
+  block,
+  onStop,
+}: {
+  block: SubagentBlock;
+  onStop?: () => Promise<void>;
+}) {
+  const { t } = useLingui();
   const [open, setOpen] = useState(() => openHelpers.has(block.agentId));
+  const [stopping, setStopping] = useState(false);
+  const [stopFailed, setStopFailed] = useState(false);
   const running = block.status === "running";
-  const failed = block.status === "failed";
+  const stopped = block.status === "failed" && block.stopped === true;
+  const failed = block.status === "failed" && !stopped;
   const body = block.result || block.progress || "";
   return (
     <Collapsible
@@ -47,15 +58,19 @@ export function SubagentCard({ block }: { block: SubagentBlock }) {
             className={`${running ? "motion-safe:animate-[rkPulse_1.2s_ease-in-out_infinite]" : ""} shrink-0 rounded-full px-[11px] py-1 text-[13px] ${
               failed
                 ? "bg-destructive/15 text-destructive"
-                : running
-                  ? "bg-warning/15 text-warning"
-                  : "bg-success/15 text-success"
+                : stopped
+                  ? "bg-muted text-muted-foreground"
+                  : running
+                    ? "bg-warning/15 text-warning"
+                    : "bg-success/15 text-success"
             }`}
           >
             {running ? (
               <Trans>Running</Trans>
             ) : failed ? (
               <Trans>Failed</Trans>
+            ) : stopped ? (
+              <Trans>Stopped.</Trans>
             ) : (
               <Trans>Completed</Trans>
             )}
@@ -78,6 +93,28 @@ export function SubagentCard({ block }: { block: SubagentBlock }) {
           {block.task}
         </span>
       </CollapsibleTrigger>
+      {running && block.background && onStop ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={t`Stop ${block.name}`}
+          disabled={stopping}
+          onClick={() => {
+            setStopping(true);
+            setStopFailed(false);
+            void onStop()
+              .catch(() => setStopFailed(true))
+              .finally(() => setStopping(false));
+          }}
+        >
+          <Trans>Stop</Trans>
+        </Button>
+      ) : null}
+      {stopFailed ? (
+        <p role="alert" className="text-sm text-destructive">
+          <Trans>Something went wrong. Try again.</Trans>
+        </p>
+      ) : null}
       {body ? (
         <CollapsibleContent>
           <div

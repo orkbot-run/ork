@@ -3,7 +3,7 @@ import type { MessageBlock } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
-import { ContentDecryptionError } from "./content-crypto.js";
+import { ContentDecryptionError, searchTokens } from "./content-crypto.js";
 import { contentEncryptionOf } from "./content-encryption.js";
 import type { ContentExportRecord } from "./content-export.js";
 import { exportContent } from "./content-export.js";
@@ -214,6 +214,80 @@ describePostgres("content encryption (PostgreSQL)", () => {
       expect(await rawBlocks(message.id)).not.toContain("harbor");
       const found = await searchHistory(prisma, scope, { query: "harbor survey" });
       expect(found.messages.map((m) => m.messageId)).toEqual([message.id]);
+      await prisma.message.delete({ where: { id: message.id }, select: { id: true } });
+    }));
+
+  it("finds tool notes in previously encrypted messages using their legacy prefix tokens", () =>
+    runAsSystem("test fixture", async () => {
+      const message = await createThreadMessage(prisma, {
+        threadId,
+        role: "bot",
+        botId,
+        blocks: [
+          {
+            kind: "steps",
+            steps: [{ label: "Search observatory", count: 1, note: "Inspect quasars" }],
+          },
+        ],
+      });
+      const key = await contentEncryptionOf(prisma)!.ring.current(spaceId);
+      const legacyTokens = searchTokens(key, {
+        words: "",
+        strings: ["Search observatory", "Inspect quasars"],
+      });
+      await raw.query('UPDATE messages SET "searchTokens" = $1 WHERE id = $2', [
+        legacyTokens,
+        message.id,
+      ]);
+      const falseCandidates = [];
+      for (let i = 0; i < 8; i++) {
+        falseCandidates.push(
+          await createThreadMessage(prisma, {
+            threadId,
+            role: "bot",
+            botId,
+            blocks: [{ kind: "steps", steps: [{ label: "Investigate quasarscape", count: 1 }] }],
+          }),
+        );
+      }
+      expect(
+        (await searchHistory(prisma, scope, { query: "quasars", limit: 1 })).messages.map(
+          (m) => m.messageId,
+        ),
+      ).toContain(message.id);
+      expect(
+        (await searchHistory(prisma, scope, { query: "quasar" })).messages.map((m) => m.messageId),
+      ).not.toContain(message.id);
+      expect(
+        (
+          await searchHistory(prisma, scope, { query: "quasars", kinds: ["bot_replies"] })
+        ).messages.map((m) => m.messageId),
+      ).toContain(message.id);
+      for (const candidate of falseCandidates) {
+        await prisma.message.delete({ where: { id: candidate.id }, select: { id: true } });
+      }
+      await prisma.message.delete({ where: { id: message.id }, select: { id: true } });
+    }));
+
+  it("does not match omitted portions of encrypted tool steps", () =>
+    runAsSystem("test fixture", async () => {
+      const steps = Array.from({ length: 21 }, (_, index) => ({
+        label: index === 20 ? "hiddenstepword" : `Step ${index}`,
+        count: 1,
+        note: index === 0 ? `${"x".repeat(300)} hiddennoteword` : "",
+      }));
+      const message = await createThreadMessage(prisma, {
+        threadId,
+        role: "bot",
+        botId,
+        blocks: [{ kind: "steps", steps }],
+      });
+      expect((await searchHistory(prisma, scope, { query: "hiddenstepword" })).messages).toEqual(
+        [],
+      );
+      expect((await searchHistory(prisma, scope, { query: "hiddennoteword" })).messages).toEqual(
+        [],
+      );
       await prisma.message.delete({ where: { id: message.id }, select: { id: true } });
     }));
 

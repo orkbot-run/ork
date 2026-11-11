@@ -103,6 +103,7 @@ import {
   currentSessionGeneration,
   subscribeSessionGeneration,
 } from "../lib/session";
+import { visibleSnoozedActivity, visibleSnoozes } from "../lib/snooze-inbox";
 import { useSplitView } from "../lib/split-view";
 import { useArchivedCount } from "../lib/use-archived-count";
 import { useCollapsedSections } from "../lib/use-collapsed-sections";
@@ -110,6 +111,7 @@ import { useHomeHeader } from "../lib/use-home-header";
 import { chatRpc, useInboxChatActions } from "../lib/use-inbox-chat-actions";
 import { useInboxDay } from "../lib/use-inbox-day";
 import { usePublishSearchInbox } from "../lib/use-publish-search-inbox";
+import { useSnoozeClock } from "../lib/use-snooze-clock";
 import type { LoadFailureKind } from "../lib/user-error";
 import { errorText, loadFailureKind } from "../lib/user-error";
 
@@ -405,9 +407,11 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
     createSection,
     renameSection,
     organizeFromMenu,
+    snoozeFromMenu,
+    snoozeChat,
     editSectionFromMenu,
     deleteSection,
-  } = useInboxChatActions({ loadBots, setBots, setGroups, setSpaces, botSections });
+  } = useInboxChatActions({ loadBots, setBots, setGroups, setSpaces, botSections, spaces });
 
   const loadActivity = useCallback(async () => {
     if (spaceActionRef.current.busy || spaceActionRef.current.recoveryId) return;
@@ -442,25 +446,51 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
     [activityMode, hasSession],
   );
 
+  const snoozeDeadlines = useMemo(
+    () =>
+      [...bots, ...groups, ...spaces.flatMap((space) => [...space.bots, ...space.groups])].map(
+        (chat) => chat.snoozedUntil,
+      ),
+    [bots, groups, spaces],
+  );
+  const refreshSnoozes = useCallback(() => {
+    if (!hasSession) return;
+    void loadBots();
+    void loadActivity();
+  }, [hasSession, loadBots, loadActivity]);
+  const snoozeNow = useSnoozeClock(snoozeDeadlines, refreshSnoozes);
   const visible = useMemo(
-    () => withoutArchiving("bot", applyUnreadOverrides("bot", bots, unreadOverrides), archiving),
-    [bots, unreadOverrides, archiving],
+    () =>
+      visibleSnoozes(
+        withoutArchiving("bot", applyUnreadOverrides("bot", bots, unreadOverrides), archiving),
+        snoozeNow,
+      ),
+    [bots, unreadOverrides, archiving, snoozeNow],
   );
   const visibleGroups = useMemo(
     () =>
-      withoutArchiving("group", applyUnreadOverrides("group", groups, unreadOverrides), archiving),
-    [groups, unreadOverrides, archiving],
+      visibleSnoozes(
+        withoutArchiving(
+          "group",
+          applyUnreadOverrides("group", groups, unreadOverrides),
+          archiving,
+        ),
+        snoozeNow,
+      ),
+    [groups, unreadOverrides, archiving, snoozeNow],
   );
   const shownSpaces = useMemo(
     () =>
-      archiving.size === 0
-        ? spaces
-        : spaces.map((space) => ({
-            ...space,
-            bots: withoutArchiving("bot", space.bots, archiving),
-            groups: withoutArchiving("group", space.groups, archiving),
-          })),
-    [spaces, archiving],
+      spaces.map((space) => ({
+        ...space,
+        bots: visibleSnoozes(withoutArchiving("bot", space.bots, archiving), snoozeNow),
+        groups: visibleSnoozes(withoutArchiving("group", space.groups, archiving), snoozeNow),
+      })),
+    [spaces, archiving, snoozeNow],
+  );
+  const visibleActivity = useMemo(
+    () => visibleSnoozedActivity(activity, bots, groups, snoozeNow),
+    [activity, bots, groups, snoozeNow],
   );
   const inboxSpaces = useMemo(
     () =>
@@ -824,9 +854,11 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
     openGroup,
     organizeBot,
     organizeFromMenu,
+    snoozeFromMenu,
     organizeGroup,
     spaceBusy,
     spaceRecoveryId,
+    spaces,
     sharing: !!onShareSelect,
     toggleCollapsed,
   });
@@ -906,12 +938,18 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
                     {/* Folds are saved per account, so wait for it before offering them. */}
                     {!onShareSelect && activityMode && userId ? (
                       <ActivitySection
-                        activity={activity}
+                        activity={visibleActivity}
                         bots={visible}
                         groups={visibleGroups}
                         toggledSections={collapsed}
                         onToggleSection={toggleCollapsed}
                         openChat={openChat}
+                        botAction={botAction}
+                        groupAction={groupAction}
+                        sections={botSections}
+                        organizeFromMenu={organizeFromMenu}
+                        editSectionFromMenu={editSectionFromMenu}
+                        snoozeFromMenu={snoozeFromMenu}
                       />
                     ) : null}
                   </>
@@ -957,6 +995,7 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
             setOrganizeTarget(null);
           }}
           onUpdate={(update) => updateChat(organizeTarget.kind, organizeChat, update)}
+          onSnooze={(preset) => snoozeChat(organizeTarget.kind, organizeChat, preset)}
           onCreateSection={(name) =>
             createSection(organizeTarget.kind, organizeChat.id, name, organizeTarget.spaceId)
           }

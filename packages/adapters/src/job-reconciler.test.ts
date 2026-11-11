@@ -7,12 +7,14 @@ import type { BackgroundJob, JobPublisher } from "@orkbot/adapter-kit";
 import { stuckWorkStatusMessages } from "@orkbot/core";
 import type { Pool, PrismaClient, ThreadEvents } from "@orkbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { deliverBackgroundHelperOutcome } from "./background-helper-delivery.js";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import type { ReconciliationLeadership } from "./job-reconciler.js";
 import { createJobReconciler, createPostgresReconciliationLeadership } from "./job-reconciler.js";
 import { loopGuardStopText } from "./tool-loop.js";
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
+vi.mock("./background-helper-delivery.js", () => ({ deliverBackgroundHelperOutcome: vi.fn() }));
 
 function publisher() {
   const enqueue = vi.fn(async (_job: BackgroundJob): Promise<void> => undefined);
@@ -61,6 +63,30 @@ function deferred() {
 }
 
 describe("createJobReconciler", () => {
+  it("retries undelivered background helper outcomes", async () => {
+    const run = { id: "helper-1", spaceId: "space-1" };
+    const prisma = fakePrisma();
+    Object.assign(prisma.run, {
+      findMany: vi.fn(async (args?: { where?: { trigger?: string } }) =>
+        args?.where?.trigger === "tickets" ? [run] : [],
+      ),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    });
+    vi.mocked(deliverBackgroundHelperOutcome).mockRejectedValueOnce(new Error("temporary"));
+    const { jobs } = publisher();
+    const events = { notify: vi.fn() } as unknown as ThreadEvents;
+    const reconciler = createJobReconciler({ prisma, jobs, events });
+    await reconciler.reconcileOnce();
+    await reconciler.reconcileOnce();
+    expect(deliverBackgroundHelperOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ prisma, jobs, events }),
+      { spaceId: "space-1", runId: "helper-1" },
+    );
+    expect(deliverBackgroundHelperOutcome).toHaveBeenCalledTimes(2);
+    expect(prisma.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "helper-1", botOutcomeReturnedAt: null } }),
+    );
+  });
   it("continues the main scans when an auxiliary reconciler fails", async () => {
     const prisma = fakePrisma();
     const { jobs } = publisher();
@@ -798,8 +824,7 @@ describe("createJobReconciler", () => {
     await reconciler.reconcileOnce();
     await reconciler.reconcileOnce();
 
-    expect(runFindMany).toHaveBeenNthCalledWith(
-      4,
+    expect(runFindMany).toHaveBeenCalledWith(
       expect.objectContaining({
         orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
         where: {

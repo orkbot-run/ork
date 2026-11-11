@@ -3,7 +3,30 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { activityNotificationsEnabled, activityPreview } from "./runs.js";
+import { activityNotificationsEnabled, activityPreview, snoozedCompletion } from "./runs.js";
+
+it("suppresses an offline completion through the snooze watermark after waking or opening", () => {
+  const snooze = { until: new Date(2000), suppressCompletedThrough: new Date(1000) };
+  expect(snoozedCompletion(snooze, "completed", new Date(1500), 3000)).toBe(true);
+  expect(
+    snoozedCompletion(
+      { until: null, suppressCompletedThrough: new Date(2000) },
+      "completed",
+      new Date(1500),
+      3000,
+    ),
+  ).toBe(true);
+  expect(
+    snoozedCompletion(
+      { until: null, suppressCompletedThrough: new Date(2000) },
+      "completed",
+      new Date(2500),
+      3000,
+    ),
+  ).toBe(false);
+  expect(snoozedCompletion(snooze, "failed", new Date(1500), 3000)).toBe(false);
+  expect(snoozedCompletion(snooze, "completed", null, 3000)).toBe(true);
+});
 
 describe("run activity copy", () => {
   it.each([

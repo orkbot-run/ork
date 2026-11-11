@@ -221,7 +221,11 @@ describe("messaging another bot", () => {
       bot_id: "bot-target",
       message: "x".repeat(8_001),
     });
-    expect(sent).toEqual({ ok: false, error: "message exceeds the 8000 character limit" });
+    expect(sent).toEqual({
+      ok: false,
+      error:
+        "message exceeds the 8000 character limit; save longer content to a file and pass its path using files",
+    });
     expect(harness.tx.run.create).not.toHaveBeenCalled();
   });
 

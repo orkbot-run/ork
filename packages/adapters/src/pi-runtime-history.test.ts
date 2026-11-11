@@ -327,4 +327,20 @@ describe("Pi history replay", () => {
     expect(String(captured.steered[0]!.content)).toContain("And C.");
     expect(String(captured.steered[0]!.content)).not.toContain("[User]");
   });
+
+  it("never presents a background helper result as user context", async () => {
+    await replay({
+      prompt: "Continue.",
+      claimSteering: async () => [
+        {
+          id: "helper-claim",
+          messageId: "helper-message",
+          text: "Result.",
+          origin: "helper" as const,
+        },
+      ],
+    });
+    expect(captured.prompt).toContain("your background helper (not the user)");
+    expect(captured.prompt).not.toContain("Additional user context");
+  });
 });

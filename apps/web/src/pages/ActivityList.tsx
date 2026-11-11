@@ -12,7 +12,6 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-  GroupAvatar,
   Input,
   Label,
   NativeSelect,
@@ -34,6 +33,7 @@ import {
 } from "../lib/activity-list-filters";
 import { useSpaceQueries } from "../lib/query";
 import { formatRelativeTime } from "../lib/relative-time";
+import type { SnoozedChat } from "./shell/snoozed-chats";
 
 export function statusTone(status: RunActivityRow["status"]): string {
   if (status === "failed") return "text-destructive";
@@ -52,12 +52,11 @@ type ActivityListProps = {
   toggledSections: ReadonlySet<string>;
   onToggleSection: (key: string) => void;
   onOpenRun: (run: RunActivityRow) => void;
-  onOpenBot: (bot: Bot) => void;
-  onOpenGroup: (group: Group) => void;
   filters: ActivityListFilters;
   onFiltersChange: (next: ActivityListFilters) => void;
   filtersExpanded: boolean;
   filtersId: string;
+  snoozedChats?: SnoozedChat[];
 };
 
 export function ActivityList({
@@ -66,12 +65,11 @@ export function ActivityList({
   toggledSections,
   onToggleSection,
   onOpenRun,
-  onOpenBot,
-  onOpenGroup,
   filters,
   onFiltersChange,
   filtersExpanded,
   filtersId,
+  snoozedChats = [],
 }: ActivityListProps) {
   const { t } = useLingui();
   const queries = useSpaceQueries();
@@ -82,8 +80,16 @@ export function ActivityList({
   } as const;
   const active = useQuery(queries.runs.list.queryOptions({ input: { filter: "active" }, ...poll }));
   const recent = useQuery(queries.runs.list.queryOptions({ input: { filter: "recent" }, ...poll }));
-  const activeRuns = active.data?.runs ?? NO_RUNS;
-  const recentRuns = recent.data?.runs ?? NO_RUNS;
+  const hiddenBots = new Set(
+    snoozedChats.filter((chat) => chat.kind === "bot").map((chat) => chat.id),
+  );
+  const hiddenGroups = new Set(
+    snoozedChats.filter((chat) => chat.kind === "group").map((chat) => chat.id),
+  );
+  const visibleRun = (run: RunActivityRow) =>
+    run.groupId ? !hiddenGroups.has(run.groupId) : !hiddenBots.has(run.botId);
+  const activeRuns = (active.data?.runs ?? NO_RUNS).filter(visibleRun);
+  const recentRuns = (recent.data?.runs ?? NO_RUNS).filter(visibleRun);
   // "Try again" shows its progress in place of the error it answers.
   const [retrying, setRetrying] = useState(false);
   const loading = active.isPending || recent.isPending || retrying;
@@ -114,10 +120,7 @@ export function ActivityList({
     bots,
     groups,
   });
-  // Filters narrow runs, so unread chats step aside and their matching runs stay in Recent.
-  const recentRows = filtersOn
-    ? filteredRecent.filter((run) => !sections.attention.includes(run))
-    : sections.recent;
+  const recentRows = filteredRecent.filter((run) => !sections.attention.includes(run));
   const botsById = useMemo(() => new Map(bots.map((bot) => [bot.id, bot])), [bots]);
   const section = (key: string, title: string, count: number, defaultOpen: boolean) => ({
     title,
@@ -135,16 +138,13 @@ export function ActivityList({
         onOpen={() => onOpenRun(run)}
       />
     ));
-  const unreadCount = filtersOn ? 0 : sections.unreadGroups.length + sections.unreadBots.length;
   const hasAnyRuns = activeRuns.length > 0 || recentRuns.length > 0;
   const hasVisibleRuns = filteredActive.length > 0 || filteredRecent.length > 0;
 
   return (
     <div
       className={
-        hasAnyRuns || unreadCount > 0 || filtersOn || filtersExpanded
-          ? "mb-2 border-b border-border pb-2"
-          : undefined
+        hasAnyRuns || filtersOn || filtersExpanded ? "mb-2 border-b border-border pb-2" : undefined
       }
       data-testid="activity-list"
     >
@@ -181,38 +181,6 @@ export function ActivityList({
       {sections.working.length > 0 ? (
         <ActivitySection {...section("working", t`Working`, sections.working.length, false)}>
           {runRows(sections.working)}
-        </ActivitySection>
-      ) : null}
-      {unreadCount > 0 ? (
-        <ActivitySection {...section("unread", t`Unread`, unreadCount, false)}>
-          {sections.unreadGroups.map((group) => (
-            <ChatRow
-              key={group.id}
-              avatar={<GroupAvatar members={group.members} size={28} />}
-              name={group.name}
-              preview={group.preview}
-              updatedAt={group.updatedAt}
-              onOpen={() => onOpenGroup(group)}
-            />
-          ))}
-          {sections.unreadBots.map((bot) => (
-            <ChatRow
-              key={bot.id}
-              avatar={
-                <BotAvatar
-                  identity={bot.id}
-                  avatarSeed={bot.avatarSeed}
-                  color={bot.color}
-                  avatarSet={bot.avatarSet}
-                  size={28}
-                />
-              }
-              name={bot.name}
-              preview={bot.preview}
-              updatedAt={bot.updatedAt}
-              onOpen={() => onOpenBot(bot)}
-            />
-          ))}
         </ActivitySection>
       ) : null}
       {recentRows.length > 0 ? (
@@ -488,41 +456,6 @@ function ActivityRow({
             <span className={`ms-auto shrink-0 text-xs ${statusTone(run.status)}`}>{label}</span>
           ) : null}
         </div>
-      </div>
-    </button>
-  );
-}
-
-function ChatRow({
-  avatar,
-  name,
-  preview,
-  updatedAt,
-  onOpen,
-}: {
-  avatar: ReactNode;
-  name: string;
-  preview: string;
-  updatedAt: string;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left hover:bg-accent"
-    >
-      {avatar}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground">{name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground/80">
-            {formatRelativeTime(updatedAt)}
-          </span>
-        </div>
-        {preview ? (
-          <div className="truncate text-[13px] text-muted-foreground">{preview}</div>
-        ) : null}
       </div>
     </button>
   );

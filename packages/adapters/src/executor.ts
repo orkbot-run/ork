@@ -314,8 +314,17 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       // A stopping process must not claim work it cannot finish. The row stays
       // queued or expired for a worker that is still running.
       if (deps.shutdownSignal?.aborted) return;
-      const run = await deps.prisma.run.findUnique({ where: { id: runId } });
-      if (!run) return;
+      const persistedRun = await deps.prisma.run.findUnique({
+        where: { id: runId },
+        include: { thread: { select: { parentThreadId: true } } },
+      });
+      if (!persistedRun) return;
+      // Existing readers know and hide the ticket trigger. A parent relation, created only by
+      // helper admission, distinguishes this run for the new reader.
+      const run =
+        persistedRun.trigger === "tickets" && persistedRun.thread?.parentThreadId
+          ? { ...persistedRun, trigger: "background_helper" }
+          : persistedRun;
       // Logs and security events raised by this run's tools name its account and space.
       enrichLogContext({
         "run.id": runId,
@@ -407,8 +416,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           computer: { select: { scope: true } },
         },
       });
-      if (!leaseTarget.computerId) throw new Error("Bot has no computer");
-      if (leaseTarget.computerSwitching) {
+      if (!leaseTarget.computerId && run.trigger !== "background_helper")
+        throw new Error("Bot has no computer");
+      if (leaseTarget.computerSwitching && run.trigger !== "background_helper") {
         await requeueComputerRun(deps, runId, workerId, fence, resumeCheckpoint, heldForTakeover);
         return;
       }
@@ -434,24 +444,28 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       }
       let computerLease: ComputerExecutionLease | null = null;
       try {
-        computerLease = await acquireComputerExecutionLease(deps.prisma, {
-          computerId: leaseTarget.computerId,
-          runId,
-          botId: run.botId,
-          workerId,
-          runFence: fence,
-        });
-        if (!computerLease && leaseTarget.computer?.scope === "dedicated") {
-          computerLease = await acquireDedicatedScreenLeaseFence(deps.prisma, {
+        if (run.trigger !== "background_helper") {
+          if (!leaseTarget.computerId) throw new Error("Bot has no computer");
+          computerLease = await acquireComputerExecutionLease(deps.prisma, {
             computerId: leaseTarget.computerId,
             runId,
             botId: run.botId,
             workerId,
             runFence: fence,
           });
+          if (!computerLease && leaseTarget.computer?.scope === "dedicated") {
+            computerLease = await acquireDedicatedScreenLeaseFence(deps.prisma, {
+              computerId: leaseTarget.computerId,
+              runId,
+              botId: run.botId,
+              workerId,
+              runFence: fence,
+            });
+          }
         }
       } catch (error) {
         if (!(error instanceof ComputerBusyError)) throw error;
+        if (!leaseTarget.computerId) throw error;
         // Maintenance or suspension sends no release, so only a held lease waits for one.
         const heldByAnotherRun = await deps.prisma.computerExecutionLease.findFirst({
           where: {
@@ -663,7 +677,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           deps.prisma.deploymentSettings.findUnique({
             where: { id: "default" },
           }),
-          deps.memoryProviders.resolve(run.spaceId),
+          run.trigger === "background_helper"
+            ? Promise.resolve(null)
+            : deps.memoryProviders.resolve(run.spaceId),
           deps.prisma.taughtSkill.findMany({
             where: { botId: run.botId, spaceId: run.spaceId, status: "saved" },
           }),
@@ -733,9 +749,10 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const onShutdown = () => runAbortController?.abort(deps.shutdownSignal?.reason);
         deps.shutdownSignal?.addEventListener("abort", onShutdown);
         detachShutdown = () => deps.shutdownSignal?.removeEventListener("abort", onShutdown);
-        const composioRows = storedConnections.filter(
-          (connection) => connection.connectorId === "composio",
-        );
+        const composioRows =
+          run.trigger === "background_helper"
+            ? []
+            : storedConnections.filter((connection) => connection.connectorId === "composio");
         let liveSlugs: string[] = [];
         if (needsLivePluginSync(composioRows)) {
           const listing = await loadLivePluginSlugs(deps.listConnectedPluginSlugs, run.userId);
@@ -775,15 +792,16 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           type: "run.started",
           runId,
           payload: {
-            trigger: run.trigger,
+            trigger: run.trigger === "background_helper" ? "tickets" : run.trigger,
             routineId: current.routineId,
             routineName: projectRunRoutineName(current, current.routine, thread),
           },
         });
 
-        const discoveredPromise = deps.connector
-          ? deps.connector.discoverTools(context)
-          : Promise.resolve([]);
+        const discoveredPromise =
+          deps.connector && run.trigger !== "background_helper"
+            ? deps.connector.discoverTools(context)
+            : Promise.resolve([]);
         // Group threads only: who wrote each message, so the model can tell the bots and the
         // user apart. Direct chats stay plain user/assistant turns.
         const speakers = await loadThreadSpeakers(
@@ -1145,9 +1163,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           });
         }
 
-        if (!bot.computer) throw new Error("Bot has no computer");
         const storedComputer = bot.computer;
-        const computerMode = parseComputerMode(storedComputer.scope);
+        if (!storedComputer && run.trigger !== "background_helper")
+          throw new Error("Bot has no computer");
+        const requireStoredComputer = () => {
+          if (!storedComputer) throw new Error("This run has no computer");
+          return storedComputer;
+        };
+        const computerMode = storedComputer ? parseComputerMode(storedComputer.scope) : "dedicated";
         const artifacts = deps.artifacts;
         const recentFilesInput = {
           context,
@@ -1160,11 +1183,12 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const runComputer = lazyRunComputer(
           async () => {
             getLogger().info("computer.requested");
-            const computer = await provisionComputer(deps, storedComputer.id, context, "bot");
+            const stored = requireStoredComputer();
+            const computer = await provisionComputer(deps, stored.id, context, "bot");
             earlierFiles.computerStarted();
             computerUse.screenRelease = { computer, context, keepWarm: false };
-            recordComputerDisk(deps, storedComputer.id, computer, context);
-            scheduleComputerSleep(deps.jobs, storedComputer.id);
+            recordComputerDisk(deps, stored.id, computer, context);
+            scheduleComputerSleep(deps.jobs, stored.id);
             // Earlier attachments wait for the computer's first use; every start copies them
             // again, so they need no checkpoint, and each copy logs and skips its own failure.
             if (artifacts) {
@@ -1178,16 +1202,20 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           () => runAbortController?.abort(),
         );
         const computerKind =
-          (await deps.sandbox.provisionKind?.(storedComputer.homeKey)) ?? storedComputer.kind;
+          storedComputer && run.trigger !== "background_helper"
+            ? ((await deps.sandbox.provisionKind?.(storedComputer.homeKey)) ?? storedComputer.kind)
+            : undefined;
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(
           async () => {
             if (!runComputer.ready) return;
-            await checkpointRunComputerWorkspace(deps, storedComputer, runComputer.ready, {
+            await checkpointRunComputerWorkspace(deps, requireStoredComputer(), runComputer.ready, {
               ...context,
               signal: attemptSignal,
             });
           },
-          { id: storedComputer.id, kind: computerKind },
+          storedComputer
+            ? { id: storedComputer.id, kind: computerKind ?? storedComputer.kind }
+            : null,
           attemptSignal,
         );
         const pendingTurnFiles: MessageBlock[][] = [turnBlocks ?? []];
@@ -1204,7 +1232,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               tool: computerUse.tool,
               trigger: run.trigger,
               "run.id": runId,
-              "computer.id": storedComputer.id,
+              "computer.id": storedComputer?.id,
             },
             async () => {
               const computer = await runComputer.get();
@@ -1263,12 +1291,18 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const attachedFilesPrompt = [
           currentTurnFilesInstruction(currentTurnFiles),
           recentThreadFilesInstruction(recentThreadFiles),
-          await delegatedFilesInstruction(deps, run, storedComputer, turnBlocks),
+          storedComputer && run.trigger !== "background_helper"
+            ? await delegatedFilesInstruction(deps, run, storedComputer, turnBlocks)
+            : undefined,
         ]
           .filter(Boolean)
           .join("\n\n");
-        const graphical =
-          computerKind !== "desktop" && deps.sandbox.describe().capabilities.graphical;
+        const graphical = Boolean(
+          storedComputer &&
+            run.trigger !== "background_helper" &&
+            computerKind !== "desktop" &&
+            deps.sandbox.describe().capabilities.graphical,
+        );
         // Gate on the pair written to the run row above; re-deriving it would drop the
         // deployment fallback and gate a vision-capable default as text-only.
         const modelSeesImages = modelAcceptsImageInput(
@@ -1283,10 +1317,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               name: bot.name,
             })
           : undefined;
-        const hasMessagingIdentity = deps.messaging
-          ? await deps.messaging.hasIdentity(bot.id)
-          : false;
-        const paymentWallet = deps.paymentWallet;
+        const hasMessagingIdentity =
+          deps.messaging && run.trigger !== "background_helper"
+            ? await deps.messaging.hasIdentity(bot.id)
+            : false;
+        const paymentWallet = run.trigger === "background_helper" ? undefined : deps.paymentWallet;
         const paymentWalletEnabled = paymentWallet
           ? await paymentWalletConnected(
               { prisma: deps.prisma, secretStore: deps.secretStore, paymentWallet },
@@ -1429,9 +1464,12 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           trigger: run.trigger,
           clientNonce: run.clientNonce,
         });
-        const exposedConnectorTools = discovered.filter(
-          (tool) => !builtinAgentTools.some((builtin) => builtin.name === tool.name),
-        );
+        const exposedConnectorTools =
+          run.trigger === "background_helper"
+            ? []
+            : discovered.filter(
+                (tool) => !builtinAgentTools.some((builtin) => builtin.name === tool.name),
+              );
         const strategicConnectorTools = filterStrategicInitiativeTools(exposedConnectorTools, {
           trigger: run.trigger,
           clientNonce: run.clientNonce,
@@ -1475,12 +1513,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           graphical,
           disabled: disabledBuiltinTools,
         });
-        const dockerToolInstruction = dockerComputerToolInstruction(
-          computerKind,
-          disabledBuiltinTools,
-        );
+        const dockerToolInstruction = computerKind
+          ? dockerComputerToolInstruction(computerKind, disabledBuiltinTools)
+          : undefined;
         const hostEnvironment =
-          computerKind && usesNativeShell(computerKind)
+          storedComputer && computerKind && usesNativeShell(computerKind)
             ? await deps.sandbox
                 .environment?.(
                   {
@@ -1504,21 +1541,28 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           : computerKind === "wuying"
             ? `Commands run on a Windows cloud computer. ${hostShell} Files outside the bot workspace can be accessed through commands. The screen shows the Windows desktop; use the graphical tools for apps without a command line.`
             : `Commands run on the user's ${hostEnvironment.platform} computer with their account permissions. ${hostShell} Local files outside the bot workspace can be accessed through commands. App launching is available through OS commands; graphical screen control is unavailable.`;
-        const computerInstruction = [
-          "Use the computer only when the task needs files, commands, a browser, or an installed application. Answer directly from the conversation when sufficient; use connected tools for app data. A website with no connected app is still yours to use in the computer's browser, now and in scheduled routines, so a missing connection alone is never a reason to decline. Do not inspect the computer just to prepare for an unrelated task. If what you are about to buy, send or submit differs from what the user confirmed, such as a changed item or total, show the difference and confirm again first.",
-          hostInstruction
-            ? `${baseComputerInstruction} ${hostInstruction}`
-            : dockerToolInstruction
-              ? `${baseComputerInstruction} ${dockerToolInstruction}`
-              : baseComputerInstruction,
-          diskNoteInstruction(storedComputer),
-        ]
-          .filter(Boolean)
-          .join(" ");
+        const computerInstruction =
+          run.trigger === "background_helper"
+            ? "You are a background helper working on a task from the parent bot, not a human. Return your result to the parent. You cannot use a computer or contact other agents."
+            : [
+                "Use the computer only when the task needs files, commands, a browser, or an installed application. Answer directly from the conversation when sufficient; use connected tools for app data. A website with no connected app is still yours to use in the computer's browser, now and in scheduled routines, so a missing connection alone is never a reason to decline. Do not inspect the computer just to prepare for an unrelated task. If what you are about to buy, send or submit differs from what the user confirmed, such as a changed item or total, show the difference and confirm again first.",
+                hostInstruction
+                  ? `${baseComputerInstruction} ${hostInstruction}`
+                  : dockerToolInstruction
+                    ? `${baseComputerInstruction} ${dockerToolInstruction}`
+                    : baseComputerInstruction,
+                storedComputer && run.trigger !== "background_helper"
+                  ? diskNoteInstruction(storedComputer)
+                  : undefined,
+              ]
+                .filter(Boolean)
+                .join(" ");
         const workspaceInstruction =
-          computerMode === "team"
-            ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. Put intentionally shared work under shared/. Other bots' folders are visible under bots/; treat them as their working areas.`
-            : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
+          run.trigger === "background_helper"
+            ? ""
+            : computerMode === "team"
+              ? `Your Team Computer home is ${teamBotWorkspaceDirectory(bot.id)}. Relative file paths and shell working directories start there. From the shell, put intentionally shared work under ../../shared/. Other bots' folders are under ../; treat them as their working areas.`
+              : "This entire computer workspace is your private home. Relative file paths and shell working directories start at its root.";
 
         const reply = await createReplyState(deps, run, runSecrets);
         const script = scripted ? inferScript(task.prompt, takeoverResume?.checkpoint) : undefined;
@@ -1598,7 +1642,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             userComputerOwner: userComputerOwnerId,
           },
           computer: {
-            stored: storedComputer,
+            get stored() {
+              return requireStoredComputer();
+            },
             kind: computerKind,
             mode: computerMode,
             lease: computerLease,
@@ -1869,7 +1915,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                   botId: bot.id,
                   userId: run.userId,
                   runId,
-                  parentRunId: runId,
+                  parentRunId:
+                    run.trigger === "background_helper" ? (thread.parentRunId ?? runId) : runId,
+                  ...(run.trigger === "background_helper"
+                    ? { operationKind: "subagent" as const }
+                    : {}),
                   operationId: runId,
                 });
               },

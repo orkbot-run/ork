@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; unsigned reasoning coverage is an Ork addition.
+
 import type { Api, Context, Message, Model } from "@earendil-works/pi-ai";
 import type { AgentRunRequest } from "@orkbot/adapter-kit";
 import { DEFAULT_CONTEXT_STRATEGY } from "@orkbot/adapter-kit";
@@ -91,6 +95,32 @@ function connectorPages() {
 }
 
 describe("runtime context policy", () => {
+  it("preserves unsigned reasoning and discards signed reasoning when rebuilding a changed prefix", () => {
+    const { request, context } = fixture(1);
+    const policy = createRuntimeContextPolicy({ ...request, contextStrategy: "current" });
+    context.messages.push({
+      role: "assistant",
+      content: [
+        { type: "thinking", thinking: "unsigned plan" },
+        { type: "thinking", thinking: "signed plan", thinkingSignature: "signature" },
+        { type: "text", text: "answer" },
+      ],
+      timestamp: 200,
+    } as unknown as Message);
+    policy.prepareContext(context, model);
+    const revised = {
+      ...context,
+      messages: [
+        { ...context.messages[0]!, content: "changed prefix" } as Message,
+        ...context.messages.slice(1),
+      ],
+    };
+    const output = policy.prepareContext(revised, model);
+    expect(JSON.stringify(output.messages)).toContain("unsigned plan");
+    expect(JSON.stringify(output.messages)).not.toContain('"thinking":"signed plan"');
+    expect(JSON.stringify(output.messages)).not.toContain("signature");
+  });
+
   it.each([200_000, 80_000])(
     "retains connector pages newest-first within a %i context budget",
     (contextWindow) => {

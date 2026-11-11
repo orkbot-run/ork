@@ -1,3 +1,4 @@
+import type { SnoozePreset } from "@orkbot/core";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ViewStyle } from "react-native";
@@ -42,6 +43,7 @@ export function BotOrganizeModal({
   onCreateSection,
   onRenameSection,
   onDeleteSection,
+  onSnooze,
 }: {
   bot: Pick<MobileBot, "name" | "pinned" | "sectionId"> &
     Partial<Pick<MobileBot, "notifyOnFinish">>;
@@ -51,6 +53,7 @@ export function BotOrganizeModal({
   onCreateSection: (name: string) => Promise<void>;
   onRenameSection: (sectionId: string, name: string) => Promise<void>;
   onDeleteSection: (sectionId: string) => Promise<void>;
+  onSnooze?: (preset: SnoozePreset) => Promise<void>;
 }) {
   const Sheet = useNativeSheet();
   const styles = useThemedStyles(createBotOrganizeStyles);
@@ -60,6 +63,7 @@ export function BotOrganizeModal({
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showSnooze, setShowSnooze] = useState(false);
 
   async function save(request: () => Promise<void>, fallback = t("Could not update chat")) {
     if (saving) return;
@@ -140,6 +144,40 @@ export function BotOrganizeModal({
             {bot.notifyOnFinish ? t("Silence notifications") : t("Resume notifications")}
           </Text>
         </Pressable>
+      ) : null}
+      {onSnooze ? (
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showSnooze }}
+            disabled={saving}
+            onPress={() => setShowSnooze(!showSnooze)}
+            style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+          >
+            <NativeSymbol ios="clock" android="time-outline" size={18} />
+            <Text style={styles.actionLabel}>{t("Snooze")}</Text>
+          </Pressable>
+          {showSnooze
+            ? (
+                [
+                  ["hour_1", "1 hour"],
+                  ["hour_3", "3 hours"],
+                  ["tomorrow_9", "Tomorrow at 9"],
+                  ["monday_9", "Monday at 9"],
+                ] as const
+              ).map(([preset, label]) => (
+                <Pressable
+                  key={preset}
+                  accessibilityRole="button"
+                  disabled={saving}
+                  onPress={() => void save(() => onSnooze(preset))}
+                  style={({ pressed }) => [styles.action, pressed && styles.pressed]}
+                >
+                  <Text style={styles.actionLabel}>{t(label)}</Text>
+                </Pressable>
+              ))
+            : null}
+        </>
       ) : null}
       <Text style={styles.sectionLabel}>{t("Move to")}</Text>
       <ScrollView

@@ -7400,3 +7400,36 @@ msgstr "음성 서비스에서 키를 거부했습니다."
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1시간"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3시간"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "월요일 9시"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "잠시 미루기"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "미룬 항목"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "내일 9시"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "{0} 다시 표시"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "다시 표시됨"

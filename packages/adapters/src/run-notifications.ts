@@ -86,6 +86,18 @@ export async function notifyRun(
     (isBackgroundRunTrigger(run.trigger) && message.kind !== "help" && message.kind !== "takeover")
   )
     return;
+  if (message.kind === "completion") {
+    const snoozed = await deps.prisma.threadSnooze
+      .findFirst({
+        where: { threadId: run.threadId, userId: run.userId, until: { gt: new Date() } },
+        select: { threadId: true },
+      })
+      .catch((error) => {
+        getLogger().error("snooze lookup for notification", error);
+        return undefined;
+      });
+    if (snoozed !== null) return;
+  }
   const routineId = message.kind === "failure" ? run.routineId : null;
   const notice = await runNotice(deps.prisma, run, routineId).catch((error) => {
     if (options.retryOnFailure) throw error;

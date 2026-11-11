@@ -1,6 +1,7 @@
 import { t } from "@lingui/core/macro";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import { safeLocalStorage } from "../lib/storage";
 import { useBotsSidebarWidth } from "./shell/sidebar-layout";
 
 const STORAGE_KEY = "orkbot:right-panel-width";
@@ -18,7 +19,7 @@ function maximumWidth(reservedLeadingPx: number, viewportWidth = window.innerWid
 
 function readPreferredWidth() {
   try {
-    const saved = Number(localStorage.getItem(STORAGE_KEY));
+    const saved = Number(safeLocalStorage.getItem(STORAGE_KEY));
     if (saved >= MIN_WIDTH) return Math.min(ABSOLUTE_MAX, saved);
   } catch {
     /* Storage may be disabled. */
@@ -46,7 +47,7 @@ export function ResizableSidePanel({
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, String(preferredWidth));
+      safeLocalStorage.setItem(STORAGE_KEY, String(preferredWidth));
     } catch {
       /* Storage may be disabled. */
     }

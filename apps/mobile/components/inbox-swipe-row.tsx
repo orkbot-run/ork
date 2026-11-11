@@ -1,3 +1,4 @@
+import type { SnoozePreset } from "@orkbot/core";
 import type { ReactElement } from "react";
 import type { MobileBotSection } from "../lib/api";
 import type { InboxRowAction } from "../lib/inbox-swipe";
@@ -14,6 +15,7 @@ export type InboxSwipeRowProps = {
   sections: readonly MobileBotSection[];
   preview: InboxChatPreviewProps;
   onAction: (action: InboxRowAction) => void;
+  onSnooze?: (preset: SnoozePreset) => void;
   onOrganize: (update: BotOrganizationUpdate) => void;
   onEditSection: (mode: "create" | "rename") => void;
   children: ReactElement;

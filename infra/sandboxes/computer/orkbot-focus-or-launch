@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3 -I
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 material is preserved; Python isolation changes are Ork additions.
 """Raise an app's existing window by WM_CLASS, else spawn its launcher.
 
 The control daemon only forwards allowlisted launchers here. A matched window

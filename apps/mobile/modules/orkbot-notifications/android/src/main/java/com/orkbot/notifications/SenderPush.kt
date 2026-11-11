@@ -35,7 +35,8 @@ internal object SenderPush {
   fun notificationId(threadId: String) = "push:$threadId".hashCode()
 
   fun present(context: Context, data: JSONObject): Boolean {
-    val title = data.optString("notificationTitle").takeIf(String::isNotBlank) ?: return false
+    if (!data.has("notificationBody")) return false
+    val title = data.optString("notificationTitle")
     val botId = data.optString("botId").takeIf(String::isNotBlank) ?: return false
     val threadId = data.optString("threadId").takeIf(String::isNotBlank) ?: return false
     if (OrkNotificationService.isOpenThread(botId, threadId)) return true

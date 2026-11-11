@@ -26,6 +26,7 @@ model AiDataConsent {
 }
 
 model User {
+  threadSnoozes ThreadSnooze[]
   serverUpdateConsents ServerUpdateControl[]
   aiDataConsents AiDataConsent[]
   pages          Page[]
@@ -904,6 +905,12 @@ model Thread {
   externalConversationId      String?    @unique
   externalConversation        ExternalConversation? @relation(fields: [externalConversationId], references: [id], onDelete: Cascade)
   userId                      String
+  parentThreadId              String?
+  parentThread                Thread?    @relation("HelperThreads", fields: [parentThreadId], references: [id], onDelete: Cascade)
+  helperThreads               Thread[]   @relation("HelperThreads")
+  parentRunId                 String?
+  parentRun                   Run?       @relation("HelperParentRun", fields: [parentRunId], references: [id], onDelete: Cascade)
+  helperCallId                String?
   createdAt                   DateTime   @default(now())
   nextEventSeq                Int        @default(0)
   nextMessageSeq              Int        @default(0)
@@ -916,6 +923,7 @@ model Thread {
   /// Highest message seq the user has read; the "New" divider goes after it. -1 = none read.
   lastReadSeq                 Int        @default(-1)
   messages                    Message[]
+  snoozes                     ThreadSnooze[]
   events                      Event[]
   tasks                       Task[]
   runs                        Run[]
@@ -923,7 +931,22 @@ model Thread {
 
   @@index([spaceId])
   @@index([spaceId, userId])
+  @@unique([parentRunId, helperCallId])
+  @@index([parentThreadId])
   @@map("threads")
+}
+
+model ThreadSnooze {
+  threadId String
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  until DateTime? @db.Timestamptz(3)
+  suppressCompletedThrough DateTime @default(now()) @db.Timestamptz(3)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+  @@index([userId, until])
+  @@map("thread_snoozes")
 }
 
 model Message {
@@ -1001,6 +1024,7 @@ model Run {
   bot                  Bot               @relation(fields: [botId], references: [id], onDelete: Cascade)
   threadId             String
   thread               Thread            @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  helperThreads        Thread[]          @relation("HelperParentRun")
   taskId               String
   task                 Task              @relation(fields: [taskId], references: [id], onDelete: Cascade)
   userId               String

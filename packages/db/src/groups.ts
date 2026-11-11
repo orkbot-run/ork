@@ -19,6 +19,7 @@ import {
   previewFromBlocks,
   primaryActiveRun,
 } from "./thread-listing.js";
+import { loadThreadSnoozes } from "./thread-snoozes.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 type GroupRecord = {
@@ -53,6 +54,7 @@ type SpaceGroupRecord = Pick<
   "id" | "spaceId" | "name" | "pinned" | "sectionId" | "updatedAt" | "members"
 > & {
   thread: {
+    id: string;
     unread: boolean;
     messages: Array<{ blocks: unknown }>;
   } | null;
@@ -335,9 +337,17 @@ export function createGroupRepos(prisma: PrismaClient) {
       }),
       1,
     );
+    const snoozes = await loadThreadSnoozes(
+      prisma,
+      actor.userId,
+      groups.flatMap((group) => group.thread?.id ?? []),
+    );
     return groups
       .filter((group) => hasMinimumActiveMembers(group.members))
-      .map((group) => mapSpaceGroup(group));
+      .map((group) => ({
+        ...mapSpaceGroup(group),
+        ...(snoozes.has(group.thread!.id) ? { snoozedUntil: snoozes.get(group.thread!.id) } : {}),
+      }));
   }
 
   /**
@@ -386,9 +396,17 @@ export function createGroupRepos(prisma: PrismaClient) {
         }),
         1,
       );
+      const snoozes = await loadThreadSnoozes(
+        prisma,
+        actor.userId,
+        groups.flatMap((group) => group.thread?.id ?? []),
+      );
       return groups
         .filter((group) => hasMinimumActiveMembers(group.members))
-        .map((group) => mapGroup(group as GroupRecord));
+        .map((group) => ({
+          ...mapGroup(group as GroupRecord),
+          ...(snoozes.has(group.thread!.id) ? { snoozedUntil: snoozes.get(group.thread!.id) } : {}),
+        }));
     },
 
     listSpaceGroupsForSpaces,

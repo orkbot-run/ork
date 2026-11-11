@@ -513,6 +513,11 @@ describe("stripNoResponseReply", () => {
 });
 
 describe("runReplyGuidance", () => {
+  it("requires a written result from a background helper, not a ticket update", () => {
+    expect(runAllowsSilentEmpty("background_helper")).toBe(false);
+    expect(runReplyGuidance("background_helper")).toContain("complete result");
+    expect(runReplyGuidance("background_helper")).not.toContain("ticket_comment");
+  });
   it("does not ask routine runs for message_user progress", () => {
     expect(runPromotesMidTurnNarration("routine")).toBe(false);
     expect(runReplyGuidance("routine")).toBe(ROUTINE_SILENT_REPLY_GUIDANCE);

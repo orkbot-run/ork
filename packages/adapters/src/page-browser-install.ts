@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 installer is preserved; Python isolation is an Ork addition.
+
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
@@ -69,7 +73,7 @@ export function installPageBrowserFilesCommand(): string {
     "set -eu",
     `if [ "$(cat /usr/local/lib/orkbot/page-browser.version 2>/dev/null)" = ${version} ]; then exit 0; fi`,
     asRoot,
-    `printf '%s' ${shellQuote(archive)} | base64 -d | $root python3 -c ${shellQuote(unpack)}`,
+    `printf '%s' ${shellQuote(archive)} | base64 -d | $root /usr/bin/python3 -I -c ${shellQuote(unpack)}`,
   ].join("\n");
 }
 

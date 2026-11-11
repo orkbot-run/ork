@@ -294,11 +294,22 @@ describe("iOS swipe row", () => {
       .filter((child) => child.getAttribute("data-ui"))
       .map(entry);
 
-  it("uses system swipe actions with a full swipe only on the read toggle", () => {
+  it("offers the four snooze choices from the native context menu", () => {
+    const onSnooze = vi.fn();
+    const { press, root } = render({ onSnooze });
+    press("1 hour");
+    press("3 hours");
+    press("Tomorrow at 9");
+    press("Monday at 9");
+    expect(onSnooze.mock.calls).toEqual([["hour_1"], ["hour_3"], ["tomorrow_9"], ["monday_9"]]);
+    act(() => root.unmount());
+  });
+
+  it("uses system full swipe to archive or toggle read state", () => {
     const { container, onAction, root } = render({ unread: true, pinned: true });
     expect(swift.groups).toEqual([
       { edge: "leading", allowsFullSwipe: undefined, labels: ["Mark as Read"] },
-      { edge: "trailing", allowsFullSwipe: false, labels: ["Archive", "Unpin"] },
+      { edge: "trailing", allowsFullSwipe: true, labels: ["Archive", "Unpin"] },
     ]);
     const buttons = Array.from(
       container.querySelectorAll<HTMLElement>('[data-ui="SwipeActions.Actions"] > button'),

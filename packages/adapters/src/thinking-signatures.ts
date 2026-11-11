@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 behavior is preserved; unsigned reasoning preservation is an Ork addition.
+
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 
 /**
@@ -13,13 +17,13 @@ export function isThinkingSignatureMismatch(errorMessage: string | undefined): b
   return !!errorMessage && MISMATCHED_SIGNATURE.test(errorMessage);
 }
 
-/** The context with thinking blocks removed from earlier assistant messages. */
+/** The context with signature-bound or redacted thinking removed from earlier assistant messages. */
 export function withoutThinkingBlocks(context: TranscriptContext): TranscriptContext {
   const messages = withoutThinkingFrom(context.messages, 0);
   return messages === context.messages ? context : { ...context, messages };
 }
 
-/** The messages with thinking blocks removed from assistant messages from `from` up to `to`. */
+/** Remove signature-bound or redacted thinking from assistant messages in [from, to). */
 export function withoutThinkingFrom<T extends TranscriptContext["messages"][number]>(
   messages: T[],
   from: number,
@@ -28,7 +32,9 @@ export function withoutThinkingFrom<T extends TranscriptContext["messages"][numb
   let changed = false;
   const result = messages.map((message, index) => {
     if (index < from || index >= to || message.role !== "assistant") return message;
-    const content = message.content.filter((part) => part.type !== "thinking");
+    const content = message.content.filter(
+      (part) => part.type !== "thinking" || (!part.thinkingSignature && !part.redacted),
+    );
     if (content.length === message.content.length) return message;
     changed = true;
     return { ...message, content };

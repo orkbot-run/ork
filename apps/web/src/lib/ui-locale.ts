@@ -1,5 +1,6 @@
 import { AppLocaleSchema } from "@orkbot/contracts";
 import { matchUiLocale } from "@orkbot/core";
+import { safeLocalStorage } from "./storage";
 
 export const UI_LOCALES = AppLocaleSchema.options;
 
@@ -70,9 +71,7 @@ export function resolveUiLocale(options: ResolveUiLocaleOptions = {}): UiLocale 
   const stored =
     options.stored !== undefined
       ? options.stored
-      : readStoredLocale(
-          options.storage ?? (typeof localStorage !== "undefined" ? localStorage : null),
-        );
+      : readStoredLocale(options.storage === undefined ? safeLocalStorage : options.storage);
   if (stored) return normalizeUiLocale(stored);
 
   const envDefault =
@@ -101,9 +100,7 @@ export function resolveUiLocale(options: ResolveUiLocaleOptions = {}): UiLocale 
 
 export function persistUiLocale(
   locale: UiLocale,
-  storage: Pick<Storage, "setItem"> | null = typeof localStorage !== "undefined"
-    ? localStorage
-    : null,
+  storage: Pick<Storage, "setItem"> | null = safeLocalStorage,
 ): void {
   if (!storage) return;
   try {

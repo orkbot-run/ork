@@ -18,6 +18,7 @@ const fakeAgentState = vi.hoisted(() => ({
   lastSubagentResult: undefined as unknown,
   failPrompt: false,
   abortCalls: 0,
+  executorCalls: [] as Array<{ name: string; args: unknown; id: string }>,
 }));
 
 type FakeAgentTool = {
@@ -148,7 +149,10 @@ async function runWithModel(
         maxImagesPerPrompt,
         ...limits,
       },
-      executeTool: vi.fn(async () => ({ ok: true })),
+      executeTool: vi.fn(async (name, args, id) => {
+        fakeAgentState.executorCalls.push({ name, args, id });
+        return { ok: true };
+      }),
       resolveModel,
     },
     {
@@ -189,6 +193,7 @@ describe("Pi agent thinking level", () => {
     fakeAgentState.subagentArgs = { name: "helper", task: "help" };
     fakeAgentState.lastSubagentResult = undefined;
     fakeAgentState.failPrompt = false;
+    fakeAgentState.executorCalls = [];
     vi.unstubAllEnvs();
   });
 
@@ -198,6 +203,19 @@ describe("Pi agent thinking level", () => {
     const levels = await runWithModel("reasoning-model");
     expect(levels).toEqual(["medium", "medium"]);
     expect(levels.every((level) => level !== "off")).toBe(true);
+  });
+
+  it("dispatches a background helper through the durable executor instead of nesting it", async () => {
+    fakeAgentState.subagentArgs = { name: "helper", task: "Research", background: true };
+    await runWithModel("plain-model");
+    expect(fakeAgentState.models).toHaveLength(1);
+    expect(fakeAgentState.executorCalls).toContainEqual(
+      expect.objectContaining({
+        name: "run_subagent",
+        args: expect.objectContaining({ background: true, task: "Research" }),
+      }),
+    );
+    expect(fakeAgentState.lastSubagentResult).toMatchObject({ details: { ok: true } });
   });
 
   it("uses a stable provider session for each bot thread", async () => {

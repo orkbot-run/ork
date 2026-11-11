@@ -45,6 +45,9 @@ function fixture(
     dedicated?: boolean;
     heldBy?: string;
     checkpoint?: string;
+    trigger?: string;
+    noComputer?: boolean;
+    clientNonce?: string;
   } = {},
 ) {
   const run = {
@@ -55,6 +58,9 @@ function fixture(
     leaseFence: 0,
     checkpoint: options.checkpoint ?? null,
     startedAt: options.startedAt ?? null,
+    trigger: options.trigger === "background_helper" ? "tickets" : (options.trigger ?? "user"),
+    thread: { parentThreadId: options.trigger === "background_helper" ? "parent-thread" : null },
+    clientNonce: options.clientNonce ?? null,
   };
   const prisma = {
     $queryRaw: vi.fn(async () => []),
@@ -70,7 +76,7 @@ function fixture(
     },
     bot: {
       findUniqueOrThrow: vi.fn(async () => ({
-        computerId: "computer-1",
+        computerId: options.noComputer ? null : "computer-1",
         computerSwitching: options.switching ?? false,
         computer: { scope: options.dedicated ? "dedicated" : "team" },
       })),
@@ -122,6 +128,24 @@ describe("execution start timing", () => {
       expect(enqueue).toHaveBeenCalledOnce();
     },
   );
+
+  it("starts a background helper without a computer or its lease", async () => {
+    const { prisma, start } = fixture({
+      trigger: "background_helper",
+      noComputer: true,
+      switching: true,
+    });
+    await expect(start()).rejects.toThrow("attempt setup failed");
+    expect(prisma.attempt.create).toHaveBeenCalledOnce();
+    expect(leases.acquire).not.toHaveBeenCalled();
+    expect(leases.dedicated).not.toHaveBeenCalled();
+  });
+
+  it("does not treat a ticket with a spoofed nonce as a background helper", async () => {
+    const { start } = fixture({ trigger: "tickets", clientNonce: "background-helper:spoof" });
+    await expect(start()).rejects.toThrow("attempt setup failed");
+    expect(leases.acquire).toHaveBeenCalledOnce();
+  });
 
   it("waits without a retry timer while another run of the bot holds the computer", async () => {
     leases.acquire.mockRejectedValue(new ComputerBusyError());

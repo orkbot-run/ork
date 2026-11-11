@@ -7401,3 +7401,36 @@ msgstr "你的語音供應商拒絕了該金鑰。"
 #: src/components/vault/VaultItemEditor.tsx
 msgid "ZIP or postal code"
 msgstr ""
+
+#: src/pages/BotContextMenu.tsx
+msgid "1 hour"
+msgstr "1小時"
+
+#: src/pages/BotContextMenu.tsx
+msgid "3 hours"
+msgstr "3小時"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Monday at 9"
+msgstr "週一9點"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Snooze"
+msgstr "稍後提醒"
+
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Snoozed"
+msgstr "已稍後提醒"
+
+#: src/pages/BotContextMenu.tsx
+msgid "Tomorrow at 9"
+msgstr "明天9點"
+
+#. placeholder {0}: chat.name
+#: src/pages/shell/snoozed-chats.tsx
+msgid "Wake {0}"
+msgstr "喚醒 {0}"
+
+#: src/pages/shell/sidebar-roster.tsx
+msgid "Woken"
+msgstr "已恢復"
