@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { createHmac, generateKeyPairSync, randomUUID } from "node:crypto";
+import {
+  createCipheriv,
+  createHash,
+  createHmac,
+  generateKeyPairSync,
+  randomUUID,
+} from "node:crypto";
 import { createLocalJWKSet, SignJWT } from "jose";
 import { describe, expect, it, vi } from "vitest";
 import { createNativeGrantVerifier } from "./native-accounts-login.js";
@@ -10,6 +16,7 @@ import {
   serverClaimProof,
   startServerClaimWorker,
   verifyServerClaimGrant,
+  workspaceConnectionStatus,
 } from "./server-claim.js";
 
 const issuer = "https://accounts.example.test";
@@ -309,5 +316,71 @@ describe("server claim worker", () => {
       await stop();
       vi.useRealTimers();
     }
+  });
+});
+
+describe("workspace connection status", () => {
+  const organizationId = "12345678-1234-1234-1234-123456789abc";
+  const secret = "s".repeat(43);
+  const receipt = "r".repeat(43);
+  const iv = Buffer.alloc(12, 1);
+  const key = createHash("sha256").update("orkbot-workspace-receipt-v1\0").update(secret).digest();
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  cipher.setAAD(Buffer.from(`${organizationId}:${id}`));
+  const encrypted = Buffer.concat([cipher.update(receipt), cipher.final()]);
+  const sealed = `v1.${Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64url")}`;
+  const binding = {
+    nativeAccountsOrganizationId: organizationId,
+    nativeAccountsWorkspaceClaimId: id,
+    nativeAccountsWorkspaceReceipt: sealed,
+  };
+  function fixture(response: object | Error, current = binding) {
+    const findUnique = vi.fn().mockResolvedValueOnce(binding).mockResolvedValue(current);
+    const prisma = { deploymentSettings: { findUnique } } as never;
+    const request = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
+      if (response instanceof Error) throw response;
+      return Response.json(response);
+    });
+    return { prisma, request, findUnique };
+  }
+  it("requires a fresh central ready confirmation", async () => {
+    const f = fixture({ status: "active", ready: true });
+    await expect(
+      workspaceConnectionStatus(f.prisma, { issuer, bootstrapSecret: secret, request: f.request }),
+    ).resolves.toBe("connected");
+    expect(JSON.parse(String(f.request.mock.calls[0]![1]!.body))).toEqual({ id, receipt });
+    expect(f.findUnique).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    { status: "active" },
+    { status: "active", ready: false },
+    { status: "revoked", ready: false },
+    new Error("offline"),
+  ])("does not confirm pending, revoked, legacy or offline status", async (response) => {
+    const f = fixture(response);
+    await expect(
+      workspaceConnectionStatus(f.prisma, { issuer, bootstrapSecret: secret, request: f.request }),
+    ).resolves.toBe("unknown");
+  });
+  it("does not confirm a binding changed during the central check", async () => {
+    const f = fixture(
+      { status: "active", ready: true },
+      { ...binding, nativeAccountsOrganizationId: "other" },
+    );
+    await expect(
+      workspaceConnectionStatus(f.prisma, { issuer, bootstrapSecret: secret, request: f.request }),
+    ).resolves.toBe("unknown");
+  });
+  it("reports an absent binding without contacting Accounts", async () => {
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const request = vi.fn();
+    await expect(
+      workspaceConnectionStatus({ deploymentSettings: { findUnique } } as never, {
+        issuer,
+        bootstrapSecret: secret,
+        request,
+      }),
+    ).resolves.toBe("unconnected");
+    expect(request).not.toHaveBeenCalled();
   });
 });

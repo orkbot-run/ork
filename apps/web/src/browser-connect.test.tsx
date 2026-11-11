@@ -18,7 +18,7 @@ vi.mock("@orkbot/ui-web", () => ({
     render ? cloneElement(render, props) : <button {...props} />,
 }));
 
-import { BrowserConnect } from "./browser-connect";
+import { BrowserConnect, BrowserConnectView } from "./browser-connect";
 import { BrowserPairing } from "./browser-pairing";
 
 function PairingHarness() {
@@ -43,7 +43,7 @@ beforeEach(async () => {
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   host = document.body.appendChild(document.createElement("div"));
-  initializationFetch = vi.fn(async () => Response.json({ required: true }));
+  initializationFetch = vi.fn(async () => Response.json({ status: "unconnected" }));
   vi.stubGlobal("fetch", initializationFetch);
   root = createRoot(host);
   await act(async () => root.render(<BrowserConnect />));
@@ -74,7 +74,10 @@ async function submit() {
 
 it("explains workspace setup without deployment-specific instructions", () => {
   expect(host.textContent).toContain("Connect a workspace");
-  expect(host.textContent).toContain("Generate a code");
+  expect(host.querySelector('a[href="https://app.ork.run"]')?.textContent).toBe(
+    "Connect a workspace",
+  );
+  expect(host.textContent).not.toContain("Find the link or code");
   expect(host.textContent).not.toContain("EasyPanel");
 });
 
@@ -217,28 +220,28 @@ async function remount(fetcher: typeof initializationFetch) {
 }
 
 it("shows the native handoff and workspace guidance for an initialized server", async () => {
-  const fetcher = vi.fn(async () => Response.json({ required: false }));
+  const fetcher = vi.fn(async () => Response.json({ status: "unknown" }));
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
   expect(host.querySelector('input[id="pairing-code"]')).toBeNull();
   expect(host.querySelectorAll("a")).toHaveLength(3);
   expect(host.querySelector('a[href^="orkbot://connect"]')?.textContent).toBe("Open in Ork");
   expect(host.textContent).toContain("Responding");
-  expect(host.textContent).toContain("Generate a code");
+  expect(host.textContent).toContain("Check the workspace connection status");
   expect(host.querySelector('a[href="https://ork.run/download/"]')?.textContent).toBe(
     "Get the app",
   );
   expect(fetcher).toHaveBeenCalledWith(
-    "/api/auth/native/initialization",
+    "/api/auth/native/workspace-status",
     expect.objectContaining({ method: "GET", credentials: "omit", cache: "no-store" }),
   );
   await act(async () => vi.advanceTimersByTimeAsync(20_000));
-  expect(fetcher).toHaveBeenCalledOnce();
+  expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
 it("shows the ready-server guidance in Polish", async () => {
   vi.stubGlobal("navigator", { language: "pl-PL" });
-  await remount(vi.fn(async () => Response.json({ required: false })));
+  await remount(vi.fn(async () => Response.json({ status: "unknown" })));
   expect(host.textContent).toContain("Odpowiada");
   expect(host.textContent).toContain("Otwórz w Orku");
   expect(host.textContent).toContain("Pobierz aplikację");
@@ -254,18 +257,18 @@ it("does not flash pairing while initialization state is loading", async () => {
   );
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
-  await act(async () => resolve(Response.json({ required: false })));
+  await act(async () => resolve(Response.json({ status: "unknown" })));
   expect(host.querySelector("form")).toBeNull();
 });
 
 it("retires pairing when the server is initialized from another page", async () => {
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ required: true }))
-    .mockResolvedValueOnce(Response.json({ required: false }));
+    .mockResolvedValueOnce(Response.json({ status: "unconnected" }))
+    .mockResolvedValueOnce(Response.json({ status: "unknown" }));
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
-  await act(async () => vi.advanceTimersByTimeAsync(5_000));
+  await act(async () => vi.advanceTimersByTimeAsync(10_000));
   expect(host.querySelector("form")).toBeNull();
   expect(host.textContent).toContain("Responding");
 });
@@ -273,14 +276,42 @@ it("retires pairing when the server is initialized from another page", async () 
 it("keeps pairing hidden on an unavailable or malformed state and permits a safe retry", async () => {
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ required: "false", token: "secret-fixture-token" }))
-    .mockResolvedValueOnce(Response.json({ required: true }));
+    .mockResolvedValueOnce(Response.json({ status: "invalid", token: "secret-fixture-token" }))
+    .mockResolvedValueOnce(Response.json({ status: "unconnected" }));
   await remount(fetcher);
   expect(host.querySelector("form")).toBeNull();
   expect(host.textContent).not.toContain("secret-fixture-token");
   const retry = host.querySelector("button")!;
-  expect(retry.textContent).toBe("Retry");
+  expect(retry.textContent).toBe("Check again");
   await act(async () => retry.click());
   expect(host.querySelector("form")).toBeNull();
   expect(host.textContent).toContain("Responding");
 });
+
+it("shows connected actions when a workspace connection is confirmed", async () => {
+  await act(async () => root.render(<BrowserConnectView state="connected" onRetry={() => {}} />));
+  expect(host.textContent).toContain("Connected");
+  expect(host.textContent).toContain("Open in Ork");
+  expect(host.textContent).toContain("Go to dashboard");
+  expect(host.textContent).not.toContain("Check the workspace connection status");
+});
+
+it("shows connected only on a confirmed workspace status and clears it on error", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(Response.json({ status: "connected" }))
+    .mockRejectedValueOnce(new Error("offline"));
+  await remount(fetcher);
+  expect(host.textContent).toContain("Connected");
+  await act(async () => vi.advanceTimersByTimeAsync(10_000));
+  expect(host.textContent).not.toContain("Connected");
+  expect(host.textContent).toContain("Could not check the server");
+});
+
+it.each(["setup", "unavailable"] as const)(
+  "keeps the native app link available when status is %s",
+  async (state) => {
+    await act(async () => root.render(<BrowserConnectView state={state} onRetry={() => {}} />));
+    expect(host.querySelector('a[href^="orkbot://connect"]')?.textContent).toBe("Open in Ork");
+  },
+);

@@ -14,7 +14,7 @@ import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
 import type { NativePairingStore } from "./native-pairing-store.js";
 import { nativePairingStore } from "./native-pairing-store.js";
 import { oidcAccountSubject } from "./oidc.js";
-import { serverClaimProof } from "./server-claim.js";
+import { serverClaimProof, workspaceConnectionStatus } from "./server-claim.js";
 
 const PURPOSE = "orkbot-server-login-v1";
 const CHALLENGE_SECONDS = 120;
@@ -355,6 +355,24 @@ export function nativeAccountsLogin(
     });
   const store = options.store ?? nativeLoginStore(prisma, options);
   const pairings = options.pairingStore ?? nativePairingStore(prisma);
+  // Share and briefly cache public checks to bound requests to Accounts.
+  let cachedStatus: { value: "connected" | "unconnected" | "unknown"; until: number } | undefined;
+  let statusRequest: Promise<"connected" | "unconnected" | "unknown"> | undefined;
+  const workspaceStatus = () => {
+    if (cachedStatus && cachedStatus.until > Date.now()) return Promise.resolve(cachedStatus.value);
+    if (!statusRequest) {
+      statusRequest = workspaceConnectionStatus(prisma, options)
+        .then((value) => {
+          cachedStatus = { value, until: Date.now() + 5_000 };
+          return value;
+        })
+        .finally(() => {
+          statusRequest = undefined;
+        });
+    }
+    return statusRequest;
+  };
+
   const provisionIdentity = async (
     ctx: Parameters<typeof setSessionCookie>[0],
     identity: NativeLoginGrant,
@@ -450,6 +468,14 @@ export function nativeAccountsLogin(
           });
           if (!proof) throw new APIError("NOT_FOUND", { message: "Not found" });
           return ctx.json(proof);
+        },
+      ),
+      nativeAccountsWorkspaceStatus: createAuthEndpoint(
+        "/native/workspace-status",
+        { method: "GET" },
+        async (ctx) => {
+          ctx.setHeader("Cache-Control", "no-store");
+          return ctx.json({ status: await workspaceStatus() });
         },
       ),
       nativeAccountsInitialization: createAuthEndpoint(

@@ -154,18 +154,28 @@ function fixture(expectedOwnerKey?: string) {
   const request = (path: string, body?: unknown, requestOrigin: string | null = origin) =>
     auth.handler(
       new Request(`${origin}/api/auth/native/${path}`, {
-        method: path === "initialization" ? "GET" : "POST",
+        method: ["initialization", "workspace-status"].includes(path) ? "GET" : "POST",
         headers: {
           "content-type": "application/json",
           ...(requestOrigin ? { origin: requestOrigin } : {}),
         },
-        ...(path !== "initialization" ? { body: JSON.stringify(body) } : {}),
+        ...(!["initialization", "workspace-status"].includes(path)
+          ? { body: JSON.stringify(body) }
+          : {}),
       }),
     );
   return { data, consume, provision, seen, request, auth, pairings, issue, initializationRequired };
 }
 
 describe("native login endpoint", () => {
+  it("returns only an uncached public workspace state if verification is unavailable", async () => {
+    const f = fixture();
+    const response = await f.request("workspace-status", undefined, null);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(await response.json()).toEqual({ status: "unknown" });
+  });
+
   it("issues a challenge without exposing installation secrets", async () => {
     const f = fixture();
     const response = await f.request("challenge", {});

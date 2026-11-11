@@ -2,51 +2,40 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createServerConnectLink } from "@orkbot/contracts";
-import { Button } from "@orkbot/ui-web";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  CircleHelp,
-  Download,
-  LockKeyhole,
-  Server,
-  ShieldCheck,
-  Terminal,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, ArrowUpRight, Download, Server } from "lucide-react";
+import { useEffect, useState } from "react";
 import "./styles.css";
+
+export type ServerPageState = "loading" | "setup" | "connected" | "unknown" | "unavailable";
 
 /** This page identifies its own server. Query strings can never choose a different target. */
 export function BrowserConnect() {
-  const polish = navigator.language.toLowerCase().startsWith("pl");
-  const [initialization, setInitialization] = useState<
-    "loading" | "required" | "complete" | "unavailable"
-  >("loading");
+  const [state, setState] = useState<ServerPageState>("loading");
   const [checkAttempt, setCheckAttempt] = useState(0);
-  const initialized = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     async function check() {
-      if (controller.signal.aborted || initialized.current) return;
       try {
-        const response = await fetch("/api/auth/native/initialization", {
+        const response = await fetch("/api/auth/native/workspace-status", {
           method: "GET",
           credentials: "omit",
           redirect: "error",
           cache: "no-store",
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8_000)]),
         });
-        if (!response.ok) throw new Error("Initialization state unavailable");
-        const state = await response.json();
-        if (!state || typeof state.required !== "boolean")
-          throw new Error("Invalid initialization state");
-        if (controller.signal.aborted || initialized.current) return;
-        initialized.current = !state.required;
-        setInitialization(state.required ? "required" : "complete");
-        if (state.required) timer = setTimeout(() => void check(), 5_000);
+        if (!response.ok) throw new Error("Workspace status unavailable");
+        const result = await response.json();
+        if (!result || !["connected", "unconnected", "unknown"].includes(result.status))
+          throw new Error("Invalid workspace status");
+        if (controller.signal.aborted) return;
+        setState(result.status === "unconnected" ? "setup" : result.status);
+        timer = setTimeout(() => void check(), 10_000);
       } catch {
-        if (!controller.signal.aborted && !initialized.current) setInitialization("unavailable");
+        if (!controller.signal.aborted) {
+          setState("unavailable");
+          timer = setTimeout(() => void check(), 10_000);
+        }
       }
     }
     void check();
@@ -55,14 +44,73 @@ export function BrowserConnect() {
       clearTimeout(timer);
     };
   }, [checkAttempt]);
+  return (
+    <BrowserConnectView
+      state={state}
+      onRetry={() => {
+        setState("loading");
+        setCheckAttempt((n) => n + 1);
+      }}
+    />
+  );
+}
 
+export function BrowserConnectView({
+  state,
+  onRetry,
+}: {
+  state: ServerPageState;
+  onRetry: () => void;
+}) {
+  const polish = navigator.language.toLowerCase().startsWith("pl");
   let link: string | undefined;
   try {
     link = createServerConnectLink(window.location.origin);
   } catch {
-    // Public plain HTTP cannot safely hand off authentication to a native client.
+    /* Public HTTP cannot safely hand off authentication. */
   }
-  const serverAvailable = initialization === "required" || initialization === "complete";
+  const setup = state === "setup";
+  const connected = state === "connected";
+  const unavailable = state === "unavailable";
+  const loading = state === "loading";
+  const title = loading
+    ? polish
+      ? "Sprawdzamy Twój serwer"
+      : "Checking your server"
+    : setup
+      ? polish
+        ? "Twój serwer Ork jest gotowy"
+        : "Your Ork server is ready"
+      : unavailable
+        ? polish
+          ? "Nie udało się sprawdzić serwera"
+          : "Could not check the server"
+        : polish
+          ? "Twój serwer Ork działa"
+          : "Your Ork server is running";
+  const description = loading
+    ? polish
+      ? "Sprawdzamy stan serwera."
+      : "Checking the server status."
+    : setup
+      ? polish
+        ? "Połącz go z workspace, aby zacząć korzystać z Ork."
+        : "Connect it to a workspace to get started with Ork."
+      : unavailable
+        ? polish
+          ? "Spróbuj ponownie lub sprawdź połączenie z workspace w panelu Ork."
+          : "Try again or check your workspace connection in the Ork dashboard."
+        : connected
+          ? polish
+            ? "Otwórz aplikację Ork, aby korzystać ze swojego workspace."
+            : "Open the Ork app to use your workspace."
+          : polish
+            ? "Stan połączenia z workspace sprawdzisz w panelu Ork."
+            : "Check the workspace connection status in the Ork dashboard.";
+  const primary =
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90";
+  const secondary =
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-border px-5 text-sm font-medium hover:bg-secondary";
   return (
     <main className="min-h-full bg-background px-5 text-foreground sm:px-8">
       <div className="mx-auto max-w-5xl">
@@ -84,40 +132,51 @@ export function BrowserConnect() {
             {polish ? "Pobierz aplikację" : "Get the app"}
           </a>
         </header>
-
         <section className="grid gap-8 py-12 sm:py-16 md:grid-cols-[1.25fr_0.75fr] md:items-center">
           <div className="space-y-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              {polish ? "Witaj na swoim serwerze" : "Welcome to your server"}
+              {polish ? "Twój serwer" : "Your server"}
             </p>
-            <h1 className="max-w-xl text-4xl font-semibold tracking-tight sm:text-5xl">
-              {polish ? "Twój Ork. Twoja przestrzeń." : "Your Ork. Your workspace."}
-            </h1>
-            <p className="max-w-xl text-base leading-7 text-muted-foreground">
-              {polish
-                ? "Ten serwer jest domem dla Twoich botów. Połącz go z workspace’em, aby zarządzać nim w dashboardzie, lub otwórz go w aplikacji Ork."
-                : "This server is home to your bots. Connect it to a workspace to manage it in the dashboard, or open it in the Ork app."}
-            </p>
+            <h1 className="max-w-xl text-4xl font-semibold tracking-tight sm:text-5xl">{title}</h1>
+            <p className="max-w-xl text-base leading-7 text-muted-foreground">{description}</p>
             <div className="flex flex-wrap gap-3">
-              <a
-                href="#workspace-setup"
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground hover:opacity-90"
-              >
-                {polish ? "Połącz workspace" : "Connect a workspace"}
-                <ArrowRight aria-hidden="true" className="size-4" />
-              </a>
-              {link && (
-                <Button
-                  nativeButton={false}
-                  role="link"
-                  variant="outline"
-                  render={<a href={link} />}
-                >
-                  <span>{polish ? "Otwórz w Orku" : "Open in Ork"}</span>
+              {connected && link && (
+                <a className={primary} href={link}>
+                  {polish ? "Otwórz w Orku" : "Open in Ork"}
                   <ArrowUpRight aria-hidden="true" className="size-4" />
-                </Button>
+                </a>
+              )}
+              {!loading && (
+                <a className={connected && link ? secondary : primary} href="https://app.ork.run">
+                  {setup
+                    ? polish
+                      ? "Połącz workspace"
+                      : "Connect a workspace"
+                    : polish
+                      ? "Przejdź do panelu"
+                      : "Go to dashboard"}
+                  <ArrowRight aria-hidden="true" className="size-4" />
+                </a>
+              )}
+              {unavailable && (
+                <button type="button" className={secondary} onClick={onRetry}>
+                  {polish ? "Sprawdź ponownie" : "Check again"}
+                </button>
+              )}
+              {!loading && !connected && link && (
+                <a className={secondary} href={link}>
+                  {polish ? "Otwórz w Orku" : "Open in Ork"}
+                  <ArrowUpRight aria-hidden="true" className="size-4" />
+                </a>
               )}
             </div>
+            {setup && (
+              <p className="max-w-xl text-sm leading-6 text-muted-foreground">
+                {polish
+                  ? "Otwórz link wyświetlony w terminalu po instalacji. Możesz też wpisać kod ręcznie w panelu workspace."
+                  : "Open the link shown in the terminal after installation, or enter the code in your workspace dashboard."}
+              </p>
+            )}
           </div>
           <div className="rounded-2xl border border-border bg-card p-6 sm:p-7">
             <div className="flex items-start gap-4">
@@ -133,140 +192,43 @@ export function BrowserConnect() {
             </div>
             <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">
-                  {polish ? "Odpowiedź serwera" : "Server response"}
-                </span>
+                <span className="text-muted-foreground">{polish ? "Serwer" : "Server"}</span>
                 <span role="status" className="text-right font-medium">
-                  {initialization === "loading"
+                  {loading
                     ? polish
-                      ? "Sprawdzanie…"
-                      : "Checking…"
-                    : serverAvailable
+                      ? "Sprawdzanie..."
+                      : "Checking..."
+                    : unavailable
                       ? polish
-                        ? "Odpowiada"
-                        : "Responding"
+                        ? "Nieznany"
+                        : "Unknown"
                       : polish
-                        ? "Niedostępna"
-                        : "Unavailable"}
+                        ? "Odpowiada"
+                        : "Responding"}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span className="text-muted-foreground">
-                  {polish ? "Połączenie" : "Connection"}
-                </span>
-                <span className="font-medium">
-                  {window.location.protocol === "https:" ? "HTTPS" : "HTTP"}
+                <span className="text-muted-foreground">Workspace</span>
+                <span className="text-right font-medium">
+                  {connected
+                    ? polish
+                      ? "Połączony"
+                      : "Connected"
+                    : polish
+                      ? "Sprawdź w panelu"
+                      : "Check dashboard"}
                 </span>
               </div>
             </div>
-            <p className="mt-5 text-xs leading-5 text-muted-foreground">
-              {polish
-                ? "Odpowiedź serwera nie potwierdza jeszcze połączenia z workspace’em. Jego status sprawdzisz w dashboardzie."
-                : "A server response does not confirm a workspace connection. Check its status in the dashboard."}
-            </p>
-            {initialization === "unavailable" && (
-              <Button
-                className="mt-4"
-                variant="outline"
-                onClick={() => {
-                  setInitialization("loading");
-                  setCheckAttempt((value) => value + 1);
-                }}
-              >
-                {polish ? "Spróbuj ponownie" : "Retry"}
-              </Button>
+            {!connected && (
+              <p className="mt-5 text-xs leading-5 text-muted-foreground">
+                {polish
+                  ? "Stan połączenia z workspace sprawdzisz w panelu Ork."
+                  : "Check the workspace connection status in the Ork dashboard."}
+              </p>
             )}
           </div>
         </section>
-
-        {/* App pairing is temporarily hidden. BrowserPairing is retained in browser-pairing.tsx. */}
-        <section id="workspace-setup" className="scroll-mt-6 border-t border-border py-12 sm:py-16">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              {polish ? "Konfiguracja workspace’u" : "Workspace setup"}
-            </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">
-              {polish ? "Połącz serwer z workspace’em" : "Connect your server to a workspace"}
-            </h2>
-            <p className="mt-4 leading-7 text-muted-foreground">
-              {polish
-                ? "Potrzebujesz dostępu do hosta oraz konta administratora workspace’u. Połączenie potwierdzisz jednorazowym kodem."
-                : "You’ll need access to the host and a workspace administrator account. A one-time code confirms the connection."}
-            </p>
-          </div>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <article className="rounded-2xl border border-border bg-card p-6">
-              <div className="flex items-center justify-between">
-                <Terminal aria-hidden="true" className="size-5" />
-                <span className="text-xs font-semibold text-muted-foreground">01</span>
-              </div>
-              <h3 className="mt-5 font-semibold">
-                {polish ? "Otwórz konsolę API" : "Open the API console"}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {polish
-                  ? "Potrzebujesz dostępu do serwera, na którym działa Ork."
-                  : "You need access to the server running Ork."}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-border bg-card p-6">
-              <div className="flex items-center justify-between">
-                <LockKeyhole aria-hidden="true" className="size-5" />
-                <span className="text-xs font-semibold text-muted-foreground">02</span>
-              </div>
-              <h3 className="mt-5 font-semibold">{polish ? "Wygeneruj kod" : "Generate a code"}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {polish
-                  ? "Wygeneruj kod konfiguracji na serwerze. Kod jest ważny przez krótki czas i należy go zachować dla siebie."
-                  : "Generate a setup code on the server. The code expires shortly and should be kept private."}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-border bg-card p-6">
-              <div className="flex items-center justify-between">
-                <ShieldCheck aria-hidden="true" className="size-5" />
-                <span className="text-xs font-semibold text-muted-foreground">03</span>
-              </div>
-              <h3 className="mt-5 font-semibold">
-                {polish ? "Potwierdź w dashboardzie" : "Confirm in the dashboard"}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {polish
-                  ? "Wybierz organizację, otwórz Server i wpisz kod. Przed potwierdzeniem sprawdź adres serwera."
-                  : "Choose your organization, open Server, and enter the code. Check the server address before confirming."}
-              </p>
-            </article>
-          </div>
-        </section>
-        <section className="border-t border-border py-12">
-          <div className="flex gap-3">
-            <CircleHelp aria-hidden="true" className="mt-1 size-5 shrink-0" />
-            <div>
-              <h2 className="text-xl font-semibold">
-                {polish ? "Warto wiedzieć" : "Good to know"}
-              </h2>
-              <div className="mt-5 grid gap-5 text-sm leading-6 text-muted-foreground sm:grid-cols-2">
-                <p>
-                  {polish
-                    ? "Adres serwera wskazuje, z czym ma połączyć się aplikacja. Sam adres nie przyznaje dostępu ani nie potwierdza workspace’u."
-                    : "The server address tells the app where to connect. The address alone does not grant access or verify a workspace."}
-                </p>
-                <p>
-                  {polish
-                    ? "Jeśli połączenie się nie powiedzie, sprawdź publiczny adres HTTPS i upewnij się, że zatwierdzasz kod właściwym kontem. Nie usuwaj danych serwera podczas diagnozy."
-                    : "If connection fails, check the public HTTPS address and confirm the code with the correct account. Keep server data while troubleshooting."}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-        <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border py-7 text-xs text-muted-foreground">
-          <span>Ork</span>
-          <span>
-            {polish
-              ? "Serwer działa na Twojej infrastrukturze."
-              : "Your server runs on your infrastructure."}
-          </span>
-        </footer>
       </div>
     </main>
   );

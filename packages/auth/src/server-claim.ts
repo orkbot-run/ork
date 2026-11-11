@@ -440,6 +440,53 @@ async function post(
   return { status: response.status, body: value };
 }
 
+/** Read the current workspace binding without returning its identity or credentials. */
+export async function workspaceConnectionStatus(
+  prisma: PrismaClient,
+  options: { issuer: string; bootstrapSecret?: string; request?: typeof fetch },
+): Promise<"connected" | "unconnected" | "unknown"> {
+  try {
+    const select = {
+      nativeAccountsOrganizationId: true,
+      nativeAccountsWorkspaceClaimId: true,
+      nativeAccountsWorkspaceReceipt: true,
+    } as const;
+    const settings = await prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+      select,
+    });
+    const organizationId = settings?.nativeAccountsOrganizationId;
+    if (!organizationId) return "unconnected";
+    const id = settings.nativeAccountsWorkspaceClaimId;
+    const sealed = settings.nativeAccountsWorkspaceReceipt;
+    if (!UUID.test(organizationId) || !id || !ID.test(id) || !sealed || !options.bootstrapSecret)
+      return "unknown";
+    const receipt = openWorkspaceReceipt(sealed, options.bootstrapSecret, organizationId, id);
+    const result = await post(options.issuer, "binding", { id, receipt }, options.request);
+    if (
+      result.status !== 200 ||
+      !result.body ||
+      typeof result.body !== "object" ||
+      !("status" in result.body) ||
+      result.body.status !== "active" ||
+      !("ready" in result.body) ||
+      result.body.ready !== true
+    )
+      return "unknown";
+    const current = await prisma.deploymentSettings.findUnique({
+      where: { id: "default" },
+      select,
+    });
+    return current?.nativeAccountsOrganizationId === organizationId &&
+      current.nativeAccountsWorkspaceClaimId === id &&
+      current.nativeAccountsWorkspaceReceipt === sealed
+      ? "connected"
+      : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 /** Check every workspace session against the current central membership. */
 export async function authorizeWorkspaceSession(
   prisma: PrismaClient,
