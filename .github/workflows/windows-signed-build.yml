@@ -1,0 +1,113 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+name: windows-signed-build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ORKBOT_ENABLE_AUTO_UPDATE: '0'
+      ORK_ACCOUNTS_ISSUER: https://api.orkbot.run
+      ORK_ACCOUNTS_DESKTOP_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_DESKTOP_CLIENT_ID }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 8.0.x
+      - name: Install Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - run: pnpm install --frozen-lockfile
+      - name: Prepare verified packaging tools
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --test .github/scripts/prepare-tauri-tools.test.mjs
+          node .github/scripts/prepare-tauri-tools.mjs
+      - name: Prepare Artifact Signing client
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'artifact-signing-client.zip'
+          Invoke-WebRequest -Uri 'https://api.nuget.org/v3-flatcontainer/microsoft.artifactsigning.client/1.0.151/microsoft.artifactsigning.client.1.0.151.nupkg' -OutFile $archive
+          $expected = '35375a4bc4e1102da729fc3d8d9925f774c3baae6b8b7ff6398d948ca9ab0d8a'
+          if ((Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant() -ne $expected) { throw 'Artifact Signing client hash mismatch.' }
+          $client = Join-Path $env:RUNNER_TEMP 'artifact-signing-client'
+          Expand-Archive -LiteralPath $archive -DestinationPath $client
+          $dlib = Join-Path $client 'bin\x64\Azure.CodeSigning.Dlib.dll'
+          if (!(Test-Path -LiteralPath $dlib)) { throw 'Artifact Signing Dlib is missing.' }
+          $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $signtool = Get-ChildItem -Path $kits -Directory | Where-Object { $_.Name -match '^10\.\d+\.\d+\.\d+$' -and [version]$_.Name -ge [version]'10.0.22621.0' } | Sort-Object { [version]$_.Name } -Descending | ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (!$signtool) { throw 'A supported Windows SDK SignTool was not found.' }
+          "ORK_WINDOWS_SIGNTOOL=$signtool" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "ORK_WINDOWS_SIGNING_DLIB=$dlib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      # Configure the federated credential for this repository and refs/heads/main only.
+      - name: Authenticate to Azure with OIDC
+        uses: azure/login@eec3c95657c1536435858eda1f3ff5437fee8474 # v2.3.0
+        with:
+          client-id: ${{ vars.AZURE_SIGNING_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_SIGNING_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SIGNING_SUBSCRIPTION_ID }}
+      - name: Build signed NSIS installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $config = Join-Path $env:RUNNER_TEMP 'windows-signing.json'
+          $metadata = Join-Path $env:RUNNER_TEMP 'artifact-signing-metadata.json'
+          node apps/desktop/scripts/windows-distribution.ts prepare $config $metadata
+          if ($LASTEXITCODE -ne 0) { throw 'Signing configuration failed.' }
+          pnpm --filter @orkbot/desktop tauri:build --bundles nsis --config $config
+          if ($LASTEXITCODE -ne 0) { throw 'Windows build failed.' }
+      - name: Verify installer and bundled executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis -Filter '*.exe' -File)
+          if ($installers.Count -ne 1) { throw "Expected one installer, found $($installers.Count)." }
+          $extract = Join-Path $env:RUNNER_TEMP 'ork-installer-content'
+          & 7z x "-o$extract" -y $installers[0].FullName | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Failed to extract the installer for signature verification.' }
+          $apps = @(Get-ChildItem $extract -Recurse -File -Filter '*.exe' | Where-Object { $_.Name -in @('orkbot-desktop-preview.exe', 'Ork.exe') })
+          if ($apps.Count -ne 1) { throw "Expected one bundled application executable, found $($apps.Count)." }
+          foreach ($file in @($installers[0], $apps[0])) {
+            & $env:ORK_WINDOWS_SIGNTOOL verify /pa /all /tw $file.FullName
+            if ($LASTEXITCODE -ne 0) { throw "Signature verification failed: $($file.Name)" }
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid' -or !$signature.TimeStamperCertificate -or $signature.SignerCertificate.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne '234.studio') {
+              throw "Unexpected publisher, timestamp or signature status: $($file.Name)"
+            }
+          }
+          Get-FileHash -Algorithm SHA256 $installers[0].FullName | Format-List | Out-File (Join-Path $env:RUNNER_TEMP 'windows-installer-sha256.txt')
+      - name: Upload verified installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-windows-signed-${{ github.run_id }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*.exe
+            ${{ runner.temp }}/windows-installer-sha256.txt
+          if-no-files-found: error
+          retention-days: 7
