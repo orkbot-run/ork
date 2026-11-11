@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved; unsigned reasoning coverage is an Ork addition.
+
 import type { TranscriptContext } from "@earendil-works/pi-ai";
 import { describe, expect, it } from "vitest";
 import {
@@ -36,6 +40,8 @@ describe("thinking signatures bound to a different conversation", () => {
               thinkingSignature: "x",
               redacted: true,
             },
+            { type: "thinking", thinking: "unsigned plan" },
+            { type: "thinking", thinking: "[redacted]", redacted: true },
             { type: "text", text: "hello" },
           ],
         },
@@ -45,9 +51,14 @@ describe("thinking signatures bound to a different conversation", () => {
     const stripped = withoutThinkingBlocks(context);
     expect((stripped as { systemPrompt?: string }).systemPrompt).toBe("s");
     expect(stripped.messages[0]).toBe(context.messages[0]);
-    expect(stripped.messages[1]).toMatchObject({ content: [{ type: "text", text: "hello" }] });
+    expect(stripped.messages[1]).toMatchObject({
+      content: [
+        { type: "thinking", thinking: "unsigned plan" },
+        { type: "text", text: "hello" },
+      ],
+    });
     expect(stripped.messages[2]).toBe(context.messages[2]);
-    expect(context.messages[1]).toMatchObject({ content: { length: 3 } });
+    expect(context.messages[1]).toMatchObject({ content: { length: 5 } });
     const plain = { messages: [context.messages[0]] } as unknown as TranscriptContext;
     expect(withoutThinkingBlocks(plain)).toBe(plain);
   });
