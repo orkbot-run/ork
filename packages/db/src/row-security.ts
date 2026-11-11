@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 material is preserved. Server update additions follow LICENSE.md.
+// Inherited Apache-2.0 material is preserved. Server update and session timezone changes follow LICENSE.md.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
@@ -211,8 +211,9 @@ function settingsFor(context: DbContext | undefined, bypassKey: string): Setting
   return ["", "", "off", ""];
 }
 
+// Prisma sends and reads timestamps in UTC, so each database session must use UTC.
 const SET_SESSION =
-  "SELECT set_config('app.space_id', $1, false), set_config('app.user_id', $2, false), set_config('app.rls_bypass', $3, false), set_config('app.rls_bypass_key', $4, false)";
+  "SELECT set_config('app.space_id', $1, false), set_config('app.user_id', $2, false), set_config('app.rls_bypass', $3, false), set_config('app.rls_bypass_key', $4, false), set_config('TimeZone', 'UTC', false)";
 const applied = new WeakMap<PoolClient, string>();
 
 async function applySettings(client: PoolClient, settings: Settings): Promise<void> {
