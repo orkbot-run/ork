@@ -54,6 +54,7 @@ import {
   withModelCredentialLock,
 } from "./pi-oauth.js";
 import { compatibleModelThinking } from "./pi-openai-compatible-provider.js";
+import { resolveWorkspaceModel } from "./workspace-model-policy.js";
 
 export function runtimeFallbackModel(runtime: AgentRuntime) {
   return runtime.describe().capabilities.scripted ? { provider: "scripted", id: "scripted" } : null;
@@ -512,6 +513,13 @@ export async function resolveConnectedRunModel(
   /** The connection a role row is pinned to. */
   credentialId?: string,
 ): Promise<AgentRunRequest["model"]> {
+  const workspace = await resolveWorkspaceModel(deps, scope.spaceId);
+  if (workspace) {
+    if (workspace.model.provider !== provider || workspace.model.id !== modelId)
+      throw new Error("The requested model is not allowed by the workspace owner.");
+    registerSecrets?.(workspace.redact);
+    return workspace.model;
+  }
   const { credential, resolved } = await resolveConnectedModelKey(
     deps,
     scope,
@@ -545,6 +553,8 @@ export async function resolveRunModel(
     botId?: string;
   },
 ): Promise<AgentRunRequest["model"]> {
+  const workspace = await resolveWorkspaceModel(deps, scope.spaceId);
+  if (workspace) return workspace.model;
   const override = scope.botId
     ? await deps.prisma.bot.findFirst({
         where: {

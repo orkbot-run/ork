@@ -226,6 +226,7 @@ function fixture(runId = "run-1") {
   };
   const choice = { modelId: "main-a" };
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     $queryRaw: vi.fn(async () => []),
     usageRecord: {
       createMany: vi.fn(async (_input: { data: Array<{ model: string }> }) => ({ count: 1 })),

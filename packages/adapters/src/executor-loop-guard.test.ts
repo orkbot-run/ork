@@ -190,6 +190,7 @@ async function runLoop(
     },
   };
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     externalEffect,
     $transaction: async (work: unknown): Promise<unknown> =>
       typeof work === "function" ? work(proxied) : Promise.all(work as unknown[]),

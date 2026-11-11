@@ -13,6 +13,7 @@ import {
   parseModelSecret,
   resolveMemberMainModel,
   resolveStoredModelAuth,
+  resolveWorkspaceModel,
   retireToReconnectMarker,
   secretValuesToRedact,
   toOAuthCredential,
@@ -222,6 +223,15 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
   private async resolveModel(bot: TeamChatEngagementInput["bot"]): Promise<{
     model: AgentRunModel;
   } | null> {
+    const workspace = await resolveWorkspaceModel(
+      {
+        prisma: this.deps.prisma,
+        secretStore: this.deps.secrets,
+        mcpAllowPrivateEndpoint: this.deps.allowPrivateEndpoint,
+      },
+      bot.spaceId,
+    );
+    if (workspace) return { model: workspace.model };
     const settings = await this.deps.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
     });

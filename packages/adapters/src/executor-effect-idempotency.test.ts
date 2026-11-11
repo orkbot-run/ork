@@ -152,6 +152,7 @@ function fixture(runId = "run-1") {
     ),
   };
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     $transaction: vi.fn(async (write: (tx: unknown) => unknown) => write(prisma)),
     $queryRaw: vi.fn(async () => []),
     user: { findUnique: vi.fn(async () => null) },

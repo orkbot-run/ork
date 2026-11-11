@@ -13,6 +13,7 @@ import { sendThreadMessage } from "./thread-target.js";
 function fixture(group = false) {
   const model = { modelProvider: "openrouter", modelId: "deepseek/deepseek-v4-pro" };
   const tx = {
+    workspaceModelPolicy: { findFirst: vi.fn().mockResolvedValue(null) },
     secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "synthetic" }) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: "group-1" }]),
     chatGroup: {
@@ -114,6 +115,28 @@ function fixture(group = false) {
 }
 
 describe("current image send admission", () => {
+  it("uses the enforced workspace model's image capability instead of the bot's personal model", async () => {
+    const { tx, send } = fixture();
+    tx.workspaceModelPolicy.findFirst.mockResolvedValue({
+      provider: "openrouter",
+      modelId: "openai/gpt-4o",
+    });
+    await expect(send()).resolves.toMatchObject({ runId: "run-1" });
+  });
+
+  it("rejects images when the enforced workspace model cannot read them", async () => {
+    const { tx, send } = fixture();
+    tx.bot.findFirst.mockResolvedValue({
+      id: "bot-1",
+      modelProvider: "openrouter",
+      modelId: "openai/gpt-4o",
+    });
+    tx.workspaceModelPolicy.findFirst.mockResolvedValue({
+      provider: "openrouter",
+      modelId: "deepseek/deepseek-v4-pro",
+    });
+    await expect(send()).rejects.toMatchObject({ code: "CONFLICT" });
+  });
   it("preserves legacy clients that omit image handling", async () => {
     const { tx, send } = fixture();
     await expect(send(undefined, null)).resolves.toMatchObject({ runId: "run-1" });

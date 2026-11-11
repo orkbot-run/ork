@@ -32,6 +32,7 @@ import { listPiCatalog, offeredCatalog, scriptedCatalogEntry } from "./pi-models
 import type { StoredModelSecret } from "./pi-oauth.js";
 import { parseModelSecret } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
+import { findWorkspaceModelPolicy } from "./workspace-model-policy.js";
 
 export type ModelCredential = Awaited<ReturnType<typeof findModelCredential>>;
 
@@ -615,6 +616,24 @@ export async function validateBotModelChange(
   const scope = { userId: input.userId, spaceId: input.spaceId };
   const { provider, model } = input;
   const changing = provider !== input.current?.provider || model !== input.current?.model;
+  if (
+    !changing &&
+    input.thinkingLevel &&
+    (await findWorkspaceModelPolicy(deps.prisma, input.spaceId))
+  ) {
+    // Existing bot settings may still name a personal credential. A profile edit should not
+    // depend on that credential while the workspace's model is in force.
+    return { ok: true, provider, model, thinkingLevel: null };
+  }
+  if (changing && provider && model) {
+    const policy = await findWorkspaceModelPolicy(deps.prisma, input.spaceId);
+    if (policy) {
+      if (policy.provider !== provider || policy.modelId !== model)
+        return { ok: false, error: "Models are managed by the workspace owner." };
+      // Following the workspace avoids pinning the bot to an individual credential.
+      return { ok: true, provider: null, model: null, thinkingLevel: null };
+    }
+  }
   if (changing && provider && model) {
     const hosted =
       deps.hostedProvider === provider &&

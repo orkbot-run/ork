@@ -169,6 +169,7 @@ async function runWithModel(
     yield { type: "done" as const, text: "Done" };
   });
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     $queryRaw: vi.fn(async () => []),
     $transaction: vi.fn(
       async (work: (tx: unknown) => Promise<unknown>): Promise<unknown> => work(prisma),

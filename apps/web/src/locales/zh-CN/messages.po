@@ -831,6 +831,7 @@ msgstr "任意模型，使用你自己的密钥"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API 密钥"
 
@@ -842,6 +843,10 @@ msgstr "{provider} 的 API 密钥"
 msgid "API key header"
 msgstr "API 密钥请求头"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "API key saved securely"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "API 密钥"
@@ -851,6 +856,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1238,6 +1244,7 @@ msgstr "无法读取图像"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1291,6 +1298,7 @@ msgid "Change {title}"
 msgstr "更改{title}"
 
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "更换模型"
 
@@ -1413,6 +1421,7 @@ msgstr "选择机器人颜色或上传图片"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "选择模型"
 
@@ -1421,6 +1430,7 @@ msgid "Choose a new password"
 msgstr "设置新密码"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "选择提供方"
 
@@ -1445,6 +1455,10 @@ msgstr "选择文件夹"
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
 msgstr "选择如何使用 Ork"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
+msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
@@ -2204,6 +2218,11 @@ msgstr "无法加载此文件。"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not load voice settings"
 msgstr "无法加载语音设置"
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Could not load workspace model settings."
+msgstr ""
 
 #: src/lib/sign-out.ts
 msgid "Could not log out. Try again."
@@ -3123,6 +3142,11 @@ msgstr "每月"
 msgid "Every week"
 msgstr "每周"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Everyone in this workspace uses the model selected by the owner."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "展开"
@@ -3255,11 +3279,13 @@ msgstr "在聊天中查找"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "查找模型"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "正在查找…"
 
@@ -3850,6 +3876,11 @@ msgstr "正在加载预览…"
 msgid "Loading voice providers…"
 msgstr "正在加载语音提供方…"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Loading workspace model…"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
@@ -4022,6 +4053,10 @@ msgstr "成员"
 msgid "Members ({0})"
 msgstr "成员（{0}）"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again. Existing runs may need to be restarted."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4175,10 +4210,18 @@ msgstr "模型连接"
 msgid "Model id"
 msgstr "模型 ID"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "模型选项"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5077,12 +5120,14 @@ msgstr "受保护输入"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "提供方"
 
@@ -5287,6 +5332,7 @@ msgstr "重新加载"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "移除"
 
@@ -5333,6 +5379,10 @@ msgstr "移除请求头"
 msgid "Remove message trigger"
 msgstr "移除消息触发器"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "移除计划"
@@ -5345,6 +5395,10 @@ msgstr "移除技能 {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "移除技能"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5674,6 +5728,10 @@ msgstr "周六"
 msgid "Save"
 msgstr "保存"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "保存工作区并安装最新软件。"
@@ -5719,6 +5777,7 @@ msgstr "正在保存…"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "正在保存…"
 
@@ -5919,6 +5978,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "服务器 URL"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6485,6 +6548,10 @@ msgstr "计算机服务无法为此账户启动计算机。"
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "连接超时。"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7309,6 +7376,10 @@ msgstr "可使用你的 ChatGPT 或 Claude 套餐。"
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 msgid "Workspace"
 msgstr "工作区"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Workspace model"
+msgstr ""
 
 #: src/lib/billing.ts
 msgid "year"

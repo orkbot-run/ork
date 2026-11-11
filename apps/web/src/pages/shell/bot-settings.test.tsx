@@ -12,6 +12,7 @@ vi.mock("../../lib/rpc", () => {
   const rpc = {
     voice: { voices: vi.fn(async () => []) },
     models: {
+      workspacePolicy: vi.fn().mockResolvedValue({ canManage: false, policy: null }),
       credentials: vi.fn(async () => []),
       list: vi.fn(async () => []),
     },

@@ -159,6 +159,7 @@ async function executorHarness(server: ReturnType<typeof statefulMcpServer>) {
   });
   const events: AppendEventInput[] = [];
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findUnique: vi.fn(async () => run),

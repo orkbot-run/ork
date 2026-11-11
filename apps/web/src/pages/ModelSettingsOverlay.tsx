@@ -28,9 +28,11 @@ import {
   ModelThinkingOptions,
   Spinner,
 } from "@orkbot/ui-web";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ModelCredential } from "../lib/model-auth";
+import { useSpaceQueries } from "../lib/query";
 import type { ModelRoleConnectIntent } from "./ModelRoleSettings";
 import { ModelRoleSettings } from "./ModelRoleSettings";
 import { CompatibleModelFields } from "./model-settings/compatible-model-fields";
@@ -39,6 +41,7 @@ import { ConnectionNameField, ProvidersSection } from "./model-settings/provider
 import type { ConnectableProvider } from "./model-settings/role-model-picker";
 import { SpaceBotsModelNotice } from "./model-settings/space-bots-model";
 import { useModelSettings } from "./model-settings/use-model-settings";
+import { WorkspaceModelPolicy } from "./WorkspaceModelPolicy";
 
 export function ModelSettingsOverlay({
   onClose,
@@ -56,6 +59,9 @@ export function ModelSettingsOverlay({
 }) {
   const { t } = useLingui();
   const model = useModelSettings(onClose, scope);
+  const queries = useSpaceQueries();
+  const queryClient = useQueryClient();
+  const policyQuery = useQuery(queries.models.workspacePolicy.queryOptions());
   const {
     baseUrl,
     busy,
@@ -263,141 +269,169 @@ export function ModelSettingsOverlay({
 
   const content = (
     <>
-      {error && !connectionAt ? (
+      {policyQuery.data &&
+      (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
+        <WorkspaceModelPolicy
+          value={policyQuery.data}
+          catalog={catalog}
+          onChanged={async () => {
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queries.models.key() }),
+              queryClient.invalidateQueries({ queryKey: queries.me.key() }),
+            ]);
+            await refresh();
+          }}
+        />
+      ) : null}
+      {policyQuery.isPending ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          <Trans>Loading workspace model…</Trans>
+        </p>
+      ) : null}
+      {policyQuery.isError ? (
         <p className="mb-4 text-sm text-destructive" role="alert">
-          {error}
+          <Trans>Could not load workspace model settings.</Trans>
         </p>
       ) : null}
-      {notice && !connectionAt ? (
-        <p className="mb-4 text-sm text-success" role="status">
-          {notice}
-        </p>
-      ) : null}
-      {me ? (
+      {policyQuery.data && !policyQuery.data.policy ? (
         <>
-          <ModelRoleSettings
-            userId={me.userId}
-            spaceId={me.spaceId}
-            scope={scope}
-            credentials={credentials}
-            title={t`Main model`}
-            defaultLabel={t`Choose a model`}
-            providers={providers}
-            providerLabel={providerLabel}
-            onConnect={(next, intent) => openConnection(next, intent, null, "main")}
-            onManage={(id, credentialId) =>
-              openConnection({ id, name: id }, null, credentialId, "main")
-            }
-            panel={connectionAt === "main" ? panelFor(true) : null}
-            thinking
-            onChanged={() => void refresh()}
-          />
-          {me.needsModel ? null : (
-            <SpaceBotsModelNotice
-              refreshKey={`${me.spaceId}:${me.defaultProvider ?? ""}:${me.defaultModel ?? ""}`}
-            />
+          {error && !connectionAt ? (
+            <p className="mb-4 text-sm text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {notice && !connectionAt ? (
+            <p className="mb-4 text-sm text-success" role="status">
+              {notice}
+            </p>
+          ) : null}
+          {me ? (
+            <>
+              <ModelRoleSettings
+                userId={me.userId}
+                spaceId={me.spaceId}
+                scope={scope}
+                credentials={credentials}
+                title={t`Main model`}
+                defaultLabel={t`Choose a model`}
+                providers={providers}
+                providerLabel={providerLabel}
+                onConnect={(next, intent) => openConnection(next, intent, null, "main")}
+                onManage={(id, credentialId) =>
+                  openConnection({ id, name: id }, null, credentialId, "main")
+                }
+                panel={connectionAt === "main" ? panelFor(true) : null}
+                thinking
+                onChanged={() => void refresh()}
+              />
+              {me.needsModel ? null : (
+                <SpaceBotsModelNotice
+                  refreshKey={`${me.spaceId}:${me.defaultProvider ?? ""}:${me.defaultModel ?? ""}`}
+                />
+              )}
+              <ModelRoleSettings
+                userId={me.userId}
+                spaceId={me.spaceId}
+                scope={scope}
+                credentials={credentials}
+                progressive
+                modelRole="approval"
+                title={t`Approval model`}
+                defaultLabel={t`Choose a model`}
+                providers={providers}
+                providerLabel={providerLabel}
+                onConnect={(next, intent) => openConnection(next, intent, null, "approval")}
+                onManage={(id, credentialId) =>
+                  openConnection({ id, name: id }, null, credentialId, "approval")
+                }
+                panel={connectionAt === "approval" ? panelFor(true) : null}
+              />
+              <ModelRoleSettings
+                userId={me.userId}
+                spaceId={me.spaceId}
+                scope={scope}
+                credentials={credentials}
+                progressive
+                modelRole="computer"
+                title={t`Computer-use model`}
+                defaultLabel={t`Same as main model`}
+                providers={providers}
+                providerLabel={providerLabel}
+                onConnect={(next, intent) => openConnection(next, intent, null, "computer")}
+                onManage={(id, credentialId) =>
+                  openConnection({ id, name: id }, null, credentialId, "computer")
+                }
+                panel={connectionAt === "computer" ? panelFor(true) : null}
+              />
+              {scope === "space" ? null : (
+                <ProvidersSection
+                  credentials={credentials}
+                  providers={allProviders}
+                  name={connectionName}
+                  disabled={busy}
+                  onAdd={(next) => openConnection(next, null, null, "providers:add")}
+                  onOpen={(entry) =>
+                    connectionAt === `providers:${entry.id}`
+                      ? closeConnection()
+                      : openConnection(
+                          { id: entry.provider, name: entry.provider },
+                          null,
+                          entry.id,
+                          `providers:${entry.id}`,
+                        )
+                  }
+                  panel={
+                    connectionAt?.startsWith("providers:")
+                      ? panelFor(connectionAt === "providers:add")
+                      : null
+                  }
+                  panelAt={connectionAt?.slice("providers:".length) ?? null}
+                />
+              )}
+            </>
+          ) : loading ? (
+            <div className="grid place-items-center py-10">
+              <Spinner
+                className="size-5 text-muted-foreground"
+                aria-label={t`Loading model catalog…`}
+              />
+            </div>
+          ) : catalog.length ? null : (
+            <p className="text-[13px] leading-[1.5] text-muted-foreground">
+              <Trans>No model catalog is available.</Trans>
+            </p>
           )}
-          <ModelRoleSettings
-            userId={me.userId}
-            spaceId={me.spaceId}
-            scope={scope}
-            credentials={credentials}
-            progressive
-            modelRole="approval"
-            title={t`Approval model`}
-            defaultLabel={t`Choose a model`}
-            providers={providers}
-            providerLabel={providerLabel}
-            onConnect={(next, intent) => openConnection(next, intent, null, "approval")}
-            onManage={(id, credentialId) =>
-              openConnection({ id, name: id }, null, credentialId, "approval")
-            }
-            panel={connectionAt === "approval" ? panelFor(true) : null}
-          />
-          <ModelRoleSettings
-            userId={me.userId}
-            spaceId={me.spaceId}
-            scope={scope}
-            credentials={credentials}
-            progressive
-            modelRole="computer"
-            title={t`Computer-use model`}
-            defaultLabel={t`Same as main model`}
-            providers={providers}
-            providerLabel={providerLabel}
-            onConnect={(next, intent) => openConnection(next, intent, null, "computer")}
-            onManage={(id, credentialId) =>
-              openConnection({ id, name: id }, null, credentialId, "computer")
-            }
-            panel={connectionAt === "computer" ? panelFor(true) : null}
-          />
-          {scope === "space" ? null : (
-            <ProvidersSection
-              credentials={credentials}
-              providers={allProviders}
-              name={connectionName}
-              disabled={busy}
-              onAdd={(next) => openConnection(next, null, null, "providers:add")}
-              onOpen={(entry) =>
-                connectionAt === `providers:${entry.id}`
-                  ? closeConnection()
-                  : openConnection(
-                      { id: entry.provider, name: entry.provider },
-                      null,
-                      entry.id,
-                      `providers:${entry.id}`,
-                    )
-              }
-              panel={
-                connectionAt?.startsWith("providers:")
-                  ? panelFor(connectionAt === "providers:add")
-                  : null
-              }
-              panelAt={connectionAt?.slice("providers:".length) ?? null}
-            />
-          )}
+          <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  <Trans>Disconnect {disconnectName}?</Trans>
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  <Trans>This removes the connection from every space.</Trans>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>
+                  <Trans>Cancel</Trans>
+                </AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  disabled={pending === "disconnect"}
+                  onClick={() => {
+                    setConfirmDisconnect(false);
+                    setConnectionAt(null);
+                    intentRef.current = null;
+                    void disconnectCredential();
+                  }}
+                >
+                  <Trans>Disconnect</Trans>
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </>
-      ) : loading ? (
-        <div className="grid place-items-center py-10">
-          <Spinner
-            className="size-5 text-muted-foreground"
-            aria-label={t`Loading model catalog…`}
-          />
-        </div>
-      ) : catalog.length ? null : (
-        <p className="text-[13px] leading-[1.5] text-muted-foreground">
-          <Trans>No model catalog is available.</Trans>
-        </p>
-      )}
-      <AlertDialog open={confirmDisconnect} onOpenChange={setConfirmDisconnect}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              <Trans>Disconnect {disconnectName}?</Trans>
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              <Trans>This removes the connection from every space.</Trans>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>
-              <Trans>Cancel</Trans>
-            </AlertDialogCancel>
-            <AlertDialogAction
-              variant="destructive"
-              disabled={pending === "disconnect"}
-              onClick={() => {
-                setConfirmDisconnect(false);
-                setConnectionAt(null);
-                intentRef.current = null;
-                void disconnectCredential();
-              }}
-            >
-              <Trans>Disconnect</Trans>
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      ) : null}
     </>
   );
 

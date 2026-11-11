@@ -315,9 +315,11 @@ export async function runAutoReviewJudge(
             provider: input.checker.provider,
             id: input.checker.model,
             apiKey: input.oauth ? undefined : input.apiKey,
+            routing: input.routing,
             accountId: input.accountId,
             gatewayId: input.gatewayId,
             baseUrl: input.baseUrl,
+            apiProtocol: input.apiProtocol,
             headers: input.headers,
             allowPrivateEndpoint: input.allowPrivateEndpoint,
             cacheCapabilities: input.cacheCapabilities,
@@ -401,9 +403,11 @@ export type LlmAutoReviewOptions = {
   runtime: AgentRuntime;
   checker: AutoReviewChecker;
   apiKey?: string;
+  routing?: AgentRunModel["routing"];
   accountId?: string;
   gatewayId?: string;
   baseUrl?: string;
+  apiProtocol?: AgentRunModel["apiProtocol"];
   headers?: Record<string, string>;
   allowPrivateEndpoint?: boolean;
   cacheCapabilities?: CacheCapabilities;

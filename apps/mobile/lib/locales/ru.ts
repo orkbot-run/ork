@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "API URL": "Адрес API",
+  "Choose a provider": "Выберите поставщика",
+  "Choose one model and API key for everyone in this workspace.":
+    "Выберите одну модель и ключ API для всего рабочего пространства.",
+  "Everyone in this workspace uses the model selected by the owner.":
+    "Все участники рабочего пространства используют модель, выбранную владельцем.",
+  "Members will need their own model connection again.":
+    "Участникам снова потребуется собственное подключение к модели.",
+  "Model ID": "ID модели",
+  "Model supports images": "Модель поддерживает изображения",
+  Provider: "Поставщик",
+  "Remove the workspace model?": "Удалить модель рабочего пространства?",
+  "Save model": "Сохранить модель",
+  "Set workspace model": "Настроить модель рабочего пространства",
+  "The key cannot be displayed after saving. Enter a new key to replace it.":
+    "После сохранения ключ нельзя просмотреть. Чтобы заменить его, введите новый ключ.",
+  "Workspace model": "Модель рабочего пространства",
   Snooze: "Отложить",
   "1 hour": "1 час",
   "3 hours": "3 часа",

@@ -69,9 +69,13 @@ const plaintexts: Record<string, string> = {
 async function runTurn({
   primaryConnected,
   backupConnected = true,
+  workspace,
+  pinned = false,
 }: {
   primaryConnected: boolean;
   backupConnected?: boolean;
+  workspace?: "configured" | "unavailable" | "changed";
+  pinned?: boolean;
 }) {
   const run: Record<string, unknown> = {
     id: "run-1",
@@ -83,6 +87,9 @@ async function runTurn({
     status: "queued",
     trigger: "user",
     leaseFence: 0,
+    ...(pinned
+      ? { modelPinned: true, modelProvider: PRIMARY.provider, modelId: PRIMARY.modelId }
+      : {}),
   };
   const state = {
     credentials: [
@@ -129,12 +136,28 @@ async function runTurn({
     },
   };
   let request: AgentRunRequest | undefined;
+  let policyReads = 0;
   const runtimeRun = vi.fn(async function* (next: AgentRunRequest) {
     request = next;
     yield { type: "done" as const, text: "Done" };
   });
   const prisma = withModelRoles(
     {
+      workspaceModelPolicy: {
+        findFirst: vi.fn(async () =>
+          workspace
+            ? {
+                provider: "openrouter",
+                modelId: "company-model",
+                secretId:
+                  workspace === "changed" && ++policyReads > 1
+                    ? "replacement-secret"
+                    : "workspace-secret",
+                secretRef: "workspace-ref",
+              }
+            : null,
+        ),
+      },
       $transaction: vi.fn(async (work: (client: typeof tx) => Promise<unknown>) =>
         work({ ...prisma, ...tx }),
       ),
@@ -228,7 +251,13 @@ async function runTurn({
     prisma,
     billingEnabled: false,
     secretStore: {
-      load: vi.fn(async (_ciphertext: string, secretId: string) => plaintexts[secretId]),
+      load: vi.fn(async (_ciphertext: string, secretId: string) => {
+        if (secretId === "workspace-secret") {
+          if (workspace === "unavailable") throw new Error("private-key-in-provider-error");
+          return "private-workspace-api-key";
+        }
+        return plaintexts[secretId];
+      }),
       put: vi.fn(async () => ({ ciphertext: "sealed-marker" })),
       delete: vi.fn(async () => undefined),
     },
@@ -255,6 +284,50 @@ async function runTurn({
 describe("a main model that cannot start runs on the member's backup", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("uses the workspace model even when the run pinned a personal model", async () => {
+    const { request, run } = await runTurn({
+      primaryConnected: true,
+      pinned: true,
+      workspace: "configured",
+    });
+    expect(request?.model).toMatchObject({
+      provider: "openrouter",
+      id: "company-model",
+      apiKey: "private-workspace-api-key",
+    });
+    expect(request?.fallbackModels).toEqual([]);
+    expect(run).toMatchObject({ modelProvider: "openrouter", modelId: "company-model" });
+  });
+
+  it("does not use personal backups if the workspace key is unavailable", async () => {
+    const { runtimeRun, finalizeRun } = await runTurn({
+      primaryConnected: false,
+      workspace: "unavailable",
+    });
+    expect(runtimeRun).not.toHaveBeenCalled();
+    expect(finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "failed",
+        error:
+          "The workspace model connection is unavailable. Ask the workspace owner to check it.",
+      }),
+    );
+  });
+
+  it("does not start on a stale key if the policy changes while the run is being prepared", async () => {
+    const { runtimeRun, finalizeRun } = await runTurn({
+      primaryConnected: true,
+      workspace: "changed",
+    });
+    expect(runtimeRun).not.toHaveBeenCalled();
+    expect(finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        outcome: "failed",
+        error: "The workspace model changed. Start the run again.",
+      }),
+    );
   });
 
   it("starts on the backup when the main model has no connection", async () => {

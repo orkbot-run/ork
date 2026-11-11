@@ -156,12 +156,6 @@ export function BotSettings({
   const { t } = useLingui();
   const ids = useId();
   const modelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (focusModel && tab === "settings") {
-      modelRef.current?.scrollIntoView?.({ block: "nearest" });
-      modelRef.current?.querySelector<HTMLElement>('[id$="-model"]')?.focus();
-    }
-  }, [tab, focusModel]);
   const [name, setName] = useState(bot.name);
   const savedNameRef = useRef(bot.name);
   const [description, setDescription] = useState(bot.description);
@@ -219,10 +213,18 @@ export function BotSettings({
   const voices = useQuery({ ...queries.voice.voices.queryOptions({ input: {} }), ...refresh }).data;
   const credentialsQuery = useQuery({ ...queries.models.credentials.queryOptions(), ...refresh });
   const catalogQuery = useQuery({ ...queries.models.list.queryOptions(), ...refresh });
+  const policyQuery = useQuery({ ...queries.models.workspacePolicy.queryOptions(), ...refresh });
+  useEffect(() => {
+    if (focusModel && tab === "settings" && policyQuery.data) {
+      modelRef.current?.scrollIntoView?.({ block: "nearest" });
+      modelRef.current?.querySelector<HTMLElement>('[id$="-model"]')?.focus();
+    }
+  }, [tab, focusModel, policyQuery.data]);
   const meQuery = useQuery({ ...queries.me.queryOptions(), ...refresh });
   const credentials = credentialsQuery.data ?? NO_CREDENTIALS;
   const catalog = catalogQuery.data ?? NO_CATALOG;
   const me = meQuery.data ?? null;
+  const workspaceModel = policyQuery.data?.policy;
   // A failed catalog load must not clear an existing thinkingLevel override on save.
   const modelMetaReady =
     credentialsQuery.data !== undefined &&
@@ -316,8 +318,10 @@ export function BotSettings({
     defaultEntry?.images,
   );
 
-  const effectiveProvider = selectedModel?.provider ?? me?.defaultProvider ?? null;
-  const effectiveModelId = selectedModel?.modelId ?? me?.defaultModel ?? null;
+  const effectiveProvider =
+    workspaceModel?.provider ?? selectedModel?.provider ?? me?.defaultProvider ?? null;
+  const effectiveModelId =
+    workspaceModel?.modelId ?? selectedModel?.modelId ?? me?.defaultModel ?? null;
   const effectiveEntry =
     effectiveProvider && effectiveModelId
       ? catalog.find(
@@ -393,9 +397,15 @@ export function BotSettings({
         memoryScope,
         autoSpeak,
         voiceId: voiceId || null,
-        modelProvider: selected?.provider ?? null,
-        modelId: selected?.modelId ?? null,
-        ...(modelMetaReady &&
+        ...(policyQuery.data && !workspaceModel
+          ? {
+              modelProvider: selected?.provider ?? null,
+              modelId: selected?.modelId ?? null,
+            }
+          : {}),
+        ...(policyQuery.data &&
+        !workspaceModel &&
+        modelMetaReady &&
         (thinkingOptions.length > 0 ||
           (selected?.provider ?? null) !== bot.modelProvider ||
           (selected?.modelId ?? null) !== bot.modelId)
@@ -639,19 +649,36 @@ export function BotSettings({
                   <label htmlFor={`${ids}-model`} className="sr-only">
                     <Trans>Model</Trans>
                   </label>
-                  <div className="min-w-0 w-full [&>div]:mt-0 [&>button]:mt-0">
-                    <ChatModelPicker
-                      id={`${ids}-model`}
-                      choices={modelChoices}
-                      value={selectedModelKey}
-                      onChange={(key) => {
-                        setModelKey(key);
-                        setThinkingLevel("");
-                      }}
-                    />
-                  </div>
+                  {workspaceModel ? (
+                    <div className="min-w-0 w-full text-sm">
+                      <span>
+                        {workspaceModel.provider} · {workspaceModel.modelId}
+                      </span>
+                      <p className="mt-1 text-muted-foreground">
+                        <Trans>
+                          Everyone in this workspace uses the model selected by the owner.
+                        </Trans>
+                      </p>
+                    </div>
+                  ) : policyQuery.data ? (
+                    <div className="min-w-0 w-full [&>div]:mt-0 [&>button]:mt-0">
+                      <ChatModelPicker
+                        id={`${ids}-model`}
+                        choices={modelChoices}
+                        value={selectedModelKey}
+                        onChange={(key) => {
+                          setModelKey(key);
+                          setThinkingLevel("");
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      <Trans>Loading workspace model…</Trans>
+                    </p>
+                  )}
                 </div>
-                {thinkingOptions.length ? (
+                {!workspaceModel && policyQuery.data && thinkingOptions.length ? (
                   <label
                     htmlFor={`${ids}-thinking`}
                     className="flex min-h-11 items-center justify-between gap-3 text-sm text-foreground"

@@ -831,6 +831,7 @@ msgstr ""
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API 키"
 
@@ -842,6 +843,10 @@ msgstr "{provider}용 API 키"
 msgid "API key header"
 msgstr "API 키 헤더"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "API key saved securely"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "API 키"
@@ -851,6 +856,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1238,6 +1244,7 @@ msgstr "이미지를 읽을 수 없음"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "취소"
 
@@ -1291,6 +1298,7 @@ msgid "Change {title}"
 msgstr "{title} 변경"
 
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "모델 변경"
 
@@ -1413,6 +1421,7 @@ msgstr "봇 색상을 선택하거나 이미지를 업로드하세요"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "모델 선택"
 
@@ -1421,6 +1430,7 @@ msgid "Choose a new password"
 msgstr "새 비밀번호 선택"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr ""
 
@@ -1444,6 +1454,10 @@ msgstr "폴더 선택"
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
+msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
 msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
@@ -2204,6 +2218,11 @@ msgstr "파일을 불러오지 못했습니다."
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not load voice settings"
 msgstr "음성 설정을 불러오지 못했습니다."
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Could not load workspace model settings."
+msgstr ""
 
 #: src/lib/sign-out.ts
 msgid "Could not log out. Try again."
@@ -3123,6 +3142,11 @@ msgstr "매월"
 msgid "Every week"
 msgstr "매주"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Everyone in this workspace uses the model selected by the owner."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "펼치기"
@@ -3255,11 +3279,13 @@ msgstr "채팅에서 찾기"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "모델 찾기"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "찾는 중…"
 
@@ -3850,6 +3876,11 @@ msgstr "미리보기를 불러오는 중…"
 msgid "Loading voice providers…"
 msgstr "음성 서비스를 불러오는 중…"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Loading workspace model…"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
@@ -4022,6 +4053,10 @@ msgstr "멤버"
 msgid "Members ({0})"
 msgstr ""
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again. Existing runs may need to be restarted."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4175,10 +4210,18 @@ msgstr "모델 연결"
 msgid "Model id"
 msgstr "모델 ID"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "모델 선택지"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5077,12 +5120,14 @@ msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "서비스"
 
@@ -5287,6 +5332,7 @@ msgstr "새로고침"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "삭제"
 
@@ -5333,6 +5379,10 @@ msgstr "헤더 삭제"
 msgid "Remove message trigger"
 msgstr ""
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "일정 제거"
@@ -5344,6 +5394,10 @@ msgstr "작업 기술 {0} 삭제"
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
+msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5674,6 +5728,10 @@ msgstr "토요일"
 msgid "Save"
 msgstr "저장"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "작업 공간을 저장하고 최신 소프트웨어를 설치합니다."
@@ -5719,6 +5777,7 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "저장 중…"
 
@@ -5919,6 +5978,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "서버 URL"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6485,6 +6548,10 @@ msgstr "이 계정에서는 컴퓨터 서비스가 컴퓨터를 시작할 수 �
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "연결 시간이 초과되었습니다."
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7308,6 +7375,10 @@ msgstr "ChatGPT 또는 Claude 요금제로 사용할 수 있습니다."
 
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 msgid "Workspace"
+msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Workspace model"
 msgstr ""
 
 #: src/lib/billing.ts

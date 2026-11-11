@@ -16,6 +16,9 @@ type UiWebModule = typeof UiWeb;
 /** Provider rows end with their "Connect" action; models show their name alone. */
 const optionName = (entry: Element) => entry.textContent?.replace(/Connect$/, "");
 const models = vi.hoisted(() => ({
+  workspacePolicy: vi.fn(),
+  setWorkspacePolicy: vi.fn(),
+  clearWorkspacePolicy: vi.fn(),
   list: vi.fn(),
   role: vi.fn(),
   forRole: vi.fn(),
@@ -359,6 +362,7 @@ beforeEach(() => {
   Element.prototype.scrollIntoView = () => undefined;
   i18n.loadAndActivate({ locale: "en", messages: {} });
   vi.mocked(rpc.me).mockResolvedValue(account("deepseek", "deepseek-chat"));
+  models.workspacePolicy.mockResolvedValue({ canManage: false, policy: null });
   models.list.mockResolvedValue([deepseekEntry]);
   models.credentials.mockResolvedValue([]);
   models.connect.mockResolvedValue({});
@@ -1714,3 +1718,93 @@ it.each([false, true])(
     }
   },
 );
+
+it("saves a workspace model without displaying the key again", async () => {
+  models.workspacePolicy.mockResolvedValue({ canManage: true, policy: null });
+  models.setWorkspacePolicy.mockImplementation(async () => {
+    models.workspacePolicy.mockResolvedValue({
+      canManage: true,
+      policy: { provider: "deepseek", modelId: "deepseek-chat" },
+    });
+    return { ok: true };
+  });
+  const view = await renderSettings();
+  try {
+    await click(buttons(view.container, "Set workspace model")[0]);
+    const provider = view.container.querySelector("select");
+    if (!(provider instanceof HTMLSelectElement)) throw new Error("Missing provider");
+    await act(async () => {
+      provider.value = "deepseek";
+      provider.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const model = view.container.querySelector('select[id$="-model"]');
+    const key = view.container.querySelector('input[autocomplete="new-password"]');
+    if (!(model instanceof HTMLSelectElement) || !(key instanceof HTMLInputElement))
+      throw new Error("Missing fields");
+    expect([...model.options].map((item) => item.value)).toContain("deepseek-chat");
+    await act(async () => {
+      model.value = "deepseek-chat";
+      model.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await typeInto(key, "private-test-key-1234");
+    const form = key.closest("form");
+    if (!form) throw new Error("Missing form");
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(models.setWorkspacePolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "deepseek",
+        modelId: "deepseek-chat",
+        apiKey: "private-test-key-1234",
+      }),
+    );
+    expect(view.container.textContent).toContain("deepseek-chat");
+    expect(view.container.textContent).not.toContain("private-test-key-1234");
+    expect(view.container.querySelector('input[autocomplete="new-password"]')).toBeNull();
+    expect(view.container.querySelector('[data-testid="model-role-main"]')).toBeNull();
+  } finally {
+    await view.unmount();
+  }
+});
+
+it("finds models on the owner's custom endpoint without borrowing personal headers", async () => {
+  models.workspacePolicy.mockResolvedValue({ canManage: true, policy: null });
+  models.list.mockResolvedValue([compatibleEntry]);
+  models.probeOpenAiCompatible.mockResolvedValue({ models: ["company-model"] });
+  const view = await renderSettings();
+  try {
+    await click(buttons(view.container, "Set workspace model")[0]);
+    const provider = view.container.querySelector("select");
+    if (!(provider instanceof HTMLSelectElement)) throw new Error("Missing provider");
+    await act(async () => {
+      provider.value = "openai-compatible";
+      provider.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const url = view.container.querySelector('input[type="url"]');
+    const key = view.container.querySelector('input[autocomplete="new-password"]');
+    if (!(url instanceof HTMLInputElement) || !(key instanceof HTMLInputElement))
+      throw new Error("Missing fields");
+    await typeInto(url, "https://models.example.test/v1");
+    await typeInto(key, "private-test-key-1234");
+    expect(key.type).toBe("password");
+    await click(buttons(view.container, "Find models")[0]);
+    expect(models.probeOpenAiCompatible).toHaveBeenCalledWith({
+      baseUrl: "https://models.example.test/v1",
+      apiKey: "private-test-key-1234",
+      apiProtocol: "chat-completions",
+      headers: {},
+    });
+    expect(
+      [...view.container.querySelectorAll("datalist option")].map((option) =>
+        option.getAttribute("value"),
+      ),
+    ).toContain("company-model");
+    expect(view.container.textContent).not.toContain("private-test-key-1234");
+  } finally {
+    await view.unmount();
+  }
+});

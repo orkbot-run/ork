@@ -5,6 +5,7 @@
 
 import { SecretStoreUnavailableError } from "@orkbot/adapter-kit";
 import {
+  findWorkspaceModelPolicy,
   listPiCatalog,
   ModelSignInError,
   modelConnectionMetadata,
@@ -30,7 +31,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@orkbot/contracts";
-import { clampCatalogThinkingLevel } from "@orkbot/core";
+import { clampCatalogThinkingLevel, redactSecrets } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import {
   appliedModelRole,
@@ -73,8 +74,127 @@ export function modelsRoutes(ctx: RouterContext) {
     validateRoleChoices,
     authed,
   } = ctx;
+  const workspace = async (actor: { userId: string; spaceId: string }) => {
+    const space = await deps.prisma.space.findUniqueOrThrow({
+      where: { id: actor.spaceId },
+      select: {
+        organizationId: true,
+        organization: {
+          select: { members: { where: { userId: actor.userId }, select: { role: true } } },
+        },
+      },
+    });
+    return {
+      organizationId: space.organizationId,
+      owner: space.organization.members.some(({ role }) =>
+        role.split(",").some((part) => part.trim() === "owner"),
+      ),
+    };
+  };
+  const requirePersonalModelsAllowed = async (actor: { userId: string; spaceId: string }) => {
+    if (await findWorkspaceModelPolicy(deps.prisma, actor.spaceId))
+      throw new ORPCError("FORBIDDEN", { message: "Models are managed by the workspace owner." });
+  };
   return {
     models: {
+      workspacePolicy: authed.models.workspacePolicy.handler(async ({ context }) => {
+        const { organizationId, owner } = await workspace(context.actor);
+        const policy = await deps.prisma.workspaceModelPolicy.findUnique({
+          where: { organizationId },
+          select: { provider: true, modelId: true },
+        });
+        return { canManage: owner, policy };
+      }),
+      setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
+        const { organizationId, owner } = await workspace(context.actor);
+        if (!owner) throw new ORPCError("FORBIDDEN");
+        if (!input.apiKey?.trim() || !input.modelId?.trim())
+          throw new ORPCError("BAD_REQUEST", {
+            message: "A model and a new API key are required.",
+          });
+        // Always create a new connection: never read or reuse a member's personal key.
+        let plaintext: string;
+        try {
+          ({ plaintext } = await ctx.verifyModelConnection(
+            context.actor,
+            { ...input, credentialId: null },
+            context.signal,
+          ));
+        } catch {
+          // Provider responses can echo request headers or keys; never forward them.
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Could not verify the model connection. Check its settings and API key.",
+          });
+        }
+        let stored: Awaited<ReturnType<typeof deps.secrets.put>>;
+        try {
+          stored = await deps.secrets.put(plaintext, {
+            operationId: "workspace-model",
+            traceId: "workspace-model",
+            ...context.actor,
+            signal: context.signal ?? new AbortController().signal,
+          });
+        } catch {
+          throw new ORPCError("SERVICE_UNAVAILABLE", {
+            message: "Could not securely save the workspace model.",
+          });
+        }
+        let previous: { secretId: string; secretRef: string } | null;
+        try {
+          previous = await withSerializableRetry(() =>
+            deps.prisma.$transaction(
+              async (tx) => {
+                const old = await tx.workspaceModelPolicy.findUnique({
+                  where: { organizationId },
+                  select: { secretId: true, secretRef: true },
+                });
+                const data = {
+                  provider: input.provider,
+                  modelId: input.modelId!.trim(),
+                  secretId: stored.id,
+                  secretRef: stored.ref,
+                };
+                await tx.workspaceModelPolicy.upsert({
+                  where: { organizationId },
+                  create: { organizationId, ...data },
+                  update: data,
+                });
+                return old;
+              },
+              { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+            ),
+          );
+        } catch (error) {
+          await deps.secrets.delete(stored.ref, stored.id).catch(() => undefined);
+          throw error;
+        }
+        if (previous)
+          await deps.secrets.delete(previous.secretRef, previous.secretId).catch(() => undefined);
+        return { ok: true as const };
+      }),
+      clearWorkspacePolicy: authed.models.clearWorkspacePolicy.handler(async ({ context }) => {
+        const { organizationId, owner } = await workspace(context.actor);
+        if (!owner) throw new ORPCError("FORBIDDEN");
+        const previous = await withSerializableRetry(() =>
+          deps.prisma.$transaction(
+            async (tx) => {
+              const old = await tx.workspaceModelPolicy.findUnique({
+                where: { organizationId },
+                select: { secretId: true, secretRef: true },
+              });
+              const removed = await tx.workspaceModelPolicy.deleteMany({
+                where: { organizationId },
+              });
+              if (old && removed.count !== 1) throw new ORPCError("FORBIDDEN");
+              return old;
+            },
+            { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+          ),
+        );
+        if (previous)
+          await deps.secrets.delete(previous.secretRef, previous.secretId).catch(() => undefined);
+        return { ok: true as const };
+      }),
       list: authed.models.list.handler(async ({ context }) => chatCatalog(context.actor)),
       credentials: authed.models.credentials.handler(async ({ context }) => {
         const [rows, main] = await Promise.all([
@@ -168,6 +288,7 @@ export function modelsRoutes(ctx: RouterContext) {
         );
       }),
       setRole: authed.models.setRole.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         if (input.expectedUserId && input.expectedUserId !== context.actor.userId)
           throw new ORPCError("FORBIDDEN");
         const { role, primary, backups, scope } = input;
@@ -191,6 +312,7 @@ export function modelsRoutes(ctx: RouterContext) {
         ),
       ),
       setBackups: authed.models.setBackups.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         await validateRoleChoices(context.actor, "main", input);
         await updateModelRole(
           deps.prisma,
@@ -201,6 +323,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       connect: authed.models.connect.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         const record = await firstModelConnectAnalytics(deps, context.actor, "api_key");
         record(input.provider, { name: "model_connect_started" });
         try {
@@ -277,10 +400,23 @@ export function modelsRoutes(ctx: RouterContext) {
               context.signal,
               { allowPrivate: mayUsePrivateEndpoint(deps) },
             );
-            return { models };
+            const secretValues = [apiKey, apiKey?.trim(), ...Object.values(headers ?? {})].filter(
+              (value): value is string => Boolean(value),
+            );
+            return {
+              models: models.filter(
+                (model) => !secretValues.some((value) => model.includes(value)),
+              ),
+            };
           } catch (error) {
+            const secretValues = [apiKey, apiKey?.trim(), ...Object.values(headers ?? {})].filter(
+              (value): value is string => Boolean(value),
+            );
             throw new ORPCError("BAD_REQUEST", {
-              message: error instanceof Error ? error.message : "Could not list models",
+              message:
+                error instanceof Error
+                  ? redactSecrets(error.message, secretValues)
+                  : "Could not list models",
             });
           }
         },
@@ -292,14 +428,18 @@ export function modelsRoutes(ctx: RouterContext) {
             deps.modelConnectionFetch,
             context.signal,
           );
-          return { models };
+          return { models: models.filter((model) => !model.includes(input.apiKey)) };
         } catch (error) {
           throw new ORPCError("BAD_REQUEST", {
-            message: error instanceof Error ? error.message : "Could not list models",
+            message:
+              error instanceof Error
+                ? redactSecrets(error.message, [input.apiKey])
+                : "Could not list models",
           });
         }
       }),
       beginOAuth: authed.models.beginOAuth.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         // An older app's sign-in renews the provider's newest connection, bound now so a
         // disconnect of that connection retires it and it never lands on another one.
         const target = await modelConnectionTarget(
@@ -351,6 +491,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return result.status === "connected" ? { status: "ready" as const } : result;
       }),
       finishOAuth: authed.models.finishOAuth.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         throwIfAborted(context.signal);
         let provider: string | undefined;
         const record = await firstModelConnectAnalytics(deps, context.actor, "oauth");
@@ -403,6 +544,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       setDefault: authed.models.setDefault.handler(async ({ context, input }) => {
+        await requirePersonalModelsAllowed(context.actor);
         const modelId = usableModelId(input.modelId);
         if (!modelId) throw new ORPCError("BAD_REQUEST", { message: "Choose a model" });
         // An omitted level keeps the one this model already has in the main list: on the

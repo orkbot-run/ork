@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "API URL": "API URL",
+  "Choose a provider": "プロバイダーを選択",
+  "Choose one model and API key for everyone in this workspace.":
+    "このワークスペース全体で使用するモデルとAPIキーを選択します。",
+  "Everyone in this workspace uses the model selected by the owner.":
+    "このワークスペースの全員がオーナーの選択したモデルを使用します。",
+  "Members will need their own model connection again.":
+    "メンバーは再び各自のモデル接続が必要になります。",
+  "Model ID": "モデルID",
+  "Model supports images": "モデルは画像に対応",
+  Provider: "プロバイダー",
+  "Remove the workspace model?": "ワークスペースのモデルを削除しますか？",
+  "Save model": "モデルを保存",
+  "Set workspace model": "ワークスペースのモデルを設定",
+  "The key cannot be displayed after saving. Enter a new key to replace it.":
+    "保存後にキーを表示することはできません。変更するには新しいキーを入力してください。",
+  "Workspace model": "ワークスペースのモデル",
   Snooze: "スヌーズ",
   "1 hour": "1時間",
   "3 hours": "3時間",

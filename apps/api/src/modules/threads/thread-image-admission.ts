@@ -8,6 +8,7 @@ import {
   CHATGPT_OAUTH_PROVIDER,
   codexLiveModel,
   findConnectedModelCredential,
+  findWorkspaceModelPolicy,
   knownModelImageInput,
   modelAcceptsImageInput,
   modelIdSupportsImages,
@@ -49,6 +50,29 @@ export async function assertThreadImageInput(
   },
 ) {
   if (!blocks.some((block) => block.kind === "image")) return;
+  const workspace = await findWorkspaceModelPolicy(prisma, actor.spaceId);
+  if (workspace && run?.status !== "running") {
+    let supportsImages = knownModelImageInput(workspace.provider, workspace.modelId);
+    if (workspace.provider === "openai-compatible" && configuration) {
+      const secret = parseModelSecret(
+        await configuration.secrets.load(workspace.secretRef, workspace.secretId),
+      );
+      if (
+        secret.kind === "openai_compatible" &&
+        modelIdSupportsImages(secret.visionModelIds, workspace.modelId)
+      )
+        supportsImages = true;
+    }
+    const unknown =
+      supportsImages === undefined &&
+      !runtimeModelAcceptsImages(workspace.provider, workspace.modelId);
+    if (supportsImages === false || unknown)
+      throw new ORPCError("CONFLICT", {
+        message: unknown ? MODEL_IMAGE_INPUT_UNKNOWN : MODEL_IMAGE_INPUT_ERROR,
+        data: { reason: "model_image_input_unsupported" },
+      });
+    return;
+  }
   const bot = await prisma.bot.findFirst({
     where: { id: botId, userId: actor.userId, spaceId: actor.spaceId },
     select: { modelProvider: true, modelId: true, thinkingLevel: true },

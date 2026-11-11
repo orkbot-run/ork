@@ -14,10 +14,20 @@ export default function BotModelScreen() {
   const [choices, setChoices] = useState<ChatModelChoice[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    void Promise.all([rpc("me"), rpc("models/list"), rpc("models/credentials")])
-      .then(([me, catalog, credentials]) =>
-        setChoices(chatModelPickerChoices(me, catalog, credentials, value, t)),
-      )
+    void Promise.all([
+      rpc("me"),
+      rpc("models/list"),
+      rpc("models/credentials"),
+      rpc("models/workspacePolicy"),
+    ])
+      .then(([me, catalog, credentials, policy]) => {
+        if (policy.policy) {
+          setChoices([]);
+          setError(t("Everyone in this workspace uses the model selected by the owner."));
+          return;
+        }
+        setChoices(chatModelPickerChoices(me, catalog, credentials, value, t));
+      })
       .catch((err) => setError(errorText(err, t("Could not load model settings"))));
   }, [t, value]);
 

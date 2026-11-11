@@ -12,6 +12,7 @@ import type { ExecutorDeps } from "./executor-deps.js";
 import { HttpDecisionProvider } from "./http-decisions.js";
 import { findConnectedModelCredential, hasHostedModelCredits } from "./model-selection.js";
 import { resolveModelKey } from "./run-model.js";
+import { resolveWorkspaceModel } from "./workspace-model-policy.js";
 /** The Auto Review provider that judges a run's action with one checker choice. */
 export async function autoReviewCheckerProvider(
   deps: ExecutorDeps,
@@ -26,6 +27,44 @@ export async function autoReviewCheckerProvider(
 ): Promise<AutoReviewProvider> {
   const { runId, spaceId, userId, botId, threadId } = scope;
   const { injectedReview, memberChecker, backups, registerSecrets } = options;
+  const workspace = await resolveWorkspaceModel(deps, spaceId);
+  if (workspace) {
+    registerSecrets(workspace.redact);
+    const model = workspace.model;
+    return createAutoReviewProvider("llm", {
+      llm: {
+        runtime: deps.runtime,
+        checker: { provider: model.provider, model: model.id, thinkingLevel: model.thinkingLevel },
+        apiKey: model.apiKey,
+        routing: model.routing,
+        accountId: model.accountId,
+        gatewayId: model.gatewayId,
+        baseUrl: model.baseUrl,
+        apiProtocol: model.apiProtocol,
+        headers: model.headers,
+        allowPrivateEndpoint: model.allowPrivateEndpoint,
+        cacheCapabilities: model.cacheCapabilities,
+        contextWindow: model.contextWindow,
+        maxTokens: model.maxTokens,
+        reasoning: model.reasoning,
+        runId,
+        spaceId,
+        userId,
+        botId,
+        threadId,
+        onUsage: (event) =>
+          recordUsage(deps.prisma, event, {
+            spaceId,
+            userId,
+            botId,
+            parentRunId: runId,
+            runId,
+            operationId: `auto-review:${runId}`,
+            operationKind: "setup",
+          }),
+      },
+    });
+  }
   if (injectedReview) return injectedReview;
   const kind =
     memberChecker || (checker.provider !== "jev" && checker.provider !== "scripted")
@@ -88,10 +127,12 @@ export async function autoReviewCheckerProvider(
           runtime: deps.runtime,
           checker,
           apiKey: judgeKey.oauth ? undefined : judgeKey.apiKey,
+          routing: judgeKey.routing,
           callObserver: judgeKey.callObserver,
           accountId: judgeKey.accountId,
           gatewayId: judgeKey.gatewayId,
           baseUrl: judgeKey.baseUrl,
+          apiProtocol: judgeKey.apiProtocol,
           headers: judgeKey.headers,
           allowPrivateEndpoint: judgeKey.allowPrivateEndpoint,
           cacheCapabilities: judgeKey.cacheCapabilities,

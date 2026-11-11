@@ -457,7 +457,7 @@ export function botsRoutes(ctx: RouterContext) {
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
             ...(input.modelProvider !== undefined
-              ? { modelProvider: input.modelProvider, modelId: input.modelId ?? null }
+              ? { modelProvider: modelChange.provider, modelId: modelChange.model }
               : {}),
             ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
             ...(input.teamChatAmbientEnabled !== undefined

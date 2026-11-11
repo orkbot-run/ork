@@ -248,6 +248,7 @@ import { appendToolCompletionAudit } from "./tool-completion-audit.js";
 import { toolResultFingerprint } from "./tool-loop.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
 import { createWebProvider } from "./web-provider-factory.js";
+import { findWorkspaceModelPolicy, resolveWorkspaceModel } from "./workspace-model-policy.js";
 
 /** Same reach as the MCP connector: usable servers assigned to the bot or shared with every bot. */
 async function verbatimMcpServersForRun(
@@ -586,6 +587,12 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             error instanceof Error ? error : new Error("Unsupported turn checkpoint");
         }
         const storedTurnCheckpoint = Boolean(turnCheckpoint);
+        let workspaceModelError: string | undefined;
+        const workspaceModel = await resolveWorkspaceModel(deps, run.spaceId).catch(() => {
+          workspaceModelError =
+            "The workspace model connection is unavailable. Ask the workspace owner to check it.";
+          return null;
+        });
         const resolveCheckpointModel = (
           provider: string,
           id: string,
@@ -612,16 +619,21 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           : undefined;
         let pinnedComputerModels: Awaited<ReturnType<typeof restoreComputerModels>> | undefined;
         let pinnedComputerFailure: string | undefined;
-        if (savedComputerMode) {
+        if (savedComputerMode && !workspaceModelError) {
           try {
             pinnedComputerModels = await restoreComputerModels(
               { resolveFallbackModel: checkpointModelResolver },
               savedComputerMode,
             );
           } catch (error) {
-            // A paused turn whose model or account is gone cannot resume; retrying will not help.
-            if (!isLostPinnedModel(error)) throw error;
-            pinnedComputerFailure = PINNED_COMPUTER_MODEL_LOST_RUN_ERROR;
+            if (workspaceModel) {
+              // Resuming may not restore a different or personal model under this policy.
+              pinnedComputerFailure = "This paused run uses a different model. Start a new run.";
+            } else {
+              // A paused turn whose model or account is gone cannot resume; retrying will not help.
+              if (!isLostPinnedModel(error)) throw error;
+              pinnedComputerFailure = PINNED_COMPUTER_MODEL_LOST_RUN_ERROR;
+            }
           }
         }
         const messagingSource =
@@ -673,7 +685,9 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               status: true,
             },
           }),
-          pinnedComputerModels ? Promise.resolve(null) : resolveMemberMainModel(deps, run),
+          pinnedComputerModels || workspaceModel || workspaceModelError
+            ? Promise.resolve(null)
+            : resolveMemberMainModel(deps, run),
           deps.prisma.deploymentSettings.findUnique({
             where: { id: "default" },
           }),
@@ -732,7 +746,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const modelChoice = runModelChoice(run, bot);
         const hasModelOverride = Boolean(modelChoice.modelProvider && modelChoice.modelId);
         const overrideCredential =
-          !pinnedComputerModels && hasModelOverride && modelChoice.modelProvider
+          !workspaceModel &&
+          !workspaceModelError &&
+          !pinnedComputerModels &&
+          hasModelOverride &&
+          modelChoice.modelProvider
             ? await findConnectedModelCredential(
                 deps.prisma,
                 deps.secretStore,
@@ -978,6 +996,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const runDeployment = deps.deploymentModelConfigured ? resolveDeploymentModel() : null;
         const runtimeFallback = runtimeFallbackModel(deps.runtime);
         const pinError =
+          !workspaceModel &&
+          !workspaceModelError &&
           !pinnedComputerModels &&
           run.modelPinned &&
           !(
@@ -986,22 +1006,29 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           )
             ? pinnedModelCredentialError(modelChoice, overrideCredential)
             : undefined;
-        const selected = pinnedComputerModels
+        const selected = workspaceModel
           ? {
-              provider: pinnedComputerModels.main.provider,
-              id: pinnedComputerModels.main.id,
-              thinkingLevel: pinnedComputerModels.main.thinkingLevel,
+              provider: workspaceModel.model.provider,
+              id: workspaceModel.model.id,
+              thinkingLevel: workspaceModel.model.thinkingLevel,
               credential: null,
             }
-          : selectConfiguredModel({
-              override: modelChoice,
-              overrideCredential,
-              main,
-              hostedProvider: (await modelCreditBillingEnabled(deps))
-                ? resolveDeploymentModel().provider
-                : undefined,
-              defaults: { settings, deployment: runDeployment },
-            });
+          : pinnedComputerModels
+            ? {
+                provider: pinnedComputerModels.main.provider,
+                id: pinnedComputerModels.main.id,
+                thinkingLevel: pinnedComputerModels.main.thinkingLevel,
+                credential: null,
+              }
+            : selectConfiguredModel({
+                override: modelChoice,
+                overrideCredential,
+                main,
+                hostedProvider: (await modelCreditBillingEnabled(deps))
+                  ? resolveDeploymentModel().provider
+                  : undefined,
+                defaults: { settings, deployment: runDeployment },
+              });
         const selectedProvider = selected.provider ?? runtimeFallback?.provider;
         const selectedModelId = selected.id ?? runtimeFallback?.id;
         // A missing or refused connection of the user's own fails every scheduled run alike.
@@ -1017,6 +1044,10 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             await backOffRoutineAfterAccountError(deps, run.routineId);
           }
         };
+        if (workspaceModelError) {
+          await failRunBeforeModel(workspaceModelError, true);
+          return;
+        }
         if (pinnedComputerFailure) {
           await failRunBeforeModel(pinnedComputerFailure, true);
           return;
@@ -1026,6 +1057,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           return;
         }
         if (
+          !workspaceModel &&
           !pinnedComputerModels &&
           run.modelPinned &&
           (selected.provider !== modelChoice.modelProvider || selected.id !== modelChoice.modelId)
@@ -1034,23 +1066,25 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           return;
         }
         const modelAccessDenied = async () =>
+          !workspaceModel &&
           (await modelCreditBillingEnabled(deps)) &&
           !(await spaceHasModelAccess(deps.prisma, run.spaceId));
         const scripted = deps.runtime.describe().capabilities.scripted;
         let backupChoices: Promise<ModelRoleChoice[]> | undefined;
         const loadBackups = () =>
-          (backupChoices ??= scripted
-            ? Promise.resolve([])
-            : effectiveModelRole(deps.prisma, run, "main", {
-                settings,
-                deployment: runDeployment,
-              }).then(
-                (role) => role.backups,
-                (error: unknown) => {
-                  getLogger().warn("Backup models could not be loaded", { runId, error });
-                  return [];
-                },
-              ));
+          (backupChoices ??=
+            scripted || workspaceModel
+              ? Promise.resolve([])
+              : effectiveModelRole(deps.prisma, run, "main", {
+                  settings,
+                  deployment: runDeployment,
+                }).then(
+                  (role) => role.backups,
+                  (error: unknown) => {
+                    getLogger().warn("Backup models could not be loaded", { runId, error });
+                    return [];
+                  },
+                ));
         // Backups that could not start here are not offered again once the model runs.
         const backupsUnavailable = new Set<ModelRoleChoice>();
         // A main model with no connection, or whose provider refused its sign-in, runs on the
@@ -1102,26 +1136,34 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
               id: selectedModelId,
               credential: selected.credential,
               thinkingLevel: selected.thinkingLevel,
-              resolved: pinnedComputerModels
+              resolved: workspaceModel
                 ? {
-                    ...pinnedComputerModels.main,
-                    apiKey: pinnedComputerModels.main.apiKey,
-                    callObserver: pinnedComputerModels.main.callObserver,
-                    oauth: pinnedComputerModels.main.oauth?.credential,
-                    persistOAuth: pinnedComputerModels.main.oauth?.persist,
-                    refreshOAuth: pinnedComputerModels.main.oauth?.refresh,
-                    retireOAuth: pinnedComputerModels.main.oauth?.retire,
-                    redact: [],
+                    ...workspaceModel.model,
+                    apiKey: workspaceModel.model.apiKey,
+                    callObserver: undefined,
+                    oauth: undefined,
+                    redact: workspaceModel.redact,
                   }
-                : await resolveModelKey(
-                    deps,
-                    run.userId,
-                    run.spaceId,
-                    selected.credential,
-                    selectedProvider,
-                    selectedModelId,
-                    (values) => runSecrets.push(...values),
-                  ),
+                : pinnedComputerModels
+                  ? {
+                      ...pinnedComputerModels.main,
+                      apiKey: pinnedComputerModels.main.apiKey,
+                      callObserver: pinnedComputerModels.main.callObserver,
+                      oauth: pinnedComputerModels.main.oauth?.credential,
+                      persistOAuth: pinnedComputerModels.main.oauth?.persist,
+                      refreshOAuth: pinnedComputerModels.main.oauth?.refresh,
+                      retireOAuth: pinnedComputerModels.main.oauth?.retire,
+                      redact: [],
+                    }
+                  : await resolveModelKey(
+                      deps,
+                      run.userId,
+                      run.spaceId,
+                      selected.credential,
+                      selectedProvider,
+                      selectedModelId,
+                      (values) => runSecrets.push(...values),
+                    ),
             };
           } catch (error) {
             // An incompatible saved model or a dead (already retired) credential is a
@@ -1156,7 +1198,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         runSecrets.push(...resolved.redact);
         // A pin stays as it was created. Unpinned runs still record the model they
         // used; modelPinned is what keeps that record from becoming the next choice.
-        if (!run.modelPinned) {
+        if (!run.modelPinned || workspaceModel) {
           await deps.prisma.run.updateMany({
             where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
             data: { modelProvider: runModelProvider, modelId: runModelId },
@@ -1351,18 +1393,19 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             ));
           }
         }
-        const mainRunModel: AgentRunRequest["model"] = pinnedComputerModels?.main ?? {
-          provider: runModelProvider,
-          id: runModelId,
-          ...(credential ? { connectionId: credential.id } : {}),
-          ...resolvedModelRunFields(resolved),
-          thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
-        };
+        const mainRunModel: AgentRunRequest["model"] = workspaceModel?.model ??
+          pinnedComputerModels?.main ?? {
+            provider: runModelProvider,
+            id: runModelId,
+            ...(credential ? { connectionId: credential.id } : {}),
+            ...resolvedModelRunFields(resolved),
+            thinkingLevel: thinkingLevel ?? resolved.thinkingLevel ?? null,
+          };
         // Saved identities win on resume, including when the setting was cleared meanwhile.
         const computerModel =
           pinnedComputerModels?.computer ??
           // A paused turn resumes with the models it started with, even one saved before this setting.
-          (scripted || storedTurnCheckpoint || !graphical
+          (workspaceModel || scripted || storedTurnCheckpoint || !graphical
             ? undefined
             : await resolveComputerRunModel(
                 {
@@ -1860,6 +1903,14 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             !lease.valid || Boolean(runAbortController?.signal.aborted),
           )
         ) {
+          return;
+        }
+
+        // Policy changes take effect before the next model call, including queued runs.
+        // A running stream is not interrupted, but stale setup must not start a new one.
+        const currentPolicy = await findWorkspaceModelPolicy(deps.prisma, run.spaceId);
+        if ((currentPolicy?.secretId ?? null) !== (workspaceModel?.secretId ?? null)) {
+          await failRunBeforeModel("The workspace model changed. Start the run again.");
           return;
         }
 
