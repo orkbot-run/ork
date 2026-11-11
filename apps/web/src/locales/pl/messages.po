@@ -6284,7 +6284,7 @@ msgstr "Zatrzymaj"
 #. placeholder {0}: block.name
 #: src/components/SubagentCard.tsx
 msgid "Stop {0}"
-msgstr ""
+msgstr "Zatrzymaj {0}"
 
 #: src/pages/shell/composer.tsx
 msgid "Stop {name}"
