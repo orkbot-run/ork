@@ -63,6 +63,7 @@ describe("funding selects credentials without deleting saved connections", () =>
             deploymentModelKey: "fixture-deployment-key",
             secretStore: { load, put: vi.fn() },
             prisma: {
+              workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
               deploymentSettings: {
                 findUnique: async () => ({ modelCreditsEnabled: billingEnabled }),
               },

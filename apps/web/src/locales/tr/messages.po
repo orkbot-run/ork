@@ -831,6 +831,7 @@ msgstr "Herhangi bir model, kendi anahtarınla"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API anahtarı"
 
@@ -842,6 +843,10 @@ msgstr "{provider} için API anahtarı"
 msgid "API key header"
 msgstr "API anahtarı üstbilgisi"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "API key saved securely"
+msgstr ""
+
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "API anahtarları"
@@ -851,6 +856,7 @@ msgid "API token"
 msgstr "API belirteci"
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "API URL'si"
 
@@ -1238,6 +1244,7 @@ msgstr "Görselleri okuyamaz"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "İptal"
 
@@ -1291,6 +1298,7 @@ msgid "Change {title}"
 msgstr "{title} değiştir"
 
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "Modeli değiştir"
 
@@ -1413,6 +1421,7 @@ msgstr "Bir bot rengi seçin veya bir resim yükleyin"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "Bir model seçin"
 
@@ -1421,6 +1430,7 @@ msgid "Choose a new password"
 msgstr "Yeni bir parola seçin"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "Sağlayıcı seç"
 
@@ -1445,6 +1455,10 @@ msgstr "Klasör seç"
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
 msgstr "Ork'yu nasıl kullanacağını seç"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
+msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
@@ -2204,6 +2218,11 @@ msgstr "Bu dosya yüklenemedi."
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Could not load voice settings"
 msgstr "Ses ayarları yüklenemedi"
+
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Could not load workspace model settings."
+msgstr ""
 
 #: src/lib/sign-out.ts
 msgid "Could not log out. Try again."
@@ -3123,6 +3142,11 @@ msgstr "Her ay"
 msgid "Every week"
 msgstr "Her hafta"
 
+#: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Everyone in this workspace uses the model selected by the owner."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "Genişlet"
@@ -3255,11 +3279,13 @@ msgstr "Sohbette bul"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "Model bul"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "Aranıyor…"
 
@@ -3850,6 +3876,11 @@ msgstr "Önizleme yükleniyor…"
 msgid "Loading voice providers…"
 msgstr "Ses sağlayıcıları yükleniyor…"
 
+#: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Loading workspace model…"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/PageLoading.tsx
@@ -4022,6 +4053,10 @@ msgstr "Üye"
 msgid "Members ({0})"
 msgstr "Üyeler ({0})"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again. Existing runs may need to be restarted."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4175,10 +4210,18 @@ msgstr "Model bağlantıları"
 msgid "Model id"
 msgstr "Model kimliği"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "Model seçenekleri"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5077,12 +5120,14 @@ msgstr "Korumalı giriş"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr "Protokol"
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Sağlayıcı"
 
@@ -5287,6 +5332,7 @@ msgstr "Yeniden yükle"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Kaldır"
 
@@ -5333,6 +5379,10 @@ msgstr "Üstbilgiyi kaldır"
 msgid "Remove message trigger"
 msgstr "Mesaj tetikleyicisini kaldır"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "Zamanlamayı kaldır"
@@ -5345,6 +5395,10 @@ msgstr "{0} becerisini kaldır"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "Becerileri kaldır"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5674,6 +5728,10 @@ msgstr "Cumartesi"
 msgid "Save"
 msgstr "Kaydet"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "Çalışma alanını kaydedin ve güncel yazılımı yükleyin."
@@ -5719,6 +5777,7 @@ msgstr "Kaydediliyor..."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "Kaydediliyor…"
 
@@ -5919,6 +5978,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Sunucu URL'si"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6485,6 +6548,10 @@ msgstr "Bilgisayar hizmeti bu hesap için bilgisayar başlatamıyor."
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Bağlantı zaman aşımına uğradı."
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
@@ -7309,6 +7376,10 @@ msgstr "ChatGPT veya Claude aboneliğinle çalışır."
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 msgid "Workspace"
 msgstr "Çalışma alanı"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Workspace model"
+msgstr ""
 
 #: src/lib/billing.ts
 msgid "year"

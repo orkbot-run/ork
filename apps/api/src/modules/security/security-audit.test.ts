@@ -18,6 +18,18 @@ const actor = { userId: "user-1", spaceId: "space-1" };
 beforeEach(() => vi.mocked(recordSecurityEvent).mockClear());
 
 describe("procedureSecurityEvent", () => {
+  it("audits workspace model changes without recording the API key", () => {
+    const event = procedureSecurityEvent(
+      ["models", "setWorkspacePolicy"],
+      { provider: "example", modelId: "model", apiKey: "private-test-key" },
+      actor,
+    );
+    expect(event).toMatchObject({
+      type: "credential.changed",
+      metadata: { provider: "example", modelId: "model" },
+    });
+    expect(JSON.stringify(event)).not.toContain("private-test-key");
+  });
   it("records which credential changed without its value", () => {
     const event = procedureSecurityEvent(
       ["models", "connect"],

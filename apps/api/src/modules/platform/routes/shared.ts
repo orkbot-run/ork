@@ -7,6 +7,7 @@
 import {
   deploymentModelRole,
   findConnectedModelCredential,
+  findWorkspaceModelPolicy,
   hasHostedModelCredits,
   hostCredentialSource,
   mcpStdioAvailable,
@@ -84,6 +85,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     // Set only while the active default is the deployment's own, running on host credentials.
     ...hostCredentials(
       !setup.main &&
+        !setup.workspaceModel &&
         !setup.settings?.defaultModelProvider &&
         Boolean(deps.env.deploymentModelHostCredentials),
       deps.env.defaultProvider,
@@ -126,8 +128,11 @@ function computerHostFor(
 
 /** The main model chat runs: the member's while it can run, else the deployment's. */
 export async function modelSetup(deps: RouterDeps, actor: Actor) {
+  const workspaceModel = await findWorkspaceModelPolicy(deps.prisma, actor.spaceId);
   const [member, settings] = await Promise.all([
-    resolveMemberMainModel({ prisma: deps.prisma, secretStore: deps.secrets }, actor),
+    workspaceModel
+      ? null
+      : resolveMemberMainModel({ prisma: deps.prisma, secretStore: deps.secrets }, actor),
     deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
   ]);
   const main =
@@ -145,7 +150,11 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
     (!funding?.creditPurchasesEnabled || creditsAvailable);
   return {
     main,
+    workspaceModel,
     model:
+      (workspaceModel
+        ? { provider: workspaceModel.provider, modelId: workspaceModel.modelId }
+        : null) ??
       main ??
       deploymentModelRole("main", {
         settings,
@@ -155,7 +164,7 @@ export async function modelSetup(deps: RouterDeps, actor: Actor) {
     funding,
     creditsAvailable,
     hasDeployment,
-    needsModel: deps.env.agentRuntime !== "scripted" && !main && !hasDeployment,
+    needsModel: deps.env.agentRuntime !== "scripted" && !workspaceModel && !main && !hasDeployment,
   };
 }
 

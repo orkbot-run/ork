@@ -941,6 +941,7 @@ describe("connected model credential selection", () => {
       },
     ];
     const prisma = {
+      workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
       userModelPreference: {
         findMany: vi.fn(async () => preferences),
         findFirst: vi.fn(
@@ -1269,6 +1270,7 @@ describe("bot model change validation", () => {
 
   function changeDeps(connected: Record<string, ReturnType<typeof credential>>) {
     const prisma = {
+      workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
       // A saved model lives on the space preference, as the picker writes it.
       userModelPreference: {
         findFirst: async (args: { where: { credential?: { provider?: string } } }) => {
@@ -1402,6 +1404,7 @@ describe("live-only catalog validation", () => {
     const selected = credential("openai", null);
     const savedBots = vi.fn(async () => [{ modelProvider: "openai", modelId: model }]);
     const prisma = {
+      workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
       bot: { findMany: savedBots },
       routine: { findMany: async () => [] },
       spaceSettingOverride: { findUnique: vi.fn(async () => null) },

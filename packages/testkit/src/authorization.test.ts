@@ -259,6 +259,12 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ],
       ["serverUpdates/policy", { automatic: true, expectedRevision: 0 }],
       ["models/list"],
+      ["models/workspacePolicy"],
+      [
+        "models/setWorkspacePolicy",
+        { provider: "openrouter", modelId: "openai/gpt-6-luna", apiKey: "not-a-real-key" },
+      ],
+      ["models/clearWorkspacePolicy"],
       ["models/credentials"],
       ["models/connect", { provider: "test", apiKey: "not-a-real-key" }],
       ["models/beginOAuth", { provider: "openai-codex" }],

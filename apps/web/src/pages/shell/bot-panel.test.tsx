@@ -19,6 +19,7 @@ vi.mock("../../lib/rpc", () => {
     bots: { get: vi.fn(), update: vi.fn(), restoreInstructions: vi.fn() },
     voice: { voices: vi.fn().mockResolvedValue([]) },
     models: {
+      workspacePolicy: vi.fn().mockResolvedValue({ canManage: false, policy: null }),
       credentials: vi.fn().mockResolvedValue([]),
       list: vi.fn().mockResolvedValue([]),
     },
@@ -304,6 +305,24 @@ it("shows the profile and the Advanced tab's controls", async () => {
 });
 
 describe("BotSettings model choices", () => {
+  it("shows the workspace model and preserves a previously saved personal choice", async () => {
+    vi.mocked(rpc.models.workspacePolicy).mockResolvedValueOnce({
+      canManage: false,
+      policy: { provider: "company", modelId: "shared-model" },
+    });
+    await render("Billing", { modelProvider: "personal", modelId: "old-model" });
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[data-testid="bot-settings-advanced"] button')!
+        .click(),
+    );
+    expect(container.textContent).toContain("company · shared-model");
+    expect(container.querySelector('select[id$="-model"]')).toBeNull();
+    await setDescription("Updated");
+    await clickSave();
+    expect(onSave.mock.calls[0]?.[0]).not.toHaveProperty("modelProvider");
+    expect(onSave.mock.calls[0]?.[0]).not.toHaveProperty("modelId");
+  });
   it("submits DeepSeek API ids and does not offer a display label", async () => {
     vi.mocked(rpc.models.credentials).mockResolvedValueOnce([
       {

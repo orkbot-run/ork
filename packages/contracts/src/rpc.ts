@@ -471,6 +471,14 @@ export const appContract = {
     apply: oc.input(ServerUpdateRequestSchema).output(ServerUpdateRunSchema),
   },
   models: {
+    workspacePolicy: oc.output(
+      z.object({
+        canManage: z.boolean(),
+        policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
+      }),
+    ),
+    setWorkspacePolicy: oc.input(ModelConnectInputSchema).output(z.object({ ok: z.literal(true) })),
+    clearWorkspacePolicy: oc.output(z.object({ ok: z.literal(true) })),
     forRole: oc
       .input(z.object({ role: ModelRoleSchema, expectedUserId: Id.optional() }))
       .output(z.array(ModelCatalogEntrySchema)),

@@ -324,6 +324,7 @@ function fixture({
     | { executionId: string; checkpoint: Omit<TurnCheckpoint, "provider" | "model"> }
     | undefined;
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     user: { findUnique: vi.fn(async () => null) },
     run: {
       findFirst: vi.fn(

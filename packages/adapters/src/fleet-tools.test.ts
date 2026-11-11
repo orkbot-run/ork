@@ -137,6 +137,7 @@ function fakeFleet(input: {
   }));
   const groups = input.groups ?? [];
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     bot: {
       findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
         bots.filter((bot) =>

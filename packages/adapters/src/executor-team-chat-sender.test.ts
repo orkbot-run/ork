@@ -54,6 +54,7 @@ async function teamChatRun(input: {
     leaseFence: 0,
   };
   const prisma = {
+    workspaceModelPolicy: { findFirst: vi.fn(async () => null) },
     $queryRaw: vi.fn(async () => []),
     user: { findUnique: vi.fn(async () => null) },
     run: {

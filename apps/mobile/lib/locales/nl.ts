@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "API URL": "API-adres",
+  "Choose a provider": "Kies een aanbieder",
+  "Choose one model and API key for everyone in this workspace.":
+    "Kies één model en API-sleutel voor de hele werkruimte.",
+  "Everyone in this workspace uses the model selected by the owner.":
+    "Iedereen in deze werkruimte gebruikt het model dat de eigenaar heeft gekozen.",
+  "Members will need their own model connection again.":
+    "Leden hebben weer hun eigen modelverbinding nodig.",
+  "Model ID": "Model-ID",
+  "Model supports images": "Model ondersteunt afbeeldingen",
+  Provider: "Aanbieder",
+  "Remove the workspace model?": "Model van de werkruimte verwijderen?",
+  "Save model": "Model opslaan",
+  "Set workspace model": "Model voor werkruimte instellen",
+  "The key cannot be displayed after saving. Enter a new key to replace it.":
+    "De sleutel kan na het opslaan niet worden weergegeven. Voer een nieuwe sleutel in om deze te vervangen.",
+  "Workspace model": "Model van werkruimte",
   Snooze: "Sluimeren",
   "1 hour": "1 uur",
   "3 hours": "3 uur",

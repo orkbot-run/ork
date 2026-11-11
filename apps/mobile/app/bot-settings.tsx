@@ -35,6 +35,7 @@ import { NativeSwitch } from "../components/native-switch";
 import { NativeSymbol } from "../components/native-symbol";
 import { ProfileEditDialog } from "../components/profile-edit-dialog";
 import { Chevron } from "../components/row-accessories";
+import { SettingsRow } from "../components/settings-group";
 import type { MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { currentApiBase, loadSessionToken, rpc, selectedSpaceId } from "../lib/api";
 import { avatarColor, isAvatarPhoto, withAvatarColor } from "../lib/bot-avatar-edit";
@@ -86,6 +87,10 @@ export default function BotSettingsScreen() {
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
   const [me, setMe] = useState<MobileMe | null>(null);
+  const [workspaceModel, setWorkspaceModel] = useState<{
+    provider: string;
+    modelId: string;
+  } | null>(null);
   const [modelMetaReady, setModelMetaReady] = useState(false);
   const [modelMetaError, setModelMetaError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -208,11 +213,17 @@ export default function BotSettingsScreen() {
   }, [botId, dailyCheckInsSave, crossSpaceSave, fleetSave, notifySave, nameSave]);
 
   useEffect(() => {
-    void Promise.all([rpc("me"), rpc("models/list"), rpc("models/credentials")])
-      .then(([nextMe, nextCatalog, nextCredentials]) => {
+    void Promise.all([
+      rpc("me"),
+      rpc("models/list"),
+      rpc("models/credentials"),
+      rpc("models/workspacePolicy"),
+    ])
+      .then(([nextMe, nextCatalog, nextCredentials, policy]) => {
         setMe(nextMe);
         setCatalog(nextCatalog);
         setCredentials(nextCredentials);
+        setWorkspaceModel(policy.policy);
         setModelMetaError(null);
         setModelMetaReady(true);
       })
@@ -233,8 +244,10 @@ export default function BotSettingsScreen() {
     ? modelOptionKey(selectedModel.provider, selectedModel.modelId)
     : "";
 
-  const effectiveProvider = selectedModel?.provider ?? me?.defaultProvider ?? null;
-  const effectiveModelId = selectedModel?.modelId ?? me?.defaultModel ?? null;
+  const effectiveProvider =
+    workspaceModel?.provider ?? selectedModel?.provider ?? me?.defaultProvider ?? null;
+  const effectiveModelId =
+    workspaceModel?.modelId ?? selectedModel?.modelId ?? me?.defaultModel ?? null;
   const effectiveEntry =
     effectiveProvider && effectiveModelId
       ? catalog.find(
@@ -271,6 +284,7 @@ export default function BotSettingsScreen() {
   }, [focus]);
 
   function selectModel(key: string) {
+    if (!modelMetaReady || workspaceModel) return;
     if (key === selectedModelKey) return;
     setModelKey(key);
     setThinkingLevel("");
@@ -278,11 +292,11 @@ export default function BotSettingsScreen() {
 
   // The searchable model list hands its pick back as a one-shot route param.
   useEffect(() => {
-    if (pickedModel === undefined) return;
+    if (pickedModel === undefined || !modelMetaReady) return;
     router.setParams({ model: undefined });
     setAdvancedOpen(true);
     selectModel(pickedModel);
-  }, [pickedModel]);
+  }, [pickedModel, modelMetaReady, workspaceModel]);
 
   function applyVoices(available: Voice[], assigned: string | undefined) {
     setVoices(available);
@@ -405,11 +419,11 @@ export default function BotSettingsScreen() {
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null);
       const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
-      if (modelChanged) {
+      if (modelMetaReady && !workspaceModel && modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
       }
-      if (modelMetaReady && (modelChanged || thinkingChanged)) {
+      if (modelMetaReady && !workspaceModel && (modelChanged || thinkingChanged)) {
         input.thinkingLevel = thinkingOptions.length
           ? ((thinkingLevel || null) as ThinkingLevel | null)
           : null;
@@ -607,24 +621,33 @@ export default function BotSettingsScreen() {
             }}
           >
             <SettingsGroup label={t("Model")}>
-              <MenuPicker
-                plain
-                choices={modelChoices}
-                label={t("Model")}
-                showLabel={false}
-                onChange={selectModel}
-                onPress={
-                  modelChoices.length > MODEL_SEARCH_THRESHOLD
-                    ? () =>
-                        router.push({
-                          pathname: "/bot-model",
-                          params: { botId, value: selectedModelKey },
-                        })
-                    : undefined
-                }
-                value={selectedModelKey}
-              />
-              {thinkingOptions.length ? (
+              {workspaceModel ? (
+                <SettingsRow
+                  title={`${workspaceModel.provider} · ${workspaceModel.modelId}`}
+                  detail={t("Everyone in this workspace uses the model selected by the owner.")}
+                />
+              ) : modelMetaReady ? (
+                <MenuPicker
+                  plain
+                  choices={modelChoices}
+                  label={t("Model")}
+                  showLabel={false}
+                  onChange={selectModel}
+                  onPress={
+                    modelChoices.length > MODEL_SEARCH_THRESHOLD
+                      ? () =>
+                          router.push({
+                            pathname: "/bot-model",
+                            params: { botId, value: selectedModelKey },
+                          })
+                      : undefined
+                  }
+                  value={selectedModelKey}
+                />
+              ) : (
+                <SettingsRow title={modelMetaError ?? t("Loading…")} />
+              )}
+              {!workspaceModel && modelMetaReady && thinkingOptions.length ? (
                 <MenuPicker
                   plain
                   choices={thinkingChoices}

@@ -24,6 +24,7 @@ type MockClient = {
   userModelRoleChoice?: unknown;
   spaceModelRoleChoice?: unknown;
   spaceSettingOverride?: unknown;
+  workspaceModelPolicy?: unknown;
   $transaction?: ((...args: unknown[]) => Promise<unknown>) & { modelRoles?: true };
 };
 
@@ -85,6 +86,7 @@ export function withModelRoles<T>(prisma: T, rows: RoleRow[] = []): T {
     }),
   };
   const augment = (target: MockClient) => {
+    target.workspaceModelPolicy ??= { findFirst: vi.fn(async () => null) };
     const own = target.userModelRoleChoice as
       | { findMany?: (args: { where: RoleWhere }) => Promise<unknown>; modelRoles?: true }
       | undefined;

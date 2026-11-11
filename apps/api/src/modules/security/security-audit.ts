@@ -22,6 +22,12 @@ type AuditedProcedure = {
  */
 export const AUDITED_PROCEDURES: Record<string, AuditedProcedure> = {
   "models.connect": { type: "credential.created", kind: "model", fields: ["provider"] },
+  "models.setWorkspacePolicy": {
+    type: "credential.changed",
+    kind: "workspace_model",
+    fields: ["provider", "modelId"],
+  },
+  "models.clearWorkspacePolicy": { type: "credential.deleted", kind: "workspace_model" },
   "models.finishOAuth": { type: "credential.created", kind: "model" },
   "models.disconnect": { type: "credential.deleted", kind: "model", fields: ["provider"] },
   "mcp.servers.create": { type: "credential.created", kind: "mcp" },

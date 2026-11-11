@@ -2,18 +2,28 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; model configuration changes follow LICENSE.md.
 
-import { hasModelConnection, modelConnectionOptions } from "@orkbot/core";
+import type { ModelApiProtocol } from "@orkbot/contracts";
+import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
+import {
+  hasModelConnection,
+  modelConnectionOptions,
+  workspaceApiModels,
+  workspaceApiProviders,
+} from "@orkbot/core";
 import { fetchFresh } from "@orkbot/core/query";
 import { isCancelledError, useQuery } from "@tanstack/react-query";
 import type { Href } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadFailure } from "../../components/load-failure";
 import { ModelProviders } from "../../components/model-providers";
 import type { ConnectableProvider, ModelConnectIntent } from "../../components/model-role-settings";
 import { ModelRoleSettings } from "../../components/model-role-settings";
+import { NativeActionButton } from "../../components/native-action-button";
+import { NativeSwitch } from "../../components/native-switch";
+import { SettingsGroup, SettingsInputRow, SettingsRow } from "../../components/settings-group";
 import { SpaceBotsModel } from "../../components/space-bots-model";
 import type { MobileBot, MobileModel, MobileModelCredential } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
@@ -62,6 +72,10 @@ export default function Models() {
       },
       queryClient,
     ).data ?? noCredentials;
+  const workspacePolicy = useQuery(
+    { ...rpcQuery("models/workspacePolicy", undefined, spaceId), enabled: false },
+    queryClient,
+  ).data;
   const bots =
     useQuery({ ...rpcQuery("bots/list", undefined, spaceId), enabled: false }, queryClient).data ??
     noBots;
@@ -86,7 +100,14 @@ export default function Models() {
     async (reuse = false) => {
       try {
         if (!current()) return;
-        const read = (path: "me" | "models/list" | "models/credentials" | "bots/list") =>
+        const read = (
+          path:
+            | "me"
+            | "models/list"
+            | "models/credentials"
+            | "bots/list"
+            | "models/workspacePolicy",
+        ) =>
           fetchFresh(
             queryClient,
             {
@@ -99,6 +120,7 @@ export default function Models() {
           read("me"),
           read("models/list"),
           read("models/credentials"),
+          read("models/workspacePolicy"),
           read("bots/list").catch(() => undefined),
         ]);
         if (!current()) return;
@@ -258,7 +280,16 @@ export default function Models() {
             {shownError}
           </Text>
         ) : null}
-        {me ? (
+        {workspacePolicy && (workspacePolicy.canManage || workspacePolicy.policy) ? (
+          <MobileWorkspaceModelPolicy
+            value={workspacePolicy}
+            catalog={catalog}
+            openPicker={pushModelPicker}
+            rpc={rpc}
+            onChanged={() => load()}
+          />
+        ) : null}
+        {me && workspacePolicy && !workspacePolicy.policy ? (
           <>
             <ModelRoleSettings
               {...shared}
@@ -313,6 +344,349 @@ export default function Models() {
         ) : null}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function MobileWorkspaceModelPolicy({
+  value,
+  catalog,
+  openPicker,
+  rpc,
+  onChanged,
+}: {
+  value: { canManage: boolean; policy: { provider: string; modelId: string } | null };
+  catalog: MobileModel[];
+  openPicker: (request: ModelPickerRequest) => void;
+  rpc: ReturnType<typeof captureSettingsContext>["send"];
+  onChanged: () => Promise<void>;
+}) {
+  const { t } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [provider, setProvider] = useState(value.policy?.provider ?? "");
+  const [modelId, setModelId] = useState(value.policy?.modelId ?? "");
+  const [apiKey, setApiKey] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiProtocol, setApiProtocol] = useState<ModelApiProtocol>("chat-completions");
+  const [supportsImages, setSupportsImages] = useState(false);
+  const [routing, setRouting] = useState<Record<string, string>>({});
+  const [foundModels, setFoundModels] = useState<string[]>([]);
+  const [finding, setFinding] = useState(false);
+  const probeVersion = useRef(0);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const styles = useThemedStyles(createModelsStyles);
+  const providers = workspaceApiProviders(catalog);
+  const models = workspaceApiModels(catalog, provider);
+  const routingFields =
+    catalog.find((entry) => entry.provider === provider)?.connection?.routingFields ?? [];
+  const routingReady = routingFields.every((field) => {
+    const value = routing[field.key] ?? "";
+    return !value ? !field.required : /^[A-Za-z0-9_-]{1,64}$/.test(value);
+  });
+  function invalidateProbe() {
+    probeVersion.current += 1;
+    setFoundModels([]);
+    setFinding(false);
+  }
+  async function findModels() {
+    if (!baseUrl.trim() || !apiKey.trim() || finding) return;
+    const version = ++probeVersion.current;
+    setFinding(true);
+    setError(null);
+    try {
+      const result = await rpc("models/probeOpenAiCompatible", {
+        baseUrl: baseUrl.trim(),
+        apiKey,
+        apiProtocol,
+        headers: {},
+      });
+      if (version === probeVersion.current) setFoundModels(result.models);
+    } catch {
+      if (version === probeVersion.current) setError(t("Could not load model settings"));
+    } finally {
+      if (version === probeVersion.current) setFinding(false);
+    }
+  }
+  async function save() {
+    if (!provider.trim() || !modelId.trim() || !apiKey.trim() || !routingReady || pending) return;
+    const key = apiKey;
+    setApiKey("");
+    setError(null);
+    setPending(true);
+    try {
+      await rpc("models/setWorkspacePolicy", {
+        provider: provider.trim(),
+        modelId: modelId.trim(),
+        apiKey: key,
+        credentialId: null,
+        ...(routingFields.length
+          ? {
+              routing: Object.fromEntries(
+                Object.entries(routing).filter(([, value]) => value.trim()),
+              ),
+            }
+          : {}),
+        ...(provider.trim() === OPENAI_COMPATIBLE_PROVIDER_ID
+          ? { baseUrl: baseUrl.trim(), apiProtocol, supportsImages }
+          : {}),
+      });
+      await onChanged();
+      setEditing(false);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setPending(false);
+    }
+  }
+  async function remove() {
+    setPending(true);
+    setError(null);
+    try {
+      await rpc("models/clearWorkspacePolicy");
+      await onChanged();
+      setEditing(false);
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <View style={{ gap: 12 }}>
+      <Text
+        accessibilityRole="header"
+        style={{ color: native.label, fontWeight: "600", fontSize: 16 }}
+      >
+        {t("Workspace model")}
+      </Text>
+      <Text style={{ color: native.secondaryLabel }}>
+        {value.policy
+          ? t("Everyone in this workspace uses the model selected by the owner.")
+          : t("Choose one model and API key for everyone in this workspace.")}
+      </Text>
+      {value.policy ? (
+        <Text style={{ color: native.label }}>
+          {value.policy.provider} · {value.policy.modelId}
+        </Text>
+      ) : null}
+      {value.canManage && !editing ? (
+        <>
+          <NativeActionButton
+            label={value.policy ? t("Change model") : t("Set workspace model")}
+            onPress={() => setEditing(true)}
+          />
+          {value.policy ? (
+            <NativeActionButton
+              label={t("Remove")}
+              prominence="destructive"
+              onPress={() =>
+                Alert.alert(
+                  t("Remove the workspace model?"),
+                  t("Members will need their own model connection again."),
+                  [
+                    { text: t("Cancel"), style: "cancel" },
+                    { text: t("Remove"), style: "destructive", onPress: () => void remove() },
+                  ],
+                )
+              }
+            />
+          ) : null}
+        </>
+      ) : null}
+      {editing && value.canManage ? (
+        <>
+          <SettingsGroup
+            label={t("Workspace model")}
+            footer={t("The key cannot be displayed after saving. Enter a new key to replace it.")}
+          >
+            <SettingsRow
+              title={t("Provider")}
+              value={providers.find((item) => item.id === provider)?.name ?? t("Choose a provider")}
+              chevron="right"
+              onPress={() =>
+                openPicker({
+                  title: t("Provider"),
+                  selectedKey: provider,
+                  choices: providers.map((item) => ({
+                    key: item.id,
+                    label: item.name,
+                    modelLabel: item.name,
+                  })),
+                  onSelect: (choice) => {
+                    setProvider(choice.key);
+                    setModelId("");
+                    setRouting({});
+                    invalidateProbe();
+                  },
+                })
+              }
+            />
+            {routingFields.map((field) => (
+              <SettingsInputRow
+                key={field.key}
+                accessibilityLabel={field.label}
+                placeholder={field.label}
+                value={routing[field.key] ?? ""}
+                onChangeText={(value) => setRouting((old) => ({ ...old, [field.key]: value }))}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ))}
+            {provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+              <SettingsInputRow
+                accessibilityLabel={t("Model ID")}
+                placeholder={t("Model ID")}
+                value={modelId}
+                onChangeText={setModelId}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ) : (
+              <SettingsRow
+                title={t("Model")}
+                value={models.find((item) => item.id === modelId)?.label ?? t("Choose a model")}
+                chevron="right"
+                disabled={!provider}
+                onPress={() =>
+                  openPicker({
+                    title: t("Choose a model"),
+                    selectedKey: modelId,
+                    choices: models.map((item) => ({
+                      key: item.id,
+                      label: item.label,
+                      modelLabel: item.label,
+                    })),
+                    onSelect: (choice) => setModelId(choice.key),
+                  })
+                }
+              />
+            )}
+            {provider.trim() === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+              <SettingsInputRow
+                accessibilityLabel={t("API URL")}
+                placeholder={t("API URL")}
+                value={baseUrl}
+                onChangeText={(value) => {
+                  setBaseUrl(value);
+                  invalidateProbe();
+                }}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            ) : null}
+            {provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+              <SettingsRow
+                title={t("Protocol")}
+                value={apiProtocol}
+                chevron="right"
+                onPress={() =>
+                  openPicker({
+                    title: t("Protocol"),
+                    selectedKey: apiProtocol,
+                    choices: [
+                      {
+                        key: "chat-completions",
+                        label: "Chat Completions",
+                        modelLabel: "Chat Completions",
+                      },
+                      { key: "responses", label: "Responses", modelLabel: "Responses" },
+                      {
+                        key: "anthropic-messages",
+                        label: "Anthropic Messages",
+                        modelLabel: "Anthropic Messages",
+                      },
+                    ],
+                    onSelect: (choice) => {
+                      setApiProtocol(choice.key as ModelApiProtocol);
+                      invalidateProbe();
+                    },
+                  })
+                }
+              />
+            ) : null}
+            {provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+              <SettingsRow
+                title={t("Model supports images")}
+                trailing={
+                  <NativeSwitch
+                    accessibilityLabel={t("Model supports images")}
+                    value={supportsImages}
+                    onValueChange={setSupportsImages}
+                  />
+                }
+              />
+            ) : null}
+            <SettingsInputRow
+              accessibilityLabel={t("API key")}
+              placeholder={t("API key")}
+              value={apiKey}
+              onChangeText={(value) => {
+                setApiKey(value);
+                invalidateProbe();
+              }}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </SettingsGroup>
+          {provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+            <>
+              <NativeActionButton
+                label={t("Find models")}
+                busy={finding}
+                disabled={!baseUrl.trim() || !apiKey.trim()}
+                onPress={() => void findModels()}
+              />
+              {[...models, ...foundModels.map((id) => ({ id, label: id }))].length ? (
+                <NativeActionButton
+                  label={t("Choose a model")}
+                  prominence="quiet"
+                  onPress={() =>
+                    openPicker({
+                      title: t("Choose a model"),
+                      selectedKey: modelId,
+                      choices: [
+                        ...new Map(
+                          [...models, ...foundModels.map((id) => ({ id, label: id }))].map(
+                            (item) => [item.id, item],
+                          ),
+                        ).values(),
+                      ].map((item) => ({
+                        key: item.id,
+                        label: item.label,
+                        modelLabel: item.label,
+                      })),
+                      onSelect: (choice) => setModelId(choice.key),
+                    })
+                  }
+                />
+              ) : null}
+            </>
+          ) : null}
+          <NativeActionButton
+            label={t("Save model")}
+            busy={pending}
+            disabled={!provider.trim() || !modelId.trim() || !apiKey.trim() || !routingReady}
+            onPress={() => void save()}
+          />
+          <NativeActionButton
+            label={t("Cancel")}
+            prominence="quiet"
+            disabled={pending}
+            onPress={() => {
+              setApiKey("");
+              setEditing(false);
+              setError(null);
+            }}
+          />
+        </>
+      ) : null}
+      {error ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+    </View>
   );
 }
 

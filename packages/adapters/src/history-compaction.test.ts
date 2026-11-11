@@ -527,6 +527,16 @@ describe("recordHistoryCompactAttemptsExhausted", () => {
 });
 
 describe("compactHistory", () => {
+  it("removes model secrets from errors before they reach job logs", async () => {
+    const harness = compactionHarness({ deploymentModelKey: "private-workspace-test-key" });
+    harness.runtime.run.mockImplementation(async function* () {
+      yield { type: "text", text: "Working" };
+      throw new Error("Provider failed with private-workspace-test-key");
+    });
+    await expect(compactHistory(harness.deps, "thread-1")).rejects.toThrow(
+      "Provider failed with [redacted]",
+    );
+  });
   it("passes tool steps to the summarizer and carries its summary into the following history", async () => {
     const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, seq) => ({
       seq,

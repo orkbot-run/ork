@@ -3,6 +3,22 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ZH_TW_MESSAGES: Record<string, string> = {
+  "API URL": "API 網址",
+  "Choose a provider": "選擇供應商",
+  "Choose one model and API key for everyone in this workspace.":
+    "為整個工作區選擇一個模型和 API 金鑰。",
+  "Everyone in this workspace uses the model selected by the owner.":
+    "工作區中的所有人都使用擁有者選擇的模型。",
+  "Members will need their own model connection again.": "成員將再次需要自己的模型連線。",
+  "Model ID": "模型 ID",
+  "Model supports images": "模型支援圖片",
+  Provider: "供應商",
+  "Remove the workspace model?": "移除工作區模型？",
+  "Save model": "儲存模型",
+  "Set workspace model": "設定工作區模型",
+  "The key cannot be displayed after saving. Enter a new key to replace it.":
+    "儲存後無法顯示金鑰。請輸入新金鑰以取代。",
+  "Workspace model": "工作區模型",
   Snooze: "稍後提醒",
   "1 hour": "1小時",
   "3 hours": "3小時",

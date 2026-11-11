@@ -431,6 +431,7 @@ export function createRouterContext(deps: RouterDeps) {
     announceRoutine,
     codexCatalog,
     connectModelCredential,
+    verifyModelConnection,
     favicons,
     refreshExpiredCredential,
     botModelValidation,

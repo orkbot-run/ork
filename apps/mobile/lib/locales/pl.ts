@@ -3,6 +3,23 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Choose a provider": "Wybierz dostawcę",
+  "Everyone in this workspace uses the model selected by the owner.":
+    "Wszyscy w tym workspace’ie korzystają z modelu wybranego przez właściciela.",
+  "Model ID": "Identyfikator modelu",
+  "Model supports images": "Model obsługuje obrazy",
+  "Remove the workspace model?": "Usunąć model workspace’u?",
+  "Save model": "Zapisz model",
+  "Set workspace model": "Ustaw model workspace’u",
+  "The key cannot be displayed after saving. Enter a new key to replace it.":
+    "Po zapisaniu klucza nie można go wyświetlić. Aby go zastąpić, wpisz nowy.",
+  "Workspace model": "Model workspace’u",
+  "Choose one model and API key for everyone in this workspace.":
+    "Wybierz jeden model i klucz API dla całego workspace’u.",
+  "Members will need their own model connection again.":
+    "Członkowie znów będą potrzebować własnego połączenia z modelem.",
+  "API URL": "Adres API",
+  Provider: "Dostawca",
   Snooze: "Drzemka",
   "1 hour": "1 godzina",
   "3 hours": "3 godziny",

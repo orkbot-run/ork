@@ -5,6 +5,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import type { Actor } from "@orkbot/contracts";
+import { redactSecrets } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { recordUsage } from "@orkbot/db";
 import { getLogger } from "@orkbot/logging";
@@ -56,12 +57,19 @@ export function createSpeechSummarizer(deps: {
   ): Promise<string | null> {
     const scope = { userId: actor.userId, spaceId: actor.spaceId, botId };
     const id = `speech-summary:${randomUUID()}`;
+    let secretValues: string[] = [];
     // Usage kinds are a fixed set; an auxiliary call like this one counts as setup.
     const record = async (event: UsageEvent) => {
       await recordUsage(deps.prisma, event, { ...scope, operationId: id, operationKind: "setup" });
     };
     try {
       const model = await deps.resolveModel(scope);
+      secretValues = [
+        model.apiKey,
+        model.oauth?.credential.access,
+        model.oauth?.credential.refresh,
+        ...Object.values(model.headers ?? {}),
+      ].filter((value): value is string => Boolean(value));
       // "scripted" means no model is configured; it would echo canned text.
       if (!deps.runtime.describe().capabilities.compaction || model.provider === "scripted") {
         return null;
@@ -105,7 +113,7 @@ export function createSpeechSummarizer(deps: {
       return summary ? summary.slice(0, SUMMARY_MAX_CHARS) : null;
     } catch (error) {
       getLogger().warn("speech summary failed", {
-        reason: error instanceof Error ? error.message : String(error),
+        reason: redactSecrets(error instanceof Error ? error.message : String(error), secretValues),
       });
       return null;
     }
