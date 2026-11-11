@@ -276,6 +276,6 @@ server_main() {
   initialization=$(timeout --foreground 60 python3 "$helper" initialization-required "$server_url") || fail "could not determine the server initialization status."
   if [[ "$auth_mode" == native && "$initialization" == true ]]; then
     timeout --foreground 60 "${server_docker[@]}" compose --env-file "$ENV_FILE" "${compose_files[@]}" exec -T api node dist/cli/server-claim.js || fail "could not generate server authorization; rerun this installer to try again."
-    echo 'If the link or code expires, rerun this installer to get a new one.'
+    echo 'If the code expires, rerun the installer to get a new one.'
   fi
 }

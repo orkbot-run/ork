@@ -14,9 +14,9 @@ export function serverClaimInstructions(
   const remaining = expiresAt * 1000 - Date.now();
   if (!Number.isSafeInteger(expiresAt) || remaining <= 0)
     throw new Error("Server authorization has expired.");
-  const minutes = Math.min(10, Math.ceil(remaining / 60_000));
+  const minutes = Math.min(15, Math.ceil(remaining / 60_000));
   const duration = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
-  return `Enter this code in your workspace dashboard under Server:\n${code}\n\nThe code expires in ${duration}. If the server already has an owner, sign in as that owner.\n`;
+  return `\nConnect your server:\nhttps://app.ork.run/account/connect-server#code=${code}&workspace=1\n\nOr enter the code manually:\n\n1. Open https://app.ork.run\n2. Sign in and select your workspace.\n3. Open Server and enter this code:\n\n   ${code}\n\n4. Check the server address and confirm the connection.\n\nThe code expires in ${duration}. If the server already has an owner, sign in as that owner.\n`;
 }
 
 /** The Compose self-host API stores its role environment in a private mounted file. */

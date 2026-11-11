@@ -48,8 +48,8 @@ describe("server claim lifetime", () => {
     return { tx, db: db as never, request, expiresAt };
   }
 
-  it("requests and accepts a ten-minute code", async () => {
-    const f = fixture(600);
+  it("requests and accepts a fifteen-minute code", async () => {
+    const f = fixture(900);
     await expect(
       issueServerClaim(f.db, {
         issuer,
@@ -60,13 +60,13 @@ describe("server claim lifetime", () => {
     ).resolves.toEqual({ code: "23456789AB", expiresAt: f.expiresAt });
     expect(JSON.parse(String(f.request.mock.calls[0]![1]!.body))).toMatchObject({
       origin,
-      lifetimeSeconds: 600,
+      lifetimeSeconds: 900,
     });
     expect(f.tx.verification.updateMany).toHaveBeenCalledOnce();
   });
 
   it("rejects a response exceeding the permitted lifetime", async () => {
-    const f = fixture(620);
+    const f = fixture(920);
     await expect(
       issueServerClaim(f.db, {
         issuer,
@@ -95,7 +95,7 @@ describe("server claim lifetime", () => {
     expect(f.request).toHaveBeenCalledTimes(2);
     const first = JSON.parse(String(f.request.mock.calls[0]![1]!.body));
     const second = JSON.parse(String(f.request.mock.calls[1]![1]!.body));
-    expect(first.lifetimeSeconds).toBe(600);
+    expect(first.lifetimeSeconds).toBe(900);
     expect(second).toEqual({ origin, challenge: first.challenge });
   });
 

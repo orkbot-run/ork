@@ -308,10 +308,10 @@ export async function issueServerClaim(
     let response = await post(
       options.issuer,
       "issue",
-      { origin: options.origin, challenge, lifetimeSeconds: 600 },
+      { origin: options.origin, challenge, lifetimeSeconds: 900 },
       options.request,
     );
-    let maxLifetime = 605;
+    let maxLifetime = 905;
     if (response.status === 400) {
       response = await post(
         options.issuer,

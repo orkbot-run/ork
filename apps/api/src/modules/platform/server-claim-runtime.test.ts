@@ -15,25 +15,27 @@ const loader = pathToFileURL(
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
 it("directs setup to a workspace", () => {
-  const instructions = serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) + 600);
-  expect(instructions).toContain("workspace dashboard");
+  const instructions = serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) + 900);
+  expect(instructions).toContain("select your workspace");
   expect(instructions).not.toContain("Personal account");
   expect(instructions).toContain("23456789AB");
-  expect(instructions).toContain("expires in 10 minutes");
-  expect(() => serverClaimInstructions("invalid", Math.floor(Date.now() / 1000) + 600)).toThrow();
+  expect(instructions).toContain("expires in 15 minutes");
+  expect(() => serverClaimInstructions("invalid", Math.floor(Date.now() / 1000) + 900)).toThrow();
 });
 
-it("sends an existing server's owner to the workspace dashboard", () => {
+it("sends an existing server's owner to the select your workspace", () => {
   const instructions = serverClaimInstructions(
     "23456789AB",
-    Math.floor(Date.now() / 1000) + 600,
+    Math.floor(Date.now() / 1000) + 900,
     true,
   );
-  expect(instructions).toContain("workspace dashboard");
+  expect(instructions).toContain("select your workspace");
   expect(instructions).toContain("23456789AB");
   expect(instructions).toContain("already has an owner");
-  expect(instructions).toContain("expires in 10 minutes");
-  expect(instructions).not.toContain("connect-server#code");
+  expect(instructions).toContain("expires in 15 minutes");
+  expect(instructions).toContain(
+    "https://app.ork.run/account/connect-server#code=23456789AB&workspace=1",
+  );
 });
 
 it.each([false, true])("shows the actual fallback lifetime for workspace %s", (workspace) => {
