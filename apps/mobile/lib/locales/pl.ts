@@ -3,12 +3,12 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
-  "Snooze": "Drzemka",
+  Snooze: "Drzemka",
   "1 hour": "1 godzina",
   "3 hours": "3 godziny",
   "Tomorrow at 9": "Jutro o 9:00",
   "Monday at 9": "W poniedziałek o 9:00",
-  "Woken": "Obudzono",
+  Woken: "Obudzono",
   "Stopped.": "Zatrzymano.",
   "Routine: {names}": "Rutyna: {names}",
   "Routines: {names}": "Rutyny: {names}",

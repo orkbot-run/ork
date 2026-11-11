@@ -3,12 +3,12 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
-  "Snooze": "スヌーズ",
+  Snooze: "スヌーズ",
   "1 hour": "1時間",
   "3 hours": "3時間",
   "Tomorrow at 9": "明日の9時",
   "Monday at 9": "月曜日の9時",
-  "Woken": "再表示",
+  Woken: "再表示",
   "Stopped.": "停止しました。",
   "New server available": "新しいサーバーが利用可能です",
   "Open servers": "サーバーを開く",

@@ -146,6 +146,7 @@ export default function ArchivedBots() {
       () => removed(generation, withoutBot(bot.id)),
       () => generation === focusGeneration.current,
       options.requestContext,
+      () => removed(generation, withoutBot(bot.id)),
     );
   }
 

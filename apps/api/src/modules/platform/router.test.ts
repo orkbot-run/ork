@@ -7226,6 +7226,7 @@ describe("bot model auth on save", () => {
       },
       userModelPreference: { findFirst: preferenceFindFirst },
       userModelCredential: { findFirst: vi.fn(async () => null) },
+      threadSnooze: { findMany: vi.fn(async () => []) },
       secret: { findFirst: secretFindFirst },
       $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
     };
@@ -8265,6 +8266,7 @@ describe("openai-compatible enabled models", () => {
     const prisma = {
       ...pins,
       $queryRaw: vi.fn(async () => []),
+      threadSnooze: { findMany: vi.fn(async () => []) },
       bot: {
         findFirst: vi.fn(async () => bot),
         findMany: vi.fn(async ({ where }: { where: PinWhere }) =>

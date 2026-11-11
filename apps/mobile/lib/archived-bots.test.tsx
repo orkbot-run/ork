@@ -119,6 +119,8 @@ describe("archived chat read failures", () => {
   let unregister: () => void;
   beforeEach(async () => {
     vi.clearAllMocks();
+    rpc.mockReset();
+    groupRpc.mockReset();
     unregister = registerSettingsSheet(closeSettingsSheet);
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     rpc.mockResolvedValue([bot]);

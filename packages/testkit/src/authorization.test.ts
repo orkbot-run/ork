@@ -346,6 +346,8 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ],
       ["threads/markRead", { botId: "missing-bot" }],
       ["threads/markUnread", { botId: "missing-bot" }],
+      ["threads/snooze", { botId: "missing-bot", until: "2099-01-01T00:00:00Z" }],
+      ["threads/unsnooze", { botId: "missing-bot" }],
       ["threads/head"],
       ["threads/react"],
       ["threads/endCall"],
@@ -736,6 +738,8 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ],
       ["threads/markRead", { botId: ownerBot.id }],
       ["threads/markUnread", { botId: ownerBot.id }],
+      ["threads/snooze", { botId: ownerBot.id, until: "2099-01-01T00:00:00Z" }],
+      ["threads/unsnooze", { botId: ownerBot.id }],
       ["computer/status", { botId: ownerBot.id }],
       ["computer/boot", { botId: ownerBot.id }],
       ["computer/stop", { botId: ownerBot.id }],
@@ -788,6 +792,8 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["threads/followUp", { groupId: ownerGroup.id, text: "intruder follow-up" }],
       ["threads/markRead", { groupId: ownerGroup.id }],
       ["threads/markUnread", { groupId: ownerGroup.id }],
+      ["threads/snooze", { groupId: ownerGroup.id, until: "2099-01-01T00:00:00Z" }],
+      ["threads/unsnooze", { groupId: ownerGroup.id }],
     ];
     await Promise.all(
       groupCalls.map(([procedure, input]) => expectDenied(app, intruder, procedure, input)),

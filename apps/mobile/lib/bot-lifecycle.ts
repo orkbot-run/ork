@@ -13,6 +13,7 @@ export function confirmDeleteBot(
   // False once the screen that asked has gone, so a late failure doesn't alert elsewhere.
   current: () => boolean = () => true,
   requestContext?: ApiRequestContext,
+  onDeletedAfterLeaving?: () => void,
 ) {
   const remove = async (deleteMemories: boolean) => {
     if (!current()) return;
@@ -29,6 +30,8 @@ export function confirmDeleteBot(
       if (current()) {
         removeFromSearchInbox(bot.id);
         onDeleted();
+      } else {
+        onDeletedAfterLeaving?.();
       }
     } catch (error) {
       if (current()) Alert.alert(t("Could not delete bot"), errorText(error, t("Try again.")));

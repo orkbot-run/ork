@@ -2564,7 +2564,10 @@ describe("computer execution leases", () => {
     };
     const create = vi.fn().mockRejectedValue(Object.assign(new Error("unique"), { code: "P2002" }));
     const client = {
-      $queryRaw: vi.fn().mockResolvedValue([{ id: "run-2" }]),
+      $queryRaw: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValue([{ id: "run-2" }]),
       externalEffect: { deleteMany: vi.fn(async () => ({ count: 0 })) },
       thread: {
         update: vi
