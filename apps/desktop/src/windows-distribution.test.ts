@@ -32,7 +32,5 @@ it("configures Tauri to sign each binary with a timestamp using the selected Azu
     "C:\\Temp Files\\metadata.json",
     "%1",
   ]);
-  expect(() =>
-    windowsSigningConfiguration({ signtool: "", dlib: "x", metadata: "y" }),
-  ).toThrow();
+  expect(() => windowsSigningConfiguration({ signtool: "", dlib: "x", metadata: "y" })).toThrow();
 });

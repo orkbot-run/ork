@@ -12,14 +12,8 @@ export function windowsSigningConfiguration(options: {
   dlib: string;
   metadata: string;
 }) {
-  if (
-    ![options.signtool, options.dlib, options.metadata].every((value) =>
-      value.trim(),
-    )
-  )
-    throw new Error(
-      "SignTool, Artifact Signing Dlib and metadata paths are required.",
-    );
+  if (![options.signtool, options.dlib, options.metadata].every((value) => value.trim()))
+    throw new Error("SignTool, Artifact Signing Dlib and metadata paths are required.");
 
   return {
     bundle: {
@@ -65,20 +59,10 @@ export function artifactSigningMetadata() {
   };
 }
 
-if (
-  process.argv[1] &&
-  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
-) {
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [command, configFile, metadataFile] = process.argv.slice(2);
-  if (
-    process.platform !== "win32" ||
-    command !== "prepare" ||
-    !configFile ||
-    !metadataFile
-  )
-    throw new Error(
-      "Expected: prepare <config path> <metadata path> on Windows.",
-    );
+  if (process.platform !== "win32" || command !== "prepare" || !configFile || !metadataFile)
+    throw new Error("Expected: prepare <config path> <metadata path> on Windows.");
   const metadata = path.resolve(metadataFile);
   const config = windowsSigningConfiguration({
     signtool: process.env.ORK_WINDOWS_SIGNTOOL ?? "",
