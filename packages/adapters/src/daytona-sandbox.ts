@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Modified by Ork contributors for optional sandbox loading. Inherited Apache material and new PolyForm changes.
-// Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
+// Modified by Ork contributors for startup account refusal handling and page browsing; see LICENSE.md.
 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -14,6 +14,8 @@ import type {
   ComputerObservation,
   ComputerRef,
   ControlLeaseRef,
+  PageBrowserCommand,
+  PageBrowserResult,
   PortableFile,
   ProcessEvent,
   SandboxProvider,
@@ -32,7 +34,13 @@ import {
   workspacePath,
 } from "./computer-support.js";
 import { PORTABLE_TRANSFER_BATCH_BYTES } from "./computer-workspace.js";
-import { LinuxDesktop, onBotScreen, PREPARE_LINUX_DESKTOP } from "./linux-desktop.js";
+import {
+  LinuxDesktop,
+  onBotScreen,
+  PAGE_BROWSER_MAX_OUTPUT,
+  PREPARE_LINUX_DESKTOP,
+} from "./linux-desktop.js";
+import { installPageBrowserCommand } from "./page-browser-install.js";
 import { sandboxCommandArgv } from "./sandbox-command-environment.js";
 import { isSandboxGoneError } from "./sandbox-errors.js";
 import { withAbort } from "./web-ssrf.js";
@@ -78,7 +86,15 @@ export type DaytonaSandbox = Pick<
   | "stop"
   | "delete"
 > & {
-  process: Pick<Sandbox["process"], "executeCommand">;
+  process: Pick<
+    Sandbox["process"],
+    | "executeCommand"
+    | "createSession"
+    | "executeSessionCommand"
+    | "sendSessionCommandInput"
+    | "getSessionCommand"
+    | "deleteSession"
+  > & { getSessionCommandLogs(sessionId: string, commandId: string): Promise<{ stdout?: string }> };
   fs: Pick<Sandbox["fs"], "listFiles" | "getFileDetails"> & {
     uploadFile(file: Buffer, remotePath: string): Promise<void>;
     downloadFile(remotePath: string): Promise<Buffer>;
@@ -130,6 +146,90 @@ export class DaytonaSandboxProvider implements SandboxProvider {
         boundedSandboxCommandTimeoutMs(undefined) / 1000,
       );
       return { code: result.exitCode, stdout: result.result, stderr: result.result };
+    },
+    runWithInput: async (computer, command, input, timeoutMs, context) => {
+      const deadline = AbortSignal.timeout(Math.max(1, timeoutMs));
+      const signal = AbortSignal.any([context.signal, deadline]);
+      if (context.signal.aborted) throw new Error("Page browser cancelled");
+      let sandbox: DaytonaSandbox;
+      try {
+        sandbox = await withAbort(this.box(computer), signal);
+      } catch {
+        if (context.signal.aborted) throw new Error("Page browser cancelled");
+        if (deadline.aborted) return { code: 124, stdout: "" };
+        throw new Error("Page browser transport failed");
+      }
+      const sessionId = `orkbot-page-${randomUUID()}`;
+      const cleanup = async () => {
+        try {
+          await withAbort(sandbox.process.deleteSession(sessionId), AbortSignal.timeout(5_000));
+        } catch {
+          // Provider errors can include request bodies; never log them.
+          getLogger().warn("sandbox.page_browser_session_cleanup", {
+            provider: "daytona",
+            outcome: "cleanup_unconfirmed",
+          });
+        }
+      };
+      // The SDK cannot cancel HTTP calls. If cancellation races a create/execute/input request,
+      // delete immediately and again when the outstanding call settles so late creation is cleaned.
+      const stage = async <T>(operation: () => Promise<T>): Promise<T> => {
+        signal.throwIfAborted();
+        const pending = operation();
+        let settled = false;
+        pending.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        try {
+          return await withAbort(pending, signal);
+        } finally {
+          if (signal.aborted && !settled) void pending.then(cleanup, cleanup);
+        }
+      };
+      try {
+        await stage(() => sandbox.process.createSession(sessionId));
+        // Restrict bytes before the provider stores or returns command logs. stderr can include
+        // sensitive values, so discard it. The extra byte distinguishes truncation from an exact fit.
+        const cappedScript = `/usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -c ${shellQuote(command)} 2>/dev/null | /usr/bin/head -c ${PAGE_BROWSER_MAX_OUTPUT + 1}; exit \${PIPESTATUS[0]}`;
+        const boundedCommand = `/usr/bin/env -u BASH_ENV -u ENV /bin/bash --noprofile --norc -c ${shellQuote(cappedScript)}`;
+        const started = await stage(() =>
+          sandbox.process.executeSessionCommand(sessionId, {
+            command: boundedCommand,
+            runAsync: true,
+            suppressInputEcho: true,
+          }),
+        );
+        if (!started.cmdId) throw new Error("missing command id");
+        await stage(() => sandbox.process.sendSessionCommandInput(sessionId, started.cmdId, input));
+        let exitCode: number | undefined;
+        do {
+          const state = await stage(() =>
+            sandbox.process.getSessionCommand(sessionId, started.cmdId),
+          );
+          exitCode = state.exitCode;
+          if (exitCode === undefined) await abortableDelay(100, signal);
+        } while (exitCode === undefined);
+        const logs = await stage(() =>
+          sandbox.process.getSessionCommandLogs(sessionId, started.cmdId),
+        );
+        const stdout = logs.stdout ?? "";
+        if (Buffer.byteLength(stdout) > PAGE_BROWSER_MAX_OUTPUT)
+          throw new Error("output too large");
+        return { code: exitCode, stdout };
+      } catch {
+        if (context.signal.aborted)
+          throw new Error("Page browser cancelled; action outcome may be unknown");
+        if (deadline.aborted) return { code: 124, stdout: "" };
+        // SDK errors may include the input in a request object or message.
+        throw new Error("Page browser transport failed; action outcome may be unknown");
+      } finally {
+        await cleanup();
+      }
     },
     screenUrl: async (computer, port, context) => {
       const preview = await this.screenPreview(
@@ -290,6 +390,14 @@ export class DaytonaSandboxProvider implements SandboxProvider {
       }
       throw error;
     }
+  }
+
+  async pageBrowser(
+    computer: ComputerRef,
+    request: PageBrowserCommand,
+    context: AdapterContext,
+  ): Promise<PageBrowserResult> {
+    return this.desktops.pageBrowser(computer, request, context);
   }
 
   async connectScreen(
@@ -575,6 +683,24 @@ export class DaytonaSandboxProvider implements SandboxProvider {
         300,
       );
       if (runtime.exitCode !== 0) throw new Error("could not prepare computer desktop tools");
+      try {
+        const browser = await sandbox.process.executeCommand(
+          `bash -c ${shellQuote(installPageBrowserCommand())}`,
+          undefined,
+          undefined,
+          300,
+        );
+        if (browser.exitCode !== 0)
+          getLogger().warn("sandbox.page_browser", {
+            provider: "daytona",
+            outcome: "install_failed",
+          });
+      } catch {
+        getLogger().warn("sandbox.page_browser", {
+          provider: "daytona",
+          outcome: "install_failed",
+        });
+      }
       if (this.preparations.get(sandbox.id) !== preparation) {
         throw new Error("Daytona workspace preparation was invalidated during teardown");
       }

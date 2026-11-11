@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 desktop support is preserved; shared output limit is an Ork addition.
+
 import { randomUUID } from "node:crypto";
 import type {
   AdapterContext,
@@ -75,7 +79,7 @@ export interface LinuxDesktopHost {
 
 /** The supervisor's limit on one page-browser call, which the helper's own waits fit inside. */
 const PAGE_BROWSER_TIMEOUT_MS = 25_000;
-const PAGE_BROWSER_MAX_OUTPUT = 512 * 1024;
+export const PAGE_BROWSER_MAX_OUTPUT = 512 * 1024;
 
 /** Point a bot's commands at its own screen, as Docker computers do, unless the caller chose a display. */
 export function onBotScreen(

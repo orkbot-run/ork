@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 behavior is preserved; portable cwd mapping follows LICENSE.md.
+// Inherited Apache-2.0 behavior is preserved; portable cwd mapping and page-browser tests follow LICENSE.md.
 // Modified by Ork contributors for startup account refusal handling; see LICENSE.md.
 
+import { spawnSync } from "node:child_process";
 import type { CreateSandboxFromSnapshotParams, FileInfo, SandboxState } from "@daytona/sdk";
 import {
   DaytonaAuthenticationError,
@@ -18,6 +19,7 @@ import { SandboxAccountError } from "@orkbot/adapter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DaytonaSandbox, DaytonaSandboxSdk } from "./daytona-sandbox.js";
 import { DaytonaSandboxProvider } from "./daytona-sandbox.js";
+import { PAGE_BROWSER_MAX_OUTPUT } from "./linux-desktop.js";
 import { desktopCommandResponder } from "./linux-desktop.test-support.js";
 import { isSandboxGoneError } from "./sandbox-errors.js";
 
@@ -33,6 +35,180 @@ describe("DaytonaSandboxProvider", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
+  });
+
+  it("uses session stdin without logging or putting input in the command", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    const run = provider["desktops"]["host"].runWithInput!;
+    const secret = "fake-password-never-in-command";
+    await expect(run(computer, "test-page-command", secret, 5000, context)).resolves.toEqual({
+      code: 0,
+      stdout: '{"ok":true}',
+    });
+    expect(fixture.executeSessionCommand).toHaveBeenCalledWith(expect.any(String), {
+      command: expect.stringContaining("test-page-command"),
+      runAsync: true,
+      suppressInputEcho: true,
+    });
+    expect(fixture.sendSessionCommandInput).toHaveBeenCalledWith(
+      expect.any(String),
+      "test-command-id",
+      secret,
+    );
+    expect(JSON.stringify(fixture.executeSessionCommand.mock.calls)).not.toContain(secret);
+    expect(fixture.deleteSession).toHaveBeenCalledTimes(1);
+    expect(fixture.files.size).toBe(0);
+  });
+
+  it("caps stdout before transport, discards stderr, and preserves normal exit status", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    const run = provider["desktops"]["host"].runWithInput!;
+    const short = `/bin/cat; printf 'private-stderr' >&2; exit 7`;
+    await run(computer, short, "input\n", 5000, context);
+    const shortCommand = fixture.executeSessionCommand.mock.calls.at(-1)![1].command;
+    const shortResult = spawnSync("/bin/bash", ["-c", shortCommand], {
+      input: "input\n",
+      encoding: "utf8",
+    });
+    expect(shortResult.status).toBe(7);
+    expect(shortResult.stdout).toBe("input\n");
+    expect(shortResult.stderr).toBe("");
+    const large = `/usr/bin/python3 -c "import sys; sys.stderr.write('s'*1048576); sys.stdout.write('x'*1048576)"`;
+    await run(computer, large, "input\n", 5000, context);
+    const largeCommand = fixture.executeSessionCommand.mock.calls.at(-1)![1].command;
+    const largeResult = spawnSync("/bin/bash", ["-c", largeCommand], {
+      encoding: "utf8",
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    expect(Buffer.byteLength(largeResult.stdout)).toBe(PAGE_BROWSER_MAX_OUTPUT + 1);
+    expect(largeResult.stderr).toBe("");
+  });
+
+  it("routes page requests through the assigned desktop", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    await expect(provider.pageBrowser(computer, { command: "snapshot" }, context)).resolves.toEqual(
+      { ok: true },
+    );
+    const command = fixture.executeSessionCommand.mock.calls[0]?.[1].command;
+    expect(command).toContain("DISPLAY=:20");
+    expect(command).toContain("ORKBOT_CDP_PORT=");
+  });
+
+  it("keeps workspace preparation available when page-browser installation fails", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    const original = fixture.executeCommand.getMockImplementation()!;
+    fixture.executeCommand.mockImplementation(async (command, cwd, env, timeout) => {
+      if (command.includes("page-browser.version"))
+        return { exitCode: 1, result: "installation failed" };
+      return original(command, cwd, env, timeout);
+    });
+    await expect(provider.prepare(computer, context)).resolves.toBeUndefined();
+    expect(
+      fixture.executeCommand.mock.calls.some(([command]) =>
+        command.includes("page-browser.version"),
+      ),
+    ).toBe(true);
+  });
+
+  it("hides a provider error that contains the input and still deletes the session", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    fixture.sendSessionCommandInput.mockRejectedValue(new Error("fake-secret"));
+    const run = provider["desktops"]["host"].runWithInput!;
+    await expect(run(computer, "page", "fake-secret", 5000, context)).rejects.toThrow(
+      "Page browser transport failed",
+    );
+    expect(fixture.deleteSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns timeout and deletes a still-running session", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    fixture.getSessionCommand.mockImplementation(async () => ({
+      id: "cmd",
+      command: "page",
+      exitCode: undefined,
+    }));
+    const run = provider["desktops"]["host"].runWithInput!;
+    await expect(run(computer, "page", "fake-secret", 30, context)).resolves.toEqual({
+      code: 124,
+      stdout: "",
+    });
+    expect(fixture.deleteSession).toHaveBeenCalled();
+  });
+
+  it("deletes again if a pending session creation completes after cancellation", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    const controller = new AbortController();
+    let finish!: () => void;
+    fixture.createSession.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const run = provider["desktops"]["host"].runWithInput!;
+    const request = run(computer, "page", "fake-secret", 5000, {
+      ...context,
+      signal: controller.signal,
+    });
+    while (!finish) await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    await expect(request).rejects.toThrow("Page browser cancelled");
+    expect(fixture.deleteSession).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.waitFor(() => expect(fixture.deleteSession).toHaveBeenCalledTimes(2));
+    expect(fixture.sendSessionCommandInput).not.toHaveBeenCalled();
+  });
+
+  it("cleans after cancellation racing an in-flight input request", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    const controller = new AbortController();
+    let finish!: () => void;
+    fixture.sendSessionCommandInput.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const run = provider["desktops"]["host"].runWithInput!;
+    const request = run(computer, "page", '{"password":"fake-secret"}\n', 5000, {
+      ...context,
+      signal: controller.signal,
+    });
+    while (!finish) await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.abort();
+    await expect(request).rejects.toThrow("action outcome may be unknown");
+    expect(fixture.deleteSession).toHaveBeenCalledTimes(1);
+    finish();
+    await vi.waitFor(() => expect(fixture.deleteSession).toHaveBeenCalledTimes(2));
+    expect(fixture.getSessionCommandLogs).not.toHaveBeenCalled();
+  });
+
+  it("rejects oversized session output", async () => {
+    const fixture = daytonaFixture();
+    const provider = new DaytonaSandboxProvider({ apiKey: "test-key" }, fixture.client);
+    const computer = await provider.provision({ botId: "bot-a", homePath: "/unused" }, context);
+    fixture.getSessionCommandLogs.mockResolvedValue({ stdout: "x".repeat(512 * 1024 + 1) });
+    const run = provider["desktops"]["host"].runWithInput!;
+    await expect(run(computer, "page", "fake-secret", 5000, context)).rejects.toThrow(
+      "Page browser transport failed",
+    );
+    expect(fixture.deleteSession).toHaveBeenCalled();
   });
 
   it.each([
@@ -974,6 +1150,32 @@ function daytonaFixture(
       return { exitCode: 0, result: "" };
     },
   );
+  const createSession = vi.fn(async (_id: string): Promise<void> => {});
+  const executeSessionCommand = vi.fn(
+    async (
+      _id: string,
+      _request: { command: string; runAsync?: boolean; suppressInputEcho?: boolean },
+    ) => ({ cmdId: "test-command-id", stdout: "", stderr: "" }),
+  );
+  const sendSessionCommandInput = vi.fn(
+    async (_id: string, _commandId: string, _input: string): Promise<void> => {},
+  );
+  const getSessionCommand = vi.fn(
+    async (
+      _id: string,
+      _commandId: string,
+    ): Promise<{ id: string; command: string; exitCode?: number }> => ({
+      id: "test-command-id",
+      command: "page",
+      exitCode: 0,
+    }),
+  );
+  const getSessionCommandLogs = vi.fn(
+    async (_id: string, _commandId: string): Promise<{ stdout?: string }> => ({
+      stdout: '{"ok":true}',
+    }),
+  );
+  const deleteSession = vi.fn(async (_id: string): Promise<void> => {});
   const uploadFile = vi.fn(async (content: Buffer, target: string) => {
     files.set(target, Buffer.from(content));
     modes.set(target, modes.get(target) ?? "0644");
@@ -1047,7 +1249,15 @@ function daytonaFixture(
     state: remote.state,
     desiredState: remote.desiredState,
     recoverable: remote.recoverable,
-    process: { executeCommand },
+    process: {
+      executeCommand,
+      createSession,
+      executeSessionCommand,
+      sendSessionCommandInput,
+      getSessionCommand,
+      getSessionCommandLogs,
+      deleteSession,
+    },
     fs: {
       uploadFile,
       downloadFile,
@@ -1093,10 +1303,17 @@ function daytonaFixture(
     options,
     remote,
     sandbox,
+    files,
     client,
     create,
     get,
     executeCommand,
+    createSession,
+    executeSessionCommand,
+    sendSessionCommandInput,
+    getSessionCommand,
+    getSessionCommandLogs,
+    deleteSession,
     refreshData,
     start,
     recover,
