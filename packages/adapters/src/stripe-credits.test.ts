@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 billing tests are preserved; credit authentication tests are Ork additions.
+
 import { BillingNoMonthlyCreditsError } from "@orkbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { byokTierOf, StripeBillingProvider } from "./stripe-billing.js";
@@ -41,6 +45,7 @@ describe("Stripe prepaid model credits", () => {
     });
     const body = requests.at(-1)!.params;
     expect(body.get("mode")).toBe("subscription");
+    expect(body.get("payment_method_options[card][request_three_d_secure]")).toBe("any");
     expect(body.get("allowed_payment_method_types[0]")).toBe("card");
     expect(body.has("payment_method_types[0]")).toBe(false);
     expect(body.get("subscription_data[billing_mode][type]")).toBe("classic");
@@ -65,6 +70,9 @@ describe("Stripe prepaid model credits", () => {
     });
     expect(requests).toHaveLength(1);
     expect(requests[0]!.params.get("mode")).toBe("payment");
+    expect(requests[0]!.params.get("payment_method_options[card][request_three_d_secure]")).toBe(
+      "any",
+    );
     expect(requests[0]!.params.get("allowed_payment_method_types[0]")).toBe("card");
     expect(requests[0]!.params.has("subscription_data[billing_mode][type]")).toBe(false);
     expect(requests[0]!.params.get("payment_intent_data[metadata][orkbot_credit_cents]")).toBe(
