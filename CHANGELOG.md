@@ -9,6 +9,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-11
+
+### Security
+
+- Connected servers check current workspace membership for signed-in users and devices. Removing a member blocks access, including sessions created before a later reinvitation.
+
+### Added
+
+- Choose a team workspace in the desktop server picker and see whether its server is reachable. Mobile also lists workspace servers.
+- Snooze chats and bots to keep them out of the inbox until they are due again.
+- Browse pages on supported hosted computers and search earlier tool work across chats.
+- See server update stages and download progress in the app.
+
+### Changed
+
+- Ork Accounts uses `https://api.ork.run` as its API and identity issuer.
+- Saved server addresses are under Self-hosted instead of the workspace picker. The server connection page explains how to connect a workspace and open the native app. Personal server pairing is temporarily disabled.
+- The mobile inbox separates chat activity from other entries. The activity view shows activity only.
+- The Polish translation covers more of the app.
+
+### Fixed
+
+- Bot message paths and notifications work when moving between chats. Conversation history retains tool activity and unsigned reasoning where available.
+- Preferences remain available when browser storage is blocked.
+- Quiet shell commands have more time to finish before timing out.
+
+### Self-host upgrade notes
+
+- The Accounts issuer changed to `https://api.ork.run`. Existing identities and server connections from the previous issuer do not migrate automatically. Back up server data before resetting an installation and reconnect the server to a workspace after the reset.
+- Deploy the matching Accounts service changes before updating a workspace server. Existing workspace sessions must sign in again, and the owner must sign in before a new member joins a fresh server. Access is unavailable while Accounts cannot verify membership. See [accounts and server setup](docs/self-host-accounts.md).
+- Operators can disconnect a workspace from the host or dashboard without deleting server data. See [disconnect a workspace server](docs/self-host-accounts.md#disconnect-a-workspace-server).
+- Back up the database, server configuration and bot data before upgrading. Restoring an older image does not reverse database migrations.
+
 ## [1.2.2] - 2026-11-09
 
 ### Changed
