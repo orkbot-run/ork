@@ -7,7 +7,7 @@ import { beginServerPairing } from "./server-pairing";
 const identity = vi.hoisted(() => ({
   version: 0,
   authorization: {
-    issuer: "https://api.orkbot.run",
+    issuer: "https://api.ork.run",
     subject: "account-a",
     accessToken: "native-test-token",
   } as { issuer: string; subject: string; accessToken: string } | null,
@@ -19,8 +19,8 @@ vi.mock("./accounts", () => ({
 vi.mock("./i18n", () => ({ t: (value: string) => value }));
 
 const origin = "https://server.example.test";
-const endpoint = "https://api.orkbot.run/api/server-pairings";
-const owner = JSON.stringify(["https://api.orkbot.run", "account-a"]);
+const endpoint = "https://api.ork.run/api/server-pairings";
+const owner = JSON.stringify(["https://api.ork.run", "account-a"]);
 const ticket = { id: "a".repeat(64), code: "AB23CD", expiresAt: 1_800_000_300 };
 const status = (state: string, server: string | null = origin) => ({
   status: state,
@@ -37,7 +37,7 @@ beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
   identity.version = 0;
   identity.authorization = {
-    issuer: "https://api.orkbot.run",
+    issuer: "https://api.ork.run",
     subject: "account-a",
     accessToken: "native-test-token",
   };

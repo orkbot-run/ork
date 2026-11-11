@@ -9,13 +9,13 @@ use url::Url;
 
 use crate::server::normalize_server_url;
 
-const API: &str = "https://api.orkbot.run/api/servers";
+const API: &str = "https://api.ork.run/api/servers";
 const ERROR: &str = "Could not update your servers. Try again.";
 const MAX_BODY: usize = 1024 * 1024;
 const DEVICE_FILE: &str = "directory-device-id";
 
 pub fn origin() -> Url {
-    Url::parse("https://api.orkbot.run").expect("The Accounts directory origin is fixed")
+    Url::parse("https://api.ork.run").expect("The Accounts directory origin is fixed")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]

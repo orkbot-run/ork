@@ -51,6 +51,10 @@ connection after it can reach Accounts again. Existing users and server data are
 the operation does not revoke local sessions. Older connections may require the manual
 `--clear-workspace <organization-id>` command after dashboard removal.
 
+## Issuer change
+
+The Accounts issuer is `https://api.ork.run`. Existing identity bindings from the previous issuer are not migrated. Back up any data you need, then create a new installation and sign in again.
+
 ## Earlier OIDC configuration
 
 The [Linux server installer](self-host.md#linux-server-setup) registers its client using
@@ -63,7 +67,7 @@ For an existing manually managed OIDC installation, register its client with an 
 operator and configure the API:
 
 ```env
-OIDC_ISSUER=https://api.orkbot.run
+OIDC_ISSUER=https://api.ork.run
 OIDC_CLIENT_ID=replace-with-registered-client-id
 OIDC_CLIENT_SECRET=replace-with-server-client-secret
 OIDC_NAME="Ork Accounts"

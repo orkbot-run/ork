@@ -16,7 +16,7 @@ pnpm --filter @orkbot/accounts-web build
 ```
 
 Publish `dist/` under `/account/` on the dashboard origin. `Caddyfile` routes
-`/account/api/auth/*` to `https://api.orkbot.run`, serves account pages/assets
+`/account/api/auth/*` to `https://api.ork.run`, serves account pages/assets
 from this build and forwards other requests to the existing dashboard.
 `ACCOUNTS_UPSTREAM` can override the API destination for a different deployment.
 The browser keeps relative requests and dashboard-scoped cookies; no frontend
@@ -28,19 +28,19 @@ Set these variables on the dashboard proxy (replace paths and service addresses)
 DASHBOARD_HOST=dashboard.example.test
 ACCOUNTS_WEB_ROOT=/srv/accounts
 DASHBOARD_UPSTREAM=http://dashboard:5173
-ACCOUNTS_UPSTREAM=https://api.orkbot.run
+ACCOUNTS_UPSTREAM=https://api.ork.run
 ```
 
 If EasyPanel terminates HTTPS in front of this Caddy container, use
 `DASHBOARD_HOST=:80` and route the dashboard domain to port 80. Otherwise Caddy
-serves the configured dashboard hostname directly. Do not route `api.orkbot.run`
+serves the configured dashboard hostname directly. Do not route `api.ork.run`
 back through this proxy: EasyPanel must route it directly to the Accounts service
 on port 3200. This avoids a proxy loop.
 
 On the private Accounts API, configure:
 
 ```dotenv
-ACCOUNTS_URL=https://api.orkbot.run
+ACCOUNTS_URL=https://api.ork.run
 ACCOUNTS_WEB_URL=https://dashboard.example.test/account
 HOST=0.0.0.0
 PORT=3200
@@ -48,7 +48,7 @@ NODE_ENV=production
 ```
 
 Replace the dashboard example with the real UI origin, including `/account`.
-On the Ork product API, set `OIDC_ISSUER=https://api.orkbot.run` and use the client
+On the Ork product API, set `OIDC_ISSUER=https://api.ork.run` and use the client
 ID/secret registered with that Accounts deployment. Keep those credentials on the
 server. For an existing installation, changing the issuer changes identity mappings;
 do not silently migrate existing users by matching email addresses.

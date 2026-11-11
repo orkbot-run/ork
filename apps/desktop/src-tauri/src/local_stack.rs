@@ -2000,7 +2000,7 @@ mod tests {
             let rendered = render_environment(template, |bytes| Ok("d".repeat(bytes * 2))).unwrap();
             let values = parse_environment(&rendered).unwrap();
             assert_eq!(values["OIDC_NAME"], "Ork Accounts");
-            assert_eq!(values["OIDC_ISSUER"], "https://api.orkbot.run");
+            assert_eq!(values["OIDC_ISSUER"], "https://api.ork.run");
             assert_eq!(values["AUTH_PASSWORD_ENABLED"], "false");
             assert_eq!(values["POSTGRES_PASSWORD"], "d".repeat(32));
             assert_eq!(values["POSTGRES_APP_PASSWORD"], "d".repeat(32));

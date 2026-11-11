@@ -36,7 +36,7 @@ BETTER_AUTH_SECRET=b
 ENCRYPTION_KEY=e
 SCREEN_PROXY_SECRET=s
 SANDBOX_SUPERVISOR_TOKEN=t
-OIDC_ISSUER=https://api.orkbot.run
+OIDC_ISSUER=https://api.ork.run
 OIDC_CLIENT_ID=offline-test-client
 EOF
 exit 0

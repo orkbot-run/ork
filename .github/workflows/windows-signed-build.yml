@@ -21,7 +21,7 @@ jobs:
       id-token: write
     env:
       ORKBOT_ENABLE_AUTO_UPDATE: '0'
-      ORK_ACCOUNTS_ISSUER: https://api.orkbot.run
+      ORK_ACCOUNTS_ISSUER: https://api.ork.run
       ORK_ACCOUNTS_DESKTOP_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_DESKTOP_CLIENT_ID }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5

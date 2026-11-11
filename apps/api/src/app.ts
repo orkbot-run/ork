@@ -566,7 +566,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   if (env.passwordAuth === false && (env.oidc || env.accountsEnabled)) {
     await expireNonOidcSessions(
       prisma,
-      env.oidc?.issuer ?? "https://api.orkbot.run",
+      env.oidc?.issuer ?? "https://api.ork.run",
       env.desktopAccountKey,
     );
   }
@@ -590,7 +590,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
                 env.bootstrapSecret
                   ? runAsSystem("verify device workspace membership", () =>
                       authorizeWorkspaceSession(prisma, {
-                        issuer: "https://api.orkbot.run",
+                        issuer: "https://api.ork.run",
                         bootstrapSecret: env.bootstrapSecret!,
                         userId,
                         sessionId,
@@ -614,7 +614,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     breachedPasswordCheck: env.breachedPasswordCheck,
     oidc: env.oidc,
     nativeAccounts: env.accountsEnabled
-      ? { issuer: "https://api.orkbot.run", bootstrapSecret: env.bootstrapSecret }
+      ? { issuer: "https://api.ork.run", bootstrapSecret: env.bootstrapSecret }
       : undefined,
     secret: env.authSecret,
     baseURL: env.authUrl,
@@ -868,14 +868,14 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           prisma,
           ...serverUpdateSetup,
           delegatedAccountKey: null,
-          issuer: "https://api.orkbot.run",
+          issuer: "https://api.ork.run",
           currentRevision: env.gitSha ?? null,
         })
       : createServerUpdates({
           prisma,
           ...serverUpdateSetup,
           delegatedAccountKey: serverUpdateSetup.delegatedAccountKey,
-          issuer: "https://api.orkbot.run",
+          issuer: "https://api.ork.run",
           currentRevision: env.gitSha ?? null,
         })
     : undefined;
@@ -1001,7 +1001,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     if (!env.bootstrapSecret) return false;
     return runAsSystem("verify workspace membership", () =>
       authorizeWorkspaceSession(prisma, {
-        issuer: "https://api.orkbot.run",
+        issuer: "https://api.ork.run",
         bootstrapSecret: env.bootstrapSecret!,
         sessionId: session.session.id,
         userId: session.user.id,
@@ -1613,7 +1613,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const stopServerClaim =
     env.accountsEnabled && env.bootstrapSecret && !env.desktopAccountKey
       ? startServerClaimWorker(prisma, {
-          issuer: "https://api.orkbot.run",
+          issuer: "https://api.ork.run",
           origin: env.webOrigin,
           bootstrapSecret: env.bootstrapSecret,
           observe: createServerObserver(env.dataDir),

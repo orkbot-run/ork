@@ -499,7 +499,7 @@ describe("OIDC environment", () => {
 describe("product API authentication boundary", () => {
   const configured = {
     ...base,
-    OIDC_ISSUER: "https://api.orkbot.run",
+    OIDC_ISSUER: "https://api.ork.run",
     OIDC_CLIENT_ID: "offline-public-client",
   };
 
@@ -515,7 +515,7 @@ describe("product API authentication boundary", () => {
     );
     expect(() =>
       loadProductEnv({ ...config, OIDC_ISSUER: "https://different.example.test" }),
-    ).toThrow("OIDC_ISSUER must be https://api.orkbot.run");
+    ).toThrow("OIDC_ISSUER must be https://api.ork.run");
   });
 
   it("requires explicit central issuer and client settings before startup", () => {
@@ -537,7 +537,7 @@ describe("product API authentication boundary", () => {
     const env = loadProductEnv(configured);
     expect(env.passwordAuth).toBe(false);
     expect(env.oidc).toMatchObject({
-      issuer: "https://api.orkbot.run",
+      issuer: "https://api.ork.run",
       clientId: "offline-public-client",
       clientSecret: undefined,
       name: "Ork Accounts",
@@ -555,14 +555,14 @@ describe("product API authentication boundary", () => {
 
   it.each([
     "https://identity.example.test",
-    "https://api.orkbot.run/",
+    "https://api.ork.run/",
     "http://api.orkbot.run",
-    "https://api.orkbot.run?next=other",
+    "https://api.ork.run?next=other",
     "https://user:password@api.orkbot.run",
     "not-a-url",
   ])("rejects a different or noncanonical issuer %s", (issuer) => {
     expect(() => loadProductEnv({ ...configured, OIDC_ISSUER: issuer })).toThrow(
-      "OIDC_ISSUER must be https://api.orkbot.run",
+      "OIDC_ISSUER must be https://api.ork.run",
     );
   });
 });
