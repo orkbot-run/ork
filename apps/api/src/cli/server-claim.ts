@@ -57,18 +57,15 @@ try {
       "Local workspace binding removed. Existing users and data were preserved.\n",
     );
   } else {
-    const workspace = process.argv.includes("--workspace");
-    if (process.argv.includes("--personal") && workspace)
-      throw new Error("Choose either --personal or --workspace.");
     const claim = await runAsSystem("local server authorization", () =>
       issueServerClaim(prisma, {
         origin,
         issuer: "https://api.orkbot.run",
         bootstrapSecret: secret,
-        ...(workspace ? { mode: "workspace" as const } : {}),
+        mode: "workspace",
       }),
     );
-    process.stdout.write(serverClaimInstructions(claim.code, claim.expiresAt, workspace));
+    process.stdout.write(serverClaimInstructions(claim.code, claim.expiresAt, true));
   }
 } finally {
   await prisma.$disconnect();

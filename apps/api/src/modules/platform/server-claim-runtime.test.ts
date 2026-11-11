@@ -14,10 +14,10 @@ const loader = pathToFileURL(
 ).href;
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-it("directs setup to the account page", () => {
+it("directs setup to a workspace", () => {
   const instructions = serverClaimInstructions("23456789AB", Math.floor(Date.now() / 1000) + 600);
-  expect(instructions).toContain("https://accounts.ork.run/account/connect-server");
-  expect(instructions).not.toContain("workspace dashboard");
+  expect(instructions).toContain("workspace dashboard");
+  expect(instructions).not.toContain("Personal account");
   expect(instructions).toContain("23456789AB");
   expect(instructions).toContain("expires in 10 minutes");
   expect(() => serverClaimInstructions("invalid", Math.floor(Date.now() / 1000) + 600)).toThrow();
@@ -34,17 +34,6 @@ it("sends an existing server's owner to the workspace dashboard", () => {
   expect(instructions).toContain("already has an owner");
   expect(instructions).toContain("expires in 10 minutes");
   expect(instructions).not.toContain("connect-server#code");
-});
-
-it("directs personal authorization to the account page", () => {
-  const instructions = serverClaimInstructions(
-    "23456789AB",
-    Math.floor(Date.now() / 1000) + 600,
-    false,
-  );
-  expect(instructions).toContain("https://accounts.ork.run/account/connect-server");
-  expect(instructions).toContain("23456789AB");
-  expect(instructions).not.toContain("workspace dashboard");
 });
 
 it.each([false, true])("shows the actual fallback lifetime for workspace %s", (workspace) => {

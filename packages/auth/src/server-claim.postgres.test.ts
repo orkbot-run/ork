@@ -140,42 +140,6 @@ describe.skipIf(!enabled)("durable server authorization", () => {
     await database?.pool.end();
   });
 
-  it("connects a server directly to its account", async () =>
-    system(async () => {
-      const service = broker();
-      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
-      await issueServerClaim(prisma!, options);
-      service.approve();
-      await processServerClaim(prisma!, options);
-      await processServerClaim(prisma!, options);
-      expect(
-        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
-      ).toMatchObject({
-        nativeAccountsOwnerKey: oidcAccountSubject(issuer, "owner"),
-        nativeAccountsOrganizationId: null,
-      });
-      expect(service.reports).toEqual([true]);
-    }));
-
-  it("only allows the existing owner to reconnect a personal server", async () =>
-    system(async () => {
-      await prisma!.deploymentSettings.update({
-        where: { id: "default" },
-        data: { nativeAccountsOwnerKey: oidcAccountSubject(issuer, "another-owner") },
-      });
-      const service = broker();
-      const options = { issuer, origin, bootstrapSecret, request: service.request, keys };
-      await issueServerClaim(prisma!, options);
-      service.approve();
-      await processServerClaim(prisma!, options);
-      expect(
-        await prisma!.deploymentSettings.findUniqueOrThrow({ where: { id: "default" } }),
-      ).toMatchObject({ nativeAccountsOwnerKey: oidcAccountSubject(issuer, "another-owner") });
-      expect(
-        await serverClaimProof(prisma!, id, proofNonce, { origin, bootstrapSecret }),
-      ).toBeNull();
-    }));
-
   it("connects a fresh server directly to a workspace without a personal claim", async () =>
     system(async () => {
       const organizationId = randomUUID();
