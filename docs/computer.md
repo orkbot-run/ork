@@ -1,3 +1,7 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors (modifications) -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited Apache-2.0 documentation is preserved; command-path guidance is an Ork addition. -->
+
 # The bot's computer
 
 Every bot has a real computer with a browser, a terminal, files and a desktop, so it can do work
@@ -40,6 +44,12 @@ Bots save their work on the computer and send you the results as files in the ch
 has sent is also under **Artifacts** in the account menu.
 
 To have a bot react to files changing, use a [routine](./routines.md) that watches a folder.
+
+## Computer command paths
+
+On the default computer image, login shells include `~/.local/bin` in `PATH`. Programs in that
+directory can take precedence over system executables. Shell profiles can change the search order.
+Install only software you trust there.
 
 ## Fix a computer
 
