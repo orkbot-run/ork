@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 history retrieval is preserved; tool-work lookup changes are Ork additions.
+
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import { historyMessageText, readHistory, searchHistory } from "./history-retrieval.js";
@@ -24,6 +28,47 @@ function sql(mock: ReturnType<typeof db>["mock"], call = 0) {
   return mock.$queryRaw.mock.calls[call]![0] as Prisma.Sql;
 }
 describe("local history retrieval", () => {
+  it("lists tool work using the authorized cross-chat scope and a stable time boundary", async () => {
+    const { mock, prisma } = db();
+    mock.$queryRaw.mockResolvedValueOnce([
+      {
+        ...row(7),
+        role: "bot",
+        threadId: "other",
+        chatName: "Other",
+        blocks: [{ kind: "steps", steps: [{ label: "Inspect", count: 1 }] }],
+      },
+    ]);
+    const searchAt = new Date("2026-02-01T00:00:00Z");
+    const result = await searchHistory(
+      prisma,
+      { ...scope, allowMyChats: true, searchAt },
+      { toolWork: true, scope: "my_chats" },
+    );
+    expect(result.messages[0]).toMatchObject({
+      threadId: "other",
+      text: expect.stringContaining("Inspect"),
+    });
+    expect(sql(mock).sql).toContain(`jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "steps")')`);
+    expect(sql(mock).values).toContain(searchAt);
+    await expect(
+      searchHistory(prisma, scope, { toolWork: true, scope: "my_chats" }),
+    ).rejects.toThrow("my_chats");
+  });
+  it("suggests tool work from another chat only after an exhausted cross-chat search", async () => {
+    const { mock, prisma } = db();
+    mock.$queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([{ found: 1 }]);
+    const searchAt = new Date("2026-02-01T00:00:00Z");
+    const result = await searchHistory(
+      prisma,
+      { ...scope, allowMyChats: true, searchAt },
+      { query: "missing", scope: "my_chats" },
+    );
+    expect(result).toMatchObject({ suggestedSearch: { toolWork: true, scope: "my_chats" } });
+    expect(sql(mock, 1).values).toContain(searchAt);
+    expect(sql(mock, 1).sql).toContain(`jsonb_path_exists(m.blocks, '$[*] ? (@.kind == "steps")')`);
+  });
+
   it.each([false, true])(
     "excludes per-bot waiting rows across search and read queries (cross-chat: %s)",
     async (crossChat) => {
@@ -43,8 +88,8 @@ describe("local history retrieval", () => {
         messageId: "message-4",
         ...(crossChat ? { threadId: "peer-thread" } : {}),
       });
-      expect(mock.$queryRaw).toHaveBeenCalledTimes(4);
-      for (let call = 0; call < 4; call++) {
+      expect(mock.$queryRaw).toHaveBeenCalledTimes(crossChat ? 5 : 4);
+      for (let call = 0; call < (crossChat ? 5 : 4); call++) {
         const query = sql(mock, call);
         expect(query.sql).toContain("NOT EXISTS (");
         expect(query.sql).toContain("FROM steering_messages pending");

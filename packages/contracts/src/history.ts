@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
-// Inherited Apache-2.0 history contracts are preserved. Argument normalization is an Ork addition.
+// Inherited Apache-2.0 history contracts are preserved. Argument normalization and tool-work lookup are Ork additions.
 
 import { z } from "zod";
 import { Id } from "./ids.js";
@@ -61,6 +61,7 @@ export const HistorySearchInputSchema = z.preprocess(
   z
     .object({
       scope: z.enum(["this_chat", "my_chats"]).optional(),
+      toolWork: z.literal(true).optional(),
       botId: Id.optional(),
       kinds: z
         .array(z.enum(["bot_messages", "user_messages", "bot_replies"]))
@@ -76,9 +77,14 @@ export const HistorySearchInputSchema = z.preprocess(
       limit: z.number().int().min(1).max(20).optional(),
     })
     .refine(
-      (input) => (input.query !== undefined) !== (input.queries !== undefined),
-      "Provide exactly one of query or queries",
-    ),
+      (input) =>
+        Number(input.query !== undefined) +
+          Number(input.queries !== undefined) +
+          Number(input.toolWork === true) ===
+        1,
+      "Provide exactly one of query, queries or toolWork",
+    )
+    .refine((input) => !input.toolWork || !input.kinds, "toolWork cannot be combined with kinds"),
 );
 /**
  * Files one history response lists. The run queues that many for its computer, so every listed

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache-2.0 material is preserved; decision-card and cross-chat routine guidance changes are Ork additions.
+// Inherited Apache-2.0 material is preserved; decision-card, cross-chat routine guidance, and tool-work lookup changes are Ork additions.
 
 import type { ConnectorTool } from "@orkbot/adapter-kit";
 import {
@@ -969,7 +969,7 @@ export const builtinAgentTools: ConnectorTool[] = [
   {
     name: "search_history",
     description:
-      "Search literal keywords in earlier messages and their file names (default this_chat); every word of a query must match the same message. Provide exactly one of query or queries. To find an earlier conversation, fan out 2–4 keyword variants via queries with scope my_chats; narrow by date or botId when hinted. my_chats requires a direct human app run. Returns at most five matches, newest first, grouped by chat; matchedQueryIndexes are zero-based indexes into queries. Then read_history around the best hits using their threadId. When nextSearch is present, call search_history with those arguments to continue. Coverage applies only to the requested literal query and range; an empty narrower query does not exhaust an unfinished broader query. Use read_history to check surrounding messages and corrections. Read a listed attachment at its path and name it in your answer.",
+      "Search literal keywords in earlier messages and their file names (default this_chat); every word of a query must match the same message. Provide exactly one of query, queries or toolWork. Set toolWork to true to list previous tool activity without a keyword. To find an earlier conversation, fan out 2–4 keyword variants via queries with scope my_chats; narrow by date or botId when hinted. my_chats requires a direct human app run. Returns at most five matches, newest first, grouped by chat; matchedQueryIndexes are zero-based indexes into queries. Then read_history around the best hits using their threadId. When nextSearch is present, call search_history with those arguments to continue. Coverage applies only to the requested literal query and range; an empty narrower query does not exhaust an unfinished broader query. Use read_history to check surrounding messages and corrections. Read a listed attachment at its path and name it in your answer.",
     inputSchema: {
       type: "object",
       properties: {
@@ -986,6 +986,11 @@ export const builtinAgentTools: ConnectorTool[] = [
           items: { type: "string", minLength: 1, maxLength: 500 },
           minItems: 1,
           maxItems: 5,
+        },
+        toolWork: {
+          type: "boolean",
+          enum: [true],
+          description: "List earlier bot replies with tool steps, without a keyword.",
         },
         scope: { type: "string", enum: ["this_chat", "my_chats"] },
         botId: { type: "string" },
@@ -1019,6 +1024,11 @@ export const builtinAgentTools: ConnectorTool[] = [
         limit: { type: "integer", minimum: 1, maximum: 5 },
       },
       oneOf: [
+        {
+          type: "object",
+          properties: { toolWork: { type: "boolean", enum: [true] } },
+          required: ["toolWork"],
+        },
         { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
         {
           type: "object",

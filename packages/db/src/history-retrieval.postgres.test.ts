@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 history retrieval is preserved; tool-work lookup changes are Ork additions.
+
 import { HistorySearchInputSchema } from "@orkbot/contracts";
 import { escapeJsonSearchWildcards } from "@orkbot/core";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -72,6 +76,73 @@ postgres("history retrieval (PostgreSQL)", () => {
     expect(botReplies.messages.map((message) => message.messageId)).toContain("tool-history");
     expect(userMessages.messages).toEqual([]);
     await pool.query(`DELETE FROM messages WHERE id = 'tool-history'`);
+  });
+  it("uses the deployed partial tool-work index and finds work in other authorized chats", async () => {
+    await pool.query(`
+      CREATE INDEX synthetic_tool_work ON messages ("threadId", seq)
+        WHERE role = 'bot' AND jsonb_path_exists(blocks, '$[*] ? (@.kind == "steps")');
+      INSERT INTO bots VALUES ('other-bot','synthetic-space','synthetic-user',NULL,'Other bot');
+      INSERT INTO threads VALUES ('other-thread','synthetic-space','synthetic-user','other-bot',NULL);
+      INSERT INTO messages VALUES ('other-tool','other-thread',1,'bot',NULL,NULL,
+        '2026-01-02', '[{"kind":"steps","steps":[{"label":"Inspect telescope","count":1}]}]');
+    `);
+    try {
+      const predicates = await pool.query<{ name: string; predicate: string }>(`
+        SELECT c.relname AS name, pg_get_expr(i.indpred, i.indrelid) AS predicate
+        FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE (n.nspname = 'public' AND c.relname = 'messages_tool_work_idx')
+          OR (n.oid = pg_my_temp_schema() AND c.relname = 'synthetic_tool_work')
+      `);
+      expect(predicates.rows).toHaveLength(2);
+      expect(predicates.rows.find((r) => r.name === "messages_tool_work_idx")?.predicate).toBe(
+        predicates.rows.find((r) => r.name === "synthetic_tool_work")?.predicate,
+      );
+      await pool.query("SET enable_seqscan = off");
+      const plan = await pool.query<{ "QUERY PLAN": string }>(`EXPLAIN SELECT seq FROM messages
+        WHERE "threadId" = 'other-thread' AND role = 'bot'
+          AND jsonb_path_exists(blocks, '$[*] ? (@.kind == "steps")')`);
+      expect(plan.rows.map((row) => row["QUERY PLAN"]).join("\n")).toContain("synthetic_tool_work");
+      await pool.query("RESET enable_seqscan");
+      const cross = { ...scope, allowMyChats: true, searchAt: new Date("2026-02-01") };
+      const missing = await searchHistory(prisma, cross, {
+        query: "notpresentanywhere",
+        scope: "my_chats",
+      });
+      expect(missing).toMatchObject({ suggestedSearch: { toolWork: true, scope: "my_chats" } });
+      const listing = await searchHistory(prisma, cross, { toolWork: true, scope: "my_chats" });
+      expect(listing.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ messageId: "other-tool", threadId: "other-thread" }),
+        ]),
+      );
+      const filtered = await searchHistory(prisma, cross, {
+        toolWork: true,
+        scope: "my_chats",
+        botId: "synthetic-bot",
+      });
+      expect(filtered.messages.map((message) => message.messageId)).not.toContain("other-tool");
+      const after = await searchHistory(prisma, cross, {
+        toolWork: true,
+        scope: "my_chats",
+        after: "2026-01-03",
+      });
+      expect(after.messages.map((message) => message.messageId)).not.toContain("other-tool");
+      await expect(
+        searchHistory(prisma, scope, { toolWork: true, scope: "my_chats" }),
+      ).rejects.toThrow("my_chats");
+      const old = await searchHistory(
+        prisma,
+        { ...cross, searchAt: new Date("2026-01-01") },
+        { query: "notpresentanywhere", scope: "my_chats" },
+      );
+      expect(old).not.toHaveProperty("suggestedSearch");
+    } finally {
+      await pool.query("RESET enable_seqscan");
+      await pool.query(
+        "DELETE FROM messages WHERE id = 'other-tool'; DELETE FROM threads WHERE id = 'other-thread'; DELETE FROM bots WHERE id = 'other-bot'; DROP INDEX synthetic_tool_work",
+      );
+    }
   });
   it("does not match text omitted by the bounded step representation", async () => {
     const steps = Array.from({ length: 21 }, (_, index) => ({
