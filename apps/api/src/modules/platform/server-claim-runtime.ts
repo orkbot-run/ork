@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 export function serverClaimInstructions(
   code: string,
   expiresAt: number,
-  _workspace = true,
+  workspace = false,
 ): string {
   if (!/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/.test(code))
     throw new Error("Invalid server authorization code.");
@@ -16,6 +16,8 @@ export function serverClaimInstructions(
     throw new Error("Server authorization has expired.");
   const minutes = Math.min(10, Math.ceil(remaining / 60_000));
   const duration = `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  if (!workspace)
+    return `Enter this code at https://accounts.ork.run/account/connect-server:\n${code}\n\nThe code expires in ${duration}.\n`;
   return `Enter this code in your workspace dashboard under Server:\n${code}\n\nThe code expires in ${duration}. If the server already has an owner, sign in as that owner.\n`;
 }
 

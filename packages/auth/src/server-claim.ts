@@ -174,15 +174,8 @@ async function existingOwnerAvailable(
     (!expectedOwner || settings.nativeAccountsOwnerKey === expectedOwner)
   );
 }
-const claimOwnerAvailable = async (
-  tx: PrismaClient,
-  mode: Claim["mode"],
-  lock = false,
-  owner?: string,
-) =>
-  mode === "workspace"
-    ? (await existingOwnerAvailable(tx, lock, owner)) || (await ownerAvailable(tx, lock))
-    : ownerAvailable(tx, lock);
+const claimOwnerAvailable = async (tx: PrismaClient, lock = false, owner?: string) =>
+  (await existingOwnerAvailable(tx, lock, owner)) || (await ownerAvailable(tx, lock));
 
 /** Operator-only local reset; it preserves the server owner, accounts and application data. */
 export async function clearWorkspaceBinding(
@@ -276,7 +269,7 @@ export async function issueServerClaim(
   };
   const reservation = JSON.stringify(issuing);
   await prisma.$transaction(async (tx) => {
-    if (!(await claimOwnerAvailable(tx as PrismaClient, options.mode, true)))
+    if (!(await claimOwnerAvailable(tx as PrismaClient, true)))
       throw new Error("This server already has an owner.");
     const existing = await tx.verification.findUnique({ where: { id: KEY } });
     if (existing) {
@@ -285,8 +278,7 @@ export async function issueServerClaim(
         !saved ||
         (saved.state === "issuing" && saved.leaseUntil > Date.now()) ||
         (saved.state !== "issuing" &&
-          ((saved.state === "claimed" && !(options.mode === "workspace" && saved.reported)) ||
-            (saved.leaseUntil ?? 0) > Date.now()))
+          ((saved.state === "claimed" && !saved.reported) || (saved.leaseUntil ?? 0) > Date.now()))
       )
         throw new Error("Another server authorization is in progress.");
       const deleted = await tx.verification.deleteMany({
@@ -355,7 +347,7 @@ export async function issueServerClaim(
       bootstrapMac: claimMac(ticket, options.bootstrapSecret, options.origin),
     };
     const published = await prisma.$transaction(async (tx) => {
-      if (!(await claimOwnerAvailable(tx as PrismaClient, options.mode, true))) return false;
+      if (!(await claimOwnerAvailable(tx as PrismaClient, true))) return false;
       const changed = await tx.verification.updateMany({
         where: { id: KEY, value: reservation, expiresAt: { gt: new Date() } },
         data: { value: JSON.stringify(claim), expiresAt: new Date(claim.expiresAt * 1000) },
@@ -399,10 +391,7 @@ export async function serverClaimProof(
     return null;
   if (saved.state === "failed") return null;
   if (saved.state === "pending") {
-    if (
-      saved.expiresAt <= Math.floor(Date.now() / 1000) ||
-      !(await claimOwnerAvailable(prisma, saved.mode))
-    )
+    if (saved.expiresAt <= Math.floor(Date.now() / 1000) || !(await claimOwnerAvailable(prisma)))
       return null;
     return { id, proofNonce, status: "pending", organizationBinding: true };
   }
@@ -791,7 +780,7 @@ export async function processServerClaim(
     boundClaim.bootstrapMac = claimMac(boundClaim, options.bootstrapSecret, options.origin);
     await prisma.$transaction(async (tx) => {
       if (
-        !(await claimOwnerAvailable(tx as PrismaClient, claim.mode, true, owner)) ||
+        !(await claimOwnerAvailable(tx as PrismaClient, true, owner)) ||
         (claim.mode === "workspace" && typeof payload.organization_id !== "string")
       ) {
         const failedClaim: Claim = { ...claim, state: "failed" };
@@ -806,9 +795,7 @@ export async function processServerClaim(
       const bound = await tx.deploymentSettings.updateMany({
         where: {
           id: "default",
-          ...(claim.mode === "workspace"
-            ? { OR: [{ nativeAccountsOwnerKey: owner }, { nativeAccountsOwnerKey: null }] }
-            : { nativeAccountsOwnerKey: null }),
+          OR: [{ nativeAccountsOwnerKey: owner }, { nativeAccountsOwnerKey: null }],
           nativeAccountsOrganizationId: null,
         },
         data: {
@@ -835,8 +822,13 @@ export async function processServerClaim(
           members: { some: { spaceMemberships: { some: {} } } },
         },
       });
-      if (claim.mode !== "workspace" && admitted !== 0)
-        throw new Error("Server owner already exists.");
+      if (claim.mode !== "workspace" && admitted !== 0) {
+        const existingAccount = await tx.account.findFirst({
+          where: { providerId: "oidc", accountId: owner },
+          select: { userId: true },
+        });
+        if (!existingAccount) throw new Error("Server owner already exists.");
+      }
       const saved = await tx.verification.updateMany({
         where: { id: KEY, value: lease.value, expiresAt: { gt: new Date() } },
         data: {

@@ -249,7 +249,7 @@ describe("server authorization proof", () => {
         origin,
         bootstrapSecret,
       }),
-    ).toBeNull();
+    ).toMatchObject({ status: "pending" });
   });
   it("preserves the claimed proof after owner binding for report recovery", async () => {
     const grantId = randomUUID();
