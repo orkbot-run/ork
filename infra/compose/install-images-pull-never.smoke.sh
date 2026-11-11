@@ -145,7 +145,7 @@ ENCRYPTION_KEY=test-encryption-key
 SCREEN_PROXY_SECRET=test-screen-secret
 SANDBOX_SUPERVISOR_TOKEN=test-supervisor-token
 SANDBOX_COMPUTER_EGRESS=open
-OIDC_ISSUER=https://api.orkbot.run
+OIDC_ISSUER=https://api.ork.run
 OIDC_CLIENT_ID=offline-test-client
 EOF
   : > "$work/docker.log"
@@ -189,7 +189,7 @@ for invalid_accounts in missing-issuer foreign-issuer missing-client whitespace-
   if accounts_out="$(run_install "$work" --local 2>&1)"; then
     fail "$invalid_accounts started the stack"
   fi
-  [[ "$accounts_out" == *"OIDC_ISSUER=https://api.orkbot.run"*"OIDC_CLIENT_ID"*"rerun bash install-images.sh"* ]] ||
+  [[ "$accounts_out" == *"OIDC_ISSUER=https://api.ork.run"*"OIDC_CLIENT_ID"*"rerun bash install-images.sh"* ]] ||
     fail "$invalid_accounts did not explain how to configure Accounts: $accounts_out"
   [[ "$(cat "$work/cwd/.env")" == "$before" ]] || fail "$invalid_accounts changed the existing .env"
   has_compose_pull "$work" && fail "$invalid_accounts pulled images"

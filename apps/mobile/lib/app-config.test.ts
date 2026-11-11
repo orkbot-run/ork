@@ -42,11 +42,11 @@ describe("mobile app config", () => {
     (profile) => {
       vi.stubEnv("EAS_BUILD_PROFILE", profile);
       expect(() => appConfig(context(config))).toThrow(/Accounts issuer/);
-      vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://api.orkbot.run");
+      vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://api.ork.run");
       expect(() => appConfig(context(config))).toThrow(/public mobile client ID/);
       vi.stubEnv("ORK_ACCOUNTS_MOBILE_CLIENT_ID", "public-mobile-client");
       expect(appConfig(context(config)).extra).toMatchObject({
-        accountsIssuer: "https://api.orkbot.run",
+        accountsIssuer: "https://api.ork.run",
         accountsClientId: "public-mobile-client",
       });
       vi.stubEnv("ORK_ACCOUNTS_ISSUER", "https://other.example.test");

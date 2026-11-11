@@ -3,13 +3,13 @@
 
 # Native Ork Accounts connection
 
-The public website uses `ork.run`. Keep `https://api.orkbot.run` as the Accounts issuer because it is part of stored account identities and session proofs.
+Use `https://api.ork.run` as the Accounts issuer. Identity bindings from the previous issuer are not migrated. Back up any data you need, then use a new installation and sign in again.
 
 Register a public Accounts client for each native app, then supply its settings when
 building Tauri or Expo:
 
 ```sh
-ORK_ACCOUNTS_ISSUER=https://api.orkbot.run
+ORK_ACCOUNTS_ISSUER=https://api.ork.run
 ORK_ACCOUNTS_DESKTOP_CLIENT_ID=replace-with-desktop-public-client-id
 ORK_ACCOUNTS_MOBILE_CLIENT_ID=replace-with-mobile-public-client-id
 ```
@@ -23,7 +23,7 @@ fails with a configuration error. Rebuild after changing these settings or URL s
 Both clients use authorization code flow, PKCE S256 and token endpoint authentication
 method `none`. Register `authorization_code` and `refresh_token` grants and allow
 `openid email profile offline_access`. Discovery lives at
-`https://api.orkbot.run/.well-known/openid-configuration`. The issuer must match
+`https://api.ork.run/.well-known/openid-configuration`. The issuer must match
 exactly, including any trailing slash. Authorization, token, userinfo and JWKS
 endpoints come from validated discovery, cached for five minutes.
 

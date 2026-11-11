@@ -34,7 +34,7 @@ try {
       throw new Error("Use --disconnect-workspace on its own.");
     const result = await runAsSystem("disconnect workspace", () =>
       synchronizeWorkspaceBinding(prisma, {
-        issuer: "https://api.orkbot.run",
+        issuer: "https://api.ork.run",
         origin,
         bootstrapSecret: secret,
         disconnect: true,
@@ -60,7 +60,7 @@ try {
     const claim = await runAsSystem("local server authorization", () =>
       issueServerClaim(prisma, {
         origin,
-        issuer: "https://api.orkbot.run",
+        issuer: "https://api.ork.run",
         bootstrapSecret: secret,
         mode: "workspace",
       }),

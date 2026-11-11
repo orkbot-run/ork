@@ -14,7 +14,7 @@ import { issueServerClaim } from "../../auth/src/server-claim.js";
 
 const enabled = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 const origin = "https://server.example.test";
-const issuer = "https://api.orkbot.run";
+const issuer = "https://api.ork.run";
 const bootstrapSecret = "s".repeat(43);
 const id = "a".repeat(64);
 const proofNonce = "p".repeat(43);

@@ -345,7 +345,7 @@ validate_accounts_config() {
       clients++
     }
     END {
-      if (issuers != 1 || issuer != "https://api.orkbot.run" || clients != 1 || client == "") exit 1
+      if (issuers != 1 || issuer != "https://api.ork.run" || clients != 1 || client == "") exit 1
     }
   '
 services:
@@ -356,7 +356,7 @@ services:
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
 YAML
   then
-    fail "set OIDC_ISSUER=https://api.orkbot.run and OIDC_CLIENT_ID to your registered Ork Accounts client in .env (or the shell), then rerun bash install-images.sh. See docs/self-host-accounts.md."
+    fail "set OIDC_ISSUER=https://api.ork.run and OIDC_CLIENT_ID to your registered Ork Accounts client in .env (or the shell), then rerun bash install-images.sh. See docs/self-host-accounts.md."
   fi
 }
 

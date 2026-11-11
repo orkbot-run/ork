@@ -12,7 +12,7 @@ import { accountsAuthorization, accountsVersion } from "./accounts";
 import { normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 
-const ISSUER = "https://api.orkbot.run";
+const ISSUER = "https://api.ork.run";
 const ENDPOINT = `${ISSUER}/api/server-pairings`;
 const ID = /^[a-f0-9]{64}$/;
 

@@ -25,7 +25,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       throw new Error("EXPO_PUBLIC_API_URL must use HTTPS for production builds.");
     }
     if (
-      process.env.ORK_ACCOUNTS_ISSUER !== "https://api.orkbot.run" ||
+      process.env.ORK_ACCOUNTS_ISSUER !== "https://api.ork.run" ||
       !process.env.ORK_ACCOUNTS_MOBILE_CLIENT_ID?.trim()
     ) {
       throw new Error(

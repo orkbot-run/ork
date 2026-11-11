@@ -15,7 +15,7 @@ const remote = {
 };
 beforeEach(() => {
   vi.mocked(accountsAuthorization).mockResolvedValue({
-    issuer: "https://api.orkbot.run",
+    issuer: "https://api.ork.run",
     subject: "subject-a",
     accessToken: "central-bearer",
   });
@@ -31,7 +31,7 @@ it("sends the central bearer only to the fixed directory without a device ID", a
   vi.stubGlobal("fetch", fetcher);
   expect(await accountServers()).toEqual([{ ...remote, name: "Team" }]);
   expect(fetcher).toHaveBeenCalledWith(
-    "https://api.orkbot.run/api/servers/workspaces",
+    "https://api.ork.run/api/servers/workspaces",
     expect.objectContaining({
       headers: { authorization: "Bearer central-bearer" },
       credentials: "omit",
@@ -80,7 +80,7 @@ it("does not perform a stale account's directory mutation with the new account's
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
   await expect(
-    addAccountServer(remote.url, JSON.stringify(["https://api.orkbot.run", "old-subject"])),
+    addAccountServer(remote.url, JSON.stringify(["https://api.ork.run", "old-subject"])),
   ).rejects.toThrow("Sign in to Accounts");
   expect(fetcher).not.toHaveBeenCalled();
 });
@@ -112,7 +112,7 @@ it("stores a normalized bookmark without contacting the proposed product server"
   expect(await addAccountServer("server.example.test/path?token=discarded")).toEqual(remote);
   expect(fetcher).toHaveBeenCalledTimes(1);
   expect(fetcher).toHaveBeenCalledWith(
-    "https://api.orkbot.run/api/servers",
+    "https://api.ork.run/api/servers",
     expect.objectContaining({
       method: "POST",
       body: JSON.stringify({ url: remote.url, kind: "selfhosted" }),

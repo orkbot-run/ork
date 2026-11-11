@@ -5,7 +5,7 @@
 name: release-mobile
 
 env:
-  ORK_ACCOUNTS_ISSUER: ${{ vars.ORK_ACCOUNTS_ISSUER || 'https://api.orkbot.run' }}
+  ORK_ACCOUNTS_ISSUER: ${{ vars.ORK_ACCOUNTS_ISSUER || 'https://api.ork.run' }}
   ORK_ACCOUNTS_MOBILE_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_MOBILE_CLIENT_ID }}
 
 # Diagnostic Android artifacts need only GitHub. Production releases use explicitly configured

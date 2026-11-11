@@ -6,7 +6,7 @@ import { readBoundedJsonResponse } from "@orkbot/core";
 import { accountsAuthorization, accountsVersion } from "./accounts";
 import { normalizeApiBase } from "./endpoint";
 
-const DIRECTORY = "https://api.orkbot.run/api/servers";
+const DIRECTORY = "https://api.ork.run/api/servers";
 
 export type AccountServer = {
   id: string;
@@ -42,7 +42,7 @@ async function request(
   const version = accountsVersion();
   const authorization = await accountsAuthorization();
   if (
-    authorization?.issuer !== "https://api.orkbot.run" ||
+    authorization?.issuer !== "https://api.ork.run" ||
     version !== accountsVersion() ||
     (expectedOwner &&
       expectedOwner !== JSON.stringify([authorization.issuer, authorization.subject]))

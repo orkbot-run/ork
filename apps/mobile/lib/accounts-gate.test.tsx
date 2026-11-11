@@ -145,7 +145,7 @@ vi.mock("./api", () => ({
   saveApiBase: vi.fn(),
 }));
 
-const identity = { issuer: "https://api.orkbot.run", subject: "subject-a" };
+const identity = { issuer: "https://api.ork.run", subject: "subject-a" };
 const remote = {
   id: "00000000-0000-4000-8000-000000000001",
   url: "https://server.example.test",

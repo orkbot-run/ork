@@ -21,7 +21,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-ISSUER = "https://api.orkbot.run"
+ISSUER = "https://api.ork.run"
 MAX_RESPONSE = 65536
 ENV = Path(".env")
 STATE = Path(".orkbot-server.json")

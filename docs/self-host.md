@@ -107,7 +107,7 @@ bash install-images.sh --prepare-only
 
 The installer downloads `docker-compose.images.yml` and `.env.images.example`, then creates `.env`
 with random secrets. Configure Accounts next.
-Set `OIDC_ISSUER=https://api.orkbot.run` and `OIDC_CLIENT_ID` to your registered client ID in `.env`,
+Set `OIDC_ISSUER=https://api.ork.run` and `OIDC_CLIENT_ID` to your registered client ID in `.env`,
 then follow [Accounts sign-in](./self-host-accounts.md) for the callback and client secret settings.
 Choose the public URL here too.
 
@@ -162,7 +162,7 @@ If the installer, Compose downloads, or image pulls are blocked, use the
 ## Docker Compose (single machine)
 
 1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` and `POSTGRES_APP_PASSWORD` (`openssl rand -hex 16` each), plus `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, and `SCREEN_PROXY_SECRET` to independent long random strings (32+ characters; 64 hex for `ENCRYPTION_KEY`). Docker sandboxes also need a dedicated `SANDBOX_SUPERVISOR_TOKEN`. Keep existing `ENCRYPTION_KEY` values so stored credentials stay decryptable.
-2. Configure the registered Ork Accounts client in `.env` using [Accounts sign-in](./self-host-accounts.md). `OIDC_ISSUER` must be `https://api.orkbot.run`, and `OIDC_CLIENT_ID` is required. Set optional model or integration keys as needed.
+2. Configure the registered Ork Accounts client in `.env` using [Accounts sign-in](./self-host-accounts.md). `OIDC_ISSUER` must be `https://api.ork.run`, and `OIDC_CLIENT_ID` is required. Set optional model or integration keys as needed.
 3. Build the computer image: `pnpm sandbox:build` (Compose also builds it via the `computer` service).
 4. `docker compose --env-file .env -f infra/compose/docker-compose.yml up --build`
 5. Open the web origin (`http://127.0.0.1:5173` by default). Signup never grants server-administration permissions.
