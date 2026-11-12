@@ -150,7 +150,7 @@ import {
   SERVICE_NAMES,
 } from "@orkbot/logging";
 import { markExpectedFailure, requestLogging } from "@orkbot/logging/hono";
-import { createRouterClient, ORPCError, onError } from "@orpc/server";
+import { ORPCError, onError } from "@orpc/server";
 import { RPCHandler } from "@orpc/server/fetch";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -194,7 +194,6 @@ import {
 import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
-import { dashboardModelControl } from "#modules/models/dashboard-model-control";
 import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
 import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
 import {
@@ -211,11 +210,7 @@ import { healthRoutes } from "#modules/platform/health";
 import { startHourlySweep } from "#modules/platform/hourly-sweep";
 import { trackInFlightRequests } from "#modules/platform/in-flight-requests";
 import { monitoringRoutes } from "#modules/platform/monitoring";
-import {
-  mountApiRequestBodyLimits,
-  requestBodyLimit,
-  rpcBodyLimit,
-} from "#modules/platform/request-body-limit";
+import { mountApiRequestBodyLimits, rpcBodyLimit } from "#modules/platform/request-body-limit";
 import { createRouter } from "#modules/platform/router";
 import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
@@ -1086,54 +1081,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   );
   app.route("/", marketingEmailRoutes(prisma, env.authSecret));
   mountApiRequestBodyLimits(app);
-  if (env.accountsEnabled && env.bootstrapSecret) {
-    const handleDashboardModel = dashboardModelControl({
-      prisma,
-      issuer: "https://api.ork.run",
-      origin: env.webOrigin,
-      bootstrapSecret: env.bootstrapSecret,
-      dispatch: async (actor, action, input, signal, dashboardWorkspaceAccount) => {
-        const client = createRouterClient(router, {
-          context: { actor, dashboardWorkspaceModel: true, dashboardWorkspaceAccount, signal },
-        });
-        switch (action) {
-          case "list":
-            return client.models.list();
-          case "get":
-            return client.models.workspacePolicy();
-          case "set":
-            return client.models.setWorkspacePolicy(
-              input as Parameters<typeof client.models.setWorkspacePolicy>[0],
-            );
-          case "clear":
-            return client.models.clearWorkspacePolicy();
-          case "probe": {
-            if (
-              !input ||
-              typeof input !== "object" ||
-              !("apiKey" in input) ||
-              typeof input.apiKey !== "string" ||
-              !input.apiKey.trim() ||
-              !("headers" in input) ||
-              !input.headers ||
-              typeof input.headers !== "object" ||
-              Array.isArray(input.headers) ||
-              Object.keys(input.headers).length !== 0
-            )
-              throw new Error("A new key is required");
-            return client.models.probeOpenAiCompatible(
-              input as Parameters<typeof client.models.probeOpenAiCompatible>[0],
-            );
-          }
-          default:
-            throw new Error("Invalid action");
-        }
-      },
-    });
-    app.post("/api/workspace/model-control", requestBodyLimit(64 * 1024), (c) =>
-      handleDashboardModel(c.req.raw),
-    );
-  }
   mountScreenTarget(app, prisma, env.screenProxySecret);
   mountScriptAssets(app);
   mountSharedPages(app, prisma, requestClientIp);

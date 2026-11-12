@@ -117,7 +117,7 @@ describe("workspace model policy", () => {
         provider: "company",
         model: "company-model",
       }),
-    ).resolves.toMatchObject({ ok: true, provider: null, model: null });
+    ).resolves.toMatchObject({ ok: true, provider: "company", model: "company-model" });
   });
   it("also enforces the model for auxiliary and pinned model resolvers", async () => {
     const secretStore = new EncryptedSecretStore("test-only-encryption-key-not-used-outside-tests");

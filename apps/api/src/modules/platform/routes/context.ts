@@ -89,9 +89,6 @@ export function createRouterContext(deps: RouterDeps) {
     actor: Actor | null;
     /** The signed-in session, so a push token ends with the session that registered it. */
     sessionId?: string;
-    /** Internal capability established only by the verified dashboard control endpoint. */
-    dashboardWorkspaceModel?: boolean;
-    dashboardWorkspaceAccount?: string;
     signal?: AbortSignal;
     /** Re-runs the request's auth so a long-lived stream notices sign-out and revocation. */
     stillAuthorized?: () => Promise<boolean>;
@@ -393,13 +390,6 @@ export function createRouterContext(deps: RouterDeps) {
     .use(async ({ context, next, path }, input) => {
       const result = await next();
       const event = procedureSecurityEvent(path, input, context.actor);
-      if (event && context.dashboardWorkspaceModel && context.dashboardWorkspaceAccount) {
-        event.metadata = {
-          ...event.metadata,
-          via: "workspace_dashboard",
-          dashboardAccount: context.dashboardWorkspaceAccount,
-        };
-      }
       if (event) await recordSecurityEvent(event);
       return result;
     });

@@ -1,4 +1,5 @@
 import type { ChatModelChoice } from "@orkbot/core";
+import { workspaceModelChoices } from "@orkbot/core";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ModelPickerList } from "../components/model-picker-list";
@@ -22,8 +23,13 @@ export default function BotModelScreen() {
     ])
       .then(([me, catalog, credentials, policy]) => {
         if (policy.policy) {
-          setChoices([]);
-          setError(t("Everyone in this workspace uses the model selected by the owner."));
+          setChoices(
+            workspaceModelChoices(
+              policy.models?.length ? policy.models : [policy.policy],
+              catalog,
+              t("Space default"),
+            ),
+          );
           return;
         }
         setChoices(chatModelPickerChoices(me, catalog, credentials, value, t));

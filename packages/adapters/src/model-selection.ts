@@ -32,7 +32,7 @@ import { listPiCatalog, offeredCatalog, scriptedCatalogEntry } from "./pi-models
 import type { StoredModelSecret } from "./pi-oauth.js";
 import { parseModelSecret } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
-import { findWorkspaceModelPolicy } from "./workspace-model-policy.js";
+import { findWorkspaceModelPolicy, workspaceModelOptions } from "./workspace-model-policy.js";
 
 export type ModelCredential = Awaited<ReturnType<typeof findModelCredential>>;
 
@@ -628,10 +628,14 @@ export async function validateBotModelChange(
   if (changing && provider && model) {
     const policy = await findWorkspaceModelPolicy(deps.prisma, input.spaceId);
     if (policy) {
-      if (policy.provider !== provider || policy.modelId !== model)
+      if (
+        !workspaceModelOptions(policy).some(
+          (item) => item.provider === provider && item.modelId === model,
+        )
+      )
         return { ok: false, error: "Models are managed by the workspace owner." };
-      // Following the workspace avoids pinning the bot to an individual credential.
-      return { ok: true, provider: null, model: null, thinkingLevel: null };
+      // The worker resolves this choice using only the owner's shared credential.
+      return { ok: true, provider, model, thinkingLevel: null };
     }
   }
   if (changing && provider && model) {

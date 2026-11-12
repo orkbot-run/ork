@@ -475,9 +475,16 @@ export const appContract = {
       z.object({
         canManage: z.boolean(),
         policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
+        models: z.array(z.object({ provider: z.string(), modelId: z.string() })).optional(),
       }),
     ),
     setWorkspacePolicy: oc.input(ModelConnectInputSchema).output(z.object({ ok: z.literal(true) })),
+    addWorkspaceModel: oc.input(ModelConnectInputSchema).output(z.object({ ok: z.literal(true) })),
+    removeWorkspaceModel: oc
+      .input(
+        z.object({ provider: z.string().min(1).max(200), modelId: z.string().min(1).max(500) }),
+      )
+      .output(z.object({ ok: z.literal(true) })),
     clearWorkspacePolicy: oc.output(z.object({ ok: z.literal(true) })),
     forRole: oc
       .input(z.object({ role: ModelRoleSchema, expectedUserId: Id.optional() }))

@@ -16,6 +16,7 @@ import {
   modelOptionKey,
   parseModelOptionKey,
   resolveSelectableModelId,
+  workspaceModelChoices,
 } from "@orkbot/core";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import type { Voice } from "expo-speech";
@@ -91,6 +92,9 @@ export default function BotSettingsScreen() {
     provider: string;
     modelId: string;
   } | null>(null);
+  const [workspaceModels, setWorkspaceModels] = useState<
+    Array<{ provider: string; modelId: string }>
+  >([]);
   const [modelMetaReady, setModelMetaReady] = useState(false);
   const [modelMetaError, setModelMetaError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -224,6 +228,9 @@ export default function BotSettingsScreen() {
         setCatalog(nextCatalog);
         setCredentials(nextCredentials);
         setWorkspaceModel(policy.policy);
+        setWorkspaceModels(
+          policy.models?.length ? policy.models : policy.policy ? [policy.policy] : [],
+        );
         setModelMetaError(null);
         setModelMetaReady(true);
       })
@@ -244,10 +251,20 @@ export default function BotSettingsScreen() {
     ? modelOptionKey(selectedModel.provider, selectedModel.modelId)
     : "";
 
+  const allowedWorkspaceSelection =
+    !selectedModel ||
+    workspaceModels.some(
+      (item) => item.provider === selectedModel.provider && item.modelId === selectedModel.modelId,
+    );
+  const pickerModelKey = workspaceModel && !allowedWorkspaceSelection ? "" : selectedModelKey;
   const effectiveProvider =
-    workspaceModel?.provider ?? selectedModel?.provider ?? me?.defaultProvider ?? null;
+    (workspaceModel
+      ? ((allowedWorkspaceSelection ? selectedModel?.provider : null) ?? workspaceModel.provider)
+      : (selectedModel?.provider ?? me?.defaultProvider)) ?? null;
   const effectiveModelId =
-    workspaceModel?.modelId ?? selectedModel?.modelId ?? me?.defaultModel ?? null;
+    (workspaceModel
+      ? ((allowedWorkspaceSelection ? selectedModel?.modelId : null) ?? workspaceModel.modelId)
+      : (selectedModel?.modelId ?? me?.defaultModel)) ?? null;
   const effectiveEntry =
     effectiveProvider && effectiveModelId
       ? catalog.find(
@@ -264,8 +281,11 @@ export default function BotSettingsScreen() {
   ).filter((level) => level !== "off");
 
   const modelChoices = useMemo(
-    () => chatModelPickerChoices(me, catalog, credentials, selectedModelKey, t),
-    [catalog, credentials, me, selectedModelKey, t],
+    () =>
+      workspaceModel
+        ? workspaceModelChoices(workspaceModels, catalog, t("Space default"))
+        : chatModelPickerChoices(me, catalog, credentials, selectedModelKey, t),
+    [catalog, credentials, me, selectedModelKey, t, workspaceModel, workspaceModels],
   );
 
   const thinkingChoices: MenuPickerChoice[] = useMemo(
@@ -284,7 +304,7 @@ export default function BotSettingsScreen() {
   }, [focus]);
 
   function selectModel(key: string) {
-    if (!modelMetaReady || workspaceModel) return;
+    if (!modelMetaReady) return;
     if (key === selectedModelKey) return;
     setModelKey(key);
     setThinkingLevel("");
@@ -419,7 +439,7 @@ export default function BotSettingsScreen() {
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null);
       const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
-      if (modelMetaReady && !workspaceModel && modelChanged) {
+      if (modelMetaReady && (!workspaceModel || allowedWorkspaceSelection) && modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
       }
@@ -621,12 +641,7 @@ export default function BotSettingsScreen() {
             }}
           >
             <SettingsGroup label={t("Model")}>
-              {workspaceModel ? (
-                <SettingsRow
-                  title={`${workspaceModel.provider} · ${workspaceModel.modelId}`}
-                  detail={t("Everyone in this workspace uses the model selected by the owner.")}
-                />
-              ) : modelMetaReady ? (
+              {modelMetaReady ? (
                 <MenuPicker
                   plain
                   choices={modelChoices}
@@ -638,11 +653,11 @@ export default function BotSettingsScreen() {
                       ? () =>
                           router.push({
                             pathname: "/bot-model",
-                            params: { botId, value: selectedModelKey },
+                            params: { botId, value: pickerModelKey },
                           })
                       : undefined
                   }
-                  value={selectedModelKey}
+                  value={pickerModelKey}
                 />
               ) : (
                 <SettingsRow title={modelMetaError ?? t("Loading…")} />

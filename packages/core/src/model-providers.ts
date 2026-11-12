@@ -353,6 +353,39 @@ export type ChatModelChoice = {
   images?: boolean;
 };
 
+/** Only models explicitly shared by the workspace owner appear in this picker. */
+export function workspaceModelChoices(
+  models: readonly { provider: string; modelId: string }[],
+  catalog: readonly ModelCatalogEntry[],
+  defaultLabel: string,
+): ChatModelChoice[] {
+  const first = models[0];
+  const defaultModel =
+    first &&
+    (catalog.find((item) => item.provider === first.provider && item.id === first.modelId)?.label ??
+      first.modelId);
+  return [
+    {
+      key: "",
+      label: defaultModel ? `${defaultLabel} (${defaultModel})` : defaultLabel,
+      title: defaultLabel,
+      detail: defaultModel,
+    },
+    ...models.map(({ provider, modelId }) => {
+      const entry = catalog.find((item) => item.provider === provider && item.id === modelId);
+      return {
+        key: modelOptionKey(provider, modelId),
+        label: entry?.label ?? modelId,
+        provider,
+        modelId,
+        providerLabel: entry?.providerName ?? provider,
+        modelLabel: entry?.label ?? modelId,
+        images: entry?.images,
+      };
+    }),
+  ];
+}
+
 /** Filter on full labels before shortening rows; saved/default choices stay first. */
 export function groupModelChoices(choices: readonly ChatModelChoice[], query: string) {
   const sections: { key: string; heading?: string; data: ChatModelChoice[] }[] = [];

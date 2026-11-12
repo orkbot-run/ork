@@ -17,6 +17,7 @@ import {
   runModelChoice,
   runtimeModelAcceptsImages,
   selectConfiguredModel,
+  workspaceModelOptions,
 } from "@orkbot/adapters";
 import type { Actor, MessageBlock } from "@orkbot/contracts";
 import { MODEL_IMAGE_INPUT_ERROR, MODEL_IMAGE_INPUT_UNKNOWN } from "@orkbot/core";
@@ -52,20 +53,28 @@ export async function assertThreadImageInput(
   if (!blocks.some((block) => block.kind === "image")) return;
   const workspace = await findWorkspaceModelPolicy(prisma, actor.spaceId);
   if (workspace && run?.status !== "running") {
-    let supportsImages = knownModelImageInput(workspace.provider, workspace.modelId);
-    if (workspace.provider === "openai-compatible" && configuration) {
+    const selectedBot = await prisma.bot.findFirst({
+      where: { id: botId, userId: actor.userId, spaceId: actor.spaceId },
+      select: { modelProvider: true, modelId: true, thinkingLevel: true },
+    });
+    const choice = selectedBot && (run ? runModelChoice(run, selectedBot) : selectedBot);
+    const shared =
+      workspaceModelOptions(workspace).find(
+        (item) => item.provider === choice?.modelProvider && item.modelId === choice?.modelId,
+      ) ?? workspace;
+    let supportsImages = knownModelImageInput(shared.provider, shared.modelId);
+    if (shared.provider === "openai-compatible" && configuration) {
       const secret = parseModelSecret(
-        await configuration.secrets.load(workspace.secretRef, workspace.secretId),
+        await configuration.secrets.load(shared.secretRef, shared.secretId),
       );
       if (
         secret.kind === "openai_compatible" &&
-        modelIdSupportsImages(secret.visionModelIds, workspace.modelId)
+        modelIdSupportsImages(secret.visionModelIds, shared.modelId)
       )
         supportsImages = true;
     }
     const unknown =
-      supportsImages === undefined &&
-      !runtimeModelAcceptsImages(workspace.provider, workspace.modelId);
+      supportsImages === undefined && !runtimeModelAcceptsImages(shared.provider, shared.modelId);
     if (supportsImages === false || unknown)
       throw new ORPCError("CONFLICT", {
         message: unknown ? MODEL_IMAGE_INPUT_UNKNOWN : MODEL_IMAGE_INPUT_ERROR,
