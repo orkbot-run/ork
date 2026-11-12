@@ -831,7 +831,6 @@ msgstr "自分のキーで、あらゆるモデルを"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "APIキー"
 
@@ -843,10 +842,6 @@ msgstr "{provider}のAPIキー"
 msgid "API key header"
 msgstr "APIキーのヘッダー"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "API key saved securely"
-msgstr ""
-
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "APIキー"
@@ -856,7 +851,6 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1244,7 +1238,6 @@ msgstr "画像を読み取れません"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "キャンセル"
 
@@ -1298,7 +1291,6 @@ msgid "Change {title}"
 msgstr "{title} を変更"
 
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "モデルを変更"
 
@@ -1421,7 +1413,6 @@ msgstr "ボットの色を選択するか、画像をアップロードしてく
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "モデルを選択"
 
@@ -1430,7 +1421,6 @@ msgid "Choose a new password"
 msgstr "新しいパスワードを設定"
 
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "プロバイダーを選択"
 
@@ -1455,10 +1445,6 @@ msgstr "フォルダを選択"
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
 msgstr "Orkの使い方を選択"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
-msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
@@ -2220,7 +2206,6 @@ msgid "Could not load voice settings"
 msgstr "音声設定を読み込めませんでした"
 
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr ""
 
@@ -3279,13 +3264,11 @@ msgstr "チャット内を検索"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "モデルを検索"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "検索中…"
 
@@ -4053,10 +4036,6 @@ msgstr "メンバー"
 msgid "Members ({0})"
 msgstr "メンバー（{0}）"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Members will need their own model connection again. Existing runs may need to be restarted."
-msgstr ""
-
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4210,18 +4189,10 @@ msgstr "モデル接続"
 msgid "Model id"
 msgstr "モデルID"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model ID"
-msgstr ""
-
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "モデルのオプション"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model supports images"
-msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5120,14 +5091,12 @@ msgstr "保護された入力"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "プロバイダー"
 
@@ -5332,7 +5301,6 @@ msgstr "再読み込み"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "削除"
 
@@ -5379,10 +5347,6 @@ msgstr "ヘッダーを削除"
 msgid "Remove message trigger"
 msgstr "メッセージトリガーを削除"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove model"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "スケジュールを削除"
@@ -5394,10 +5358,6 @@ msgstr "スキル{0}を削除"
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
-msgstr ""
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove the workspace model?"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5728,10 +5688,6 @@ msgstr "土曜日"
 msgid "Save"
 msgstr "保存"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Save model"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "ワークスペースを保存して、最新のソフトウェアをインストールします。"
@@ -5777,7 +5733,6 @@ msgstr "保存中..."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "保存中…"
 
@@ -5978,10 +5933,6 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "サーバーURL"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Set workspace model"
-msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6548,10 +6499,6 @@ msgstr "このアカウントではコンピューターサービスがコンピ
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "接続がタイムアウトしました。"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "The key cannot be displayed after saving. Enter a new key to replace it."
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

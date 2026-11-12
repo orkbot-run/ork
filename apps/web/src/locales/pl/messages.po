@@ -831,7 +831,6 @@ msgstr "Dowolny model z własnym kluczem"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "Klucz API"
 
@@ -843,10 +842,6 @@ msgstr "Klucz API dostawcy {provider}"
 msgid "API key header"
 msgstr "Nagłówek klucza API"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "API key saved securely"
-msgstr "Klucz API został bezpiecznie zapisany"
-
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "Klucze API"
@@ -856,7 +851,6 @@ msgid "API token"
 msgstr "Token API"
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "Adres API"
 
@@ -1244,7 +1238,6 @@ msgstr "Nie odczytuje obrazów"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Anuluj"
 
@@ -1298,7 +1291,6 @@ msgid "Change {title}"
 msgstr "Zmień {title}"
 
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "Zmień model"
 
@@ -1421,7 +1413,6 @@ msgstr "Wybierz kolor bota lub prześlij obraz"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "Wybierz model"
 
@@ -1430,7 +1421,6 @@ msgid "Choose a new password"
 msgstr "Wybierz nowe hasło"
 
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "Wybierz dostawcę"
 
@@ -1455,10 +1445,6 @@ msgstr "Wybierz folder"
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
 msgstr "Wybierz sposób korzystania z Ork"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
-msgstr "Wybierz jeden model i klucz API dla całego workspace’u. Do tego czasu członkowie korzystają z własnych połączeń."
 
 #: src/components/vault/VaultItemEditor.tsx
 msgid "City"
@@ -2220,7 +2206,6 @@ msgid "Could not load voice settings"
 msgstr "Nie udało się wczytać ustawień głosu"
 
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr "Nie udało się załadować ustawień modelu workspace’u."
 
@@ -3279,13 +3264,11 @@ msgstr "Znajdź w czacie"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "Znajdź modele"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "Wyszukiwanie…"
 
@@ -4053,10 +4036,6 @@ msgstr "Członek"
 msgid "Members ({0})"
 msgstr "Członkowie ({0})"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Members will need their own model connection again. Existing runs may need to be restarted."
-msgstr "Członkowie znów będą potrzebować własnego połączenia z modelem. Uruchomione zadania mogą wymagać ponowienia."
-
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4210,18 +4189,10 @@ msgstr "Połączenia modeli"
 msgid "Model id"
 msgstr "Identyfikator modelu"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model ID"
-msgstr "Identyfikator modelu"
-
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "Opcje modelu"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model supports images"
-msgstr "Model obsługuje obrazy"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5120,14 +5091,12 @@ msgstr "Chronione wprowadzanie"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr "Protokół"
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Dostawca"
 
@@ -5332,7 +5301,6 @@ msgstr "Wczytaj ponownie"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Usuń"
 
@@ -5379,10 +5347,6 @@ msgstr "Usuń nagłówek"
 msgid "Remove message trigger"
 msgstr "Usuń wyzwalacz wiadomości"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove model"
-msgstr "Usuń model"
-
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "Usuń harmonogram"
@@ -5395,10 +5359,6 @@ msgstr "Usuń umiejętność {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "Usuń umiejętności"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove the workspace model?"
-msgstr "Usunąć model workspace’u?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5728,10 +5688,6 @@ msgstr "sobota"
 msgid "Save"
 msgstr "Zapisz"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Save model"
-msgstr "Zapisz model"
-
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "Zapisz obszar roboczy i zainstaluj aktualne oprogramowanie."
@@ -5777,7 +5733,6 @@ msgstr "Zapisywanie..."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "Zapisywanie…"
 
@@ -5978,10 +5933,6 @@ msgstr "Serwer zaktualizowany"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Adres URL serwera"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Set workspace model"
-msgstr "Ustaw model workspace’u"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6548,10 +6499,6 @@ msgstr "Usługa komputerów nie może uruchomić komputerów dla tego konta."
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Upłynął czas połączenia."
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "The key cannot be displayed after saving. Enter a new key to replace it."
-msgstr "Po zapisaniu klucza nie można go wyświetlić. Aby go zastąpić, wpisz nowy."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts
