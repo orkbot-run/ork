@@ -248,7 +248,11 @@ import { appendToolCompletionAudit } from "./tool-completion-audit.js";
 import { toolResultFingerprint } from "./tool-loop.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
 import { createWebProvider } from "./web-provider-factory.js";
-import { findWorkspaceModelPolicy, resolveWorkspaceModel } from "./workspace-model-policy.js";
+import {
+  findWorkspaceModelPolicy,
+  resolveWorkspaceModel,
+  workspaceModelOptions,
+} from "./workspace-model-policy.js";
 
 /** Same reach as the MCP connector: usable servers assigned to the bot or shared with every bot. */
 async function verbatimMcpServersForRun(
@@ -587,8 +591,17 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
             error instanceof Error ? error : new Error("Unsupported turn checkpoint");
         }
         const storedTurnCheckpoint = Boolean(turnCheckpoint);
+        const botPromise = deps.prisma.bot.findUniqueOrThrow({
+          where: { id: run.botId },
+          include: { computer: true },
+        });
+        const selectedBot = await botPromise;
+        const workspaceChoice = runModelChoice(run, selectedBot);
         let workspaceModelError: string | undefined;
-        const workspaceModel = await resolveWorkspaceModel(deps, run.spaceId).catch(() => {
+        const workspaceModel = await resolveWorkspaceModel(deps, run.spaceId, {
+          provider: workspaceChoice.modelProvider,
+          modelId: workspaceChoice.modelId,
+        }).catch(() => {
           workspaceModelError =
             "The workspace model connection is unavailable. Ask the workspace owner to check it.";
           return null;
@@ -664,10 +677,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           runLoginRedactions,
           runCodeRedactions,
         ] = await Promise.all([
-          deps.prisma.bot.findUniqueOrThrow({
-            where: { id: run.botId },
-            include: { computer: true },
-          }),
+          botPromise,
           deps.prisma.thread.findUniqueOrThrow({ where: { id: run.threadId } }),
           loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
           run.trigger === "bot_message"
@@ -1909,7 +1919,17 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // Policy changes take effect before the next model call, including queued runs.
         // A running stream is not interrupted, but stale setup must not start a new one.
         const currentPolicy = await findWorkspaceModelPolicy(deps.prisma, run.spaceId);
-        if ((currentPolicy?.secretId ?? null) !== (workspaceModel?.secretId ?? null)) {
+        if (
+          currentPolicy
+            ? !workspaceModel ||
+              !workspaceModelOptions(currentPolicy).some(
+                (item) =>
+                  item.secretId === workspaceModel.secretId &&
+                  item.provider === workspaceModel.model.provider &&
+                  item.modelId === workspaceModel.model.id,
+              )
+            : !!workspaceModel
+        ) {
           await failRunBeforeModel("The workspace model changed. Start the run again.");
           return;
         }

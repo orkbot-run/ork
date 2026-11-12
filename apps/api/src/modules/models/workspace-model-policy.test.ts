@@ -54,7 +54,7 @@ it("lets only the owner save and remove a shared key and never returns it", asyn
     env: { agentRuntime: "pi", defaultProvider: "openrouter", defaultModel: "model" },
     modelConnectionFetch: vi.fn(async () => new Response("{}", { status: 200 })),
   } as unknown as RouterDeps;
-  const client = (spaceId: string, dashboardWorkspaceModel = false) =>
+  const client = (spaceId: string) =>
     createRouterClient(createRouter(deps), {
       context: {
         actor: {
@@ -63,19 +63,11 @@ it("lets only the owner save and remove a shared key and never returns it", asyn
           email: `${spaceId}@example.test`,
           isDeploymentOwner: false,
         } satisfies Actor,
-        dashboardWorkspaceModel,
       } as never,
     });
-  const ordinaryOwner = client("owner-space");
-  const owner = client("owner-space", true);
+  const owner = client("owner-space");
   const member = client("member-space");
   const input = { provider: "openrouter", modelId: "test/model", apiKey: key, credentialId: null };
-  await expect(ordinaryOwner.models.setWorkspacePolicy(input)).rejects.toMatchObject({
-    code: "FORBIDDEN",
-  });
-  await expect(ordinaryOwner.models.clearWorkspacePolicy()).rejects.toMatchObject({
-    code: "FORBIDDEN",
-  });
   await expect(member.models.setWorkspacePolicy(input)).rejects.toMatchObject({
     code: "FORBIDDEN",
   });
@@ -85,6 +77,7 @@ it("lets only the owner save and remove a shared key and never returns it", asyn
   expect(status).toEqual({
     canManage: false,
     policy: { provider: "openrouter", modelId: "test/model" },
+    models: [{ provider: "openrouter", modelId: "test/model" }],
   });
   expect(JSON.stringify(status)).not.toContain(key);
   await expect(member.models.setRole({ role: "main", primary: null })).rejects.toMatchObject({

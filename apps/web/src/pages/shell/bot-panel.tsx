@@ -26,6 +26,7 @@ import {
   modelOptionKey,
   parseModelOptionKey,
   resolveSelectableModelId,
+  workspaceModelChoices,
 } from "@orkbot/core";
 import {
   Button,
@@ -225,6 +226,11 @@ export function BotSettings({
   const catalog = catalogQuery.data ?? NO_CATALOG;
   const me = meQuery.data ?? null;
   const workspaceModel = policyQuery.data?.policy;
+  const sharedModels = policyQuery.data?.models?.length
+    ? policyQuery.data.models
+    : workspaceModel
+      ? [workspaceModel]
+      : [];
   // A failed catalog load must not clear an existing thinkingLevel override on save.
   const modelMetaReady =
     credentialsQuery.data !== undefined &&
@@ -311,17 +317,24 @@ export function BotSettings({
   const defaultEntry = me?.defaultModel
     ? catalogEntry(catalog, me.defaultProvider, me.defaultModel)
     : undefined;
-  const modelChoices = chatModelChoices(
-    connectedOptions,
-    selectedModelKey,
-    t`Space default`,
-    defaultEntry?.images,
-  );
+  const allowedWorkspaceSelection =
+    !selectedModel ||
+    sharedModels.some(
+      (item) => item.provider === selectedModel.provider && item.modelId === selectedModel.modelId,
+    );
+  const pickerModelKey = workspaceModel && !allowedWorkspaceSelection ? "" : selectedModelKey;
+  const modelChoices = workspaceModel
+    ? workspaceModelChoices(sharedModels, catalog, t`Space default`)
+    : chatModelChoices(connectedOptions, selectedModelKey, t`Space default`, defaultEntry?.images);
 
   const effectiveProvider =
-    workspaceModel?.provider ?? selectedModel?.provider ?? me?.defaultProvider ?? null;
+    (workspaceModel
+      ? ((allowedWorkspaceSelection ? selectedModel?.provider : null) ?? workspaceModel.provider)
+      : (selectedModel?.provider ?? me?.defaultProvider)) ?? null;
   const effectiveModelId =
-    workspaceModel?.modelId ?? selectedModel?.modelId ?? me?.defaultModel ?? null;
+    (workspaceModel
+      ? ((allowedWorkspaceSelection ? selectedModel?.modelId : null) ?? workspaceModel.modelId)
+      : (selectedModel?.modelId ?? me?.defaultModel)) ?? null;
   const effectiveEntry =
     effectiveProvider && effectiveModelId
       ? catalog.find(
@@ -397,7 +410,7 @@ export function BotSettings({
         memoryScope,
         autoSpeak,
         voiceId: voiceId || null,
-        ...(policyQuery.data && !workspaceModel
+        ...(policyQuery.data && (!workspaceModel || allowedWorkspaceSelection)
           ? {
               modelProvider: selected?.provider ?? null,
               modelId: selected?.modelId ?? null,
@@ -649,23 +662,12 @@ export function BotSettings({
                   <label htmlFor={`${ids}-model`} className="sr-only">
                     <Trans>Model</Trans>
                   </label>
-                  {workspaceModel ? (
-                    <div className="min-w-0 w-full text-sm">
-                      <span>
-                        {workspaceModel.provider} · {workspaceModel.modelId}
-                      </span>
-                      <p className="mt-1 text-muted-foreground">
-                        <Trans>
-                          Everyone in this workspace uses the model selected by the owner.
-                        </Trans>
-                      </p>
-                    </div>
-                  ) : policyQuery.data ? (
+                  {policyQuery.data ? (
                     <div className="min-w-0 w-full [&>div]:mt-0 [&>button]:mt-0">
                       <ChatModelPicker
                         id={`${ids}-model`}
                         choices={modelChoices}
-                        value={selectedModelKey}
+                        value={pickerModelKey}
                         onChange={(key) => {
                           setModelKey(key);
                           setThinkingLevel("");

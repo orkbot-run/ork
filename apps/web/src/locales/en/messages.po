@@ -638,6 +638,10 @@ msgstr "Add trigger"
 msgid "Add workspace"
 msgstr "Add workspace"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Add workspace model"
+msgstr "Add workspace model"
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
@@ -831,6 +835,7 @@ msgstr "Any model, with your own key"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API key"
 
@@ -851,6 +856,7 @@ msgid "API token"
 msgstr "API token"
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "API URL"
 
@@ -1238,6 +1244,7 @@ msgstr "Can't read images"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -1413,6 +1420,7 @@ msgstr "Choose a bot color or upload an image"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "Choose a model"
 
@@ -1421,6 +1429,7 @@ msgid "Choose a new password"
 msgstr "Choose a new password"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "Choose a provider"
 
@@ -2206,6 +2215,7 @@ msgid "Could not load voice settings"
 msgstr "Could not load voice settings"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr "Could not load workspace model settings."
 
@@ -3127,11 +3137,6 @@ msgstr "Every month"
 msgid "Every week"
 msgstr "Every week"
 
-#: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Everyone in this workspace uses the model selected by the owner."
-msgstr "Everyone in this workspace uses the model selected by the owner."
-
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "Expand"
@@ -3264,11 +3269,13 @@ msgstr "Find in chat"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "Find models"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "Finding…"
 
@@ -3528,6 +3535,10 @@ msgstr "How will you use Ork?"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "I’m done"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "If no shared models remain, members will need their own connection. Existing runs may need to be restarted."
+msgstr "If no shared models remain, members will need their own connection. Existing runs may need to be restarted."
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4036,6 +4047,10 @@ msgstr "Member"
 msgid "Members ({0})"
 msgstr "Members ({0})"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members can use the models shared by the workspace owner. When none are shared, members use their own connections."
+msgstr "Members can use the models shared by the workspace owner. When none are shared, members use their own connections."
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4189,10 +4204,18 @@ msgstr "Model connections"
 msgid "Model id"
 msgstr "Model id"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr "Model ID"
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "Model options"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr "Model supports images"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5091,12 +5114,14 @@ msgstr "Protected input"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr "Protocol"
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Provider"
 
@@ -5301,6 +5326,7 @@ msgstr "Reload"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Remove"
 
@@ -5347,6 +5373,10 @@ msgstr "Remove header"
 msgid "Remove message trigger"
 msgstr "Remove message trigger"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr "Remove model"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "Remove schedule"
@@ -5359,6 +5389,10 @@ msgstr "Remove skill {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "Remove skills"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr "Remove the workspace model?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5688,6 +5722,10 @@ msgstr "Saturday"
 msgid "Save"
 msgstr "Save"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr "Save model"
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "Save the workspace and install current software."
@@ -5733,6 +5771,7 @@ msgstr "Saving..."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "Saving…"
 
@@ -6499,6 +6538,10 @@ msgstr "The computer service cannot start computers for this account."
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "The connection timed out."
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr "The key cannot be displayed after saving. Enter a new key to replace it."
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

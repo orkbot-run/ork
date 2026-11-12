@@ -21,8 +21,9 @@ import {
   storedOpenAiCompatibleProbeHeaders,
   storedOpenAiCompatibleProbeKey,
   UNAVAILABLE_MODEL_FOR_AUTH_MESSAGE,
+  workspaceModelOptions,
 } from "@orkbot/adapters";
-import type { ThinkingLevel } from "@orkbot/contracts";
+import type { Actor, ModelConnectInput, ThinkingLevel } from "@orkbot/contracts";
 import {
   backupChoiceKey,
   canonicalPiProviderId,
@@ -95,104 +96,176 @@ export function modelsRoutes(ctx: RouterContext) {
     if (await findWorkspaceModelPolicy(deps.prisma, actor.spaceId))
       throw new ORPCError("FORBIDDEN", { message: "Models are managed by the workspace owner." });
   };
+  const policySelect = {
+    provider: true,
+    modelId: true,
+    secretId: true,
+    secretRef: true,
+    additionalModels: true,
+  } as const;
+  const saveWorkspaceModel = async (
+    actor: Actor,
+    input: ModelConnectInput,
+    signal: AbortSignal | undefined,
+    append: boolean,
+  ) => {
+    const { organizationId, owner } = await workspace(actor);
+    if (!owner) throw new ORPCError("FORBIDDEN");
+    if (!input.apiKey?.trim() || !input.modelId?.trim())
+      throw new ORPCError("BAD_REQUEST", { message: "A model and a new API key are required." });
+    let plaintext: string;
+    try {
+      ({ plaintext } = await ctx.verifyModelConnection(
+        actor,
+        { ...input, credentialId: null },
+        signal,
+      ));
+    } catch {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Could not verify the model connection. Check its settings and API key.",
+      });
+    }
+    let stored: Awaited<ReturnType<typeof deps.secrets.put>>;
+    try {
+      stored = await deps.secrets.put(plaintext, {
+        operationId: "workspace-model",
+        traceId: "workspace-model",
+        ...actor,
+        signal: signal ?? new AbortController().signal,
+      });
+    } catch {
+      throw new ORPCError("SERVICE_UNAVAILABLE", {
+        message: "Could not securely save the workspace model.",
+      });
+    }
+    let removed: Array<{ secretId: string; secretRef: string }>;
+    try {
+      removed = await withSerializableRetry(() =>
+        deps.prisma.$transaction(
+          async (tx) => {
+            const old = await tx.workspaceModelPolicy.findUnique({
+              where: { organizationId },
+              select: policySelect,
+            });
+            const previous = old ? workspaceModelOptions(old) : [];
+            const next = {
+              provider: input.provider,
+              modelId: input.modelId!.trim(),
+              secretId: stored.id,
+              secretRef: stored.ref,
+            };
+            const matching = previous.find(
+              (item) => item.provider === next.provider && item.modelId === next.modelId,
+            );
+            let items = append ? previous.filter((item) => item !== matching) : [];
+            if (append && matching && previous[0] === matching) items = [next, ...items];
+            else items.push(next);
+            if (items.length > 33)
+              throw new ORPCError("BAD_REQUEST", { message: "Too many workspace models." });
+            const [primary, ...additionalModels] = items;
+            const data = { ...primary!, additionalModels };
+            await tx.workspaceModelPolicy.upsert({
+              where: { organizationId },
+              create: { organizationId, ...data },
+              update: data,
+            });
+            return append ? (matching ? [matching] : []) : previous;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        ),
+      );
+    } catch (error) {
+      await deps.secrets.delete(stored.ref, stored.id).catch(() => undefined);
+      throw error;
+    }
+    await Promise.all(
+      removed.map((item) =>
+        deps.secrets.delete(item.secretRef, item.secretId).catch(() => undefined),
+      ),
+    );
+    return { ok: true as const };
+  };
   return {
     models: {
       workspacePolicy: authed.models.workspacePolicy.handler(async ({ context }) => {
         const { organizationId, owner } = await workspace(context.actor);
-        const policy = await deps.prisma.workspaceModelPolicy.findUnique({
+        const row = await deps.prisma.workspaceModelPolicy.findUnique({
           where: { organizationId },
-          select: { provider: true, modelId: true },
+          select: policySelect,
         });
-        return { canManage: owner, policy };
+        const models = row
+          ? workspaceModelOptions(row).map(({ provider, modelId }) => ({ provider, modelId }))
+          : [];
+        return { canManage: owner, policy: models[0] ?? null, models };
       }),
-      setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
-        const { organizationId, owner } = await workspace(context.actor);
-        if (!owner || !context.dashboardWorkspaceModel) throw new ORPCError("FORBIDDEN");
-        if (!input.apiKey?.trim() || !input.modelId?.trim())
-          throw new ORPCError("BAD_REQUEST", {
-            message: "A model and a new API key are required.",
-          });
-        // Always create a new connection: never read or reuse a member's personal key.
-        let plaintext: string;
-        try {
-          ({ plaintext } = await ctx.verifyModelConnection(
-            context.actor,
-            { ...input, credentialId: null },
-            context.signal,
-          ));
-        } catch {
-          // Provider responses can echo request headers or keys; never forward them.
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Could not verify the model connection. Check its settings and API key.",
-          });
-        }
-        let stored: Awaited<ReturnType<typeof deps.secrets.put>>;
-        try {
-          stored = await deps.secrets.put(plaintext, {
-            operationId: "workspace-model",
-            traceId: "workspace-model",
-            ...context.actor,
-            signal: context.signal ?? new AbortController().signal,
-          });
-        } catch {
-          throw new ORPCError("SERVICE_UNAVAILABLE", {
-            message: "Could not securely save the workspace model.",
-          });
-        }
-        let previous: { secretId: string; secretRef: string } | null;
-        try {
-          previous = await withSerializableRetry(() =>
+      setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(({ context, input }) =>
+        saveWorkspaceModel(context.actor, input, context.signal, false),
+      ),
+      addWorkspaceModel: authed.models.addWorkspaceModel.handler(({ context, input }) =>
+        saveWorkspaceModel(context.actor, input, context.signal, true),
+      ),
+      removeWorkspaceModel: authed.models.removeWorkspaceModel.handler(
+        async ({ context, input }) => {
+          const { organizationId, owner } = await workspace(context.actor);
+          if (!owner) throw new ORPCError("FORBIDDEN");
+          const removed = await withSerializableRetry(() =>
             deps.prisma.$transaction(
               async (tx) => {
                 const old = await tx.workspaceModelPolicy.findUnique({
                   where: { organizationId },
-                  select: { secretId: true, secretRef: true },
+                  select: policySelect,
                 });
-                const data = {
-                  provider: input.provider,
-                  modelId: input.modelId!.trim(),
-                  secretId: stored.id,
-                  secretRef: stored.ref,
-                };
-                await tx.workspaceModelPolicy.upsert({
-                  where: { organizationId },
-                  create: { organizationId, ...data },
-                  update: data,
-                });
-                return old;
+                if (!old) return null;
+                const items = workspaceModelOptions(old);
+                const target = items.find(
+                  (item) => item.provider === input.provider && item.modelId === input.modelId,
+                );
+                if (!target) return null;
+                const remaining = items.filter((item) => item !== target);
+                if (!remaining.length)
+                  await tx.workspaceModelPolicy.deleteMany({ where: { organizationId } });
+                else {
+                  const [primary, ...additionalModels] = remaining;
+                  await tx.workspaceModelPolicy.update({
+                    where: { organizationId },
+                    data: { ...primary!, additionalModels },
+                  });
+                }
+                return target;
               },
               { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
             ),
           );
-        } catch (error) {
-          await deps.secrets.delete(stored.ref, stored.id).catch(() => undefined);
-          throw error;
-        }
-        if (previous)
-          await deps.secrets.delete(previous.secretRef, previous.secretId).catch(() => undefined);
-        return { ok: true as const };
-      }),
+          if (removed)
+            await deps.secrets.delete(removed.secretRef, removed.secretId).catch(() => undefined);
+          return { ok: true as const };
+        },
+      ),
       clearWorkspacePolicy: authed.models.clearWorkspacePolicy.handler(async ({ context }) => {
         const { organizationId, owner } = await workspace(context.actor);
-        if (!owner || !context.dashboardWorkspaceModel) throw new ORPCError("FORBIDDEN");
+        if (!owner) throw new ORPCError("FORBIDDEN");
         const previous = await withSerializableRetry(() =>
           deps.prisma.$transaction(
             async (tx) => {
               const old = await tx.workspaceModelPolicy.findUnique({
                 where: { organizationId },
-                select: { secretId: true, secretRef: true },
+                select: policySelect,
               });
+              const items = old ? workspaceModelOptions(old) : [];
               const removed = await tx.workspaceModelPolicy.deleteMany({
                 where: { organizationId },
               });
               if (old && removed.count !== 1) throw new ORPCError("FORBIDDEN");
-              return old;
+              return items;
             },
             { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
           ),
         );
-        if (previous)
-          await deps.secrets.delete(previous.secretRef, previous.secretId).catch(() => undefined);
+        await Promise.all(
+          previous.map((item) =>
+            deps.secrets.delete(item.secretRef, item.secretId).catch(() => undefined),
+          ),
+        );
         return { ok: true as const };
       }),
       list: authed.models.list.handler(async ({ context }) => chatCatalog(context.actor)),

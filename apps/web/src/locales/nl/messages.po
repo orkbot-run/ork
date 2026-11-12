@@ -638,6 +638,10 @@ msgstr "Trigger toevoegen"
 msgid "Add workspace"
 msgstr "Werkruimte toevoegen"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Add workspace model"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
@@ -831,6 +835,7 @@ msgstr "Elk model, met je eigen sleutel"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API-sleutel"
 
@@ -851,6 +856,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1238,6 +1244,7 @@ msgstr "Kan afbeeldingen niet lezen"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Annuleren"
 
@@ -1413,6 +1420,7 @@ msgstr "Kies een botkleur of upload een afbeelding"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "Kies een model"
 
@@ -1421,6 +1429,7 @@ msgid "Choose a new password"
 msgstr "Kies een nieuw wachtwoord"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr ""
 
@@ -2206,6 +2215,7 @@ msgid "Could not load voice settings"
 msgstr "Steminstellingen laden mislukt"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr ""
 
@@ -3127,11 +3137,6 @@ msgstr "Elke maand"
 msgid "Every week"
 msgstr "Elke week"
 
-#: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Everyone in this workspace uses the model selected by the owner."
-msgstr ""
-
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "Uitklappen"
@@ -3264,11 +3269,13 @@ msgstr "Zoeken in chat"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "Modellen zoeken"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "Bezig met zoeken…"
 
@@ -3528,6 +3535,10 @@ msgstr ""
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "Ik ben klaar"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "If no shared models remain, members will need their own connection. Existing runs may need to be restarted."
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4036,6 +4047,10 @@ msgstr "Lid"
 msgid "Members ({0})"
 msgstr "Leden ({0})"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members can use the models shared by the workspace owner. When none are shared, members use their own connections."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4189,10 +4204,18 @@ msgstr "Modelverbindingen"
 msgid "Model id"
 msgstr "Model-id"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "Modelopties"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5091,12 +5114,14 @@ msgstr "Beveiligde invoer"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Aanbieder"
 
@@ -5301,6 +5326,7 @@ msgstr "Herladen"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Verwijderen"
 
@@ -5347,6 +5373,10 @@ msgstr "Header verwijderen"
 msgid "Remove message trigger"
 msgstr "Berichttrigger verwijderen"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "Schema verwijderen"
@@ -5358,6 +5388,10 @@ msgstr "Skill {0} verwijderen"
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
+msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5688,6 +5722,10 @@ msgstr "zaterdag"
 msgid "Save"
 msgstr "Opslaan"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "Sla de werkruimte op en installeer de huidige software."
@@ -5733,6 +5771,7 @@ msgstr "Bezig met opslaan..."
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "Bezig met opslaan…"
 
@@ -6499,6 +6538,10 @@ msgstr "De computerservice kan voor dit account geen computers starten."
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "De verbinding is verlopen."
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

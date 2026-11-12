@@ -29,7 +29,6 @@ const mocks = vi.hoisted(() => ({
   platform: "ios",
   connected: true,
   workspacePolicy: null as { provider: string; modelId: string } | null,
-  workspaceCanManage: false,
   serverCredentials: false,
   catalogEmpty: false,
   extraProviders: false,
@@ -167,7 +166,7 @@ vi.mock("./api", () => ({
       };
     }
     if (procedure === "models/workspacePolicy")
-      return { canManage: mocks.workspaceCanManage, policy: mocks.workspacePolicy };
+      return { canManage: false, policy: mocks.workspacePolicy };
     if (procedure === "models/forRole") return mocks.catalogEmpty ? [] : catalog;
     if (procedure === "models/setRole") {
       await result;
@@ -605,7 +604,6 @@ beforeEach(() => {
   mocks.platform = "ios";
   mocks.connected = true;
   mocks.workspacePolicy = null;
-  mocks.workspaceCanManage = false;
   mocks.serverCredentials = false;
   mocks.catalogEmpty = false;
   mocks.extraProviders = false;
@@ -639,15 +637,17 @@ describe("chat settings model row", () => {
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Advanced"]')!.click());
   };
 
-  it("shows the enforced workspace model instead of offering personal choices", async () => {
+  it("offers only shared workspace models instead of personal choices", async () => {
     mocks.params = { botId: "bot-fixture" };
     mocks.workspacePolicy = { provider: "company", modelId: "shared-model" };
     await render();
-    expect(container.textContent).toContain("company · shared-model");
-    expect(container.querySelector('button[aria-label="Model"]')).toBeNull();
-    expect(container.textContent).toContain(
-      "Everyone in this workspace uses the model selected by the owner.",
-    );
+    expect(container.textContent).toContain("Space default (shared-model)");
+    expect(container.querySelector('[data-menu="Model"]')).not.toBeNull();
+    expect(mocks.menus.get("Model")?.actions.map((action) => action.title)).toEqual([
+      "Space default (shared-model)",
+      "shared-model",
+    ]);
+    expect(container.textContent).not.toContain("Model 1 (OpenRouter)");
   });
 
   it("opens the searchable model list when there are too many models for a menu", async () => {
@@ -1092,16 +1092,6 @@ describe("model role lists", () => {
     [...section(title).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
       button.textContent?.includes(name),
     )!;
-
-  it("shows an enforced workspace model without giving its owner editing controls", async () => {
-    mocks.workspaceCanManage = true;
-    mocks.workspacePolicy = { provider: "company", modelId: "shared-model" };
-    await renderModels();
-    expect(container.textContent).toContain("company · shared-model");
-    expect(container.textContent).not.toContain("Set workspace model");
-    expect(container.textContent).not.toContain("Change model");
-    expect(container.textContent).not.toContain("Remove");
-  });
 
   it("numbers the main model and its fallbacks, then offers Add fallback", async () => {
     mocks.primary = { ...model(1), thinkingLevel: "high" };

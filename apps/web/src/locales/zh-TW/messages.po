@@ -639,6 +639,10 @@ msgstr "新增觸發器"
 msgid "Add workspace"
 msgstr "新增工作區"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Add workspace model"
+msgstr ""
+
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Added"
@@ -832,6 +836,7 @@ msgstr "使用自己的金鑰連接任何模型"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API 金鑰"
 
@@ -852,6 +857,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1239,6 +1245,7 @@ msgstr "無法讀取影像"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1414,6 +1421,7 @@ msgstr "選擇機器人顏色或上傳圖片"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "選擇模型"
 
@@ -1422,6 +1430,7 @@ msgid "Choose a new password"
 msgstr "設定新密碼"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "選擇供應商"
 
@@ -2207,6 +2216,7 @@ msgid "Could not load voice settings"
 msgstr "無法載入語音設定"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr ""
 
@@ -3128,11 +3138,6 @@ msgstr "每月"
 msgid "Every week"
 msgstr "每週"
 
-#: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Everyone in this workspace uses the model selected by the owner."
-msgstr ""
-
 #: src/pages/shell/message-cards.tsx
 msgid "Expand"
 msgstr "展開"
@@ -3265,11 +3270,13 @@ msgstr "在聊天中尋找"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "查詢模型"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "正在查詢…"
 
@@ -3529,6 +3536,10 @@ msgstr "你會如何使用 Ork？"
 #: src/pages/shell/computer-release-actions.tsx
 msgid "I’m done"
 msgstr "我做完了"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "If no shared models remain, members will need their own connection. Existing runs may need to be restarted."
+msgstr ""
 
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "If you heard that, voice is ready."
@@ -4037,6 +4048,10 @@ msgstr "成員"
 msgid "Members ({0})"
 msgstr "成員（{0}）"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members can use the models shared by the workspace owner. When none are shared, members use their own connections."
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4190,10 +4205,18 @@ msgstr "模型連線"
 msgid "Model id"
 msgstr "模型 ID"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model ID"
+msgstr ""
+
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "模型選項"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Model supports images"
+msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5092,12 +5115,14 @@ msgstr "受保護的輸入"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "供應商"
 
@@ -5302,6 +5327,7 @@ msgstr "重新載入"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "移除"
 
@@ -5348,6 +5374,10 @@ msgstr "移除標頭"
 msgid "Remove message trigger"
 msgstr "移除訊息觸發條件"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove model"
+msgstr ""
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr "移除排程"
@@ -5359,6 +5389,10 @@ msgstr "移除技能 {0}"
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
+msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5689,6 +5723,10 @@ msgstr "週六"
 msgid "Save"
 msgstr "儲存"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Save model"
+msgstr ""
+
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "儲存工作空間並安裝最新軟體。"
@@ -5734,6 +5772,7 @@ msgstr "儲存中…"
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "正在儲存…"
 
@@ -6500,6 +6539,10 @@ msgstr "電腦服務無法為此帳戶啟動電腦。"
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "連線超時。"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "The key cannot be displayed after saving. Enter a new key to replace it."
+msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

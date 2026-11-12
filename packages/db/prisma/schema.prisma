@@ -293,6 +293,7 @@ model WorkspaceModelPolicy {
   modelId        String
   secretId       String
   secretRef      String
+  additionalModels Json       @default("[]")
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 

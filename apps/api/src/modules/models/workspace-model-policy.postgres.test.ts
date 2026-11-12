@@ -15,12 +15,7 @@ const postgres =
   process.env.VERIFY_DATABASE && runtimeUrl && migrationUrl && runtimeUrl !== migrationUrl
     ? describe.sequential
     : describe.skip;
-function workspaceClient(
-  router: ReturnType<typeof createRouter>,
-  userId: string,
-  spaceId: string,
-  dashboardWorkspaceModel = false,
-) {
+function workspaceClient(router: ReturnType<typeof createRouter>, userId: string, spaceId: string) {
   return createRouterClient(router, {
     context: {
       actor: {
@@ -29,7 +24,6 @@ function workspaceClient(
         email: `${userId}@example.test`,
         isDeploymentOwner: false,
       } satisfies Actor,
-      dashboardWorkspaceModel,
     } as never,
   });
 }
@@ -80,7 +74,7 @@ postgres("workspace model API with PostgreSQL", () => {
       modelConnectionFetch: vi.fn(async () => new Response("{}", { status: 200 })),
     } as unknown as RouterDeps;
     const router = createRouter(deps);
-    owner = workspaceClient(router, ownerId, spaceId, true);
+    owner = workspaceClient(router, ownerId, spaceId);
     member = workspaceClient(router, memberId, spaceId);
   });
   afterAll(async () => {
@@ -105,6 +99,7 @@ postgres("workspace model API with PostgreSQL", () => {
     expect(status).toEqual({
       canManage: false,
       policy: { provider: "openrouter", modelId: "example/model" },
+      models: [{ provider: "openrouter", modelId: "example/model" }],
     });
     expect(JSON.stringify(status)).not.toContain(secret);
     const resolved = await runAsTenant({ userId: memberId, spaceId }, () =>
@@ -118,6 +113,61 @@ postgres("workspace model API with PostgreSQL", () => {
     await expect(member.models.clearWorkspacePolicy()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(member.models.setRole({ role: "main", primary: null })).rejects.toMatchObject({
       code: "FORBIDDEN",
+    });
+  });
+  it("restricts members to owner-managed models and promotes the next model when the default is removed", async () => {
+    const second = {
+      provider: "openrouter",
+      modelId: "example/second",
+      apiKey: "private-second-workspace-key",
+      credentialId: null,
+    };
+    await expect(member.models.addWorkspaceModel(second)).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    await expect(owner.models.addWorkspaceModel(second)).resolves.toEqual({ ok: true });
+    const status = await member.models.workspacePolicy();
+    expect(status.models).toEqual([
+      { provider: "openrouter", modelId: "example/model" },
+      { provider: "openrouter", modelId: "example/second" },
+    ]);
+    expect(JSON.stringify(status)).not.toContain("private-second-workspace-key");
+    const resolve = (modelId: string) =>
+      runAsTenant({ userId: memberId, spaceId }, () =>
+        resolveWorkspaceModel({ prisma: runtimeDb.prisma, secretStore }, spaceId, {
+          provider: "openrouter",
+          modelId,
+        }),
+      );
+    expect((await resolve("example/second"))?.model).toMatchObject({
+      id: "example/second",
+      apiKey: second.apiKey,
+    });
+    expect((await resolve("not-allowed"))?.model).toMatchObject({
+      id: "example/model",
+      apiKey: secret,
+    });
+    await expect(
+      member.models.removeWorkspaceModel({ provider: "openrouter", modelId: "example/model" }),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      owner.models.removeWorkspaceModel({ provider: "openrouter", modelId: "example/model" }),
+    ).resolves.toEqual({ ok: true });
+    expect((await member.models.workspacePolicy()).policy).toEqual({
+      provider: "openrouter",
+      modelId: "example/second",
+    });
+    expect((await resolve("example/model"))?.model).toMatchObject({
+      id: "example/second",
+      apiKey: second.apiKey,
+    });
+    await owner.models.removeWorkspaceModel({ provider: "openrouter", modelId: "example/second" });
+    expect((await member.models.workspacePolicy()).policy).toBeNull();
+    await owner.models.setWorkspacePolicy({
+      provider: "openrouter",
+      modelId: "example/model",
+      apiKey: secret,
+      credentialId: null,
     });
   });
   it("keeps the shared credential when its owner is removed", async () => {

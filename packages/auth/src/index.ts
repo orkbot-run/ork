@@ -1123,9 +1123,3 @@ function isOidcCallback(
 ): boolean {
   return ctx?.path === "/callback/:id" && ctx.params?.id === "oidc";
 }
-
-export {
-  createWorkspaceModelGrantVerifier,
-  WORKSPACE_MODEL_GRANT_PURPOSE,
-  workspaceModelRequestHash,
-} from "./workspace-model-grant.js";

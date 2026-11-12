@@ -28,7 +28,7 @@ import {
   ModelThinkingOptions,
   Spinner,
 } from "@orkbot/ui-web";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ModelCredential } from "../lib/model-auth";
@@ -59,6 +59,7 @@ export function ModelSettingsOverlay({
 }) {
   const { t } = useLingui();
   const model = useModelSettings(onClose, scope);
+  const queryClient = useQueryClient();
   const queries = useSpaceQueries();
   const policyQuery = useQuery(queries.models.workspacePolicy.queryOptions());
   const {
@@ -270,7 +271,17 @@ export function ModelSettingsOverlay({
     <>
       {policyQuery.data &&
       (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
-        <WorkspaceModelPolicy value={policyQuery.data} />
+        <WorkspaceModelPolicy
+          value={policyQuery.data}
+          catalog={catalog}
+          onChanged={async () => {
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: queries.models.key() }),
+              queryClient.invalidateQueries({ queryKey: queries.me.key() }),
+            ]);
+            await refresh();
+          }}
+        />
       ) : null}
       {policyQuery.isPending ? (
         <p className="mb-4 text-sm text-muted-foreground">
