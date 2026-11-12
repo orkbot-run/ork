@@ -831,6 +831,7 @@ msgstr "Dowolny model z własnym kluczem"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "Klucz API"
 
@@ -851,6 +852,7 @@ msgid "API token"
 msgstr "Token API"
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "Adres API"
 
@@ -1238,6 +1240,7 @@ msgstr "Nie odczytuje obrazów"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Anuluj"
 
@@ -1421,6 +1424,7 @@ msgid "Choose a new password"
 msgstr "Wybierz nowe hasło"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "Wybierz dostawcę"
 
@@ -2326,6 +2330,7 @@ msgstr "Nie udało się uruchomić rutyny"
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not save"
 msgstr "Nie udało się zapisać"
 
@@ -3128,7 +3133,6 @@ msgid "Every week"
 msgstr "Co tydzień"
 
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Everyone in this workspace uses the model selected by the owner."
 msgstr "Wszyscy w tym workspace’ie korzystają z modelu wybranego przez właściciela."
 
@@ -4036,6 +4040,10 @@ msgstr "Członek"
 msgid "Members ({0})"
 msgstr "Członkowie ({0})"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again."
+msgstr "Członkowie znów będą potrzebować własnego połączenia z modelem."
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4173,6 +4181,7 @@ msgstr "Tryb"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Model"
 msgstr "Model"
 
@@ -5097,6 +5106,7 @@ msgstr "Protokół"
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Dostawca"
 
@@ -5301,6 +5311,7 @@ msgstr "Wczytaj ponownie"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Usuń"
 
@@ -5359,6 +5370,10 @@ msgstr "Usuń umiejętność {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "Usuń umiejętności"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr "Usunąć model workspace’u?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5685,6 +5700,7 @@ msgstr "sobota"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "Zapisz"
 
@@ -5933,6 +5949,10 @@ msgstr "Serwer zaktualizowany"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Adres URL serwera"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr "Ustaw model workspace’u"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx

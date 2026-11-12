@@ -831,6 +831,7 @@ msgstr "Herhangi bir model, kendi anahtarınla"
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API anahtarı"
 
@@ -851,6 +852,7 @@ msgid "API token"
 msgstr "API belirteci"
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "API URL'si"
 
@@ -1238,6 +1240,7 @@ msgstr "Görselleri okuyamaz"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "İptal"
 
@@ -1421,6 +1424,7 @@ msgid "Choose a new password"
 msgstr "Yeni bir parola seçin"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "Sağlayıcı seç"
 
@@ -2326,6 +2330,7 @@ msgstr "Rutin çalıştırılamadı"
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not save"
 msgstr "Kaydedilemedi"
 
@@ -3128,7 +3133,6 @@ msgid "Every week"
 msgstr "Her hafta"
 
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Everyone in this workspace uses the model selected by the owner."
 msgstr ""
 
@@ -4036,6 +4040,10 @@ msgstr "Üye"
 msgid "Members ({0})"
 msgstr "Üyeler ({0})"
 
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again."
+msgstr "Üyelerin yeniden kendi model bağlantılarını kullanması gerekecek."
+
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4173,6 +4181,7 @@ msgstr "Mod"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Model"
 msgstr "Model"
 
@@ -5097,6 +5106,7 @@ msgstr "Protokol"
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Sağlayıcı"
 
@@ -5301,6 +5311,7 @@ msgstr "Yeniden yükle"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Kaldır"
 
@@ -5359,6 +5370,10 @@ msgstr "{0} becerisini kaldır"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr "Becerileri kaldır"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr "Çalışma alanı modeli kaldırılsın mı?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5685,6 +5700,7 @@ msgstr "Cumartesi"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "Kaydet"
 
@@ -5933,6 +5949,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Sunucu URL'si"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr "Çalışma alanı modelini ayarla"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
