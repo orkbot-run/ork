@@ -89,7 +89,7 @@
     },
     "patchedDependencies": {
       "dockerode@5.0.1": "patches/dockerode@5.0.1.patch",
-      "expo@57.0.32": "patches/expo@57.0.32.patch",
+      "expo@57.0.33": "patches/expo@57.0.33.patch",
       "query-string@7.1.3": "patches/query-string@7.1.3.patch"
     }
   }
