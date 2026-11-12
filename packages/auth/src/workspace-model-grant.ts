@@ -67,6 +67,14 @@ export function createWorkspaceModelGrantVerifier(options: {
       organizationId: payload.organization_id,
       claimId: payload.claim_id,
       expiresAt: payload.exp,
+      ...(payload.email_verified === true &&
+      typeof payload.email === "string" &&
+      payload.email.includes("@") &&
+      payload.email.length <= 320 &&
+      typeof payload.name === "string" &&
+      payload.name.length <= 200
+        ? { email: payload.email.toLowerCase(), name: payload.name }
+        : {}),
     };
   };
 }

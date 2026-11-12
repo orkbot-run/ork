@@ -35,6 +35,20 @@ it("accepts only a short-lived, audience- and request-bound Accounts grant", asy
   const verify = createWorkspaceModelGrantVerifier({ issuer, origin, keys });
   const grant = await sign(payload);
   await expect(verify(grant, "set", input)).resolves.toMatchObject({ organizationId, claimId });
+  await expect(
+    verify(
+      await sign({ ...payload, email: "OWNER@example.test", email_verified: true, name: "Owner" }),
+      "set",
+      input,
+    ),
+  ).resolves.toMatchObject({ email: "owner@example.test", name: "Owner" });
+  expect(
+    await verify(
+      await sign({ ...payload, email: "owner@example.test", email_verified: false, name: "Owner" }),
+      "set",
+      input,
+    ),
+  ).not.toHaveProperty("email");
   await expect(verify(grant, "clear", input)).rejects.toThrow();
   await expect(verify(grant, "set", { ...input, modelId: "other" })).rejects.toThrow();
   await expect(

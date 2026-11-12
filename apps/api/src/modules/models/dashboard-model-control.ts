@@ -9,6 +9,7 @@ import {
 import type { Actor } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { requireMembership, runAsSystem } from "@orkbot/db";
+import { initializeWorkspaceOwner } from "./initialize-workspace-owner.js";
 
 const actions = new Set(["list", "get", "set", "clear", "probe"]);
 
@@ -77,18 +78,6 @@ export function dashboardModelControl(options: {
             workspaceConnectionStatus(options.prisma, options))) !== "connected"
         )
           return null;
-        const account = await options.prisma.account.findFirst({
-          where: { providerId: "oidc", accountId: settings.nativeAccountsOwnerKey },
-          select: { userId: true },
-        });
-        if (!account) return null;
-        const space = await options.prisma.space.findFirst({
-          where: { createdByUserId: account.userId, isDefault: true, deletingAt: null },
-          orderBy: { createdAt: "asc" },
-          select: { id: true },
-        });
-        if (!space) return null;
-        const member = await requireMembership(options.prisma, account.userId, space.id);
         if (Math.random() < 1 / 64)
           await options.prisma.verification.deleteMany({
             where: {
@@ -96,7 +85,7 @@ export function dashboardModelControl(options: {
               expiresAt: { lt: new Date(Date.now() - 30_000) },
             },
           });
-        // Uniqueness on id prevents replay across processes. Never persist request contents.
+        // Consume the authority before any provisioning or model change.
         await options.prisma.verification.create({
           data: {
             id: `dashboard-model-grant:${grant.id}`,
@@ -105,6 +94,45 @@ export function dashboardModelControl(options: {
             expiresAt: new Date(grant.expiresAt * 1000),
           },
         });
+        let account = await options.prisma.account.findFirst({
+          where: { providerId: "oidc", accountId: settings.nativeAccountsOwnerKey },
+          select: { userId: true },
+        });
+        let space =
+          account &&
+          (await options.prisma.space.findFirst({
+            where: { createdByUserId: account.userId, isDefault: true, deletingAt: null },
+            orderBy: { createdAt: "asc" },
+            select: { id: true },
+          }));
+        if (
+          (!account || !space) &&
+          grant.email &&
+          grant.name !== undefined &&
+          settings.nativeAccountsOwnerKey === oidcAccountSubject(options.issuer, grant.subject)
+        ) {
+          await initializeWorkspaceOwner(options.prisma, {
+            accountKey: settings.nativeAccountsOwnerKey,
+            organizationId: grant.organizationId,
+            claimId: grant.claimId,
+            email: grant.email,
+            name: grant.name,
+          });
+          account = await options.prisma.account.findFirst({
+            where: { providerId: "oidc", accountId: settings.nativeAccountsOwnerKey },
+            select: { userId: true },
+          });
+          space =
+            account &&
+            (await options.prisma.space.findFirst({
+              where: { createdByUserId: account.userId, isDefault: true, deletingAt: null },
+              orderBy: { createdAt: "asc" },
+              select: { id: true },
+            }));
+        }
+        if (!account) return null;
+        if (!space) return null;
+        const member = await requireMembership(options.prisma, account.userId, space.id);
         return member;
       });
       if (!actor) return reply({ error: "Workspace connection unavailable" }, 403);
