@@ -561,6 +561,10 @@ msgstr "Bu rutini çalıştırmak için bir tetikleyici ekleyin."
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr "Ses sağlayıcısı anahtarı ekle ve Ses ayarlarından bir ses seç."
 
+#: src/pages/ServerAISettings.tsx
+msgid "Add AI account"
+msgstr "Yapay zeka hesabı ekle"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Bir HTTPS sunucu URL'si gir."
@@ -737,6 +741,10 @@ msgstr "Yazmaya izin ver"
 msgid "Allowed in this space"
 msgstr "Bu alanda izinli"
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Allowed models"
+msgstr "İzin verilen modeller"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Bir kez izin verildi"
@@ -829,6 +837,7 @@ msgstr "Herhangi bir model, kendi anahtarınla"
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/model-settings/compatible-key-field.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -852,6 +861,7 @@ msgid "API token"
 msgstr "API belirteci"
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr "API URL'si"
@@ -1231,7 +1241,9 @@ msgstr "Görselleri okuyamaz"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/model-settings/space-bots-model.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
@@ -1432,6 +1444,10 @@ msgstr "Sağlayıcı seç"
 msgid "Choose a tool"
 msgstr "Bir araç seçin"
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Choose at least one model and enter valid limits."
+msgstr "En az bir model seçin ve geçerli sınırlar girin."
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "Yedek seç"
@@ -1524,6 +1540,7 @@ msgid "Close memory settings"
 msgstr "Hafıza ayarlarını kapat"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Close model settings"
 msgstr "Model ayarlarını kapat"
@@ -1627,6 +1644,10 @@ msgstr "Sıkı"
 msgid "Complete"
 msgstr "Tamamlandı"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Complete sign-in"
+msgstr "Giriş işlemini tamamla"
+
 #: src/components/SubagentCard.tsx
 msgid "Completed"
 msgstr "Tamamlandı"
@@ -1683,6 +1704,10 @@ msgstr "Bilgisayarlar hazır. Devam etmek için sayfayı yenile veya bir bot aç
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers unavailable"
 msgstr "Bilgisayarlar kullanılamıyor"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Concurrent requests"
+msgstr "Eşzamanlı istekler"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1790,6 +1815,10 @@ msgstr "Bağlandı"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "{0} bağlandı."
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Connected, but could not refresh."
+msgstr "Bağlandı ancak yenilenemedi."
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1969,6 +1998,10 @@ msgstr "Sohbet temizlenemedi"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
 msgstr "İşlem tamamlanamadı"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete AI account sign-in."
+msgstr "Yapay zeka hesabına giriş tamamlanamadı."
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
@@ -2175,7 +2208,9 @@ msgid "Could not load MCP servers"
 msgstr "MCP sunucuları yüklenemedi"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "Model ayarları yüklenemedi"
 
@@ -2326,6 +2361,8 @@ msgstr "Rutin çalıştırılamadı"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
@@ -2659,6 +2696,7 @@ msgstr "Reddet"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "Varsayılan"
 
@@ -2675,6 +2713,10 @@ msgstr "Hermes varsayılanı"
 #: src/pages/shell/agent-import.tsx
 msgid "Default from OpenClaw"
 msgstr "OpenClaw varsayılanı"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Default model"
+msgstr "Varsayılan model"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2825,6 +2867,10 @@ msgstr "<0>{emailSuggestion}</0> mi demek istediniz?"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "Bir aracı devre dışı bırak"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Disable account"
+msgstr "Hesabı devre dışı bırak"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -2977,6 +3023,10 @@ msgstr "Her ad yalnızca bir kez kullanılabilir."
 msgid "Edit"
 msgstr "Düzenle"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Edit AI account"
+msgstr "Yapay zeka hesabını düzenle"
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Önce düzenle"
@@ -3013,6 +3063,10 @@ msgstr "E-posta doğrulaması gerekiyor"
 msgid "Enable {0}"
 msgstr "{0} etkinleştir"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Enabled"
+msgstr "Etkin"
+
 #: src/components/ComputerProviderSettings.tsx
 msgid "End user ID"
 msgstr "Son kullanıcı kimliği"
@@ -3028,6 +3082,10 @@ msgstr "Ork'yu beğendin mi?"
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Bir parola girin"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Enter a valid budget."
+msgstr "Geçerli bir bütçe girin."
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -3218,6 +3276,14 @@ msgstr "Başarısız oldu."
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
 msgstr "Hata yönetimi"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Fallback"
+msgstr "Yedek bağlantı"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Fallback priority"
+msgstr "Yedek bağlantı önceliği"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
@@ -3922,6 +3988,10 @@ msgstr "Düşük"
 msgid "Main model"
 msgstr "Ana model"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Make available"
+msgstr "Kullanıma aç"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -4204,10 +4274,19 @@ msgid "Model options"
 msgstr "Model seçenekleri"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/settings-nav.ts
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Models"
 msgstr "Modeller"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Models (one per line)"
+msgstr "Modeller (her satıra bir tane)"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Models and limits"
+msgstr "Modeller ve sınırlar"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4238,6 +4317,11 @@ msgstr "ay"
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "Aylık"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Monthly budget (USD)"
+msgstr "Aylık bütçe (USD)"
 
 #: src/components/ModelCredits.tsx
 msgid "Monthly credits"
@@ -4296,6 +4380,7 @@ msgstr "Bilgisayarlarım"
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4459,6 +4544,10 @@ msgstr "Sonraki sayfa"
 #: src/pages/SettingsOverlay.tsx
 msgid "Next settings sections"
 msgstr "Sonraki ayar bölümleri"
+
+#: src/pages/ServerAISettings.tsx
+msgid "No AI accounts assigned"
+msgstr "Atanmış yapay zeka hesabı yok"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
@@ -4748,6 +4837,10 @@ msgstr "Tam pencerede aç"
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "Gezinmeyi aç"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Open sign-in page"
+msgstr "Giriş sayfasını aç"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -5104,6 +5197,7 @@ msgid "Protocol"
 msgstr "Protokol"
 
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -5169,6 +5263,7 @@ msgstr "Önerilen"
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "Yeniden bağlan"
@@ -5345,6 +5440,10 @@ msgstr "Değişiklik tetikleyicisini kaldır"
 #: src/pages/PluginsOverlay.tsx
 msgid "Remove from every space?"
 msgstr "Her alandan kaldırılsın mı?"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove from workspace"
+msgstr "Çalışma alanından kaldır"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5542,8 +5641,10 @@ msgstr "Çalışma alanın geri yükleniyor"
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "Yeniden dene"
@@ -5696,6 +5797,8 @@ msgstr "Cumartesi"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5703,6 +5806,10 @@ msgstr "Cumartesi"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "Kaydet"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Save budget"
+msgstr "Bütçeyi kaydet"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5934,6 +6041,10 @@ msgstr "Serenity uç noktası gerekli."
 msgid "Server"
 msgstr "Sunucu"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Server accounts"
+msgstr "Sunucu hesapları"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
 msgstr "Sunucu adı"
@@ -6053,6 +6164,7 @@ msgstr "Kenar çubuğu yoğunluğu"
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Sign in"
@@ -6911,6 +7023,11 @@ msgstr "Geri al"
 msgid "Uninstall"
 msgstr "Kaldır"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Unlimited"
+msgstr "Sınırsız"
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr "Bağlantıyı kaldır"
@@ -7142,6 +7259,10 @@ msgstr "Değişkenler"
 msgid "Vault"
 msgstr "Kasa"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Verification code"
+msgstr "Doğrulama kodu"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Doğrula ve ekle"
@@ -7347,6 +7468,10 @@ msgstr "Çalışma alanı"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Workspace monthly budget (USD)"
+msgstr "Çalışma alanı aylık bütçesi (USD)"
 
 #: src/lib/billing.ts
 msgid "year"

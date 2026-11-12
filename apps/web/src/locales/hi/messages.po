@@ -561,6 +561,10 @@ msgstr "इस रूटीन को चलाने के लिए ट्र
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Add AI account"
+msgstr "एआई खाता जोड़ें"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "एक HTTPS सर्वर URL दर्ज करें।"
@@ -737,6 +741,10 @@ msgstr ""
 msgid "Allowed in this space"
 msgstr ""
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Allowed models"
+msgstr "अनुमत मॉडल"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "एक बार अनुमति दी गई"
@@ -829,6 +837,7 @@ msgstr ""
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/model-settings/compatible-key-field.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -852,6 +861,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
@@ -1231,7 +1241,9 @@ msgstr "तस्वीरें नहीं पढ़ सकता"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/model-settings/space-bots-model.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
@@ -1432,6 +1444,10 @@ msgstr ""
 msgid "Choose a tool"
 msgstr "एक टूल चुनें"
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Choose at least one model and enter valid limits."
+msgstr "कम से कम एक मॉडल चुनें और मान्य सीमाएँ दर्ज करें।"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "बैकअप चुनें"
@@ -1524,6 +1540,7 @@ msgid "Close memory settings"
 msgstr "मेमोरी सेटिंग्स बंद करें"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Close model settings"
 msgstr "मॉडल सेटिंग्स बंद करें"
@@ -1627,6 +1644,10 @@ msgstr ""
 msgid "Complete"
 msgstr "पूर्ण"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Complete sign-in"
+msgstr "साइन-इन पूरा करें"
+
 #: src/components/SubagentCard.tsx
 msgid "Completed"
 msgstr "पूर्ण"
@@ -1683,6 +1704,10 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers unavailable"
 msgstr "कंप्यूटर उपलब्ध नहीं हैं"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Concurrent requests"
+msgstr "एक साथ अनुरोध"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1790,6 +1815,10 @@ msgstr "कनेक्टेड"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "{0} कनेक्ट किया गया।"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Connected, but could not refresh."
+msgstr "कनेक्ट हो गया, लेकिन रिफ़्रेश नहीं हो सका।"
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1969,6 +1998,10 @@ msgstr "बातचीत साफ़ नहीं की जा सकी"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
 msgstr ""
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete AI account sign-in."
+msgstr "एआई खाते का साइन-इन पूरा नहीं हो सका।"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
@@ -2175,7 +2208,9 @@ msgid "Could not load MCP servers"
 msgstr "MCP सर्वर लोड नहीं हो सके"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "मॉडल सेटिंग्स लोड नहीं हो सकीं"
 
@@ -2326,6 +2361,8 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
@@ -2659,6 +2696,7 @@ msgstr "अस्वीकार करें"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "डिफ़ॉल्ट"
 
@@ -2675,6 +2713,10 @@ msgstr "Hermes का डिफ़ॉल्ट"
 #: src/pages/shell/agent-import.tsx
 msgid "Default from OpenClaw"
 msgstr "OpenClaw का डिफ़ॉल्ट"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Default model"
+msgstr "डिफ़ॉल्ट मॉडल"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2825,6 +2867,10 @@ msgstr "क्या आपका मतलब <0>{emailSuggestion}</0> था?"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "टूल अक्षम करें"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Disable account"
+msgstr "खाता बंद करें"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -2977,6 +3023,10 @@ msgstr "हर नाम का उपयोग केवल एक बार �
 msgid "Edit"
 msgstr "संपादित करें"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Edit AI account"
+msgstr "एआई खाता संपादित करें"
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "पहले संपादित करें"
@@ -3013,6 +3063,10 @@ msgstr "ईमेल सत्यापन आवश्यक है"
 msgid "Enable {0}"
 msgstr "{0} सक्षम करें"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Enabled"
+msgstr "चालू"
+
 #: src/components/ComputerProviderSettings.tsx
 msgid "End user ID"
 msgstr ""
@@ -3028,6 +3082,10 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "पासवर्ड दर्ज करें"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Enter a valid budget."
+msgstr "मान्य बजट दर्ज करें।"
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -3218,6 +3276,14 @@ msgstr "विफल।"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
 msgstr "विफलता प्रबंधन"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Fallback"
+msgstr "वैकल्पिक कनेक्शन"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Fallback priority"
+msgstr "वैकल्पिक कनेक्शन की प्राथमिकता"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
@@ -3922,6 +3988,10 @@ msgstr "निम्न"
 msgid "Main model"
 msgstr "मुख्य मॉडल"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Make available"
+msgstr "उपलब्ध करें"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -4204,10 +4274,19 @@ msgid "Model options"
 msgstr "मॉडल विकल्प"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/settings-nav.ts
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Models"
 msgstr "मॉडल्स"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Models (one per line)"
+msgstr "मॉडल (हर पंक्ति में एक)"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Models and limits"
+msgstr "मॉडल और सीमाएँ"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4238,6 +4317,11 @@ msgstr ""
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "मासिक"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Monthly budget (USD)"
+msgstr "मासिक बजट (USD)"
 
 #: src/components/ModelCredits.tsx
 msgid "Monthly credits"
@@ -4296,6 +4380,7 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4459,6 +4544,10 @@ msgstr "अगला पृष्ठ"
 #: src/pages/SettingsOverlay.tsx
 msgid "Next settings sections"
 msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "No AI accounts assigned"
+msgstr "कोई एआई खाता असाइन नहीं किया गया"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
@@ -4748,6 +4837,10 @@ msgstr "पूरी विंडो में खोलें"
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "नेविगेशन खोलें"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Open sign-in page"
+msgstr "साइन-इन पेज खोलें"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -5104,6 +5197,7 @@ msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -5169,6 +5263,7 @@ msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr ""
@@ -5345,6 +5440,10 @@ msgstr "बदलाव ट्रिगर हटाएँ"
 #: src/pages/PluginsOverlay.tsx
 msgid "Remove from every space?"
 msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove from workspace"
+msgstr "वर्कस्पेस से हटाएँ"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5542,8 +5641,10 @@ msgstr ""
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "फिर कोशिश करें"
@@ -5696,6 +5797,8 @@ msgstr "शनिवार"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5703,6 +5806,10 @@ msgstr "शनिवार"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "सहेजें"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Save budget"
+msgstr "बजट सहेजें"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5934,6 +6041,10 @@ msgstr ""
 msgid "Server"
 msgstr "सर्वर"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Server accounts"
+msgstr "सर्वर के खाते"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
 msgstr "सर्वर का नाम"
@@ -6053,6 +6164,7 @@ msgstr ""
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Sign in"
@@ -6911,6 +7023,11 @@ msgstr "पूर्ववत करें"
 msgid "Uninstall"
 msgstr ""
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Unlimited"
+msgstr "असीमित"
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr ""
@@ -7142,6 +7259,10 @@ msgstr ""
 msgid "Vault"
 msgstr "वॉल्ट"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Verification code"
+msgstr "पुष्टि कोड"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "पुष्टि करके जोड़ें"
@@ -7347,6 +7468,10 @@ msgstr ""
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Workspace monthly budget (USD)"
+msgstr "वर्कस्पेस का मासिक बजट (USD)"
 
 #: src/lib/billing.ts
 msgid "year"

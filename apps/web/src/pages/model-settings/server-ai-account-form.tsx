@@ -61,7 +61,12 @@ export function ServerAIAccountForm({
           setOAuthPending(pending);
           setCode("");
         },
-        onError: (message) => setError(message),
+        onError: (message) =>
+          setError(
+            message === "Connected, but could not refresh."
+              ? t`Connected, but could not refresh.`
+              : t`Could not complete AI account sign-in.`,
+          ),
         onSaved: async () => {
           setKey("");
           await callbacks.current.onSaved();

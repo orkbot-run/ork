@@ -561,6 +561,10 @@ msgstr "このルーティンを実行するトリガーを追加してくださ
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Add AI account"
+msgstr "AIアカウントを追加"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "HTTPSのサーバーURLを追加してください。"
@@ -737,6 +741,10 @@ msgstr "書き込みを許可"
 msgid "Allowed in this space"
 msgstr ""
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Allowed models"
+msgstr "許可されたモデル"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "今回のみ許可しました"
@@ -829,6 +837,7 @@ msgstr "自分のキーで、あらゆるモデルを"
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/model-settings/compatible-key-field.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -852,6 +861,7 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
@@ -1231,7 +1241,9 @@ msgstr "画像を読み取れません"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/model-settings/space-bots-model.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
@@ -1432,6 +1444,10 @@ msgstr "プロバイダーを選択"
 msgid "Choose a tool"
 msgstr "ツールを選択"
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Choose at least one model and enter valid limits."
+msgstr "モデルを1つ以上選択し、有効な上限を入力してください。"
+
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
 msgstr "バックアップを選択"
@@ -1524,6 +1540,7 @@ msgid "Close memory settings"
 msgstr "メモリ設定を閉じる"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Close model settings"
 msgstr "モデル設定を閉じる"
@@ -1627,6 +1644,10 @@ msgstr "コンパクト"
 msgid "Complete"
 msgstr "完了"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Complete sign-in"
+msgstr "ログインを完了"
+
 #: src/components/SubagentCard.tsx
 msgid "Completed"
 msgstr "完了"
@@ -1683,6 +1704,10 @@ msgstr "コンピューターが利用可能になりました。再読み込み
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers unavailable"
 msgstr "コンピューターを利用できません"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Concurrent requests"
+msgstr "同時リクエスト数"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1790,6 +1815,10 @@ msgstr "接続済み"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Connected {0}."
 msgstr "{0}を接続しました。"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Connected, but could not refresh."
+msgstr "接続しましたが、更新できませんでした。"
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1969,6 +1998,10 @@ msgstr "会話をクリアできませんでした"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
 msgstr "操作を完了できませんでした"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete AI account sign-in."
+msgstr "AIアカウントへのログインを完了できませんでした。"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
@@ -2175,7 +2208,9 @@ msgid "Could not load MCP servers"
 msgstr "MCPサーバーを読み込めませんでした"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "モデル設定を読み込めませんでした"
 
@@ -2326,6 +2361,8 @@ msgstr "ルーティンを実行できませんでした"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
@@ -2659,6 +2696,7 @@ msgstr "拒否"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "デフォルト"
 
@@ -2675,6 +2713,10 @@ msgstr "Hermesの初期設定"
 #: src/pages/shell/agent-import.tsx
 msgid "Default from OpenClaw"
 msgstr "OpenClawの初期設定"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Default model"
+msgstr "デフォルトモデル"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2825,6 +2867,10 @@ msgstr "<0>{emailSuggestion}</0> のことですか？"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "ツールを無効にする"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Disable account"
+msgstr "アカウントを無効化"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -2977,6 +3023,10 @@ msgstr "各名前は一度だけ使用できます。"
 msgid "Edit"
 msgstr "編集"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Edit AI account"
+msgstr "AIアカウントを編集"
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先に編集"
@@ -3013,6 +3063,10 @@ msgstr "メールアドレスの確認が必要です"
 msgid "Enable {0}"
 msgstr "{0}を有効にする"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Enabled"
+msgstr "有効"
+
 #: src/components/ComputerProviderSettings.tsx
 msgid "End user ID"
 msgstr ""
@@ -3028,6 +3082,10 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "パスワードを入力してください"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Enter a valid budget."
+msgstr "有効な予算を入力してください。"
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -3218,6 +3276,14 @@ msgstr "失敗しました。"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
 msgstr "失敗時の対応"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Fallback"
+msgstr "代替接続"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Fallback priority"
+msgstr "代替接続の優先度"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
@@ -3922,6 +3988,10 @@ msgstr "低"
 msgid "Main model"
 msgstr "メインモデル"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Make available"
+msgstr "利用を許可"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -4204,10 +4274,19 @@ msgid "Model options"
 msgstr "モデルのオプション"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/settings-nav.ts
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Models"
 msgstr "モデル"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Models (one per line)"
+msgstr "モデル（1行に1つ）"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Models and limits"
+msgstr "モデルと上限"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4238,6 +4317,11 @@ msgstr "月"
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "毎月"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Monthly budget (USD)"
+msgstr "月間予算（USD）"
 
 #: src/components/ModelCredits.tsx
 msgid "Monthly credits"
@@ -4296,6 +4380,7 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4459,6 +4544,10 @@ msgstr "次のページ"
 #: src/pages/SettingsOverlay.tsx
 msgid "Next settings sections"
 msgstr "次の設定セクション"
+
+#: src/pages/ServerAISettings.tsx
+msgid "No AI accounts assigned"
+msgstr "AIアカウントが割り当てられていません"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
@@ -4748,6 +4837,10 @@ msgstr "フルウィンドウで開く"
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "ナビゲーションを開く"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Open sign-in page"
+msgstr "ログインページを開く"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -5104,6 +5197,7 @@ msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 #: src/pages/WorkspaceModelPolicy.tsx
@@ -5169,6 +5263,7 @@ msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "再接続"
@@ -5345,6 +5440,10 @@ msgstr "変更トリガーを削除"
 #: src/pages/PluginsOverlay.tsx
 msgid "Remove from every space?"
 msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "Remove from workspace"
+msgstr "ワークスペースから削除"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
@@ -5542,8 +5641,10 @@ msgstr "ワークスペースを復元中"
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "再試行"
@@ -5696,6 +5797,8 @@ msgstr "土曜日"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -5703,6 +5806,10 @@ msgstr "土曜日"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "保存"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Save budget"
+msgstr "予算を保存"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5934,6 +6041,10 @@ msgstr "Serenityのエンドポイントは必須です。"
 msgid "Server"
 msgstr "サーバー"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Server accounts"
+msgstr "サーバーのアカウント"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
 msgstr "サーバー名"
@@ -6053,6 +6164,7 @@ msgstr "サイドバーの密度"
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Sign in"
@@ -6911,6 +7023,11 @@ msgstr "元に戻す"
 msgid "Uninstall"
 msgstr "アンインストール"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Unlimited"
+msgstr "無制限"
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr "リンクを解除"
@@ -7142,6 +7259,10 @@ msgstr ""
 msgid "Vault"
 msgstr "保管庫"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Verification code"
+msgstr "確認コード"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "確認して追加"
@@ -7347,6 +7468,10 @@ msgstr "ワークスペース"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Workspace monthly budget (USD)"
+msgstr "ワークスペースの月間予算（USD）"
 
 #: src/lib/billing.ts
 msgid "year"
