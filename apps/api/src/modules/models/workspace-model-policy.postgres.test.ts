@@ -15,12 +15,7 @@ const postgres =
   process.env.VERIFY_DATABASE && runtimeUrl && migrationUrl && runtimeUrl !== migrationUrl
     ? describe.sequential
     : describe.skip;
-function workspaceClient(
-  router: ReturnType<typeof createRouter>,
-  userId: string,
-  spaceId: string,
-  dashboardWorkspaceModel = false,
-) {
+function workspaceClient(router: ReturnType<typeof createRouter>, userId: string, spaceId: string) {
   return createRouterClient(router, {
     context: {
       actor: {
@@ -29,7 +24,6 @@ function workspaceClient(
         email: `${userId}@example.test`,
         isDeploymentOwner: false,
       } satisfies Actor,
-      dashboardWorkspaceModel,
     } as never,
   });
 }
@@ -80,7 +74,7 @@ postgres("workspace model API with PostgreSQL", () => {
       modelConnectionFetch: vi.fn(async () => new Response("{}", { status: 200 })),
     } as unknown as RouterDeps;
     const router = createRouter(deps);
-    owner = workspaceClient(router, ownerId, spaceId, true);
+    owner = workspaceClient(router, ownerId, spaceId);
     member = workspaceClient(router, memberId, spaceId);
   });
   afterAll(async () => {

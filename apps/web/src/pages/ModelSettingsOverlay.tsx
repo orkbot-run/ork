@@ -33,6 +33,8 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ModelCredential } from "../lib/model-auth";
 import { useSpaceQueries } from "../lib/query";
+import { selectedSpaceId } from "../lib/rpc";
+import { useBoundSpaceId } from "../lib/space-rpc";
 import type { ModelRoleConnectIntent } from "./ModelRoleSettings";
 import { ModelRoleSettings } from "./ModelRoleSettings";
 import { CompatibleModelFields } from "./model-settings/compatible-model-fields";
@@ -59,6 +61,7 @@ export function ModelSettingsOverlay({
 }) {
   const { t } = useLingui();
   const model = useModelSettings(onClose, scope);
+  const policySpaceId = useBoundSpaceId() ?? selectedSpaceId();
   const queries = useSpaceQueries();
   const policyQuery = useQuery(queries.models.workspacePolicy.queryOptions());
   const {
@@ -270,7 +273,17 @@ export function ModelSettingsOverlay({
     <>
       {policyQuery.data &&
       (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
-        <WorkspaceModelPolicy value={policyQuery.data} />
+        <WorkspaceModelPolicy
+          key={JSON.stringify([model.me?.userId, policySpaceId])}
+          value={policyQuery.data}
+          catalog={catalog}
+          client={model.rpc}
+          isCurrent={model.isCurrent}
+          onChanged={async () => {
+            await policyQuery.refetch();
+            await refresh();
+          }}
+        />
       ) : null}
       {policyQuery.isPending ? (
         <p className="mb-4 text-sm text-muted-foreground">

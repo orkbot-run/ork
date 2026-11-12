@@ -1719,9 +1719,9 @@ it.each([false, true])(
   },
 );
 
-it("shows the enforced workspace model without controls to change it", async () => {
+it("shows the enforced workspace model without management controls to a member", async () => {
   models.workspacePolicy.mockResolvedValue({
-    canManage: true,
+    canManage: false,
     policy: { provider: "deepseek", modelId: "deepseek-chat" },
   });
   const view = await renderSettings();
@@ -1741,12 +1741,47 @@ it("shows the enforced workspace model without controls to change it", async () 
   }
 });
 
-it("does not offer workspace configuration in the app when no policy is set", async () => {
+it("offers workspace configuration to its owner on the connected server", async () => {
   models.workspacePolicy.mockResolvedValue({ canManage: true, policy: null });
   const view = await renderSettings();
   try {
-    expect(view.container.textContent).not.toContain("Set workspace model");
+    expect(view.container.textContent).toContain("Set workspace model");
     expect(view.container.querySelector('[data-testid="model-role-main"]')).not.toBeNull();
+  } finally {
+    await view.unmount();
+  }
+});
+
+it("sends a new shared key directly to the captured server session", async () => {
+  models.workspacePolicy.mockResolvedValue({ canManage: true, policy: null });
+  models.setWorkspacePolicy.mockResolvedValue({ ok: true });
+  const view = await renderSettings();
+  try {
+    await click(buttons(view.container, "Set workspace model")[0]);
+    const section = view.container.querySelector('section[aria-label="Workspace model"]')!;
+    const provider = section.querySelector("select")!;
+    const key = section.querySelector('input[type="password"]') as HTMLInputElement;
+    const model = section.querySelector("input[list]") as HTMLInputElement;
+    await typeInto(model, "company-model");
+    await typeInto(key, "fake-private-workspace-key");
+    await act(async () =>
+      section
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(models.setWorkspacePolicy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: provider.value,
+        modelId: "company-model",
+        apiKey: "fake-private-workspace-key",
+        credentialId: null,
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(
+      view.container.querySelector('section[aria-label="Workspace model"] input[type="password"]'),
+    ).toBeNull();
+    expect(view.container.textContent).not.toContain("fake-private-workspace-key");
   } finally {
     await view.unmount();
   }

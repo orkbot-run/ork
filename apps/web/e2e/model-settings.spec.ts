@@ -5,7 +5,7 @@
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { AiConsentStatus } from "@orkbot/contracts";
+import type { AiConsentStatus, ModelCatalogEntry } from "@orkbot/contracts";
 import {
   activeBotId,
   captureScreenshot,
@@ -28,6 +28,50 @@ const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 test.afterEach(async ({ page }) => {
   // Finish intercepted responses before the browser context is disposed.
   await page.unrouteAll({ behavior: "wait" });
+});
+
+test("the native renderer manages shared AI on its connected server", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `workspace-model-${Date.now()}@orkbot.test`, "password12", "Workspace Owner");
+  await completeOnboarding(page);
+  const catalog = await rpc<ModelCatalogEntry[]>(page, "models/list", {});
+  const model = catalog.find(
+    (entry) =>
+      entry.auth !== "oauth" &&
+      !entry.placeholder &&
+      entry.protocol !== "decisions" &&
+      entry.provider !== "openai-compatible" &&
+      !entry.connection?.routingFields?.some((field) => field.required),
+  );
+  expect(model).toBeDefined();
+  await openUserSettings(page, "models");
+  const section = page.getByRole("region", { name: "Workspace model", exact: true });
+  await section.getByRole("button", { name: "Set workspace model", exact: true }).click();
+  await section.getByLabel("Provider", { exact: true }).selectOption(model!.provider);
+  await section.getByLabel("Model", { exact: true }).fill(model!.id);
+  await section.getByLabel("API key", { exact: true }).fill("fake-workspace-model-key");
+  await section.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(section.getByLabel("API key", { exact: true })).toHaveCount(0);
+  await expect(section).toContainText(model!.id);
+  const policy = await rpc<{
+    canManage: boolean;
+    policy: { provider: string; modelId: string } | null;
+  }>(page, "models/workspacePolicy", {});
+  expect(policy).toMatchObject({
+    canManage: true,
+    policy: { provider: model!.provider, modelId: model!.id },
+  });
+  expect(JSON.stringify(policy)).not.toContain("fake-workspace-model-key");
+  await captureScreenshot(page, testInfo, "shared-model-on-connected-server");
+  const retired = await page.request.post("/api/workspace/model-control", {
+    data: { action: "get", grant: "retired-fake-grant" },
+  });
+  expect(retired.status()).toBe(404);
+  await section.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(section).not.toContainText(model!.id);
+  expect((await rpc<{ policy: unknown }>(page, "models/workspacePolicy", {})).policy).toBeNull();
 });
 
 test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, testInfo) => {

@@ -8,13 +8,14 @@ import { isCancelledError, useQuery } from "@tanstack/react-query";
 import type { Href } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadFailure } from "../../components/load-failure";
 import { ModelProviders } from "../../components/model-providers";
 import type { ConnectableProvider, ModelConnectIntent } from "../../components/model-role-settings";
 import { ModelRoleSettings } from "../../components/model-role-settings";
 import { SpaceBotsModel } from "../../components/space-bots-model";
+import { WorkspaceModelSettings } from "../../components/workspace-model-settings";
 import type { MobileBot, MobileModel, MobileModelCredential } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
@@ -270,21 +271,15 @@ export default function Models() {
             {shownError}
           </Text>
         ) : null}
-        {workspacePolicy?.policy ? (
-          <View style={{ gap: 12 }}>
-            <Text
-              accessibilityRole="header"
-              style={{ color: native.label, fontWeight: "600", fontSize: 16 }}
-            >
-              {t("Workspace model")}
-            </Text>
-            <Text style={{ color: native.secondaryLabel }}>
-              {t("Everyone in this workspace uses the model selected by the owner.")}
-            </Text>
-            <Text style={{ color: native.label }}>
-              {workspacePolicy.policy.provider} · {workspacePolicy.policy.modelId}
-            </Text>
-          </View>
+        {workspacePolicy ? (
+          <WorkspaceModelSettings
+            key={JSON.stringify([me?.userId, spaceId ?? me?.spaceId])}
+            value={workspacePolicy}
+            catalog={catalog}
+            send={rpc}
+            isCurrent={current}
+            onChanged={() => load()}
+          />
         ) : null}
         {me && workspacePolicy && !workspacePolicy.policy ? (
           <>
