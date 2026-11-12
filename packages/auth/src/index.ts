@@ -71,6 +71,7 @@ export {
   verifiedNativeSessionIdentity,
 } from "./native-session-identity.js";
 export type { OidcConfig } from "./oidc.js";
+export { oidcAccountSubject } from "./oidc.js";
 export { passkeyRelyingParty } from "./passkey.js";
 export {
   integrationClaimConfirmEmail,
@@ -85,6 +86,7 @@ export {
   issueServerClaim,
   startServerClaimWorker,
   synchronizeWorkspaceBinding,
+  workspaceConnectionStatus,
 } from "./server-claim.js";
 export { welcomeEmail } from "./welcome-email.js";
 
@@ -1121,3 +1123,9 @@ function isOidcCallback(
 ): boolean {
   return ctx?.path === "/callback/:id" && ctx.params?.id === "oidc";
 }
+
+export {
+  createWorkspaceModelGrantVerifier,
+  WORKSPACE_MODEL_GRANT_PURPOSE,
+  workspaceModelRequestHash,
+} from "./workspace-model-grant.js";
