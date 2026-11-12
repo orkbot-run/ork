@@ -10,6 +10,7 @@ import {
   readRpcEvents,
   requestSignal,
   rpcHttpError,
+  throwIfAborted,
 } from "@orkbot/client-transport";
 import type {
   AccountSecurity,
@@ -1105,7 +1106,7 @@ async function request(
     const requestHeaders = consentContext?.headers ?? (await authHeaders());
     const requestSpaceId = requestHeaders["x-orkbot-space-id"];
     if (proc === "aiConsent/status") {
-      deadline.signal.throwIfAborted();
+      throwIfAborted(deadline.signal);
       if (
         requestApiBase !== currentApiBase() ||
         requestSessionGeneration !== currentSessionGeneration() ||
@@ -1124,7 +1125,7 @@ async function request(
       consentContext.sessionGeneration !== currentSessionGeneration()
     )
       throw new Error(t("Something went wrong. Try again."));
-    deadline.signal.throwIfAborted();
+    throwIfAborted(deadline.signal);
     let res: Response;
     const correlation = clientCorrelationHeaders();
     try {

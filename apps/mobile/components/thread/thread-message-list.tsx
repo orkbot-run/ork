@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 message lists are preserved. Loading placeholders follow LICENSE.md.
+
 import type { ThreadItem } from "@orkbot/core";
 import { threadWindowMessages } from "@orkbot/core";
 import type { ReactElement, ReactNode } from "react";
@@ -11,6 +15,7 @@ import type { ThreadListScroll } from "../../lib/thread-list-scroll";
 import type { useThreadPaging } from "../../lib/thread-paging";
 import { ThreadScrollSurface } from "../thread-scroll-surface";
 import { JumpToLatestButton } from "./thread-list-controls";
+import { ThreadMessagesSkeleton } from "./thread-messages-skeleton";
 
 const styles = StyleSheet.create({
   // Full screen width. Column padding stays on the content so the indicator
@@ -42,6 +47,7 @@ export function ThreadMessageList({
   failedSendBubbles,
   errorNotice,
   workingFooter,
+  initialLoading,
   loadingNewer,
   showLatest,
 }: {
@@ -64,6 +70,7 @@ export function ThreadMessageList({
   failedSendBubbles: ReactNode;
   errorNotice: ReactNode;
   workingFooter: ReactNode;
+  initialLoading: boolean;
   loadingNewer: boolean;
   showLatest: () => void;
 }) {
@@ -144,13 +151,28 @@ export function ThreadMessageList({
               <View onLayout={() => scroll.performScroll(behavior.current.onLayout())}>
                 {errorNotice}
                 {failedSendBubbles}
-                {workingFooter}
+                {initialLoading ? null : workingFooter}
               </View>
             }
             renderItem={renderItem}
           />
         </ThreadScrollSurface>
       )}
+      {initialLoading ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              paddingTop: headerClearance.padding,
+              paddingBottom: bottomInset + 16,
+              ...columnPadding,
+            },
+          ]}
+        >
+          <ThreadMessagesSkeleton />
+        </View>
+      ) : null}
       {showPinnedPage || state.detached ? (
         <JumpToLatestButton
           bottomInset={bottomInset}

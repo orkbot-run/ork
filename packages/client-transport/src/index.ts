@@ -7,13 +7,13 @@ import { StandardRPCLink } from "@orpc/client/standard";
 import type { StandardLazyResponse } from "@orpc/standard-server";
 import { rpcHttpError } from "./codec.js";
 import { RPC_MAX_BYTES, readRpcEnvelopes } from "./events.js";
-import { requestSignal } from "./signal.js";
+import { requestSignal, throwIfAborted } from "./signal.js";
 
 export type { RpcJsonEnvelope } from "./codec.js";
 export { decodeRpcJson, encodeRpcJson, rpcHttpError } from "./codec.js";
 export type { RpcEventOptions } from "./events.js";
 export { RPC_IDLE_TIMEOUT_MS, RPC_MAX_BYTES, readRpcEvents } from "./events.js";
-export { requestSignal } from "./signal.js";
+export { requestSignal, throwIfAborted } from "./signal.js";
 
 export type RpcTransportCall<T extends ClientContext> = ClientOptions<T> & {
   path: readonly string[];
@@ -58,7 +58,7 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
             Symbol.asyncIterator in request.body
           )
             throw new TypeError("RPC request streams are not supported by this transport.");
-          options.signal?.throwIfAborted();
+          throwIfAborted(options.signal);
           const pending = config
             .fetch(
               request.url.href,
@@ -122,7 +122,7 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
                   );
                   complete = true;
                 } catch (error) {
-                  if (options.signal?.aborted) throw options.signal.reason;
+                  throwIfAborted(options.signal);
                   if (response.ok || !(error instanceof SyntaxError)) throw error;
                 }
                 if (!response.ok) throw rpcHttpError(response, parsed);
@@ -170,7 +170,7 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
           return {
             async next() {
               try {
-                deadline.signal.throwIfAborted();
+                throwIfAborted(deadline.signal);
                 const next = await iterator.next();
                 if (next.done) close();
                 return next;
@@ -195,7 +195,7 @@ export function createRpcLink<T extends ClientContext = Record<never, never>>(
         }
         return output;
       } catch (error) {
-        if (deadline.signal.aborted) throw deadline.signal.reason;
+        throwIfAborted(deadline.signal);
         // StandardRPCLink wraps body failures. Keep HTTP errors recognizable to existing callers.
         if (
           error instanceof Error &&
