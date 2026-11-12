@@ -112,6 +112,7 @@ function mapBot(
     autoSpeak?: boolean;
     modelProvider?: string | null;
     modelId?: string | null;
+    modelConnectionId?: string | null;
     thinkingLevel?: string | null;
     teamChatAmbientEnabled?: boolean;
     teamChatRules?: string;
@@ -161,6 +162,7 @@ function mapBot(
     autoSpeak: bot.autoSpeak ?? false,
     modelProvider: bot.modelProvider ? canonicalPiProviderId(bot.modelProvider) : null,
     modelId: bot.modelId ?? null,
+    modelConnectionId: bot.modelConnectionId ?? null,
     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
@@ -570,6 +572,7 @@ export function createRepos(
         spawnKey?: string;
         modelProvider?: string | null;
         modelId?: string | null;
+        modelConnectionId?: string | null;
         thinkingLevel?: string | null;
         disabledBuiltinTools?: string[];
         initialMessage?: {
@@ -586,6 +589,7 @@ export function createRepos(
       const spawnKey = input.spawnKey ?? input.id;
       let modelProvider = input.modelProvider ?? null;
       let modelId = input.modelId ?? null;
+      let modelConnectionId = input.modelConnectionId ?? null;
       let thinkingLevel = input.thinkingLevel ?? null;
       let disabledBuiltinTools = input.disabledBuiltinTools ?? [];
       if (input.parentBotId) {
@@ -600,6 +604,7 @@ export function createRepos(
         if (!modelId) {
           modelProvider = parent.modelProvider ?? null;
           modelId = parent.modelId ?? null;
+          modelConnectionId = parent.modelConnectionId ?? null;
         }
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
         if (input.disabledBuiltinTools === undefined) {
@@ -690,6 +695,7 @@ export function createRepos(
               spawnKey,
               modelProvider,
               modelId,
+              modelConnectionId,
               thinkingLevel,
               disabledBuiltinTools,
             },

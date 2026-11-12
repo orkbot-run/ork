@@ -6,6 +6,7 @@ import type { OAuthAuth, OAuthCredential } from "@earendil-works/pi-ai";
 import { createDb, runAsSystem } from "@orkbot/db";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "./executor-deps.js";
+import { validateBotModelChange } from "./model-selection.js";
 import { parseModelSecret, serializeModelSecret } from "./pi-oauth.js";
 import { InMemoryRealtimeFanout } from "./realtime.js";
 import { resolveConnectedRunModel, resolveRunModel } from "./run-model.js";
@@ -408,6 +409,81 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     expect(selected?.model.connectionId).toBe(backup.id);
     await selected?.dispose();
     await expect(claim(primary.id)).rejects.toMatchObject({ code: "forbidden" });
+  });
+
+  it("honors two bots' exact account pins and rejects a revoked pin before execution", async () => {
+    const primary = await catalog.create(admin, input("Primary"));
+    const alternate = await catalog.create(admin, {
+      ...input("Alternate"),
+      plaintext: JSON.stringify({ kind: "api_key", key: "fixture-alternate-key" }),
+    });
+    await assign(primary.id);
+    await assign(alternate.id, admin, 1);
+    const runtime = new ServerAIModels(authDeps());
+    const deps = {
+      prisma: prisma!,
+      secretStore: secrets,
+      serverAIModels: runtime,
+    } as unknown as ExecutorDeps;
+    const bots = await system(() =>
+      Promise.all(
+        [primary, alternate].map((account) =>
+          prisma!.bot.create({
+            data: {
+              spaceId: member.spaceId,
+              userId: member.userId,
+              name: account.label,
+              color: "blue",
+              modelProvider: "openai",
+              modelId: "model-a",
+              modelConnectionId: account.id,
+            },
+          }),
+        ),
+      ),
+    );
+    for (const [index, bot] of bots.entries()) {
+      const model = await system(() => resolveRunModel(deps, { ...member, botId: bot.id }));
+      expect(model.connectionId).toBe(index === 0 ? primary.id : alternate.id);
+      expect(model.apiKey).toBe(index === 0 ? "fixture-private-api-key" : "fixture-alternate-key");
+    }
+    const validationDeps = {
+      prisma: prisma!,
+      secretStore: secrets,
+      serverAIModels: runtime,
+      refreshExpiredCredential() {},
+      defaultModel: async () => ({ provider: null, model: null }),
+    };
+    await expect(
+      validateBotModelChange(validationDeps, {
+        ...member,
+        provider: "openai",
+        model: "model-a",
+        connectionId: alternate.id,
+      }),
+    ).resolves.toMatchObject({ ok: true });
+    await catalog.offer(admin, member.spaceId, alternate.id, false);
+    await expect(
+      system(() => resolveRunModel(deps, { ...member, botId: bots[1]!.id })),
+    ).rejects.toMatchObject({ code: "unavailable" });
+    await expect(
+      validateBotModelChange(validationDeps, {
+        ...member,
+        provider: "openai",
+        model: "model-a",
+        connectionId: alternate.id,
+      }),
+    ).resolves.toMatchObject({ ok: false });
+    await expect(
+      runtime.validateSelection(workspaceAdmin, {
+        provider: "openai",
+        modelId: "model-a",
+        connectionId: primary.id,
+      }),
+    ).resolves.toBe(false);
+    await expect(runtime.resolve(member)).resolves.toMatchObject({
+      model: { connectionId: primary.id },
+    });
   });
 
   it("serializes concurrent default changes without leaving the workspace unconfigured", async () => {

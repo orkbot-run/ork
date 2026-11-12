@@ -241,6 +241,7 @@ jobs:
           rustup target add aarch64-linux-android
           ndk_tools="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
           export CC_aarch64_linux_android="$ndk_tools/aarch64-linux-android23-clang"
+          export AR_aarch64_linux_android="$ndk_tools/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
           cargo build --locked --lib --target aarch64-linux-android
 

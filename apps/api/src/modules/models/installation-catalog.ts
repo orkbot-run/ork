@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { listPiCatalog } from "@orkbot/adapters";
-import type { Actor, ModelCatalogEntry } from "@orkbot/contracts";
+import type { Actor, ModelCatalogEntry, ModelCredential } from "@orkbot/contracts";
 import type { RouterDeps } from "#modules/platform/router";
 
 /** Managed workspaces never probe a member's personal credentials to build a model picker. */
@@ -29,4 +29,23 @@ export async function installationCatalog(
     }
   }
   return [...offered.values()];
+}
+
+export async function installationCredentials(
+  deps: RouterDeps,
+  actor: Actor,
+): Promise<ModelCredential[] | null> {
+  const scoped = await deps.serverAIModels?.actor(actor);
+  if (!scoped || !deps.serverAI) return null;
+  return (await deps.serverAI.list(scoped))
+    .filter((account) => account.enabled && account.state === "active")
+    .map((account) => ({
+      id: account.id,
+      provider: account.provider,
+      label: account.label,
+      managed: true,
+      hasKey: true,
+      isDefault: account.isDefault,
+      enabledModelIds: account.allowedModels.filter((id) => account.models.includes(id)),
+    }));
 }

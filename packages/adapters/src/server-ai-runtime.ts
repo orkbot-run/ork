@@ -52,15 +52,52 @@ export class ServerAIModels {
     });
   }
 
+  async assignedAccounts(scope: InstallationModelScope) {
+    const actor = await this.actor(scope);
+    return actor
+      ? (await this.deps.catalog.list(actor)).filter((row) => row.enabled && row.state === "active")
+      : null;
+  }
+
+  /** Validate picker metadata without loading credentials or contacting a provider. */
+  async validateSelection(
+    scope: InstallationModelScope,
+    selection?: { provider: string; modelId: string; connectionId?: string },
+  ): Promise<boolean | null> {
+    const actor = await this.actor(scope);
+    if (!actor) return null;
+    if (!selection) return true;
+    return Boolean(await this.selectedAccount(actor, selection));
+  }
+
+  private async selectedAccount(
+    actor: AIActor,
+    selection: { provider: string; modelId: string; connectionId?: string },
+  ) {
+    const allowed = (await this.deps.catalog.list(actor)).filter(
+      (row) =>
+        row.enabled &&
+        row.state === "active" &&
+        row.provider === selection.provider &&
+        row.allowedModels.includes(selection.modelId) &&
+        row.models.includes(selection.modelId),
+    );
+    if (selection.connectionId) return allowed.find((row) => row.id === selection.connectionId);
+    const primary = (await this.deps.catalog.choices(actor))[0];
+    return (
+      allowed.find((row) => row.id === primary?.connectionId) ??
+      (allowed.length === 1 ? allowed[0] : undefined)
+    );
+  }
+
   async resolve(
     scope: InstallationModelScope,
     selection?: { provider: string; modelId: string; connectionId?: string },
   ) {
     const actor = await this.actor(scope);
     if (!actor) return null;
-    const allowed = await this.deps.catalog.list(actor);
-    const choices = await this.deps.catalog.choices(actor);
     if (!selection) {
+      const choices = await this.deps.catalog.choices(actor);
       for (const choice of choices) {
         try {
           return {
@@ -77,29 +114,10 @@ export class ServerAIModels {
       }
       throw new AIConnectionError("unavailable");
     }
-    const primary = choices[0];
-    let connectionId = selection?.connectionId ?? primary?.connectionId;
-    const modelId = selection?.modelId ?? primary?.modelId;
-    if (selection && !selection.connectionId) {
-      const candidates = allowed.filter(
-        (row) =>
-          row.enabled &&
-          row.state === "active" &&
-          row.provider === selection.provider &&
-          row.allowedModels.includes(selection.modelId) &&
-          row.models.includes(selection.modelId),
-      );
-      if (!candidates.some((row) => row.id === connectionId))
-        connectionId = candidates.length === 1 ? candidates[0]!.id : undefined;
-    }
-    const account = allowed.find((row) => row.id === connectionId);
-    if (
-      !connectionId ||
-      !modelId ||
-      !account ||
-      (selection && account.provider !== selection.provider)
-    )
-      throw new AIConnectionError("unavailable");
+    const account = await this.selectedAccount(actor, selection);
+    if (!account) throw new AIConnectionError("unavailable");
+    const connectionId = account.id;
+    const modelId = selection.modelId;
     return {
       ...(await serverAIModel(this.deps, actor, connectionId, modelId)),
       secretId: connectionId,

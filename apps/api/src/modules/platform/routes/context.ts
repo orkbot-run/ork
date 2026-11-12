@@ -121,6 +121,7 @@ export function createRouterContext(deps: RouterDeps) {
     ((scope: { userId: string; spaceId: string }, secretId: string, provider: string) =>
       kickModelCredentialRefresh(deps.prisma, deps.secrets, scope, secretId, provider));
   const botModelValidation = (actor: Actor) => ({
+    serverAIModels: deps.serverAIModels,
     prisma: deps.prisma,
     secretStore: deps.secrets,
     codexCatalog,

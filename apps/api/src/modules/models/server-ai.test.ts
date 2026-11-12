@@ -124,3 +124,22 @@ it("rejects every legacy credential path before accessing the personal store in 
     await expect(work()).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(deps.modelConnectionFetch).not.toHaveBeenCalled();
 });
+
+it("returns only assigned account picker metadata without reading personal credentials", async () => {
+  const { client, serverAI, principal } = fixture();
+  serverAI.list.mockResolvedValue([
+    { ...account, enabled: true, allowedModels: ["example/model", "retired"], isDefault: true },
+  ] as never);
+  expect(await client.models.credentials()).toEqual([
+    {
+      id: account.id,
+      provider: account.provider,
+      label: account.label,
+      managed: true,
+      hasKey: true,
+      isDefault: true,
+      enabledModelIds: ["example/model"],
+    },
+  ]);
+  expect(serverAI.list).toHaveBeenCalledWith(principal);
+});

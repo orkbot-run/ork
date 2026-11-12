@@ -196,7 +196,7 @@ export default function BotSettingsScreen() {
         setComputerMode(next.computerMode);
         setModelKey(
           next.modelProvider && next.modelId
-            ? modelOptionKey(next.modelProvider, next.modelId)
+            ? modelOptionKey(next.modelProvider, next.modelId, next.modelConnectionId)
             : "",
         );
         setThinkingLevel(next.thinkingLevel ?? "");
@@ -223,7 +223,7 @@ export default function BotSettingsScreen() {
         setMe(nextMe);
         setCatalog(nextCatalog);
         setCredentials(nextCredentials);
-        setWorkspaceModel(policy.policy);
+        setWorkspaceModel(policy.managed ? null : policy.policy);
         setModelMetaError(null);
         setModelMetaReady(true);
       })
@@ -237,11 +237,12 @@ export default function BotSettingsScreen() {
   const selectedModel = storedModel
     ? {
         provider: storedModel.provider,
+        connectionId: storedModel.connectionId,
         modelId: resolveSelectableModelId(catalog, storedModel.provider, storedModel.modelId),
       }
     : null;
   const selectedModelKey = selectedModel
-    ? modelOptionKey(selectedModel.provider, selectedModel.modelId)
+    ? modelOptionKey(selectedModel.provider, selectedModel.modelId, selectedModel.connectionId)
     : "";
 
   const effectiveProvider =
@@ -404,6 +405,7 @@ export default function BotSettingsScreen() {
         color?: string;
         modelProvider?: string | null;
         modelId?: string | null;
+        modelConnectionId?: string | null;
         thinkingLevel?: ThinkingLevel | null;
         autoSpeak?: boolean;
       } = { botId };
@@ -417,11 +419,13 @@ export default function BotSettingsScreen() {
       if (color !== bot.color) input.color = color;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
-        (selected?.modelId ?? null) !== (bot.modelId ?? null);
+        (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
+        (selected?.connectionId ?? null) !== (bot.modelConnectionId ?? null);
       const thinkingChanged = (thinkingLevel || null) !== (bot.thinkingLevel ?? null);
       if (modelMetaReady && !workspaceModel && modelChanged) {
         input.modelProvider = selected?.provider ?? null;
         input.modelId = selected?.modelId ?? null;
+        input.modelConnectionId = selected?.connectionId ?? null;
       }
       if (modelMetaReady && !workspaceModel && (modelChanged || thinkingChanged)) {
         input.thinkingLevel = thinkingOptions.length
@@ -473,6 +477,7 @@ export default function BotSettingsScreen() {
       replyModePending ||
       (selectedModel?.provider ?? null) !== (bot.modelProvider ?? null) ||
       (selectedModel?.modelId ?? null) !== (bot.modelId ?? null) ||
+      (selectedModel?.connectionId ?? null) !== (bot.modelConnectionId ?? null) ||
       (thinkingLevel || null) !== (bot.thinkingLevel ?? null));
 
   const voiceValue = (

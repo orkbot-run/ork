@@ -142,6 +142,78 @@ test("managed workspace settings show assigned accounts and server administratio
   await captureScreenshot(page, testInfo, "installation-ai-add-account");
 });
 
+test("a managed bot can choose between assigned accounts with the same model", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `bot-ai-accounts-${Date.now()}@orkbot.test`, "password12", "Workspace member");
+  await completeOnboarding(page);
+  const botId = await activeBotId(page);
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          managed: true,
+          canManage: false,
+          policy: { provider: "openai", modelId: "shared-model" },
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/models/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            managed: true,
+            provider: "openai",
+            id: "shared-model",
+            label: "Shared model",
+            credentialIds: ["account-one", "account-two"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      json: {
+        json: ["one", "two"].map((name) => ({
+          id: `account-${name}`,
+          managed: true,
+          provider: "openai",
+          label: `Account ${name}`,
+          hasKey: true,
+          isDefault: name === "one",
+          enabledModelIds: ["shared-model"],
+        })),
+      },
+    }),
+  );
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/rpc/bots/update", async (route) => {
+    saved = (route.request().postDataJSON() as { json: Record<string, unknown> }).json;
+    await route.fulfill({ json: { json: await rpc(page, "bots/get", { botId }) } });
+  });
+  await openBotPanelTab(page, "Advanced");
+  const settings = page.getByTestId("bot-settings");
+  const picker = settings.getByRole("combobox", { name: "Model", exact: true });
+  await expect(picker).toBeVisible();
+  await expect(picker.locator("option")).toHaveText([
+    "Space default",
+    "Shared model (Account one)",
+    "Shared model (Account two)",
+  ]);
+  await picker.selectOption({ label: "Shared model (Account two)" });
+  await captureScreenshot(page, testInfo, "bot-ai-account-picker");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => saved?.modelConnectionId).toBe("account-two");
+  expect(saved).toMatchObject({
+    modelProvider: "openai",
+    modelId: "shared-model",
+    modelConnectionId: "account-two",
+  });
+});
+
 test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   const stamp = Date.now();

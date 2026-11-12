@@ -70,7 +70,9 @@ const rowLabelClass = "text-sm text-foreground";
 /** The advanced fields one Save sends, in the order their saved snapshot keeps them. */
 function advancedValues(bot: Bot) {
   return [
-    bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
+    bot.modelProvider && bot.modelId
+      ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelConnectionId)
+      : "",
     bot.thinkingLevel ?? "",
     bot.computerMode,
     bot.memoryScope,
@@ -147,6 +149,7 @@ export function BotSettings({
     voiceId?: string | null;
     modelProvider?: string | null;
     modelId?: string | null;
+    modelConnectionId?: string | null;
     thinkingLevel?: ThinkingLevel | null;
     disabledBuiltinTools?: string[];
   }) => Promise<void>;
@@ -189,7 +192,9 @@ export function BotSettings({
   useEffect(() => setFleetManagement(bot.fleetManagement), [bot.fleetManagement]);
   const [voiceId, setVoiceId] = useState(bot.voiceId ?? "");
   const [modelKey, setModelKey] = useState(
-    bot.modelProvider && bot.modelId ? modelOptionKey(bot.modelProvider, bot.modelId) : "",
+    bot.modelProvider && bot.modelId
+      ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelConnectionId)
+      : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
   const [disabledBuiltinTools, setDisabledBuiltinTools] = useState<string[]>(
@@ -224,7 +229,7 @@ export function BotSettings({
   const credentials = credentialsQuery.data ?? NO_CREDENTIALS;
   const catalog = catalogQuery.data ?? NO_CATALOG;
   const me = meQuery.data ?? null;
-  const workspaceModel = policyQuery.data?.policy;
+  const workspaceModel = policyQuery.data?.managed ? null : policyQuery.data?.policy;
   // A failed catalog load must not clear an existing thinkingLevel override on save.
   const modelMetaReady =
     credentialsQuery.data !== undefined &&
@@ -301,11 +306,12 @@ export function BotSettings({
   const selectedModel = storedModel
     ? {
         provider: storedModel.provider,
+        connectionId: storedModel.connectionId,
         modelId: resolveSelectableModelId(catalog, storedModel.provider, storedModel.modelId),
       }
     : null;
   const selectedModelKey = selectedModel
-    ? modelOptionKey(selectedModel.provider, selectedModel.modelId)
+    ? modelOptionKey(selectedModel.provider, selectedModel.modelId, selectedModel.connectionId)
     : "";
 
   const defaultEntry = me?.defaultModel
@@ -401,6 +407,7 @@ export function BotSettings({
           ? {
               modelProvider: selected?.provider ?? null,
               modelId: selected?.modelId ?? null,
+              modelConnectionId: selected?.connectionId ?? null,
             }
           : {}),
         ...(policyQuery.data &&

@@ -489,7 +489,12 @@ describe("prepareFleetRequest set_child_bot_model", () => {
       canonical: {
         botId: "bot-scout",
         botName: "Scout",
-        previous: { provider: "anthropic", model: "claude-old", thinkingLevel: null },
+        previous: {
+          provider: "anthropic",
+          model: "claude-old",
+          connectionId: null,
+          thinkingLevel: null,
+        },
         provider: "custom",
         model: "my-model",
       },
@@ -1962,7 +1967,7 @@ describe("setChildBotModel", () => {
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
-  it("requires all three original model values in the atomic write", async () => {
+  it("requires the original model and account values in the atomic write", async () => {
     const { deps, prisma } = fakeFleet(fleet);
     const tx = {
       $queryRaw: vi.fn(),
@@ -1979,6 +1984,7 @@ describe("setChildBotModel", () => {
           id: "bot-scout",
           modelProvider: "anthropic",
           modelId: "claude-old",
+          modelConnectionId: null,
           thinkingLevel: null,
         },
       }),

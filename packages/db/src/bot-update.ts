@@ -31,7 +31,13 @@ export async function commitBotUpdate(
     expectedSettings?: Partial<
       Pick<
         Bot,
-        "modelProvider" | "modelId" | "thinkingLevel" | "autoSpeak" | "voiceId" | "avatarSetPinned"
+        | "modelProvider"
+        | "modelId"
+        | "modelConnectionId"
+        | "thinkingLevel"
+        | "autoSpeak"
+        | "voiceId"
+        | "avatarSetPinned"
       >
     >;
     /**

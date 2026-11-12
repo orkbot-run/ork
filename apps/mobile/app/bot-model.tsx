@@ -21,7 +21,7 @@ export default function BotModelScreen() {
       rpc("models/workspacePolicy"),
     ])
       .then(([me, catalog, credentials, policy]) => {
-        if (policy.policy) {
+        if (policy.policy && !policy.managed) {
           setChoices([]);
           setError(t("Everyone in this workspace uses the model selected by the owner."));
           return;

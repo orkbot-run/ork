@@ -186,7 +186,12 @@ describe("prepareOwnBotSettings", () => {
       { model: "Gemini Flash" },
     );
     expect(result).toEqual({
-      data: { modelProvider: "google", modelId: "gemini-3.8-flash", thinkingLevel: "high" },
+      data: {
+        modelConnectionId: null,
+        modelProvider: "google",
+        modelId: "gemini-3.8-flash",
+        thinkingLevel: "high",
+      },
     });
     expect(validate).toHaveBeenCalledWith(
       expect.anything(),
@@ -208,7 +213,12 @@ describe("prepareOwnBotSettings", () => {
       { model: "gemini-3.8-flash" },
     );
     expect(result).toEqual({
-      data: { modelProvider: "google", modelId: "gemini-3.8-flash", thinkingLevel: null },
+      data: {
+        modelConnectionId: null,
+        modelProvider: "google",
+        modelId: "gemini-3.8-flash",
+        thinkingLevel: null,
+      },
     });
   });
 

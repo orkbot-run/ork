@@ -53,6 +53,7 @@ import { ORPCError } from "@orpc/server";
 import { mayUsePrivateEndpoint } from "#modules/mcp/mcp-servers";
 import type { RouterContext } from "#modules/platform/routes/context";
 import { withSerializableRetry } from "#modules/platform/serializable-retry";
+import { installationCredentials } from "../installation-catalog.js";
 import { firstModelConnectAnalytics } from "../model-connect-analytics.js";
 import {
   modelConnectionTarget,
@@ -222,7 +223,8 @@ export function modelsRoutes(ctx: RouterContext) {
       }),
       list: authed.models.list.handler(async ({ context }) => chatCatalog(context.actor)),
       credentials: authed.models.credentials.handler(async ({ context }) => {
-        if (await deps.serverAIModels?.actor(context.actor)) return [];
+        const managed = await installationCredentials(deps, context.actor);
+        if (managed) return managed;
         const [rows, main] = await Promise.all([
           deps.prisma.userModelCredential.findMany({
             where: { userId: context.actor.userId },

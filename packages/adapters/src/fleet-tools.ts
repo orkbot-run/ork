@@ -286,6 +286,7 @@ async function prepareChildModel(
   const previous = {
     provider: child.modelProvider,
     model: child.modelId,
+    connectionId: child.modelConnectionId ?? null,
     thinkingLevel: child.thinkingLevel ?? null,
   };
   const chosen = model
@@ -1072,6 +1073,7 @@ export async function setChildBotModel(
   if (
     (previous?.provider ?? null) !== child.modelProvider ||
     (previous?.model ?? null) !== child.modelId ||
+    (previous?.connectionId ?? null) !== (child.modelConnectionId ?? null) ||
     (previous?.thinkingLevel ?? null) !== (child.thinkingLevel ?? null)
   ) {
     return { error: "That bot's model changed since you approved; ask again." };
@@ -1099,11 +1101,13 @@ export async function setChildBotModel(
       expectedSettings: {
         modelProvider: child.modelProvider,
         modelId: child.modelId,
+        modelConnectionId: child.modelConnectionId ?? null,
         thinkingLevel: child.thinkingLevel ?? null,
       },
       data: {
         modelProvider: validated.provider,
         modelId: validated.model,
+        modelConnectionId: null,
         thinkingLevel: validated.thinkingLevel,
       },
     });
@@ -1232,6 +1236,7 @@ const botSelect = {
   name: true,
   modelProvider: true,
   modelId: true,
+  modelConnectionId: true,
   thinkingLevel: true,
   thread: { select: { id: true } },
 } satisfies Prisma.BotSelect;

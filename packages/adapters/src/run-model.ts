@@ -9,7 +9,7 @@ import type {
   ModelCredentialFailedState,
   ModelCredentialRetireReason,
 } from "@orkbot/adapter-kit";
-import { OPENAI_COMPATIBLE_PROVIDER_ID } from "@orkbot/contracts";
+import { OPENAI_COMPATIBLE_PROVIDER_ID, ThinkingLevelSchema } from "@orkbot/contracts";
 import { MISSING_MODEL_RUN_ERROR } from "@orkbot/core";
 import { cloudflareProviderEnv } from "./cloudflare-ai-gateway.js";
 import {
@@ -82,6 +82,7 @@ export async function fleetPrepareDeps(
   return {
     prisma: deps.prisma,
     modelChange: {
+      serverAIModels: deps.serverAIModels,
       hostedProvider,
       secretStore: deps.secretStore,
       codexCatalog: deps.codexCatalog,
@@ -560,8 +561,6 @@ export async function resolveRunModel(
     workspaceMembershipVersion?: string | null;
   },
 ): Promise<AgentRunRequest["model"]> {
-  const workspace = await resolveWorkspaceModel(deps, scope.spaceId, scope);
-  if (workspace) return workspace.model;
   const override = scope.botId
     ? await deps.prisma.bot.findFirst({
         where: {
@@ -569,9 +568,30 @@ export async function resolveRunModel(
           userId: scope.userId,
           spaceId: scope.spaceId,
         },
-        select: { modelProvider: true, modelId: true, thinkingLevel: true },
+        select: {
+          modelProvider: true,
+          modelId: true,
+          modelConnectionId: true,
+          thinkingLevel: true,
+        },
       })
     : null;
+  const selection =
+    override?.modelProvider && override.modelId
+      ? {
+          provider: override.modelProvider,
+          modelId: override.modelId,
+          connectionId: override.modelConnectionId ?? undefined,
+        }
+      : undefined;
+  const workspace = await resolveWorkspaceModel(deps, scope.spaceId, scope, selection);
+  if (workspace)
+    return {
+      ...workspace.model,
+      thinkingLevel: override?.thinkingLevel
+        ? ThinkingLevelSchema.parse(override.thinkingLevel)
+        : workspace.model.thinkingLevel,
+    };
   const hasOverride = Boolean(override?.modelProvider && override.modelId);
   const [overrideCredential, main, settings] = await Promise.all([
     hasOverride

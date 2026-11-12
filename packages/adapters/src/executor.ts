@@ -12,7 +12,7 @@ import {
   SandboxUnresponsiveError,
 } from "@orkbot/adapter-kit";
 import type { MessageBlock, ModelRoleChoice, RunStatus } from "@orkbot/contracts";
-import { disabledBuiltinToolSet } from "@orkbot/contracts";
+import { disabledBuiltinToolSet, ThinkingLevelSchema } from "@orkbot/contracts";
 import {
   assertTransition,
   botMessageAllowsSilence,
@@ -610,11 +610,32 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         }
         const storedTurnCheckpoint = Boolean(turnCheckpoint);
         let workspaceModelError: string | undefined;
-        const workspaceModel = await resolveWorkspaceModel(deps, run.spaceId, run).catch(() => {
+        const bot = await deps.prisma.bot.findUniqueOrThrow({
+          where: { id: run.botId },
+          include: { computer: true },
+        });
+        const modelChoice = runModelChoice(run, bot);
+        const workspaceSelection =
+          modelChoice.modelProvider && modelChoice.modelId
+            ? {
+                provider: modelChoice.modelProvider,
+                modelId: modelChoice.modelId,
+                connectionId: modelChoice.modelConnectionId ?? undefined,
+              }
+            : undefined;
+        const workspaceModel = await resolveWorkspaceModel(
+          deps,
+          run.spaceId,
+          run,
+          workspaceSelection,
+        ).catch(() => {
           workspaceModelError =
             "The workspace model connection is unavailable. Ask the workspace owner to check it.";
           return null;
         });
+        if (workspaceModel && modelChoice.thinkingLevel) {
+          workspaceModel.model.thinkingLevel = ThinkingLevelSchema.parse(modelChoice.thinkingLevel);
+        }
         const resolveCheckpointModel = (
           provider: string,
           id: string,
@@ -669,7 +690,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const channelId = messagingChannelId(sourceBlocks);
         const messagingChannelRun = isMessagingChannelRun(run.trigger, sourceBlocks);
         const [
-          bot,
           thread,
           messages,
           peerMessage,
@@ -686,10 +706,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           runLoginRedactions,
           runCodeRedactions,
         ] = await Promise.all([
-          deps.prisma.bot.findUniqueOrThrow({
-            where: { id: run.botId },
-            include: { computer: true },
-          }),
           deps.prisma.thread.findUniqueOrThrow({ where: { id: run.threadId } }),
           loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
           run.trigger === "bot_message"
@@ -765,7 +781,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           initialBotCommandEnvironment,
         );
         // modelPinned distinguishes the captured choice from an attempt's recorded model.
-        const modelChoice = runModelChoice(run, bot);
         const hasModelOverride = Boolean(modelChoice.modelProvider && modelChoice.modelId);
         const overrideCredential =
           !workspaceModel &&

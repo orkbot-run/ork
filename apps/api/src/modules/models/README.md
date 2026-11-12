@@ -25,3 +25,5 @@ Every provider attempt rechecks the workspace assignment and reserves capacity a
 Installation OAuth sign-ins use a separate encrypted handoff namespace. Completion checks the original session, admission and installation binding, and reconnect refuses an account revision changed while the sign-in was open. Completion returns account metadata. The installation keeps provider tokens in its configured secret store.
 
 The catalog migration preserves existing encrypted organization policies and local IDs. Once a workspace is centrally mapped, legacy personal model mutation and credential-probe endpoints reject its session. Workers must support run reader version 4 before these workspaces execute jobs. Unmapped local installations retain the existing model settings path.
+
+Bots can select a specific assigned AI account, including when several accounts offer the same model. Execution rechecks that account and refuses a revoked assignment.

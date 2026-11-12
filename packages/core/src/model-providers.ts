@@ -169,6 +169,8 @@ type CatalogModelRef = {
 };
 
 type CredentialModelRef = {
+  id?: string;
+  managed?: boolean;
   provider: string;
   label: string;
   modelId?: string | null;
@@ -192,11 +194,37 @@ function canonicalApiModelId(provider: string, modelId: string): string | undefi
   return canonical;
 }
 
-export function modelOptionKey(provider: string, modelId: string): string {
+export function modelOptionKey(
+  provider: string,
+  modelId: string,
+  connectionId?: string | null,
+): string {
+  if (connectionId)
+    return `connection:${JSON.stringify([canonicalPiProviderId(provider), modelId, connectionId])}`;
   return `${canonicalPiProviderId(provider)}::${modelId}`;
 }
 
-export function parseModelOptionKey(key: string): { provider: string; modelId: string } | null {
+export function parseModelOptionKey(
+  key: string,
+): { provider: string; modelId: string; connectionId?: string } | null {
+  if (key.startsWith("connection:")) {
+    try {
+      const parts: unknown = JSON.parse(key.slice("connection:".length));
+      if (
+        !Array.isArray(parts) ||
+        parts.length !== 3 ||
+        !parts.every((part) => typeof part === "string" && part.length > 0)
+      )
+        return null;
+      return {
+        provider: canonicalPiProviderId(parts[0]),
+        modelId: parts[1],
+        connectionId: parts[2],
+      };
+    } catch {
+      return null;
+    }
+  }
   const separator = key.indexOf("::");
   if (separator <= 0) return null;
   return {
@@ -237,7 +265,11 @@ export function resolveSelectableModelId(
 
 function freeFormChoice(credential: CredentialModelRef, modelId: string): ConnectedModelChoice {
   return {
-    key: modelOptionKey(credential.provider, modelId),
+    key: modelOptionKey(
+      credential.provider,
+      modelId,
+      credential.managed ? credential.id : undefined,
+    ),
     provider: credential.provider,
     modelId,
     label: withConnectionName(modelId, credential.label),
@@ -311,6 +343,21 @@ export function connectedModelChoices(
   const choices: ConnectedModelChoice[] = [];
   const seen = new Set<string>();
   for (const credential of credentials) {
+    if (credential.managed) {
+      for (const id of credential.enabledModelIds ?? []) {
+        const entry = catalog.find(
+          (row) => row.managed && row.provider === credential.provider && row.id === id,
+        );
+        if (entry)
+          choices.push({
+            ...freeFormChoice(credential, id),
+            modelLabel: entry.label,
+            label: withConnectionName(entry.label, credential.label),
+            images: entry.images,
+          });
+      }
+      continue;
+    }
     const providerModels = catalog.filter(
       (entry) =>
         canonicalPiProviderId(entry.provider) === canonicalPiProviderId(credential.provider) &&
@@ -333,7 +380,16 @@ export function connectedModelChoices(
           : catalogChoices(providerModels);
     choices.push(...next);
   }
-  choices.push(...catalogChoices(catalog.filter((entry) => entry.managed && !entry.placeholder)));
+  choices.push(
+    ...catalogChoices(
+      catalog.filter(
+        (entry) =>
+          entry.managed &&
+          !entry.placeholder &&
+          !credentials.some((credential) => credential.managed),
+      ),
+    ),
+  );
   return choices.filter((choice) => {
     if (seen.has(choice.key)) return false;
     seen.add(choice.key);

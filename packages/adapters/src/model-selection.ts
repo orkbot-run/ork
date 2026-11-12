@@ -32,6 +32,7 @@ import { listPiCatalog, offeredCatalog, scriptedCatalogEntry } from "./pi-models
 import type { StoredModelSecret } from "./pi-oauth.js";
 import { parseModelSecret } from "./pi-oauth.js";
 import { OPENAI_COMPATIBLE_PROVIDER_ID } from "./pi-openai-compatible-provider.js";
+import type { ServerAIModels } from "./server-ai-runtime.js";
 import { findWorkspaceModelPolicy } from "./workspace-model-policy.js";
 
 export type ModelCredential = Awaited<ReturnType<typeof findModelCredential>>;
@@ -580,6 +581,7 @@ export async function findConnectedModelCredential(
 }
 
 export type BotModelChangeDeps = {
+  serverAIModels?: ServerAIModels;
   hostedProvider?: string;
   prisma: PrismaClient;
   secretStore: Pick<SecretStore, "load">;
@@ -610,11 +612,28 @@ export async function validateBotModelChange(
     provider: string | null;
     model: string | null;
     thinkingLevel?: string | null;
+    connectionId?: string | null;
     current?: { provider: string | null; model: string | null };
   },
 ): Promise<BotModelChangeResult> {
   const scope = { userId: input.userId, spaceId: input.spaceId };
   const { provider, model } = input;
+  const managed = await deps.serverAIModels?.validateSelection(
+    scope,
+    provider && model
+      ? { provider, modelId: model, connectionId: input.connectionId ?? undefined }
+      : undefined,
+  );
+  if (managed !== undefined && managed !== null) {
+    if (!managed) return { ok: false, error: PINNED_PROVIDER_NOT_CONNECTED };
+    const allowed = listPiCatalog().find(
+      (entry) => entry.provider === provider && entry.id === model,
+    )?.thinkingLevels;
+    if (input.thinkingLevel && allowed && !allowed.some((level) => level === input.thinkingLevel))
+      return { ok: false, error: "Unsupported thinking level" };
+    return { ok: true, provider, model, thinkingLevel: input.thinkingLevel ?? null };
+  }
+  if (input.connectionId) return { ok: false, error: PINNED_PROVIDER_NOT_CONNECTED };
   const changing = provider !== input.current?.provider || model !== input.current?.model;
   if (
     !changing &&
@@ -857,6 +876,7 @@ export async function validateConnectedModelChoice(
 }
 
 export type ModelChoice = {
+  modelConnectionId?: string | null;
   modelProvider: string | null;
   modelId: string | null;
   thinkingLevel: string | null;
@@ -875,12 +895,14 @@ export function runModelChoice(
     return {
       modelProvider: run.modelProvider,
       modelId: run.modelId,
+      ...(run.modelConnectionId !== undefined ? { modelConnectionId: run.modelConnectionId } : {}),
       thinkingLevel: run.thinkingLevel,
     };
   }
   return {
     modelProvider: bot.modelProvider,
     modelId: bot.modelId,
+    ...(bot.modelConnectionId !== undefined ? { modelConnectionId: bot.modelConnectionId } : {}),
     thinkingLevel: bot.thinkingLevel,
   };
 }
