@@ -107,7 +107,7 @@ export function modelsRoutes(ctx: RouterContext) {
       }),
       setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
         const { organizationId, owner } = await workspace(context.actor);
-        if (!owner) throw new ORPCError("FORBIDDEN");
+        if (!owner || !context.dashboardWorkspaceModel) throw new ORPCError("FORBIDDEN");
         if (!input.apiKey?.trim() || !input.modelId?.trim())
           throw new ORPCError("BAD_REQUEST", {
             message: "A model and a new API key are required.",
@@ -174,7 +174,7 @@ export function modelsRoutes(ctx: RouterContext) {
       }),
       clearWorkspacePolicy: authed.models.clearWorkspacePolicy.handler(async ({ context }) => {
         const { organizationId, owner } = await workspace(context.actor);
-        if (!owner) throw new ORPCError("FORBIDDEN");
+        if (!owner || !context.dashboardWorkspaceModel) throw new ORPCError("FORBIDDEN");
         const previous = await withSerializableRetry(() =>
           deps.prisma.$transaction(
             async (tx) => {

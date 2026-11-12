@@ -831,7 +831,6 @@ msgstr ""
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API-Schlüssel"
 
@@ -843,10 +842,6 @@ msgstr "API-Schlüssel für {provider}"
 msgid "API key header"
 msgstr "API-Schlüssel-Header"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "API key saved securely"
-msgstr ""
-
 #: src/pages/shell/agent-import.tsx
 msgid "API keys"
 msgstr "API-Schlüssel"
@@ -856,7 +851,6 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1244,7 +1238,6 @@ msgstr "Kann keine Bilder lesen"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Abbrechen"
 
@@ -1298,7 +1291,6 @@ msgid "Change {title}"
 msgstr "{title} ändern"
 
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Change model"
 msgstr "Modell wechseln"
 
@@ -1421,7 +1413,6 @@ msgstr "Wähle eine Bot-Farbe oder lade ein Bild hoch"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/shell/composer-error.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a model"
 msgstr "Modell auswählen"
 
@@ -1430,7 +1421,6 @@ msgid "Choose a new password"
 msgstr "Wähle ein neues Passwort"
 
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr ""
 
@@ -1454,10 +1444,6 @@ msgstr "Ordner wählen"
 #: src/components/ModelCredits.tsx
 #: src/components/SubscriptionGate.tsx
 msgid "Choose how to use Ork"
-msgstr ""
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Choose one model and API key for everyone in this workspace. Members use their own connections until you set one."
 msgstr ""
 
 #: src/components/vault/VaultItemEditor.tsx
@@ -2220,7 +2206,6 @@ msgid "Could not load voice settings"
 msgstr "Stimmeinstellungen konnten nicht geladen werden"
 
 #: src/pages/ModelSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not load workspace model settings."
 msgstr ""
 
@@ -3279,13 +3264,11 @@ msgstr "Im Chat suchen"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Find models"
 msgstr "Modelle suchen"
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Finding…"
 msgstr "Suche läuft…"
 
@@ -4053,10 +4036,6 @@ msgstr "Mitglied"
 msgid "Members ({0})"
 msgstr ""
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Members will need their own model connection again. Existing runs may need to be restarted."
-msgstr ""
-
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -4210,18 +4189,10 @@ msgstr "Modellverbindungen"
 msgid "Model id"
 msgstr "Modell-ID"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model ID"
-msgstr ""
-
 #: src/components/FoundModelPicker.tsx
 #: src/pages/model-settings/role-model-picker.tsx
 msgid "Model options"
 msgstr "Modelloptionen"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Model supports images"
-msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/settings-nav.ts
@@ -5120,14 +5091,12 @@ msgstr ""
 
 #: src/pages/model-settings/compatible-model-fields.tsx
 #: src/pages/Onboarding.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Anbieter"
 
@@ -5332,7 +5301,6 @@ msgstr "Neu laden"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Entfernen"
 
@@ -5379,10 +5347,6 @@ msgstr "Header entfernen"
 msgid "Remove message trigger"
 msgstr ""
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove model"
-msgstr ""
-
 #: src/pages/RoutineEditor.tsx
 msgid "Remove schedule"
 msgstr ""
@@ -5394,10 +5358,6 @@ msgstr "Skill {0} entfernen"
 
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
-msgstr ""
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Remove the workspace model?"
 msgstr ""
 
 #: src/pages/RoutineEditor.tsx
@@ -5728,10 +5688,6 @@ msgstr "Samstag"
 msgid "Save"
 msgstr "Speichern"
 
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Save model"
-msgstr ""
-
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
 msgstr "Den Arbeitsbereich speichern und aktuelle Software installieren."
@@ -5777,7 +5733,6 @@ msgstr ""
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/dialogs.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Saving…"
 msgstr "Wird gespeichert…"
 
@@ -5978,10 +5933,6 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "Server-URL"
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "Set workspace model"
-msgstr ""
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6548,10 +6499,6 @@ msgstr "Der Computerdienst kann für dieses Konto keine Computer starten."
 #: src/lib/model-connection-preflight.ts
 msgid "The connection timed out."
 msgstr "Zeitüberschreitung der Verbindung."
-
-#: src/pages/WorkspaceModelPolicy.tsx
-msgid "The key cannot be displayed after saving. Enter a new key to replace it."
-msgstr ""
 
 #. js-lingui-explicit-id
 #: src/lib/run-error.ts

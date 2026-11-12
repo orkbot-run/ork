@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   platform: "ios",
   connected: true,
   workspacePolicy: null as { provider: string; modelId: string } | null,
+  workspaceCanManage: false,
   serverCredentials: false,
   catalogEmpty: false,
   extraProviders: false,
@@ -166,7 +167,7 @@ vi.mock("./api", () => ({
       };
     }
     if (procedure === "models/workspacePolicy")
-      return { canManage: false, policy: mocks.workspacePolicy };
+      return { canManage: mocks.workspaceCanManage, policy: mocks.workspacePolicy };
     if (procedure === "models/forRole") return mocks.catalogEmpty ? [] : catalog;
     if (procedure === "models/setRole") {
       await result;
@@ -604,6 +605,7 @@ beforeEach(() => {
   mocks.platform = "ios";
   mocks.connected = true;
   mocks.workspacePolicy = null;
+  mocks.workspaceCanManage = false;
   mocks.serverCredentials = false;
   mocks.catalogEmpty = false;
   mocks.extraProviders = false;
@@ -1090,6 +1092,16 @@ describe("model role lists", () => {
     [...section(title).querySelectorAll<HTMLButtonElement>("button")].find((button) =>
       button.textContent?.includes(name),
     )!;
+
+  it("shows an enforced workspace model without giving its owner editing controls", async () => {
+    mocks.workspaceCanManage = true;
+    mocks.workspacePolicy = { provider: "company", modelId: "shared-model" };
+    await renderModels();
+    expect(container.textContent).toContain("company · shared-model");
+    expect(container.textContent).not.toContain("Set workspace model");
+    expect(container.textContent).not.toContain("Change model");
+    expect(container.textContent).not.toContain("Remove");
+  });
 
   it("numbers the main model and its fallbacks, then offers Add fallback", async () => {
     mocks.primary = { ...model(1), thinkingLevel: "high" };
