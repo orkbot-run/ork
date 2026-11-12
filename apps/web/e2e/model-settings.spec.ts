@@ -38,10 +38,10 @@ test("the native renderer manages shared AI on its connected server", async ({
   const catalog = await rpc<ModelCatalogEntry[]>(page, "models/list", {});
   const model = catalog.find(
     (entry) =>
+      entry.provider === "openrouter" &&
       entry.auth !== "oauth" &&
       !entry.placeholder &&
       entry.protocol !== "decisions" &&
-      entry.provider !== "openai-compatible" &&
       !entry.connection?.routingFields?.some((field) => field.required),
   );
   expect(model).toBeDefined();
