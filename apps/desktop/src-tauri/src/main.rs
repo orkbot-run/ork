@@ -73,6 +73,7 @@ struct DesktopState {
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
     pending_server: Mutex<Option<String>>,
+    pending_workspace: Mutex<Option<server_link::WorkspaceLink>>,
     initialization: Mutex<Option<server_link::Initialization>>,
     opening_server: Mutex<Option<OpeningServer>>,
     pending_bookmark: Mutex<Option<server_link::Bookmark>>,
@@ -904,8 +905,19 @@ fn start_server_discovery(app: tauri::AppHandle) {
             let Ok(bearer) = authorization.directory_bearer() else {
                 continue;
             };
-            let Ok(servers) = directory.list(bearer, &device).await else {
+            let Ok(catalog) = directory.catalog(bearer).await else {
                 continue;
+            };
+            let servers = if catalog.has_organizations() {
+                let Ok(servers) = catalog.discovery_servers() else {
+                    continue;
+                };
+                servers
+            } else {
+                let Ok(servers) = directory.list(bearer, &device).await else {
+                    continue;
+                };
+                servers
             };
             if !discovery_session_current(&state, generation, &authorization)
                 || !current_server_account(&app, &state, &document, &authorization)
@@ -1083,6 +1095,10 @@ fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String>
         .map_err(|_| "Desktop state unavailable.")? = None;
     *state
         .pending_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
+    *state
+        .pending_workspace
         .lock()
         .map_err(|_| "Desktop state unavailable.")? = None;
     *state
@@ -1379,6 +1395,46 @@ async fn list_workspaces<R: tauri::Runtime>(
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     Ok(workspaces)
+}
+
+#[tauri::command]
+async fn workspace_catalog<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+) -> Result<server_directory::WorkspaceCatalog, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let catalog = server_directory::Directory::new()?
+        .catalog(authorization.directory_bearer()?)
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(catalog)
+}
+
+#[tauri::command]
+async fn set_default_organization<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    organization_id: Option<String>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    server_directory::Directory::new()?
+        .set_default_organization(
+            authorization.directory_bearer()?,
+            organization_id.as_deref(),
+        )
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1730,8 +1786,21 @@ async fn connect_workspace(
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
     id: String,
+    link: Option<server_link::WorkspaceLink>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    let intent = state.restore_intent.load(Ordering::SeqCst);
+    if let Some(link) = &link {
+        if state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .as_ref()
+            != Some(link)
+        {
+            return Err("This workspace link is no longer active.".into());
+        }
+    }
     let authorization = state
         .accounts
         .authorization(&server_directory::origin())
@@ -1751,6 +1820,18 @@ async fn connect_workspace(
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
     server::probe_server(&target).await?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Err("This connection is no longer active.".into());
+    }
+    if let Some(link) = &link {
+        let selected = workspace.target.as_ref().ok_or("Workspace unavailable.")?;
+        if link.organization_id != selected.organization_id
+            || link.server_id != selected.server_id
+            || link.workspace_id != selected.workspace_id
+        {
+            return Err("Workspace unavailable.".into());
+        }
+    }
     open_server(
         &window,
         &app,
@@ -1763,7 +1844,17 @@ async fn connect_workspace(
         },
         &authorization,
     )
-    .await
+    .await?;
+    if state.restore_intent.load(Ordering::SeqCst) == intent {
+        let mut pending = state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        if link.is_none() || pending.as_ref() == link.as_ref() {
+            *pending = None;
+        }
+    }
+    Ok(())
 }
 
 async fn connect_directory_server(
@@ -1817,6 +1908,8 @@ struct SetupState {
     mode: settings::InstanceMode,
     startup: Startup,
     pending_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pending_workspace: Option<server_link::WorkspaceLink>,
     #[serde(skip_serializing_if = "Option::is_none")]
     initializing_server: Option<String>,
 }
@@ -1889,6 +1982,11 @@ fn setup_state<R: tauri::Runtime>(
             .map_err(|_| "Desktop state unavailable.")?
             .as_ref()
             .map(|initialization| initialization.origin.clone()),
+        pending_workspace: state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .clone(),
         pending_server: state
             .pending_server
             .lock()
@@ -2270,6 +2368,17 @@ async fn open_server(
             "Could not show that server or restore the previous choice.".into()
         });
     }
+    if let Some(workspace) = &choice.workspace {
+        if server_directory::remember_workspace(
+            &state.directory,
+            authorization.account.identity(),
+            workspace,
+        )
+        .is_err()
+        {
+            eprintln!("Could not save the workspace preference.");
+        }
+    }
     *state
         .setup
         .lock()
@@ -2328,6 +2437,23 @@ fn clear_server_link<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn clear_workspace_link<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    target: server_link::WorkspaceLink,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let mut pending = state
+        .pending_workspace
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if pending.as_ref() == Some(&target) {
+        *pending = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_setup(&window)?;
     app.exit(0);
@@ -2335,6 +2461,28 @@ fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String
 }
 
 fn receive_server_link(app: &tauri::AppHandle, input: &str) {
+    if let Some(workspace) = server_link::parse_workspace(input) {
+        let Some(state) = app.try_state::<DesktopState>() else {
+            return;
+        };
+        cancel_server_pairings(&state);
+        cancel_restore(&state);
+        if let Ok(mut pending) = state.pending_workspace.lock() {
+            *pending = Some(workspace.clone());
+        }
+        if let Ok(mut pending) = state.pending_server.lock() {
+            *pending = None;
+        }
+        if let Ok(mut pending) = state.initialization.lock() {
+            *pending = None;
+        }
+        update_startup(app, Startup::idle());
+        if let Ok(window) = setup_window(app, true) {
+            let _ = window.emit("desktop-workspace-link", workspace);
+        }
+        return;
+    }
+
     let initialization = server_link::parse_initialization(input);
     let initializing = initialization.is_some();
     let Some(origin) = server_link::parse(input).or_else(|| {
@@ -2349,6 +2497,9 @@ fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     };
     cancel_server_pairings(&state);
     cancel_restore(&state);
+    if let Ok(mut pending) = state.pending_workspace.lock() {
+        *pending = None;
+    }
     if let Ok(mut pending) = state.initialization.lock() {
         *pending = initialization;
     }
@@ -2680,10 +2831,7 @@ fn focus_active<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     // The warm-window reaper checks this generation under the same active-window lock.
     state.warm_generation.fetch_add(1, Ordering::Relaxed);
     drop(active);
-    if show_only_window(&window).is_err() {
-        return false;
-    }
-    true
+    show_only_window(&window).is_ok()
 }
 
 fn saved_server<'a>(
@@ -2746,7 +2894,12 @@ fn cancel_restore(state: &DesktopState) {
 }
 
 fn begin_restore(state: &DesktopState) -> Option<u64> {
-    if !state.accounts_have_started()
+    if state
+        .pending_workspace
+        .lock()
+        .ok()
+        .is_some_and(|pending| pending.is_some())
+        || !state.accounts_have_started()
         || !state.setup_ready.load(Ordering::SeqCst)
         || state
             .pending_server
@@ -2804,20 +2957,52 @@ async fn restore_saved_server(
     }
     let device = server_directory::device_id(&state.directory)?;
     let directory = server_directory::Directory::new()?;
+    let catalog = directory.catalog(authorization.directory_bearer()?).await?;
+    require_account(&state, &authorization)?;
+    if catalog.has_organizations() {
+        let Some(workspace) =
+            catalog.initial_workspace(&state.directory, authorization.account.identity())?
+        else {
+            return Ok(false);
+        };
+        if state.restore_intent.load(Ordering::SeqCst) != intent {
+            return Ok(false);
+        }
+        let target = server::normalize_server_url(&workspace.url)?;
+        server::probe_server(&target).await?;
+        require_account(&state, &authorization)?;
+        update_startup(
+            app,
+            Startup {
+                phase: "opening",
+                server_id: Some(workspace.id.clone()),
+                kind: None,
+                message: None,
+            },
+        );
+        show_setup(app).map_err(|_| "Could not open server settings.")?;
+        open_server(
+            window,
+            app,
+            &state,
+            settings::Setup {
+                mode: settings::InstanceMode::Existing,
+                server_url: target,
+                account: None,
+                workspace: workspace.target,
+            },
+            &authorization,
+        )
+        .await?;
+        if state.restore_intent.load(Ordering::SeqCst) != intent {
+            retire_server_windows(app, &state);
+            return Ok(false);
+        }
+        return Ok(true);
+    }
     let entries = directory
         .list(authorization.directory_bearer()?, &device)
         .await?;
-    // Do not silently open a personal server when there are company workspaces to choose from.
-    if let Ok(Ok(workspaces)) = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        directory.workspaces(authorization.directory_bearer()?),
-    )
-    .await
-    {
-        if !workspaces.is_empty() {
-            return Ok(false);
-        }
-    }
     require_account(&state, &authorization)?;
     let server = {
         let choice = state
@@ -3070,6 +3255,7 @@ fn main() {
             if !args.iter().any(|argument| {
                 server_link::parse(argument).is_some()
                     || server_link::parse_initialization(argument).is_some()
+                    || server_link::parse_workspace(argument).is_some()
             }) {
                 show_active_or_setup(app);
             }
@@ -3085,6 +3271,8 @@ fn main() {
             setup_accounts_logout,
             list_servers,
             list_workspaces,
+            workspace_catalog,
+            set_default_organization,
             check_workspace,
             set_default_server,
             create_server_installation,
@@ -3103,6 +3291,7 @@ fn main() {
             local_stack_state,
             quit_setup,
             clear_server_link,
+            clear_workspace_link,
             native_command
         ])
         .setup(|app| {
@@ -3164,6 +3353,7 @@ fn main() {
                 pairings: pairing::Pairings::new(credential_store),
                 warm_generation: AtomicU64::new(0),
                 pending_server: Mutex::new(None),
+                pending_workspace: Mutex::new(None),
                 initialization: Mutex::new(None),
                 opening_server: Mutex::new(None),
                 pending_bookmark: Mutex::new(None),
@@ -3298,6 +3488,7 @@ mod tests {
             pairings: pairing::Pairings::default(),
             warm_generation: AtomicU64::new(0),
             pending_server: Mutex::new(None),
+            pending_workspace: Mutex::new(None),
             initialization: Mutex::new(None),
             opening_server: Mutex::new(None),
             pending_bookmark: Mutex::new(None),
@@ -3866,6 +4057,9 @@ mod tests {
                 setup_accounts_session,
                 list_servers,
                 list_workspaces,
+                workspace_catalog,
+                set_default_organization,
+                clear_workspace_link,
                 check_workspace,
                 set_default_server,
                 create_server_installation,
@@ -3913,6 +4107,12 @@ mod tests {
                 tauri::ipc::InvokeBody::Json(
                     serde_json::json!({"requestId": "fixture-request", "origin": "https://server.example.test", "rawUrl": "https://server.example.test"}),
                 )
+            } else if command == "set_default_organization" {
+                tauri::ipc::InvokeBody::Json(serde_json::json!({ "organizationId": null }))
+            } else if command == "clear_workspace_link" {
+                tauri::ipc::InvokeBody::Json(
+                    serde_json::json!({ "target": { "organizationId": "00000000-0000-4000-8000-000000000001", "serverId": "00000000-0000-4000-8000-000000000001", "workspaceId": "00000000-0000-4000-8000-000000000001" } }),
+                )
             } else {
                 tauri::ipc::InvokeBody::default()
             },
@@ -3951,6 +4151,25 @@ mod tests {
                 serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
             ),
         );
+        for command in ["workspace_catalog", "set_default_organization"] {
+            let error = tauri::test::get_ipc_response(&setup, request(command, local)).unwrap_err();
+            assert!(
+                [
+                    serde_json::json!("Sign in to Accounts first."),
+                    serde_json::json!("Set ORK_ACCOUNTS_ISSUER before building the desktop app."),
+                    serde_json::json!(
+                        "Set ORK_ACCOUNTS_DESKTOP_CLIENT_ID before building the desktop app."
+                    ),
+                ]
+                .contains(&error),
+                "{error}"
+            );
+        }
+        tauri::test::assert_ipc_response(
+            &setup,
+            request("clear_workspace_link", local),
+            Ok(serde_json::Value::Null),
+        );
         for (window, origin) in [
             (&setup, "https://orkbot.example.com"),
             (&other, local),
@@ -3960,6 +4179,9 @@ mod tests {
                 "setup_accounts_session",
                 "list_servers",
                 "list_workspaces",
+                "workspace_catalog",
+                "set_default_organization",
+                "clear_workspace_link",
                 "check_workspace",
                 "connect_workspace",
                 "set_default_server",

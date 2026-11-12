@@ -2,17 +2,34 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { createAvatar } from "@orkbot/avatar";
-import type { ServerPairing, ServerPairingState } from "@orkbot/contracts";
+import type {
+  IdentityCatalog,
+  ServerPairing,
+  ServerPairingState,
+  WorkspaceTarget,
+} from "@orkbot/contracts";
 import {
+  catalogWorkspace,
   createServerConnectLink,
+  identityCatalogSchema,
+  initialCatalogOrganization,
   parseServerConnectLink,
   SERVER_INSTALL_COMMAND,
   SERVER_PAIRING_ALPHABET,
   SERVER_PAIRING_LIFETIME_SECONDS,
+  WorkspaceTargetSchema,
 } from "@orkbot/contracts";
 import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
 import { createPersonalOrkId, isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { PL_MESSAGES } from "./locales/pl.js";
+import { renderWorkspacePicker } from "./workspace-picker.js";
+
+type WorkspaceLink = Pick<WorkspaceTarget, "organizationId" | "serverId" | "workspaceId">;
+const workspaceLinkSchema = WorkspaceTargetSchema.pick({
+  organizationId: true,
+  serverId: true,
+  workspaceId: true,
+});
 
 type Account = { userinfo: { name?: string; email?: string; ork_avatar?: string } };
 type Server = { id: string; url: string; kind: "local" | "selfhosted"; isDefault?: boolean };
@@ -63,7 +80,9 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   const steps = [...doc.querySelectorAll<HTMLElement>("[data-step]")];
   const phases = [...doc.querySelectorAll<HTMLElement>("[data-phase]")];
   let account: Account | null = null;
+  let accountEpoch = 0;
   let pendingServer: string | null = null;
+  let pendingWorkspace: WorkspaceLink | null = null;
   let pendingInitialization = false;
   let pairingRequest: string | null = null;
   let pairing: ServerPairing | null = null;
@@ -84,8 +103,10 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     local: boolean;
     command: "connect_saved_server" | "connect_workspace";
   } | null = null;
-  let workspaceCount: number | null = null;
+  let organizationCount: number | null = null;
   let workspaceSnapshot = "";
+  let workspaceCatalog: IdentityCatalog | null = null;
+  let selectedOrganizationId: string | null | undefined;
   let workspaceProbeGeneration = 0;
   let directoryOwner: Account | null = null;
   let directoryPolling = false;
@@ -137,7 +158,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
 
   function controls() {
     for (const button of doc.querySelectorAll<HTMLButtonElement>("button")) {
-      button.disabled = operation !== null;
+      button.disabled = operation !== null || button.dataset.unavailable === "true";
     }
     element<HTMLButtonElement>("quit").disabled = false;
     element<HTMLButtonElement>("sign-out").disabled = operation === "logout";
@@ -157,6 +178,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element("retry-local").hidden =
       screen !== "local" || operation !== null || startup.phase === "opening";
     element("retry-server").hidden = screen !== "servers" || !failedServer;
+    for (const select of doc.querySelectorAll<HTMLSelectElement>("[data-directory-control]"))
+      select.disabled = operation !== null;
     input.disabled = operation !== null;
     element("setup").hidden = !pendingInitialization;
     element("installation").hidden = pendingInitialization || !!pairingRequest;
@@ -224,6 +247,42 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     }
   }
 
+  function receivePendingWorkspace(value: unknown) {
+    const parsed = workspaceLinkSchema.safeParse(value);
+    if (!parsed.success || disposed) return;
+    pendingWorkspace = parsed.data;
+    failedServer = null;
+    pendingServer = null;
+    pendingInitialization = false;
+    startup = { phase: "idle" };
+    if (account) {
+      generation++;
+      operation = null;
+      void run("directory", (version) => openPendingWorkspace(version), "servers");
+    }
+  }
+
+  async function clearPendingWorkspace() {
+    const pending = pendingWorkspace;
+    if (!pending) return;
+    pendingWorkspace = null;
+    await transport.invoke("clear_workspace_link", { target: pending });
+  }
+
+  async function openPendingWorkspace(version: number) {
+    const pending = pendingWorkspace;
+    const owner = account;
+    if (!pending || !owner) return;
+    selectedOrganizationId = pending.organizationId;
+    await loadServers(version);
+    if (!current(version) || account !== owner || pendingWorkspace !== pending) return;
+    const choice = workspaceCatalog && catalogWorkspace(workspaceCatalog, pending);
+    if (!choice?.server.routes.some((route) => route.kind === "direct" && route.deviceId === null))
+      throw "Workspace unavailable";
+    await openServer(version, "connect_workspace", { id: pending.workspaceId, link: pending });
+    if (current(version) && pendingWorkspace === pending) pendingWorkspace = null;
+  }
+
   function receivePendingServer(value: unknown) {
     const payload =
       typeof value === "object" && value !== null
@@ -234,6 +293,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       const origin = parseServerConnectLink(createServerConnectLink(payload.origin));
       if (!origin) return;
       clearPairing();
+      pendingWorkspace = null;
       pendingServer = origin;
       pendingInitialization = payload.initialize === true;
       if (account && !operation) showPendingServer();
@@ -326,58 +386,31 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   async function loadWorkspaces(version: number, owner: Account | null, refreshStatus = false) {
     let timeout: number | undefined;
     try {
-      const entries = await Promise.race([
-        transport.invoke<Workspace[]>("list_workspaces"),
+      const raw = await Promise.race([
+        transport.invoke<IdentityCatalog>("workspace_catalog"),
         new Promise<never>((_, reject) => {
           timeout = win?.setTimeout(() => reject(new Error("Workspace directory timed out")), 4000);
         }),
       ]);
       if (!current(version) || account !== owner) return;
-      const valid = Array.isArray(entries) ? entries : [];
-      workspaceCount = valid.length;
+      const catalog = identityCatalogSchema.parse(raw);
+      workspaceCatalog = catalog;
+      if (selectedOrganizationId === undefined)
+        selectedOrganizationId = initialCatalogOrganization(catalog)?.id ?? null;
+      organizationCount = catalog.organizations.length;
       element("workspaces-error").hidden = true;
-      element("workspaces-section").hidden = valid.length === 0;
-      const snapshot = JSON.stringify(valid);
+      element("workspaces-section").hidden = catalog.organizations.length === 0;
+      const snapshot = JSON.stringify([catalog, selectedOrganizationId]);
       if (snapshot === workspaceSnapshot) {
-        if (refreshStatus) checkWorkspaces(valid, version, owner, snapshot);
+        if (refreshStatus) renderWorkspaces(version, owner);
         return;
       }
       workspaceSnapshot = snapshot;
-      workspaces.replaceChildren();
-      for (const entry of valid) {
-        const button = doc.createElement("button");
-        button.type = "button";
-        button.className = "choice workspace-choice";
-        const icon = doc.createElement("span");
-        icon.className = "workspace-icon";
-        icon.setAttribute("aria-hidden", "true");
-        icon.textContent = entry.name.trim().charAt(0).toUpperCase();
-        const text = doc.createElement("span");
-        const name = doc.createElement("strong");
-        name.textContent = entry.name;
-        const meta = doc.createElement("span");
-        meta.className = "workspace-meta";
-        const label = doc.createElement("small");
-        label.textContent = t("Team workspace");
-        const availability = doc.createElement("small");
-        availability.className = "workspace-availability";
-        availability.dataset.workspaceId = entry.id;
-        setWorkspaceStatus(availability, "checking");
-        const arrow = doc.createElement("span");
-        arrow.setAttribute("aria-hidden", "true");
-        arrow.textContent = "→";
-        meta.append(label, availability);
-        text.append(name, meta);
-        button.append(icon, text, arrow);
-        button.addEventListener("click", () => void connect("connect_workspace", { id: entry.id }));
-        workspaces.append(button);
-      }
-      controls();
-      checkWorkspaces(valid, version, owner, snapshot);
+      renderWorkspaces(version, owner);
     } catch {
       if (!current(version) || account !== owner) return;
       workspaceProbeGeneration++;
-      workspaceCount = null;
+      organizationCount = null;
       workspaceSnapshot = "";
       workspaces.replaceChildren();
       element("workspaces-section").hidden = true;
@@ -385,6 +418,47 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     } finally {
       win?.clearTimeout(timeout);
     }
+  }
+
+  function renderWorkspaces(version: number, owner: Account | null) {
+    if (!workspaceCatalog || !current(version) || account !== owner) return;
+    const epoch = accountEpoch;
+    const snapshot = workspaceSnapshot;
+    const active = () =>
+      !disposed && accountEpoch === epoch && account === owner && workspaceSnapshot === snapshot;
+    const valid = renderWorkspacePicker({
+      document: doc,
+      container: workspaces,
+      catalog: workspaceCatalog,
+      organizationId: selectedOrganizationId ?? null,
+      t,
+      chooseOrganization: (id) => {
+        if (!active()) return;
+        void clearPendingWorkspace().catch((error) => {
+          if (accountEpoch === epoch && account === owner && !disposed) errorMessage(error);
+        });
+        failedServer = null;
+        selectedOrganizationId = id;
+        workspaceSnapshot = JSON.stringify([workspaceCatalog, id]);
+        renderWorkspaces(generation, owner);
+      },
+      setDefaultOrganization: (organizationId) => {
+        if (!active()) return;
+        void run(
+          "directory",
+          async (next) => {
+            await transport.invoke("set_default_organization", { organizationId });
+            if (current(next) && account === owner) await loadWorkspaces(next, owner);
+          },
+          "servers",
+        );
+      },
+      open: (id) => {
+        if (active()) void connect("connect_workspace", { id });
+      },
+    });
+    controls();
+    checkWorkspaces(valid, version, owner, workspaceSnapshot);
   }
 
   function setWorkspaceStatus(
@@ -791,6 +865,11 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
   async function continueAccount(version: number, value: Account) {
     if (!current(version)) return;
     account = value;
+    accountEpoch++;
+    if (pendingWorkspace) {
+      await openPendingWorkspace(version);
+      return;
+    }
     renderOrk(value.userinfo.ork_avatar ?? welcomeOrk);
     if (pendingServer) {
       showPendingServer();
@@ -808,7 +887,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       return;
     }
     const selected =
-      workspaceCount === 0
+      organizationCount === 0
         ? (entries.find((entry) => entry.isDefault) ??
           (entries.length === 1 ? entries[0] : undefined))
         : undefined;
@@ -912,6 +991,8 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     discardPendingServer();
     generation++;
     account = null;
+    accountEpoch++;
+    pendingWorkspace = null;
     failedServer = null;
     startup = { phase: "idle" };
     renderOrk(welcomeOrk);
@@ -921,7 +1002,9 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     element("account").textContent = "";
     servers.replaceChildren();
     workspaces.replaceChildren();
-    workspaceCount = null;
+    organizationCount = null;
+    workspaceCatalog = null;
+    selectedOrganizationId = undefined;
     workspaceSnapshot = "";
     workspaceProbeGeneration++;
     element("workspaces-section").hidden = true;
@@ -1067,9 +1150,19 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         return;
       }
       cleanups.push(stopLinks);
+      const stopWorkspaceLinks = await transport.listen<WorkspaceLink>(
+        "desktop-workspace-link",
+        ({ payload }) => receivePendingWorkspace(payload),
+      );
+      if (!current(version)) {
+        stopWorkspaceLinks();
+        return;
+      }
+      cleanups.push(stopWorkspaceLinks);
       const state = await transport.invoke<{
         startup?: Startup;
         pendingServer?: string;
+        pendingWorkspace?: WorkspaceLink;
         initializingServer?: string;
       } | null>("setup_state");
       if (!current(version)) return;
@@ -1077,6 +1170,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
         origin: state?.pendingServer,
         initialize: state?.initializingServer === state?.pendingServer,
       });
+      if (state?.pendingWorkspace) receivePendingWorkspace(state.pendingWorkspace);
       startup = state?.startup ?? { phase: "idle" };
       // Restoring a verified session never opens browser sign-in. New users continue explicitly.
       const restored = await transport.invoke<Account | null>("setup_accounts_session");

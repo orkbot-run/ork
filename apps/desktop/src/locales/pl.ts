@@ -4,6 +4,19 @@
 // Preserves the inherited Polish catalog and adds the progressive Ork welcome.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Workspace unavailable": "Workspace niedostępny",
+  "Workspace unavailable.": "Workspace niedostępny.",
+  "Server unavailable. Try again or choose a workspace.":
+    "Serwer niedostępny. Spróbuj ponownie lub wybierz workspace.",
+  "This workspace link is no longer active.": "Ten link do workspace'u nie jest już aktywny.",
+  Organization: "Organizacja",
+  "Choose organization": "Wybierz organizację",
+  "Organization unavailable": "Organizacja niedostępna",
+  "No servers connected": "Brak podłączonych serwerów",
+  "Set as default organization": "Ustaw jako domyślną organizację",
+  "Preparing workspace": "Przygotowywanie workspace'u",
+  "Access required": "Wymagany dostęp",
+  "Server unavailable": "Serwer niedostępny",
   "Update Ork to connect to this server.": "Zaktualizuj Ork, aby połączyć się z tym serwerem.",
   // Menus
   "About {name}": "O {name}",

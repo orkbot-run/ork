@@ -3,6 +3,50 @@
 
 use url::Url;
 
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceLink {
+    pub organization_id: String,
+    pub server_id: String,
+    pub workspace_id: String,
+}
+
+pub fn parse_workspace(input: &str) -> Option<WorkspaceLink> {
+    if input.len() > 512 || input.trim() != input || input.chars().any(char::is_control) {
+        return None;
+    }
+    let link = Url::parse(input).ok()?;
+    if link.scheme() != "orkbot"
+        || link.host_str() != Some("workspace")
+        || !link.username().is_empty()
+        || link.password().is_some()
+        || link.port().is_some()
+        || !link.path().is_empty()
+        || link.fragment().is_some()
+    {
+        return None;
+    }
+    let mut organization = None;
+    let mut server = None;
+    let mut workspace = None;
+    for (name, value) in link.query_pairs() {
+        if !crate::server_directory::uuid(&value) {
+            return None;
+        }
+        match name.as_ref() {
+            "organization" if organization.is_none() => organization = Some(value.into_owned()),
+            "server" if server.is_none() => server = Some(value.into_owned()),
+            "workspace" if workspace.is_none() => workspace = Some(value.into_owned()),
+            _ => return None,
+        }
+    }
+    Some(WorkspaceLink {
+        organization_id: organization?,
+        server_id: server?,
+        workspace_id: workspace?,
+    })
+}
+
 /// A connect link proposes an origin. It carries no authentication authority.
 pub fn parse(input: &str) -> Option<String> {
     if input.len() > 4096 || input.trim() != input || input.chars().any(char::is_control) {
@@ -109,6 +153,31 @@ pub struct Bookmark {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn workspace_links_contain_only_three_resource_identifiers() {
+        let id = "00000000-0000-4000-8000-000000000001";
+        let link = format!("orkbot://workspace?organization={id}&server={id}&workspace={id}");
+        assert_eq!(
+            parse_workspace(&link),
+            Some(WorkspaceLink {
+                organization_id: id.into(),
+                server_id: id.into(),
+                workspace_id: id.into()
+            })
+        );
+        for invalid in [
+            format!("{link}&server={id}"),
+            format!("{link}&grant=secret"),
+            format!("{link}#fragment"),
+            link.replace("workspace=", "workspace=bad"),
+            link.replace("//workspace?", "//workspace/?"),
+            format!(" {link}"),
+            link.replace("orkbot:", "https:"),
+        ] {
+            assert!(parse_workspace(&invalid).is_none(), "{invalid}");
+        }
+    }
 
     fn initialization_link(origin: &str, secret: &str) -> String {
         let mut url = Url::parse("orkbot://initialize").unwrap();

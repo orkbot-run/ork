@@ -95,15 +95,15 @@ impl Workspace {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[serde(rename_all = "camelCase")]
-struct WorkspaceCatalog {
+pub struct WorkspaceCatalog {
     version: u64,
     default_organization_id: Option<String>,
     organizations: Vec<CatalogOrganization>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct CatalogOrganization {
     id: String,
@@ -113,7 +113,7 @@ struct CatalogOrganization {
     role: String,
     servers: Vec<CatalogServer>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CatalogServer {
     id: String,
@@ -124,7 +124,7 @@ struct CatalogServer {
     routes: Vec<CatalogRoute>,
     workspaces: Vec<CatalogWorkspace>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CatalogRoute {
     id: String,
@@ -132,7 +132,7 @@ struct CatalogRoute {
     address: String,
     device_id: Option<String>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CatalogWorkspace {
     id: String,
@@ -143,6 +143,78 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
+    pub fn has_organizations(&self) -> bool {
+        !self.organizations.is_empty()
+    }
+
+    pub fn discovery_servers(&self) -> Result<Vec<Server>, String> {
+        let mut seen = std::collections::HashSet::new();
+        Ok(self
+            .clone()
+            .workspaces()?
+            .into_iter()
+            .filter_map(|workspace| {
+                let target = workspace.target?;
+                seen.insert(target.server_id.clone()).then_some(Server {
+                    id: target.server_id,
+                    url: workspace.url,
+                    kind: Kind::Selfhosted,
+                    device_id: None,
+                })
+            })
+            .collect())
+    }
+
+    pub fn initial_workspace(
+        &self,
+        directory: &Path,
+        identity: (&str, &str),
+    ) -> Result<Option<Workspace>, String> {
+        let organization = self
+            .organizations
+            .iter()
+            .find(|row| Some(&row.id) == self.default_organization_id.as_ref())
+            .or_else(|| (self.organizations.len() == 1).then(|| &self.organizations[0]));
+        let Some(organization) = organization else {
+            return Ok(None);
+        };
+        let previous = workspace_history(directory, identity, &organization.id)?;
+        let choices: Vec<_> = organization
+            .servers
+            .iter()
+            .flat_map(|server| {
+                server
+                    .workspaces
+                    .iter()
+                    .filter(|workspace| workspace.can_open)
+                    .map(move |workspace| (server, workspace))
+            })
+            .collect();
+        let choice = choices
+            .iter()
+            .find(|(server, workspace)| {
+                previous.as_ref().is_some_and(|prior| {
+                    prior.server_id == server.id && prior.workspace_id == workspace.id
+                })
+            })
+            .or_else(|| (choices.len() == 1).then(|| &choices[0]));
+        let Some((server, workspace)) = choice else {
+            return Ok(None);
+        };
+        self.clone()
+            .workspaces()?
+            .into_iter()
+            .find(|row| {
+                row.id == workspace.id
+                    && row
+                        .target
+                        .as_ref()
+                        .is_some_and(|target| target.server_id == server.id)
+            })
+            .map(Some)
+            .ok_or_else(|| "Server unavailable. Try again or choose a workspace.".into())
+    }
+
     fn workspaces(self) -> Result<Vec<Workspace>, String> {
         if self.version != 2
             || self
@@ -227,19 +299,22 @@ fn preference_path(directory: &Path, identity: (&str, &str)) -> std::path::PathB
 }
 
 /// Default choices belong to an Accounts identity on this device; they contain no credentials.
-pub fn preference(directory: &Path, identity: (&str, &str)) -> Result<Option<Preference>, String> {
+fn local_choice<T: DeserializeOwned>(
+    directory: &Path,
+    path: &Path,
+    max_bytes: u64,
+) -> Result<Option<T>, String> {
     match fs::symlink_metadata(directory) {
         Ok(metadata) if metadata.is_dir() && !reparse_point(&metadata) => {}
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         _ => return Err(ERROR.into()),
     }
-    let path = preference_path(directory, identity);
-    let metadata = match fs::symlink_metadata(&path) {
+    let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         _ => return Err(ERROR.into()),
     };
-    if !metadata.is_file() || reparse_point(&metadata) || metadata.len() > 256 {
+    if !metadata.is_file() || reparse_point(&metadata) || metadata.len() > max_bytes {
         return Err(ERROR.into());
     }
     let mut options = fs::OpenOptions::new();
@@ -256,21 +331,83 @@ pub fn preference(directory: &Path, identity: (&str, &str)) -> Result<Option<Pre
     }
     let file = options.open(path).map_err(|_| ERROR)?;
     let after = file.metadata().map_err(|_| ERROR)?;
-    if !after.is_file() || reparse_point(&after) || after.len() > 256 {
+    if !after.is_file() || reparse_point(&after) || after.len() > max_bytes {
         return Err(ERROR.into());
     }
     let mut contents = Vec::new();
-    file.take(257)
+    file.take(max_bytes + 1)
         .read_to_end(&mut contents)
         .map_err(|_| ERROR)?;
-    if contents.len() > 256 {
+    if contents.len() as u64 > max_bytes {
         return Err(ERROR.into());
     }
-    let preference: Preference = serde_json::from_slice(&contents).map_err(|_| ERROR)?;
+    serde_json::from_slice(&contents)
+        .map(Some)
+        .map_err(|_| ERROR.into())
+}
+
+pub fn preference(directory: &Path, identity: (&str, &str)) -> Result<Option<Preference>, String> {
+    let Some(preference) =
+        local_choice::<Preference>(directory, &preference_path(directory, identity), 256)?
+    else {
+        return Ok(None);
+    };
     if preference.server_id.as_deref().is_some_and(|id| !uuid(id)) {
         return Err(ERROR.into());
     }
     Ok(Some(preference))
+}
+
+fn workspace_history_path(
+    directory: &Path,
+    identity: (&str, &str),
+    organization_id: &str,
+) -> std::path::PathBuf {
+    directory.join(format!(
+        "workspace-history-{}-{organization_id}.json",
+        crate::settings::account_key(identity)
+    ))
+}
+
+pub fn workspace_history(
+    directory: &Path,
+    identity: (&str, &str),
+    organization_id: &str,
+) -> Result<Option<WorkspaceTarget>, String> {
+    if !uuid(organization_id) {
+        return Err(ERROR.into());
+    }
+    let target = local_choice::<WorkspaceTarget>(
+        directory,
+        &workspace_history_path(directory, identity, organization_id),
+        1024,
+    )?;
+    if let Some(target) = &target {
+        target.validate()?;
+        if target.organization_id != organization_id {
+            return Err(ERROR.into());
+        }
+    }
+    Ok(target)
+}
+
+pub fn remember_workspace(
+    directory: &Path,
+    identity: (&str, &str),
+    target: &WorkspaceTarget,
+) -> Result<(), String> {
+    target.validate()?;
+    device_id(directory)?;
+    let mut file = tempfile::NamedTempFile::new_in(directory).map_err(|_| ERROR)?;
+    serde_json::to_writer(&mut file, target).map_err(|_| ERROR)?;
+    file.as_file().sync_all().map_err(|_| ERROR)?;
+    file.persist(workspace_history_path(
+        directory,
+        identity,
+        &target.organization_id,
+    ))
+    .map_err(|_| ERROR)?;
+    Ok(())
 }
 
 pub fn save_preference(
@@ -492,14 +629,47 @@ impl Directory {
         Ok(list.servers)
     }
 
-    pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
+    pub async fn catalog(&self, token: &str) -> Result<WorkspaceCatalog, String> {
         let endpoint = self
             .endpoint
             .join("/api/identity/v2/catalog")
             .map_err(|_| ERROR)?;
         let catalog: WorkspaceCatalog =
             json(self.send(Method::GET, endpoint, token, None).await?).await?;
-        catalog.workspaces()
+        catalog.clone().workspaces()?;
+        Ok(catalog)
+    }
+
+    pub async fn set_default_organization(
+        &self,
+        token: &str,
+        organization_id: Option<&str>,
+    ) -> Result<(), String> {
+        if organization_id.is_some_and(|id| !uuid(id)) {
+            return Err(ERROR.into());
+        }
+        let endpoint = self
+            .endpoint
+            .join("/api/organizations/preferences")
+            .map_err(|_| ERROR)?;
+        let value: serde_json::Value = json(
+            self.send(
+                Method::PATCH,
+                endpoint,
+                token,
+                Some(serde_json::json!({ "defaultOrganizationId": organization_id })),
+            )
+            .await?,
+        )
+        .await?;
+        if value.get("defaultOrganizationId") != Some(&serde_json::json!(organization_id)) {
+            return Err(ERROR.into());
+        }
+        Ok(())
+    }
+
+    pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
+        self.catalog(token).await?.workspaces()
     }
 
     pub async fn create_installation(&self, token: &str) -> Result<InstallationCommand, String> {
@@ -591,7 +761,7 @@ async fn json<T: DeserializeOwned>(mut response: Response) -> Result<T, String> 
     serde_json::from_slice(&body).map_err(|_| ERROR.into())
 }
 
-fn uuid(value: &str) -> bool {
+pub(crate) fn uuid(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, byte)| {
             if matches!(index, 8 | 13 | 18 | 23) {
@@ -1026,6 +1196,195 @@ mod tests {
                 .is_err());
             wire.await.unwrap();
         }
+    }
+
+    #[test]
+    fn workspace_history_is_account_device_and_organization_scoped() {
+        let directory = tempfile::tempdir().unwrap();
+        let other_device = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "user-a");
+        let target = WorkspaceTarget {
+            organization_id: DEVICE.into(),
+            server_id: DEVICE.into(),
+            workspace_id: DEVICE.into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        remember_workspace(directory.path(), identity, &target).unwrap();
+        assert_eq!(
+            workspace_history(directory.path(), identity, DEVICE).unwrap(),
+            Some(target.clone())
+        );
+        assert!(
+            workspace_history(directory.path(), (identity.0, "user-b"), DEVICE)
+                .unwrap()
+                .is_none()
+        );
+        assert!(workspace_history(other_device.path(), identity, DEVICE)
+            .unwrap()
+            .is_none());
+        assert!(workspace_history(
+            directory.path(),
+            identity,
+            "00000000-0000-4000-8000-000000000002"
+        )
+        .unwrap()
+        .is_none());
+        assert!(workspace_history(directory.path(), identity, "../outside").is_err());
+        let path = workspace_history_path(directory.path(), identity, DEVICE);
+        assert!(!path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("user-a"));
+        fs::write(path, " ".repeat(1025)).unwrap();
+        assert!(workspace_history(directory.path(), identity, DEVICE).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_history_rejects_links_and_writes_without_following_them() {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir().unwrap();
+        let outside = tempfile::NamedTempFile::new().unwrap();
+        fs::write(outside.path(), "unchanged").unwrap();
+        let identity = ("https://accounts.example.test", "user-a");
+        let path = workspace_history_path(directory.path(), identity, DEVICE);
+        symlink(outside.path(), &path).unwrap();
+        assert!(workspace_history(directory.path(), identity, DEVICE).is_err());
+        let target = WorkspaceTarget {
+            organization_id: DEVICE.into(),
+            server_id: DEVICE.into(),
+            workspace_id: DEVICE.into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        remember_workspace(directory.path(), identity, &target).unwrap();
+        assert_eq!(fs::read_to_string(outside.path()).unwrap(), "unchanged");
+        assert_eq!(
+            workspace_history(directory.path(), identity, DEVICE).unwrap(),
+            Some(target)
+        );
+    }
+
+    #[test]
+    fn startup_keeps_the_chosen_organization_and_an_unreachable_remembered_workspace() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "user-a");
+        let mut value = workspace_catalog();
+        let other = "00000000-0000-4000-8000-000000000002";
+        value["organizations"].as_array_mut().unwrap().push(serde_json::json!({ "id": other, "name": "Empty", "type": "shared", "role": "admin", "servers": [] }));
+        let decode =
+            |value: serde_json::Value| serde_json::from_value::<WorkspaceCatalog>(value).unwrap();
+        assert!(decode(value.clone())
+            .initial_workspace(directory.path(), identity)
+            .unwrap()
+            .is_none());
+        value["defaultOrganizationId"] = serde_json::json!(other);
+        assert!(decode(value.clone())
+            .initial_workspace(directory.path(), identity)
+            .unwrap()
+            .is_none());
+        value["defaultOrganizationId"] = serde_json::json!(DEVICE);
+        let target = decode(value.clone())
+            .initial_workspace(directory.path(), identity)
+            .unwrap()
+            .unwrap()
+            .target
+            .unwrap();
+        remember_workspace(directory.path(), identity, &target).unwrap();
+        value["organizations"][0]["servers"][0]["routes"] = serde_json::json!([]);
+        assert!(decode(value)
+            .initial_workspace(directory.path(), identity)
+            .is_err());
+    }
+
+    #[test]
+    fn workspace_history_restores_the_last_authorized_choice_within_the_selected_organization() {
+        let directory = tempfile::tempdir().unwrap();
+        let identity = ("https://accounts.example.test", "user-a");
+        let mut value = workspace_catalog();
+        let mut second = value["organizations"][0]["servers"][0]["workspaces"][0].clone();
+        second["id"] = serde_json::json!("00000000-0000-4000-8000-000000000002");
+        value["organizations"][0]["servers"][0]["workspaces"]
+            .as_array_mut()
+            .unwrap()
+            .push(second);
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(catalog
+            .initial_workspace(directory.path(), identity)
+            .unwrap()
+            .is_none());
+        let selected = catalog.clone().workspaces().unwrap().pop().unwrap();
+        remember_workspace(
+            directory.path(),
+            identity,
+            selected.target.as_ref().unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            catalog
+                .initial_workspace(directory.path(), identity)
+                .unwrap()
+                .unwrap()
+                .id,
+            selected.id
+        );
+        assert!(catalog
+            .initial_workspace(directory.path(), (identity.0, "other-account"))
+            .unwrap()
+            .is_none());
+        assert_eq!(catalog.discovery_servers().unwrap().len(), 1);
+        let mut denied = workspace_catalog();
+        denied["organizations"][0]["servers"][0]["workspaces"][0]["canOpen"] =
+            serde_json::json!(false);
+        assert!(serde_json::from_value::<WorkspaceCatalog>(denied)
+            .unwrap()
+            .discovery_servers()
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn organization_preferences_keep_the_account_bearer_native_and_verify_the_saved_value() {
+        let (directory, wire) = response(
+            "200 OK",
+            serde_json::json!({ "defaultOrganizationId": DEVICE }).to_string(),
+            "",
+        )
+        .await;
+        directory
+            .set_default_organization(CENTRAL_BEARER, Some(DEVICE))
+            .await
+            .unwrap();
+        let request = wire.await.unwrap();
+        assert!(request.starts_with("PATCH /api/organizations/preferences HTTP/1.1\r\n"));
+        assert!(request.to_lowercase().contains(&format!(
+            "authorization: bearer {}",
+            CENTRAL_BEARER.to_lowercase()
+        )));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(request.split_once("\r\n\r\n").unwrap().1)
+                .unwrap(),
+            serde_json::json!({ "defaultOrganizationId": DEVICE })
+        );
+        let (directory, wire) = response(
+            "200 OK",
+            serde_json::json!({ "defaultOrganizationId": null }).to_string(),
+            "",
+        )
+        .await;
+        assert!(directory
+            .set_default_organization(CENTRAL_BEARER, Some(DEVICE))
+            .await
+            .is_err());
+        wire.await.unwrap();
+        assert!(Directory::new()
+            .unwrap()
+            .set_default_organization(CENTRAL_BEARER, Some("bad"))
+            .await
+            .is_err());
     }
 
     fn workspace_catalog() -> serde_json::Value {

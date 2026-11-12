@@ -42,11 +42,48 @@ function node<T extends HTMLElement = HTMLButtonElement>(id: string): T {
 function screen() {
   return document.querySelector<HTMLElement>(".shell")?.dataset.screen;
 }
+function catalogFixture(workspaces: { id: string; name: string; url: string }[]) {
+  return {
+    version: 2,
+    defaultOrganizationId: null,
+    organizations: workspaces.length
+      ? [
+          {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            name: "Organization",
+            type: "shared",
+            role: "member",
+            servers: workspaces.map((workspace) => ({
+              id: workspace.id,
+              name: "Server",
+              state: "ready",
+              bindingVersion: 1,
+              keyFingerprint: "a".repeat(64),
+              routes: [
+                { id: workspace.id, kind: "direct", address: workspace.url, deviceId: null },
+              ],
+              workspaces: [
+                {
+                  id: workspace.id,
+                  name: workspace.name,
+                  state: "ready",
+                  canOpen: true,
+                  role: "member",
+                },
+              ],
+            })),
+          },
+        ]
+      : [],
+  };
+}
+
 async function setup(
   options: {
     session?: unknown;
     startup?: unknown;
     pendingServer?: string;
+    pendingWorkspace?: unknown;
     initializingServer?: string;
     invoke?: (command: string, args?: Record<string, unknown>) => Promise<unknown>;
   } = {},
@@ -61,14 +98,18 @@ async function setup(
       return {
         startup: options.startup ?? { phase: "idle" },
         pendingServer: options.pendingServer,
+        pendingWorkspace: options.pendingWorkspace,
         initializingServer: options.initializingServer,
       };
     if (options.invoke) {
       const result = await options.invoke(command, args);
+      if (command === "workspace_catalog")
+        return Array.isArray(result) ? catalogFixture(result) : (result ?? catalogFixture([]));
       if (result !== undefined || command !== "server_initialization_required") return result;
       return true;
     }
     if (command === "setup_accounts_session") return options.session ?? null;
+    if (command === "workspace_catalog") return catalogFixture([]);
     if (command === "list_servers") return saved;
     if (command === "setup_accounts_sign_in") return account;
     if (command === "create_server_pairing") return pairingTicket();
@@ -95,6 +136,8 @@ async function setup(
       listeners.get("desktop-stack-changed")?.({ payload: { phase, message: null, output } }),
     startup: (value: unknown) => listeners.get("desktop-startup-changed")?.({ payload: value }),
     link: (value: unknown) => listeners.get("desktop-server-link")?.({ payload: value }),
+    workspaceLink: (value: unknown) =>
+      listeners.get("desktop-workspace-link")?.({ payload: value }),
     changeServer: () => listeners.get("desktop-change-server")?.({ payload: null }),
   };
 }
@@ -209,7 +252,7 @@ describe("bundled desktop setup", () => {
     expect(invoke.mock.calls.map(([name]) => name)).toEqual([
       "setup_state",
       "setup_accounts_session",
-      "list_workspaces",
+      "workspace_catalog",
       "list_servers",
     ]);
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
@@ -233,10 +276,18 @@ describe("bundled desktop setup", () => {
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [{ ...saved[0], isDefault: true }];
-        if (name === "list_workspaces")
+        if (name === "workspace_catalog")
           return [
-            { id: "workspace-a", name: "Studio", url: "https://studio.example.com" },
-            { id: "workspace-b", name: "Team", url: "https://team.example.com" },
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Studio",
+              url: "https://studio.example.com",
+            },
+            {
+              id: "22222222-2222-4222-8222-222222222222",
+              name: "Team",
+              url: "https://team.example.com",
+            },
           ];
         return undefined;
       },
@@ -245,12 +296,14 @@ describe("bundled desktop setup", () => {
     expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
     expect(node("workspaces-section").hidden).toBe(false);
     expect(node("workspaces").textContent).toContain("Studio");
-    expect(node("workspaces").textContent).toContain("Team workspace");
+    expect(node("workspaces").textContent).toContain("Organization");
     expect(node("local").hidden).toBe(false);
     expect(node("selfhost").hidden).toBe(false);
     node("workspaces").querySelector<HTMLButtonElement>("button")!.click();
     await flush();
-    expect(invoke).toHaveBeenCalledWith("connect_workspace", { id: "workspace-a" });
+    expect(invoke).toHaveBeenCalledWith("connect_workspace", {
+      id: "11111111-1111-4111-8111-111111111111",
+    });
   });
 
   it("discards a personal server link and presents the available workspaces", async () => {
@@ -259,8 +312,14 @@ describe("bundled desktop setup", () => {
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
-        if (name === "list_workspaces")
-          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        if (name === "workspace_catalog")
+          return [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Studio",
+              url: "https://studio.example.com",
+            },
+          ];
         return undefined;
       },
     });
@@ -286,8 +345,14 @@ describe("bundled desktop setup", () => {
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [saved[0]];
-        if (name === "list_workspaces")
-          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        if (name === "workspace_catalog")
+          return [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Studio",
+              url: "https://studio.example.com",
+            },
+          ];
         return undefined;
       },
     });
@@ -307,8 +372,14 @@ describe("bundled desktop setup", () => {
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [];
-        if (name === "list_workspaces")
-          return [{ id: "workspace-a", name: "Studio", url: "https://studio.example.com" }];
+        if (name === "workspace_catalog")
+          return [
+            {
+              id: "11111111-1111-4111-8111-111111111111",
+              name: "Studio",
+              url: "https://studio.example.com",
+            },
+          ];
         if (name === "check_workspace") return online;
         return undefined;
       },
@@ -320,7 +391,9 @@ describe("bundled desktop setup", () => {
     node("refresh").click();
     await flush();
     expect(node("workspaces").textContent).toContain("Online");
-    expect(invoke).toHaveBeenCalledWith("check_workspace", { id: "workspace-a" });
+    expect(invoke).toHaveBeenCalledWith("check_workspace", {
+      id: "11111111-1111-4111-8111-111111111111",
+    });
   });
 
   it("keeps the picker available and reports a workspace directory failure", async () => {
@@ -328,7 +401,7 @@ describe("bundled desktop setup", () => {
       invoke: async (name) => {
         if (name === "setup_accounts_session") return account;
         if (name === "list_servers") return [saved[0]];
-        if (name === "list_workspaces") throw new Error("unavailable");
+        if (name === "workspace_catalog") throw new Error("unavailable");
         return undefined;
       },
     });
@@ -1124,4 +1197,79 @@ it("ignores malformed avatar metadata and never inserts account HTML into artwor
   expect(node("hero").querySelector("svg")).not.toBeNull();
   expect(node("hero").innerHTML).not.toContain("attacker");
   expect(node("hero").querySelector("[onload]")).toBeNull();
+});
+
+describe("explicit workspace links", () => {
+  const target = {
+    organizationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    serverId: "11111111-1111-4111-8111-111111111111",
+    workspaceId: "11111111-1111-4111-8111-111111111111",
+  };
+  const directory = catalogFixture([
+    { id: target.workspaceId, name: "Research", url: "https://server.example.test" },
+  ]);
+  it("opens an available exact target after account restoration", async () => {
+    const { invoke } = await setup({
+      pendingWorkspace: target,
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return directory;
+        if (name === "list_servers") return saved;
+      },
+    });
+    expect(invoke).toHaveBeenCalledWith("connect_workspace", {
+      id: target.workspaceId,
+      link: target,
+    });
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+  it("refuses an unavailable target without opening a different workspace or server", async () => {
+    const { invoke } = await setup({
+      pendingWorkspace: { ...target, workspaceId: "22222222-2222-4222-8222-222222222222" },
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return directory;
+        if (name === "list_servers") return saved.map((row) => ({ ...row, isDefault: true }));
+      },
+    });
+    expect(node("status").textContent).toContain("Workspace unavailable");
+    expect(invoke).not.toHaveBeenCalledWith("connect_workspace", expect.anything());
+    expect(invoke).not.toHaveBeenCalledWith("connect_saved_server", expect.anything());
+  });
+  it("discards a link directory result that arrives after logout", async () => {
+    const waiting = deferred<unknown>();
+    const { invoke } = await setup({
+      pendingWorkspace: target,
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return waiting.promise;
+        if (name === "list_servers") return saved;
+      },
+    });
+    node("sign-out").click();
+    await flush();
+    waiting.resolve(directory);
+    await flush();
+    expect(screen()).toBe("welcome");
+    expect(invoke).not.toHaveBeenCalledWith("connect_workspace", expect.anything());
+  });
+});
+
+it("keeps the workspace chooser usable after saving an organization preference fails", async () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  const { invoke } = await setup({
+    invoke: async (name) => {
+      if (name === "setup_accounts_session") return account;
+      if (name === "list_servers") return [];
+      if (name === "workspace_catalog")
+        return catalogFixture([{ id, name: "Research", url: "https://server.example.test" }]);
+      if (name === "set_default_organization") throw new Error("unavailable");
+    },
+  });
+  node("workspaces").querySelector<HTMLButtonElement>(".link")!.click();
+  await flush();
+  expect(node("status").dataset.error).toBe("true");
+  node("workspaces").querySelector<HTMLButtonElement>(".workspace-choice")!.click();
+  await flush();
+  expect(invoke).toHaveBeenCalledWith("connect_workspace", { id });
 });

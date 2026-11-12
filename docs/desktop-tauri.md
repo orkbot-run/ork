@@ -34,13 +34,14 @@ CI checks and builds Tauri on macOS, Windows and Linux in `desktop-tauri.yml`, w
 
 ## Server and session isolation
 
-The bundled setup page selects **Existing instance** or **This computer**. A server
+The bundled setup page selects an organization and workspace, or starts a local installation with **This computer**. A server
 switch waits for a candidate window to display a usable app before saving the new
 choice and replacing the current window. Failed candidates leave the previous choice
 and window intact.
 
-Windows and Linux use separate WebView data directories for each complete server
-origin, including its port. macOS 14 and later use a stable store per origin. Older
+Windows and Linux use separate WebView data directories for each Accounts identity,
+complete server origin and managed workspace target. macOS 14 and later use the same
+stable scope. Older
 supported macOS versions use incognito WebViews, so WebView cookies are cleared on
 exit or reconnect. The selected address is still saved.
 
@@ -71,6 +72,12 @@ ownership probe protects reuse of the managed project, and its server address st
 on loopback. Host computer access uses the native consent and revocation path backed
 by the existing server-owned computer protocol. See [Desktop app](desktop-app.md) for
 the account controls and permissions.
+
+## Organizations and workspaces
+
+Accounts supplies the version 2 organization, server and workspace catalog. Setup includes organizations without a server and shows workspaces that need provisioning or access. The account's default organization is shared across devices. Each desktop installation keeps its last workspace separately for each account and organization.
+
+A workspace link names the organization, server and workspace IDs. Rust fetches the current catalog before opening that exact target, and login grants stay bound to its installation key and connection version. An unavailable target leaves the chooser open. Late link and directory results are discarded after an account switch.
 
 ## Native capabilities
 

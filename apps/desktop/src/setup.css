@@ -510,3 +510,11 @@ footer {
   border-radius: 50%;
   background: currentColor;
 }
+
+.workspace-list h3 {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
