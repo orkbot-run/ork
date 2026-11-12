@@ -1,6 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+/** Check cancellation on runtimes that do not implement AbortSignal.throwIfAborted. */
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  if (signal.reason !== undefined) throw signal.reason;
+  const error = new Error("Request canceled");
+  error.name = "AbortError";
+  throw error;
+}
+
 /** A deadline belongs to a whole request, including its body and nested recovery calls. */
 export function requestSignal(parent?: AbortSignal, timeoutMs?: number | null) {
   if (timeoutMs != null && (!Number.isFinite(timeoutMs) || timeoutMs < 0))

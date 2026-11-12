@@ -43,6 +43,51 @@ async function collect(events: AsyncIterable<unknown>) {
 }
 
 describe("shared RPC wire transport", () => {
+  it("supports unary and streamed requests without a native signal abort guard", async () => {
+    const controller = new AbortController();
+    Object.defineProperty(controller.signal, "throwIfAborted", { value: undefined });
+    const fetch = vi.fn(
+      async (_url: string, _init: RequestInit, call: { path: readonly string[] }) =>
+        call.path[0] === "events"
+          ? response(['data: {"json":1}\n\ndata: {"json":2}\n\n'])
+          : Response.json({ json: { ok: true } }),
+    );
+    const link = createRpcLink({ url: "https://server.example.test/rpc", fetch });
+    const options = { context: {}, signal: controller.signal };
+    await expect(link.call(["read"], {}, options)).resolves.toEqual({ ok: true });
+    const events = (await link.call(["events"], {}, options)) as AsyncGenerator;
+    expect((await events.next()).value).toBe(1);
+    const reason = new Error("Retired request");
+    controller.abort(reason);
+    await expect(events.next()).rejects.toBe(reason);
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["before", "during"])(
+    "rejects cancellation %s fetching when the signal has no abort reason",
+    async (phase) => {
+      const controller = new AbortController();
+      Object.defineProperties(controller.signal, {
+        throwIfAborted: { value: undefined },
+        reason: { value: undefined },
+      });
+      const started = deferred<void>();
+      const fetch = vi.fn(() => {
+        started.resolve();
+        return new Promise<Response>(() => {});
+      });
+      const link = createRpcLink({ url: "https://server.example.test/rpc", fetch });
+      if (phase === "before") controller.abort();
+      const pending = link.call(["read"], {}, { context: {}, signal: controller.signal });
+      if (phase === "during") {
+        await Promise.race([started.promise, pending.catch(() => undefined)]);
+        controller.abort();
+      }
+      await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+      if (phase === "before") expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
   it("does not cancel a fully consumed unary response", async () => {
     const body = Response.json({ json: { ok: true } });
     const cancel = vi.spyOn(body.body!, "cancel");

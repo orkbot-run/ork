@@ -100,6 +100,32 @@ afterEach(() => {
 });
 
 describe("mobile API authentication", () => {
+  it.each(["bots/list", "aiConsent/status"] as const)(
+    "sends %s without native abort guards on React Native",
+    async (proc) => {
+      const NativeAbortController = AbortController;
+      vi.stubGlobal(
+        "AbortController",
+        class extends NativeAbortController {
+          constructor() {
+            super();
+            Object.defineProperty(this.signal, "throwIfAborted", { value: undefined });
+          }
+        },
+      );
+      const result = { ok: true };
+      const fetch = vi.fn(async (input: unknown) =>
+        String(input).endsWith("/api/auth/capabilities")
+          ? Response.json({ aiConsent: true })
+          : Response.json({ json: result }),
+      );
+      vi.stubGlobal("fetch", fetch);
+
+      await expect(rpc(proc)).resolves.toEqual(result);
+      expect(fetch.mock.calls.some(([input]) => String(input).endsWith(`/rpc/${proc}`))).toBe(true);
+    },
+  );
+
   it("does not send a captured old bearer after the session changes", async () => {
     await saveSessionToken("fake-session-a");
     const context = await captureApiRequestContext();
