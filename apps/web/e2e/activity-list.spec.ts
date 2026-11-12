@@ -300,20 +300,24 @@ test("activity filters keep retry when a refresh fails", async ({ page }, testIn
   await expect(activitySearch).toHaveValue("Chief");
 });
 
-test("activity groups what needs you, what is working, and unread chats", async ({
+test("activity groups attention, working, and recent runs without duplicating unread chats", async ({
   page,
 }, testInfo) => {
   await signup(page, `activity-sections-${Date.now()}@orkbot.test`, "password12", "Sections");
   await completeOnboarding(page);
   const writer = await createNamedBot(page, "Writer");
+  await page.getByPlaceholder("Message Writer").fill("hello from the writer");
+  await page.keyboard.press("Enter");
   await expect
     .poll(async () => {
-      const active = await rpc<{ runs: Array<{ botId: string }> }>(page, "runs/list", {
-        filter: "active",
-      });
-      return active.runs.some((run) => run.botId === writer);
+      const recent = await rpc<{ runs: Array<{ botId: string; status: string }> }>(
+        page,
+        "runs/list",
+        { filter: "recent" },
+      );
+      return recent.runs.some((run) => run.botId === writer && run.status === "completed");
     })
-    .toBe(false);
+    .toBe(true);
   await createNamedBot(page, "Head of Marketing");
   await rpc(page, "threads/markUnread", { botId: writer });
   await page.getByPlaceholder("Message Head of Marketing").fill("ask me which city to use");
@@ -330,6 +334,7 @@ test("activity groups what needs you, what is working, and unread chats", async 
   const aside = page.locator("aside").first();
   const attention = aside.getByRole("region", { name: "Needs attention", exact: true });
   const working = aside.getByRole("region", { name: "Working", exact: true });
+  const recent = aside.getByRole("region", { name: "Recent", exact: true });
   const unread = aside.getByRole("region", { name: "Unread", exact: true });
   await expect(attention.getByRole("button", { name: /^Head of Marketing,/ })).toBeVisible({
     timeout: 20_000,
@@ -338,9 +343,11 @@ test("activity groups what needs you, what is working, and unread chats", async 
   await expect(working.getByRole("button", { name: /^Researcher,/ })).toBeHidden();
   await working.getByRole("button", { name: /^Working/ }).click();
   await expect(working.getByRole("button", { name: /^Researcher,/ })).toBeVisible();
-  await expect(unread.getByRole("button", { name: /^Unread/ })).toBeVisible();
-  await unread.getByRole("button", { name: /^Unread/ }).click();
-  await expect(unread).toContainText("Writer");
+  await expect(recent.getByRole("button", { name: /^Writer,/ })).toBeVisible();
+  await expect(unread).toHaveCount(0);
+  await expect(
+    aside.getByTestId("activity-list").getByRole("button", { name: /^Writer,/ }),
+  ).toHaveCount(1);
   await captureActivitySidebar(page, testInfo, "61b-activity-sections");
 
   await page.reload();
