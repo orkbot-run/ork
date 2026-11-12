@@ -599,6 +599,9 @@ export function Thread({ sessionEpoch, userId }: { sessionEpoch: number; userId:
               failedSendBubbles={failedSendBubbles}
               errorNotice={errorNotice}
               workingFooter={workingFooter}
+              initialLoading={
+                Boolean(threadKey) && snap === null && !error && feedback.unsentSends.length === 0
+              }
               loadingNewer={paging.loadingNewer}
               showLatest={showLatest}
             />

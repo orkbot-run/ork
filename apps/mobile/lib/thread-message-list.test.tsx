@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 list tests are preserved. Loading regressions follow LICENSE.md.
 
 import type { ComponentProps, ReactNode } from "react";
 import { act, createElement } from "react";
@@ -49,6 +52,11 @@ vi.mock("../components/thread/thread-list-controls", () => ({
     createElement("div", { "data-inset-end": String(insetEnd) }),
 }));
 
+vi.mock("../components/thread/thread-messages-skeleton", () => ({
+  ThreadMessagesSkeleton: () =>
+    createElement("div", { role: "progressbar", "aria-label": "Loading…" }),
+}));
+
 vi.mock("./appearance", () => ({
   mobileTokens: () => ({ mutedForeground: "muted" }),
 }));
@@ -96,6 +104,7 @@ function listProps(
     failedSendBubbles: null,
     errorNotice: null,
     workingFooter: null,
+    initialLoading: false,
     loadingNewer: false,
     showLatest: () => undefined,
     ...rest,
@@ -115,6 +124,20 @@ beforeEach(() => {
 
 afterEach(() => {
   container.remove();
+});
+
+it("shows loading placeholders until the conversation is ready without replacing the list", async () => {
+  const root = createRoot(container);
+  await act(async () =>
+    root.render(createElement(ThreadMessageList, listProps({ initialLoading: true }))),
+  );
+  expect(container.querySelector('[role="progressbar"]')).not.toBeNull();
+  expect(container.querySelector('[data-list="flat"]')).not.toBeNull();
+
+  await act(async () => root.render(createElement(ThreadMessageList, listProps())));
+  expect(container.querySelector('[role="progressbar"]')).toBeNull();
+  expect(container.querySelector('[data-list="flat"]')).not.toBeNull();
+  await act(async () => root.unmount());
 });
 
 it("pads message content and leaves the live list frame on the screen edge", async () => {
