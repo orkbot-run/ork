@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Restrictive workspace policy coverage follows LICENSE.md.
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createDb } from "./client.js";
@@ -602,16 +606,29 @@ describePostgres("row-level security (PostgreSQL)", () => {
 
   it("routes every bypass policy through the key check", async () => {
     const policies = await owner.prisma.$queryRaw<
-      Array<{ policyname: string; qual: string; with_check: string | null }>
+      Array<{ policyname: string; permissive: string; qual: string; with_check: string | null }>
     >`
-      SELECT policyname, qual, with_check FROM pg_policies WHERE schemaname = 'public'
+      SELECT policyname, permissive, qual, with_check FROM pg_policies WHERE schemaname = 'public'
         AND (policyname LIKE '%\\_system' OR qual LIKE '%rls\\_%' OR with_check LIKE '%rls\\_%')`;
     expect(policies.length).toBeGreaterThan(50);
-    expect(
-      policies.filter(
-        (p) => p.qual !== "( SELECT app_rls_bypass() AS app_rls_bypass)" || p.with_check !== null,
-      ),
-    ).toEqual([]);
+    const bypass = "( SELECT app_rls_bypass() AS app_rls_bypass)";
+    const restricted = policies.filter((policy) => policy.permissive === "RESTRICTIVE");
+    expect(restricted.length).toBeGreaterThan(0);
+    for (const policy of policies) {
+      if (policy.permissive === "PERMISSIVE") {
+        expect(policy.qual, policy.policyname).toBe(bypass);
+        expect([null, bypass], policy.policyname).toContain(policy.with_check);
+      } else {
+        // These restrictions narrow existing tenant policies. Both read and write retain
+        // the keyed system bypass, unmanaged compatibility and the exact workspace fence.
+        expect(policy.permissive, policy.policyname).toBe("RESTRICTIVE");
+        expect(policy.policyname.endsWith("_central_resource")).toBe(true);
+        expect(policy.qual, policy.policyname).toBe(
+          `(${bypass} OR (NOT ( SELECT app_central_scope_is_managed() AS app_central_scope_is_managed)) OR ("spaceId" = NULLIF(current_setting('app.space_id'::text, true), ''::text)))`,
+        );
+        expect(policy.with_check, policy.policyname).toBe(policy.qual);
+      }
+    }
   });
 
   it("lets a system step inside a tenant transaction across tenants and back", async () => {
