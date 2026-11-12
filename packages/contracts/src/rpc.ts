@@ -195,6 +195,13 @@ import {
 import { SearchQueryOutputSchema } from "./search.js";
 import { SecurityEventListInputSchema, SecurityEventSchema } from "./security-events.js";
 import {
+  AIBudgetSchema,
+  AIModelsSchema,
+  ServerAIAccountSchema,
+  ServerAIStatusSchema,
+  WorkspaceAIConfigurationSchema,
+} from "./server-ai.js";
+import {
   ServerUpdatesApplySchema,
   ServerUpdatesCheckSchema,
   ServerUpdatesPolicySchema,
@@ -470,10 +477,77 @@ export const appContract = {
     check: oc.input(ServerUpdateRequestSchema).output(ServerUpdateCheckSchema),
     apply: oc.input(ServerUpdateRequestSchema).output(ServerUpdateRunSchema),
   },
+  serverAI: {
+    beginOAuth: oc
+      .input(
+        z.object({
+          provider: z.string().min(1).max(100),
+          connectionId: Id.nullable(),
+          label: z.string().trim().min(1).max(100),
+          models: AIModelsSchema,
+          concurrencyLimit: z.number().int().min(1).max(128),
+          monthlyBudgetMicros: AIBudgetSchema,
+          codePage: z.boolean().optional(),
+        }),
+      )
+      .output(ModelOAuthBeginSchema),
+    submitOAuthCode: oc
+      .input(z.object({ loginId: Id, code: z.string().trim().min(1).max(8192) }))
+      .output(z.object({ ok: z.literal(true) })),
+    completeOAuth: oc
+      .input(z.object({ loginId: Id }))
+      .output(
+        z.discriminatedUnion("status", [
+          z.object({ status: z.literal("pending") }),
+          z.object({ status: z.literal("ready") }),
+          z.object({ status: z.literal("error"), error: z.string() }),
+        ]),
+      ),
+    finishOAuth: oc.input(z.object({ loginId: Id })).output(ServerAIAccountSchema),
+    cancelOAuth: oc.input(z.object({ loginId: Id })).output(z.object({ ok: z.literal(true) })),
+    catalog: oc.output(z.array(ModelCatalogEntrySchema)),
+    status: oc.output(ServerAIStatusSchema),
+    create: oc
+      .input(
+        z.object({
+          connection: ModelConnectInputSchema,
+          label: z.string().trim().min(1).max(100),
+          models: AIModelsSchema,
+          concurrencyLimit: z.number().int().min(1).max(128),
+          monthlyBudgetMicros: AIBudgetSchema,
+        }),
+      )
+      .output(ServerAIAccountSchema),
+    reconnect: oc
+      .input(z.object({ connectionId: Id, connection: ModelConnectInputSchema }))
+      .output(ServerAIAccountSchema),
+    update: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          label: z.string().trim().min(1).max(100),
+          models: AIModelsSchema,
+          concurrencyLimit: z.number().int().min(1).max(128),
+          monthlyBudgetMicros: AIBudgetSchema,
+        }),
+      )
+      .output(ServerAIAccountSchema),
+    offer: oc
+      .input(z.object({ spaceId: Id, connectionId: Id, available: z.boolean() }))
+      .output(z.object({ ok: z.literal(true) })),
+    configure: oc
+      .input(WorkspaceAIConfigurationSchema.extend({ connectionId: Id }))
+      .output(z.object({ ok: z.literal(true) })),
+    workspaceBudget: oc
+      .input(z.object({ monthlyBudgetMicros: AIBudgetSchema }))
+      .output(z.object({ ok: z.literal(true) })),
+    disable: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
+  },
   models: {
     workspacePolicy: oc.output(
       z.object({
         canManage: z.boolean(),
+        managed: z.boolean().optional(),
         policy: z.object({ provider: z.string(), modelId: z.string() }).nullable(),
       }),
     ),

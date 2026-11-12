@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache export tests are preserved. Ork adds workspace lifetime checks.
 
 import type { AccountExportRecord } from "@orkbot/contracts";
 import {
@@ -276,5 +277,37 @@ describe("GET /api/account/export", () => {
     expect(response.status).toBe(410);
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(consumeAccountExportToken).toHaveBeenCalledWith("used");
+  });
+});
+
+describe("workspace export lifetime", () => {
+  it("aborts an export when workspace authority is revoked and disposes its observer", async () => {
+    const controller = new AbortController();
+    const dispose = vi.fn();
+    const files = async function* () {
+      yield { path: "one.txt", data: [new TextEncoder().encode("first file")] };
+      yield { path: "two.txt", data: [new TextEncoder().encode("second file")] };
+    };
+    const reader = zipStream(files(), undefined, {
+      signal: controller.signal,
+      dispose,
+    }).getReader();
+    await reader.read();
+    controller.abort(new Error("Workspace access revoked"));
+    await expect(reader.read()).rejects.toThrow("Workspace access revoked");
+    expect(dispose).toHaveBeenCalled();
+  });
+  it("disposes an observer after a normal completed export", async () => {
+    const dispose = vi.fn();
+    const stream = zipStream(
+      (async function* () {
+        yield { path: "one.txt", data: [new Uint8Array([1])] };
+      })(),
+      undefined,
+      { signal: new AbortController().signal, dispose },
+    );
+    for await (const _ of stream) {
+    }
+    expect(dispose).toHaveBeenCalledOnce();
   });
 });

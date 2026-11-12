@@ -31,6 +31,7 @@ import {
 } from "@orkbot/contracts";
 import { organicAvatarFamily, withAbort } from "@orkbot/core";
 import {
+  CentralWorkspaceCreationRequiredError,
   createRepos,
   createSpaceForMember,
   InvalidSpaceNameError,
@@ -442,7 +443,11 @@ class AccountImporter implements ArchiveSink {
           name: space.name,
         });
       } catch (error) {
-        if (error instanceof SpaceLimitError || error instanceof InvalidSpaceNameError)
+        if (
+          error instanceof CentralWorkspaceCreationRequiredError ||
+          error instanceof SpaceLimitError ||
+          error instanceof InvalidSpaceNameError
+        )
           throw new AccountImportError(error.message);
         throw error;
       }

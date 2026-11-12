@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const DE_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "Verbunden, aber Aktualisierung fehlgeschlagen",
+
+  "Access required": "Zugriff erforderlich",
+  "Add AI account": "KI-Konto hinzufügen",
+  "Allowed models": "Erlaubte Modelle",
+  "Choose at least one model and enter valid limits.":
+    "Wähle mindestens ein Modell und gib gültige Limits ein.",
+  "Choose organization": "Organisation wählen",
+  "Complete sign-in": "Anmeldung abschließen",
+  "Concurrent requests": "Gleichzeitige Anfragen",
+  "Default model": "Standardmodell",
+  "Default organization": "Standardorganisation",
+  "Disable account": "Konto deaktivieren",
+  "Edit AI account": "KI-Konto bearbeiten",
+  Enabled: "Aktiviert",
+  "Enter a valid budget.": "Gib ein gültiges Budget ein.",
+  Fallback: "Ersatzverbindung",
+  "Fallback priority": "Priorität der Ersatzverbindung",
+  "Make available": "Verfügbar machen",
+  "Models and limits": "Modelle und Limits",
+  "Monthly budget (USD)": "Monatliches Budget (USD)",
+  "No AI accounts assigned": "Keine KI-Konten zugewiesen",
+  "No available workspaces": "Keine verfügbaren Arbeitsbereiche",
+  "No servers connected": "Keine Server verbunden",
+  "Open sign-in page": "Anmeldeseite öffnen",
+  "Preparing workspace": "Arbeitsbereich wird vorbereitet",
+  "Remove from workspace": "Aus Arbeitsbereich entfernen",
+  "Save budget": "Budget speichern",
+  "Server accounts": "Serverkonten",
+  "Server unavailable": "Server nicht verfügbar",
+  "Set as default organization": "Als Standardorganisation festlegen",
+  Unlimited: "Unbegrenzt",
+  "Verification code": "Bestätigungscode",
+  Workspace: "Arbeitsbereich",
+  "Workspace monthly budget (USD)": "Monatliches Budget des Arbeitsbereichs (USD)",
+  "Workspace unavailable": "Arbeitsbereich nicht verfügbar",
+
   "API URL": "API-Adresse",
   "Choose a provider": "Anbieter auswählen",
   "Choose one model and API key for everyone in this workspace.":

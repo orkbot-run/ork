@@ -13,6 +13,7 @@
   "dependencies": {
     "@orkbot/adapter-kit": "workspace:*",
     "@orkbot/adapters": "workspace:*",
+    "@orkbot/auth": "workspace:*",
     "@orkbot/core": "workspace:*",
     "@orkbot/db": "workspace:*",
     "@orkbot/logging": "workspace:*"

@@ -92,6 +92,9 @@ import {
   reconcilePurchases,
   removePiUserSessions,
   resolveDeploymentModel,
+  ServerAICatalog,
+  ServerAIModels,
+  ServerAIOAuth,
   StripeBillingProvider,
   sandboxProviderOptionsFromEnv,
   stripeBillingConfigFromEnv,
@@ -106,9 +109,13 @@ import {
 import {
   authorizeWorkspaceSession,
   createAuth,
+  InstallationClient,
   isBlockedAuthPath,
   loopbackTwinOrigins,
   startServerClaimWorker,
+  startWorkspaceAuthority,
+  verifiedNativeSessionIdentity,
+  WorkspaceAuthority,
 } from "@orkbot/auth";
 import type { Actor, AuthCapabilities } from "@orkbot/contracts";
 import {
@@ -195,6 +202,7 @@ import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
 import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
+import { authorizedResponse } from "#modules/platform/authorized-response";
 import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
 import {
   clientIpMiddleware,
@@ -363,6 +371,55 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   prisma = withSecretPersistence(prisma, secrets);
   installSecurityEventStore(prisma);
   installAuditEventStore(prisma);
+  const accountsIssuer = env.accountsIssuer ?? "https://api.ork.run";
+  const installation = env.accountsEnabled
+    ? new InstallationClient(prisma, { issuer: accountsIssuer, encryptionKey: env.encryptionKey })
+    : undefined;
+  const workspaceAuthority = installation
+    ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
+    : undefined;
+  const serverAI = workspaceAuthority
+    ? new ServerAICatalog({
+        prisma,
+        secrets,
+        realtime,
+        principal: async (actor) =>
+          actor.sessionId &&
+          (await workspaceAuthority.session(actor.sessionId, actor.userId, actor.spaceId))
+            ? verifiedNativeSessionIdentity(prisma, actor.sessionId, actor.userId, accountsIssuer)
+            : null,
+        authorizeWork: (actor) =>
+          workspaceAuthority.work(actor.spaceId, actor.userId, actor.membershipVersion),
+      })
+    : undefined;
+  const serverAIOAuth = serverAI
+    ? new ServerAIOAuth({ prisma, secrets, catalog: serverAI })
+    : undefined;
+  const serverAIModels = serverAI
+    ? new ServerAIModels({
+        prisma,
+        secrets,
+        catalog: serverAI,
+        allowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
+      })
+    : undefined;
+  const workspaceSessionAllowed = async (session: {
+    user: { id: string };
+    session: { id: string };
+  }) => {
+    if (installation && (await installation.registered()))
+      return !!(await workspaceAuthority!.session(session.session.id, session.user.id));
+    if (!env.accountsEnabled || env.desktopAccountKey) return true;
+    if (!env.bootstrapSecret) return false;
+    return runAsSystem("verify workspace membership", () =>
+      authorizeWorkspaceSession(prisma, {
+        issuer: accountsIssuer,
+        bootstrapSecret: env.bootstrapSecret!,
+        sessionId: session.session.id,
+        userId: session.user.id,
+      }),
+    );
+  };
   const unreadableMasterKeys = await verifyContentKeys(prisma);
   if (unreadableMasterKeys.length)
     logger.error("Stored space keys need master keys that are not configured", undefined, {
@@ -564,11 +621,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   ]);
   integrationSettings.warmDirectories();
   if (env.passwordAuth === false && (env.oidc || env.accountsEnabled)) {
-    await expireNonOidcSessions(
-      prisma,
-      env.oidc?.issuer ?? "https://api.ork.run",
-      env.desktopAccountKey,
-    );
+    await expireNonOidcSessions(prisma, env.oidc?.issuer ?? accountsIssuer, env.desktopAccountKey);
   }
   const pushTokens = new PrismaPushTokenStore(prisma, env.encryptionKey);
   const notifications =
@@ -584,19 +637,10 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ? new UserDeviceHub({
         prisma,
         address: userDeviceInternalAddress(env.apiHost, env.port),
-        ...(env.accountsEnabled && !env.desktopAccountKey
+        ...(env.accountsEnabled
           ? {
               authorizeSession: (userId: string, sessionId: string) =>
-                env.bootstrapSecret
-                  ? runAsSystem("verify device workspace membership", () =>
-                      authorizeWorkspaceSession(prisma, {
-                        issuer: "https://api.ork.run",
-                        bootstrapSecret: env.bootstrapSecret!,
-                        userId,
-                        sessionId,
-                      }),
-                    )
-                  : Promise.resolve(false),
+                workspaceSessionAllowed({ user: { id: userId }, session: { id: sessionId } }),
             }
           : {}),
       })
@@ -609,12 +653,13 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     devices: userDevices ?? new UserDevices({ prisma, forwardSecret: userDeviceSecret }),
   };
   const auth = createAuth(prisma, {
+    workspaceAuthority,
     analytics,
     passwordAuth: env.passwordAuth,
     breachedPasswordCheck: env.breachedPasswordCheck,
     oidc: env.oidc,
     nativeAccounts: env.accountsEnabled
-      ? { issuer: "https://api.ork.run", bootstrapSecret: env.bootstrapSecret }
+      ? { issuer: accountsIssuer, bootstrapSecret: env.bootstrapSecret }
       : undefined,
     secret: env.authSecret,
     baseURL: env.authUrl,
@@ -710,6 +755,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     PAYMENT_WALLET_CLIENT_ID: env.paymentWalletClientId,
   });
   const executor = createRunExecutor({
+    serverAIModels,
+    authorizeWork: workspaceAuthority ? (scope) => workspaceAuthority.execution(scope) : undefined,
     billingEnabled: modelCreditsEnabled,
     maxUploadSizeBytes: env.maxUploadSizeBytes,
     mediaGeneration,
@@ -868,20 +915,23 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           prisma,
           ...serverUpdateSetup,
           delegatedAccountKey: null,
-          issuer: "https://api.ork.run",
+          issuer: accountsIssuer,
           currentRevision: env.gitSha ?? null,
         })
       : createServerUpdates({
           prisma,
           ...serverUpdateSetup,
           delegatedAccountKey: serverUpdateSetup.delegatedAccountKey,
-          issuer: "https://api.ork.run",
+          issuer: accountsIssuer,
           currentRevision: env.gitSha ?? null,
         })
     : undefined;
   serverUpdates?.start();
 
   const router = createRouter({
+    serverAI,
+    serverAIOAuth,
+    serverAIModels,
     serverUpdates,
     speechSummary:
       env.voiceSummaryMinChars === undefined
@@ -993,21 +1043,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       c.header("cache-control", "no-store");
     });
   }
-  const workspaceSessionAllowed = async (session: {
-    user: { id: string };
-    session: { id: string };
-  }) => {
-    if (!env.accountsEnabled || env.desktopAccountKey) return true;
-    if (!env.bootstrapSecret) return false;
-    return runAsSystem("verify workspace membership", () =>
-      authorizeWorkspaceSession(prisma, {
-        issuer: "https://api.ork.run",
-        bootstrapSecret: env.bootstrapSecret!,
-        sessionId: session.session.id,
-        userId: session.user.id,
-      }),
-    );
-  };
   app.use("*", async (c, next) => {
     if (
       !env.accountsEnabled ||
@@ -1023,6 +1058,15 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     );
     if (session?.user && !(await workspaceSessionAllowed(session)))
       return c.json({ error: "Workspace access unavailable" }, 403);
+    return next();
+  });
+  app.use("/api/auth/native/*", async (c, next) => {
+    if (
+      !c.req.path.startsWith("/api/auth/native/workspace/") &&
+      installation &&
+      (await installation.registered())
+    )
+      return c.json({ error: "update_required", identityProtocol: 2 }, 426);
     return next();
   });
   app.get("/api/auth/capabilities", (c) => {
@@ -1115,18 +1159,49 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     // The bearer plugin turns a signed `Authorization: Bearer` into the session cookie.
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user) return null;
-    if (!(await workspaceSessionAllowed(session))) return null;
+    const centralized = !!installation && (await installation.registered());
+    const central = centralized
+      ? await workspaceAuthority!.session(
+          session.session.id,
+          session.user.id,
+          request.headers.get("x-orkbot-space-id"),
+        )
+      : null;
+    if (centralized ? !central : !(await workspaceSessionAllowed(session))) return null;
     const actor = await actorFromMembership(
       requireMembership(
         prisma,
         session.user.id,
-        request.headers.get("x-orkbot-space-id"),
+        central?.spaceId ?? request.headers.get("x-orkbot-space-id"),
         session.session.id,
       ),
     );
-    return actor && { actor, sessionId: session.session.id };
+    return actor && { actor, sessionId: session.session.id, central };
   };
   const sessionActor = async (request: Request) => (await requestSession(request))?.actor ?? null;
+  app.use("/api/*", async (c, next) => {
+    const session = await requestSession(c.req.raw);
+    if (!session?.central) return next();
+    const permission = workspaceAuthority!.window.watch(
+      session.central.workspaceId,
+      session.central.subject,
+      session.central.revision,
+    );
+    if (permission.signal.aborted) {
+      permission.dispose();
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    try {
+      await next();
+      c.res = authorizedResponse(c.res, {
+        signal: AbortSignal.any([c.req.raw.signal, permission.signal]),
+        dispose: permission.dispose,
+      });
+    } catch (error) {
+      permission.dispose();
+      throw error;
+    }
+  });
   if (userDeviceHub && userDevices) {
     mountUserDeviceRoutes(app, {
       prisma,
@@ -1134,8 +1209,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       devices: userDevices,
       forwardSecret: userDeviceSecret,
       session: async (request) => {
-        const found = await auth.api.getSession({ headers: request.headers });
-        return found ? { userId: found.user.id, sessionId: found.session.id } : null;
+        const found = await requestSession(request);
+        return found ? { userId: found.actor.userId, sessionId: found.sessionId } : null;
       },
       trustedOrigin: (origin) => isTrustedOrigin(origin, env),
     });
@@ -1165,24 +1240,51 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     if (actor) {
       enrichLogContext({ "user.id": actor.userId, "space.id": actor.spaceId });
     }
-    const { matched, response } = await rpc.handle(c.req.raw, {
-      prefix: "/rpc",
-      context: {
-        actor,
-        sessionId: session?.sessionId,
-        signal: c.req.raw.signal,
-        // Same user in the same space, so leaving the space also ends a stream.
-        // A database failure rejects this check; only a missing membership is unauthorized.
-        stillAuthorized: async () => {
-          const current = await sessionActor(c.req.raw);
-          return Boolean(
-            actor && current?.userId === actor.userId && current.spaceId === actor.spaceId,
-          );
+    const permission = session?.central
+      ? workspaceAuthority!.window.watch(
+          session.central.workspaceId,
+          session.central.subject,
+          session.central.revision,
+        )
+      : undefined;
+    let ownsResponse = false;
+    if (permission?.signal.aborted) {
+      permission.dispose();
+      return c.json({ error: "Forbidden" }, 403);
+    }
+    try {
+      const { matched, response } = await rpc.handle(c.req.raw, {
+        prefix: "/rpc",
+        context: {
+          actor,
+          sessionId: session?.sessionId,
+          signal: permission
+            ? AbortSignal.any([c.req.raw.signal, permission.signal])
+            : c.req.raw.signal,
+          // Same user in the same space, so leaving the space also ends a stream.
+          // A database failure rejects this check; only a missing membership is unauthorized.
+          stillAuthorized: async () => {
+            const current = await sessionActor(c.req.raw);
+            return Boolean(
+              actor && current?.userId === actor.userId && current.spaceId === actor.spaceId,
+            );
+          },
         },
-      },
-    });
-    if (matched) return c.newResponse(response.body, response);
-    await next();
+      });
+      if (matched) {
+        const result = c.newResponse(response.body, response);
+        if (!permission) return result;
+        const guarded = authorizedResponse(result, {
+          signal: AbortSignal.any([c.req.raw.signal, permission.signal]),
+          dispose: permission.dispose,
+        });
+        ownsResponse = true;
+        return guarded;
+      }
+      await next();
+    } finally {
+      if (!ownsResponse) permission?.dispose();
+    }
   });
   mountAccountExportRoute(app, { prisma, auth, artifacts, home });
   mountAuditExportRoute(app, { prisma, sessionActor });
@@ -1354,6 +1456,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       const judge =
         env.teamChatJudgeProvider && env.teamChatJudgeModel
           ? new ModelTeamChatEngagementJudge({
+              serverAIModels,
               prisma,
               runtime,
               secrets,
@@ -1365,6 +1468,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
               modelOverride: env.teamChatJudgeModel,
             })
           : new ModelTeamChatEngagementJudge({
+              serverAIModels,
               prisma,
               runtime,
               secrets,
@@ -1613,11 +1717,20 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const stopServerClaim =
     env.accountsEnabled && env.bootstrapSecret && !env.desktopAccountKey
       ? startServerClaimWorker(prisma, {
-          issuer: "https://api.ork.run",
+          issuer: accountsIssuer,
           origin: env.webOrigin,
           bootstrapSecret: env.bootstrapSecret,
           observe: createServerObserver(env.dataDir),
         })
+      : undefined;
+  const stopWorkspaceAuthority =
+    installation && workspaceAuthority
+      ? startWorkspaceAuthority(
+          installation,
+          workspaceAuthority,
+          (error) => logger.error("Workspace authority synchronization failed", error),
+          realtime,
+        )
       : undefined;
   return {
     app,
@@ -1638,6 +1751,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
       await stopServerClaim?.();
+      await stopWorkspaceAuthority?.();
+      serverAI?.dispose();
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       auth.disposeOidcDiscovery();
@@ -1647,6 +1762,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       const runsStopped = runs?.stop();
       await userDeviceHub?.close();
       oauthLogins.abortAll();
+      serverAIOAuth?.dispose();
       messagingStopped = true;
       clearMessagingRetryDelay?.();
       clearTeamChatRetryDelay?.();

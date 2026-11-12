@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+[package]
+name = "ork-installation-transport"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "PolyForm-Noncommercial-1.0.0"
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+
+[dependencies]
+rustls = { version = "0.23.46", default-features = false, features = ["std", "ring", "tls12"] }
+sha2 = "0.10"
+thiserror = "2"
+uniffi = "0.32.2"
+x509-parser = "0.18"
+
+[dev-dependencies]
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring"] }
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[[bin]]
+name = "ork-transport-bindgen"
+path = "src/bin/bindgen.rs"
+required-features = ["bindgen"]

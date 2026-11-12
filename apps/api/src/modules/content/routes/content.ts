@@ -255,7 +255,14 @@ export function contentRoutes(ctx: RouterContext) {
       }),
       accountToken: authed.export.accountToken.handler(async ({ context }) => {
         await requireIdentityConfirmation(deps.auth, context);
-        return { token: await deps.auth.issueAccountExportToken(context.actor.userId) };
+        return {
+          token: await deps.auth.issueAccountExportToken(
+            context.actor.userId,
+            context.sessionId
+              ? { sessionId: context.sessionId, spaceId: context.actor.spaceId }
+              : undefined,
+          ),
+        };
       }),
     },
     search: {

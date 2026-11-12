@@ -37,6 +37,8 @@ pub enum Command {
     AccountsSignIn,
     #[serde(rename = "accounts.session")]
     AccountsSession,
+    #[serde(rename = "accounts.workspaceTarget")]
+    AccountsWorkspaceTarget,
     #[serde(rename = "accounts.logout")]
     AccountsLogout,
     #[serde(rename = "accounts.retryRevocations")]

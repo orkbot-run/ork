@@ -91,13 +91,34 @@ export function modelsRoutes(ctx: RouterContext) {
       ),
     };
   };
+  const requireUnmanagedWorkspace = async (actor: { userId: string; spaceId: string }) => {
+    if (await deps.serverAIModels?.actor(actor))
+      throw new ORPCError("FORBIDDEN", { message: "Manage AI connections on this server." });
+  };
   const requirePersonalModelsAllowed = async (actor: { userId: string; spaceId: string }) => {
+    await requireUnmanagedWorkspace(actor);
     if (await findWorkspaceModelPolicy(deps.prisma, actor.spaceId))
       throw new ORPCError("FORBIDDEN", { message: "Models are managed by the workspace owner." });
   };
   return {
     models: {
       workspacePolicy: authed.models.workspacePolicy.handler(async ({ context }) => {
+        const managed = await deps.serverAIModels?.actor(context.actor);
+        if (managed && deps.serverAI) {
+          const choices = await deps.serverAI.choices(managed);
+          const primary = choices[0];
+          const connection =
+            primary &&
+            (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
+          return {
+            managed: true,
+            canManage: false,
+            policy:
+              connection && primary
+                ? { provider: connection.provider, modelId: primary.modelId }
+                : null,
+          };
+        }
         const { organizationId, owner } = await workspace(context.actor);
         const policy = await deps.prisma.workspaceModelPolicy.findUnique({
           where: { organizationId },
@@ -106,6 +127,8 @@ export function modelsRoutes(ctx: RouterContext) {
         return { canManage: owner, policy };
       }),
       setWorkspacePolicy: authed.models.setWorkspacePolicy.handler(async ({ context, input }) => {
+        if (await deps.serverAIModels?.actor(context.actor))
+          throw new ORPCError("FORBIDDEN", { message: "Manage AI connections on this server." });
         const { organizationId, owner } = await workspace(context.actor);
         if (!owner) throw new ORPCError("FORBIDDEN");
         if (!input.apiKey?.trim() || !input.modelId?.trim())
@@ -173,6 +196,8 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       clearWorkspacePolicy: authed.models.clearWorkspacePolicy.handler(async ({ context }) => {
+        if (await deps.serverAIModels?.actor(context.actor))
+          throw new ORPCError("FORBIDDEN", { message: "Manage AI connections on this server." });
         const { organizationId, owner } = await workspace(context.actor);
         if (!owner) throw new ORPCError("FORBIDDEN");
         const previous = await withSerializableRetry(() =>
@@ -197,6 +222,7 @@ export function modelsRoutes(ctx: RouterContext) {
       }),
       list: authed.models.list.handler(async ({ context }) => chatCatalog(context.actor)),
       credentials: authed.models.credentials.handler(async ({ context }) => {
+        if (await deps.serverAIModels?.actor(context.actor)) return [];
         const [rows, main] = await Promise.all([
           deps.prisma.userModelCredential.findMany({
             where: { userId: context.actor.userId },
@@ -337,6 +363,7 @@ export function modelsRoutes(ctx: RouterContext) {
       }),
       probeOpenAiCompatible: authed.models.probeOpenAiCompatible.handler(
         async ({ context, input }) => {
+          await requireUnmanagedWorkspace(context.actor);
           let apiKey = input.apiKey;
           let headers = input.headers;
           if (!apiKey?.trim() || headers === undefined) {
@@ -422,6 +449,7 @@ export function modelsRoutes(ctx: RouterContext) {
         },
       ),
       probeCatalog: authed.models.probeCatalog.handler(async ({ context, input }) => {
+        await requireUnmanagedWorkspace(context.actor);
         try {
           const models = await probeCatalogProviderModels(
             { provider: input.provider, apiKey: input.apiKey },
@@ -470,6 +498,7 @@ export function modelsRoutes(ctx: RouterContext) {
           });
       }),
       submitOAuthCode: authed.models.submitOAuthCode.handler(async ({ context, input }) => {
+        await requireUnmanagedWorkspace(context.actor);
         return deps.oauthLogins
           .submit(input.loginId, context.actor, input.code)
           .catch((error: unknown) => {
@@ -479,6 +508,7 @@ export function modelsRoutes(ctx: RouterContext) {
           });
       }),
       completeOAuth: authed.models.completeOAuth.handler(async ({ context, input }) => {
+        await requireUnmanagedWorkspace(context.actor);
         const result = await deps.oauthLogins.complete(input.loginId, {
           userId: context.actor.userId,
           spaceId: context.actor.spaceId,
@@ -727,6 +757,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       rename: authed.models.rename.handler(async ({ context, input }) => {
+        await requireUnmanagedWorkspace(context.actor);
         const renamed = await deps.prisma.userModelCredential.updateMany({
           where: { id: input.credentialId, userId: context.actor.userId },
           data: { label: input.label },
@@ -736,6 +767,7 @@ export function modelsRoutes(ctx: RouterContext) {
         return { ok: true as const };
       }),
       disconnect: authed.models.disconnect.handler(async ({ context, input }) => {
+        await requireUnmanagedWorkspace(context.actor);
         // Retire pending sign-ins in every space first — the credentials are
         // account-wide, so a finishing OAuth session anywhere could otherwise
         // re-persist a credential the delete below just removed. Removing one

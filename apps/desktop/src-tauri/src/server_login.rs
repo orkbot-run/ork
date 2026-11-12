@@ -101,6 +101,29 @@ pub async fn issue(
     issue_at(&endpoint, token, origin, challenge, current).await
 }
 
+pub async fn issue_workspace(
+    token: &str,
+    target: &crate::server_directory::WorkspaceTarget,
+    challenge: &str,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
+    target.validate()?;
+    let endpoint = crate::server_directory::origin()
+        .join("/api/identity/v2/login-grants")
+        .map_err(|_| ERROR)?;
+    issue_payload_at(
+        &endpoint,
+        token,
+        challenge,
+        serde_json::json!({
+            "organizationId": target.organization_id, "serverId": target.server_id,
+            "workspaceId": target.workspace_id, "challenge": challenge,
+        }),
+        current,
+    )
+    .await
+}
+
 async fn issue_at(
     endpoint: &Url,
     token: &str,
@@ -115,12 +138,31 @@ async fn issue_at(
     if canonical != *origin {
         return Err(ERROR.into());
     }
+    issue_payload_at(endpoint, token, challenge, serde_json::json!({"origin": origin.origin().ascii_serialization(), "challenge": challenge}), current).await
+}
+
+async fn issue_payload_at(
+    endpoint: &Url,
+    token: &str,
+    challenge: &str,
+    body: serde_json::Value,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
+    if !valid_challenge(challenge) || !current() {
+        return Err(ERROR.into());
+    }
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|_| ERROR)?;
-    let mut response = client.post(endpoint.clone()).bearer_auth(token).json(&serde_json::json!({"origin": origin.origin().ascii_serialization(), "challenge":challenge})).send().await.map_err(|_| ERROR)?;
+    let mut response = client
+        .post(endpoint.clone())
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| ERROR)?;
     if !current()
         || !response.status().is_success()
         || response

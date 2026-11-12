@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const JA_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "接続しましたが、更新できませんでした",
+
+  "Access required": "アクセス権が必要です",
+  "Add AI account": "AIアカウントを追加",
+  "Allowed models": "許可されたモデル",
+  "Choose at least one model and enter valid limits.":
+    "モデルを1つ以上選択し、有効な上限を入力してください。",
+  "Choose organization": "組織を選択",
+  "Complete sign-in": "ログインを完了",
+  "Concurrent requests": "同時リクエスト数",
+  "Default model": "デフォルトモデル",
+  "Default organization": "デフォルトの組織",
+  "Disable account": "アカウントを無効化",
+  "Edit AI account": "AIアカウントを編集",
+  Enabled: "有効",
+  "Enter a valid budget.": "有効な予算を入力してください。",
+  Fallback: "代替接続",
+  "Fallback priority": "代替接続の優先度",
+  "Make available": "利用を許可",
+  "Models and limits": "モデルと上限",
+  "Monthly budget (USD)": "月間予算（USD）",
+  "No AI accounts assigned": "AIアカウントが割り当てられていません",
+  "No available workspaces": "利用可能なワークスペースがありません",
+  "No servers connected": "接続済みのサーバーがありません",
+  "Open sign-in page": "ログインページを開く",
+  "Preparing workspace": "ワークスペースを準備中",
+  "Remove from workspace": "ワークスペースから削除",
+  "Save budget": "予算を保存",
+  "Server accounts": "サーバーのアカウント",
+  "Server unavailable": "サーバーを利用できません",
+  "Set as default organization": "デフォルトの組織に設定",
+  Unlimited: "無制限",
+  "Verification code": "確認コード",
+  Workspace: "ワークスペース",
+  "Workspace monthly budget (USD)": "ワークスペースの月間予算（USD）",
+  "Workspace unavailable": "ワークスペースを利用できません",
+
   "API URL": "API URL",
   "Choose a provider": "プロバイダーを選択",
   "Choose one model and API key for everyone in this workspace.":

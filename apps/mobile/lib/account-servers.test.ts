@@ -2,10 +2,22 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { accountServers, addAccountServer } from "./account-servers";
+import {
+  accountDirectory,
+  accountServers,
+  addAccountServer,
+  setDefaultAccountOrganization,
+} from "./account-servers";
 import { accountsAuthorization } from "./accounts";
 
-vi.mock("./accounts", () => ({ accountsAuthorization: vi.fn(), accountsVersion: () => 0 }));
+vi.mock("./accounts", () => ({
+  accountsAuthorization: vi.fn(),
+  accountsVersion: () => 0,
+  accountsConfiguration: async () => ({
+    issuer: "https://api.ork.run",
+    clientId: "fixture-client",
+  }),
+}));
 vi.mock("./i18n", () => ({ t: (value: string) => value }));
 const remote = {
   id: "00000000-0000-4000-8000-000000000001",
@@ -25,13 +37,55 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("sends the central bearer only to the fixed directory without a device ID", async () => {
-  const workspace = { id: remote.id, url: remote.url, name: "Team" };
-  const fetcher = vi.fn().mockResolvedValue(Response.json({ workspaces: [workspace] }));
+it("sends the central bearer only to the configured directory without a device ID", async () => {
+  const organizationId = "00000000-0000-4000-8000-000000000002";
+  const serverId = "00000000-0000-4000-8000-000000000003";
+  const routeId = "00000000-0000-4000-8000-000000000004";
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({
+      version: 2,
+      defaultOrganizationId: organizationId,
+      organizations: [
+        {
+          id: organizationId,
+          name: "Company",
+          type: "shared",
+          role: "member",
+          servers: [
+            {
+              id: serverId,
+              name: "Server",
+              state: "ready",
+              bindingVersion: 1,
+              keyFingerprint: "a".repeat(64),
+              routes: [{ id: routeId, kind: "direct", address: remote.url, deviceId: null }],
+              workspaces: [
+                { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "member" },
+              ],
+            },
+          ],
+        },
+      ],
+    }),
+  );
   vi.stubGlobal("fetch", fetcher);
-  expect(await accountServers()).toEqual([{ ...remote, name: "Team" }]);
+  expect(await accountServers()).toEqual([
+    {
+      ...remote,
+      name: "Team",
+      organizationName: "Company",
+      serverName: "Server",
+      workspace: {
+        organizationId,
+        serverId,
+        workspaceId: remote.id,
+        bindingVersion: 1,
+        keyFingerprint: "a".repeat(64),
+      },
+    },
+  ]);
   expect(fetcher).toHaveBeenCalledWith(
-    "https://api.ork.run/api/servers/workspaces",
+    "https://api.ork.run/api/identity/v2/catalog",
     expect.objectContaining({
       headers: { authorization: "Bearer central-bearer" },
       credentials: "omit",
@@ -127,4 +181,45 @@ it.each([
 ])("rejects malformed directory response %j", async (response) => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(response)));
   await expect(accountServers()).rejects.toThrow("Could not load your servers");
+});
+
+it("retains organizations without servers instead of hiding them behind a flat list", async () => {
+  const catalog = {
+    version: 2,
+    defaultOrganizationId: null,
+    organizations: [
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        name: "Personal",
+        type: "personal",
+        role: "admin",
+        servers: [],
+      },
+    ],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json(catalog)),
+  );
+  expect(await accountDirectory()).toEqual({ catalog, entries: [] });
+});
+
+it("saves the shared default through Accounts while leaving workspace history on the device", async () => {
+  const organizationId = "00000000-0000-4000-8000-000000000002";
+  const fetcher = vi.fn(async () => Response.json({ defaultOrganizationId: organizationId }));
+  vi.stubGlobal("fetch", fetcher);
+  await setDefaultAccountOrganization(
+    organizationId,
+    JSON.stringify(["https://api.ork.run", "subject-a"]),
+  );
+  expect(fetcher).toHaveBeenCalledWith(
+    "https://api.ork.run/api/organizations/preferences",
+    expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ defaultOrganizationId: organizationId }),
+      headers: { authorization: "Bearer central-bearer", "content-type": "application/json" },
+      redirect: "error",
+      credentials: "omit",
+    }),
+  );
 });

@@ -258,6 +258,63 @@ describeWithDatabase("API authorization and resource isolation", () => {
         },
       ],
       ["serverUpdates/policy", { automatic: true, expectedRevision: 0 }],
+      ["serverAI/status"],
+      [
+        "serverAI/beginOAuth",
+        {
+          provider: "openai-codex",
+          connectionId: null,
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/submitOAuthCode", { loginId: "missing", code: "fixture" }],
+      ["serverAI/completeOAuth", { loginId: "missing" }],
+      ["serverAI/finishOAuth", { loginId: "missing" }],
+      ["serverAI/cancelOAuth", { loginId: "missing" }],
+      ["serverAI/catalog"],
+      [
+        "serverAI/create",
+        {
+          connection: { provider: "test", apiKey: "not-a-real-key" },
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      [
+        "serverAI/reconnect",
+        { connectionId: "missing", connection: { provider: "test", apiKey: "not-a-real-key" } },
+      ],
+      [
+        "serverAI/update",
+        {
+          connectionId: "missing",
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/offer", { connectionId: "missing", spaceId: "missing", available: true }],
+      [
+        "serverAI/configure",
+        {
+          connectionId: "missing",
+          enabled: true,
+          allowedModels: ["test/model"],
+          defaultModelId: "test/model",
+          isDefault: true,
+          fallback: false,
+          priority: 0,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/workspaceBudget", { monthlyBudgetMicros: null }],
+      ["serverAI/disable", { connectionId: "missing" }],
       ["models/list"],
       ["models/workspacePolicy"],
       [
@@ -2191,7 +2248,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const connection = {
       provider: "openai-compatible",
       modelId: "arbitrary-model",
-      baseUrl: "http://localhost:8000/v1",
+      baseUrl: "https://models.example.test/v1",
     };
     const connected = await rpc<ModelCredential>(app, cookie, "models/connect", {
       ...connection,
@@ -2231,7 +2288,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const connection = {
       provider: "openai-compatible",
       modelId: "arbitrary-model",
-      baseUrl: "http://localhost:8000/v1",
+      baseUrl: "https://models.example.test/v1",
     };
     await rpc(app, cookie, "models/connect", {
       ...connection,

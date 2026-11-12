@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { SERVER_INSTALL_COMMAND, SERVER_UPDATE_RECOVERY_PROTOCOL } from "@orkbot/contracts";
+import type { IdentityCatalog } from "@orkbot/contracts";
+import {
+  initialCatalogOrganization,
+  initialCatalogWorkspace,
+  SERVER_INSTALL_COMMAND,
+  SERVER_UPDATE_RECOVERY_PROTOCOL,
+} from "@orkbot/contracts";
 import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
@@ -19,7 +25,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Updates from "../app/(settings)/updates";
 import type { AccountServer } from "../lib/account-servers";
-import { accountServers, addAccountServer } from "../lib/account-servers";
+import {
+  accountDirectory,
+  accountServers,
+  addAccountServer,
+  setDefaultAccountOrganization,
+} from "../lib/account-servers";
 import {
   accountsIdentity,
   accountsVersion,
@@ -40,7 +51,6 @@ import {
 } from "../lib/api";
 import { loadAppearancePreference } from "../lib/appearance";
 import {
-  displayApiHost,
   normalizeApiBase,
   requireAccountsSignIn,
   serverInitializationRequired,
@@ -48,10 +58,17 @@ import {
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import {
+  lastOrganizationWorkspace,
+  saveSelectedWorkspace,
+  selectedWorkspace,
+} from "../lib/selected-workspace";
+import {
   clearServerConnect,
+  clearWorkspaceConnect,
   confirmServerInitialization,
   hasPendingServerInitialization,
   pendingServerConnect,
+  pendingWorkspaceConnect,
   subscribeServerConnect,
 } from "../lib/server-connect";
 import { serverHeaders } from "../lib/server-headers";
@@ -62,6 +79,7 @@ import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
 import { LogoAvatar } from "./logo-avatar";
 import { NativeActionButton } from "./native-action-button";
+import { WorkspaceDirectory, workspaceEntries } from "./workspace-directory";
 
 const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
@@ -136,6 +154,14 @@ async function selectServer(
     const saved = await saveApiBase(entry.url, serverHeaders(entry.url));
     if (!saved.ok) throw new Error(saved.error);
     if (!current()) return null;
+    const previousWorkspace = await selectedWorkspace(account, entry.url);
+    if (!current()) return null;
+    if (JSON.stringify(previousWorkspace) !== JSON.stringify(entry.workspace ?? null)) {
+      await clearProductAccountSession();
+      if (!current()) return null;
+    }
+    await saveSelectedWorkspace(account, entry.url, entry.workspace);
+    if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
     return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;
   });
@@ -168,6 +194,7 @@ export function AccountsGate({
     () => `${linkGeneration.current}:${pendingServerConnect() ?? ""}`,
   );
   const linkedServer = pendingServerConnect();
+  const linkedWorkspace = pendingWorkspaceConnect();
   const operationPending = useRef(false);
   const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
@@ -175,6 +202,12 @@ export function AccountsGate({
   );
   const [orkAvatar, setOrkAvatar] = useState(welcomeOrk);
   const [servers, setServers] = useState<AccountServer[]>([]);
+  const [directory, setDirectory] = useState<IdentityCatalog | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const chosenOrganization = useRef<{ account: string; id: string | null }>({
+    account: "",
+    id: null,
+  });
   const [started, setStarted] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -235,6 +268,9 @@ export function AccountsGate({
         knownServers.current.clear();
         setOrkAvatar(welcomeOrk);
         setServers([]);
+        setDirectory(null);
+        setOrganizationId(null);
+        chosenOrganization.current = { account: "", id: null };
         setDraft("");
         setReadyAt({ version, attempt });
         setPhase("signed-out");
@@ -247,8 +283,16 @@ export function AccountsGate({
       verified = true;
       const directorySession = currentSessionGeneration();
       const directoryServer = currentApiBase();
-      const entries = await accountServers(account);
+      const loaded = await accountDirectory(account);
+      const { entries, catalog } = loaded;
       if (generation.current !== current) return;
+      const organization =
+        chosenOrganization.current.account === account && chosenOrganization.current.id !== null
+          ? catalog.organizations.find((row) => row.id === chosenOrganization.current.id)
+          : initialCatalogOrganization(catalog);
+      chosenOrganization.current = { account, id: organization?.id ?? null };
+      setOrganizationId(organization?.id ?? null);
+      setDirectory(catalog);
       if (directoryOwner.current !== account) {
         directoryOwner.current = account;
         knownServers.current = new Set(entries.map((entry) => entry.id));
@@ -257,6 +301,28 @@ export function AccountsGate({
       directoryReady = true;
       setAdding(Boolean(linkedServer) || entries.length === 0);
       if (linkedServer) setDraft(linkedServer);
+      if (linkedWorkspace) {
+        const requestedOrganization = catalog.organizations.find(
+          (row) => row.id === linkedWorkspace.organizationId,
+        );
+        chosenOrganization.current = { account, id: requestedOrganization?.id ?? null };
+        setOrganizationId(requestedOrganization?.id ?? null);
+        const requested = entries.find(
+          (row) =>
+            row.workspace?.organizationId === linkedWorkspace.organizationId &&
+            row.workspace.serverId === linkedWorkspace.serverId &&
+            row.workspace.workspaceId === linkedWorkspace.workspaceId,
+        );
+        if (!requested) throw new Error(t("Workspace unavailable"));
+        await select(requested, {
+          current: () =>
+            generation.current === current && pendingWorkspaceConnect() === linkedWorkspace,
+          sessionGeneration: directorySession,
+          server: directoryServer,
+        });
+        return;
+      }
+
       if (
         PERSONAL_SERVER_CONNECTION_ENABLED &&
         linkedServer &&
@@ -300,10 +366,28 @@ export function AccountsGate({
         }
         if (generation.current !== current) return;
       }
-      if (productGate && !linkedServer) {
+      if (productGate && !linkedServer && organization) {
+        const remembered = await lastOrganizationWorkspace(account, organization.id);
         const selected = await SecureStore.getItemAsync(SERVER_KEY);
         if (generation.current !== current) return;
-        const previous = entries.find((entry) => `${account}:${entry.id}` === selected);
+        const available = workspaceEntries(organization, entries);
+        const legacy = available.find((entry) => `${account}:${entry.id}` === selected);
+        const legacyServer = organization.servers.find((server) =>
+          server.workspaces.some((workspace) => workspace.id === legacy?.id),
+        );
+        const target = initialCatalogWorkspace(
+          catalog,
+          organization.id,
+          remembered ??
+            (legacy && legacyServer ? { workspaceId: legacy.id, serverId: legacyServer.id } : null),
+        );
+        const previous =
+          target &&
+          available.find(
+            (entry) =>
+              entry.id === target.workspaceId &&
+              (!entry.workspace || entry.workspace.serverId === target.serverId),
+          );
         if (previous) {
           const selected = await selectServer(
             previous,
@@ -373,16 +457,14 @@ export function AccountsGate({
       if (!current()) return;
       if (!operationPending.current && !pairingRef.current) {
         try {
-          const entries = await accountServers(account);
+          const { entries, catalog } = await accountDirectory(account);
           if (!current()) return;
-          const changed =
-            entries.length !== knownServers.current.size ||
-            entries.some((entry) => !knownServers.current.has(entry.id));
+          setDirectory(catalog);
           const added = entries.some(
             (entry) => !knownServers.current.has(entry.id) && entry.url !== activeServer,
           );
           knownServers.current = new Set(entries.map((entry) => entry.id));
-          if (changed) setServers(entries);
+          setServers(entries);
           if (added && phase === "ready") {
             if (!discoveryAlert.current) {
               discoveryAlert.current = true;
@@ -492,6 +574,7 @@ export function AccountsGate({
       setPhase("ready");
     }
     if (linkedServer) clearServerConnect(linkedServer);
+    if (linkedWorkspace) clearWorkspaceConnect(linkedWorkspace);
     return true;
   }
 
@@ -806,15 +889,48 @@ export function AccountsGate({
           <>
             {visiblePhase === "servers" ? (
               <>
-                {servers.map((entry) => (
-                  <NativeActionButton
-                    key={entry.id}
-                    label={entry.name ?? displayApiHost(entry.url)}
-                    busy={pending}
-                    disabled={Boolean(pairing)}
-                    onPress={() => void action(() => select(entry))}
+                {directory ? (
+                  <WorkspaceDirectory
+                    catalog={directory}
+                    entries={servers}
+                    organizationId={organizationId}
+                    pending={pending || !!pairing}
+                    onOrganization={(id) =>
+                      void action(async () => {
+                        const account = owner.current;
+                        const current = generation.current;
+                        const organization = directory.organizations.find((row) => row.id === id);
+                        if (!organization) return;
+                        chosenOrganization.current = { account, id };
+                        setOrganizationId(id);
+                        const remembered = await lastOrganizationWorkspace(account, id);
+                        if (owner.current !== account || generation.current !== current) return;
+                        const available = workspaceEntries(organization, servers);
+                        const target = initialCatalogWorkspace(directory, id, remembered);
+                        const previous =
+                          target &&
+                          available.find(
+                            (row) =>
+                              row.id === target.workspaceId &&
+                              (!row.workspace || row.workspace.serverId === target.serverId),
+                          );
+                        if (previous) await select(previous);
+                      })
+                    }
+                    onDefault={(id) =>
+                      void action(async () => {
+                        const account = owner.current;
+                        const current = generation.current;
+                        await setDefaultAccountOrganization(id, account);
+                        if (owner.current === account && generation.current === current)
+                          setDirectory((value) =>
+                            value ? { ...value, defaultOrganizationId: id } : value,
+                          );
+                      })
+                    }
+                    onSelect={(entry) => void action(() => select(entry))}
                   />
-                ))}
+                ) : null}
                 {PERSONAL_SERVER_CONNECTION_ENABLED &&
                 adding &&
                 (linkedServer || pairing || hasPendingServerInitialization(draft)) ? (

@@ -69,6 +69,7 @@ if (
     accounts: {
       signIn: () => call("accounts.signIn"),
       session: () => call("accounts.session"),
+      workspaceTarget: () => call("accounts.workspaceTarget"),
       logout: () => call("accounts.logout"),
       retryRevocations: () => call("accounts.retryRevocations"),
       createServerLoginGrant: (request) => call("accounts.createServerLoginGrant", request),

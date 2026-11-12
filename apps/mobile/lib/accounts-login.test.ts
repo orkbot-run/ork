@@ -12,6 +12,14 @@ import {
 const state = vi.hoisted(() => ({
   origin: "https://server.example.test",
   generation: 1,
+  accountVersion: 0,
+  workspace: null as null | {
+    organizationId: string;
+    serverId: string;
+    workspaceId: string;
+    bindingVersion: number;
+    keyFingerprint: string;
+  },
   identity: {
     issuer: "https://accounts.example.test",
     subject: "owner",
@@ -21,7 +29,11 @@ const state = vi.hoisted(() => ({
   replace: vi.fn(),
   clearSpace: vi.fn(),
 }));
-vi.mock("./accounts", () => ({ accountsAuthorization: async () => state.identity }));
+vi.mock("./accounts", () => ({
+  accountsAuthorization: async () => state.identity,
+  accountsVersion: () => state.accountVersion,
+}));
+vi.mock("./selected-workspace", () => ({ selectedWorkspace: async () => state.workspace }));
 vi.mock("./api", () => ({
   currentApiBase: () => state.origin,
   fetchMobileJson: (...args: unknown[]) => state.request(...args),
@@ -36,6 +48,8 @@ vi.mock("./i18n", () => ({ t: (text: string) => text }));
 beforeEach(() => {
   state.origin = "https://server.example.test";
   state.generation = 1;
+  state.accountVersion = 0;
+  state.workspace = null;
   state.identity = {
     issuer: "https://accounts.example.test",
     subject: "owner",
@@ -78,6 +92,54 @@ it("keeps the central bearer on Accounts and saves only the local server session
     expect(request.redirect).toBe("error");
   }
   expect(state.replace).toHaveBeenCalledWith(1, "server-session", "sign_in");
+});
+
+it("logs in to the exact central workspace without forwarding the Accounts bearer to its server", async () => {
+  state.workspace = {
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    serverId: "20000000-0000-4000-8000-000000000001",
+    workspaceId: "30000000-0000-4000-8000-000000000001",
+    bindingVersion: 1,
+    keyFingerprint: "a".repeat(64),
+  };
+  state.request.mockImplementation(async (url: string) => ({
+    response: new Response(null, { status: 200 }),
+    body: url.endsWith("challenge")
+      ? { version: 2, challenge: "c".repeat(43), expiresAt: Date.now() / 1000 + 60 }
+      : url.endsWith("login-grants")
+        ? { grant: "workspace-grant", expiresAt: Date.now() / 1000 + 60 }
+        : {
+            token: "workspace-session",
+            user: { id: "local-user" },
+            workspaceId: state.workspace!.workspaceId,
+            spaceId: "local-space",
+          },
+  }));
+  expect(await continueWithAccountsServer()).toBe(true);
+  expect(state.request.mock.calls.map(([url]) => url)).toEqual([
+    `${state.origin}/api/auth/native/workspace/challenge`,
+    `${state.identity.issuer}/api/identity/v2/login-grants`,
+    `${state.origin}/api/auth/native/workspace/complete`,
+  ]);
+  expect(JSON.parse(state.request.mock.calls[1]![1].body)).toEqual({
+    organizationId: state.workspace.organizationId,
+    serverId: state.workspace.serverId,
+    workspaceId: state.workspace.workspaceId,
+    challenge: "c".repeat(43),
+  });
+  expect(state.request.mock.calls[0]![1].headers.authorization).toBeUndefined();
+  expect(state.request.mock.calls[2]![1].headers.authorization).toBeUndefined();
+});
+
+it("rejects an old response after the account changes away and back", async () => {
+  const original = state.request.getMockImplementation()!;
+  state.request.mockImplementation(async (...args: unknown[]) => {
+    const result = await original(...args);
+    if (String(args[0]).endsWith("server-login-grants")) state.accountVersion += 2;
+    return result;
+  });
+  await expect(continueWithAccountsServer()).rejects.toThrow("Could not continue");
+  expect(state.replace).not.toHaveBeenCalled();
 });
 
 it("does not complete sign-in if the central account changes while issuing the proof", async () => {

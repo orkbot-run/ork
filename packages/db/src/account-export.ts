@@ -56,6 +56,7 @@ export async function* runGeneratorAsTenant<T>(
 export async function readAccountExport(
   prisma: PrismaClient,
   userId: string,
+  spaceId?: string,
 ): Promise<AccountExportSource> {
   const [user, memberships] = await Promise.all([
     prisma.user.findUniqueOrThrow({
@@ -63,7 +64,7 @@ export async function readAccountExport(
       select: { name: true, email: true, timezone: true },
     }),
     prisma.spaceMember.findMany({
-      where: { userId, space: { deletingAt: null } },
+      where: { userId, ...(spaceId ? { spaceId } : {}), space: { deletingAt: null } },
       orderBy: [{ space: { createdAt: "asc" } }, { spaceId: "asc" }],
       select: { role: true, space: { select: { id: true, name: true, createdAt: true } } },
     }),

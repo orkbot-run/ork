@@ -11,7 +11,9 @@ export const EXPLICIT_REPLY_READER_VERSION = 2;
 
 /** Version 3 enforces the background helper's independent run and tool boundary. */
 export const BACKGROUND_HELPER_READER_VERSION = 3;
-export const SUPPORTED_RUN_READER_VERSION = BACKGROUND_HELPER_READER_VERSION;
+/** Version 4 enforces immutable central workspace admission and installation AI accounts. */
+export const WORKSPACE_AUTHORITY_READER_VERSION = 4;
+export const SUPPORTED_RUN_READER_VERSION = WORKSPACE_AUTHORITY_READER_VERSION;
 
 /** Claim-local only: never let a pooled connection advertise a reader after the transaction. */
 export async function declareRunReaderVersion(tx: Pick<Prisma.TransactionClient, "$queryRaw">) {

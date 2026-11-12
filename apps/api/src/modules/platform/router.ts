@@ -30,6 +30,9 @@ import type {
   ProviderCatalogCache,
   PushTokenStore,
   RemoteConnectorDependencies,
+  ServerAICatalog,
+  ServerAIModels,
+  ServerAIOAuth,
   TicketChangeNotifier,
   verifyModelServesAgents,
 } from "@orkbot/adapters";
@@ -51,6 +54,7 @@ import { mcpRoutes } from "#modules/mcp/routes/mcp";
 import { memoryRoutes } from "#modules/memory/routes/memory";
 import { messagingRoutes } from "#modules/messaging/routes/messaging";
 import { modelsRoutes } from "#modules/models/routes/models";
+import { serverAIRoutes } from "#modules/models/routes/server-ai";
 import { routinesRoutes } from "#modules/routines/routes/routines";
 import { serverUpdateRoutes } from "#modules/server-updates/routes";
 import type { ServerUpdatesService } from "#modules/server-updates/service";
@@ -66,6 +70,8 @@ export { callMarkerClientNonce } from "#modules/threads/routes/threads";
 export { HEARTBEAT_MS, SESSION_RECHECK_MS } from "./routes/shared.js";
 
 export interface RouterDeps {
+  serverAI?: ServerAICatalog;
+  serverAIModels?: ServerAIModels;
   serverUpdates?: ServerUpdatesService;
   pushTokens: PushTokenStore;
   /** Stops a call's ring on the owner's other devices once it is settled. */
@@ -86,6 +92,7 @@ export interface RouterDeps {
   home: AgentHomeStore;
   secrets: SecretStore;
   oauthLogins: PiOAuthLogins;
+  serverAIOAuth?: ServerAIOAuth;
   /** Live Codex catalog seam; defaults to the shared per-process cache. */
   codexCatalog?: CodexLiveCatalog;
   providerCatalog?: ProviderCatalogCache;
@@ -160,6 +167,7 @@ export function createRouter(deps: RouterDeps) {
     ...spacesRoutes(ctx),
     ...organizationsRoutes(ctx),
     ...modelsRoutes(ctx),
+    ...serverAIRoutes(ctx),
     ...botsRoutes(ctx),
     ...threadsRoutes(ctx),
     ...computerRoutes(ctx),

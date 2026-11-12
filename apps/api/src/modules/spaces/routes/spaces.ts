@@ -10,6 +10,7 @@ import {
   CannotDeleteLastSpaceError,
   CannotDeleteSpaceAsNonOwnerError,
   CannotRenameSpaceAsNonOwnerError,
+  CentralWorkspaceCreationRequiredError,
   createExternalConversationRepos,
   createSpaceForMember,
   InvalidSpaceNameError,
@@ -78,7 +79,11 @@ export function spacesRoutes(ctx: RouterContext) {
               name: input.name,
             });
           } catch (error) {
-            if (error instanceof SpaceLimitError || error instanceof InvalidSpaceNameError) {
+            if (
+              error instanceof CentralWorkspaceCreationRequiredError ||
+              error instanceof SpaceLimitError ||
+              error instanceof InvalidSpaceNameError
+            ) {
               throw new ORPCError("BAD_REQUEST", { message: error.message });
             }
             if (error instanceof SpaceDeletionInProgressError) {

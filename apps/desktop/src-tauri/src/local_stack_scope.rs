@@ -256,6 +256,7 @@ mod tests {
         settings::save(
             root.path(),
             &settings::Setup {
+                workspace: None,
                 mode: settings::InstanceMode::New,
                 server_url: Url::parse("http://127.0.0.1:45173").unwrap(),
                 account: Some(owner("a")),

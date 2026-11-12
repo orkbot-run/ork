@@ -309,6 +309,22 @@ describe("Pi usage accounting", () => {
       await once(server, "close");
     }
   }, 30000);
+  it("reports only quota metadata before exposing a provider rejection", async () => {
+    const onResponse = vi.fn();
+    const wrapped = usageReportingFetch(
+      async () =>
+        new Response("private provider text", {
+          status: 429,
+          headers: { "retry-after": "120", "x-private-token": "secret" },
+        }),
+      new Set(),
+      undefined,
+      onResponse,
+    );
+    const response = await wrapped("https://example.test");
+    expect(onResponse).toHaveBeenCalledExactlyOnceWith({ status: 429, retryAfter: "120" });
+    expect(await response.text()).toBe("private provider text");
+  });
   it("persists a generation id before exposing the first SSE chunk", async () => {
     let release = () => {};
     let entered = () => {};
@@ -434,6 +450,31 @@ describe("Pi usage accounting", () => {
       }),
     );
     expect(events[0]).toMatchObject({ costUsd: 0.125, costSource: "provider-reported" });
+  });
+
+  it("refuses a revoked per-call lease before opening the provider stream", async () => {
+    const streamSimple = vi.fn();
+    const afterCall = vi.fn();
+    const stream = await observedPiStream(
+      { streamSimple } as unknown as Parameters<typeof observedPiStream>[0],
+      model,
+      { messages: [] },
+      undefined,
+      vi.fn(),
+      {
+        beforeCall: () => "reserved-call",
+        signalForCall: () => AbortSignal.abort(new Error("AI assignment revoked")),
+        afterCall,
+      },
+    );
+    for await (const _event of stream) {
+    }
+    expect(streamSimple).not.toHaveBeenCalled();
+    expect(afterCall).toHaveBeenCalledWith(
+      "reserved-call",
+      expect.objectContaining({ costUsd: 0, usageSource: "not-started" }),
+    );
+    expect((await stream.result()).stopReason).toBe("error");
   });
 
   it("settles a thrown provider call before exposing the terminal event", async () => {

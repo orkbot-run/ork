@@ -28,6 +28,13 @@ export interface NativeLoginIdentity {
   allowProvision?: boolean;
   workspaceId?: string;
   workspaceMembership?: string;
+  centralWorkspace?: {
+    id: string;
+    spaceId: string;
+    organizationId: string;
+    revision: string;
+    role: "admin" | "member";
+  };
 }
 export interface NativeLoginGrant extends NativeLoginIdentity {
   email: string;
@@ -42,6 +49,14 @@ const verifiedLogin = new AsyncLocalStorage<NativeLoginIdentity>();
 /** Only a signature-verified login flow can establish this request-local proof. */
 export function nativeLoginProof(): NativeLoginIdentity | undefined {
   return verifiedLogin.getStore();
+}
+
+/** Internal verified flows establish this proof before auth hooks provision their exact workspace. */
+export function withVerifiedNativeLogin<T>(
+  identity: NativeLoginIdentity,
+  run: () => Promise<T>,
+): Promise<T> {
+  return verifiedLogin.run(identity, run);
 }
 
 const digest = (input: string) => createHash("sha256").update(input).digest("hex");
@@ -312,6 +327,58 @@ export function nativeLoginStore(
   };
 }
 
+export async function provisionNativeIdentity(
+  ctx: Parameters<typeof setSessionCookie>[0],
+  identity: NativeLoginGrant,
+  grant: string,
+) {
+  const accountKey = oidcAccountSubject(identity.issuer, identity.subject);
+  const adapter = ctx.context.internalAdapter;
+  const existing = await adapter.findAccountByKey({
+    providerId: "oidc",
+    accountId: accountKey,
+  });
+  let user: Awaited<ReturnType<typeof adapter.findUserById>>;
+  if (existing) {
+    user = await adapter.findUserById(existing.userId);
+    if (!user) throw denied();
+    const collision = await adapter.findUserByEmail(identity.email);
+    if (collision && collision.user.id !== user.id) throw denied();
+    user = await adapter.updateUser(user.id, {
+      email: identity.email,
+      emailVerified: true,
+      name: identity.name,
+      ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
+    });
+    await adapter.updateAccount(existing.id, { idToken: grant });
+  } else {
+    if (await adapter.findUserByEmail(identity.email)) throw denied();
+    user = await adapter.createUser(
+      {
+        name: identity.name,
+        email: identity.email,
+        emailVerified: true,
+        ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
+      },
+      {
+        method: "oauth",
+        oauth: {
+          providerId: "oidc",
+          profile: { sub: identity.subject, iss: identity.issuer },
+        },
+      },
+    );
+    await adapter.createAccount({
+      userId: user.id,
+      providerId: "oidc",
+      accountId: accountKey,
+      idToken: grant,
+    });
+  }
+  if (!user) throw denied();
+  return user;
+}
+
 function validReceipt(value: unknown): value is { id: string; receipt: string; expiresAt: number } {
   return Boolean(
     value &&
@@ -373,57 +440,6 @@ export function nativeAccountsLogin(
     return statusRequest;
   };
 
-  const provisionIdentity = async (
-    ctx: Parameters<typeof setSessionCookie>[0],
-    identity: NativeLoginGrant,
-    grant: string,
-  ) => {
-    const accountKey = oidcAccountSubject(identity.issuer, identity.subject);
-    const adapter = ctx.context.internalAdapter;
-    const existing = await adapter.findAccountByKey({
-      providerId: "oidc",
-      accountId: accountKey,
-    });
-    let user: Awaited<ReturnType<typeof adapter.findUserById>>;
-    if (existing) {
-      user = await adapter.findUserById(existing.userId);
-      if (!user) throw denied();
-      const collision = await adapter.findUserByEmail(identity.email);
-      if (collision && collision.user.id !== user.id) throw denied();
-      user = await adapter.updateUser(user.id, {
-        email: identity.email,
-        emailVerified: true,
-        name: identity.name,
-        ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
-      });
-      await adapter.updateAccount(existing.id, { idToken: grant });
-    } else {
-      if (await adapter.findUserByEmail(identity.email)) throw denied();
-      user = await adapter.createUser(
-        {
-          name: identity.name,
-          email: identity.email,
-          emailVerified: true,
-          ...(identity.orkAvatar ? { orkAvatar: identity.orkAvatar } : {}),
-        },
-        {
-          method: "oauth",
-          oauth: {
-            providerId: "oidc",
-            profile: { sub: identity.subject, iss: identity.issuer },
-          },
-        },
-      );
-      await adapter.createAccount({
-        userId: user.id,
-        providerId: "oidc",
-        accountId: accountKey,
-        idToken: grant,
-      });
-    }
-    if (!user) throw denied();
-    return user;
-  };
   const brokerPost = async (path: "redeem" | "grant" | "report", body: object) => {
     const response = await fetch(new URL(`/api/server-pairings/${path}`, options.issuer), {
       method: "POST",
@@ -598,7 +614,7 @@ export function nativeAccountsLogin(
             await verifiedLogin.run({ ...identity, ...authorization }, async () => {
               if (!(await pairings.current(lease)) || !(await store.initializationRequired()))
                 throw denied();
-              const user = await provisionIdentity(ctx, identity, grant);
+              const user = await provisionNativeIdentity(ctx, identity, grant);
               await options.provisionUser!(user);
             });
             if (!(await pairings.current(lease))) throw denied();
@@ -655,7 +671,7 @@ export function nativeAccountsLogin(
               : {}),
           });
           return verifiedLogin.run({ ...identity, ...authorization }, async () => {
-            const user = await provisionIdentity(ctx, identity, grant);
+            const user = await provisionNativeIdentity(ctx, identity, grant);
             const adapter = ctx.context.internalAdapter;
             const session = await adapter.createSession(user.id);
             if (!session) throw denied();

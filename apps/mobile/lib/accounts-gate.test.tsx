@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import type { IdentityCatalog } from "@orkbot/contracts";
 import { tokensForAppearance } from "@orkbot/ui-tokens";
 import * as Clipboard from "expo-clipboard";
 import type { ReactNode } from "react";
@@ -11,7 +12,7 @@ import { Alert } from "react-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { redirectSystemPath } from "../app/+native-intent";
 import { AccountsGate } from "../components/accounts-gate";
-import { accountServers, addAccountServer } from "./account-servers";
+import { accountServers, addAccountServer, setDefaultAccountOrganization } from "./account-servers";
 import { accountsIdentity, continueWithAccounts, signOutAccounts } from "./accounts";
 import { continueWithAccountsServer } from "./accounts-login";
 import {
@@ -24,8 +25,14 @@ import {
 } from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
-
-import { clearServerConnect, pendingServerConnect, receiveServerConnect } from "./server-connect";
+import { saveSelectedWorkspace, selectedWorkspace } from "./selected-workspace";
+import {
+  clearServerConnect,
+  clearWorkspaceConnect,
+  pendingServerConnect,
+  pendingWorkspaceConnect,
+  receiveServerConnect,
+} from "./server-connect";
 import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
 import { currentSessionGeneration } from "./session";
@@ -35,6 +42,7 @@ vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates
 
 const state = vi.hoisted(() => ({
   storage: new Map<string, string>(),
+  catalog: null as IdentityCatalog | null,
   version: 0,
   listeners: new Set<() => void>(),
   appListeners: new Set<(state: string) => void>(),
@@ -102,6 +110,62 @@ vi.mock("../components/native-action-button", () => ({
     </button>
   ),
 }));
+vi.mock("../components/settings-group", () => ({
+  SettingsGroup: ({ label, children }: { label?: string; children: ReactNode }) => (
+    <section aria-label={label}>{children}</section>
+  ),
+  SettingsRow: ({
+    title,
+    value,
+    disabled,
+    onPress,
+  }: {
+    title: string;
+    value?: string;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) =>
+    onPress ? (
+      <button type="button" disabled={disabled} onClick={onPress}>
+        {title}
+        {value}
+      </button>
+    ) : (
+      <div>
+        {title}
+        {value}
+      </div>
+    ),
+}));
+vi.mock("../components/menu-picker", () => ({
+  MenuPickerMenu: ({
+    label,
+    choices,
+    value,
+    disabled,
+    onChange,
+  }: {
+    label: string;
+    choices: { key: string; label: string }[];
+    value: string;
+    disabled?: boolean;
+    onChange(key: string): void;
+  }) => (
+    <select
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="" />
+      {choices.map((choice) => (
+        <option key={choice.key} value={choice.key}>
+          {choice.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
 vi.mock("./native", () => ({ useMobileTokens: () => tokensForAppearance("light") }));
 vi.mock("./appearance", () => ({ loadAppearancePreference: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./i18n", () => ({
@@ -130,7 +194,56 @@ vi.mock("./accounts", () => ({
     return () => state.listeners.delete(listener);
   },
 }));
-vi.mock("./account-servers", () => ({ accountServers: vi.fn(), addAccountServer: vi.fn() }));
+vi.mock("./account-servers", () => {
+  const accountServers = vi.fn();
+  return {
+    accountServers,
+    addAccountServer: vi.fn(),
+    setDefaultAccountOrganization: vi.fn(async () => {}),
+    accountDirectory: async (owner: string) => {
+      const entries = await accountServers(owner);
+      return {
+        entries,
+        catalog: state.catalog ?? {
+          version: 2,
+          defaultOrganizationId: "00000000-0000-4000-8000-000000000010",
+          organizations: [
+            {
+              id: "00000000-0000-4000-8000-000000000010",
+              name: "Personal",
+              type: "personal",
+              role: "admin",
+              servers: entries.map((entry: { id: string; url: string; name?: string }) => ({
+                id: entry.id,
+                name: "Server",
+                state: "ready",
+                bindingVersion: 1,
+                keyFingerprint: "a".repeat(64),
+                routes: [],
+                workspaces: [
+                  {
+                    id: entry.id,
+                    name: entry.name ?? new URL(entry.url).host,
+                    canOpen: true,
+                    state: "ready",
+                    role: "admin",
+                  },
+                  {
+                    id: "00000000-0000-4000-8000-000000000099",
+                    name: "Another workspace",
+                    canOpen: true,
+                    state: "ready",
+                    role: "admin",
+                  },
+                ],
+              })),
+            },
+          ],
+        },
+      };
+    },
+  };
+});
 vi.mock("./incoming-share", () => ({ receiveIncomingShare: vi.fn() }));
 vi.mock("./session", () => ({ currentSessionGeneration: vi.fn(() => 1) }));
 vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
@@ -180,9 +293,12 @@ beforeEach(() => {
     cancel: vi.fn().mockResolvedValue(undefined),
   };
   vi.mocked(beginServerPairing).mockReset().mockResolvedValue(pairing);
+  const workspace = pendingWorkspaceConnect();
+  if (workspace) clearWorkspaceConnect(workspace);
   const linked = pendingServerConnect();
   if (linked) clearServerConnect(linked);
   state.storage.clear();
+  state.catalog = null;
   state.version = 0;
   state.listeners.clear();
   state.appListeners.clear();
@@ -1404,4 +1520,115 @@ xit("does not bookmark a normal recovery that finishes authentication for the pr
   expect(addAccountServer).not.toHaveBeenCalled();
   expect(rpc).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain("Product screen");
+});
+
+const personalId = "00000000-0000-4000-8000-000000000010";
+const companyId = "00000000-0000-4000-8000-000000000020";
+const installationId = "00000000-0000-4000-8000-000000000030";
+function managedDirectory(defaultOrganizationId: string | null = personalId) {
+  const workspace = {
+    organizationId: companyId,
+    serverId: installationId,
+    workspaceId: remote.id,
+    bindingVersion: 2,
+    keyFingerprint: "a".repeat(64),
+  };
+  state.catalog = {
+    version: 2,
+    defaultOrganizationId,
+    organizations: [
+      { id: personalId, name: "Personal", type: "personal", role: "admin", servers: [] },
+      {
+        id: companyId,
+        name: "Company",
+        type: "shared",
+        role: "member",
+        servers: [
+          {
+            id: installationId,
+            name: "Company server",
+            state: "ready",
+            bindingVersion: 2,
+            keyFingerprint: "a".repeat(64),
+            routes: [],
+            workspaces: [
+              {
+                id: remote.id,
+                name: "Company workspace",
+                state: "ready",
+                canOpen: true,
+                role: "member",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+  ]);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  return workspace;
+}
+async function chooseOrganization(id: string) {
+  await act(async () => {
+    const picker = host.querySelector('select[aria-label="Organization"]') as HTMLSelectElement;
+    picker.value = id;
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+it("keeps an empty default organization visible and restores the device's workspace after an explicit organization change", async () => {
+  const workspace = managedDirectory();
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  expect(host.textContent).toContain("No servers connected");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await chooseOrganization(companyId);
+  expect(host.textContent).toContain("Product screen");
+  expect(await selectedWorkspace(owner, remote.url)).toEqual(workspace);
+  expect(setDefaultAccountOrganization).not.toHaveBeenCalled();
+});
+
+it("uses an explicit workspace link before the central organization default", async () => {
+  const workspace = managedDirectory();
+  const link = `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=${remote.id}`;
+  expect(redirectSystemPath({ path: link, initial: true })).toBe("/");
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(
+    await selectedWorkspace(JSON.stringify([identity.issuer, identity.subject]), remote.url),
+  ).toEqual(workspace);
+  expect(pendingWorkspaceConnect()).toBeNull();
+});
+
+it("never substitutes the default organization when a workspace link is inaccessible", async () => {
+  managedDirectory(companyId);
+  receiveServerConnect(
+    `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=00000000-0000-4000-8000-000000000099`,
+  );
+  await render();
+  expect(host.textContent).toContain("Workspace unavailable");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await click("Retry");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("saves the default organization centrally only after an explicit preference action", async () => {
+  managedDirectory(null);
+  await render();
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await chooseOrganization(personalId);
+  await click("Set as default organization");
+  expect(setDefaultAccountOrganization).toHaveBeenCalledExactlyOnceWith(
+    personalId,
+    JSON.stringify([identity.issuer, identity.subject]),
+  );
+  expect(host.textContent).toContain("Default organization");
+  expect(saveApiBase).not.toHaveBeenCalled();
 });

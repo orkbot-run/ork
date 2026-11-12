@@ -200,6 +200,50 @@ jobs:
     steps:
       - run: test "${{ needs.static-checks.result }}" = success && test "${{ needs.unit-tests-shard.result }}" = success
 
+  native-transport:
+    name: Installation TLS (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/client-transport/native
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - name: Check installation transport
+        run: |
+          cargo fmt -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --lib
+      - name: Build iOS transport and check Swift bindings
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-ios-sim
+          cargo build --locked --lib --target aarch64-apple-ios-sim
+          cargo build --locked --features bindgen
+          cargo run --locked --features bindgen --bin ork-transport-bindgen -- generate --library target/debug/libork_installation_transport.dylib --language swift --out-dir "$RUNNER_TEMP/ork-transport-bindings" --no-format
+          xcrun swiftc -typecheck -I "$RUNNER_TEMP/ork-transport-bindings" -Xcc "-fmodule-map-file=$RUNNER_TEMP/ork-transport-bindings/ork_installation_transportFFI.modulemap" "$RUNNER_TEMP/ork-transport-bindings/ork_installation_transport.swift"
+      - name: Build Android transport
+        if: runner.os == 'Linux'
+        run: |
+          rustup target add aarch64-linux-android
+          ndk_tools="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          export CC_aarch64_linux_android="$ndk_tools/aarch64-linux-android23-clang"
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
+          cargo build --locked --lib --target aarch64-linux-android
+
   native-computer:
     name: Native computer (${{ matrix.os }})
     needs: changes

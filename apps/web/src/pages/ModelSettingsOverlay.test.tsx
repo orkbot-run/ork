@@ -36,9 +36,22 @@ const models = vi.hoisted(() => ({
   submitOAuthCode: vi.fn(),
 }));
 
+const serverAI = vi.hoisted(() => ({
+  status: vi.fn(),
+  catalog: vi.fn(),
+  configure: vi.fn(),
+  create: vi.fn(),
+  reconnect: vi.fn(),
+  update: vi.fn(),
+  offer: vi.fn(),
+  disable: vi.fn(),
+  workspaceBudget: vi.fn(),
+}));
+
 vi.mock("../lib/rpc", () => {
   const rpc = {
     models,
+    serverAI,
     bots: { list: vi.fn(async () => []), update: vi.fn() },
     me: vi.fn(),
   };
@@ -336,7 +349,14 @@ async function renderSettings(
     );
   });
   await act(async () => {
-    await Promise.resolve();
+    await vi.waitFor(() => {
+      expect(
+        container.querySelector("[data-testid=model-role-main]") ??
+          container.querySelector("[role=alert]") ??
+          container.querySelector('section[aria-label="Workspace model"]') ??
+          container.querySelector('[data-testid="server-ai-ready"]'),
+      ).not.toBeNull();
+    });
   });
   return {
     container,
@@ -1782,6 +1802,84 @@ it("sends a new shared key directly to the captured server session", async () =>
       view.container.querySelector('section[aria-label="Workspace model"] input[type="password"]'),
     ).toBeNull();
     expect(view.container.textContent).not.toContain("fake-private-workspace-key");
+  } finally {
+    await view.unmount();
+  }
+});
+
+it("opens managed AI settings without reading or refreshing personal credentials", async () => {
+  models.workspacePolicy.mockResolvedValue({ managed: true, canManage: false, policy: null });
+  serverAI.status.mockResolvedValue({
+    available: true,
+    spaceId: "space-1",
+    workspaceMonthlyBudgetMicros: null,
+    canManageServer: false,
+    canManageWorkspace: false,
+    accounts: [],
+    connections: [],
+  });
+  const view = await renderSettings();
+  try {
+    expect(view.container.textContent).toContain("No AI accounts assigned");
+    expect(models.credentials).not.toHaveBeenCalled();
+    expect(models.list).not.toHaveBeenCalled();
+    expect(models.role).not.toHaveBeenCalled();
+    expect(serverAI.catalog).not.toHaveBeenCalled();
+    expect(rpc.me).not.toHaveBeenCalled();
+  } finally {
+    await view.unmount();
+  }
+});
+
+it("changes the managed default with one captured-server request and preserves the budget", async () => {
+  const row = {
+    id: "connection-b",
+    label: "Account B",
+    provider: "openai",
+    models: ["model-b"],
+    state: "active",
+    revision: 1,
+    concurrencyLimit: 8,
+    enabled: true,
+    allowedModels: ["model-b"],
+    defaultModelId: "model-b",
+    isDefault: false,
+    fallback: false,
+    priority: 0,
+    assignmentRevision: 1,
+    monthlyBudgetMicros: 1234567,
+  };
+  models.workspacePolicy.mockResolvedValue({ managed: true, canManage: false, policy: null });
+  serverAI.status.mockResolvedValue({
+    available: true,
+    spaceId: "space-1",
+    workspaceMonthlyBudgetMicros: null,
+    canManageServer: false,
+    canManageWorkspace: true,
+    accounts: [],
+    connections: [row],
+  });
+  serverAI.configure.mockResolvedValue({ ok: true });
+  const view = await renderSettings();
+  try {
+    const switches = view.container.querySelectorAll('[role="switch"]');
+    expect(switches.length).toBe(3);
+    await click(switches[1] as HTMLButtonElement);
+    expect(serverAI.configure).toHaveBeenCalledExactlyOnceWith(
+      {
+        connectionId: row.id,
+        enabled: true,
+        allowedModels: ["model-b"],
+        defaultModelId: "model-b",
+        isDefault: true,
+        fallback: false,
+        priority: 0,
+        monthlyBudgetMicros: 1234567,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
+    expect(models.setRole).not.toHaveBeenCalled();
+    expect(models.credentials).not.toHaveBeenCalled();
   } finally {
     await view.unmount();
   }

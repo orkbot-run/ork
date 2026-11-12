@@ -2158,7 +2158,17 @@ describe("PiOAuthLogins hand-off between API processes", () => {
     ciphertext: string;
     createdAt: Date;
   };
-  type Where = Partial<Omit<Row, "createdAt">> & { createdAt?: { gte?: Date; lt?: Date } };
+  type ScopeFilter = string | { startsWith?: string; not?: { startsWith: string } };
+  type Where = Partial<Omit<Row, "createdAt" | "scope">> & {
+    scope?: ScopeFilter;
+    createdAt?: { gte?: Date; lt?: Date };
+  };
+  const matchesScope = (scope: string, filter?: ScopeFilter) =>
+    filter === undefined ||
+    (typeof filter === "string"
+      ? scope === filter
+      : (!filter.startsWith || scope.startsWith(filter.startsWith)) &&
+        (!filter.not || !scope.startsWith(filter.not.startsWith)));
   type HandoffStore = ConstructorParameters<typeof PiOAuthLogins>[1];
 
   function handoffStore() {
@@ -2166,7 +2176,7 @@ describe("PiOAuthLogins hand-off between API processes", () => {
     let clock = Date.now();
     const matches = (row: Row, where: Where) =>
       (where.id === undefined || row.id === where.id) &&
-      (where.scope === undefined || row.scope === where.scope) &&
+      matchesScope(row.scope, where.scope) &&
       (where.spaceId === undefined || row.spaceId === where.spaceId) &&
       (where.userId === undefined || row.userId === where.userId) &&
       (where.provider === undefined || row.provider === where.provider) &&
@@ -2211,22 +2221,68 @@ describe("PiOAuthLogins hand-off between API processes", () => {
   }
 
   /** One API process: its own memory, the shared store. */
-  function apiProcess(store: HandoffStore) {
+  function apiProcess(store: HandoffStore, namespace: "personal" | "server-ai" = "personal") {
     const seen: Array<{ verifier?: string; code: string }> = [];
-    const logins = new PiOAuthLogins(async (_provider, _type, interaction, options) => {
-      interaction.notify({
-        type: "auth_url",
-        url: "https://claude.ai/oauth/authorize?code=true",
-        instructions: "open",
-      });
-      const code = await interaction.prompt({ type: "manual_code", message: "paste" });
-      seen.push({ verifier: options?.verifier, code });
-      return oauthCred({ access: `exchanged-${code}` });
-    }, store);
+    const logins = new PiOAuthLogins(
+      async (_provider, _type, interaction, options) => {
+        interaction.notify({
+          type: "auth_url",
+          url: "https://claude.ai/oauth/authorize?code=true",
+          instructions: "open",
+        });
+        const code = await interaction.prompt({ type: "manual_code", message: "paste" });
+        seen.push({ verifier: options?.verifier, code });
+        return oauthCred({ access: `exchanged-${code}` });
+      },
+      store,
+      namespace,
+    );
     return { logins, seen };
   }
 
   const member = { userId: "u", spaceId: "w" };
+
+  it("keeps installation handoffs out of personal completion and cancellation", async () => {
+    const { rows, store } = handoffStore();
+    const original = apiProcess(store, "server-ai");
+    const intent = {
+      accountKey: "a".repeat(64),
+      bindingVersion: 1,
+      membershipVersion: "admission",
+      sessionId: "session",
+      connectionId: null,
+      connectionRevision: null,
+      label: "Team",
+      models: ["model"],
+      concurrencyLimit: 2,
+      monthlyBudgetMicros: null,
+    };
+    const started = await original.logins.begin({
+      ...member,
+      provider: "anthropic",
+      codePage: true,
+      installation: intent,
+    });
+    original.logins.abortAll();
+    const personal = apiProcess(store);
+    await expect(personal.logins.submit(started.loginId, member, "stolen-code")).rejects.toThrow(
+      /not found/,
+    );
+    await personal.logins.cancel(started.loginId, member);
+    await personal.logins.cancelProvider({ userId: member.userId, provider: "anthropic" });
+    expect(rows.has(started.loginId)).toBe(true);
+    const replacement = apiProcess(store, "server-ai");
+    expect(await replacement.logins.installationContext(started.loginId, member)).toEqual(intent);
+    await replacement.logins.submit(started.loginId, member, "server-code");
+    await flushMicrotasks();
+    expect(replacement.logins.complete(started.loginId, member)).toMatchObject({
+      status: "connected",
+      installation: intent,
+      credential: { access: "exchanged-server-code" },
+    });
+    replacement.logins.abortAll();
+    personal.logins.abortAll();
+  });
 
   it("finishes a sign-in on the API process that receives the code", async () => {
     const { rows, store, secrets } = handoffStore();
@@ -2292,7 +2348,12 @@ describe("PiOAuthLogins hand-off between API processes", () => {
       apiProcess(store).logins.submit(started.loginId, actor, "the-code"),
     ).resolves.toEqual({ ok: true });
     expect(store?.prisma.modelOAuthSession.findFirst).toHaveBeenCalledWith({
-      where: { id: started.loginId, ...member, createdAt: { gte: expect.any(Date) } },
+      where: {
+        id: started.loginId,
+        ...member,
+        scope: { not: { startsWith: "server-ai:" } },
+        createdAt: { gte: expect.any(Date) },
+      },
       select: { ciphertext: true },
     });
   });

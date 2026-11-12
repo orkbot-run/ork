@@ -43,9 +43,34 @@ import { ConnectionNameField, ProvidersSection } from "./model-settings/provider
 import type { ConnectableProvider } from "./model-settings/role-model-picker";
 import { SpaceBotsModelNotice } from "./model-settings/space-bots-model";
 import { useModelSettings } from "./model-settings/use-model-settings";
+import { AISettingsFrame, ServerAISettings } from "./ServerAISettings";
 import { WorkspaceModelPolicy } from "./WorkspaceModelPolicy";
 
-export function ModelSettingsOverlay({
+export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSettingsOverlay>[0]) {
+  const { t } = useLingui();
+  const queries = useSpaceQueries();
+  const policy = useQuery(queries.models.workspacePolicy.queryOptions());
+  if (policy.isPending)
+    return (
+      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
+        <Spinner />
+      </AISettingsFrame>
+    );
+  if (policy.isError)
+    return (
+      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
+        <p role="alert" className="text-sm text-destructive">{t`Could not load model settings`}</p>
+        <Button variant="outline" onClick={() => void policy.refetch()}>
+          <Trans>Retry</Trans>
+        </Button>
+      </AISettingsFrame>
+    );
+  if (policy.data.managed)
+    return <ServerAISettings embedded={props.embedded} onClose={props.onClose} />;
+  return <LegacyModelSettingsOverlay {...props} />;
+}
+
+function LegacyModelSettingsOverlay({
   onClose,
   embedded = false,
   scope,

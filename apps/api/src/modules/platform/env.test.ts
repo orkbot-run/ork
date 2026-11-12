@@ -503,6 +503,27 @@ describe("product API authentication boundary", () => {
     OIDC_CLIENT_ID: "offline-public-client",
   };
 
+  it("accepts a pinned test issuer and refuses a production override", () => {
+    const configuration = {
+      ...base,
+      AUTH_ACCOUNTS_ENABLED: "true",
+      ACCOUNTS_ISSUER: "https://accounts.example.test",
+    };
+    expect(loadProductEnv(configuration).accountsIssuer).toBe(configuration.ACCOUNTS_ISSUER);
+    expect(() => loadProductEnv({ ...configuration, NODE_ENV: "production" })).toThrow(
+      "ACCOUNTS_ISSUER",
+    );
+    for (const issuer of [
+      "http://accounts.example.test",
+      "https://accounts.example.test/path",
+      "https://accounts.example.test/",
+      "https://user:password@accounts.example.test",
+      "https://accounts.example.test?query=1",
+    ]) {
+      expect(() => loadEnv({ ...base, ACCOUNTS_ISSUER: issuer })).toThrow("ACCOUNTS_ISSUER");
+    }
+  });
+
   it("starts native Accounts without a client registration and keeps local auth closed", () => {
     const config = { ...base, AUTH_ACCOUNTS_ENABLED: "true" };
     const env = loadProductEnv(config);

@@ -125,6 +125,7 @@ struct OpeningServer {
     origin: String,
     account: String,
     intent: u64,
+    workspace: Option<server_directory::WorkspaceTarget>,
 }
 
 impl OpeningServer {
@@ -300,6 +301,38 @@ fn active_document(app: &tauri::AppHandle) -> Option<native::Document> {
     state.sessions.current(&label)
 }
 
+fn document_workspace(
+    state: &DesktopState,
+    document: &native::Document,
+    authorization: &accounts::Authorization,
+) -> Result<Option<server_directory::WorkspaceTarget>, String> {
+    let account = settings::account_key(authorization.account.identity());
+    if let Some(opening) = state
+        .opening_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .as_ref()
+    {
+        if opening.permits(
+            document,
+            Some(&account),
+            state.restore_intent.load(Ordering::SeqCst),
+        ) {
+            return Ok(opening.workspace.clone());
+        }
+    }
+    Ok(state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .as_ref()
+        .filter(|setup| {
+            setup.belongs_to(authorization.account.identity())
+                && setup.server_url.origin() == document.origin.origin()
+        })
+        .and_then(|setup| setup.workspace.clone()))
+}
+
 fn send_native_event(
     app: &tauri::AppHandle,
     document: &native::Document,
@@ -392,6 +425,7 @@ async fn native_command(
     let opening_auth = matches!(
         &command,
         native::Command::AccountsCreateServerLoginGrant { .. }
+            | native::Command::AccountsWorkspaceTarget
             | native::Command::AccountsConsumeServerInitializationSecret
             | native::Command::ServerRemember
     ) && opening_server_matches(&state, &document, None);
@@ -448,6 +482,17 @@ async fn native_command(
             }
             serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
         }
+        Command::AccountsWorkspaceTarget => {
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization) {
+                return Err("Could not continue".into());
+            }
+            serde_json::to_value(document_workspace(&state, &document, &authorization)?)
+                .map_err(|_| "Could not continue".into())
+        }
         Command::AccountsCreateServerLoginGrant { origin, challenge } => {
             let audience = server_login::audience_for_document(&document.origin, &origin)?;
             if !server_login::valid_challenge(&challenge) {
@@ -457,13 +502,27 @@ async fn native_command(
                 .accounts
                 .authorization(&server_directory::origin())
                 .await?;
-            let result = server_login::issue(
-                authorization.directory_bearer()?,
-                &audience,
-                &challenge,
-                || current_server_account(&app, &state, &document, &authorization),
-            )
-            .await?;
+            let workspace = document_workspace(&state, &document, &authorization)?;
+            let result = if let Some(target) = workspace {
+                if !current_server_account(&app, &state, &document, &authorization) {
+                    return Err("Could not continue".into());
+                }
+                server_login::issue_workspace(
+                    authorization.directory_bearer()?,
+                    &target,
+                    &challenge,
+                    || current_server_account(&app, &state, &document, &authorization),
+                )
+                .await?
+            } else {
+                server_login::issue(
+                    authorization.directory_bearer()?,
+                    &audience,
+                    &challenge,
+                    || current_server_account(&app, &state, &document, &authorization),
+                )
+                .await?
+            };
             serde_json::to_value(result).map_err(|_| "Could not continue".into())
         }
         Command::AccountsConsumeServerInitializationSecret => {
@@ -1700,6 +1759,7 @@ async fn connect_workspace(
             mode: settings::InstanceMode::Existing,
             server_url: target,
             account: None,
+            workspace: workspace.target,
         },
         &authorization,
     )
@@ -1741,6 +1801,7 @@ async fn connect_directory_server(
                     mode: settings::InstanceMode::Existing,
                     server_url: target,
                     account: None,
+                    workspace: None,
                 },
                 authorization,
             )
@@ -1891,6 +1952,7 @@ async fn connect_server(
             mode: settings::InstanceMode::Existing,
             server_url: target,
             account: None,
+            workspace: None,
         },
         &authorization,
     )
@@ -1994,6 +2056,7 @@ async fn start_local_server(
             mode: settings::InstanceMode::New,
             server_url: stack.web_url(),
             account: None,
+            workspace: None,
         },
         &authorization,
     )
@@ -2066,6 +2129,7 @@ async fn open_server(
         origin: target.origin().ascii_serialization(),
         account: settings::account_key(authorization.account.identity()),
         intent,
+        workspace: choice.workspace.clone(),
     };
     if let Some(initialization) = state
         .initialization
@@ -2089,6 +2153,7 @@ async fn open_server(
         &state.directory,
         &target,
         authorization.account.identity(),
+        choice.workspace.as_ref(),
     );
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -3247,6 +3312,7 @@ mod tests {
             origin: "https://server.example.test".into(),
             account: "account-a".into(),
             intent: 3,
+            workspace: None,
         };
         let mut document = native::Document {
             label: "server-new".into(),
@@ -3425,6 +3491,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: origin.clone(),
             account: Some("a".repeat(64)),
+            workspace: None,
         });
         let logout = begin_accounts_logout(&state).unwrap();
         reset_setup_after_product_logout(
@@ -3469,6 +3536,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: origin,
             account: Some("b".repeat(64)),
+            workspace: None,
         });
         let logout = begin_accounts_logout(&state).unwrap();
         assert!(reset_setup_after_product_logout(
@@ -3504,6 +3572,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: Url::parse("https://server.example.test").unwrap(),
             account: Some("a".repeat(64)),
+            workspace: None,
         });
         assert!(!state.accounts_have_started());
         assert_eq!(state.startup.lock().unwrap().phase, "idle");
@@ -3653,6 +3722,7 @@ mod tests {
                 mode,
                 server_url: Url::parse(url).unwrap(),
                 account: Some(settings::account_key(identity)),
+                workspace: None,
             };
             settings::save(directory.path(), &choice).unwrap();
             let mut choice = settings::load(directory.path()).unwrap();
@@ -3713,6 +3783,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: Url::parse(&entries[1].url).unwrap(),
             account: Some(settings::account_key(identity)),
+            workspace: None,
         };
         let preference = server_directory::Preference {
             server_id: Some(entries[0].id.clone()),

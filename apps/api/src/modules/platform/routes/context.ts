@@ -49,6 +49,7 @@ import { createAgentSkillsService } from "#modules/agents/agent-skills";
 import { createTaughtSkillsService } from "#modules/agents/taught-skills";
 import { createBotRemoval } from "#modules/bots/bot-removal";
 import { createMcpServers } from "#modules/mcp/mcp-servers";
+import { installationCatalog } from "#modules/models/installation-catalog";
 import {
   createModelConnector,
   prepareAllowedThinkingLevels,
@@ -147,6 +148,8 @@ export function createRouterContext(deps: RouterDeps) {
     actor: Actor,
     reads = createModelCatalogReads(deps.prisma, deps.secrets, actor.userId),
   ) => {
+    const installation = await installationCatalog(deps, actor);
+    if (installation) return installation;
     const catalog = await catalogForSpace(actor, reads);
     return deps.env.agentRuntime === "scripted" ? [...catalog, scriptedCatalogEntry] : catalog;
   };
@@ -224,6 +227,8 @@ export function createRouterContext(deps: RouterDeps) {
     return { ...settings, deploymentPrimary: deploymentModelRole(role, defaults).primary };
   };
   const modelRoleCatalog = async (actor: Actor, role: ModelRole): Promise<ModelCatalogEntry[]> => {
+    const installation = await installationCatalog(deps, actor);
+    if (installation) return installation.filter((entry) => modelSupportsRole(entry, role));
     const reads = createModelCatalogReads(deps.prisma, deps.secrets, actor.userId);
     const catalog = await chatCatalog(actor, reads);
     const decisions = role === "approval" ? decisionModelCatalog() : [];

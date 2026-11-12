@@ -514,6 +514,9 @@ importers:
       '@orkbot/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
+      '@orkbot/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@orkbot/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -907,6 +910,9 @@ importers:
       react-email:
         specifier: 6.11.6
         version: 6.11.6(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/react':
         specifier: 19.2.18

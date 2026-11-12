@@ -13,6 +13,9 @@ import {
   IntegrationProviderSettings,
   unwrapEnvFromKeyManager,
 } from "@orkbot/adapters";
+import { InstallationClient } from "@orkbot/auth/installation-client";
+import { WorkspaceAuthority } from "@orkbot/auth/workspace-authority";
+import { startWorkspaceAuthority } from "@orkbot/auth/workspace-authority-service";
 import { phoneCallSettings } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
@@ -79,6 +82,8 @@ import {
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
+  ServerAICatalog,
+  ServerAIModels,
   sandboxProviderOptionsFromEnv,
   shutdownPiTelemetry,
   UserDevices,
@@ -141,6 +146,46 @@ async function main() {
   prisma = withSecretPersistence(prisma, secrets);
   installSecurityEventStore(prisma);
   installAuditEventStore(prisma);
+  const accountsIssuer = process.env.ACCOUNTS_ISSUER ?? "https://api.ork.run";
+  if (process.env.NODE_ENV === "production" && accountsIssuer !== "https://api.ork.run")
+    throw new Error("Unsupported production Accounts issuer");
+  const installation =
+    process.env.AUTH_ACCOUNTS_ENABLED === "true"
+      ? new InstallationClient(prisma, {
+          issuer: accountsIssuer,
+          encryptionKey: resolveEncryptionKey(process.env),
+        })
+      : undefined;
+  const workspaceAuthority = installation
+    ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
+    : undefined;
+  const stopWorkspaceAuthority =
+    installation && workspaceAuthority
+      ? startWorkspaceAuthority(
+          installation,
+          workspaceAuthority,
+          (error) => logger.error("Workspace authority synchronization failed", error),
+          realtime,
+        )
+      : undefined;
+  const serverAI = workspaceAuthority
+    ? new ServerAICatalog({
+        prisma,
+        secrets,
+        realtime,
+        principal: async () => null,
+        authorizeWork: (actor) =>
+          workspaceAuthority.work(actor.spaceId, actor.userId, actor.membershipVersion),
+      })
+    : undefined;
+  const serverAIModels = serverAI
+    ? new ServerAIModels({
+        prisma,
+        secrets,
+        catalog: serverAI,
+        allowPrivateEndpoint: process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
+      })
+    : undefined;
   const unreadableMasterKeys = await verifyContentKeys(prisma);
   if (unreadableMasterKeys.length)
     logger.error("Stored space keys need master keys that are not configured", undefined, {
@@ -284,6 +329,8 @@ async function main() {
     voip: await createApnsVoipProvider(apnsVoipConfig(process.env)),
   });
   const executor = createRunExecutor({
+    serverAIModels,
+    authorizeWork: workspaceAuthority ? (scope) => workspaceAuthority.execution(scope) : undefined,
     maxUploadSizeBytes,
     mediaGeneration,
     prisma,
@@ -407,6 +454,8 @@ async function main() {
     (stopped ??= (async () => {
       stopping = true;
       shutdown.abort();
+      await stopWorkspaceAuthority?.();
+      serverAI?.dispose();
       stopStallWatch();
       try {
         await stopHealth?.();

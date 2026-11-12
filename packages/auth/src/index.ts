@@ -50,11 +50,18 @@ import {
   nativeSessionIdentityKey,
   workspaceSessionMembershipKey,
 } from "./native-session-identity.js";
+import { nativeWorkspaceLogin } from "./native-workspace-login.js";
 import type { OidcConfig } from "./oidc.js";
 import { isCurrentOidcAccount, oidcAccountSubject, oidcDiscovery } from "./oidc.js";
 import { passkeyRelyingParty } from "./passkey.js";
 import type { TokenKey } from "./token-storage.js";
 import { encryptStoredOAuthTokens, openIdToken, sealIdToken } from "./token-storage.js";
+import type { WorkspaceAuthority } from "./workspace-authority.js";
+import {
+  consumeWorkspaceExportToken,
+  issueWorkspaceExportToken,
+  WORKSPACE_EXPORT_TOKEN_PREFIX,
+} from "./workspace-export-token.js";
 
 export {
   emailLocale,
@@ -64,6 +71,7 @@ export {
 } from "./email.js";
 export type { HomeDeletionReason } from "./home-deletion-email.js";
 export { homeDeletionEmail } from "./home-deletion-email.js";
+export { InstallationClient } from "./installation-client.js";
 export { nativeAccountsLogin, nativeLoginProof } from "./native-accounts-login.js";
 export {
   NATIVE_SESSION_IDENTITY_PREFIX,
@@ -89,8 +97,11 @@ export {
   workspaceConnectionStatus,
 } from "./server-claim.js";
 export { welcomeEmail } from "./welcome-email.js";
+export { WorkspaceAuthority } from "./workspace-authority.js";
+export { startWorkspaceAuthority } from "./workspace-authority-service.js";
 
 export interface AuthEnv {
+  workspaceAuthority?: WorkspaceAuthority;
   analytics?: ProductAnalytics;
   passwordAuth?: boolean;
   /** Opt-in: rejects new passwords found in Have I Been Pwned. Calls an outside service. */
@@ -264,6 +275,16 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       });
     }
     const native = nativeLoginProof();
+    if (native?.centralWorkspace) {
+      if (!env.workspaceAuthority) throw new APIError("FORBIDDEN");
+      await env.workspaceAuthority.provisionMember(user.id, native);
+      return;
+    }
+    if (await env.workspaceAuthority?.active())
+      throw new APIError("FORBIDDEN", {
+        code: "UPDATE_REQUIRED",
+        message: "Update the app to continue.",
+      });
     if (native?.workspaceId && !env.singleAccount) {
       const settings = await prisma.deploymentSettings.findUnique({
         where: { id: "default" },
@@ -375,6 +396,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
           "reset-password:": "hashed",
           "delete-account-": "hashed",
           [ACCOUNT_EXPORT_TOKEN_PREFIX]: "hashed",
+          [WORKSPACE_EXPORT_TOKEN_PREFIX]: "hashed",
         },
       },
     },
@@ -523,6 +545,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
       },
     },
     plugins: [
+      ...(env.workspaceAuthority ? [nativeWorkspaceLogin(prisma, env.workspaceAuthority)] : []),
       signedBearer,
       expo(),
       accountSecurity(
@@ -986,10 +1009,48 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         session,
         env.passwordAuth !== false,
       ),
-    issueAccountExportToken: async (userId: string) =>
-      issueAccountExportToken((await auth.$context).internalAdapter, userId),
-    consumeAccountExportToken: async (token: string) =>
-      consumeAccountExportToken((await auth.$context).internalAdapter, token),
+    issueAccountExportToken: async (
+      userId: string,
+      scope?: { sessionId: string; spaceId: string },
+    ) => {
+      const adapter = (await auth.$context).internalAdapter;
+      if (!(await env.workspaceAuthority?.active()))
+        return issueAccountExportToken(adapter, userId);
+      const access =
+        scope && (await env.workspaceAuthority!.session(scope.sessionId, userId, scope.spaceId));
+      if (!access || !scope) throw new APIError("FORBIDDEN");
+      return issueWorkspaceExportToken(adapter, {
+        userId,
+        sessionId: scope.sessionId,
+        spaceId: access.spaceId,
+        workspaceId: access.workspaceId,
+        revision: access.revision,
+      });
+    },
+    consumeAccountExportToken: async (token: string) => {
+      if (await env.workspaceAuthority?.active()) return null;
+      return consumeAccountExportToken((await auth.$context).internalAdapter, token);
+    },
+    consumeWorkspaceExportToken: async (token: string) => {
+      if (!(await env.workspaceAuthority?.active())) return null;
+      const scope = await consumeWorkspaceExportToken((await auth.$context).internalAdapter, token);
+      if (!scope) return null;
+      const current = await env.workspaceAuthority!.session(
+        scope.sessionId,
+        scope.userId,
+        scope.spaceId,
+      );
+      if (
+        !current ||
+        current.revision !== scope.revision ||
+        current.workspaceId !== scope.workspaceId
+      )
+        return null;
+      return {
+        ...scope,
+        ...env.workspaceAuthority!.window.watch(scope.workspaceId, current.subject, scope.revision),
+      };
+    },
     disposeOidcDiscovery: () => discovery?.dispose(),
   });
 }

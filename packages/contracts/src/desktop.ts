@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Native auth and pairing are Ork additions.
 // Modified by Ork contributors to remove the legacy setup bridge.
 
+import type { WorkspaceTarget } from "./workspace-selection.js";
+
 /** A native host can share its server session with an SSO popup without exposing commands. */
 export interface OrkNativeAuth {
   readonly ssoPopup: true;
@@ -104,6 +106,7 @@ export interface OrkDesktop {
   accounts?: {
     signIn: () => Promise<OrkDesktopAccount>;
     session: () => Promise<OrkDesktopAccount | null>;
+    workspaceTarget?: () => Promise<WorkspaceTarget | null>;
     logout: () => Promise<void>;
     /** Retry only captured retired credentials; live credentials remain native. */
     retryRevocations?: () => Promise<void>;

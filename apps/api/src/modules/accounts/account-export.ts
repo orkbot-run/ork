@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache export streaming is preserved. Ork adds session-bound workspace authorization.
 
 import type { AdapterContext, AgentHomeStore, ArtifactStore } from "@orkbot/adapter-kit";
 import { resolveBotWorkspacePath } from "@orkbot/adapters";
@@ -51,6 +52,7 @@ export const ACCOUNT_EXPORT_MAX_ARCHIVE_BYTES = 2 ** 32 - 64 * 1024 * 1024;
 export function zipStream(
   files: AsyncIterable<ArchiveFile>,
   maxBytes = ACCOUNT_EXPORT_MAX_ARCHIVE_BYTES,
+  lifetime?: { signal: AbortSignal; dispose: () => void },
 ): ReadableStream<Uint8Array> {
   const zip = new Zip();
   const output: Uint8Array[] = [];
@@ -82,24 +84,52 @@ export function zipStream(
     zip.end();
   }
   const producer = steps();
+  let stopListening = () => {};
+  let lifetimeFinished = false;
+  const finishLifetime = () => {
+    if (lifetimeFinished) return;
+    lifetimeFinished = true;
+    stopListening();
+    lifetime?.dispose();
+  };
   return new ReadableStream<Uint8Array>(
     {
+      start(controller) {
+        if (!lifetime) return;
+        const abort = () => {
+          controller.error(lifetime.signal.reason ?? new Error("Workspace access revoked"));
+          finishLifetime();
+          void producer.return(undefined).catch(() => undefined);
+        };
+        if (lifetime.signal.aborted) abort();
+        else {
+          lifetime.signal.addEventListener("abort", abort, { once: true });
+          stopListening = () => lifetime.signal.removeEventListener("abort", abort);
+        }
+      },
       async pull(controller) {
         try {
+          lifetime?.signal.throwIfAborted();
           while (!output.length && !finished) {
             const step = await producer.next();
+            lifetime?.signal.throwIfAborted();
             if (failure) throw failure;
             if (step.done && !finished) throw new Error("Zip ended without its last chunk");
           }
           if (failure) throw failure;
         } catch (error) {
+          finishLifetime();
           getLogger().error("account.export.failed", error);
           throw error;
         }
         for (const chunk of output.splice(0)) controller.enqueue(chunk);
-        if (finished && !output.length) controller.close();
+        if (finished && !output.length) {
+          finishLifetime();
+          controller.close();
+        }
       },
       async cancel() {
+        finishLifetime();
         await producer.return(undefined);
       },
     },
@@ -213,15 +243,29 @@ export function mountAccountExportRoute(
   app: Hono,
   deps: AccountExportStores & {
     prisma: PrismaClient;
-    auth: Pick<Auth, "consumeAccountExportToken">;
+    auth: Pick<Auth, "consumeAccountExportToken"> &
+      Partial<Pick<Auth, "consumeWorkspaceExportToken">>;
   },
 ): void {
   app.get("/api/account/export", async (c) => {
-    const userId = await deps.auth.consumeAccountExportToken(c.req.query("token") ?? "");
+    const token = c.req.query("token") ?? "";
+    const scoped = await deps.auth.consumeWorkspaceExportToken?.(token);
+    const userId = scoped?.userId ?? (await deps.auth.consumeAccountExportToken(token));
     if (!userId) return c.text("Export link expired", 410, { "cache-control": "no-store" });
     const now = new Date();
-    const source = await readAccountExport(deps.prisma, userId);
-    const body = zipStream(accountArchiveFiles(source, deps, { signal: c.req.raw.signal, now }));
+    let source: AccountExportSource;
+    try {
+      source = await readAccountExport(deps.prisma, userId, scoped?.spaceId);
+    } catch (error) {
+      scoped?.dispose();
+      throw error;
+    }
+    const signal = scoped ? AbortSignal.any([c.req.raw.signal, scoped.signal]) : c.req.raw.signal;
+    const body = zipStream(
+      accountArchiveFiles(source, deps, { signal, now }),
+      ACCOUNT_EXPORT_MAX_ARCHIVE_BYTES,
+      scoped ? { signal, dispose: scoped.dispose } : undefined,
+    );
     return new Response(body, {
       headers: {
         "content-type": "application/zip",

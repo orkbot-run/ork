@@ -40,6 +40,36 @@ pub struct Workspace {
     pub id: String,
     pub name: String,
     pub url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<WorkspaceTarget>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceTarget {
+    pub organization_id: String,
+    pub server_id: String,
+    pub workspace_id: String,
+    pub binding_version: u64,
+    pub key_fingerprint: String,
+}
+
+impl WorkspaceTarget {
+    pub fn validate(&self) -> Result<(), String> {
+        if !uuid(&self.organization_id)
+            || !uuid(&self.server_id)
+            || !uuid(&self.workspace_id)
+            || self.binding_version == 0
+            || self.key_fingerprint.len() != 64
+            || !self
+                .key_fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(ERROR.into());
+        }
+        Ok(())
+    }
 }
 
 impl Workspace {
@@ -48,12 +78,18 @@ impl Workspace {
         if !uuid(&self.id)
             || self.name.trim() != self.name
             || self.name.is_empty()
-            || self.name.chars().count() > 100
+            || self.name.chars().count() > if self.target.is_some() { 310 } else { 100 }
             || self.name.chars().any(char::is_control)
             || url.scheme() != "https"
             || self.url != url.origin().ascii_serialization()
         {
             return Err(ERROR.into());
+        }
+        if let Some(target) = &self.target {
+            target.validate()?;
+            if target.workspace_id != self.id {
+                return Err(ERROR.into());
+            }
         }
         Ok(())
     }
@@ -61,8 +97,120 @@ impl Workspace {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WorkspaceList {
-    workspaces: Vec<Workspace>,
+#[serde(rename_all = "camelCase")]
+struct WorkspaceCatalog {
+    version: u64,
+    default_organization_id: Option<String>,
+    organizations: Vec<CatalogOrganization>,
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CatalogOrganization {
+    id: String,
+    name: String,
+    #[serde(rename = "type")]
+    kind: String,
+    role: String,
+    servers: Vec<CatalogServer>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CatalogServer {
+    id: String,
+    name: String,
+    binding_version: u64,
+    key_fingerprint: Option<String>,
+    state: String,
+    routes: Vec<CatalogRoute>,
+    workspaces: Vec<CatalogWorkspace>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CatalogRoute {
+    id: String,
+    kind: String,
+    address: String,
+    device_id: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CatalogWorkspace {
+    id: String,
+    name: String,
+    state: String,
+    can_open: bool,
+    role: Option<String>,
+}
+
+impl WorkspaceCatalog {
+    fn workspaces(self) -> Result<Vec<Workspace>, String> {
+        if self.version != 2
+            || self
+                .default_organization_id
+                .as_deref()
+                .is_some_and(|id| !uuid(id))
+            || self.organizations.len() > 1000
+        {
+            return Err(ERROR.into());
+        }
+        let mut result = Vec::new();
+        let mut ids = std::collections::HashSet::new();
+        for organization in self.organizations {
+            if !uuid(&organization.id)
+                || !["personal", "shared"].contains(&organization.kind.as_str())
+                || !["admin", "manager", "member"].contains(&organization.role.as_str())
+            {
+                return Err(ERROR.into());
+            }
+            for server in organization.servers {
+                if !uuid(&server.id) || server.binding_version == 0 {
+                    return Err(ERROR.into());
+                }
+                let route = server
+                    .routes
+                    .iter()
+                    .find(|route| route.kind == "direct" && route.device_id.is_none());
+                if server.state != "ready" {
+                    continue;
+                }
+                let Some(route) = route else {
+                    continue;
+                };
+                if !uuid(&route.id) {
+                    return Err(ERROR.into());
+                }
+                for workspace in server.workspaces {
+                    if !workspace.can_open || workspace.state != "ready" {
+                        continue;
+                    }
+                    if !matches!(workspace.role.as_deref(), Some("admin" | "member")) {
+                        return Err(ERROR.into());
+                    }
+                    let entry = Workspace {
+                        id: workspace.id.clone(),
+                        name: format!(
+                            "{} / {} / {}",
+                            organization.name, server.name, workspace.name
+                        ),
+                        url: route.address.clone(),
+                        target: Some(WorkspaceTarget {
+                            organization_id: organization.id.clone(),
+                            server_id: server.id.clone(),
+                            workspace_id: workspace.id,
+                            binding_version: server.binding_version,
+                            key_fingerprint: server.key_fingerprint.clone().ok_or(ERROR)?,
+                        }),
+                    };
+                    entry.validate()?;
+                    if !ids.insert(entry.id.clone()) || result.len() >= 10_000 {
+                        return Err(ERROR.into());
+                    }
+                    result.push(entry);
+                }
+            }
+        }
+        Ok(result)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -347,21 +495,11 @@ impl Directory {
     pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
         let endpoint = self
             .endpoint
-            .join("/api/servers/workspaces")
+            .join("/api/identity/v2/catalog")
             .map_err(|_| ERROR)?;
-        let list: WorkspaceList =
+        let catalog: WorkspaceCatalog =
             json(self.send(Method::GET, endpoint, token, None).await?).await?;
-        if list.workspaces.len() > 1000 {
-            return Err(ERROR.into());
-        }
-        let mut ids = std::collections::HashSet::new();
-        for workspace in &list.workspaces {
-            workspace.validate()?;
-            if !ids.insert(&workspace.id) {
-                return Err(ERROR.into());
-            }
-        }
-        Ok(list.workspaces)
+        catalog.workspaces()
     }
 
     pub async fn create_installation(&self, token: &str) -> Result<InstallationCommand, String> {
@@ -890,30 +1028,65 @@ mod tests {
         }
     }
 
+    fn workspace_catalog() -> serde_json::Value {
+        serde_json::json!({"version": 2, "defaultOrganizationId": null, "organizations": [{
+            "id": DEVICE, "name": "Company", "type": "shared", "role": "member", "servers": [{
+                "id": DEVICE, "name": "Server", "bindingVersion": 1, "keyFingerprint": "a".repeat(64), "state": "ready",
+                "routes": [{"id": DEVICE, "kind": "direct", "address": "https://team.example.com", "deviceId": null}],
+                "workspaces": [{"id": DEVICE, "name": "Studio", "state": "ready", "canOpen": true, "role": "member"}]
+            }]
+        }]})
+    }
+
     #[tokio::test]
     async fn workspace_directory_validates_membership_response_before_exposing_servers() {
-        let workspace =
-            serde_json::json!({"id": DEVICE, "name": "Studio", "url": "https://team.example.com"});
-        let (directory, wire) = response(
-            "200 OK",
-            serde_json::json!({"workspaces": [workspace.clone()]}).to_string(),
-            "",
-        )
-        .await;
+        let catalog = workspace_catalog();
+        let (directory, wire) = response("200 OK", catalog.to_string(), "").await;
         let list = directory.workspaces("private-fixture-token").await.unwrap();
-        assert_eq!(list[0].name, "Studio");
+        assert_eq!(list[0].name, "Company / Server / Studio");
+        assert_eq!(list[0].target.as_ref().unwrap().workspace_id, DEVICE);
+        assert_eq!(
+            list[0].target.as_ref().unwrap().key_fingerprint,
+            "a".repeat(64)
+        );
         let request = wire.await.unwrap();
-        assert!(request.starts_with("GET /api/servers/workspaces HTTP/1.1\r\n"));
-        for invalid in [
-            serde_json::json!({"workspaces": [workspace.clone(), workspace.clone()]}),
-            serde_json::json!({"workspaces": [{"id": DEVICE, "name": "Studio", "url": "https://user@team.example.com"}]}),
-            serde_json::json!({"workspaces": [{"id": DEVICE, "name": "Studio\nAdmin", "url": "https://team.example.com"}]}),
-            serde_json::json!({"workspaces": [{"id": "bad", "name": "Studio", "url": "https://team.example.com"}]}),
-        ] {
-            let (directory, wire) = response("200 OK", invalid.to_string(), "").await;
+        assert!(request.starts_with("GET /api/identity/v2/catalog HTTP/1.1\r\n"));
+        let mut invalid = Vec::new();
+        let mut duplicate = catalog.clone();
+        duplicate["organizations"][0]["servers"][0]["workspaces"] = serde_json::json!([
+            catalog["organizations"][0]["servers"][0]["workspaces"][0],
+            catalog["organizations"][0]["servers"][0]["workspaces"][0]
+        ]);
+        invalid.push(duplicate);
+        for (field, value) in [("id", "bad"), ("name", "Studio\nAdmin")] {
+            let mut item = catalog.clone();
+            item["organizations"][0]["servers"][0]["workspaces"][0][field] =
+                serde_json::json!(value);
+            invalid.push(item);
+        }
+        let mut credential_url = catalog.clone();
+        credential_url["organizations"][0]["servers"][0]["routes"][0]["address"] =
+            serde_json::json!("https://user@team.example.com");
+        invalid.push(credential_url);
+        let mut wrong_pin = catalog.clone();
+        wrong_pin["organizations"][0]["servers"][0]["keyFingerprint"] =
+            serde_json::json!("invalid");
+        invalid.push(wrong_pin);
+        for body in invalid {
+            let (directory, wire) = response("200 OK", body.to_string(), "").await;
             assert!(directory.workspaces("private-fixture-token").await.is_err());
             wire.await.unwrap();
         }
+        let mut blocked = catalog;
+        blocked["organizations"][0]["servers"][0]["workspaces"][0]["canOpen"] =
+            serde_json::json!(false);
+        let (directory, wire) = response("200 OK", blocked.to_string(), "").await;
+        assert!(directory
+            .workspaces("private-fixture-token")
+            .await
+            .unwrap()
+            .is_empty());
+        wire.await.unwrap();
     }
 
     fn entry() -> serde_json::Value {
@@ -1108,6 +1281,7 @@ mod tests {
         crate::settings::save(
             root.path(),
             &crate::settings::Setup {
+                workspace: None,
                 mode: crate::settings::InstanceMode::Existing,
                 server_url: Url::parse("https://different.example.test").unwrap(),
                 account: Some(crate::settings::account_key(identity)),

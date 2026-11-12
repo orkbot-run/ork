@@ -56,13 +56,17 @@ const { push, back, params, rpcCalls, saved, authScope } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("./session", () => ({ currentSessionGeneration: () => authScope.generation }));
+vi.mock("./session", () => ({
+  currentSessionGeneration: () => authScope.generation,
+  subscribeSessionGeneration: () => () => {},
+}));
 vi.mock("./side-insets", () => ({ useSideInsets: () => ({}) }));
 vi.mock("./api", () => ({
   currentApiBase: () => authScope.server,
   captureApiRequestContext: async (spaceId = "space-fixture") => ({
     headers: { "x-orkbot-space-id": spaceId },
   }),
+  subscribeConfirmedSpaceSwitch: () => () => {},
   selectedSpaceId: () => "space-fixture",
   spaceSelectionSeq: () => authScope.selection,
   rpc: async (
@@ -73,6 +77,7 @@ vi.mock("./api", () => ({
     rpcCalls.push([procedure, input, options]);
     if (saved.held) await saved.held;
     if (saved.failMe && procedure === "me") throw new Error("offline");
+    if (procedure === "models/workspacePolicy") return { canManage: false, policy: null };
     if (procedure === "me")
       return {
         userId: "user-fixture",

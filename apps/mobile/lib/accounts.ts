@@ -60,6 +60,7 @@ async function config(): Promise<Config> {
     clientId: Constants.expoConfig?.extra?.accountsClientId,
   });
 }
+export const accountsConfiguration = config;
 
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {
   const next = writes.then(operation, operation);

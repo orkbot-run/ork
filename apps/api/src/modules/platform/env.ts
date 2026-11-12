@@ -50,6 +50,7 @@ export interface AppEnv {
   desktopStackToken?: string;
   desktopAccountKey?: string;
   accountsEnabled?: boolean;
+  accountsIssuer?: string;
   bootstrapSecret?: string;
   databaseUrl: string;
   realtimeDatabaseUrl: string;
@@ -188,14 +189,20 @@ export interface AppEnv {
 /** Enforce the shipped API's identity boundary without changing injectable library fixtures. */
 export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   const issuer = optional(source.OIDC_ISSUER);
+  const trustedIssuer =
+    source.NODE_ENV === "test" || source.NODE_ENV === "development"
+      ? (optional(source.ACCOUNTS_ISSUER) ?? "https://api.ork.run")
+      : "https://api.ork.run";
+  if (optional(source.ACCOUNTS_ISSUER) && source.ACCOUNTS_ISSUER !== trustedIssuer)
+    throw new Error("ACCOUNTS_ISSUER must be https://api.ork.run in production");
   if (source.AUTH_ACCOUNTS_ENABLED === "true") {
-    if (issuer && issuer !== "https://api.ork.run")
+    if (issuer && issuer !== trustedIssuer)
       throw new Error("OIDC_ISSUER must be https://api.ork.run");
     if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
       throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
     return loadEnv({ ...source, AUTH_PASSWORD_ENABLED: "false" });
   }
-  if (issuer !== "https://api.ork.run") throw new Error("OIDC_ISSUER must be https://api.ork.run");
+  if (issuer !== trustedIssuer) throw new Error("OIDC_ISSUER must be https://api.ork.run");
   if (optional(source.AUTH_PASSWORD_ENABLED) && source.AUTH_PASSWORD_ENABLED !== "false")
     throw new Error("AUTH_PASSWORD_ENABLED must be false; sign in with Ork Accounts");
   const clientId = required(source, "OIDC_CLIENT_ID");
@@ -211,6 +218,14 @@ export function loadProductEnv(source: NodeJS.ProcessEnv = process.env): AppEnv 
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
   secretStoreOptionsFromEnv(source);
   const accountsEnabled = source.AUTH_ACCOUNTS_ENABLED === "true";
+  const accountsIssuer = optional(source.ACCOUNTS_ISSUER) ?? "https://api.ork.run";
+  try {
+    const url = new URL(accountsIssuer);
+    if (url.protocol !== "https:" || url.origin !== accountsIssuer || url.username || url.password)
+      throw new Error();
+  } catch {
+    throw new Error("ACCOUNTS_ISSUER must be an HTTPS origin");
+  }
   const clientId = optional(source.OIDC_CLIENT_ID);
   const clientSecret = optional(source.OIDC_CLIENT_SECRET);
   const issuer =
@@ -305,6 +320,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     desktopStackToken,
     desktopAccountKey,
     accountsEnabled,
+    accountsIssuer,
     bootstrapSecret,
     authSecret,
     authUrl,

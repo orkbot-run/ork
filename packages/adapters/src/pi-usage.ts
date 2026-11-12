@@ -223,6 +223,7 @@ export function usageReportingFetch(
   fetcher: typeof fetch,
   reported: ReportedUsageFields,
   onRequestId?: (id: string) => void | Promise<void>,
+  onResponse?: (response: { status: number; retryAfter: string | null }) => void | Promise<void>,
 ): typeof fetch {
   return async (input, init) => {
     // The wrapper hides the default fetch identity from the SSRF guard. Pair
@@ -234,6 +235,10 @@ export function usageReportingFetch(
     rejectedRequests.delete(reported);
     sseObserved.delete(reported);
     const response = await transport(input, init);
+    await onResponse?.({
+      status: response.status,
+      retryAfter: response.headers.get("retry-after"),
+    });
     // OpenRouter's Anthropic-format stream carries the upstream message id; its usage
     // lookup accepts only the generation id from this header.
     await observeRequestId(response.headers.get("x-generation-id"), reported, onRequestId);
@@ -407,6 +412,15 @@ export function observedPiStream(
               cacheWriteRetention,
             })
           : undefined;
+        const authorizationSignal =
+          reservation !== undefined ? observer?.signalForCall?.(reservation) : undefined;
+        if (authorizationSignal)
+          options = {
+            ...options,
+            signal: options?.signal
+              ? AbortSignal.any([options.signal, authorizationSignal])
+              : authorizationSignal,
+          };
         options?.signal?.throwIfAborted();
         started = true;
         // Some Pi adapters reject custom fetch outright. Only audited SSE families opt in.
@@ -441,6 +455,9 @@ export function observedPiStream(
                       : (streamOptions?.fetch ?? globalThis.fetch),
                     reported,
                     reportRequestId,
+                    reservation !== undefined
+                      ? (response) => observer?.onResponse?.(reservation!, response)
+                      : undefined,
                   ),
                   onProviderStreamEvent: async (event, eventModel) => {
                     if (!sseObserved.has(reported)) {

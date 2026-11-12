@@ -109,6 +109,8 @@ export * from "./screen-reconnect.js";
 export * from "./search.js";
 export * from "./secrets-guard.js";
 export * from "./self-update.js";
+export * from "./server-ai-oauth-attempt.js";
+export * from "./server-ai-settings.js";
 export * from "./server-updates.js";
 export * from "./signup-policy.js";
 export * from "./source-settings.js";
