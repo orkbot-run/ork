@@ -124,6 +124,9 @@ async function channel(
     maxVersion: options.tls12 ? "TLSv1.2" : "TLSv1.3",
     ALPNProtocols: ["http/1.1"],
   });
+  // A shutdown alert may finish after the outer WebSocket starts closing.
+  // Keep an owner after HTTP/handshake listeners have detached; active requests still reject.
+  socket.on("error", () => socket.destroy());
   cleanup.push(() => {
     socket.destroy();
   });
@@ -219,6 +222,18 @@ describe("installation transport", () => {
     const result = await send(socket, {}, undefined, "/large");
     expect(result.status).toBe(200);
     expect(result.content).toBe("X".repeat(2 * 1024 * 1024));
+  });
+
+  it("closes the TLS client when its WebSocket closes before the TLS shutdown write", async () => {
+    const f = await fixture();
+    const socket = await channel(f);
+    await once(socket, "secureConnect");
+    const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()));
+    f.clients[0]!.close();
+    socket.end();
+    await closed;
+    expect(socket.destroyed).toBe(true);
+    expect(f.calls).toHaveLength(0);
   });
 
   it("refuses another logical origin before dispatching a request", async () => {
