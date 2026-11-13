@@ -11,10 +11,15 @@ const mocks = vi.hoisted(() => ({
   get: vi.fn(),
   set: vi.fn(),
   remove: vi.fn(),
+  nativeAvailable: false,
+  nativeWipe: vi.fn(),
   extra: { accountsIssuer: "https://accounts.example.test", accountsClientId: "mobile-client" },
 }));
 vi.mock("expo-constants", () => ({ default: { expoConfig: { extra: mocks.extra } } }));
-vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => null }));
+vi.mock("expo-modules-core", () => ({
+  requireOptionalNativeModule: () =>
+    mocks.nativeAvailable ? { forgetAllPersonalKeys: mocks.nativeWipe } : null,
+}));
 vi.mock("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "device-only",
   getItemAsync: mocks.get,
@@ -86,6 +91,8 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   mocks.storage.clear();
+  mocks.nativeAvailable = false;
+  mocks.nativeWipe.mockReset().mockResolvedValue(undefined);
   mocks.extra.accountsIssuer = issuer;
   mocks.extra.accountsClientId = "mobile-client";
   mocks.get.mockReset().mockImplementation(async (key) => mocks.storage.get(key) ?? null);
@@ -161,6 +168,103 @@ it("requests explicit consent with Expo S256 and saves verified tokens in device
     refreshToken: "new-refresh",
     subject: "subject-1",
   });
+  expect(JSON.parse(mocks.storage.get("orkbot.accounts.identity-v1")!)).toEqual({
+    issuer,
+    clientId: "mobile-client",
+    subject: "subject-1",
+  });
+});
+
+it("retains only verified identity metadata after retiring a rotating bearer, including process restart", async () => {
+  const accounts = await import("./accounts");
+  stored();
+  tokenHandler = async () => {
+    throw new Error("Connection closed");
+  };
+  await expect(accounts.accountsAccessToken()).rejects.toThrow("Could not reach Accounts");
+  expect(mocks.storage.has(storageKey)).toBe(false);
+  const metadata = JSON.parse(mocks.storage.get("orkbot.accounts.identity-v1")!);
+  expect(metadata).toEqual({ issuer, clientId: "mobile-client", subject: "subject-1" });
+  const requests = fetched.mock.calls.length;
+  expect(await accounts.accountsLocalIdentity()).toEqual({ issuer, subject: "subject-1" });
+  vi.resetModules();
+  const restarted = await import("./accounts");
+  expect(await restarted.accountsLocalIdentity()).toEqual({ issuer, subject: "subject-1" });
+  expect(await restarted.accountsAccessToken()).toBeNull();
+  expect(fetched.mock.calls.length).toBe(requests);
+});
+
+it("deletes the identity selector on explicit logout without reviving it after restart", async () => {
+  const accounts = await import("./accounts");
+  stored();
+  await accounts.accountsAccessToken();
+  expect(await accounts.accountsLocalIdentity()).not.toBeNull();
+  await accounts.signOutAccounts();
+  expect(mocks.storage.has("orkbot.accounts.identity-v1")).toBe(false);
+  expect(await accounts.accountsLocalIdentity()).toBeNull();
+  vi.resetModules();
+  expect(await (await import("./accounts")).accountsLocalIdentity()).toBeNull();
+});
+
+it("does not use identity metadata for another issuer or client", async () => {
+  const accounts = await import("./accounts");
+  for (const identity of [
+    { issuer: "https://other.example.test", clientId: "mobile-client", subject: "owner" },
+    { issuer, clientId: "another-client", subject: "owner" },
+    { issuer, clientId: "mobile-client", subject: "" },
+  ]) {
+    mocks.storage.set("orkbot.accounts.identity-v1", JSON.stringify(identity));
+    expect(await accounts.accountsLocalIdentity()).toBeNull();
+  }
+  expect(fetched).not.toHaveBeenCalled();
+});
+
+it("wipes previous personal keys before committing a different verified browser account", async () => {
+  const accounts = await import("./accounts");
+  stored(Date.now() + 60_000);
+  mocks.nativeAvailable = true;
+  claims.sub = "next-owner";
+  userSub = "next-owner";
+  mocks.nativeWipe.mockImplementation(async () => {
+    expect(JSON.parse(mocks.storage.get(storageKey)!).subject).toBe("subject-1");
+  });
+  expect(await accounts.continueWithAccounts()).toBe(true);
+  expect(mocks.nativeWipe).toHaveBeenCalledOnce();
+  expect(await accounts.accountsLocalIdentity()).toEqual({ issuer, subject: "next-owner" });
+});
+
+it("withholds the previous identity while browser account selection is pending", async () => {
+  const accounts = await import("./accounts");
+  stored(Date.now() + 3_600_000);
+  let finish!: (value: { type: string }) => void;
+  mocks.prompt.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const signingIn = accounts.continueWithAccounts();
+  await vi.waitFor(() => expect(mocks.prompt).toHaveBeenCalled());
+  expect(await accounts.accountsLocalIdentity()).toBeNull();
+  finish({ type: "cancel" });
+  expect(await signingIn).toBe(false);
+  expect(await accounts.accountsLocalIdentity()).toEqual({ issuer, subject: "subject-1" });
+  expect(mocks.nativeWipe).not.toHaveBeenCalled();
+});
+
+it("does not commit the browser account if its previous personal keys could not be removed", async () => {
+  const accounts = await import("./accounts");
+  stored(Date.now() + 3_600_000);
+  mocks.nativeAvailable = true;
+  mocks.nativeWipe.mockRejectedValue(new Error("Keystore locked"));
+  claims.sub = "next-owner";
+  userSub = "next-owner";
+  await expect(accounts.continueWithAccounts()).rejects.toThrow(
+    "Could not save the Accounts credentials",
+  );
+  expect(JSON.parse(mocks.storage.get(storageKey)!).subject).toBe("subject-1");
+  expect(mocks.storage.has("orkbot.accounts.identity-v1")).toBe(false);
+  expect(mocks.nativeWipe).toHaveBeenCalledOnce();
 });
 
 it.each([

@@ -3,16 +3,19 @@
 
 import { personalActivationMessage } from "@orkbot/contracts";
 import { accountsAuthorization, accountsVersion } from "./accounts";
+import { AccountsUnavailable } from "./accounts-network";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import { t } from "./i18n";
 import type { StagedPersonalDevice } from "./personal-device";
 import {
   activatePersonalDevice,
   forgetPersonalDevice,
+  personalCredentialEpoch,
   personalDigest,
   signPersonalDevice,
   stagePersonalDevice,
 } from "./personal-device";
+import { continueWithPersonalServer, personalLoginSelection } from "./personal-login";
 import { selectedWorkspace } from "./selected-workspace";
 import { completeServerInitialization, serverInitializationSecret } from "./server-connect";
 import { currentSessionGeneration, replaceSessionTokenIfCurrent } from "./session";
@@ -30,16 +33,40 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     const server = currentApiBase();
     const sessionGeneration = currentSessionGeneration();
     const accountVersion = accountsVersion();
-    const authorization = await accountsAuthorization();
-    if (!authorization) throw new Error(t("Could not continue"));
+    const credentialEpoch = personalCredentialEpoch();
+    const unchanged = () =>
+      server === currentApiBase() &&
+      sessionGeneration === currentSessionGeneration() &&
+      accountVersion === accountsVersion() &&
+      credentialEpoch === personalCredentialEpoch();
+    const personal = async (expectedAccount?: string) => {
+      const credential = await personalLoginSelection(expectedAccount);
+      if (!unchanged()) throw new Error(t("Could not continue"));
+      if (!credential) return null;
+      if (credential.origin !== server) throw new Error(t("Could not continue"));
+      return continueWithPersonalServer(credential, unchanged);
+    };
+    let authorizationResult: Awaited<ReturnType<typeof accountsAuthorization>>;
+    try {
+      authorizationResult = await accountsAuthorization();
+    } catch (error) {
+      if (!(error instanceof AccountsUnavailable)) throw error;
+      const renewed = await personal();
+      if (renewed !== null) return renewed;
+      throw error;
+    }
+    if (!authorizationResult) {
+      const renewed = await personal();
+      if (renewed !== null) return renewed;
+      throw new Error(t("Could not continue"));
+    }
+    const authorization = authorizationResult;
     const account = JSON.stringify([authorization.issuer, authorization.subject]);
     const workspace = await selectedWorkspace(account, server);
     const current = async () => {
       const latest = await accountsAuthorization();
       if (
-        server !== currentApiBase() ||
-        sessionGeneration !== currentSessionGeneration() ||
-        accountVersion !== accountsVersion() ||
+        !unchanged() ||
         !latest ||
         latest.issuer !== authorization.issuer ||
         latest.subject !== authorization.subject
@@ -48,6 +75,8 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     };
     await current();
     if (workspace) {
+      const renewed = await personal(account);
+      if (renewed !== null) return renewed;
       staged = await stagePersonalDevice(account, server, workspace);
       await current();
     }

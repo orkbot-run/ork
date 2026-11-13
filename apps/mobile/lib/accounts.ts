@@ -11,11 +11,12 @@ import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@
 import * as SecureStore from "expo-secure-store";
 import { fetchAccounts } from "./accounts-network";
 import { queueAccountsRevocation, retryPendingRevocations } from "./pending-revocations";
-import { signOutPersonalDevices } from "./personal-device";
+import { invalidatePersonalRequests, signOutPersonalDevices } from "./personal-device";
 import { clearServerInitialization } from "./server-connect";
 
 export const ACCOUNTS_REDIRECT_URI = "run.orkbot.app:/oauth2/callback";
 const STORAGE_KEY = "orkbot.accounts.tokens";
+const IDENTITY_KEY = "orkbot.accounts.identity-v1";
 const welcomeOrk = createPersonalOrkId();
 
 /** Retained through native auth screen remounts for this application launch. */
@@ -105,11 +106,32 @@ async function clearStored(): Promise<void> {
     await SecureStore.setItemAsync(STORAGE_KEY, "");
   }
 }
+async function clearIdentity(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(IDENTITY_KEY);
+  } catch {
+    await SecureStore.setItemAsync(IDENTITY_KEY, "");
+  }
+}
+async function saveIdentity(tokens: Tokens): Promise<void> {
+  await SecureStore.setItemAsync(
+    IDENTITY_KEY,
+    JSON.stringify({
+      issuer: tokens.issuer,
+      clientId: tokens.clientId,
+      subject: tokens.subject,
+      ...(isPersonalOrkId(tokens.orkAvatar) ? { orkAvatar: tokens.orkAvatar } : {}),
+    }),
+    { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
+  );
+}
 
 async function save(tokens: Tokens, owner: number): Promise<boolean> {
   return enqueue(async () => {
     if (owner !== generation) return false;
     try {
+      await saveIdentity(tokens);
+      if (owner !== generation) return false;
       await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(tokens), {
         keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
       });
@@ -321,6 +343,7 @@ async function exchange(
 export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean> {
   if (signingIn) return false;
   signingIn = true;
+  invalidatePersonalRequests();
   const owner = ++generation;
   try {
     const expected = await config();
@@ -367,6 +390,13 @@ export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean
       },
       nonce,
     );
+    if (owner !== generation) return false;
+    // A verified browser sign-in explicitly changes the device's account context.
+    try {
+      await signOutPersonalDevices();
+    } catch {
+      throw new Error("Could not save the Accounts credentials on this device. Sign in again.");
+    }
     const saved = await save(tokens, owner);
     if (saved) accountChanged();
     return saved;
@@ -420,6 +450,43 @@ export async function accountsIdentity(): Promise<{
   };
 }
 
+/** Identity metadata selects a personal key. It never supplies server authority or a bearer. */
+export async function accountsLocalIdentity(): Promise<{
+  issuer: string;
+  subject: string;
+  orkAvatar?: string;
+} | null> {
+  const owner = generation;
+  if (signingIn) return null;
+  const expected = await config();
+  const tokens = await load(expected);
+  let value: unknown = tokens;
+  if (!value) {
+    await writes;
+    const stored = await SecureStore.getItemAsync(IDENTITY_KEY);
+    if (!stored || stored.length > 4096) return null;
+    try {
+      value = JSON.parse(stored);
+    } catch {
+      return null;
+    }
+  }
+  if (owner !== generation || signingIn || !value || typeof value !== "object") return null;
+  const identity = value as Partial<Tokens>;
+  if (
+    identity.issuer !== expected.issuer ||
+    identity.clientId !== expected.clientId ||
+    typeof identity.subject !== "string" ||
+    !identity.subject
+  )
+    return null;
+  return {
+    issuer: expected.issuer,
+    subject: identity.subject,
+    ...(isPersonalOrkId(identity.orkAvatar) ? { orkAvatar: identity.orkAvatar } : {}),
+  };
+}
+
 async function validAccessToken(): Promise<string | null> {
   const owner = generation;
   const expected = await config();
@@ -432,6 +499,9 @@ async function validAccessToken(): Promise<string | null> {
   // Retire the predecessor before the request: a crash after server-side rotation must not replay it.
   invalidated = true;
   const retired = await enqueue(async () => {
+    if (owner !== generation) return false;
+    // Identity metadata is optional; its failure must never retain a rotating bearer.
+    await saveIdentity(previous).catch(() => undefined);
     if (owner !== generation) return false;
     await clearStored();
     return true;
@@ -489,7 +559,8 @@ export async function signOutAccounts(): Promise<void> {
         // Failed recovery persistence must not retain a live local sign-in.
       }
     }
-    await clearStored();
+    const cleared = await Promise.allSettled([clearStored(), clearIdentity()]);
+    for (const result of cleared) if (result.status === "rejected") throw result.reason;
     return previous;
   });
   const results = await Promise.allSettled([retirement, personalWipe]);

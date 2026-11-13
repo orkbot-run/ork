@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { continueWithAccountsServer } from "./accounts-login";
+import { AccountsUnavailable } from "./accounts-network";
 import { personalDigest } from "./personal-device";
 import {
   confirmServerInitialization,
@@ -33,6 +34,14 @@ const state = vi.hoisted(() => ({
   activate: vi.fn(),
   forget: vi.fn(),
   sign: vi.fn(),
+  authorize: vi.fn(),
+  personalSelection: vi.fn(),
+  resume: vi.fn(),
+  epoch: 0,
+}));
+vi.mock("./personal-login", () => ({
+  personalLoginSelection: (...args: unknown[]) => state.personalSelection(...args),
+  continueWithPersonalServer: (...args: unknown[]) => state.resume(...args),
 }));
 vi.mock("./personal-device", async (original) => ({
   ...(await original<typeof import("./personal-device")>()),
@@ -40,9 +49,10 @@ vi.mock("./personal-device", async (original) => ({
   activatePersonalDevice: (...args: unknown[]) => state.activate(...args),
   forgetPersonalDevice: (...args: unknown[]) => state.forget(...args),
   signPersonalDevice: (...args: unknown[]) => state.sign(...args),
+  personalCredentialEpoch: () => state.epoch,
 }));
 vi.mock("./accounts", () => ({
-  accountsAuthorization: async () => state.identity,
+  accountsAuthorization: () => state.authorize(),
   accountsVersion: () => state.accountVersion,
 }));
 vi.mock("./selected-workspace", () => ({ selectedWorkspace: async () => state.workspace }));
@@ -62,6 +72,10 @@ beforeEach(() => {
   state.generation = 1;
   state.accountVersion = 0;
   state.workspace = null;
+  state.epoch = 0;
+  state.authorize.mockReset().mockImplementation(async () => state.identity);
+  state.personalSelection.mockReset().mockResolvedValue(null);
+  state.resume.mockReset().mockResolvedValue(true);
   state.stage.mockReset().mockResolvedValue(null);
   state.activate.mockReset().mockResolvedValue(undefined);
   state.forget.mockReset().mockResolvedValue(undefined);
@@ -192,6 +206,54 @@ function personalResponse(activated = true) {
   }));
   return staged;
 }
+it("uses the activated personal key for renewal without requesting another central grant", async () => {
+  const staged = personalResponse();
+  state.personalSelection.mockResolvedValue(staged.credential);
+  expect(await continueWithAccountsServer()).toBe(true);
+  expect(state.resume).toHaveBeenCalledWith(staged.credential, expect.any(Function));
+  expect(state.stage).not.toHaveBeenCalled();
+  expect(state.request).not.toHaveBeenCalled();
+});
+it.each(["unavailable", "retired"])(
+  "renews personal access when Accounts is %s during in-session reauthentication",
+  async (reason) => {
+    const staged = personalResponse();
+    state.personalSelection.mockResolvedValue(staged.credential);
+    if (reason === "unavailable") state.authorize.mockRejectedValue(new AccountsUnavailable());
+    else state.authorize.mockResolvedValue(null);
+    expect(await continueWithAccountsServer()).toBe(true);
+    expect(state.request).not.toHaveBeenCalled();
+    expect(state.stage).not.toHaveBeenCalled();
+    expect(state.resume).toHaveBeenCalledOnce();
+  },
+);
+it("does not turn a server's personal refusal into automatic reactivation", async () => {
+  const staged = personalResponse();
+  state.personalSelection.mockResolvedValue(staged.credential);
+  state.resume.mockRejectedValue(new Error("Access refused"));
+  await expect(continueWithAccountsServer()).rejects.toThrow("Access refused");
+  expect(state.stage).not.toHaveBeenCalled();
+  expect(state.request).not.toHaveBeenCalled();
+});
+it("does not use personal fallback after an authoritative Accounts failure", async () => {
+  state.authorize.mockRejectedValue(new Error("Accounts refused access"));
+  await expect(continueWithAccountsServer()).rejects.toThrow("Accounts refused access");
+  expect(state.personalSelection).not.toHaveBeenCalled();
+  expect(state.resume).not.toHaveBeenCalled();
+});
+it.each(["accountVersion", "epoch"] as const)(
+  "does not resume a personal key selected before the %s changed",
+  async (field) => {
+    const staged = personalResponse();
+    state.personalSelection.mockImplementation(async () => {
+      state[field] += 1;
+      return staged.credential;
+    });
+    await expect(continueWithAccountsServer()).rejects.toThrow("Could not continue");
+    expect(state.resume).not.toHaveBeenCalled();
+  },
+);
+
 it("requests public-key activation and signs the exact grant and workspace challenge", async () => {
   const staged = personalResponse();
   expect(await continueWithAccountsServer()).toBe(true);

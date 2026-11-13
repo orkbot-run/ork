@@ -18,10 +18,12 @@ const state = vi.hoisted(() => ({
   verify: vi.fn(),
   credential: vi.fn(),
   snapshot: vi.fn(),
+  localIdentity: vi.fn(),
 }));
 vi.mock("./accounts", () => ({
   accountsVersion: () => state.account,
   accountsConfiguration: async () => ({ issuer: "https://accounts.example.test" }),
+  accountsLocalIdentity: () => state.localIdentity(),
 }));
 vi.mock("./api", () => ({
   currentApiBase: () => state.origin,
@@ -92,6 +94,9 @@ beforeEach(() => {
     target: credential.target,
   });
   state.credential.mockReset().mockResolvedValue(credential);
+  state.localIdentity
+    .mockReset()
+    .mockResolvedValue({ issuer: "https://accounts.example.test", subject: "owner" });
   state.verify
     .mockReset()
     .mockImplementation(
@@ -207,4 +212,14 @@ it("selects only the last workspace of the expected account and configured issue
     account: JSON.stringify(["https://other.example.test", "owner"]),
   });
   expect(await personalLoginSelection()).toBeNull();
+});
+it("refuses a previous account's credential after the verified identity changes or is cleared", async () => {
+  state.localIdentity.mockResolvedValue({
+    issuer: "https://accounts.example.test",
+    subject: "another-owner",
+  });
+  expect(await personalLoginSelection()).toBeNull();
+  state.localIdentity.mockResolvedValue(null);
+  expect(await personalLoginSelection()).toBeNull();
+  expect(state.credential).not.toHaveBeenCalled();
 });

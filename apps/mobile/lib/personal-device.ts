@@ -38,6 +38,9 @@ let denied = false;
 let writes: Promise<unknown> = Promise.resolve();
 const unavailable = () => new Error("Could not continue");
 export const personalCredentialEpoch = () => epoch;
+export function invalidatePersonalRequests(): void {
+  ++epoch;
+}
 export const personalDigest = (value: string) =>
   forge.md.sha256.create().update(value, "utf8").digest().toHex();
 const accountHash = (account: string) => personalDigest(`ork-personal-account-v1:${account}`);

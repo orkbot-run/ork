@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { personalOfflineMessage, personalServerMessage } from "@orkbot/contracts";
-import { accountsConfiguration, accountsVersion } from "./accounts";
+import { accountsConfiguration, accountsLocalIdentity, accountsVersion } from "./accounts";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import type { PersonalCredential } from "./personal-device";
 import {
@@ -20,6 +20,9 @@ export async function personalLoginSelection(
 ): Promise<PersonalCredential | null> {
   const snapshot = await selectedWorkspaceSnapshot();
   if (!snapshot || (expectedAccount && snapshot.account !== expectedAccount)) return null;
+  const identity = await accountsLocalIdentity();
+  if (!identity || snapshot.account !== JSON.stringify([identity.issuer, identity.subject]))
+    return null;
   const credential = await personalCredential(snapshot.account, snapshot.server, snapshot.target);
   if (!credential) return null;
   const configuration = await accountsConfiguration();
