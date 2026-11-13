@@ -28,7 +28,7 @@ cargo build --locked --features bindgen
 cargo run --locked --features bindgen --bin ork-transport-bindgen -- generate \
   --library target/debug/libork_installation_transport.dylib \
   --language swift --out-dir /tmp/ork-transport-bindings --no-format
-pnpm exec tsx apple/tests/run.ts /tmp/ork-transport-bindings
+pnpm --workspace-root exec tsx packages/client-transport/native/apple/tests/run.ts /tmp/ork-transport-bindings
 ```
 
 The test starts a loopback installation and an opaque TCP relay, then sends files and event streams from Swift through Rust to Node. It checks cancellation, an incorrect fingerprint and the absence of HTTP content in captured relay bytes. The fixture uses generated test keys and removes its files and sockets when it exits.

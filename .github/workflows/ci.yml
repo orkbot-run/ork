@@ -249,7 +249,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Test Apple HTTP through the installation server
         if: runner.os == 'macOS'
-        run: pnpm exec tsx apple/tests/run.ts "$RUNNER_TEMP/ork-transport-bindings"
+        working-directory: .
+        run: pnpm exec tsx packages/client-transport/native/apple/tests/run.ts "$RUNNER_TEMP/ork-transport-bindings"
       - name: Build Android transport
         if: runner.os == 'Linux'
         run: |
