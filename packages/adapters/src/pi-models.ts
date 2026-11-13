@@ -122,7 +122,12 @@ const hiddenCatalogKeys = new Set<string>();
 const catalogProbeBaseUrls = new Map<string, string>();
 const catalogBaseUrls = new Map<string, Set<string>>();
 
-const trimBaseUrl = (url: string) => url.trim().replace(/\/+$/, "");
+const trimBaseUrl = (url: string) => {
+  const trimmed = url.trim();
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47) end -= 1;
+  return trimmed.slice(0, end);
+};
 
 /** Whether `url` is one the model registry itself uses for this catalog provider. */
 export function isCatalogProviderBaseUrl(provider: string, url: string): boolean {
