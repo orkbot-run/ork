@@ -905,8 +905,8 @@ describe.skipIf(!enabled)(
       expect(nextWork).not.toBeNull();
       nextWork!.dispose();
     });
-    const personalClient = async () => {
-      await provision();
+    const personalClient = async (reuseInstallation = false) => {
+      if (!reuseInstallation) await provision();
       const auth = createAuth(prisma!, {
         secret: "fixture-auth-material".repeat(3),
         baseURL: "https://installation.example.test",
@@ -1268,6 +1268,50 @@ describe.skipIf(!enabled)(
         }
       },
     );
+
+    it("cannot borrow another active personal device after the current device signs out offline", async () => {
+      const first = await personalClient();
+      const second = await personalClient(true);
+      try {
+        await system(() =>
+          prisma!.centralWorkspaceBinding.update({
+            where: { id: workspaceId },
+            data: { validUntil: new Date(0) },
+          }),
+        );
+        authority!.window.dispose();
+        expect(await authority!.session(first.session.id, "identity-test-user")).not.toBeNull();
+        expect(await authority!.session(second.session.id, "identity-test-user")).not.toBeNull();
+        expect((await first.call("sign-out", {}, first.token)).status).toBe(200);
+        expect(await authority!.session(first.session.id, "identity-test-user")).toBeNull();
+        expect(await authority!.session(second.session.id, "identity-test-user")).not.toBeNull();
+        const [retired, retained] = await Promise.all(
+          [first, second].map((client) =>
+            authority!.execution({
+              spaceId: "identity-test-space",
+              userId: "identity-test-user",
+              workspaceId,
+              membershipVersion: admission,
+              personalDeviceId: client.device.id,
+            }),
+          ),
+        );
+        expect(retired).toBeNull();
+        expect(retained?.signal.aborted).toBe(false);
+        retained?.dispose();
+        const retiredWatch = await authority!.watchSession({
+          workspaceId,
+          subject: "central-participant",
+          revision: admission,
+          personalDeviceId: first.device.id,
+        });
+        expect(retiredWatch.signal.aborted).toBe(true);
+        retiredWatch.dispose();
+      } finally {
+        first.auth.disposeOidcDiscovery();
+        second.auth.disposeOidcDiscovery();
+      }
+    });
 
     it("removes the personal credential on explicit logout without turning session expiry into revocation", async () => {
       const client = await personalClient();

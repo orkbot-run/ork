@@ -104,13 +104,19 @@ export class ServerAICatalog {
       });
       if (
         binding.state !== "ready" ||
-        binding.validUntil.getTime() <= Date.now() ||
         !access?.active ||
         !actor.membershipVersion ||
         access.membershipVersion !== actor.membershipVersion ||
         (administration && access.role !== "admin")
       )
         return deny("forbidden");
+      if (binding.validUntil.getTime() <= Date.now()) {
+        // Requests and execution retain their authority watches; this uses the same durable
+        // personal admission as row security without opening another database connection.
+        const [personal] = await tx.$queryRaw<Array<{ allowed: boolean }>>`
+          SELECT app_personal_workspace_access(${binding.id}, ${actor.userId}) AS allowed`;
+        if (!personal?.allowed) return deny("forbidden");
+      }
       return {
         organizationId: binding.localOrganizationId,
         version: binding.bindingVersion,

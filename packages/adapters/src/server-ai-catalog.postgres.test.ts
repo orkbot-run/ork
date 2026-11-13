@@ -12,7 +12,7 @@ import { InMemoryRealtimeFanout } from "./realtime.js";
 import { resolveConnectedRunModel, resolveRunModel } from "./run-model.js";
 import { EncryptedSecretStore } from "./secrets.js";
 import { resolveServerAIAuth, retireServerAIAuth } from "./server-ai-auth.js";
-import type { AIActor, AIExecutionClaim } from "./server-ai-catalog.js";
+import type { AIActor, AIExecutionClaim, AIWorkPermission } from "./server-ai-catalog.js";
 import { ServerAICatalog } from "./server-ai-catalog.js";
 import { serverAIObserver } from "./server-ai-observer.js";
 import { ServerAIModels } from "./server-ai-runtime.js";
@@ -65,13 +65,18 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
   );
   const realtime = new InMemoryRealtimeFanout();
   const replicas: ServerAICatalog[] = [];
-  const replica = () => {
+  const replica = (
+    authorizeWork: (actor: AIActor) => Promise<AIWorkPermission | null> = async () => ({
+      signal: new AbortController().signal,
+      dispose() {},
+    }),
+  ) => {
     const catalog = new ServerAICatalog({
       prisma: prisma!,
       secrets,
       realtime,
       principal: async (actor) => (actor.userId === admin.userId ? adminKey : null),
-      authorizeWork: async () => ({ signal: new AbortController().signal, dispose() {} }),
+      authorizeWork,
     });
     replicas.push(catalog);
     return catalog;
@@ -246,6 +251,83 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     expect(stored.secretRef).not.toContain("fixture-private-api-key");
     await system(() => prisma!.user.delete({ where: { id: admin.userId } }));
     expect((await catalog.list(member))[0]?.id).toBe(first.id);
+  });
+
+  it("retains assigned AI offline only for an active personal device with the exact admission", async () => {
+    const connection = await catalog.create(admin, input());
+    await assign(connection.id);
+    await system(() =>
+      prisma!.centralWorkspaceBinding.update({
+        where: { id: scopeA },
+        data: { validUntil: new Date(0) },
+      }),
+    );
+    await expect(catalog.list(admin)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(claim(connection.id, admin)).rejects.toMatchObject({ code: "forbidden" });
+
+    const deviceId = randomUUID();
+    await system(() =>
+      prisma!.personalWorkspaceDevice.create({
+        data: {
+          id: deviceId,
+          workspaceId: scopeA,
+          userId: admin.userId,
+          centralSubject: `central-${admin.userId}`,
+          membershipVersion: revision,
+          registryVersion: 1,
+          permissionVersion: 1,
+          bindingVersion: 1,
+          keyFingerprint: "b".repeat(64),
+          publicKey: "fixture-activated-device-key",
+        },
+      }),
+    );
+    expect((await catalog.list(admin)).map((row) => row.id)).toEqual([connection.id]);
+    await expect(catalog.list(member)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(
+      claim(
+        connection.id,
+        admin,
+        10,
+        replica(async () => null),
+      ),
+    ).rejects.toMatchObject({
+      code: "forbidden",
+    });
+    await expect(
+      claim(
+        connection.id,
+        admin,
+        10,
+        replica(async () => ({ signal: AbortSignal.abort(), dispose() {} })),
+      ),
+    ).rejects.toMatchObject({ code: "forbidden" });
+    const running = await claim(connection.id, admin);
+    const auth = await resolveServerAIAuth(
+      { prisma: prisma!, secrets, catalog },
+      admin,
+      connection.id,
+      "model-a",
+    );
+    expect(auth.value.apiKey).toBe("fixture-private-api-key");
+
+    await system(() =>
+      prisma!.personalWorkspaceDevice.update({
+        where: { id: deviceId },
+        data: { permissionVersion: 2 },
+      }),
+    );
+    await expect(catalog.list(admin)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(catalog.validate(running)).rejects.toMatchObject({ code: "forbidden" });
+    await settle(running, null);
+    await system(() =>
+      prisma!.personalWorkspaceDevice.update({
+        where: { id: deviceId },
+        data: { permissionVersion: 1, revokedAt: new Date() },
+      }),
+    );
+    await expect(catalog.list(admin)).rejects.toMatchObject({ code: "forbidden" });
+    await expect(claim(connection.id, admin)).rejects.toMatchObject({ code: "forbidden" });
   });
 
   it("separates server delegation from workspace administration and rejects unoffered models", async () => {
