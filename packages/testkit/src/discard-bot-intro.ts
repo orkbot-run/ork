@@ -1,5 +1,6 @@
 import { runJobKey } from "@orkbot/adapter-kit";
 import type { RunStatus } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { isActive } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { asSystem } from "./system-db.js";
@@ -87,6 +88,7 @@ async function rpc(
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

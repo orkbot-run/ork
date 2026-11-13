@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { SERVER_PROTOCOL_RANGE } from "@orkbot/contracts";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
@@ -24,6 +25,7 @@ async function renderGate(billing: boolean) {
     vi.fn(async () =>
       Response.json({
         billing,
+        protocol: SERVER_PROTOCOL_RANGE,
         passwordAuth: true,
         sso: null,
         passwordReset: false,

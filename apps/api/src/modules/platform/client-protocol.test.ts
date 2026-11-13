@@ -54,7 +54,7 @@ function call(app: Hono, protocol?: string, build?: string) {
 }
 
 describe("RPC protocol admission", () => {
-  it.each([undefined, "1"])("accepts legacy or current client header %j", async (protocol) => {
+  it.each(["2"])("accepts the current client header %j", async (protocol) => {
     const { app, handled } = fixture();
     const response = await call(app, protocol);
     expect(response.status).toBe(200);
@@ -84,7 +84,7 @@ describe("RPC protocol admission", () => {
 
   it("returns the existing structured upgrade error for unsupported client versions", async () => {
     const { app, handled } = fixture();
-    const response = await call(app, "2");
+    const response = await call(app, "3");
     expect(response.status).toBe(426);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
@@ -98,9 +98,10 @@ describe("RPC protocol admission", () => {
     expect(handled()).toBe(0);
   });
 
-  it("keeps missing-header callers on version one instead of upgrading them implicitly", async () => {
-    const { app, handled } = fixture({ min: 2, max: 2 });
+  it("requires an update from version-one and missing-header callers", async () => {
+    const { app, handled } = fixture();
     expect((await call(app)).status).toBe(426);
+    expect((await call(app, "1")).status).toBe(426);
     expect((await call(app, "2")).status).toBe(200);
     expect(handled()).toBe(1);
   });
@@ -143,9 +144,9 @@ describe("RPC protocol admission", () => {
 
   it("applies protocol and timestamp requirements independently", async () => {
     const { app, handled } = fixture(SERVER_PROTOCOL_RANGE, { mobile: "20261101000000" });
-    expect((await call(app, "1", "mobile/20261031000000")).status).toBe(426);
-    expect((await call(app, "1", "mobile/20261101000000")).status).toBe(200);
-    expect((await call(app, "2", "mobile/20261107000000")).status).toBe(426);
+    expect((await call(app, "2", "mobile/20261031000000")).status).toBe(426);
+    expect((await call(app, "2", "mobile/20261101000000")).status).toBe(200);
+    expect((await call(app, "1", "mobile/20261107000000")).status).toBe(426);
     expect((await call(app, "bad", "mobile/20261031000000")).status).toBe(400);
     expect(handled()).toBe(1);
   });
@@ -173,7 +174,7 @@ describe("RPC protocol admission", () => {
     const { app } = fixture();
     const response = await app.request("/rpc/events", {
       method: "POST",
-      headers: { [CLIENT_PROTOCOL_HEADER]: "1" },
+      headers: { [CLIENT_PROTOCOL_HEADER]: "2" },
     });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/event-stream");
