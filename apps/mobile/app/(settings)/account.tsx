@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 behavior is preserved. Ork-only avatar changes follow LICENSE.md.
-// Modified by Ork contributors to expose the optional device-local haptics preference.
+// Modified by Ork contributors for device-local haptics and managed workspace selection.
 
 import { MenuView } from "@expo/ui/community/menu";
 import type { AccountSecurity, UsageSummary } from "@orkbot/contracts";
@@ -104,8 +104,10 @@ import {
 } from "../../lib/trusted-link-sites";
 import { UI_LOCALE_LABELS } from "../../lib/ui-locale";
 import { errorText } from "../../lib/user-error";
+import { useWorkspacePicker } from "../../lib/workspace-picker";
 
 export default function Account() {
+  const workspacePicker = useWorkspacePicker();
   const sideInsets = useSideInsets();
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -490,6 +492,16 @@ export default function Account() {
           {focus !== "usage" ? usageBlock : null}
         </SettingsGroup>
 
+        {workspacePicker ? (
+          <SettingsGroup>
+            <SettingsRow
+              title={t("Workspace")}
+              value={workspacePicker.organization}
+              chevron="right"
+              onPress={workspacePicker.open}
+            />
+          </SettingsGroup>
+        ) : null}
         {organizations ? (
           <SettingsGroup>
             <SettingsRow

@@ -9,6 +9,7 @@ import {
 } from "@orkbot/contracts/accounts";
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
+import forge from "node-forge";
 import { fetchAccounts } from "./accounts-network";
 import { invalidateInstallationTransport } from "./installation-transport";
 import { queueAccountsRevocation, retryPendingRevocations } from "./pending-revocations";
@@ -121,6 +122,7 @@ async function saveIdentity(tokens: Tokens): Promise<void> {
       issuer: tokens.issuer,
       clientId: tokens.clientId,
       subject: tokens.subject,
+      draftSession: forge.md.sha256.create().update(tokens.nonce).digest().toHex(),
       ...(isPersonalOrkId(tokens.orkAvatar) ? { orkAvatar: tokens.orkAvatar } : {}),
     }),
     { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
@@ -487,6 +489,22 @@ export async function accountsLocalIdentity(): Promise<{
     subject: identity.subject,
     ...(isPersonalOrkId(identity.orkAvatar) ? { orkAvatar: identity.orkAvatar } : {}),
   };
+}
+
+/** An opaque browser-login lifetime keeps managed drafts separate after logout and re-login. */
+export async function accountsDraftSession(): Promise<{ account: string; epoch: string } | null> {
+  const owner = generation;
+  const identity = await accountsLocalIdentity();
+  if (!identity || owner !== generation) return null;
+  const tokens = await load(await config());
+  let epoch = tokens ? forge.md.sha256.create().update(tokens.nonce).digest().toHex() : undefined;
+  if (!epoch) {
+    const metadata = JSON.parse((await SecureStore.getItemAsync(IDENTITY_KEY)) ?? "null");
+    if (typeof metadata?.draftSession === "string" && /^[a-f0-9]{64}$/.test(metadata.draftSession))
+      epoch = metadata.draftSession;
+  }
+  if (owner !== generation || !epoch) return null;
+  return { account: JSON.stringify([identity.issuer, identity.subject]), epoch };
 }
 
 async function validAccessToken(): Promise<string | null> {

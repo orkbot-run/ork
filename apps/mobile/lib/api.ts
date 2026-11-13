@@ -442,10 +442,12 @@ export function configureSessionEndHangUp(hangUp: (() => Promise<void>) | undefi
 }
 
 /** A central account change must never restore the previous product identity. */
-export async function clearProductAccountSession(): Promise<void> {
+export async function clearProductAccountSession(
+  reason: "account_switch" | "workspace_switch" = "account_switch",
+): Promise<void> {
   await hangUpBeforeCredentialsCleared?.().catch(() => undefined);
   invalidateInstallationTransport();
-  const cleared = await clearSessionToken("account_switch");
+  const cleared = await clearSessionToken(reason);
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();
   const storage = await Promise.all([
@@ -458,7 +460,9 @@ export async function clearProductAccountSession(): Promise<void> {
 }
 
 /** Clears session + space for an endpoint change. Restores both if either wipe fails. */
-async function clearCredentialsForEndpointChange(): Promise<
+async function clearCredentialsForEndpointChange(
+  reason: "account_switch" | "workspace_switch" = "account_switch",
+): Promise<
   | {
       ok: true;
       previousToken: string;
@@ -485,7 +489,7 @@ async function clearCredentialsForEndpointChange(): Promise<
       result: { ok: false, error: t("Could not clear the previous server session") },
     };
   }
-  const sessionCleared = await clearSessionToken("account_switch");
+  const sessionCleared = await clearSessionToken(reason);
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();
   const spaceCleared = await clearStoredValue(SPACE_KEY);
@@ -563,6 +567,7 @@ async function recoverSpaceRollback(apiBase: string) {
 export async function saveApiBase(
   input: string,
   headers: Record<string, string> = {},
+  reason: "account_switch" | "workspace_switch" = "account_switch",
 ): Promise<EndpointResult> {
   const parsed = normalizeApiBase(input);
   if (!parsed.ok) return parsed;
@@ -576,7 +581,7 @@ export async function saveApiBase(
       }
     | undefined;
   if (parsed.url !== previous) {
-    const result = await clearCredentialsForEndpointChange();
+    const result = await clearCredentialsForEndpointChange(reason);
     if (!result.ok) return result.result;
     cleared = result;
   }

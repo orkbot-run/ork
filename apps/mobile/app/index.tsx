@@ -114,6 +114,7 @@ import { usePublishSearchInbox } from "../lib/use-publish-search-inbox";
 import { useSnoozeClock } from "../lib/use-snooze-clock";
 import type { LoadFailureKind } from "../lib/user-error";
 import { errorText, loadFailureKind } from "../lib/user-error";
+import { useWorkspacePicker } from "../lib/workspace-picker";
 
 /** A row counts as on screen as soon as any of it shows. */
 const AVATAR_VIEWABILITY = { itemVisiblePercentThreshold: 1 };
@@ -759,7 +760,9 @@ function Home({ embedded, onSelectSpace, onShareSelect }: InboxPaneProps & { emb
   );
 
   const organizations = useOrganizations(hasSession && !onShareSelect).data;
-  const hasOrganizationMenu = organizationSwitchActions(organizations).length > 0;
+  const workspacePicker = useWorkspacePicker();
+  const hasOrganizationMenu =
+    !!workspacePicker || organizationSwitchActions(organizations).length > 0;
   const headerTitle = useMemo(
     () => (hasOrganizationMenu ? () => <OrganizationTitleMenu list={organizations} /> : undefined),
     [hasOrganizationMenu, organizations],

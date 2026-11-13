@@ -168,7 +168,7 @@ it("requests explicit consent with Expo S256 and saves verified tokens in device
     refreshToken: "new-refresh",
     subject: "subject-1",
   });
-  expect(JSON.parse(mocks.storage.get("orkbot.accounts.identity-v1")!)).toEqual({
+  expect(JSON.parse(mocks.storage.get("orkbot.accounts.identity-v1")!)).toMatchObject({
     issuer,
     clientId: "mobile-client",
     subject: "subject-1",
@@ -184,12 +184,25 @@ it("retains only verified identity metadata after retiring a rotating bearer, in
   await expect(accounts.accountsAccessToken()).rejects.toThrow("Could not reach Accounts");
   expect(mocks.storage.has(storageKey)).toBe(false);
   const metadata = JSON.parse(mocks.storage.get("orkbot.accounts.identity-v1")!);
-  expect(metadata).toEqual({ issuer, clientId: "mobile-client", subject: "subject-1" });
+  expect(metadata).toEqual({
+    issuer,
+    clientId: "mobile-client",
+    subject: "subject-1",
+    draftSession: expect.stringMatching(/^[a-f0-9]{64}$/),
+  });
+  expect(await accounts.accountsDraftSession()).toEqual({
+    account: JSON.stringify([issuer, "subject-1"]),
+    epoch: metadata.draftSession,
+  });
   const requests = fetched.mock.calls.length;
   expect(await accounts.accountsLocalIdentity()).toEqual({ issuer, subject: "subject-1" });
   vi.resetModules();
   const restarted = await import("./accounts");
   expect(await restarted.accountsLocalIdentity()).toEqual({ issuer, subject: "subject-1" });
+  expect(await restarted.accountsDraftSession()).toEqual({
+    account: JSON.stringify([issuer, "subject-1"]),
+    epoch: metadata.draftSession,
+  });
   expect(await restarted.accountsAccessToken()).toBeNull();
   expect(fetched.mock.calls.length).toBe(requests);
 });

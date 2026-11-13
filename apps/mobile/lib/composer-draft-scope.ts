@@ -18,11 +18,17 @@ import {
   registerSessionDiskCache,
   subscribeSessionGeneration,
 } from "./session";
+import {
+  clearWorkspaceDraftSession,
+  hydrateWorkspaceDraftSession,
+} from "./workspace-draft-session";
 
 registerSessionDiskCache((sameAccount, reason) => {
-  if (!sameAccount && reason !== "session_rejected") clearComposerDraftAttachments();
-  if (reason === "logout" || reason === "account_switch" || reason === "session_restore")
-    clearComposerDrafts();
+  clearWorkspaceDraftSession();
+  if (reason === "workspace_switch") return;
+  const includeManaged = reason === "logout" || reason === "account_switch";
+  if (!sameAccount && reason !== "session_rejected") clearComposerDraftAttachments(includeManaged);
+  if (includeManaged || reason === "session_restore") clearComposerDrafts(includeManaged);
 });
 
 /** A late authentication read never assigns a new login lifetime to a captured source. */
@@ -61,6 +67,12 @@ export function useComposerDraftScope(
           return;
         if (!token) return setScope(undefined);
         await artifactCacheSession(token);
+        await hydrateWorkspaceDraftSession(
+          () =>
+            owner === revision &&
+            generation === currentSessionGeneration() &&
+            apiBase === currentApiBase(),
+        );
         if (
           owner !== revision ||
           generation !== currentSessionGeneration() ||

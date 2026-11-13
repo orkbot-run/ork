@@ -7,6 +7,7 @@ import { validateComposerMentionBindings } from "@orkbot/core";
 import { Directory, File, Paths } from "expo-file-system";
 import { currentApiBase } from "./api";
 import { currentArtifactCacheSession } from "./artifact-cache-session";
+import { hasManagedWorkspace, workspaceDraftOwner } from "./workspace-draft-session";
 
 /** One unsent composer text per server, account, and conversation. */
 export type ComposerDraftScope = Readonly<{
@@ -14,6 +15,7 @@ export type ComposerDraftScope = Readonly<{
   userId: string;
   threadKey: string;
   namespace: string;
+  workspaceOwner?: string;
 }>;
 
 export type ComposerDraft = { text: string; bindings: ComposerMentionBinding[] };
@@ -28,11 +30,14 @@ export function composerDraftScope(
   try {
     const namespace = currentArtifactCacheSession();
     if (!namespace) return undefined;
+    const workspaceOwner = workspaceDraftOwner(currentApiBase(), userId);
+    if (hasManagedWorkspace(currentApiBase()) && !workspaceOwner) return undefined;
     return {
       apiBase: currentApiBase(),
       userId,
       threadKey: groupId ? `group:${groupId}` : `bot:${botId}`,
       namespace,
+      ...(workspaceOwner ? { workspaceOwner } : {}),
     };
   } catch {
     return undefined;
@@ -41,14 +46,25 @@ export function composerDraftScope(
 
 export function isComposerDraftScopeCurrent(scope: ComposerDraftScope): boolean {
   try {
-    return scope.namespace === currentArtifactCacheSession() && scope.apiBase === currentApiBase();
+    return (
+      (!hasManagedWorkspace(scope.apiBase) || !!scope.workspaceOwner) &&
+      scope.namespace === currentArtifactCacheSession() &&
+      scope.apiBase === currentApiBase() &&
+      scope.workspaceOwner === workspaceDraftOwner(scope.apiBase, scope.userId)
+    );
   } catch {
     return false;
   }
 }
 
 export function composerDraftScopeKey(scope: ComposerDraftScope): string {
-  return JSON.stringify([scope.apiBase, scope.userId, scope.threadKey, scope.namespace]);
+  return JSON.stringify([
+    scope.apiBase,
+    scope.userId,
+    scope.threadKey,
+    scope.namespace,
+    scope.workspaceOwner,
+  ]);
 }
 
 // The OS may evict the cache when storage runs low, so an unsent draft lives next to
@@ -66,13 +82,16 @@ function legacyDone() {
 }
 
 /** Explicit retirement removes both generations; stale callbacks still fail the namespace fence. */
-export function clearComposerDrafts(): void {
+export function clearComposerDrafts(includeManaged = true): void {
+  if (includeManaged) deleteLeftover(new Directory(Paths.document, "composer-workspace-drafts-v2"));
   deleteLeftover(root());
   deleteLeftover(legacyRoot());
 }
 export function draftFolder(scope: ComposerDraftScope): Directory {
   return new Directory(
-    root(),
+    scope.workspaceOwner
+      ? new Directory(Paths.document, "composer-workspace-drafts-v2", scope.workspaceOwner)
+      : root(),
     encodeURIComponent(scope.apiBase),
     `user-${encodeURIComponent(scope.userId)}`,
   );
@@ -198,7 +217,7 @@ function readLegacyDraft(scope: ComposerDraftScope): ComposerDraft {
 export function readComposerDraft(scope: ComposerDraftScope | undefined): ComposerDraft {
   if (!scope || !isComposerDraftScopeCurrent(scope)) return { text: "", bindings: [] };
   try {
-    migrateLegacyDrafts();
+    if (!scope.workspaceOwner) migrateLegacyDrafts();
   } catch {
     // The copy retries on the next read or write. Until it works, the draft still lives
     // where the earlier build left it; reading it there keeps the composer from starting
@@ -233,7 +252,7 @@ export function writeComposerDraft(
 ): boolean {
   try {
     if (!isComposerDraftScopeCurrent(scope)) return false;
-    migrateLegacyDrafts();
+    if (!scope.workspaceOwner) migrateLegacyDrafts();
     const file = draftFile(scope);
     const next = nextDraftFile(scope);
     if (!text) {

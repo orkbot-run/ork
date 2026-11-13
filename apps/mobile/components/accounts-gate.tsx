@@ -12,7 +12,7 @@ import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -63,6 +63,7 @@ import { continueWithPersonalServer, personalLoginSelection } from "../lib/perso
 import {
   lastOrganizationWorkspace,
   saveSelectedWorkspace,
+  selectedInstallationRoutes,
   selectedWorkspace,
 } from "../lib/selected-workspace";
 import {
@@ -80,6 +81,7 @@ import { beginServerPairing } from "../lib/server-pairing";
 import { currentSessionGeneration } from "../lib/session";
 import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
+import { WorkspacePickerContext } from "../lib/workspace-picker";
 import { LogoAvatar } from "./logo-avatar";
 import { NativeActionButton } from "./native-action-button";
 import { WorkspaceDirectory, workspaceEntries } from "./workspace-directory";
@@ -164,13 +166,15 @@ async function selectServer(
     await loadApiBase();
     if (!beforeSave()) return null;
     // Changing the endpoint may itself clear and replace the product session.
-    const saved = await saveApiBase(entry.url, serverHeaders(entry.url));
+    const saved = entry.workspace
+      ? await saveApiBase(entry.url, serverHeaders(entry.url), "workspace_switch")
+      : await saveApiBase(entry.url, serverHeaders(entry.url));
     if (!saved.ok) throw new Error(saved.error);
     if (!current()) return null;
     const previousWorkspace = await selectedWorkspace(account, entry.url);
     if (!current()) return null;
     if (JSON.stringify(previousWorkspace) !== JSON.stringify(entry.workspace ?? null)) {
-      await clearProductAccountSession();
+      await clearProductAccountSession("workspace_switch");
       if (!current()) return null;
     }
     await saveSelectedWorkspace(account, entry.url, entry.workspace, entry.relay, entry.direct);
@@ -216,6 +220,12 @@ export function AccountsGate({
   );
   const linkedServer = pendingServerConnect();
   const linkedWorkspace = pendingWorkspaceConnect();
+  const pickerOwner = useRef<{
+    account: string;
+    organizationId: string | null;
+    server: string;
+    sessionGeneration: number;
+  } | null>(null);
   const operationPending = useRef(false);
   const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
@@ -280,7 +290,14 @@ export function AccountsGate({
     let directoryReady = false;
     let personalAttempted = false;
     const restorePersonal = async () => {
-      if (!productGate || linkedServer || linkedWorkspace || personalAttempted) return false;
+      if (
+        !productGate ||
+        linkedServer ||
+        linkedWorkspace ||
+        personalAttempted ||
+        pickerOwner.current
+      )
+        return false;
       personalAttempted = true;
       const active = () =>
         generation.current === current &&
@@ -312,6 +329,7 @@ export function AccountsGate({
         owner.current = "";
         directoryOwner.current = "";
         knownServers.current.clear();
+        pickerOwner.current = null;
         setOrkAvatar(welcomeOrk);
         setServers([]);
         setDirectory(null);
@@ -324,6 +342,8 @@ export function AccountsGate({
       }
       setOrkAvatar(isPersonalOrkId(identity.orkAvatar) ? identity.orkAvatar : welcomeOrk);
       const account = JSON.stringify([identity.issuer, identity.subject]);
+      if (pickerOwner.current && pickerOwner.current.account !== account)
+        pickerOwner.current = null;
       if (!(await adoptAccount(account, () => generation.current === current))) return;
       owner.current = account;
       verified = true;
@@ -412,7 +432,7 @@ export function AccountsGate({
         }
         if (generation.current !== current) return;
       }
-      if (productGate && !linkedServer && organization) {
+      if (productGate && !linkedServer && organization && !pickerOwner.current) {
         const remembered = await lastOrganizationWorkspace(account, organization.id);
         const selected = await SecureStore.getItemAsync(SERVER_KEY);
         if (generation.current !== current) return;
@@ -462,7 +482,18 @@ export function AccountsGate({
         if (generation.current !== current) return;
         setError(errorText(failure));
         setReadyAt({ version, attempt });
-        setPhase(verified ? (directoryReady ? "servers" : "recovery") : "signed-out");
+        const canReturn =
+          pickerOwner.current?.account === owner.current &&
+          pickerOwner.current.sessionGeneration === currentSessionGeneration();
+        setPhase(
+          canReturn
+            ? "recovery"
+            : verified
+              ? directoryReady
+                ? "servers"
+                : "recovery"
+              : "signed-out",
+        );
       })
       .finally(() => {
         if (generation.current === current) void SplashScreen.hideAsync().catch(() => undefined);
@@ -631,6 +662,8 @@ export function AccountsGate({
     setServerRescue(selected === "older");
     knownServers.current.add(entry.id);
     confirmServerInitialization(entry.url, account!);
+    pickerOwner.current = null;
+    if (entry.workspace) setOrganizationId(entry.workspace.organizationId);
     if (onSelected) onSelected();
     else {
       setReadyAt({ version, attempt });
@@ -872,6 +905,24 @@ export function AccountsGate({
     }
   }
 
+  const workspacePicker = useMemo(
+    () => ({
+      organization:
+        directory?.organizations.find((row) => row.id === organizationId)?.name ?? t("Workspace"),
+      open: () => {
+        pickerOwner.current = {
+          account: owner.current,
+          organizationId,
+          server: currentApiBase(),
+          sessionGeneration: currentSessionGeneration(),
+        };
+        setAdding(false);
+        setPhase("servers");
+      },
+    }),
+    [directory, organizationId, t],
+  );
+
   if (
     phase === "ready" &&
     readyAt.version === version &&
@@ -894,7 +945,7 @@ export function AccountsGate({
         />
       </SafeAreaView>
     ) : (
-      children
+      <WorkspacePickerContext value={workspacePicker}>{children}</WorkspacePickerContext>
     );
   const visiblePhase =
     readyAt.version === version && readyAt.attempt === attempt ? phase : "loading";
@@ -912,22 +963,26 @@ export function AccountsGate({
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ alignItems: "center" }}>
-          <LogoAvatar
-            identity={orkAvatar}
-            color={seededLogoAvatarColor(orkAvatar)}
-            size={visiblePhase === "servers" || visiblePhase === "recovery" ? 112 : 220}
-            activity="idle"
-            motion="live"
-          />
-        </View>
+        {!pickerOwner.current ? (
+          <View style={{ alignItems: "center" }}>
+            <LogoAvatar
+              identity={orkAvatar}
+              color={seededLogoAvatarColor(orkAvatar)}
+              size={visiblePhase === "servers" || visiblePhase === "recovery" ? 112 : 220}
+              activity="idle"
+              motion="live"
+            />
+          </View>
+        ) : null}
         <Text
           accessibilityRole="header"
           style={{ fontSize: 30, fontWeight: "600", color: tokens.foreground, textAlign: "center" }}
         >
-          {visiblePhase === "servers" || visiblePhase === "recovery"
-            ? t("Server")
-            : t("Welcome to Ork")}
+          {pickerOwner.current
+            ? t("Workspace")
+            : visiblePhase === "servers" || visiblePhase === "recovery"
+              ? t("Server")
+              : t("Welcome to Ork")}
         </Text>
         {visiblePhase === "loading" ? (
           <ActivityIndicator accessibilityLabel={t("Loading…")} color={tokens.mutedForeground} />
@@ -1146,6 +1201,50 @@ export function AccountsGate({
               <NativeActionButton
                 label={t("Retry")}
                 onPress={() => setAttempt((value) => value + 1)}
+              />
+            ) : null}
+            {pickerOwner.current?.account === owner.current &&
+            pickerOwner.current.sessionGeneration === currentSessionGeneration() &&
+            !linkedServer &&
+            !linkedWorkspace ? (
+              <NativeActionButton
+                label={t("Cancel")}
+                prominence="secondary"
+                disabled={pending}
+                onPress={() =>
+                  void action(async () => {
+                    const previous = pickerOwner.current;
+                    const current = generation.current;
+                    const active = () =>
+                      previous === pickerOwner.current &&
+                      current === generation.current &&
+                      previous?.account === owner.current &&
+                      previous.sessionGeneration === currentSessionGeneration();
+                    if (!previous || !active()) return;
+                    const target = await selectedWorkspace(previous.account, previous.server);
+                    const routes = await selectedInstallationRoutes(
+                      previous.account,
+                      previous.server,
+                    );
+                    if (!active()) return;
+                    await selectInstallationTransport(
+                      previous.account,
+                      previous.server,
+                      target ?? undefined,
+                      routes.relay,
+                      routes.direct,
+                    );
+                    if (!active()) return;
+                    pickerOwner.current = null;
+                    chosenOrganization.current = {
+                      account: previous.account,
+                      id: previous.organizationId,
+                    };
+                    setOrganizationId(previous.organizationId);
+                    setReadyAt({ version, attempt });
+                    setPhase("ready");
+                  })
+                }
               />
             ) : null}
             <NativeActionButton

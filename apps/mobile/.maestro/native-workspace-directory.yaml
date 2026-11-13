@@ -1,0 +1,24 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+name: Connected workspace directory
+tags:
+  - native-accounts
+---
+# Run against an already authorized workspace in a native Accounts build.
+- launchApp:
+    stopApp: false
+- openLink: "orkbot:///account"
+- extendedWaitUntil:
+    visible: "Workspace.*"
+    timeout: 30000
+- tapOn: "Workspace.*"
+- extendedWaitUntil:
+    visible: "Organization"
+    timeout: 15000
+- assertVisible: "Cancel"
+- takeScreenshot: "native-workspace-directory"
+- tapOn: "Cancel"
+- assertNotVisible: "Choose organization"
+- assertNotVisible: "Get started"

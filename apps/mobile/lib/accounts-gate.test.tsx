@@ -28,6 +28,7 @@ import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
 import type { PersonalCredential } from "./personal-device";
 import { continueWithPersonalServer, personalLoginSelection } from "./personal-login";
+import type * as SelectedWorkspace from "./selected-workspace";
 import { saveSelectedWorkspace, selectedWorkspace } from "./selected-workspace";
 import {
   clearServerConnect,
@@ -40,6 +41,7 @@ import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
 import { currentSessionGeneration } from "./session";
 import { continueWithSso } from "./sso";
+import { useWorkspacePicker } from "./workspace-picker";
 
 vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates</div> }));
 vi.mock("./personal-login", () => ({
@@ -502,11 +504,23 @@ it("ignores an alert action after the account changes", async () => {
   expect(host.textContent).not.toContain("new.example.test");
   expect(host.textContent).toContain("Get started");
 });
+function PickerControl() {
+  const picker = useWorkspacePicker();
+  return (
+    <button type="button" onClick={picker?.open}>
+      Pick workspace
+    </button>
+  );
+}
+
 async function render() {
   await act(async () =>
     root.render(
       <AccountsGate>
-        <span>Product screen</span>
+        <span>
+          Product screen
+          <PickerControl />
+        </span>
       </AccountsGate>,
     ),
   );
@@ -1704,3 +1718,88 @@ it("saves the default organization centrally only after an explicit preference a
   expect(saveApiBase).not.toHaveBeenCalled();
 });
 vi.mock("./installation-transport", () => ({ selectInstallationTransport: async () => undefined }));
+vi.mock("./selected-workspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof SelectedWorkspace>()),
+  selectedInstallationRoutes: async () => ({}),
+}));
+
+it("reopens the managed directory without signing out or replacing the active workspace", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  vi.mocked(saveApiBase).mockClear();
+  vi.mocked(clearProductAccountSession).mockClear();
+  await click("Pick workspace");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(host.textContent).toContain("Company workspace");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  expect(clearProductAccountSession).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.textContent).not.toContain("Product screen");
+  await click("Cancel");
+  expect(host.textContent).toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  expect(signOutAccounts).not.toHaveBeenCalled();
+  expect(await selectedWorkspace(owner, remote.url)).toEqual(workspace);
+});
+
+it("switches a managed workspace through the existing scoped selection and saves device history", async () => {
+  const workspace = managedDirectory(companyId);
+  const secondId = "00000000-0000-4000-8000-000000000098";
+  state.catalog!.organizations[1]!.servers[0]!.workspaces.push({
+    id: secondId,
+    name: "Second workspace",
+    state: "ready",
+    canOpen: true,
+    role: "member",
+  });
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+    {
+      ...remote,
+      id: secondId,
+      name: "Second workspace",
+      workspace: { ...workspace, workspaceId: secondId },
+    },
+  ]);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  vi.mocked(clearProductAccountSession).mockClear();
+  await click("Pick workspace");
+  await click("Second workspace");
+  expect(host.textContent).toContain("Product screen");
+  expect(await selectedWorkspace(owner, remote.url)).toEqual({
+    ...workspace,
+    workspaceId: secondId,
+  });
+  expect(clearProductAccountSession).toHaveBeenCalledOnce();
+  expect(signOutAccounts).not.toHaveBeenCalled();
+  expect(setDefaultAccountOrganization).not.toHaveBeenCalled();
+});
+
+it("lets the current session cancel an explicit picker during an Accounts outage without selecting another organization", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  await click("Pick workspace");
+  vi.mocked(accountsIdentity).mockRejectedValueOnce(new AccountsUnavailable());
+  vi.mocked(saveApiBase).mockClear();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.textContent).toContain("Could not reach Accounts");
+  expect(host.textContent).toContain("Cancel");
+  expect(host.textContent).not.toContain("Product screen");
+  await click("Cancel");
+  expect(host.textContent).toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
