@@ -28,6 +28,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Configure AI in the app connected to your server. Ork Accounts handles organizations, members, server enrollment and access assignments.
 - Managed remote desktop connections use the installation's pinned identity and TLS 1.3 over direct and relay routes.
 
+### Fixed
+
+- Late background task results are safely ignored after a conversation is cleared.
+
 ### Self-host upgrade notes
 
 - Upgrade the desktop app and self-hosted server together before enabling the new workspace features. Older clients require an update. Mobile binaries will follow separately.
