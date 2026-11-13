@@ -12,6 +12,7 @@ private struct InstallationSelection: Decodable, Equatable {
   let bindingVersion: UInt64
   let keyFingerprint: String
   let relayOrigin: String?
+  let directOrigin: String?
 }
 
 private struct InstallationHeader: Decodable {
@@ -64,8 +65,16 @@ public actor InstallationContexts {
       guard UUID(uuidString: id)?.uuidString.lowercased() == id
       else { throw InstallationRequestError.invalidTarget }
     }
-    _ = try InstallationRequest(origin: selected.origin, serverId: selected.serverId,
+    _ = try InstallationRequest(origin: selected.directOrigin ?? selected.origin, serverId: selected.serverId,
       bindingVersion: selected.bindingVersion, fingerprint: selected.keyFingerprint)
+    if let address = selected.directOrigin {
+      guard selected.relayOrigin == nil,
+        selected.origin == "https://\(selected.serverId).installation.ork.invalid",
+        let direct = URLComponents(string: address),
+        !(direct.scheme == issuer.scheme && direct.host?.lowercased() == issuer.host?.lowercased() &&
+          (direct.port ?? 443) == (issuer.port ?? 443))
+      else { throw InstallationRequestError.invalidTarget }
+    }
     if let address = selected.relayOrigin {
       guard let relay = URLComponents(string: address), relay.scheme == "https",
         relay.host != nil, relay.user == nil, relay.password == nil, relay.query == nil,
@@ -104,7 +113,7 @@ public actor InstallationContexts {
       else { throw InstallationRequestError.invalidTarget }
       relay = nil
     }
-    let operation = try InstallationRequest(origin: selection.origin, serverId: selection.serverId,
+    let operation = try InstallationRequest(origin: selection.directOrigin ?? selection.origin, serverId: selection.serverId,
       bindingVersion: selection.bindingVersion, fingerprint: selection.keyFingerprint, relay: relay)
     requests[id] = operation
     inputs[id] = HttpRequest(method: decoded.method, path: decoded.path,

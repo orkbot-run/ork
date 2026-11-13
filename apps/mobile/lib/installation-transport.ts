@@ -3,8 +3,13 @@
 
 import type { NativeHttpBridge } from "@orkbot/client-transport";
 import { createNativeFetch } from "@orkbot/client-transport";
-import type { InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import type {
+  InstallationDirectRoute,
+  InstallationRelayRoute,
+  WorkspaceTarget,
+} from "@orkbot/contracts";
 import {
+  installationDirectRouteSchema,
   installationRelayRouteSchema,
   installationVirtualOrigin,
   WorkspaceTargetSchema,
@@ -61,6 +66,7 @@ export async function selectInstallationTransport(
   origin: string,
   target?: WorkspaceTarget,
   route?: InstallationRelayRoute,
+  directRoute?: InstallationDirectRoute,
 ): Promise<void> {
   if (!target) {
     invalidateInstallationTransport();
@@ -142,10 +148,19 @@ export async function selectInstallationTransport(
   const ready = enqueue(async () => {
     if (!current()) throw new Error("Native connection changed");
     let relay = route;
-    if (!relay && origin === installationVirtualOrigin(workspace.serverId)) {
-      const { selectedInstallationRelay } = await import("./selected-workspace");
-      relay = await selectedInstallationRelay(account, origin);
-      if (!relay) throw new Error("Native connection changed");
+    let direct = directRoute;
+    if (!relay && !direct && origin === installationVirtualOrigin(workspace.serverId)) {
+      const { selectedInstallationRoutes } = await import("./selected-workspace");
+      ({ relay, direct } = await selectedInstallationRoutes(account, origin));
+      if (!relay && !direct) throw new Error("Native connection changed");
+    }
+    if (direct) {
+      direct = installationDirectRouteSchema.parse(direct);
+      if (
+        origin !== installationVirtualOrigin(workspace.serverId) ||
+        direct.origin === issuer.origin
+      )
+        throw new Error("Native connection changed");
     }
     if (relay) {
       relay = installationRelayRouteSchema.parse(relay);
@@ -159,31 +174,59 @@ export async function selectInstallationTransport(
     if (!current()) throw new Error("Native connection changed");
     const bridge = await native();
     if (!current()) throw new Error("Native connection changed");
-    session ??= await bridge.begin();
-    const activeSession = session;
-    await bridge.select(
-      activeSession,
-      version,
-      JSON.stringify({
-        account,
-        origin,
-        ...workspace,
-        ...(relay ? { relayOrigin: relay.origin } : {}),
-      }),
-    );
-    if (!current()) throw new Error("Native connection changed");
     const { randomUUID } = await import("expo-crypto");
-    return createNativeFetch(
-      bridge,
-      {
-        session: activeSession,
-        revision: version,
-        origin,
-        current,
-        ...(relay ? { relayTicket: (signal?: AbortSignal) => relayTicket(relay, signal) } : {}),
-      },
-      randomUUID,
-    );
+    const configure = async (useRelay: boolean) => {
+      if (!current()) throw new Error("Native connection changed");
+      // A route attempt owns a new native nonce. Late callbacks cannot cross attempts.
+      const activeSession = await bridge.begin();
+      session = activeSession;
+      if (!current()) throw new Error("Native connection changed");
+      await bridge.select(
+        activeSession,
+        version,
+        JSON.stringify({
+          account,
+          origin,
+          ...workspace,
+          ...(useRelay && relay ? { relayOrigin: relay.origin } : {}),
+          ...(!useRelay && direct ? { directOrigin: direct.origin } : {}),
+        }),
+      );
+      if (!current()) throw new Error("Native connection changed");
+      return createNativeFetch(
+        bridge,
+        {
+          session: activeSession,
+          revision: version,
+          origin,
+          current: () => current() && session === activeSession,
+          ...(useRelay && relay
+            ? { relayTicket: (signal?: AbortSignal) => relayTicket(relay, signal) }
+            : {}),
+        },
+        randomUUID,
+      );
+    };
+    if (!direct) return configure(Boolean(relay));
+    const candidate = await configure(false);
+    if (!relay) return candidate;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4_000);
+    try {
+      // Only this unauthenticated, read-only probe may be retried on another route.
+      const response = await candidate(`${origin}/api/auth/capabilities`, {
+        method: "GET",
+        credentials: "omit",
+        signal: controller.signal,
+      });
+      await response.body?.cancel();
+      return candidate;
+    } catch {
+      if (!current()) throw new Error("Native connection changed");
+      return configure(true);
+    } finally {
+      clearTimeout(timeout);
+    }
   });
   selected = {
     account,

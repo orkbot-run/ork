@@ -318,7 +318,7 @@ async fn installation_ticket(
         .transport
         .selected(&document.label)
         .ok_or("Native connection changed")?;
-    if selection.relay_origin.is_none() {
+    if !selection.uses_relay() {
         return Ok(None);
     }
     let authorization = state
@@ -2412,25 +2412,33 @@ async fn open_server(
                 &server_directory::device_id(&state.directory)?,
             )
             .await?;
-        let selection = installation_transport::Selection {
+        let mut selection = installation_transport::Selection {
             account: settings::account_key(authorization.account.identity()),
             origin: choice.server_url.origin().ascii_serialization(),
             target: workspace.clone(),
             relay_origin: catalog.relay_origin(workspace, &choice.server_url)?,
+            direct_origin: catalog.direct_origin(workspace, &choice.server_url)?,
+            prefer_relay: false,
         };
-        let ticket = if selection.relay_origin.is_some() {
-            Some(
+        let direct_failed = if selection.uses_relay() {
+            true
+        } else {
+            selection.probe(None).await.is_err()
+        };
+        if direct_failed {
+            if selection.relay_origin.is_none() {
+                return Err("Could not connect to this installation. Try again.".into());
+            }
+            selection.prefer_relay = true;
+            let ticket =
                 server_login::issue_relay(authorization.directory_bearer()?, &selection, || {
                     require_setup(window).is_ok()
                         && require_account(state, authorization).is_ok()
                         && state.restore_intent.load(Ordering::SeqCst) == intent
                 })
-                .await?,
-            )
-        } else {
-            None
-        };
-        selection.probe(ticket).await?;
+                .await?;
+            selection.probe(Some(ticket)).await?;
+        }
         Some(selection)
     } else {
         server::require_accounts_only(&choice.server_url).await?;

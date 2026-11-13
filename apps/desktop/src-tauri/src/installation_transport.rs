@@ -24,9 +24,16 @@ pub struct Selection {
     pub origin: String,
     pub target: WorkspaceTarget,
     pub relay_origin: Option<String>,
+    #[serde(default)]
+    pub direct_origin: Option<String>,
+    #[serde(default)]
+    pub prefer_relay: bool,
 }
 
 impl Selection {
+    pub fn uses_relay(&self) -> bool {
+        self.prefer_relay || (self.direct_origin.is_none() && self.relay_origin.is_some())
+    }
     pub fn valid(&self) -> bool {
         if self.target.validate().is_err()
             || self.account.len() != 64
@@ -43,25 +50,55 @@ impl Selection {
         {
             return false;
         }
-        if let Some(relay) = &self.relay_origin {
-            let Ok(relay) = url::Url::parse(relay) else {
+        if origin.origin() == crate::server_directory::origin().origin()
+            || (self.prefer_relay && self.relay_origin.is_none())
+        {
+            return false;
+        }
+        if (self.direct_origin.is_some() || self.relay_origin.is_some())
+            && self.origin != format!("https://{}.installation.ork.invalid", self.target.server_id)
+        {
+            return false;
+        }
+        if let Some(direct) = &self.direct_origin {
+            let Ok(parsed) = crate::server::normalize_server_url(direct) else {
                 return false;
             };
-            relay.scheme() == "https"
-                && relay.origin().ascii_serialization()
-                    == self.relay_origin.as_deref().unwrap_or_default()
-                && relay.username().is_empty()
-                && relay.password().is_none()
-                && relay.origin() != crate::server_directory::origin().origin()
-                && self.origin
-                    == format!("https://{}.installation.ork.invalid", self.target.server_id)
-        } else {
-            self.connection(None).is_ok()
+            if parsed.origin().ascii_serialization() != *direct
+                || parsed.origin() == crate::server_directory::origin().origin()
+                || InstallationConnection::new(
+                    direct.clone(),
+                    self.target.server_id.clone(),
+                    self.target.binding_version,
+                    self.target.key_fingerprint.clone(),
+                )
+                .is_err()
+            {
+                return false;
+            }
         }
+        if let Some(relay) = &self.relay_origin {
+            let Ok(parsed) = url::Url::parse(relay) else {
+                return false;
+            };
+            if parsed.scheme() != "https"
+                || parsed.origin().ascii_serialization() != *relay
+                || !parsed.username().is_empty()
+                || parsed.password().is_some()
+                || parsed.origin() == crate::server_directory::origin().origin()
+            {
+                return false;
+            }
+        }
+        self.uses_relay() || self.connection(None).is_ok()
     }
 
     pub async fn revoke(&self, token: &str, ticket: Option<String>) -> bool {
-        let Ok(connection) = self.connection(ticket) else {
+        let mut route = self.clone();
+        if ticket.is_none() && route.direct_origin.is_some() {
+            route.prefer_relay = false;
+        }
+        let Ok(connection) = route.connection(ticket) else {
             return false;
         };
         let operation = async {
@@ -146,8 +183,8 @@ impl Selection {
     fn connection(&self, ticket: Option<String>) -> Result<Arc<InstallationConnection>, String> {
         self.target.validate()?;
         let target = &self.target;
-        match (&self.relay_origin, ticket) {
-            (Some(origin), Some(ticket)) => InstallationConnection::via_relay(
+        match (self.uses_relay(), self.relay_origin.as_ref(), ticket) {
+            (true, Some(origin), Some(ticket)) => InstallationConnection::via_relay(
                 self.origin.clone(),
                 target.server_id.clone(),
                 target.binding_version,
@@ -159,8 +196,10 @@ impl Selection {
                     workspace_id: target.workspace_id.clone(),
                 },
             ),
-            (None, None) => InstallationConnection::new(
-                self.origin.clone(),
+            (false, _, None) => InstallationConnection::new(
+                self.direct_origin
+                    .clone()
+                    .unwrap_or_else(|| self.origin.clone()),
                 target.server_id.clone(),
                 target.binding_version,
                 target.key_fingerprint.clone(),
@@ -243,7 +282,7 @@ impl Transport {
             return Err(ERROR.into());
         }
         // Validate direct selections before granting the document any native network authority.
-        if selection.relay_origin.is_none() {
+        if !selection.uses_relay() {
             selection.connection(None)?.cancel();
         }
         self.0.lock().map_err(|_| ERROR)?.insert(
@@ -600,6 +639,8 @@ mod tests {
             account: "a".repeat(64),
             origin: "https://installation.example.test".into(),
             relay_origin: None,
+            direct_origin: None,
+            prefer_relay: false,
             target: WorkspaceTarget {
                 organization_id: "11111111-1111-4111-8111-111111111111".into(),
                 server_id: "22222222-2222-4222-8222-222222222222".into(),
@@ -608,6 +649,38 @@ mod tests {
                 key_fingerprint: "b".repeat(64),
             },
         }
+    }
+    #[test]
+    fn route_changes_preserve_logical_scope_and_validate_both_pinned_routes() {
+        let mut route = selection();
+        route.origin = format!(
+            "https://{}.installation.ork.invalid",
+            route.target.server_id
+        );
+        route.direct_origin = Some("http://192.168.1.8:5173".into());
+        route.relay_origin = Some("https://relay.example.test".into());
+        assert!(route.valid());
+        assert!(!route.uses_relay());
+        assert!(route.connection(None).is_ok());
+        route.prefer_relay = true;
+        assert!(route.valid());
+        assert!(route.uses_relay());
+        assert!(route.connection(None).is_err());
+        let logical = route.origin.clone();
+        route.prefer_relay = false;
+        assert_eq!(route.origin, logical);
+        for direct in [
+            "http://public.example.test",
+            "http://169.254.169.254",
+            "https://api.ork.run",
+            "https://lan.example.test/path",
+        ] {
+            route.direct_origin = Some(direct.into());
+            assert!(!route.valid(), "{direct}");
+        }
+        route.direct_origin = Some("https://lan.example.test".into());
+        route.origin = "https://another.installation.ork.invalid".into();
+        assert!(!route.valid());
     }
     const ID: &str = "44444444-4444-4444-8444-444444444444";
     fn input() -> String {

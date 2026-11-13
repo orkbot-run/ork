@@ -64,6 +64,13 @@ executable page. Rust limits this listener to application document routes, and a
 saved port preserves the local origin after restart while separate account and
 workspace profiles keep browser storage apart. Every request belongs to its
 document. Retiring the document cancels pending work. Delayed callbacks are refused.
+The listener keeps each socket until its peer completes the TCP shutdown, following
+Winsock's requirements for reopening the saved port.
+
+Remote workspace selections keep one virtual installation origin and retain both
+connection routes. Desktop first probes the direct route through pinned TLS, then
+requests a relay ticket if that probe fails. This happens before the product window
+opens. Failed product requests are returned without automatic replay.
 
 Authentication stays in Rust. The native transport substitutes the selected product
 session for renderer-supplied authorization, then carries request and response

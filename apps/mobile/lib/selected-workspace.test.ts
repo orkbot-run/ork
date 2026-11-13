@@ -7,6 +7,7 @@ import {
   lastOrganizationWorkspace,
   saveSelectedWorkspace,
   selectedInstallationRelay,
+  selectedInstallationRoutes,
   selectedWorkspace,
 } from "./selected-workspace";
 
@@ -65,4 +66,22 @@ it("clears active selection without granting authority from remembered metadata"
   for (const key of storage.keys())
     storage.set(key, JSON.stringify({ account: "another-account", target }));
   expect(await lastOrganizationWorkspace("account", target.organizationId)).toBeNull();
+});
+
+it("persists both routes while keeping the workspace and key pin bound to one installation", async () => {
+  const origin = `https://${target.serverId}.installation.ork.invalid`;
+  const relay = { origin: "https://relay.example.test" };
+  const direct = { origin: "http://192.168.1.8:5173" };
+  await saveSelectedWorkspace("account-a", origin, target, relay, direct);
+  expect(await selectedInstallationRoutes("account-a", origin)).toEqual({ relay, direct });
+  expect(await selectedInstallationRoutes("account-b", origin)).toEqual({});
+  expect(await selectedWorkspace("account-a", origin)).toEqual(target);
+  await saveSelectedWorkspace("account-a", origin, target, undefined, direct);
+  expect(await selectedInstallationRoutes("account-a", origin)).toEqual({ direct });
+  await expect(
+    saveSelectedWorkspace("account-a", origin, target, undefined, {
+      origin: "http://public.example.test",
+    }),
+  ).rejects.toThrow();
+  expect(await selectedInstallationRoutes("account-a", origin)).toEqual({ direct });
 });

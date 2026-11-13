@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { z } from "zod";
+import { isPrivateNetworkHost } from "./network-host.js";
 
 export const INSTALLATION_TRANSPORT_PATH = "/api/installation-transport/v1";
 export const INSTALLATION_TRANSPORT_LEASE_PURPOSE = "ork-installation-transport-lease-v1";
@@ -20,6 +21,24 @@ export const installationRelayRouteSchema = z
     return url.protocol === "https:" && url.origin === origin && !url.username && !url.password;
   });
 export type InstallationRelayRoute = z.infer<typeof installationRelayRouteSchema>;
+export const installationDirectRouteSchema = z
+  .object({ origin: z.string().url().max(2048) })
+  .strict()
+  .refine(({ origin }) => {
+    const url = new URL(origin);
+    return (
+      url.origin === origin &&
+      !url.username &&
+      !url.password &&
+      (url.protocol === "https:" ||
+        (url.protocol === "http:" && isPrivateNetworkHost(url.hostname)))
+    );
+  });
+export type InstallationDirectRoute = z.infer<typeof installationDirectRouteSchema>;
+export type InstallationConnectionRoutes = {
+  direct?: InstallationDirectRoute;
+  relay?: InstallationRelayRoute;
+};
 export const installationVirtualOrigin = (serverId: string) =>
   `https://${z.uuid().parse(serverId)}.installation.ork.invalid`;
 

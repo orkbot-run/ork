@@ -6,6 +6,7 @@ use std::{convert::Infallible, path::Path, time::Duration};
 use http_body_util::Full;
 use hyper::{body::Bytes, service::service_fn, Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use url::Url;
 
@@ -18,11 +19,14 @@ const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' 'unsa
 pub struct RendererHost {
     pub origin: Url,
     task: tokio::task::JoinHandle<()>,
+    stop: tokio::sync::watch::Sender<bool>,
 }
 
 impl Drop for RendererHost {
     fn drop(&mut self) {
-        self.task.abort();
+        if !self.task.is_finished() {
+            let _ = self.stop.send(true);
+        }
     }
 }
 
@@ -57,33 +61,56 @@ impl RendererHost {
         }
         let host = address.to_string();
         let origin = Url::parse(&format!("http://{host}")).map_err(|_| ERROR)?;
+        let (stop, mut stopped) = tokio::sync::watch::channel(false);
         let task = tokio::spawn(async move {
             let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(64));
-            while let Ok((socket, _)) = listener.accept().await {
+            let mut connections = tokio::task::JoinSet::new();
+            loop {
+                let accepted = tokio::select! {
+                    _ = stopped.changed() => break,
+                    _ = connections.join_next(), if !connections.is_empty() => continue,
+                    accepted = listener.accept() => accepted,
+                };
+                let Ok((socket, _)) = accepted else {
+                    break;
+                };
                 let Ok(permit) = permits.clone().try_acquire_owned() else {
                     continue;
                 };
                 let host = host.clone();
-                tokio::spawn(async move {
+                connections.spawn(async move {
                     let _permit = permit;
                     let service = service_fn(move |request| {
                         let host = host.clone();
                         async move { serve(request, &host).await }
                     });
-                    let connection = hyper::server::conn::http1::Builder::new()
-                        .max_buf_size(16 * 1024)
-                        .keep_alive(false)
-                        .serve_connection(TokioIo::new(socket), service);
-                    let _ = tokio::time::timeout(Duration::from_secs(8), connection).await;
+                    let exchange = async {
+                        let parts = hyper::server::conn::http1::Builder::new()
+                            .max_buf_size(16 * 1024)
+                            .keep_alive(false)
+                            .serve_connection(TokioIo::new(socket), service)
+                            .without_shutdown()
+                            .await?;
+                        // Winsock retains an actively closing connection's local port until the
+                        // peer's FIN arrives. Keep the socket until its orderly shutdown completes.
+                        let mut socket = parts.io.into_inner();
+                        socket.shutdown().await?;
+                        let mut discarded = [0u8; 1024];
+                        while socket.read(&mut discarded).await? != 0 {}
+                        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+                    };
+                    let _ = tokio::time::timeout(Duration::from_secs(8), exchange).await;
                 });
             }
+            drop(listener);
+            while connections.join_next().await.is_some() {}
         });
-        Ok(Self { origin, task })
+        Ok(Self { origin, task, stop })
     }
 
     #[cfg(test)]
     async fn stop(mut self) {
-        self.task.abort();
+        let _ = self.stop.send(true);
         let _ = (&mut self.task).await;
     }
 }

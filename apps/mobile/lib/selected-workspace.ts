@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import type {
+  InstallationConnectionRoutes,
+  InstallationDirectRoute,
+  InstallationRelayRoute,
+  WorkspaceTarget,
+} from "@orkbot/contracts";
 import {
+  installationDirectRouteSchema,
   installationRelayRouteSchema,
   installationVirtualOrigin,
   WorkspaceTargetSchema,
@@ -61,22 +67,31 @@ export async function selectedInstallationRelay(
   account: string,
   server: string,
 ): Promise<InstallationRelayRoute | undefined> {
+  return (await selectedInstallationRoutes(account, server)).relay;
+}
+export async function selectedInstallationRoutes(
+  account: string,
+  server: string,
+): Promise<InstallationConnectionRoutes> {
   const stored = JSON.parse((await SecureStore.getItemAsync(KEY)) ?? "null");
-  if (stored?.account !== account || stored.server !== server || stored.relay === undefined)
-    return undefined;
+  if (stored?.account !== account || stored.server !== server) return {};
   const target = WorkspaceTargetSchema.parse(stored.target);
   if (server !== installationVirtualOrigin(target.serverId))
     throw new Error("Native connection changed");
-  return installationRelayRouteSchema.parse(stored.relay);
+  return {
+    ...(stored.relay ? { relay: installationRelayRouteSchema.parse(stored.relay) } : {}),
+    ...(stored.direct ? { direct: installationDirectRouteSchema.parse(stored.direct) } : {}),
+  };
 }
 export async function saveSelectedWorkspace(
   account: string,
   server: string,
   target?: WorkspaceTarget,
   relay?: InstallationRelayRoute,
+  direct?: InstallationDirectRoute,
 ): Promise<void> {
   if (target) {
-    if (relay && server !== installationVirtualOrigin(target.serverId))
+    if ((relay || direct) && server !== installationVirtualOrigin(target.serverId))
       throw new Error("Native connection changed");
     await SecureStore.setItemAsync(
       KEY,
@@ -85,6 +100,7 @@ export async function saveSelectedWorkspace(
         server,
         target: WorkspaceTargetSchema.parse(target),
         ...(relay ? { relay: installationRelayRouteSchema.parse(relay) } : {}),
+        ...(direct ? { direct: installationDirectRouteSchema.parse(direct) } : {}),
       }),
     );
     await SecureStore.setItemAsync(

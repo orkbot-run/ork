@@ -81,12 +81,10 @@ it.each(["direct", "tunnel"] as const)(
     expect(await accountServers()).toEqual([
       {
         ...remote,
+        url: `https://${serverId}.installation.ork.invalid`,
         ...(kind === "tunnel"
-          ? {
-              url: `https://${serverId}.installation.ork.invalid`,
-              relay: { origin: "https://relay.example.test" },
-            }
-          : {}),
+          ? { relay: { origin: "https://relay.example.test" } }
+          : { direct: { origin: remote.url } }),
         name: "Team",
         organizationName: "Company",
         serverName: "Server",

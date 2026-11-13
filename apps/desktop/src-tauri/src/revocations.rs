@@ -275,7 +275,8 @@ impl Revocations {
                     Target::Installation { selection, token } => {
                         // Relay capabilities require a fresh matching Accounts session. Never
                         // deliver these credentials through the ordinary HTTP logout fallback.
-                        selection.relay_origin.is_none() && selection.revoke(token, None).await
+                        (!selection.uses_relay() || selection.direct_origin.is_some())
+                            && selection.revoke(token, None).await
                     }
                     Target::Session { origin, cookies } => {
                         let Ok(origin) = Url::parse(origin) else {
@@ -401,6 +402,8 @@ mod tests {
             account: "a".repeat(64),
             origin: format!("https://{id}.installation.ork.invalid"),
             relay_origin: Some("https://relay.example.test".into()),
+            direct_origin: None,
+            prefer_relay: false,
             target: crate::server_directory::WorkspaceTarget {
                 organization_id: id.into(),
                 server_id: id.into(),

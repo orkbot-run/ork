@@ -21,6 +21,26 @@ uniffi::setup_scaffolding!();
 const MAX_CHUNK: usize = 256 * 1024;
 const BUFFER_LIMIT: usize = 64 * 1024;
 
+/// Cleartext outer sockets carry only the pinned inner TLS channel, on explicitly local routes.
+fn local_http_host(url: &url::Url) -> bool {
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => {
+            let [a, b, _, _] = ip.octets();
+            ip != std::net::Ipv4Addr::new(100, 100, 100, 200)
+                && (ip.is_private() || ip.is_loopback() || (a == 100 && (64..128).contains(&b)))
+        }
+        Some(url::Host::Ipv6(ip)) => {
+            ip != "fd00:ec2::254".parse::<std::net::Ipv6Addr>().unwrap()
+                && (ip.is_loopback() || ip.is_unique_local())
+        }
+        Some(url::Host::Domain(host)) => {
+            let host = host.trim_end_matches('.');
+            host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local")
+        }
+        None => false,
+    }
+}
+
 #[derive(Clone, Debug, thiserror::Error, uniffi::Error)]
 pub enum TransportError {
     #[error("Invalid installation certificate or key fingerprint")]

@@ -467,3 +467,41 @@ async fn outer_tls_rejects_an_untrusted_certificate() {
     ));
     server.await.unwrap();
 }
+
+#[test]
+fn direct_local_http_routes_still_require_the_pinned_inner_channel() {
+    let (_, _, fingerprint) = crate::tests::identity(false);
+    for origin in [
+        "http://localhost",
+        "http://host.local:5173",
+        "http://127.0.0.2",
+        "http://10.1.2.3",
+        "http://172.16.1.2",
+        "http://192.168.1.2",
+        "http://100.64.0.1",
+        "http://[fc00::1]",
+        "http://[::1]",
+    ] {
+        assert!(
+            InstallationConnection::new(origin.into(), SERVER.into(), 1, fingerprint.clone())
+                .is_ok(),
+            "{origin}"
+        );
+    }
+    for origin in [
+        "http://public.example.test",
+        "http://8.8.8.8",
+        "http://169.254.169.254",
+        "http://100.100.100.200",
+        "http://[fd00:ec2::254]",
+        "http://[::ffff:10.1.2.3]",
+        "http://10.1.2.3/path",
+        "http://user@10.1.2.3",
+    ] {
+        assert!(
+            InstallationConnection::new(origin.into(), SERVER.into(), 1, fingerprint.clone())
+                .is_err(),
+            "{origin}"
+        );
+    }
+}

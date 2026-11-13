@@ -1,10 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { IdentityCatalog, InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import type {
+  IdentityCatalog,
+  InstallationDirectRoute,
+  InstallationRelayRoute,
+  WorkspaceTarget,
+} from "@orkbot/contracts";
 import {
   catalogWorkspace,
   identityCatalogSchema,
+  installationDirectRouteSchema,
   installationRelayRouteSchema,
   installationVirtualOrigin,
   isLoopbackHost,
@@ -24,6 +30,7 @@ export type AccountServer = {
   serverName?: string;
   workspace?: WorkspaceTarget;
   relay?: InstallationRelayRoute;
+  direct?: InstallationDirectRoute;
 };
 
 function server(value: unknown): AccountServer {
@@ -99,11 +106,13 @@ export async function accountDirectory(
         const route = installation.routes.find((row) => row.kind === "direct");
         const tunnel = installation.routes.find((row) => row.kind === "tunnel");
         if (!route && !tunnel) continue;
-        const relay =
-          !route && tunnel
-            ? installationRelayRouteSchema.parse({ origin: tunnel.address })
-            : undefined;
-        const url = route?.address ?? installationVirtualOrigin(installation.id);
+        const relay = tunnel
+          ? installationRelayRouteSchema.parse({ origin: tunnel.address })
+          : undefined;
+        const direct = route
+          ? installationDirectRouteSchema.parse({ origin: route.address })
+          : undefined;
+        const url = installationVirtualOrigin(installation.id);
         entries.push({
           ...server({ id: workspace.id, url, kind: "selfhosted", deviceId: null }),
           name: workspace.name,
@@ -111,6 +120,7 @@ export async function accountDirectory(
           serverName: installation.name,
           workspace: selected.target,
           ...(relay ? { relay } : {}),
+          ...(direct ? { direct } : {}),
         });
       }
   return { catalog, entries };

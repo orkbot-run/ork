@@ -67,7 +67,8 @@ struct Check: Decodable { let uploads: Int; let canceled: Int; let opaque: Bool 
     let session = await contexts.begin()
     let target = String(data: try JSONSerialization.data(withJSONObject: [
       "account": "[\"https://accounts.example.test\",\"native-user\"]",
-      "origin": endpoint.origin,
+      "origin": "https://\(endpoint.serverId).installation.ork.invalid",
+      "directOrigin": endpoint.origin,
       "organizationId": "20000000-0000-4000-8000-000000000001",
       "serverId": endpoint.serverId,
       "workspaceId": "30000000-0000-4000-8000-000000000001",

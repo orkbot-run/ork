@@ -306,8 +306,7 @@ impl InstallationConnection {
             || address.query().is_some()
             || address.fragment().is_some()
             || !(address.scheme() == "https"
-                || (address.scheme() == "http"
-                    && matches!(address.host_str(), Some("127.0.0.1" | "[::1]"))))
+                || (address.scheme() == "http" && crate::local_http_host(&address)))
             || uuid::Uuid::parse_str(&server_id)
                 .map(|id| id.to_string() != server_id)
                 .unwrap_or(true)

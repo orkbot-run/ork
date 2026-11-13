@@ -147,11 +147,7 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
-    pub fn relay_origin(
-        &self,
-        target: &WorkspaceTarget,
-        origin: &Url,
-    ) -> Result<Option<String>, String> {
+    fn server_for_target(&self, target: &WorkspaceTarget) -> Result<&CatalogServer, String> {
         target.validate()?;
         let server = self
             .organizations
@@ -174,16 +170,55 @@ impl WorkspaceCatalog {
         {
             return Err(ERROR.into());
         }
+        Ok(server)
+    }
+
+    pub fn direct_origin(
+        &self,
+        target: &WorkspaceTarget,
+        origin: &Url,
+    ) -> Result<Option<String>, String> {
+        let server = self.server_for_target(target)?;
+        if origin.origin().ascii_serialization()
+            != format!("https://{}.installation.ork.invalid", target.server_id)
+        {
+            return Ok(None);
+        }
+        let Some(route) = server
+            .routes
+            .iter()
+            .find(|row| row.kind == "direct" && row.device_id.is_none())
+        else {
+            return Ok(None);
+        };
+        let parsed = normalize_server_url(&route.address)?;
+        if parsed.origin().ascii_serialization() != route.address
+            || parsed.origin() == self::origin().origin()
+            || !uuid(&route.id)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some(route.address.clone()))
+    }
+
+    pub fn relay_origin(
+        &self,
+        target: &WorkspaceTarget,
+        origin: &Url,
+    ) -> Result<Option<String>, String> {
+        let server = self.server_for_target(target)?;
         if origin.as_str().trim_end_matches('/')
             != format!("https://{}.installation.ork.invalid", target.server_id)
         {
             return Ok(None);
         }
-        let route = server
+        let Some(route) = server
             .routes
             .iter()
             .find(|row| row.kind == "tunnel" && row.device_id.is_none())
-            .ok_or(ERROR)?;
+        else {
+            return Ok(None);
+        };
         let parsed = normalize_server_url(&route.address)?;
         if parsed.scheme() != "https"
             || parsed.origin() == self::origin().origin()
@@ -415,7 +450,7 @@ impl WorkspaceCatalog {
                             "{} / {} / {}",
                             organization.name, server.name, workspace.name
                         ),
-                        url: if route.kind == "tunnel" {
+                        url: if route.kind != "local" {
                             format!("https://{}.installation.ork.invalid", server.id)
                         } else {
                             route.address.clone()
@@ -1600,6 +1635,30 @@ mod tests {
         }]})
     }
 
+    #[test]
+    fn direct_and_relay_routes_share_the_installation_origin_without_losing_the_alternate() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["servers"][0]["routes"].as_array_mut().unwrap().push(serde_json::json!({"id": "22222222-2222-4222-8222-222222222222", "kind": "tunnel", "address": "https://relay.example.test", "deviceId": null}));
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        let workspace = catalog.clone().workspaces().unwrap().pop().unwrap();
+        assert_eq!(
+            workspace.url,
+            format!("https://{DEVICE}.installation.ork.invalid")
+        );
+        let target = workspace.target.unwrap();
+        let origin = Url::parse(&workspace.url).unwrap();
+        assert_eq!(
+            catalog.direct_origin(&target, &origin).unwrap().as_deref(),
+            Some("https://team.example.com")
+        );
+        assert_eq!(
+            catalog.relay_origin(&target, &origin).unwrap().as_deref(),
+            Some("https://relay.example.test")
+        );
+        let mut wrong = target;
+        wrong.binding_version += 1;
+        assert!(catalog.direct_origin(&wrong, &origin).is_err());
+    }
     #[test]
     fn tunnel_only_workspaces_use_a_virtual_origin_and_a_separate_exact_relay_route() {
         let mut value = workspace_catalog();

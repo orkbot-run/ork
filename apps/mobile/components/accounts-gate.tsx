@@ -149,8 +149,14 @@ async function selectServer(
     if (!beforeSave()) return null;
     const savedOwner = await SecureStore.getItemAsync(ACCOUNT_KEY);
     if (!beforeSave() || savedOwner !== account) return null;
-    if (entry.relay) {
-      await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
+    if (entry.workspace) {
+      await selectInstallationTransport(
+        account,
+        entry.url,
+        entry.workspace,
+        entry.relay,
+        entry.direct,
+      );
       if (!beforeSave()) return null;
     }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
@@ -167,9 +173,15 @@ async function selectServer(
       await clearProductAccountSession();
       if (!current()) return null;
     }
-    await saveSelectedWorkspace(account, entry.url, entry.workspace, entry.relay);
+    await saveSelectedWorkspace(account, entry.url, entry.workspace, entry.relay, entry.direct);
     if (!current()) return null;
-    await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
+    await selectInstallationTransport(
+      account,
+      entry.url,
+      entry.workspace,
+      entry.relay,
+      entry.direct,
+    );
     if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
     return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;
@@ -594,8 +606,14 @@ export function AccountsGate({
       setAttempt((value) => value + 1);
       return false;
     }
-    if (entry.relay) {
-      await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
+    if (entry.workspace) {
+      await selectInstallationTransport(
+        account,
+        entry.url,
+        entry.workspace,
+        entry.relay,
+        entry.direct,
+      );
       if (!active() || !sessionCurrent()) return false;
     }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));

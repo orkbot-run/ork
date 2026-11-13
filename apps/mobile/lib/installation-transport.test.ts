@@ -41,6 +41,7 @@ const target = {
 beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
+  state.head.mockReset().mockResolvedValue({ status: 204, headers: [] });
   state.available = true;
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -262,5 +263,81 @@ it("refuses pinning the Accounts origin as an installation", async () => {
   await expect(
     selectInstallationTransport(account, "https://accounts.example.test", target),
   ).rejects.toThrow("Could not continue");
+  expect(state.begin).not.toHaveBeenCalled();
+});
+
+it("keeps both routes on one logical origin and only falls back for the unauthenticated probe", async () => {
+  const { selectInstallationTransport, fetchInstallation } = await import(
+    "./installation-transport"
+  );
+  const virtual = `https://${target.serverId}.installation.ork.invalid`;
+  const relay = { origin: "https://relay.example.test" };
+  const direct = { origin: "https://lan.example.test" };
+  const central = vi.fn(async () =>
+    Response.json({
+      grant: "ticket",
+      relayOrigin: relay.origin,
+      expiresAt: Math.floor(Date.now() / 1000) + 60,
+    }),
+  );
+  vi.stubGlobal("fetch", central);
+  state.head.mockRejectedValueOnce(new Error("network unavailable"));
+  await selectInstallationTransport(account, virtual, target, relay, direct);
+  expect(state.begin).toHaveBeenCalledTimes(2);
+  expect(state.select.mock.calls.map((call) => JSON.parse(call[2]))).toEqual([
+    { account, origin: virtual, ...target, directOrigin: direct.origin },
+    { account, origin: virtual, ...target, relayOrigin: relay.origin },
+  ]);
+  expect(central).not.toHaveBeenCalled();
+  expect(JSON.parse(state.open.mock.calls[0]![3])).toMatchObject({
+    method: "GET",
+    path: "/api/auth/capabilities",
+    headers: [],
+    hasBody: false,
+  });
+  await fetchInstallation(`${virtual}/rpc/create`, {
+    method: "POST",
+    headers: { authorization: "Bearer product" },
+  });
+  expect(central).toHaveBeenCalledOnce();
+  expect(state.open).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(state.open.mock.calls[1]![3])).toMatchObject({
+    method: "POST",
+    relayTicket: "ticket",
+  });
+});
+
+it("keeps a reachable direct route without consulting Accounts, and never replays a failed mutation", async () => {
+  const { selectInstallationTransport, fetchInstallation } = await import(
+    "./installation-transport"
+  );
+  const virtual = `https://${target.serverId}.installation.ork.invalid`;
+  const central = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", central);
+  await selectInstallationTransport(
+    account,
+    virtual,
+    target,
+    { origin: "https://relay.example.test" },
+    { origin: "https://lan.example.test" },
+  );
+  state.head.mockRejectedValueOnce(new Error("connection lost"));
+  await expect(fetchInstallation(`${virtual}/rpc/create`, { method: "POST" })).rejects.toThrow(
+    "connection lost",
+  );
+  expect(state.select).toHaveBeenCalledOnce();
+  expect(central).not.toHaveBeenCalled();
+  expect(state.open).toHaveBeenCalledTimes(2);
+});
+
+it("refuses an Accounts direct route and an origin from another installation before native setup", async () => {
+  const { selectInstallationTransport } = await import("./installation-transport");
+  for (const [logical, direct] of [
+    [`https://${target.serverId}.installation.ork.invalid`, "https://accounts.example.test"],
+    ["https://other.installation.ork.invalid", "https://lan.example.test"],
+  ])
+    await expect(
+      selectInstallationTransport(account, logical!, target, undefined, { origin: direct! }),
+    ).rejects.toThrow("changed");
   expect(state.begin).not.toHaveBeenCalled();
 });

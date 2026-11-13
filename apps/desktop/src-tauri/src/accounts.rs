@@ -1574,7 +1574,7 @@ impl Accounts {
                 if !self.is_current(authorization) {
                     return Err(ERROR.into());
                 }
-                if selection.relay_origin.is_none() {
+                if !selection.uses_relay() {
                     return Ok(None);
                 }
                 crate::server_login::issue_relay(

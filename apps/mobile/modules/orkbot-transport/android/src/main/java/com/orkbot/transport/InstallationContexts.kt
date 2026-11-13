@@ -22,11 +22,12 @@ internal data class InstallationSelection(
   val bindingVersion: ULong,
   val keyFingerprint: String,
   val relayOrigin: String?,
+  val directOrigin: String?,
 ) {
   fun connection(ticket: String?) : InstallationConnection {
     if (relayOrigin == null) {
       require(ticket == null)
-      return InstallationConnection(origin, serverId, bindingVersion, keyFingerprint)
+      return InstallationConnection(directOrigin ?: origin, serverId, bindingVersion, keyFingerprint)
     }
     return InstallationConnection.viaRelay(origin, serverId, bindingVersion, keyFingerprint,
       RelayRoute(relayOrigin, requireNotNull(ticket), organizationId, workspaceId))
@@ -67,8 +68,14 @@ internal class InstallationContexts {
     val origin = URI(json.getString("origin"))
     require(!(origin.scheme == "https" && origin.host.equals(issuer.host, true) && (if (origin.port == -1) 443 else origin.port) == (if (issuer.port == -1) 443 else issuer.port)))
     val relayOrigin = if (json.has("relayOrigin")) json.getString("relayOrigin") else null
-    val selected = InstallationSelection(account, origin.toString(), uuid(json.getString("organizationId")), uuid(json.getString("serverId")), uuid(json.getString("workspaceId")), revision(json.getDouble("bindingVersion")).toULong(), json.getString("keyFingerprint"), relayOrigin)
-    InstallationConnection(selected.origin, selected.serverId, selected.bindingVersion, selected.keyFingerprint).use { it.cancel() }
+    val directOrigin = if (json.has("directOrigin")) json.getString("directOrigin") else null
+    val selected = InstallationSelection(account, origin.toString(), uuid(json.getString("organizationId")), uuid(json.getString("serverId")), uuid(json.getString("workspaceId")), revision(json.getDouble("bindingVersion")).toULong(), json.getString("keyFingerprint"), relayOrigin, directOrigin)
+    InstallationConnection(selected.directOrigin ?: selected.origin, selected.serverId, selected.bindingVersion, selected.keyFingerprint).use { it.cancel() }
+    if (directOrigin != null) {
+      val direct = URI(directOrigin)
+      require(relayOrigin == null && selected.origin == "https://${selected.serverId}.installation.ork.invalid")
+      require(!(direct.scheme == issuer.scheme && direct.host.equals(issuer.host, true) && (if (direct.port == -1) 443 else direct.port) == (if (issuer.port == -1) 443 else issuer.port)))
+    }
     if (relayOrigin != null) {
       val relay = URI(relayOrigin)
       require(relay.scheme == "https" && relay.host != null && relay.rawUserInfo == null && relay.rawQuery == null && relay.rawFragment == null && relay.rawPath.isNullOrEmpty())

@@ -248,8 +248,7 @@ impl InstallationHttp {
             || url.query().is_some()
             || url.fragment().is_some()
             || !(url.scheme() == "https"
-                || (url.scheme() == "http"
-                    && matches!(url.host_str(), Some("127.0.0.1" | "[::1]"))))
+                || (url.scheme() == "http" && crate::local_http_host(&url)))
         {
             return Err(TransportError::InvalidRequest);
         }
