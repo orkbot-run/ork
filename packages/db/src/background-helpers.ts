@@ -201,7 +201,7 @@ export async function returnBackgroundHelperOutcome(
       },
       select: { thread: { select: { parentThreadId: true } } },
     });
-    const parentThreadId = candidate?.thread.parentThreadId;
+    const parentThreadId = candidate?.thread?.parentThreadId;
     if (!parentThreadId) return null;
     const rows = await tx.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM threads WHERE id = ${parentThreadId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
