@@ -264,8 +264,31 @@ if [[ -n "${api_container}" ]]; then
   previous_app_image="$(sudo docker inspect --format '{{.Image}}' "${api_container}" 2>/dev/null || true)"
 fi
 
+# The first additive V2 identity migration is retained by every compatible source revision.
+# A cached image's actual source label is checked separately from the checkout's revision.
+readonly WORKSPACE_AUTHORITY_FLOOR="packages/db/prisma/migrations/20261130120000_installation_identity/migration.sql"
+supports_workspace_authority() {
+  local revision="$1"
+  [[ "${revision}" =~ ^[0-9a-f]{40}$ ]] &&
+    [[ "$(git cat-file -t "${revision}:${WORKSPACE_AUTHORITY_FLOOR}" 2>/dev/null)" == blob ]]
+}
+
+refuse_legacy_rollback() {
+  echo "Automatic rollback refused: the previous source or image does not prove workspace authorization V2 support. Preserve the current authorization state and use a compatible forward fix." >&2
+  exit 1
+}
+
 rollback() {
   trap - ERR
+  if supports_workspace_authority "${target_revision}"; then
+    supports_workspace_authority "${previous_revision}" || refuse_legacy_rollback
+    if [[ -n "${previous_app_image}" ]]; then
+      local previous_image_revision
+      previous_image_revision="$(sudo docker image inspect --format \
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}' "${previous_app_image}" 2>/dev/null || true)"
+      supports_workspace_authority "${previous_image_revision}" || refuse_legacy_rollback
+    fi
+  fi
   echo "Deployment failed; restoring the previous revision ${previous_revision}." >&2
   git reset --hard "${previous_revision}"
   app_image="$(compose_app_image)"

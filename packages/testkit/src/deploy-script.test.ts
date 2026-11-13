@@ -7,6 +7,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 const repoRoot = path.resolve(import.meta.dirname, "../../..");
 const COMPOSE = "docker compose --env-file .env -f infra/compose/docker-compose.prod.yml";
 const APP_IMAGE = "ghcr.example.test/orkbot/app:local";
+const WORKSPACE_AUTHORITY_FLOOR =
+  "packages/db/prisma/migrations/20261130120000_installation_identity/migration.sql";
 // Each rolled service gains a new container, which must pass its health check before the old
 // one stops; the rest of the stack is reconciled afterwards.
 const WORKERS = "docker inspect --format {{.Id}} {{.HostConfig.RestartPolicy.Name}}";
@@ -86,6 +88,15 @@ function commit(cwd: string, message: string) {
   return git(cwd, "rev-parse", "HEAD");
 }
 
+function workspaceRevision(cwd: string, message: string) {
+  write(
+    path.join(cwd, WORKSPACE_AUTHORITY_FLOOR),
+    readFileSync(path.join(repoRoot, WORKSPACE_AUTHORITY_FLOOR), "utf8"),
+  );
+  git(cwd, "add", WORKSPACE_AUTHORITY_FLOOR);
+  return commit(cwd, message);
+}
+
 function rollout(commands: string[]) {
   return commands
     .map((line) => line.split(" @ ")[0] ?? line)
@@ -129,6 +140,10 @@ if [[ "$1" == inspect && "$*" == *"{{.Image}}"* ]]; then
   echo "\${PREVIOUS_IMAGE-sha256:previous}"
   exit 0
 fi
+if [[ "$1" == image && "$2" == inspect ]]; then
+  printf '%s\\n' "\${PREVIOUS_IMAGE_REVISION:-}"
+  exit 0
+fi
 if [[ "$*" == *" ps --quiet api" && -z "\${FRESH:-}" ]]; then echo api-old; fi
 if [[ "$*" == *" run --rm --no-deps -T --entrypoint sh postgres "* && -n "\${POSTGRES_16:-}" ]]; then
   echo upgrade
@@ -136,6 +151,9 @@ fi
 if [[ "$*" == *" config --services" ]]; then
   echo api
   [[ "$revision" == "\${NO_MIGRATE_REVISION:-}" ]] || echo migrate
+fi
+if [[ "$*" == *" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS="* ]]; then
+  printf '%s\\n' "$revision" >"$COMMAND_LOG.migrated"
 fi
 if [[ "$*" == *" run --rm -T -e ORKBOT_DEPLOYED_MIGRATIONS="* && ( -n "\${FAIL_MIGRATE:-}" || "$revision" == "\${NO_MIGRATE_REVISION:-}" ) ]]; then exit 1; fi
 if [[ "$1" == pull && -n "\${FAIL_PULL:-}" ]]; then exit 1; fi
@@ -222,10 +240,92 @@ echo "/dev/fake 104857600 0 \${FREE_KB:-52428800} 0% /"
     },
     head: () => git(checkout, "rev-parse", "HEAD"),
     deployed: () => readFileSync(path.join(checkout, ".last-deployed-revision"), "utf8").trim(),
+    migrated: () => readFileSync(`${log}.migrated`, "utf8").trim(),
   };
 }
 
 describe("production deploy script", () => {
+  it.each(["FAIL_HEALTH", "FAIL_MIGRATE"])(
+    "refuses a legacy rollback after the V2 migration path when %s fails",
+    (failure) => {
+      const deploy = fixture();
+      const next = workspaceRevision(deploy.upstream, "workspace-v2");
+      const result = deploy.run({ [failure]: "1" });
+      expect(result.status).toBe(1);
+      expect(deploy.migrated()).toBe("workspace-v2");
+      expect(deploy.head()).toBe(next);
+      expect(result.stderr).toContain("Automatic rollback refused");
+      expect(result.stderr).toContain("compatible forward fix");
+      expect(deploy.commands()).not.toContainEqual(
+        expect.stringContaining(`docker tag sha256:previous ${APP_IMAGE}`),
+      );
+      expect(deploy.commands()).not.toContainEqual(
+        expect.stringContaining(`build --build-arg GIT_SHA=${deploy.first}`),
+      );
+      expect(
+        deploy.commands().some((line) => / (up|build) /.test(line) && line.endsWith(" @ first")),
+      ).toBe(false);
+    },
+  );
+
+  it.each(["known", "missing"])(
+    "permits only a compatible V2 rollback with a %s cached image",
+    (cached) => {
+      const deploy = fixture();
+      const previous = workspaceRevision(deploy.upstream, "workspace-v2-prior");
+      git(deploy.checkout, "fetch", "-q", "origin", "main");
+      git(deploy.checkout, "reset", "--hard", previous);
+      workspaceRevision(deploy.upstream, "workspace-v2-next");
+      const result = deploy.run({
+        FAIL_HEALTH: "1",
+        PREVIOUS_IMAGE_REVISION: previous,
+        ...(cached === "missing" ? { PREVIOUS_IMAGE: "" } : {}),
+      });
+      expect(result.status).toBe(1);
+      expect(deploy.head()).toBe(previous);
+      expect(result.stderr).not.toContain("Automatic rollback refused");
+      expect(deploy.commands()).toContainEqual(
+        expect.stringContaining(
+          cached === "known"
+            ? `docker tag sha256:previous ${APP_IMAGE}`
+            : `build --build-arg GIT_SHA=${previous}`,
+        ),
+      );
+      expect(deploy.commands()).toContainEqual(expect.stringContaining("up -d --no-deps"));
+    },
+  );
+
+  it.each(["legacy", "missing", "short", "unknown", "unavailable-source"])(
+    "refuses the %s actual previous image even when the checkout is V2-capable",
+    (label) => {
+      const deploy = fixture();
+      const previous = workspaceRevision(deploy.upstream, "workspace-v2-prior");
+      git(deploy.checkout, "fetch", "-q", "origin", "main");
+      git(deploy.checkout, "reset", "--hard", previous);
+      const next = workspaceRevision(deploy.upstream, "workspace-v2-next");
+      const revision =
+        label === "legacy"
+          ? deploy.first
+          : label === "missing"
+            ? ""
+            : label === "short"
+              ? previous.slice(0, 12)
+              : label === "unknown"
+                ? "unknown"
+                : "a".repeat(40);
+      const result = deploy.run({ FAIL_HEALTH: "1", PREVIOUS_IMAGE_REVISION: revision });
+      expect(result.status).toBe(1);
+      expect(deploy.head()).toBe(next);
+      expect(result.stderr).toContain("Automatic rollback refused");
+      expect(deploy.commands()).not.toContainEqual(
+        expect.stringContaining(`docker tag sha256:previous ${APP_IMAGE}`),
+      );
+      expect(deploy.commands()).not.toContainEqual(
+        expect.stringContaining(`build --build-arg GIT_SHA=${previous}`),
+      );
+    },
+  );
+
   it("fails instead of reporting success while another deploy holds the lock", () => {
     const deploy = fixture();
     const next = commit(deploy.upstream, "next");
