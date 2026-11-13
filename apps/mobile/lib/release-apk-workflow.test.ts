@@ -115,6 +115,44 @@ describe("Android APK release workflow", () => {
     for (const dependency of dependencies) expect(triggers).toContain(`- ${dependency}/**`);
   });
 
+  it("keeps standalone and caller builds in separate queues while serializing one workflow and ref", () => {
+    const group = workflow.match(/^ {2}group: (.+)$/m)?.[1];
+    expect(group).toBeDefined();
+    const ownName = workflow.match(/^name: (.+)$/m)?.[1];
+    const callerName = readFileSync(
+      path.resolve(import.meta.dirname, "../../../.github/workflows/release-mobile.yml"),
+      "utf8",
+    ).match(/^name: (.+)$/m)?.[1];
+    expect(ownName).toBeDefined();
+    expect(callerName).toBeDefined();
+    function key(name: string, ref: string, pullRequest?: number, event = "push") {
+      return group!.replace(/\$\{\{([^}]+)\}\}/g, (_, expression: string) => {
+        switch (expression.trim()) {
+          case "github.workflow":
+            return name;
+          case "github.event_name":
+            return event;
+          case "github.event.pull_request.number || github.ref":
+            return String(pullRequest ?? ref);
+          default:
+            throw new Error(`Unexpected concurrency expression: ${expression}`);
+        }
+      });
+    }
+    const main = "refs/heads/main";
+    expect(key(ownName!, main)).not.toBe(key(callerName!, main));
+    expect(key(ownName!, main, undefined, "push")).toBe(
+      key(ownName!, main, undefined, "workflow_dispatch"),
+    );
+    expect(key(ownName!, main)).not.toBe(key(ownName!, "refs/heads/feature"));
+    expect(key(ownName!, "refs/pull/12/merge", 12)).not.toBe(
+      key(ownName!, "refs/pull/13/merge", 13),
+    );
+    expect(workflow).toMatch(
+      /^ {2}cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}$/m,
+    );
+  });
+
   it.each([
     { mirrorFails: false, fallbackFails: false, expectedCalls: 1, succeeds: true },
     { mirrorFails: true, fallbackFails: false, expectedCalls: 2, succeeds: true },
