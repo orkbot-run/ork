@@ -146,7 +146,11 @@ test("managed onboarding connects server accounts and requires a workspace defau
             providerName: "Fixture provider",
             id: "workspace-model",
             label: "Workspace model",
-            auth: "api-key",
+            auth: "both",
+            signIn: "device-code",
+            oauthLabel: "Sign in with fixture subscription",
+            authHint: "Fixture subscription or API key",
+            recommended: true,
           },
         ],
       },
@@ -154,6 +158,8 @@ test("managed onboarding connects server accounts and requires a workspace defau
   );
   await page.route("**/rpc/serverAI/create", (route) => {
     const request = route.request().postDataJSON().json;
+    expect(request.models).toEqual(account.models);
+    expect(request.connection.provider).toBe(account.provider);
     expect(request.connection.apiKey).toBe("fake-test-key");
     status.accounts = [account];
     return route.fulfill({ json: { json: account } });
@@ -195,8 +201,23 @@ test("managed onboarding connects server accounts and requires a workspace defau
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Enable a default model");
   await page.getByRole("button", { name: "Add AI account", exact: true }).click();
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Fixture provider");
+  await expect(page.getByLabel("Models (one per line)", { exact: true })).toHaveValue(
+    account.models[0]!,
+  );
+  const authentication = page.getByRole("combobox", { name: "Authentication", exact: true });
+  await expect(authentication).toHaveValue("sign-in");
+  await expect(
+    page.getByRole("button", { name: "Sign in with fixture subscription", exact: true }),
+  ).toBeEnabled();
+  await expect(page.getByLabel("API key", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "managed-onboarding-subscription-choice");
+  await authentication.selectOption("key");
+  await expect(page.getByLabel("API key", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Sign in with fixture subscription", exact: true }),
+  ).toHaveCount(0);
   await page.getByLabel("Name", { exact: true }).fill(account.label);
-  await page.getByLabel("Models (one per line)", { exact: true }).fill(account.models[0]!);
   await captureScreenshot(page, testInfo, "managed-onboarding-server-account");
   await page.getByLabel("API key", { exact: true }).fill("fake-test-key");
   await page.getByRole("button", { name: "Save", exact: true }).click();
