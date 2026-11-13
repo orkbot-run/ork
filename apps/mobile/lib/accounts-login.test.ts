@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { continueWithAccountsServer } from "./accounts-login";
+import { personalDigest } from "./personal-device";
 import {
   confirmServerInitialization,
   receiveServerConnect,
@@ -28,6 +29,17 @@ const state = vi.hoisted(() => ({
   request: vi.fn(),
   replace: vi.fn(),
   clearSpace: vi.fn(),
+  stage: vi.fn(),
+  activate: vi.fn(),
+  forget: vi.fn(),
+  sign: vi.fn(),
+}));
+vi.mock("./personal-device", async (original) => ({
+  ...(await original<typeof import("./personal-device")>()),
+  stagePersonalDevice: (...args: unknown[]) => state.stage(...args),
+  activatePersonalDevice: (...args: unknown[]) => state.activate(...args),
+  forgetPersonalDevice: (...args: unknown[]) => state.forget(...args),
+  signPersonalDevice: (...args: unknown[]) => state.sign(...args),
 }));
 vi.mock("./accounts", () => ({
   accountsAuthorization: async () => state.identity,
@@ -50,6 +62,10 @@ beforeEach(() => {
   state.generation = 1;
   state.accountVersion = 0;
   state.workspace = null;
+  state.stage.mockReset().mockResolvedValue(null);
+  state.activate.mockReset().mockResolvedValue(undefined);
+  state.forget.mockReset().mockResolvedValue(undefined);
+  state.sign.mockReset().mockResolvedValue("device-signature");
   state.identity = {
     issuer: "https://accounts.example.test",
     subject: "owner",
@@ -129,6 +145,108 @@ it("logs in to the exact central workspace without forwarding the Accounts beare
   });
   expect(state.request.mock.calls[0]![1].headers.authorization).toBeUndefined();
   expect(state.request.mock.calls[2]![1].headers.authorization).toBeUndefined();
+});
+
+function personalResponse(activated = true) {
+  state.workspace = {
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    serverId: "20000000-0000-4000-8000-000000000001",
+    workspaceId: "30000000-0000-4000-8000-000000000001",
+    bindingVersion: 1,
+    keyFingerprint: "a".repeat(64),
+  };
+  const device = { id: "40000000-0000-4000-8000-000000000001", publicKey: "publicSPKI" };
+  const staged = {
+    device,
+    epoch: 0,
+    credential: {
+      version: 1,
+      account: JSON.stringify([state.identity.issuer, state.identity.subject]),
+      origin: state.origin,
+      scope: "scope",
+      deviceId: device.id,
+      target: state.workspace,
+    },
+  };
+  state.stage.mockResolvedValue(staged);
+  state.request.mockImplementation(async (url: string) => ({
+    response: new Response(null, { status: 200 }),
+    body: url.endsWith("challenge")
+      ? { version: 2, challenge: "c".repeat(43), expiresAt: Date.now() / 1000 + 60 }
+      : url.endsWith("login-grants")
+        ? { grant: "workspace-grant", expiresAt: Date.now() / 1000 + 60 }
+        : {
+            token: "workspace-session",
+            user: { id: "local-user" },
+            workspaceId: state.workspace!.workspaceId,
+            spaceId: "local-space",
+            ...(activated
+              ? {
+                  personalDevice: {
+                    id: device.id,
+                    target: { ...state.workspace, deviceId: device.id },
+                  },
+                }
+              : {}),
+          },
+  }));
+  return staged;
+}
+it("requests public-key activation and signs the exact grant and workspace challenge", async () => {
+  const staged = personalResponse();
+  expect(await continueWithAccountsServer()).toBe(true);
+  expect(JSON.parse(state.request.mock.calls[1]![1].body).personalDevice).toEqual(staged.device);
+  expect(state.sign).toHaveBeenCalledWith(
+    staged.credential,
+    JSON.stringify([
+      "ork-personal-device-activation-v1",
+      state.workspace!.serverId,
+      1,
+      "a".repeat(64),
+      state.workspace!.workspaceId,
+      staged.device.id,
+      "c".repeat(43),
+      personalDigest("workspace-grant"),
+    ]),
+    0,
+  );
+  expect(JSON.parse(state.request.mock.calls[2]![1].body).deviceSignature).toBe("device-signature");
+  expect(state.activate).toHaveBeenCalledOnce();
+  expect(state.forget).not.toHaveBeenCalled();
+});
+it("removes the staged key when the workspace has no personal activation", async () => {
+  const staged = personalResponse(false);
+  expect(await continueWithAccountsServer()).toBe(true);
+  expect(state.activate).not.toHaveBeenCalled();
+  expect(state.forget).toHaveBeenCalledWith(staged.credential);
+});
+it("refuses activation for another installation and removes only the staged key", async () => {
+  const staged = personalResponse();
+  const original = state.request.getMockImplementation()!;
+  state.request.mockImplementation(async (...args: unknown[]) => {
+    const result = await original(...args);
+    if (String(args[0]).endsWith("complete")) result.body.personalDevice.target.bindingVersion += 1;
+    return result;
+  });
+  await expect(continueWithAccountsServer()).rejects.toThrow("Could not continue");
+  expect(state.forget).toHaveBeenCalledWith(staged.credential);
+  expect(state.activate).not.toHaveBeenCalled();
+  expect(state.replace).not.toHaveBeenCalled();
+});
+it("does not save a session when the account changes during native activation", async () => {
+  const staged = personalResponse();
+  state.activate.mockImplementation(async () => {
+    state.accountVersion += 1;
+  });
+  await expect(continueWithAccountsServer()).rejects.toThrow("Could not continue");
+  expect(state.replace).not.toHaveBeenCalled();
+  expect(state.forget).toHaveBeenCalledWith(staged.credential);
+});
+it("removes the activation when the product session could not be saved", async () => {
+  const staged = personalResponse();
+  state.replace.mockResolvedValue(false);
+  expect(await continueWithAccountsServer()).toBe(false);
+  expect(state.forget).toHaveBeenCalledWith(staged.credential);
 });
 
 it("rejects an old response after the account changes away and back", async () => {

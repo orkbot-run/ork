@@ -15,6 +15,7 @@ import { AccountsGate } from "../components/accounts-gate";
 import { accountServers, addAccountServer, setDefaultAccountOrganization } from "./account-servers";
 import { accountsIdentity, continueWithAccounts, signOutAccounts } from "./accounts";
 import { continueWithAccountsServer } from "./accounts-login";
+import { AccountsUnavailable } from "./accounts-network";
 import {
   clearProductAccountSession,
   currentApiBase,
@@ -25,6 +26,8 @@ import {
 } from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
+import type { PersonalCredential } from "./personal-device";
+import { continueWithPersonalServer, personalLoginSelection } from "./personal-login";
 import { saveSelectedWorkspace, selectedWorkspace } from "./selected-workspace";
 import {
   clearServerConnect,
@@ -39,6 +42,10 @@ import { currentSessionGeneration } from "./session";
 import { continueWithSso } from "./sso";
 
 vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates</div> }));
+vi.mock("./personal-login", () => ({
+  personalLoginSelection: vi.fn(async () => null),
+  continueWithPersonalServer: vi.fn(async () => false),
+}));
 
 const state = vi.hoisted(() => ({
   storage: new Map<string, string>(),
@@ -303,6 +310,8 @@ beforeEach(() => {
   state.listeners.clear();
   state.appListeners.clear();
   vi.mocked(accountsIdentity).mockResolvedValue(null);
+  vi.mocked(personalLoginSelection).mockReset().mockResolvedValue(null);
+  vi.mocked(continueWithPersonalServer).mockReset().mockResolvedValue(false);
   vi.mocked(currentSessionGeneration).mockReset().mockReturnValue(1);
   vi.mocked(currentApiBase).mockReturnValue(remote.url);
   vi.mocked(continueWithSso).mockResolvedValue(true);
@@ -502,6 +511,68 @@ async function render() {
     ),
   );
 }
+
+function offlineCredential(): PersonalCredential {
+  return {
+    version: 1,
+    account: JSON.stringify([identity.issuer, identity.subject]),
+    origin: remote.url,
+    scope: "public-scope",
+    deviceId: "00000000-0000-4000-8000-000000000004",
+    target: {
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      serverId: remote.id,
+      workspaceId: "00000000-0000-4000-8000-000000000003",
+      bindingVersion: 1,
+      keyFingerprint: "a".repeat(64),
+    },
+  };
+}
+it("opens the exact activated personal workspace after an Accounts transport outage", async () => {
+  const credential = offlineCredential();
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue(credential);
+  vi.mocked(continueWithPersonalServer).mockResolvedValue(true);
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(continueWithPersonalServer).toHaveBeenCalledWith(credential, expect.any(Function));
+  expect(accountServers).not.toHaveBeenCalled();
+});
+it("can renew a personal credential when the rotating Accounts token was already retired", async () => {
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  vi.mocked(continueWithPersonalServer).mockResolvedValue(true);
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(accountServers).not.toHaveBeenCalled();
+});
+it("does not use personal fallback after an authoritative Accounts refusal", async () => {
+  vi.mocked(accountsIdentity).mockRejectedValue(new Error("Access refused"));
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(personalLoginSelection).not.toHaveBeenCalled();
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
+it("does not open a remembered personal workspace from a different current route", async () => {
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue({
+    ...offlineCredential(),
+    origin: "https://other.example.test",
+  });
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
+it("keeps a deep link explicit instead of falling back to the remembered workspace", async () => {
+  receiveServerConnect(
+    "orkbot://workspace?organization=00000000-0000-4000-8000-000000000010&server=00000000-0000-4000-8000-000000000001&workspace=00000000-0000-4000-8000-000000000003",
+  );
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
 
 it("requires Accounts before product screens, directory lookup or product requests", async () => {
   await render();

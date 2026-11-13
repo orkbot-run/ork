@@ -40,6 +40,7 @@ import {
   welcomeAccountsOrk,
 } from "../lib/accounts";
 import { continueWithAccountsServer } from "../lib/accounts-login";
+import { AccountsUnavailable } from "../lib/accounts-network";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import {
   clearProductAccountSession,
@@ -57,6 +58,7 @@ import {
 } from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import { continueWithPersonalServer, personalLoginSelection } from "../lib/personal-login";
 import {
   lastOrganizationWorkspace,
   saveSelectedWorkspace,
@@ -257,11 +259,36 @@ export function AccountsGate({
     setPending(false);
     let verified = false;
     let directoryReady = false;
+    let personalAttempted = false;
+    const restorePersonal = async () => {
+      if (!productGate || linkedServer || linkedWorkspace || personalAttempted) return false;
+      personalAttempted = true;
+      const active = () =>
+        generation.current === current &&
+        accountsVersion() === version &&
+        linkGeneration.current === receivedLink;
+      const credential = await personalLoginSelection(verified ? owner.current : undefined);
+      if (!credential || !active()) return false;
+      await loadApiBase();
+      if (
+        !active() ||
+        currentApiBase() !== credential.origin ||
+        !(await adoptAccount(credential.account, active))
+      )
+        return false;
+      if (!(await continueWithPersonalServer(credential, active)) || !active()) return false;
+      owner.current = credential.account;
+      setServerRescue(false);
+      setReadyAt({ version, attempt });
+      setPhase("ready");
+      return true;
+    };
     void (async () => {
       await Promise.all([bootstrapI18n(), loadAppearancePreference()]);
       const identity = await accountsIdentity();
       if (generation.current !== current) return;
       if (!identity) {
+        if (await restorePersonal()) return;
         if (!(await adoptAccount(null, () => generation.current === current))) return;
         owner.current = "";
         directoryOwner.current = "";
@@ -405,7 +432,14 @@ export function AccountsGate({
       setReadyAt({ version, attempt });
       setPhase("servers");
     })()
-      .catch((failure) => {
+      .catch(async (failure) => {
+        if (failure instanceof AccountsUnavailable) {
+          try {
+            if (await restorePersonal()) return;
+          } catch (personalFailure) {
+            failure = personalFailure;
+          }
+        }
         if (generation.current !== current) return;
         setError(errorText(failure));
         setReadyAt({ version, attempt });

@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   extra: { accountsIssuer: "https://accounts.example.test", accountsClientId: "mobile-client" },
 }));
 vi.mock("expo-constants", () => ({ default: { expoConfig: { extra: mocks.extra } } }));
+vi.mock("expo-modules-core", () => ({ requireOptionalNativeModule: () => null }));
 vi.mock("expo-secure-store", () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: "device-only",
   getItemAsync: mocks.get,
@@ -350,7 +351,7 @@ it("clears a rotating refresh token after an ambiguous network response", async 
   tokenHandler = async () => {
     throw new Error("Connection closed");
   };
-  await expect(accountsAccessToken()).rejects.toThrow("Connection closed");
+  await expect(accountsAccessToken()).rejects.toThrow("Could not reach Accounts. Try again.");
   await expect(accountsAccessToken()).resolves.toBeNull();
   expect(fetched.mock.calls.filter(([url]) => url.endsWith("/token"))).toHaveLength(1);
 });

@@ -9,7 +9,9 @@ import {
 } from "@orkbot/contracts/accounts";
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
+import { fetchAccounts } from "./accounts-network";
 import { queueAccountsRevocation, retryPendingRevocations } from "./pending-revocations";
+import { signOutPersonalDevices } from "./personal-device";
 import { clearServerInitialization } from "./server-connect";
 
 export const ACCOUNTS_REDIRECT_URI = "run.orkbot.app:/oauth2/callback";
@@ -18,7 +20,7 @@ const welcomeOrk = createPersonalOrkId();
 
 /** Retained through native auth screen remounts for this application launch. */
 export const welcomeAccountsOrk = () => welcomeOrk;
-const discover = createAccountsDiscovery();
+const discover = createAccountsDiscovery(fetchAccounts);
 
 type Config = ReturnType<typeof accountsConfig>;
 type Tokens = {
@@ -125,7 +127,7 @@ async function save(tokens: Tokens, owner: number): Promise<boolean> {
 
 async function requestJson(url: string, init?: RequestInit): Promise<Record<string, unknown>> {
   const signal = AbortSignal.timeout(15_000);
-  const response = await fetch(url, {
+  const response = await fetchAccounts(url, {
     ...init,
     credentials: "omit",
     redirect: "error",
@@ -460,11 +462,12 @@ async function validAccessToken(): Promise<string | null> {
 /** Clears local tokens before attempting optional revocation; no end-session endpoint is needed. */
 export async function signOutAccounts(): Promise<void> {
   clearServerInitialization();
+  const personalWipe = signOutPersonalDevices();
   const pendingRefresh = refreshSnapshot;
   ++generation;
   invalidated = true;
   accountChanged();
-  const previous = await enqueue(async () => {
+  const retirement = enqueue(async () => {
     let stored: string | null = null;
     try {
       stored = await SecureStore.getItemAsync(STORAGE_KEY);
@@ -489,5 +492,7 @@ export async function signOutAccounts(): Promise<void> {
     await clearStored();
     return previous;
   });
-  if (previous) retryPendingRevocations();
+  const results = await Promise.allSettled([retirement, personalWipe]);
+  if (results[0].status === "fulfilled" && results[0].value) retryPendingRevocations();
+  for (const result of results) if (result.status === "rejected") throw result.reason;
 }

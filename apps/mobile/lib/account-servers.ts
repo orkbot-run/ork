@@ -5,6 +5,7 @@ import type { IdentityCatalog, WorkspaceTarget } from "@orkbot/contracts";
 import { catalogWorkspace, identityCatalogSchema, isLoopbackHost } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { accountsAuthorization, accountsConfiguration, accountsVersion } from "./accounts";
+import { fetchAccounts } from "./accounts-network";
 import { normalizeApiBase } from "./endpoint";
 
 export type AccountServer = {
@@ -51,7 +52,7 @@ async function request(
       expectedOwner !== JSON.stringify([authorization.issuer, authorization.subject]))
   )
     throw new Error("Sign in to Accounts to continue.");
-  const response = await fetch(`${configuration.issuer}/api/${path}`, {
+  const response = await fetchAccounts(`${configuration.issuer}/api/${path}`, {
     method,
     headers: {
       authorization: `Bearer ${authorization.accessToken}`,

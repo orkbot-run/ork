@@ -37,7 +37,7 @@ while IFS= read -r file; do
       native=true
       compose=true
       ;;
-    packages/client-transport/native/* | apps/desktop/* | scripts/pnpm*.mjs | packages/adapter-kit/* | packages/core/src/node/* | \
+    packages/client-transport/native/* | apps/mobile/modules/orkbot-identity/* | apps/desktop/* | scripts/pnpm*.mjs | packages/adapter-kit/* | packages/core/src/node/* | \
       packages/adapters/src/*computer* | packages/adapters/src/*desktop* | \
       packages/adapters/src/*sandbox* | packages/adapters/src/*host-* | \
       packages/adapters/src/home* | packages/adapters/src/native-shell* | \

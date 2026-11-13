@@ -1,9 +1,18 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { personalActivationMessage } from "@orkbot/contracts";
 import { accountsAuthorization, accountsVersion } from "./accounts";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import { t } from "./i18n";
+import type { StagedPersonalDevice } from "./personal-device";
+import {
+  activatePersonalDevice,
+  forgetPersonalDevice,
+  personalDigest,
+  signPersonalDevice,
+  stagePersonalDevice,
+} from "./personal-device";
 import { selectedWorkspace } from "./selected-workspace";
 import { completeServerInitialization, serverInitializationSecret } from "./server-connect";
 import { currentSessionGeneration, replaceSessionTokenIfCurrent } from "./session";
@@ -15,6 +24,8 @@ let inFlight = false;
 export async function continueWithAccountsServer(): Promise<boolean> {
   if (inFlight) return false;
   inFlight = true;
+  let staged: StagedPersonalDevice | null = null;
+  let activated = false;
   try {
     const server = currentApiBase();
     const sessionGeneration = currentSessionGeneration();
@@ -36,6 +47,10 @@ export async function continueWithAccountsServer(): Promise<boolean> {
         throw new Error(t("Could not continue"));
     };
     await current();
+    if (workspace) {
+      staged = await stagePersonalDevice(account, server, workspace);
+      await current();
+    }
     const request = async (url: string, body: unknown, central = false) => {
       const result = await fetchMobileJson<Record<string, unknown>>(
         url,
@@ -84,6 +99,7 @@ export async function continueWithAccountsServer(): Promise<boolean> {
             serverId: workspace.serverId,
             workspaceId: workspace.workspaceId,
             challenge: challenge.challenge,
+            ...(staged ? { personalDevice: staged.device } : {}),
           }
         : { origin: server, challenge: challenge.challenge },
       true,
@@ -95,12 +111,26 @@ export async function continueWithAccountsServer(): Promise<boolean> {
       issued.expiresAt <= Date.now() / 1000
     )
       throw new Error(t("Could not continue"));
+    const deviceSignature =
+      staged && workspace
+        ? await signPersonalDevice(
+            staged.credential,
+            personalActivationMessage(
+              { ...workspace, deviceId: staged.device.id },
+              challenge.challenge,
+              personalDigest(issued.grant),
+            ),
+            staged.epoch,
+          )
+        : null;
+    await current();
     const completed = await request(
       `${server}/api/auth/native/${workspace ? "workspace/" : ""}complete`,
       {
         challenge: challenge.challenge,
         grant: issued.grant,
         ...(bootstrapSecret ? { bootstrapSecret } : {}),
+        ...(deviceSignature ? { deviceSignature } : {}),
       },
     );
     if (
@@ -117,12 +147,45 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     )
       throw new Error(t("Sign-in did not return a session"));
     await current();
+    if (completed.personalDevice !== undefined) {
+      const device = completed.personalDevice as {
+        id?: unknown;
+        target?: Record<string, unknown>;
+      } | null;
+      if (
+        !staged ||
+        !workspace ||
+        device?.id !== staged.device.id ||
+        device.target?.deviceId !== staged.device.id ||
+        device.target?.serverId !== workspace.serverId ||
+        device.target?.workspaceId !== workspace.workspaceId ||
+        device.target?.bindingVersion !== workspace.bindingVersion ||
+        device.target?.keyFingerprint !== workspace.keyFingerprint
+      )
+        throw new Error(t("Could not continue"));
+    }
     completeServerInitialization(server, account, bootstrapSecret);
     if (!(await clearSpace()))
       throw new Error(t("Could not save your sign-in on this device. Try again."));
     await current();
-    return await replaceSessionTokenIfCurrent(sessionGeneration, completed.token, "sign_in");
+    if (staged && completed.personalDevice) {
+      await activatePersonalDevice(
+        staged,
+        () =>
+          server === currentApiBase() &&
+          sessionGeneration === currentSessionGeneration() &&
+          accountVersion === accountsVersion(),
+      );
+    }
+    await current();
+    const saved = await replaceSessionTokenIfCurrent(sessionGeneration, completed.token, "sign_in");
+    activated = saved && !!completed.personalDevice;
+    return saved;
   } finally {
-    inFlight = false;
+    try {
+      if (staged && !activated) await forgetPersonalDevice(staged.credential);
+    } finally {
+      inFlight = false;
+    }
   }
 }

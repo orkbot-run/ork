@@ -244,6 +244,18 @@ jobs:
           export AR_aarch64_linux_android="$ndk_tools/llvm-ar"
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$CC_aarch64_linux_android"
           cargo build --locked --lib --target aarch64-linux-android
+      - name: Test iOS device credentials in Keychain
+        if: runner.os == 'macOS'
+        working-directory: .
+        run: |
+          gem install --user-install xcodeproj --version 1.28.1 --no-document
+          runtime="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | contains(".iOS-")))] | last.identifier')"
+          test "$runtime" != null
+          device_type="$(xcrun simctl list runtimes --json | jq -r --arg runtime "$runtime" '[.runtimes[] | select(.identifier == $runtime) | .supportedDeviceTypes[] | select(.productFamily == "iPhone")] | first.identifier')"
+          test "$device_type" != null
+          device="$(xcrun simctl create 'Ork identity tests' "$device_type" "$runtime")"
+          trap 'xcrun simctl delete "$device"' EXIT
+          ruby apps/mobile/modules/orkbot-identity/tests/run-ios-tests.rb "$device" "$RUNNER_TEMP/ork-personal-tests"
 
   native-computer:
     name: Native computer (${{ matrix.os }})
