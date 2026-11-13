@@ -1072,6 +1072,7 @@ mod tests {
             account: authorization.account.clone(),
             token: "central-access".into(),
             generation: authorization.generation,
+            personal: None,
         };
         central_authorization.account.issuer = crate::server_directory::origin()
             .origin()
@@ -1209,18 +1210,30 @@ pub(crate) struct Authorization {
     pub account: Account,
     token: String,
     generation: u64,
+    personal: Option<PersonalAuthority>,
+}
+
+pub(crate) struct PersonalAuthority {
+    pub selection: crate::installation_transport::Selection,
+    pub device_id: String,
+    pub epoch: u64,
 }
 
 impl Authorization {
     pub(crate) fn directory_bearer(&self) -> Result<&str, String> {
-        if self.account.issuer
-            != crate::server_directory::origin()
-                .origin()
-                .ascii_serialization()
+        if self.personal.is_some()
+            || self.token.is_empty()
+            || self.account.issuer
+                != crate::server_directory::origin()
+                    .origin()
+                    .ascii_serialization()
         {
             return Err("This build must use the central Accounts issuer.".into());
         }
         Ok(&self.token)
+    }
+    pub(crate) fn personal(&self) -> Option<&PersonalAuthority> {
+        self.personal.as_ref()
     }
 }
 
@@ -1652,11 +1665,56 @@ impl Accounts {
     pub(crate) fn is_current(&self, authorization: &Authorization) -> bool {
         !self.signing_in.load(Ordering::SeqCst)
             && authorization.generation == self.generation.load(Ordering::SeqCst)
-            && authorization.account.expires_at > now()
+            && (authorization.personal.is_some() || authorization.account.expires_at > now())
+    }
+
+    /// The caller must validate the exact OS-held key before creating this local-only authority.
+    pub(crate) fn personal_authorization(
+        &self,
+        credential: &crate::personal_devices::Credential,
+        epoch: u64,
+    ) -> Result<Authorization, String> {
+        let authorization = Authorization {
+            account: credential.account.clone(),
+            token: String::new(),
+            generation: self.generation.load(Ordering::SeqCst),
+            personal: Some(PersonalAuthority {
+                selection: credential.selection.clone(),
+                device_id: credential.device_id.clone(),
+                epoch,
+            }),
+        };
+        if !self.is_current(&authorization) {
+            return Err(ERROR.into());
+        }
+        Ok(authorization)
     }
 
     pub(crate) async fn authorization(&self, origin: &Url) -> Result<Authorization, String> {
         self.authorization_config(origin, &Config::build()?).await
+    }
+
+    /// Identity metadata only. Reading it never renews or grants central authorization.
+    pub(crate) async fn local_account(&self, origin: &Url) -> Result<Option<Account>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let _operation = self.operation.lock().await;
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err(ERROR.into());
+        }
+        let config = Config::build()?;
+        let Some(raw) = self.store.get(config.key(origin)).await? else {
+            return Ok(None);
+        };
+        if raw.len() > 128 * 1024 {
+            return Err(ERROR.into());
+        }
+        let stored: Credential = serde_json::from_str(&raw).map_err(|_| ERROR)?;
+        if stored.account.issuer != config.issuer
+            || generation != self.generation.load(Ordering::SeqCst)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some(stored.account))
     }
 
     async fn authorization_config(
@@ -1673,6 +1731,7 @@ impl Accounts {
             account: credential.account,
             token: credential.access_token,
             generation,
+            personal: None,
         };
         if !self.is_current(&authorization) {
             return Err("Accounts sign-in changed. Try again.".into());

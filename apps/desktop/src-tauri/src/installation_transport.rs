@@ -220,6 +220,7 @@ struct Context {
     document: Option<String>,
     token: Option<String>,
     blocked: bool,
+    authenticating: bool,
     requests: HashMap<String, Request>,
 }
 
@@ -243,6 +244,22 @@ pub struct Transport(
     tokio::sync::OnceCell<crate::renderer_host::RendererHost>,
 );
 
+pub struct LoginGuard<'a> {
+    transport: &'a Transport,
+    label: String,
+    document: String,
+}
+impl Drop for LoginGuard<'_> {
+    fn drop(&mut self) {
+        let _ = self
+            .transport
+            .with_context(&self.label, &self.document, true, |context| {
+                context.authenticating = false;
+                Ok(())
+            });
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Input {
@@ -260,6 +277,20 @@ struct Header {
 }
 
 impl Transport {
+    pub fn begin_login(&self, label: &str, document: &str) -> Result<LoginGuard<'_>, String> {
+        self.with(label, document, |context| {
+            if context.authenticating {
+                return Err(ERROR.into());
+            }
+            context.authenticating = true;
+            Ok(())
+        })?;
+        Ok(LoginGuard {
+            transport: self,
+            label: label.into(),
+            document: document.into(),
+        })
+    }
     pub async fn renderer(&self, directory: &std::path::Path) -> Result<url::Url, String> {
         Ok(self
             .1
@@ -292,6 +323,7 @@ impl Transport {
                 document: None,
                 token: None,
                 blocked: false,
+                authenticating: false,
                 requests: HashMap::new(),
             },
         );
@@ -305,6 +337,9 @@ impl Transport {
             .get(label)
             .map(|context| context.selection.clone())
     }
+    pub fn active_selection(&self, label: &str, document: &str) -> Result<Selection, String> {
+        self.with(label, document, |context| Ok(context.selection.clone()))
+    }
 
     pub fn document(&self, label: &str, document: &str) {
         if let Ok(mut contexts) = self.0.lock() {
@@ -312,6 +347,7 @@ impl Transport {
                 if context.document.as_deref() != Some(document) {
                     context.cancel();
                     context.document = Some(document.into());
+                    context.authenticating = false;
                 }
             }
         }
@@ -681,6 +717,22 @@ mod tests {
         route.direct_origin = Some("https://lan.example.test".into());
         route.origin = "https://another.installation.ork.invalid".into();
         assert!(!route.valid());
+    }
+    #[test]
+    fn authentication_is_serialized_per_document_and_a_stale_guard_cannot_release_a_replacement() {
+        let transport = Transport::default();
+        transport.select("window", selection()).unwrap();
+        transport.document("window", "first");
+        let first = transport.begin_login("window", "first").unwrap();
+        assert!(transport.begin_login("window", "first").is_err());
+        transport.document("window", "second");
+        let second = transport.begin_login("window", "second").unwrap();
+        drop(first);
+        assert!(transport.begin_login("window", "second").is_err());
+        drop(second);
+        assert!(transport.begin_login("window", "second").is_ok());
+        transport.block_all();
+        assert!(transport.begin_login("window", "second").is_err());
     }
     const ID: &str = "44444444-4444-4444-8444-444444444444";
     fn input() -> String {

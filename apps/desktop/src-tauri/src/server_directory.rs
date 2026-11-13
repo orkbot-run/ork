@@ -147,6 +147,12 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
+    pub fn is_personal(&self, target: &WorkspaceTarget) -> Result<bool, String> {
+        self.server_for_target(target)?;
+        Ok(self.organizations.iter().any(|organization| {
+            organization.id == target.organization_id && organization.kind == "personal"
+        }))
+    }
     fn server_for_target(&self, target: &WorkspaceTarget) -> Result<&CatalogServer, String> {
         target.validate()?;
         let server = self

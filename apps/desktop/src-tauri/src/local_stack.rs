@@ -217,6 +217,23 @@ impl LocalStack {
     }
 
     /// The receipt contains only public operation IDs. It survives app and daemon restarts.
+    pub fn owns_workspace(&self, target: &crate::server_directory::WorkspaceTarget) -> bool {
+        let Some(bytes) =
+            read_owned_private(&self.directory.join(".desktop-workspace-operation"), 1024)
+        else {
+            return false;
+        };
+        let Ok(receipt) = serde_json::from_slice::<WorkspaceOperation>(&bytes) else {
+            return false;
+        };
+        receipt.completed
+            && receipt.organization_id == target.organization_id
+            && receipt.server_id == target.server_id
+            && receipt.binding_version == target.binding_version
+            && receipt.key_fingerprint == target.key_fingerprint
+            && crate::server_directory::uuid(&receipt.operation_id)
+    }
+
     pub fn workspace_operation(
         &self,
         organization_id: &str,
@@ -1985,12 +2002,28 @@ mod tests {
         private_directory(&stack.directory).unwrap();
         let organization = "00000000-0000-4000-8000-000000000001";
         let server = "00000000-0000-4000-8000-000000000002";
+        let mut target = crate::server_directory::WorkspaceTarget {
+            organization_id: organization.into(),
+            server_id: server.into(),
+            workspace_id: "00000000-0000-4000-8000-000000000003".into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        assert!(!stack.owns_workspace(&target));
+        assert!(!stack
+            .directory
+            .join(".desktop-workspace-operation")
+            .exists());
         let first = stack
             .workspace_operation(organization, server, 1, &"a".repeat(64))
             .unwrap();
         let id = first.operation_id.clone();
         assert!(!first.completed);
         stack.complete_workspace_operation(first).unwrap();
+        assert!(stack.owns_workspace(&target));
+        target.binding_version += 1;
+        assert!(!stack.owns_workspace(&target));
+
         let restarted = LocalStack::new(
             stack.directory.clone(),
             stack.resources.clone(),

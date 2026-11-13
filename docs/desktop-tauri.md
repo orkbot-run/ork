@@ -81,8 +81,23 @@ fresh short capability.
 
 Legacy connections still use server HTML and browser cookies. That document remains
 trusted, including scripts its content policy permits, until the connection is
-converted to a managed workspace. Desktop personal keys remain unfinished. Offline
-renewal also needs implementation and acceptance before this rollout can ship.
+converted to a managed workspace.
+
+An activated personal workspace can renew its product session through the pinned
+direct route when Accounts is unavailable. Its private device key stays in the OS
+credential store: the data protection keychain on macOS, machine-bound DPAPI inside
+Credential Manager on Windows, and Secret Service with a machine identifier on Linux.
+No expiry is added to the Accounts token. Saved metadata alone grants no access.
+Cold restoration requires the same account, installation pin and workspace, and a
+local Docker restart also requires its completed ownership receipt. Logout persists
+denial before deleting keys. Only a fresh interactive Accounts sign-in can clear a
+failed-cleanup barrier, after the retired keys have been removed.
+
+macOS distribution embeds a profile for the app's own keychain group and signs the
+speech helper without that group. The manual desktop workflow tests key creation,
+lookup, signing and deletion inside the signed app. Windows CI exercises DPAPI and
+the installed credential provider. These OS checks and the offline acceptance run
+remain release gates until their results are recorded for the candidate.
 
 Desktop checks for the server's `nativeRenderer: "bundled-v1"` capability before
 opening a product window. Upgrade an older server first. An older desktop connected
@@ -138,6 +153,7 @@ row records a source gap until its correction is verified. Linked tests describe
 | --- | --- | --- |
 | Bundled renderer and server handoff | Implemented: [renderer script tests](../apps/desktop/src/renderer-script.test.ts). Requires server capability `nativeRenderer: "bundled-v1"`. | Pending: cold launch and old-client/server compatibility. |
 | Accounts and saved server | Implemented: [Accounts](../apps/desktop/src-tauri/src/accounts.rs), [server login](../apps/desktop/src-tauri/src/server_login.rs). | Pending: restart restores login, default/single server selection, account/server switch, offline logout and pending revocation retry. |
+| Personal offline access | Implemented: [device lifecycle tests](../apps/desktop/src-tauri/src/personal_devices_tests.rs), [native key providers](../apps/desktop/src-tauri/src/personal_keys.rs). Key activation requires a matching server acknowledgment. | Pending: signed macOS and Windows OS key checks, offline cold restoration, logout and reconnect acceptance. |
 | WebView and credential isolation | Implemented: [profile](../apps/desktop/src-tauri/src/profile.rs), [macOS private storage tests](../apps/desktop/src-tauri/src/credentials_macos.rs). Persistent WebView cookies are unsupported on macOS 12/13 and use incognito instead. | Pending: per-origin/account isolation and older-macOS reconnect behavior. |
 | Browser OAuth/SSO and callbacks | Implemented: [browser auth](../apps/desktop/src-tauri/src/browser_auth.rs). | Pending: real configured callback, cancellation, expiration, replay and unrelated popup isolation. |
 | Passkeys | Implemented with signing/association gating on macOS 13.3+: [passkey tests](../apps/desktop/src/passkeys.test.ts). | Pending: registration and sign-in with an installed signed app and its configured relying party. Preserve existing RP registrations. |

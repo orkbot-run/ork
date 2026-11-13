@@ -107,21 +107,28 @@ pub async fn issue_workspace(
     challenge: &str,
     current: impl Fn() -> bool,
 ) -> Result<Grant, String> {
+    issue_workspace_device(token, target, challenge, None, current).await
+}
+
+pub async fn issue_workspace_device(
+    token: &str,
+    target: &crate::server_directory::WorkspaceTarget,
+    challenge: &str,
+    device: Option<serde_json::Value>,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
     target.validate()?;
     let endpoint = crate::server_directory::origin()
         .join("/api/identity/v2/login-grants")
         .map_err(|_| ERROR)?;
-    issue_payload_at(
-        &endpoint,
-        token,
-        challenge,
-        serde_json::json!({
-            "organizationId": target.organization_id, "serverId": target.server_id,
-            "workspaceId": target.workspace_id, "challenge": challenge,
-        }),
-        current,
-    )
-    .await
+    let mut body = serde_json::json!({
+        "organizationId": target.organization_id, "serverId": target.server_id,
+        "workspaceId": target.workspace_id, "challenge": challenge,
+    });
+    if let Some(device) = device {
+        body["personalDevice"] = device;
+    }
+    issue_payload_at(&endpoint, token, challenge, body, current).await
 }
 
 pub async fn issue_relay(
