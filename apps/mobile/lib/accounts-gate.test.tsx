@@ -2,11 +2,11 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { IdentityCatalog } from "@orkbot/contracts";
+import type { IdentityCatalog, WorkspaceTarget } from "@orkbot/contracts";
 import { tokensForAppearance } from "@orkbot/ui-tokens";
 import * as Clipboard from "expo-clipboard";
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Alert } from "react-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -26,6 +26,7 @@ import {
 } from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
+import { selectInstallationTransport } from "./installation-transport";
 import type { PersonalCredential } from "./personal-device";
 import { continueWithPersonalServer, personalLoginSelection } from "./personal-login";
 import type * as SelectedWorkspace from "./selected-workspace";
@@ -41,7 +42,7 @@ import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
 import { currentSessionGeneration } from "./session";
 import { continueWithSso } from "./sso";
-import { useWorkspacePicker } from "./workspace-picker";
+import { useWorkspacePickerScreen } from "./workspace-picker";
 
 vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates</div> }));
 vi.mock("./personal-login", () => ({
@@ -55,6 +56,9 @@ const state = vi.hoisted(() => ({
   version: 0,
   listeners: new Set<() => void>(),
   appListeners: new Set<(state: string) => void>(),
+  sessionListeners: new Set<() => void>(),
+  transportScope: null as { account: string; target: WorkspaceTarget } | null,
+  closePickerScreen: null as (() => void) | null,
 }));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async (key: string) => state.storage.get(key) ?? null,
@@ -79,8 +83,31 @@ vi.mock("react-native", () => ({
     },
   },
   ActivityIndicator: () => <span>Loading</span>,
+  Keyboard: { dismiss: vi.fn() },
   Linking: { openURL: vi.fn().mockResolvedValue(undefined) },
-  View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  View: ({
+    children,
+    testID,
+    pointerEvents,
+    accessibilityElementsHidden,
+    importantForAccessibility,
+  }: {
+    children: ReactNode;
+    testID?: string;
+    pointerEvents?: string;
+    accessibilityElementsHidden?: boolean;
+    importantForAccessibility?: string;
+  }) => (
+    <div
+      data-testid={testID}
+      data-pointer-events={pointerEvents}
+      data-accessibility={importantForAccessibility}
+      aria-hidden={accessibilityElementsHidden}
+      hidden={accessibilityElementsHidden}
+    >
+      {children}
+    </div>
+  ),
   ScrollView: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   TextInput: ({
@@ -254,7 +281,13 @@ vi.mock("./account-servers", () => {
   };
 });
 vi.mock("./incoming-share", () => ({ receiveIncomingShare: vi.fn() }));
-vi.mock("./session", () => ({ currentSessionGeneration: vi.fn(() => 1) }));
+vi.mock("./session", () => ({
+  currentSessionGeneration: vi.fn(() => 1),
+  subscribeSessionGeneration: (listener: () => void) => {
+    state.sessionListeners.add(listener);
+    return () => state.sessionListeners.delete(listener);
+  },
+}));
 vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
 vi.mock("./accounts-login", () => ({ continueWithAccountsServer: vi.fn() }));
 vi.mock("./server-pairing", () => ({ beginServerPairing: vi.fn() }));
@@ -311,6 +344,9 @@ beforeEach(() => {
   state.version = 0;
   state.listeners.clear();
   state.appListeners.clear();
+  state.sessionListeners.clear();
+  state.transportScope = null;
+  state.closePickerScreen = null;
   vi.mocked(accountsIdentity).mockResolvedValue(null);
   vi.mocked(personalLoginSelection).mockReset().mockResolvedValue(null);
   vi.mocked(continueWithPersonalServer).mockReset().mockResolvedValue(false);
@@ -504,10 +540,12 @@ it("ignores an alert action after the account changes", async () => {
   expect(host.textContent).not.toContain("new.example.test");
   expect(host.textContent).toContain("Get started");
 });
-function PickerControl() {
-  const picker = useWorkspacePicker();
+function PickerControl({ inScreen = false }: { inScreen?: boolean }) {
+  const picker = useWorkspacePickerScreen();
+  state.closePickerScreen = picker?.dismissScreen ?? null;
+  if (inScreen && picker?.screen) return picker.screen;
   return (
-    <button type="button" onClick={picker?.open}>
+    <button type="button" onClick={inScreen ? picker?.openInScreen : picker?.open}>
       Pick workspace
     </button>
   );
@@ -1717,7 +1755,14 @@ it("saves the default organization centrally only after an explicit preference a
   expect(host.textContent).toContain("Default organization");
   expect(saveApiBase).not.toHaveBeenCalled();
 });
-vi.mock("./installation-transport", () => ({ selectInstallationTransport: async () => undefined }));
+vi.mock("./installation-transport", () => ({
+  installationRevocationScope: () => state.transportScope ?? undefined,
+  selectInstallationTransport: vi.fn(
+    async (account: string, _origin: string, target?: WorkspaceTarget) => {
+      state.transportScope = target ? { account, target } : null;
+    },
+  ),
+}));
 vi.mock("./selected-workspace", async (importOriginal) => ({
   ...(await importOriginal<typeof SelectedWorkspace>()),
   selectedInstallationRoutes: async () => ({}),
@@ -1734,14 +1779,18 @@ it("reopens the managed directory without signing out or replacing the active wo
   vi.mocked(saveApiBase).mockClear();
   vi.mocked(clearProductAccountSession).mockClear();
   await click("Pick workspace");
-  expect(host.textContent).not.toContain("Product screen");
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
   expect(host.textContent).toContain("Company workspace");
   expect(saveApiBase).not.toHaveBeenCalled();
   expect(clearProductAccountSession).not.toHaveBeenCalled();
   await act(async () => {
     for (const listener of state.appListeners) listener("active");
   });
-  expect(host.textContent).not.toContain("Product screen");
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
   await click("Cancel");
   expect(host.textContent).toContain("Product screen");
   expect(saveApiBase).not.toHaveBeenCalled();
@@ -1803,8 +1852,327 @@ it("lets the current session cancel an explicit picker during an Accounts outage
   });
   expect(host.textContent).toContain("Could not reach Accounts");
   expect(host.textContent).toContain("Cancel");
-  expect(host.textContent).not.toContain("Product screen");
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
   await click("Cancel");
   expect(host.textContent).toContain("Product screen");
   expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("preserves the account modal and its thread draft, file and active work when the picker is cancelled", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const mounted = vi.fn();
+  const retired = vi.fn();
+  let dismissAccount = () => {};
+  function Navigator() {
+    const [route, setRoute] = useState("inbox");
+    const [prepared, setPrepared] = useState(false);
+    dismissAccount = () => setRoute("thread");
+    useEffect(() => {
+      mounted();
+      return retired;
+    }, []);
+    return (
+      <section data-current-route={route}>
+        {route === "inbox" ? (
+          <button type="button" onClick={() => setRoute("thread")}>
+            Open thread A
+          </button>
+        ) : (
+          <>
+            <span>Thread A</span>
+            <button type="button" onClick={() => setPrepared(true)}>
+              Prepare draft, file and work
+            </button>
+            {prepared ? <span>Draft A - file-A.png - Running A</span> : null}
+            {route === "account" ? (
+              <section role="dialog" aria-label="Account modal">
+                <PickerControl inScreen />
+                <button type="button" onClick={() => setRoute("thread")}>
+                  Close account
+                </button>
+              </section>
+            ) : (
+              <button type="button" onClick={() => setRoute("account")}>
+                Open account modal
+              </button>
+            )}
+          </>
+        )}
+      </section>
+    );
+  }
+  await act(async () =>
+    root.render(
+      <AccountsGate>
+        <Navigator />
+      </AccountsGate>,
+    ),
+  );
+  await click("Open thread A");
+  await click("Prepare draft, file and work");
+  await click("Open account modal");
+  await click("Pick workspace");
+  vi.mocked(selectInstallationTransport).mockClear();
+  const retained = host.querySelector('[data-testid="workspace-product"]');
+  expect(retained?.getAttribute("aria-hidden")).toBe("false");
+  expect(retained?.getAttribute("data-pointer-events")).toBe("auto");
+  expect(host.querySelector('[aria-label="Account modal"]')?.textContent).toContain("Cancel");
+  expect(retired).not.toHaveBeenCalled();
+  vi.mocked(accountsIdentity).mockRejectedValueOnce(new AccountsUnavailable());
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(retired).not.toHaveBeenCalled();
+  await click("Cancel");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(host.querySelector('[aria-label="Account modal"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  await click("Close account");
+  expect(host.querySelector('[data-current-route="thread"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  expect(mounted).toHaveBeenCalledTimes(1);
+  expect(retired).not.toHaveBeenCalled();
+  await click("Open account modal");
+  await click("Pick workspace");
+  await act(async () => dismissAccount());
+  expect(host.textContent).not.toContain("Cancel");
+  expect(host.querySelector('[data-current-route="thread"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(mounted).toHaveBeenCalledOnce();
+  expect(retired).not.toHaveBeenCalled();
+});
+
+async function trackedPicker() {
+  const workspace = managedDirectory(companyId);
+  const secondId = "00000000-0000-4000-8000-000000000098";
+  state.catalog!.organizations[1]!.servers[0]!.workspaces.push({
+    id: secondId,
+    name: "Second workspace",
+    state: "ready",
+    canOpen: true,
+    role: "member",
+  });
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+    {
+      ...remote,
+      id: secondId,
+      name: "Second workspace",
+      workspace: { ...workspace, workspaceId: secondId },
+    },
+  ]);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const retired = vi.fn();
+  const received = vi.fn();
+  const subscriptions: { signal: AbortSignal; emit(): void }[] = [];
+  function Product() {
+    const [privateData, setPrivateData] = useState(false);
+    useEffect(() => {
+      const controller = new AbortController();
+      subscriptions.push({
+        signal: controller.signal,
+        emit: () => {
+          if (!controller.signal.aborted) received();
+        },
+      });
+      return () => {
+        controller.abort();
+        retired();
+      };
+    }, []);
+    return (
+      <section>
+        <PickerControl />
+        <button type="button" onClick={() => setPrivateData(true)}>
+          Prepare private A
+        </button>
+        {privateData ? <span>Private A draft, file and running state</span> : null}
+      </section>
+    );
+  }
+  const renderProduct = () =>
+    act(async () =>
+      root.render(
+        <AccountsGate>
+          <Product />
+        </AccountsGate>,
+      ),
+    );
+  await renderProduct();
+  await click("Prepare private A");
+  await click("Pick workspace");
+  return { workspace, secondId, retired, received, subscriptions, renderProduct };
+}
+
+it.each(["account", "session", "target", "workspace-link"])(
+  "retires a retained navigator and rejects a stale screen dismiss after a newer %s",
+  async (change) => {
+    const tracked = await trackedPicker();
+    const staleDismiss = state.closePickerScreen!;
+    expect(staleDismiss).toBeTypeOf("function");
+    if (change === "account") {
+      vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "another-account" });
+      await act(async () => {
+        state.version++;
+        for (const listener of state.listeners) listener();
+      });
+    } else if (change === "session") {
+      await act(async () => {
+        vi.mocked(currentSessionGeneration).mockReturnValue(2);
+        for (const listener of state.sessionListeners) listener();
+      });
+    } else if (change === "target") {
+      state.transportScope = {
+        account: JSON.stringify([identity.issuer, identity.subject]),
+        target: { ...tracked.workspace, workspaceId: tracked.secondId },
+      };
+      await tracked.renderProduct();
+    } else {
+      await act(async () => {
+        receiveServerConnect(
+          `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=${tracked.secondId}`,
+        );
+      });
+    }
+    expect(tracked.retired).toHaveBeenCalled();
+    expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain("Private A draft");
+    const selections = vi.mocked(selectInstallationTransport).mock.calls.length;
+    await act(async () => staleDismiss());
+    expect(vi.mocked(selectInstallationTransport).mock.calls).toHaveLength(selections);
+    tracked.subscriptions[0]!.emit();
+    expect(tracked.received).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Private A draft");
+  },
+);
+
+it("unmounts and aborts the old subscription before selecting the B transport", async () => {
+  const tracked = await trackedPicker();
+  const observations: boolean[] = [];
+  const select = vi.mocked(selectInstallationTransport).getMockImplementation()!;
+  vi.mocked(selectInstallationTransport).mockImplementationOnce(async (...args) => {
+    observations.push(tracked.subscriptions[0]!.signal.aborted);
+    await select(...args);
+  });
+  await click("Second workspace");
+  expect(observations).toEqual([true]);
+  expect(tracked.retired).toHaveBeenCalledOnce();
+  expect(host.textContent).not.toContain("Private A draft");
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).not.toHaveBeenCalled();
+});
+
+it("does not complete a pending old-account selection after an account change", async () => {
+  const tracked = await trackedPicker();
+  let release!: (value: typeof identity) => void;
+  vi.mocked(accountsIdentity).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  await click("Second workspace");
+  vi.mocked(selectInstallationTransport).mockClear();
+  vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "another-account" });
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+    release(identity);
+  });
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+  expect(
+    vi
+      .mocked(selectInstallationTransport)
+      .mock.calls.some((args) => args[2]?.workspaceId === tracked.secondId),
+  ).toBe(false);
+  expect(host.textContent).not.toContain("Private A draft");
+});
+
+it("fences concurrent selection and account-refresh authorization before replacing credentials", async () => {
+  const tracked = await trackedPicker();
+  let finishSelection!: (value: typeof identity) => void;
+  let finishRefresh!: (value: null) => void;
+  vi.mocked(accountsIdentity)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSelection = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+  await click("Second workspace");
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  expect(finishSelection).toBeTypeOf("function");
+  expect(finishRefresh).toBeTypeOf("function");
+  const credentialChanges: boolean[] = [];
+  vi.mocked(clearProductAccountSession).mockImplementationOnce(async () => {
+    credentialChanges.push(tracked.subscriptions[0]!.signal.aborted);
+  });
+  vi.mocked(selectInstallationTransport).mockClear();
+  await act(async () => {
+    finishSelection(identity);
+    finishRefresh(null);
+  });
+  expect(credentialChanges).toEqual([true]);
+  expect(tracked.retired).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Get started");
+  expect(host.textContent).not.toContain("Private A draft");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).not.toHaveBeenCalled();
+});
+
+it("keeps the same live subscription when browsing the picker is cancelled", async () => {
+  const tracked = await trackedPicker();
+  vi.mocked(selectInstallationTransport).mockClear();
+  await click("Cancel");
+  expect(tracked.subscriptions).toHaveLength(1);
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(false);
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).toHaveBeenCalledOnce();
+  expect(tracked.retired).not.toHaveBeenCalled();
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("Private A draft, file and running state");
+});
+
+it("retires a known signed-out picker before deferred credential cleanup and cannot dismiss back into it", async () => {
+  const tracked = await trackedPicker();
+  const staleDismiss = state.closePickerScreen!;
+  let finish!: () => void;
+  vi.mocked(clearProductAccountSession).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  vi.mocked(accountsIdentity).mockResolvedValue(null);
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(finish).toBeTypeOf("function");
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+  expect(host.textContent).not.toContain("Private A draft");
+  const selections = vi.mocked(selectInstallationTransport).mock.calls.length;
+  await act(async () => staleDismiss());
+  expect(vi.mocked(selectInstallationTransport).mock.calls).toHaveLength(selections);
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+  await act(async () => finish());
+  expect(host.textContent).toContain("Get started");
+  expect(host.textContent).not.toContain("Private A draft");
 });

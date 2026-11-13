@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  Keyboard,
   ScrollView,
   Text,
   TextInput,
@@ -57,13 +58,15 @@ import {
   serverInitializationRequired,
 } from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
-import { selectInstallationTransport } from "../lib/installation-transport";
+import {
+  installationRevocationScope,
+  selectInstallationTransport,
+} from "../lib/installation-transport";
 import { useMobileTokens } from "../lib/native";
 import { continueWithPersonalServer, personalLoginSelection } from "../lib/personal-login";
 import {
   lastOrganizationWorkspace,
   saveSelectedWorkspace,
-  selectedInstallationRoutes,
   selectedWorkspace,
 } from "../lib/selected-workspace";
 import {
@@ -78,7 +81,7 @@ import {
 import { serverHeaders } from "../lib/server-headers";
 import type { MobileServerPairing } from "../lib/server-pairing";
 import { beginServerPairing } from "../lib/server-pairing";
-import { currentSessionGeneration } from "../lib/session";
+import { currentSessionGeneration, subscribeSessionGeneration } from "../lib/session";
 import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
 import { WorkspacePickerContext } from "../lib/workspace-picker";
@@ -108,6 +111,18 @@ type PairingWait = {
   generation: number;
   server: string;
   sessionGeneration: number;
+};
+
+type PickerOwner = {
+  account: string;
+  organizationId: string | null;
+  server: string;
+  sessionGeneration: number;
+  accountVersion: number;
+  linkGeneration: number;
+  workspaceScope: string;
+  retired: boolean;
+  presentation: "root" | "screen";
 };
 
 function serializeOwnership<T>(operation: () => Promise<T>): Promise<T> {
@@ -206,6 +221,11 @@ export function AccountsGate({
   const productGate = Boolean(children);
   const tokens = useMobileTokens();
   const version = useSyncExternalStore(subscribeAccounts, accountsVersion, accountsVersion);
+  useSyncExternalStore(
+    subscribeSessionGeneration,
+    currentSessionGeneration,
+    currentSessionGeneration,
+  );
   const linkGeneration = useRef(0);
   const subscribeLinks = useCallback(
     (listener: () => void) =>
@@ -222,12 +242,10 @@ export function AccountsGate({
   );
   const linkedServer = pendingServerConnect();
   const linkedWorkspace = pendingWorkspaceConnect();
-  const pickerOwner = useRef<{
-    account: string;
-    organizationId: string | null;
-    server: string;
-    sessionGeneration: number;
-  } | null>(null);
+  const pickerOwner = useRef<PickerOwner | null>(null);
+  const [pickerRetirement, setPickerRetirement] = useState(0);
+  const retiredPicker = useRef<(() => void) | null>(null);
+  const pickerRetirementFlight = useRef<Promise<void> | null>(null);
   const operationPending = useRef(false);
   const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
@@ -263,6 +281,50 @@ export function AccountsGate({
   const [pairingForeground, setPairingForeground] = useState(
     AppState.currentState == null || AppState.currentState === "active",
   );
+
+  function ownsPicker(previous: PickerOwner | null): previous is PickerOwner {
+    return Boolean(
+      previous &&
+        !previous.retired &&
+        previous.account === owner.current &&
+        previous.accountVersion === accountsVersion() &&
+        previous.sessionGeneration === currentSessionGeneration() &&
+        previous.server === currentApiBase() &&
+        previous.linkGeneration === linkGeneration.current &&
+        previous.workspaceScope ===
+          JSON.stringify(installationRevocationScope(currentApiBase()) ?? null),
+    );
+  }
+
+  useEffect(() => {
+    // Passive unmount cleanup retires the old screens before a new transport can be selected.
+    const complete = retiredPicker.current;
+    retiredPicker.current = null;
+    complete?.();
+  }, [pickerRetirement]);
+  useEffect(
+    () => () => {
+      retiredPicker.current?.();
+      retiredPicker.current = null;
+    },
+    [],
+  );
+
+  async function retirePicker() {
+    if (pickerRetirementFlight.current) return pickerRetirementFlight.current;
+    if (!pickerOwner.current || pickerOwner.current.retired) return;
+    pickerOwner.current.retired = true;
+    const flight = new Promise<void>((resolve) => {
+      retiredPicker.current = resolve;
+    });
+    pickerRetirementFlight.current = flight;
+    setPickerRetirement((value) => value + 1);
+    try {
+      await flight;
+    } finally {
+      if (pickerRetirementFlight.current === flight) pickerRetirementFlight.current = null;
+    }
+  }
 
   function discardPairing(update = true) {
     const creating = pairingRequest.current;
@@ -326,6 +388,8 @@ export function AccountsGate({
       const identity = await accountsIdentity();
       if (generation.current !== current) return;
       if (!identity) {
+        await retirePicker();
+        if (generation.current !== current) return;
         if (await restorePersonal()) return;
         if (!(await adoptAccount(null, () => generation.current === current))) return;
         owner.current = "";
@@ -344,8 +408,11 @@ export function AccountsGate({
       }
       setOrkAvatar(isPersonalOrkId(identity.orkAvatar) ? identity.orkAvatar : welcomeOrk);
       const account = JSON.stringify([identity.issuer, identity.subject]);
-      if (pickerOwner.current && pickerOwner.current.account !== account)
+      if (pickerOwner.current && pickerOwner.current.account !== account) {
+        await retirePicker();
+        if (generation.current !== current) return;
         pickerOwner.current = null;
+      }
       if (!(await adoptAccount(account, () => generation.current === current))) return;
       owner.current = account;
       verified = true;
@@ -482,6 +549,7 @@ export function AccountsGate({
           }
         }
         if (generation.current !== current) return;
+        if (!(failure instanceof AccountsUnavailable)) pickerOwner.current = null;
         setError(errorText(failure));
         setReadyAt({ version, attempt });
         const canReturn =
@@ -636,9 +704,13 @@ export function AccountsGate({
     const identity = await accountsIdentity();
     if (!active() || !sessionCurrent()) return false;
     if (!identity || JSON.stringify([identity.issuer, identity.subject]) !== account) {
+      await retirePicker();
+      if (!active() || !sessionCurrent()) return false;
       setAttempt((value) => value + 1);
       return false;
     }
+    await retirePicker();
+    if (!active() || !sessionCurrent()) return false;
     if (entry.workspace) {
       await selectInstallationTransport(
         account,
@@ -909,51 +981,113 @@ export function AccountsGate({
     }
   }
 
-  const workspacePicker = useMemo(
-    () => ({
+  const workspacePicker = useMemo(() => {
+    const open = (presentation: "root" | "screen") => {
+      Keyboard.dismiss();
+      pickerOwner.current = {
+        account: owner.current,
+        organizationId,
+        server: currentApiBase(),
+        sessionGeneration: currentSessionGeneration(),
+        accountVersion: accountsVersion(),
+        linkGeneration: linkGeneration.current,
+        workspaceScope: JSON.stringify(installationRevocationScope(currentApiBase()) ?? null),
+        retired: false,
+        presentation,
+      };
+      setAdding(false);
+      setPhase("servers");
+    };
+    return {
       organization:
         directory?.organizations.find((row) => row.id === organizationId)?.name ?? t("Workspace"),
-      open: () => {
-        pickerOwner.current = {
-          account: owner.current,
-          organizationId,
-          server: currentApiBase(),
-          sessionGeneration: currentSessionGeneration(),
-        };
-        setAdding(false);
-        setPhase("servers");
-      },
-    }),
-    [directory, organizationId, t],
-  );
+      open: () => open("root"),
+      openInScreen: () => open("screen"),
+    };
+  }, [directory, organizationId, t]);
 
-  if (
+  async function cancelPicker() {
+    const previous = pickerOwner.current;
+    if (!ownsPicker(previous)) return;
+    // Browsing did not change this binding; selecting it again would retire its live streams.
+    pickerOwner.current = null;
+    chosenOrganization.current = { account: previous.account, id: previous.organizationId };
+    setOrganizationId(previous.organizationId);
+    setReadyAt({ version, attempt });
+    setPhase("ready");
+  }
+
+  const ready = Boolean(
     phase === "ready" &&
-    readyAt.version === version &&
-    readyAt.attempt === attempt &&
-    !linkedServer &&
-    children
-  )
-    return serverRescue ? (
-      <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
-        <Text>{t("Update this server before connecting with this version of Ork.")}</Text>
-        <Updates />
-        <NativeActionButton
-          label={t("Check again")}
-          onPress={() => setAttempt((value) => value + 1)}
-        />
-        <NativeActionButton
-          label={t("Back")}
-          prominence="secondary"
-          onPress={() => setPhase("servers")}
-        />
-      </SafeAreaView>
-    ) : (
-      <WorkspacePickerContext value={workspacePicker}>{children}</WorkspacePickerContext>
+      readyAt.version === version &&
+      readyAt.attempt === attempt &&
+      !linkedServer &&
+      !linkedWorkspace &&
+      children,
+  );
+  const preservePicker = Boolean(
+    children &&
+      !serverRescue &&
+      phase !== "signed-out" &&
+      ownsPicker(pickerOwner.current) &&
+      pickerOwner.current.workspaceScope !== "null" &&
+      !linkedServer &&
+      !linkedWorkspace,
+  );
+  const surface = (gate: ReactNode) => {
+    const activePicker = preservePicker ? pickerOwner.current : null;
+    const inScreen = activePicker?.presentation === "screen";
+    const hideProduct = preservePicker && !inScreen;
+    return (
+      <WorkspacePickerContext
+        value={{
+          ...workspacePicker,
+          screen: inScreen ? gate : null,
+          dismissScreen: () => {
+            if (activePicker && pickerOwner.current === activePicker && !pending)
+              void action(cancelPicker);
+          },
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          {(ready && !serverRescue) || preservePicker ? (
+            <View
+              key="product"
+              testID="workspace-product"
+              style={{ flex: 1, opacity: hideProduct ? 0 : 1 }}
+              pointerEvents={hideProduct ? "none" : "auto"}
+              accessibilityElementsHidden={hideProduct}
+              importantForAccessibility={hideProduct ? "no-hide-descendants" : "auto"}
+            >
+              {children}
+            </View>
+          ) : null}
+          {inScreen ? null : gate}
+        </View>
+      </WorkspacePickerContext>
+    );
+  };
+  if (ready)
+    return surface(
+      serverRescue ? (
+        <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
+          <Text>{t("Update this server before connecting with this version of Ork.")}</Text>
+          <Updates />
+          <NativeActionButton
+            label={t("Check again")}
+            onPress={() => setAttempt((value) => value + 1)}
+          />
+          <NativeActionButton
+            label={t("Back")}
+            prominence="secondary"
+            onPress={() => setPhase("servers")}
+          />
+        </SafeAreaView>
+      ) : null,
     );
   const visiblePhase =
     readyAt.version === version && readyAt.attempt === attempt ? phase : "loading";
-  return (
+  return surface(
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
       <ScrollView
         contentContainerStyle={{
@@ -1207,48 +1341,12 @@ export function AccountsGate({
                 onPress={() => setAttempt((value) => value + 1)}
               />
             ) : null}
-            {pickerOwner.current?.account === owner.current &&
-            pickerOwner.current.sessionGeneration === currentSessionGeneration() &&
-            !linkedServer &&
-            !linkedWorkspace ? (
+            {ownsPicker(pickerOwner.current) && !linkedServer && !linkedWorkspace ? (
               <NativeActionButton
                 label={t("Cancel")}
                 prominence="secondary"
                 disabled={pending}
-                onPress={() =>
-                  void action(async () => {
-                    const previous = pickerOwner.current;
-                    const current = generation.current;
-                    const active = () =>
-                      previous === pickerOwner.current &&
-                      current === generation.current &&
-                      previous?.account === owner.current &&
-                      previous.sessionGeneration === currentSessionGeneration();
-                    if (!previous || !active()) return;
-                    const target = await selectedWorkspace(previous.account, previous.server);
-                    const routes = await selectedInstallationRoutes(
-                      previous.account,
-                      previous.server,
-                    );
-                    if (!active()) return;
-                    await selectInstallationTransport(
-                      previous.account,
-                      previous.server,
-                      target ?? undefined,
-                      routes.relay,
-                      routes.direct,
-                    );
-                    if (!active()) return;
-                    pickerOwner.current = null;
-                    chosenOrganization.current = {
-                      account: previous.account,
-                      id: previous.organizationId,
-                    };
-                    setOrganizationId(previous.organizationId);
-                    setReadyAt({ version, attempt });
-                    setPhase("ready");
-                  })
-                }
+                onPress={() => void action(cancelPicker)}
               />
             ) : null}
             <NativeActionButton
@@ -1267,6 +1365,6 @@ export function AccountsGate({
           </Text>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaView>,
   );
 }

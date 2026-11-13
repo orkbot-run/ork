@@ -104,10 +104,10 @@ import {
 } from "../../lib/trusted-link-sites";
 import { UI_LOCALE_LABELS } from "../../lib/ui-locale";
 import { errorText } from "../../lib/user-error";
-import { useWorkspacePicker } from "../../lib/workspace-picker";
+import { useWorkspacePickerScreen } from "../../lib/workspace-picker";
 
 export default function Account() {
-  const workspacePicker = useWorkspacePicker();
+  const workspacePicker = useWorkspacePickerScreen();
   const sideInsets = useSideInsets();
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -457,6 +457,8 @@ export default function Account() {
     );
   }
 
+  if (workspacePicker?.screen) return workspacePicker.screen;
+
   return (
     <SafeAreaView edges={["bottom"]} style={styles.screen}>
       <ScrollView
@@ -498,7 +500,7 @@ export default function Account() {
               title={t("Workspace")}
               value={workspacePicker.organization}
               chevron="right"
-              onPress={workspacePicker.open}
+              onPress={workspacePicker.openInScreen}
             />
           </SettingsGroup>
         ) : null}
