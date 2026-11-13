@@ -28,7 +28,8 @@ done
 grep -E '^classes([0-9]+)?\.dex$' "$temporary/entries" > "$temporary/dex-files"
 while IFS= read -r entry; do
   unzip -p "$apk" "$entry" > "$temporary/classes.dex"
-  "$tools/dexdump" "$temporary/classes.dex" | awk '/Class descriptor/ { print }' >> "$temporary/classes"
+  # DEX strings use modified UTF-8; inspect ASCII descriptors as bytes.
+  "$tools/dexdump" "$temporary/classes.dex" | LC_ALL=C awk '/Class descriptor/ { print }' >> "$temporary/classes"
 done < "$temporary/dex-files"
 for descriptor in Lcom/sun/jna/Native\; Luniffi/ork_installation_transport/UniffiLib\; Lorg/rustls/platformverifier/CertificateVerifier\; Lcom/orkbot/transport/OrkTransportModule\;; do
   grep -Fq "'$descriptor'" "$temporary/classes" || { echo 'A required native binding was removed or renamed.' >&2; exit 1; }

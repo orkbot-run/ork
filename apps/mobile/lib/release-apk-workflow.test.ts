@@ -200,6 +200,7 @@ exit "$TEST_FALLBACK_FAIL"
 
   it.each([
     { fault: "none", succeeds: true },
+    { fault: "modified-utf8", succeeds: true },
     { fault: "signature", succeeds: false },
     { fault: "package", succeeds: false },
     { fault: "missing-library", succeeds: false },
@@ -232,7 +233,8 @@ exit "$TEST_FALLBACK_FAIL"
       const commands = {
         apksigner: `exit ${fault === "signature" ? 1 : 0}`,
         aapt2: `echo "package: name='${fault === "package" ? "example.wrong" : "run.orkbot.app"}' versionCode='1'"`,
-        dexdump: `cat <<'DEX'
+        dexdump: `${fault === "modified-utf8" ? "printf '\\300\\200fixture\\n'" : ""}
+cat <<'DEX'
 Class descriptor  : 'Lcom/sun/jna/${fault === "renamed-binding" ? "Renamed" : "Native"};'
 Class descriptor  : 'Luniffi/ork_installation_transport/UniffiLib;'
 Class descriptor  : 'Lorg/rustls/platformverifier/CertificateVerifier;'
@@ -247,7 +249,14 @@ DEX`,
       const result = spawnSync(
         "bash",
         [path.resolve(import.meta.dirname, "../../../.github/scripts/verify-android-apk.sh"), apk],
-        { encoding: "utf8", env: { ...process.env, ANDROID_HOME: path.join(root, "sdk") } },
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            ANDROID_HOME: path.join(root, "sdk"),
+            ...(fault === "modified-utf8" ? { LC_ALL: "en_US.UTF-8" } : {}),
+          },
+        },
       );
       expect(result.status === 0, result.stderr).toBe(succeeds);
       if (succeeds) expect(result.stdout).toContain("native bindings verified");
