@@ -943,6 +943,14 @@ msgstr ""
 msgid "Ask"
 msgstr "묻기"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a server administrator to make an AI account available to this workspace."
+msgstr ""
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
 msgstr "묻지 않기 모드에서는 묻기 규칙이 적용되지 않습니다."
@@ -1761,6 +1769,7 @@ msgid "Connect a chat app"
 msgstr "채팅 앱 연결"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "AI 모델 연결"
@@ -1878,6 +1887,7 @@ msgstr "컨텍스트 한도"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2216,6 +2226,7 @@ msgstr "MCP 서버 목록을 불러오지 못했습니다."
 #: src/pages/model-settings/use-model-settings.ts
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "AI 모델 설정을 불러오지 못했습니다."
@@ -3072,6 +3083,10 @@ msgstr "이메일 인증이 필요합니다"
 #: src/pages/shell/bot-panel.tsx
 msgid "Enable {0}"
 msgstr "{0} 활성화"
+
+#: src/pages/Onboarding.tsx
+msgid "Enable a default model for this workspace to continue."
+msgstr ""
 
 #: src/pages/ServerAISettings.tsx
 msgid "Enabled"
@@ -5656,6 +5671,8 @@ msgstr ""
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx

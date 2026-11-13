@@ -943,6 +943,14 @@ msgstr "Artefakty"
 msgid "Ask"
 msgstr "Zapytaj"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a server administrator to make an AI account available to this workspace."
+msgstr "Poproś administratora serwera o udostępnienie konta AI temu obszarowi roboczemu."
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgstr "Poproś administratora obszaru roboczego o włączenie konta AI w tym obszarze."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
 msgstr "Reguły \"Zapytaj\" są nieaktywne w trybie \"Nigdy nie pytaj\"."
@@ -1761,6 +1769,7 @@ msgid "Connect a chat app"
 msgstr "Połącz komunikator"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "Połącz model"
@@ -1878,6 +1887,7 @@ msgstr "Limit kontekstu"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2216,6 +2226,7 @@ msgstr "Nie udało się wczytać serwerów MCP"
 #: src/pages/model-settings/use-model-settings.ts
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "Nie udało się wczytać ustawień modeli"
@@ -3072,6 +3083,10 @@ msgstr "Wymagana weryfikacja adresu e-mail"
 #: src/pages/shell/bot-panel.tsx
 msgid "Enable {0}"
 msgstr "Włącz {0}"
+
+#: src/pages/Onboarding.tsx
+msgid "Enable a default model for this workspace to continue."
+msgstr "Aby kontynuować, włącz domyślny model dla tego obszaru roboczego."
 
 #: src/pages/ServerAISettings.tsx
 msgid "Enabled"
@@ -5656,6 +5671,8 @@ msgstr "Przywracanie obszaru roboczego"
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx

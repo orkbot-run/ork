@@ -944,6 +944,14 @@ msgstr "成品"
 msgid "Ask"
 msgstr "詢問"
 
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a server administrator to make an AI account available to this workspace."
+msgstr ""
+
+#: src/pages/onboarding/managed-model-setup.tsx
+msgid "Ask a workspace administrator to enable an AI account for this workspace."
+msgstr ""
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Ask rules are inactive in Never ask."
 msgstr "永不詢問模式下，詢問規則不會生效。"
@@ -1762,6 +1770,7 @@ msgid "Connect a chat app"
 msgstr "連結聊天應用程式"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/composer-error.tsx
 msgid "Connect a model"
 msgstr "連線模型"
@@ -1879,6 +1888,7 @@ msgstr "上下文長度限制"
 #: src/components/vault/VaultItemEditor.tsx
 #: src/pages/Auth.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/dialogs.tsx
 msgid "Continue"
@@ -2217,6 +2227,7 @@ msgstr "無法載入 MCP 伺服器"
 #: src/pages/model-settings/use-model-settings.ts
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "無法載入模型設定"
@@ -3073,6 +3084,10 @@ msgstr "需要驗證電子信箱"
 #: src/pages/shell/bot-panel.tsx
 msgid "Enable {0}"
 msgstr "啟用 {0}"
+
+#: src/pages/Onboarding.tsx
+msgid "Enable a default model for this workspace to continue."
+msgstr ""
 
 #: src/pages/ServerAISettings.tsx
 msgid "Enabled"
@@ -5657,6 +5672,8 @@ msgstr "正在還原工作空間"
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/Onboarding.tsx
+#: src/pages/onboarding/managed-model-setup.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
 #: src/pages/ServerAISettings.tsx
