@@ -359,6 +359,16 @@ it("keeps saved Azure connections available for backup selection", () => {
 });
 
 describe("withConnectionName", () => {
+  it("preserves malformed and nested labels with large parenthesized inputs", () => {
+    const long = `${"a (".repeat(30_000)}end`;
+    expect(withConnectionName("Model", long)).toBe(`Model (${long})`);
+    expect(withConnectionName("Model", "Provider (Group (Work))")).toBe(
+      "Model (Provider (Group, Work))",
+    );
+    expect(withConnectionName("Model", "Provider (line\nbreak)")).toBe(
+      "Model (Provider (line\nbreak))",
+    );
+  });
   it("names the connection after the model without nesting brackets", () => {
     expect(withConnectionName("Claude Sonnet", "OpenRouter")).toBe("Claude Sonnet (OpenRouter)");
     expect(withConnectionName("Claude Sonnet", "OpenRouter (Work)")).toBe(

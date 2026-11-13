@@ -364,7 +364,27 @@ function buildPiCatalog(): PiCatalogEntry[] {
  * Trailing upstream "latest" marker: "Claude Opus 4.5 (latest)", "Gemini Flash Latest",
  * "foo-latest", or an alias parenthetical like "Qwen Max Latest (Qwen3.8 Max)".
  */
-const LATEST_MARKER = /[\s(/-]*\blatest\b\s*\)?\s*(\([^)]*\)\s*)?$/i;
+function latestLabelBase(label: string): string | null {
+  const end = label.trimEnd().length;
+  const lastInteriorClose = label.lastIndexOf(")", end - 2);
+  for (const match of label.matchAll(/\blatest\b/gi)) {
+    let suffix = match.index + match[0].length;
+    while (suffix < end && /\s/.test(label[suffix]!)) suffix++;
+    if (label[suffix] === ")") {
+      suffix++;
+      while (suffix < end && /\s/.test(label[suffix]!)) suffix++;
+    }
+    if (
+      suffix !== end &&
+      !(label[suffix] === "(" && label[end - 1] === ")" && lastInteriorClose < suffix)
+    )
+      continue;
+    let start = match.index;
+    while (start > 0 && /[\s(/-]/.test(label[start - 1]!)) start--;
+    return label.slice(0, start).trim();
+  }
+  return null;
+}
 
 /**
  * Upstream marks auto-updating alias ids with a trailing "latest". That is an alias marker, not a
@@ -378,8 +398,7 @@ export function catalogModelLabel(
   providerModelIds: readonly string[] = [],
 ): string {
   const label = name || id;
-  if (!LATEST_MARKER.test(label)) return label;
-  const base = label.replace(LATEST_MARKER, "").trim();
+  const base = latestLabelBase(label);
   if (!base) return label;
   return isAliasModelId(id, providerModelIds) ? `${base} (auto-updates)` : base;
 }

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 catalog tests are preserved. Parser regressions follow LICENSE.md.
+
 import { MODEL_KEY_FORMAT_ERROR } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultCatalogModelId } from "./model-selection.js";
@@ -493,6 +497,14 @@ describe("Pi model catalog", () => {
 });
 
 describe("catalogModelLabel", () => {
+  it("handles long untrusted labels and nested display suffixes without backtracking", () => {
+    const unmarked = `${"\t".repeat(100_000)}latestx`;
+    expect(catalogModelLabel("model", unmarked)).toBe(unmarked);
+    expect(catalogModelLabel("model", `Model${"\t".repeat(100_000)}latest`)).toBe("Model");
+    expect(catalogModelLabel("model", "Model latest (A (B)")).toBe("Model");
+    expect(catalogModelLabel("model", "Model latest (latest) (tag)")).toBe("Model latest");
+    expect(catalogModelLabel("model", "Model latest (tag) extra")).toBe("Model latest (tag) extra");
+  });
   const providerModelIds = [
     "claude-opus-4-5",
     "claude-opus-4-5-20251101",

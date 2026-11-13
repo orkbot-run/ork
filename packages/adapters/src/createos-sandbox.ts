@@ -385,7 +385,10 @@ export class CreateOSSandboxProvider implements SandboxProvider {
   private readonly activeScreenConnections = new Map<string, Set<Promise<void>>>();
 
   constructor(private readonly options: CreateOSSandboxProviderOptions) {
-    this.baseUrl = (options.baseUrl?.trim() || DEFAULT_CREATEOS_BASE_URL).replace(/\/+$/, "");
+    const baseUrl = options.baseUrl?.trim() || DEFAULT_CREATEOS_BASE_URL;
+    let end = baseUrl.length;
+    while (end > 0 && baseUrl[end - 1] === "/") end--;
+    this.baseUrl = baseUrl.slice(0, end);
     assertSecureCreateOSBaseUrl(this.baseUrl);
     this.shape = options.shape?.trim() || DEFAULT_CREATEOS_SHAPE;
     this.rootfs = options.rootfs?.trim() || DEFAULT_CREATEOS_ROOTFS;

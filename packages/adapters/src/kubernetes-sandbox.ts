@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 naming is preserved. Bounded normalization follows LICENSE.md.
+
 import { createHash } from "node:crypto";
 import type { Readable } from "node:stream";
 import { PassThrough } from "node:stream";
@@ -669,11 +673,12 @@ function loadKubernetes(): Promise<typeof KubernetesClient> {
 }
 
 function podNameForBot(botId: string): string {
-  const normalized = botId
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9-]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 40);
+  const value = botId.toLowerCase().replaceAll(/[^a-z0-9-]+/g, "-");
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "-") start++;
+  while (end > start && value[end - 1] === "-") end--;
+  const normalized = value.slice(start, Math.min(start + 40, end));
   const hash = createHash("sha256").update(botId).digest("hex").slice(0, 12);
   return `orkbot-${normalized || "bot"}-${hash}`;
 }
