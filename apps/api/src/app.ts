@@ -1818,6 +1818,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     stop: async () => {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
+      // Signal shutdown before disposing authority watches, which also abort their signals.
+      shutdown.abort();
       installationTransport?.close();
       await stopInstallationRelay?.();
       await stopServerClaim?.();
@@ -1827,7 +1829,6 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       auth.disposeOidcDiscovery();
       const serverUpdatesStopped = serverUpdates?.stop();
-      shutdown.abort();
       // Aborted runs hand themselves back while realtime is still open to announce them.
       const runsStopped = runs?.stop();
       await userDeviceHub?.close();

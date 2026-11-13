@@ -249,6 +249,7 @@ import { toolResultFingerprint } from "./tool-loop.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
 import { createWebProvider } from "./web-provider-factory.js";
 import { findWorkspaceModelPolicy, resolveWorkspaceModel } from "./workspace-model-policy.js";
+import { retireWorkspaceRun } from "./workspace-run-retirement.js";
 
 /** Same reach as the MCP connector: usable servers assigned to the bot or shared with every bot. */
 async function verbatimMcpServersForRun(
@@ -547,7 +548,18 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       };
       const runAbortController = new AbortController();
       let workPermission: { signal: AbortSignal; dispose(): void } | null | undefined;
-      const onWorkRevoked = () => runAbortController.abort(new WorkspaceExecutionDeniedError());
+      const workScope = {
+        spaceId: run.spaceId,
+        userId: run.userId,
+        workspaceId: run.centralWorkspaceId,
+        membershipVersion: run.workspaceMembershipVersion,
+        ...(run.personalDeviceId !== undefined ? { personalDeviceId: run.personalDeviceId } : {}),
+      };
+      let observedWorkRevocation = false;
+      const onWorkRevoked = () => {
+        if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
+        runAbortController.abort(new WorkspaceExecutionDeniedError());
+      };
       const runningHelpers = new Map<string, RunningHelper>();
       const settleHelpers = () => settleRunningHelpers(deps, run, runningHelpers);
 
@@ -580,21 +592,20 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       const runSecrets = [...deps.secrets];
       let dispatchHandedOff = false;
       try {
-        workPermission = await deps.authorizeWork?.({
-          spaceId: run.spaceId,
-          userId: run.userId,
-          workspaceId: run.centralWorkspaceId,
-          membershipVersion: run.workspaceMembershipVersion,
-          ...(run.personalDeviceId !== undefined ? { personalDeviceId: run.personalDeviceId } : {}),
-        });
+        workPermission = await deps.authorizeWork?.(workScope);
         if (
           workPermission === null ||
           (run.centralWorkspaceId &&
             (!workPermission || !run.workspaceMembershipVersion || !deps.serverAIModels))
-        )
+        ) {
+          if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
           throw new WorkspaceExecutionDeniedError();
+        }
         workPermission?.signal.addEventListener("abort", onWorkRevoked, { once: true });
-        if (workPermission?.signal.aborted) throw new WorkspaceExecutionDeniedError();
+        if (workPermission?.signal.aborted) {
+          if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
+          throw new WorkspaceExecutionDeniedError();
+        }
         // Durable run ownership and its heartbeat now carry recovery. Model,
         // integration and computer setup must not occupy a queue dispatch slot.
         onRunStarted?.();
@@ -2207,9 +2218,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           );
           if (await consumeRunEvents(ctx, runtimeEvents)) return;
           if (await interruptedByShutdown()) return;
+          if (workPermission?.signal.aborted) return;
           await completeRun(ctx);
         } catch (turnError) {
           if (await interruptedByShutdown()) return;
+          if (workPermission?.signal.aborted) return;
           let caughtError = turnError;
           if (handoffEndedTurn(state, caughtError)) {
             try {
@@ -2230,6 +2243,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         if (deps.shutdownSignal?.aborted) return;
         const computerAccountRefused = setupError instanceof SandboxAccountError;
         const workspaceRefused = setupError instanceof WorkspaceExecutionDeniedError;
+        if (workspaceRefused) return;
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         const setupMessage = redactSecrets(userRunError(setupError), runSecrets);
@@ -2254,7 +2268,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // setup that fails every time would retry forever. End the run instead.
         if (
           computerAccountRefused ||
-          workspaceRefused ||
           (!retryForever && priorFailures >= RUN_SETUP_FAILURE_LIMIT - 1)
         ) {
           const bot = await deps.prisma.bot.findUnique({
@@ -2318,6 +2331,33 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         });
         detachShutdown?.();
         clearInterval(heartbeat);
+        if (
+          (run.centralWorkspaceId || workPermission === null) &&
+          !lease.completed &&
+          (!deps.shutdownSignal?.aborted || observedWorkRevocation)
+        ) {
+          try {
+            let revoked = !workPermission || workPermission.signal.aborted;
+            // Tenant RLS can hide the run before this process receives its projection update.
+            if (!revoked && !deps.shutdownSignal?.aborted && deps.authorizeWork) {
+              const current = await deps.authorizeWork(workScope);
+              try {
+                revoked = !current || current.signal.aborted;
+              } finally {
+                current?.dispose();
+              }
+            }
+            if (revoked) {
+              runAbortController.abort(new WorkspaceExecutionDeniedError());
+              await retireWorkspaceRun(deps, run, { owner: workerId, fence });
+            }
+          } catch (error) {
+            getLogger().error(
+              "workspace run retirement",
+              sanitizedError(error, (text) => redactSecrets(text, runSecrets)),
+            );
+          }
+        }
         // This attempt stopped working on the run. Whether it paused, lost the
         // lease, was invalidated by the heartbeat or never finalised, the run
         // row decides whether this worker's run-scoped state may end: a
