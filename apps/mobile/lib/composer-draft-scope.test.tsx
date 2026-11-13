@@ -22,6 +22,10 @@ const state = vi.hoisted(() => ({
   listeners: new Set<() => void>(),
   retire: undefined as undefined | ((sameAccount: boolean, reason: SessionChangeReason) => void),
 }));
+vi.mock("./workspace-draft-session", () => ({
+  clearWorkspaceDraftSession: vi.fn(),
+  hydrateWorkspaceDraftSession: async () => undefined,
+}));
 vi.mock("./api", () => ({
   currentApiBase: () => state.api,
   subscribeApiBase: () => () => undefined,
@@ -159,4 +163,18 @@ it("cannot adopt a new ready login namespace while the verified route still owns
   expect(state.hydrate).not.toHaveBeenCalled();
   await act(async () => root.render(<Probe userId="user-b" verifiedGeneration={2} />));
   expect(scope).toMatchObject({ userId: "user-b", namespace: "login-b" });
+});
+
+it("preserves managed drafts through workspace changes and a fresh scoped product sign-in", () => {
+  state.retire!(false, "workspace_switch");
+  expect(state.clearText).not.toHaveBeenCalled();
+  expect(state.clearFiles).not.toHaveBeenCalled();
+  state.retire!(false, "sign_in");
+  expect(state.clearFiles).toHaveBeenCalledWith(false);
+  expect(state.clearText).not.toHaveBeenCalled();
+  state.retire!(false, "session_restore");
+  expect(state.clearText).toHaveBeenCalledWith(false);
+  state.retire!(false, "account_switch");
+  expect(state.clearText).toHaveBeenLastCalledWith(true);
+  expect(state.clearFiles).toHaveBeenLastCalledWith(true);
 });

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { EncryptedSecretStore, InMemoryRealtimeFanout } from "@orkbot/adapters";
 import type { AgentImportPlan, Bot, MemoryDocument } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { resolveEncryptionKey } from "@orkbot/core";
 import type { Prisma, PrismaClient } from "@orkbot/db";
 import { createDb } from "@orkbot/db";
@@ -1246,6 +1247,7 @@ async function raw(app: App, cookie: string, proc: string, body: unknown, spaceI
   return app.request(`/rpc/${proc}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

@@ -55,12 +55,14 @@ export function AppOverlays({
   setOverlay,
   activeBotId,
   stdioEnabled,
+  serverOrigin,
   onConnectedAppsChange,
 }: {
   overlay: ShellOverlay;
   setOverlay: (next: ShellOverlay) => void;
   activeBotId: string | undefined;
   stdioEnabled: boolean;
+  serverOrigin?: string;
   onConnectedAppsChange: (apps: ReturnType<typeof connectedAppMarks>) => void;
 }) {
   return (
@@ -78,6 +80,7 @@ export function AppOverlays({
         <McpServersOverlay
           editServerId={overlay.serverId}
           stdioEnabled={stdioEnabled}
+          serverOrigin={serverOrigin}
           onClose={() => setOverlay(null)}
         />
       ) : null}

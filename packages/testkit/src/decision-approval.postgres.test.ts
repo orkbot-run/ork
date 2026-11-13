@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { createApp } from "@orkbot/api/app";
 import type { MessageBlock } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { answerRunInput, runAsSystem } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
@@ -49,7 +50,12 @@ describeDb("persisted decision approval rules", () => {
     cookie = sessionCookieHeader(signup);
     const response = await handles.app.request("/rpc/bots/create", {
       method: "POST",
-      headers: { "content-type": "application/json", origin, cookie },
+      headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+        "content-type": "application/json",
+        origin,
+        cookie,
+      },
       body: JSON.stringify({
         json: {
           name: "Decision fixture",

@@ -31,6 +31,10 @@ const e2eGrep = grepArg?.slice("--grep=".length);
 const shard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
+if (integration && workersArg && !/^[1-9]\d*$/.test(workersArg.slice("--workers=".length))) {
+  throw new Error("Integration workers must be a positive integer");
+}
+
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
 }
@@ -150,7 +154,14 @@ async function main() {
       // Files run in parallel, each on its own copy of the migrated database (pin-test-env.ts).
       await runProcess(
         "pnpm",
-        ["exec", "vitest", "run", ...(shard ? ["--shard", shard] : []), ...selected],
+        [
+          "exec",
+          "vitest",
+          "run",
+          ...(shard ? ["--shard", shard] : []),
+          ...(workersArg ? ["--maxWorkers", workersArg.slice("--workers=".length)] : []),
+          ...selected,
+        ],
         {
           ...process.env,
           COPY_TEST_DATABASE: "1",

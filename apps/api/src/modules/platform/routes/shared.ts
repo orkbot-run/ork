@@ -67,6 +67,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     getAccountComputerSettings(deps, actor).catch(() => null),
   ]);
   return {
+    serverOrigin: new URL(deps.env.webOrigin).origin,
     ticketBoardEnabled: deps.env.ticketBoardEnabled === true,
     phoneCallsEnabled: deps.env.phoneCallsEnabled === true,
     navLinks: deps.env.navLinks ?? [],
@@ -128,6 +129,27 @@ function computerHostFor(
 
 /** The main model chat runs: the member's while it can run, else the deployment's. */
 export async function modelSetup(deps: RouterDeps, actor: Actor) {
+  const managed = await deps.serverAIModels?.actor(actor);
+  if (managed && deps.serverAI) {
+    const choices = await deps.serverAI.choices(managed);
+    const primary = choices[0];
+    const account =
+      primary && (await deps.serverAI.list(managed)).find((row) => row.id === primary.connectionId);
+    const model =
+      account && primary
+        ? { provider: account.provider, modelId: primary.modelId }
+        : { provider: "", modelId: "" };
+    return {
+      main: null,
+      workspaceModel: model,
+      model,
+      settings: await deps.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+      funding: null,
+      creditsAvailable: false,
+      hasDeployment: false,
+      needsModel: deps.env.agentRuntime !== "scripted" && !account,
+    };
+  }
   const workspaceModel = await findWorkspaceModelPolicy(deps.prisma, actor.spaceId);
   const [member, settings] = await Promise.all([
     workspaceModel

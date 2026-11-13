@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const ES_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "Conectado, pero no se pudo actualizar",
+
+  "Access required": "Se requiere acceso",
+  "Add AI account": "Añadir cuenta de IA",
+  "Allowed models": "Modelos permitidos",
+  "Choose at least one model and enter valid limits.":
+    "Elige al menos un modelo e introduce límites válidos.",
+  "Choose organization": "Elegir organización",
+  "Complete sign-in": "Completar inicio de sesión",
+  "Concurrent requests": "Solicitudes simultáneas",
+  "Default model": "Modelo predeterminado",
+  "Default organization": "Organización predeterminada",
+  "Disable account": "Desactivar cuenta",
+  "Edit AI account": "Editar cuenta de IA",
+  Enabled: "Activado",
+  "Enter a valid budget.": "Introduce un presupuesto válido.",
+  Fallback: "Conexión de respaldo",
+  "Fallback priority": "Prioridad de respaldo",
+  "Make available": "Hacer disponible",
+  "Models and limits": "Modelos y límites",
+  "Monthly budget (USD)": "Presupuesto mensual (USD)",
+  "No AI accounts assigned": "No hay cuentas de IA asignadas",
+  "No available workspaces": "No hay espacios de trabajo disponibles",
+  "No servers connected": "No hay servidores conectados",
+  "Open sign-in page": "Abrir página de inicio de sesión",
+  "Preparing workspace": "Preparando espacio de trabajo",
+  "Remove from workspace": "Quitar del espacio de trabajo",
+  "Save budget": "Guardar presupuesto",
+  "Server accounts": "Cuentas del servidor",
+  "Server unavailable": "Servidor no disponible",
+  "Set as default organization": "Establecer como organización predeterminada",
+  Unlimited: "Sin límite",
+  "Verification code": "Código de verificación",
+  Workspace: "Espacio de trabajo",
+  "Workspace monthly budget (USD)": "Presupuesto mensual del espacio de trabajo (USD)",
+  "Workspace unavailable": "Espacio de trabajo no disponible",
+
   "API URL": "URL de la API",
   "Choose a provider": "Elegir proveedor",
   "Choose one model and API key for everyone in this workspace.":

@@ -12,7 +12,7 @@ import {
   SandboxUnresponsiveError,
 } from "@orkbot/adapter-kit";
 import type { MessageBlock, ModelRoleChoice, RunStatus } from "@orkbot/contracts";
-import { disabledBuiltinToolSet } from "@orkbot/contracts";
+import { disabledBuiltinToolSet, ThinkingLevelSchema } from "@orkbot/contracts";
 import {
   assertTransition,
   botMessageAllowsSilence,
@@ -249,6 +249,7 @@ import { toolResultFingerprint } from "./tool-loop.js";
 import { restoreTurnCheckpoint } from "./turn-checkpoint.js";
 import { createWebProvider } from "./web-provider-factory.js";
 import { findWorkspaceModelPolicy, resolveWorkspaceModel } from "./workspace-model-policy.js";
+import { retireWorkspaceRun } from "./workspace-run-retirement.js";
 
 /** Same reach as the MCP connector: usable servers assigned to the bot or shared with every bot. */
 async function verbatimMcpServersForRun(
@@ -267,6 +268,12 @@ async function verbatimMcpServersForRun(
   });
   if (!servers?.length) return undefined;
   return { ids: servers.map((server) => server.id), slugs: servers.map((server) => server.slug) };
+}
+
+class WorkspaceExecutionDeniedError extends Error {
+  constructor() {
+    super("Workspace access expired or was revoked.");
+  }
 }
 
 export function createRunExecutor(executorDeps: ExecutorDeps) {
@@ -539,7 +546,20 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         tool: undefined,
         screenRelease: undefined,
       };
-      let runAbortController: AbortController | null = null;
+      const runAbortController = new AbortController();
+      let workPermission: { signal: AbortSignal; dispose(): void } | null | undefined;
+      const workScope = {
+        spaceId: run.spaceId,
+        userId: run.userId,
+        workspaceId: run.centralWorkspaceId,
+        membershipVersion: run.workspaceMembershipVersion,
+        ...(run.personalDeviceId !== undefined ? { personalDeviceId: run.personalDeviceId } : {}),
+      };
+      let observedWorkRevocation = false;
+      const onWorkRevoked = () => {
+        if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
+        runAbortController.abort(new WorkspaceExecutionDeniedError());
+      };
       const runningHelpers = new Map<string, RunningHelper>();
       const settleHelpers = () => settleRunningHelpers(deps, run, runningHelpers);
 
@@ -572,6 +592,20 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
       const runSecrets = [...deps.secrets];
       let dispatchHandedOff = false;
       try {
+        workPermission = await deps.authorizeWork?.(workScope);
+        if (
+          workPermission === null ||
+          (run.centralWorkspaceId &&
+            (!workPermission || !run.workspaceMembershipVersion || !deps.serverAIModels))
+        ) {
+          if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
+          throw new WorkspaceExecutionDeniedError();
+        }
+        workPermission?.signal.addEventListener("abort", onWorkRevoked, { once: true });
+        if (workPermission?.signal.aborted) {
+          if (!deps.shutdownSignal?.aborted) observedWorkRevocation = true;
+          throw new WorkspaceExecutionDeniedError();
+        }
         // Durable run ownership and its heartbeat now carry recovery. Model,
         // integration and computer setup must not occupy a queue dispatch slot.
         onRunStarted?.();
@@ -588,11 +622,32 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         }
         const storedTurnCheckpoint = Boolean(turnCheckpoint);
         let workspaceModelError: string | undefined;
-        const workspaceModel = await resolveWorkspaceModel(deps, run.spaceId).catch(() => {
+        const bot = await deps.prisma.bot.findUniqueOrThrow({
+          where: { id: run.botId },
+          include: { computer: true },
+        });
+        const modelChoice = runModelChoice(run, bot);
+        const workspaceSelection =
+          modelChoice.modelProvider && modelChoice.modelId
+            ? {
+                provider: modelChoice.modelProvider,
+                modelId: modelChoice.modelId,
+                connectionId: modelChoice.modelConnectionId ?? undefined,
+              }
+            : undefined;
+        const workspaceModel = await resolveWorkspaceModel(
+          deps,
+          run.spaceId,
+          run,
+          workspaceSelection,
+        ).catch(() => {
           workspaceModelError =
             "The workspace model connection is unavailable. Ask the workspace owner to check it.";
           return null;
         });
+        if (workspaceModel && modelChoice.thinkingLevel) {
+          workspaceModel.model.thinkingLevel = ThinkingLevelSchema.parse(modelChoice.thinkingLevel);
+        }
         const resolveCheckpointModel = (
           provider: string,
           id: string,
@@ -647,7 +702,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const channelId = messagingChannelId(sourceBlocks);
         const messagingChannelRun = isMessagingChannelRun(run.trigger, sourceBlocks);
         const [
-          bot,
           thread,
           messages,
           peerMessage,
@@ -664,10 +718,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           runLoginRedactions,
           runCodeRedactions,
         ] = await Promise.all([
-          deps.prisma.bot.findUniqueOrThrow({
-            where: { id: run.botId },
-            include: { computer: true },
-          }),
           deps.prisma.thread.findUniqueOrThrow({ where: { id: run.threadId } }),
           loadRunHistoryMessages(deps.prisma, run, LEGACY_HISTORY_WINDOW_SIZE, channelId),
           run.trigger === "bot_message"
@@ -743,7 +793,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           initialBotCommandEnvironment,
         );
         // modelPinned distinguishes the captured choice from an attempt's recorded model.
-        const modelChoice = runModelChoice(run, bot);
         const hasModelOverride = Boolean(modelChoice.modelProvider && modelChoice.modelId);
         const overrideCredential =
           !workspaceModel &&
@@ -759,7 +808,6 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                 modelChoice.modelId,
               )
             : null;
-        runAbortController = new AbortController();
         const attemptSignal = runAbortController.signal;
         const productionController = new AbortController();
         if (!lease.valid) runAbortController.abort();
@@ -1072,19 +1120,22 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const scripted = deps.runtime.describe().capabilities.scripted;
         let backupChoices: Promise<ModelRoleChoice[]> | undefined;
         const loadBackups = () =>
-          (backupChoices ??=
-            scripted || workspaceModel
-              ? Promise.resolve([])
-              : effectiveModelRole(deps.prisma, run, "main", {
-                  settings,
-                  deployment: runDeployment,
-                }).then(
-                  (role) => role.backups,
-                  (error: unknown) => {
-                    getLogger().warn("Backup models could not be loaded", { runId, error });
-                    return [];
-                  },
-                ));
+          (backupChoices ??= scripted
+            ? Promise.resolve([])
+            : workspaceModel && deps.serverAIModels && run.centralWorkspaceId
+              ? deps.serverAIModels.fallbacks(run).then((rows) => rows ?? [])
+              : workspaceModel
+                ? Promise.resolve([])
+                : effectiveModelRole(deps.prisma, run, "main", {
+                    settings,
+                    deployment: runDeployment,
+                  }).then(
+                    (role) => role.backups,
+                    (error: unknown) => {
+                      getLogger().warn("Backup models could not be loaded", { runId, error });
+                      return [];
+                    },
+                  ));
         // Backups that could not start here are not offered again once the model runs.
         const backupsUnavailable = new Set<ModelRoleChoice>();
         // A main model with no connection, or whose provider refused its sign-in, runs on the
@@ -1448,13 +1499,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
         const disabledBuiltinTools = disabledBuiltinToolSet(bot.disabledBuiltinTools);
-        const userComputerOwnerId = userComputerOwner({
-          trigger: run.trigger,
-          sourceRole: sourceMessage?.role,
-          messagingChannelRun: nonOwnerChatRun,
-          runUserId: run.userId,
-          botUserId: bot.userId,
-        });
+        const userComputerOwnerId = run.centralWorkspaceId
+          ? undefined
+          : userComputerOwner({
+              trigger: run.trigger,
+              sourceRole: sourceMessage?.role,
+              messagingChannelRun: nonOwnerChatRun,
+              runUserId: run.userId,
+              botUserId: bot.userId,
+            });
         let userComputer: UserComputerState;
         let userComputerScreen = false;
         if (
@@ -1908,8 +1961,13 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
 
         // Policy changes take effect before the next model call, including queued runs.
         // A running stream is not interrupted, but stale setup must not start a new one.
-        const currentPolicy = await findWorkspaceModelPolicy(deps.prisma, run.spaceId);
-        if ((currentPolicy?.secretId ?? null) !== (workspaceModel?.secretId ?? null)) {
+        const currentPolicy = run.centralWorkspaceId
+          ? null
+          : await findWorkspaceModelPolicy(deps.prisma, run.spaceId);
+        if (
+          !run.centralWorkspaceId &&
+          (currentPolicy?.secretId ?? null) !== (workspaceModel?.secretId ?? null)
+        ) {
           await failRunBeforeModel("The workspace model changed. Start the run again.");
           return;
         }
@@ -2050,7 +2108,7 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
                       if (!fallbackModelKeys.has(key))
                         throw new Error("Backup model is not selected");
                       return resolveConnectedModel(
-                        { userId: run.userId, spaceId: run.spaceId },
+                        run,
                         provider,
                         modelId,
                         (values) => runSecrets.push(...values),
@@ -2160,9 +2218,11 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           );
           if (await consumeRunEvents(ctx, runtimeEvents)) return;
           if (await interruptedByShutdown()) return;
+          if (workPermission?.signal.aborted) return;
           await completeRun(ctx);
         } catch (turnError) {
           if (await interruptedByShutdown()) return;
+          if (workPermission?.signal.aborted) return;
           let caughtError = turnError;
           if (handoffEndedTurn(state, caughtError)) {
             try {
@@ -2182,6 +2242,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         // retry budget that eventually fails the run.
         if (deps.shutdownSignal?.aborted) return;
         const computerAccountRefused = setupError instanceof SandboxAccountError;
+        const workspaceRefused = setupError instanceof WorkspaceExecutionDeniedError;
+        if (workspaceRefused) return;
         const computerBusy = setupError instanceof ComputerBusyError;
         const retryForever = computerBusy || isTooManyDatabaseConnections(setupError);
         const setupMessage = redactSecrets(userRunError(setupError), runSecrets);
@@ -2258,6 +2320,8 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
           throw new Error("Run setup failed; retrying", { cause: reportedSetupError });
         }
       } finally {
+        workPermission?.signal.removeEventListener("abort", onWorkRevoked);
+        workPermission?.dispose();
         getLogger().info("run.computer", {
           "run.id": runId,
           trigger: run.trigger,
@@ -2267,6 +2331,33 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         });
         detachShutdown?.();
         clearInterval(heartbeat);
+        if (
+          (run.centralWorkspaceId || workPermission === null) &&
+          !lease.completed &&
+          (!deps.shutdownSignal?.aborted || observedWorkRevocation)
+        ) {
+          try {
+            let revoked = !workPermission || workPermission.signal.aborted;
+            // Tenant RLS can hide the run before this process receives its projection update.
+            if (!revoked && !deps.shutdownSignal?.aborted && deps.authorizeWork) {
+              const current = await deps.authorizeWork(workScope);
+              try {
+                revoked = !current || current.signal.aborted;
+              } finally {
+                current?.dispose();
+              }
+            }
+            if (revoked) {
+              runAbortController.abort(new WorkspaceExecutionDeniedError());
+              await retireWorkspaceRun(deps, run, { owner: workerId, fence });
+            }
+          } catch (error) {
+            getLogger().error(
+              "workspace run retirement",
+              sanitizedError(error, (text) => redactSecrets(text, runSecrets)),
+            );
+          }
+        }
         // This attempt stopped working on the run. Whether it paused, lost the
         // lease, was invalidated by the heartbeat or never finalised, the run
         // row decides whether this worker's run-scoped state may end: a

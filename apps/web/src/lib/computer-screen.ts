@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited screen URL handling is preserved. Native viewer selection follows LICENSE.md.
+
 import { t } from "@lingui/core/macro";
 import { isLocalhostOrLoopbackIp } from "@orkbot/contracts";
 import { COMPUTER_SCREEN_PATH } from "@orkbot/contracts/content-security-policy";
+import { COMPUTER_FRAME_SOURCE } from "@orkbot/core";
 import { errorText } from "./user-error";
 
 export interface ComputerScreenResult {
@@ -32,6 +37,7 @@ export async function loadComputerScreen(options: {
 
 export function embeddableScreenUrl(url: string | null): string | null {
   if (!url) return null;
+  if (url === COMPUTER_FRAME_SOURCE) return url;
   try {
     const parsed = new URL(url, window.location.href);
     const page = new URL(window.location.href);

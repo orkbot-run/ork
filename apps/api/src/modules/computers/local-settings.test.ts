@@ -8,12 +8,13 @@ import { describe, expect, it, vi } from "vitest";
 import { mountLocalComputerHost, validLocalSettingsToken } from "./local-settings.js";
 
 const token = "ab".repeat(32);
-function fixture(sandboxProvider = "docker") {
+function fixture(sandboxProvider = "docker", hostAccessAllowed?: () => Promise<boolean>) {
   const upsert = vi.fn(async () => ({}));
   const app = new Hono();
   mountLocalComputerHost(app, {
     token,
     sandboxProvider,
+    hostAccessAllowed,
     prisma: { deploymentSettings: { upsert } } as never,
   });
   const request = (body = "{}", supplied: string | null = token) =>
@@ -29,6 +30,13 @@ function fixture(sandboxProvider = "docker") {
 }
 
 describe("native computer host capability", () => {
+  it("cannot enable host execution on a managed installation but can select Docker for cleanup", async () => {
+    const f = fixture("docker", async () => false);
+    expect((await f.request('{"computerHost":"this-mac"}')).status).toBe(403);
+    expect(f.upsert).not.toHaveBeenCalled();
+    expect((await f.request('{"computerHost":"docker"}')).status).toBe(200);
+    expect(f.upsert).toHaveBeenCalledOnce();
+  });
   it("refuses session cookies without the private native token", async () => {
     const f = fixture();
     for (const supplied of [null, "", "cd".repeat(32), `${token}x`]) {

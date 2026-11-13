@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { createServer } from "node:net";
 import path from "node:path";
 import type { RunsListOutput, ThreadSnapshot } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { isTerminal } from "@orkbot/core";
 import { computerNetworkNameFor } from "@orkbot/sandbox-supervisor/computer-spec";
 
@@ -163,7 +164,12 @@ async function signup(baseUrl: string) {
 async function rpc<T>(baseUrl: string, cookie: string, procedure: string, input: unknown = {}) {
   const response = await fetch(`${baseUrl}/rpc/${procedure}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: baseUrl },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: baseUrl,
+    },
     body: JSON.stringify({ json: input }),
   });
   const text = await response.text();

@@ -2,12 +2,15 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache material is preserved; signed-out preview suppression is an Ork addition.
 
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { requireNativeModule } from "expo-modules-core";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { apiBaseWarning, normalizeApiBase } from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
 import { matchesNotificationSession } from "./notification-session";
+import type { NativeNotificationTransport } from "./notification-transport";
+import { prepareNotificationTransport } from "./notification-transport";
 import { serverHeaders } from "./server-headers";
 import { currentSessionGeneration, loadSessionToken } from "./session";
 
@@ -25,7 +28,7 @@ export const DEFAULT_LIVE_NOTIFICATION_SETTINGS: LiveNotificationSettings = {
   needsAttention: true,
 };
 
-type NativeNotifications = {
+type NativeNotifications = Partial<NativeNotificationTransport> & {
   getSettings(): Promise<LiveNotificationSettings>;
   setSettings(
     settings: LiveNotificationSettings,
@@ -134,6 +137,7 @@ export async function setLiveNotificationSettings(
     const granted = existing.granted || (await Notifications.requestPermissionsAsync()).granted;
     if (!granted) throw new Error(t("Android blocked notifications."));
   }
+  await prepareNotificationTransport(nativeNotifications, parsed.url, token, spaceId);
   await nativeNotifications.setSettings(
     settings,
     parsed.url,
@@ -154,6 +158,7 @@ export async function resumeLiveNotifications(
   const parsed = normalizeApiBase(endpoint);
   if (!parsed.ok || apiBaseWarning(parsed.url)) return;
   const headers = nativeServerHeaders(parsed.url);
+  await prepareNotificationTransport(nativeNotifications, parsed.url, token, spaceId);
   if (mutedBotId && nativeNotifications.resumeAfterMute) {
     await nativeNotifications.resumeAfterMute(
       parsed.url,
@@ -168,10 +173,12 @@ export async function resumeLiveNotifications(
   }
 }
 
-/** The Android poller calls the server itself, so it needs the server's headers too. */
+/** The legacy native HTTP client also needs the negotiated protocol and custom headers. */
 function nativeServerHeaders(apiBase: string): string {
-  const headers = serverHeaders(apiBase);
-  return Object.keys(headers).length ? JSON.stringify(headers) : "";
+  return JSON.stringify({
+    ...serverHeaders(apiBase),
+    [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+  });
 }
 
 export async function stopLiveNotifications(clearSession = false): Promise<void> {

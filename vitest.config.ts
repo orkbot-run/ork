@@ -14,6 +14,7 @@ const include = [
   "apps/mobile/plugins/**/*.test.js",
   "apps/api/src/**/*.test.ts",
   "apps/worker/src/**/*.test.ts",
+  "apps/relay/src/**/*.test.ts",
 ];
 
 // Files that mock modules, stub globals, or change the environment keep a fresh module graph;
@@ -57,7 +58,7 @@ export default defineConfig({
       // source; stub them out in tests (they never render anyway).
       ...["react-native-fit-image", "@react-native-vector-icons/material-design-icons"].map(
         (dep) => ({
-          find: new RegExp(`^${dep.replace(/[/]/g, "\\/")}$`),
+          find: new RegExp(`^${dep.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`),
           replacement: fileURLToPath(
             new URL("./packages/chat-ui/src/native-test-stubs.tsx", import.meta.url),
           ),

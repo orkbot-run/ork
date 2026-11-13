@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited restore behavior remains Apache-2.0; revocation preservation is PolyForm-covered.
 set -euo pipefail
 umask 077
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,6 +54,12 @@ if [[ -e "$SRC/homes.tgz" || -L "$SRC/homes.tgz" ]]; then
 fi
 STOP_ON_FAILURE=1
 "${compose[@]}" stop api worker supervisor
+if [[ -n "$STAGE" && -d "$STAGE/data" ]]; then
+  bash "$ROOT/scripts/preserve-personal-revocations.sh" "$ROOT/data" "$STAGE/data"
+else
+  mkdir -p "$ROOT/data"
+  bash "$ROOT/scripts/preserve-personal-revocations.sh" "$ROOT/data" "$ROOT/data"
+fi
 "${compose[@]}" up -d postgres
 until "${compose[@]}" exec -T postgres pg_isready -U orkbot >/dev/null 2>&1; do
   sleep 1
@@ -70,6 +79,7 @@ if [[ -n "$STAGE" && -d "$STAGE/data" ]]; then
     echo "Previous data preserved at $ROLLBACK/data"
   fi
   mv "$STAGE/data" "$ROOT/data"
+  sync
 fi
 "${compose[@]}" up -d
 STOP_ON_FAILURE=0

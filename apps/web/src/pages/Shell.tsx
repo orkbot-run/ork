@@ -514,6 +514,7 @@ function SpaceShell() {
     addSkillRoutine,
   } = useRoutineEditor({
     rpc,
+    serverOrigin: bootstrapMe?.serverOrigin,
     active,
     activeBotId,
     timezone: bootstrapMe?.timezone,
@@ -1443,6 +1444,7 @@ function SpaceShell() {
           paletteActions={paletteActions}
         />
         <AppOverlays
+          serverOrigin={bootstrapMe?.serverOrigin}
           overlay={overlay}
           setOverlay={setOverlay}
           activeBotId={activeBotId.current}

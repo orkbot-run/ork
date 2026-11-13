@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited scroll coverage is retained. Native input cancellation follows LICENSE.md.
 // @vitest-environment jsdom
 
 import type { TaughtSkill } from "@orkbot/contracts";
@@ -87,6 +90,52 @@ it("sends a wheel scroll with the screen point it was made at", async () => {
     kind: "scroll",
     payload: { direction: "right", amount: 1, x: 200, y: 100 },
   });
+  act(() => root.unmount());
+  container.remove();
+});
+
+it("discards queued native keys when control is released and leaves page shortcuts alone", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let finish!: () => void;
+  const send = vi.fn(
+    () =>
+      new Promise<{ ok: true }>((resolve) => {
+        finish = () => resolve({ ok: true });
+      }),
+  );
+  await act(async () =>
+    root.render(<TeachCaptureOverlay botId="live-bot" skill={null} enabled live send={send} />),
+  );
+  const overlay = container.firstElementChild as HTMLElement;
+  const shortcut = new KeyboardEvent("keydown", {
+    key: "a",
+    ctrlKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => {
+    overlay.dispatchEvent(shortcut);
+    overlay.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  });
+  expect(shortcut.defaultPrevented).toBe(true);
+  expect(send).toHaveBeenCalledExactlyOnceWith({
+    botId: "live-bot",
+    kind: "key",
+    payload: { key: "ctrl+a" },
+  });
+  await act(async () =>
+    root.render(
+      <TeachCaptureOverlay botId="live-bot" skill={null} enabled={false} live send={send} />,
+    ),
+  );
+  await act(async () => finish());
+  expect(send).toHaveBeenCalledTimes(1);
+  const pageShortcut = new KeyboardEvent("keydown", { key: "a", ctrlKey: true, cancelable: true });
+  window.dispatchEvent(pageShortcut);
+  expect(pageShortcut.defaultPrevented).toBe(false);
   act(() => root.unmount());
   container.remove();
 });

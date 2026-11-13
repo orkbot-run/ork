@@ -24,6 +24,7 @@ export const OWN_BOT_SETTINGS_SELECT = {
   dailyCheckIns: true,
   modelProvider: true,
   modelId: true,
+  modelConnectionId: true,
   thinkingLevel: true,
   autoSpeak: true,
   voiceId: true,
@@ -61,6 +62,7 @@ export type OwnBotSettingsRow = {
   dailyCheckIns: boolean;
   modelProvider: string | null;
   modelId: string | null;
+  modelConnectionId?: string | null;
   thinkingLevel: string | null;
   autoSpeak: boolean;
   voiceId: string | null;
@@ -229,7 +231,7 @@ export function resolveVoiceChoice(
 export async function prepareOwnBotSettings(
   deps: FleetPrepareDeps,
   scope: Pick<Actor, "userId" | "spaceId">,
-  bot: Pick<OwnBotSettingsRow, "modelProvider" | "modelId" | "thinkingLevel">,
+  bot: Pick<OwnBotSettingsRow, "modelProvider" | "modelId" | "modelConnectionId" | "thinkingLevel">,
   args: { model?: unknown; thinkingLevel?: unknown; readAloud?: unknown; voice?: unknown },
   listVoices: () => Promise<VoiceInfo[] | null> = async () => null,
 ): Promise<{ data: BotSettingsValues } | { error: string }> {
@@ -274,6 +276,7 @@ export async function prepareOwnBotSettings(
       ...scope,
       provider,
       model: modelId,
+      connectionId: model ? null : bot.modelConnectionId,
       thinkingLevel,
       current: { provider: bot.modelProvider, model: bot.modelId },
     });
@@ -284,6 +287,7 @@ export async function prepareOwnBotSettings(
   if (model) {
     data.modelProvider = validated.provider;
     data.modelId = validated.model;
+    data.modelConnectionId = null;
   }
   data.thinkingLevel = ThinkingLevelSchema.nullable().parse(validated.thinkingLevel);
   return { data };

@@ -562,6 +562,10 @@ msgstr "新增觸發器以執行此例行任務。"
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Add AI account"
+msgstr "新增 AI 帳戶"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "請填寫 HTTPS 伺服器 URL。"
@@ -738,6 +742,10 @@ msgstr "允許寫入"
 msgid "Allowed in this space"
 msgstr ""
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Allowed models"
+msgstr "允許的模型"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "已允許一次"
@@ -830,8 +838,10 @@ msgstr "使用自己的金鑰連接任何模型"
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/model-settings/compatible-key-field.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "API 金鑰"
 
@@ -852,6 +862,8 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1138,6 +1150,7 @@ msgstr "機器人只觀察，不操作"
 msgid "Bot models"
 msgstr "機器人模型"
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "機器人螢幕"
@@ -1230,7 +1243,9 @@ msgstr "無法讀取影像"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/model-settings/space-bots-model.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
@@ -1239,6 +1254,7 @@ msgstr "無法讀取影像"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "取消"
 
@@ -1422,12 +1438,17 @@ msgid "Choose a new password"
 msgstr "設定新密碼"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr "選擇供應商"
 
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Choose a tool"
 msgstr "選擇工具"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Choose at least one model and enter valid limits."
+msgstr "請至少選擇一個模型並輸入有效的限制。"
 
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
@@ -1521,6 +1542,7 @@ msgid "Close memory settings"
 msgstr "關閉記憶設定"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Close model settings"
 msgstr "關閉模型設定"
@@ -1624,6 +1646,10 @@ msgstr "緊湊"
 msgid "Complete"
 msgstr "完成"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Complete sign-in"
+msgstr "完成登入"
+
 #: src/components/SubagentCard.tsx
 msgid "Completed"
 msgstr "已完成"
@@ -1637,6 +1663,10 @@ msgstr "電腦"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Computer access is approved separately."
 msgstr "存取電腦需要另行核准。"
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "電腦控制"
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -1680,6 +1710,10 @@ msgstr "電腦已可使用。請重新載入或開啟機器人以繼續。"
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers unavailable"
 msgstr "電腦無法使用"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Concurrent requests"
+msgstr "同時請求數"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1788,7 +1822,12 @@ msgstr "已連線"
 msgid "Connected {0}."
 msgstr "已連線 {0}。"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Connected, but could not refresh."
+msgstr "已連線，但無法重新整理。"
+
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -1966,6 +2005,10 @@ msgstr "無法清空對話"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
 msgstr "無法完成操作"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete AI account sign-in."
+msgstr "無法完成 AI 帳戶登入。"
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
@@ -2172,7 +2215,9 @@ msgid "Could not load MCP servers"
 msgstr "無法載入 MCP 伺服器"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "無法載入模型設定"
 
@@ -2189,6 +2234,10 @@ msgstr "無法載入登入選項"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "無法載入技能"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "無法載入桌面。"
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2323,10 +2372,13 @@ msgstr "無法執行例行任務"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not save"
 msgstr "無法儲存"
 
@@ -2655,6 +2707,7 @@ msgstr "拒絕"
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "預設"
 
@@ -2671,6 +2724,10 @@ msgstr "Hermes 預設內容"
 #: src/pages/shell/agent-import.tsx
 msgid "Default from OpenClaw"
 msgstr "OpenClaw 預設內容"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Default model"
+msgstr "預設模型"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2821,6 +2878,10 @@ msgstr "你是指 <0>{emailSuggestion}</0> 嗎？"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "停用工具"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Disable account"
+msgstr "停用帳戶"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -2973,6 +3034,10 @@ msgstr "每個名稱只能使用一次。"
 msgid "Edit"
 msgstr "編輯"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Edit AI account"
+msgstr "編輯 AI 帳戶"
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "先編輯"
@@ -3009,6 +3074,10 @@ msgstr "需要驗證電子信箱"
 msgid "Enable {0}"
 msgstr "啟用 {0}"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Enabled"
+msgstr "已啟用"
+
 #: src/components/ComputerProviderSettings.tsx
 msgid "End user ID"
 msgstr ""
@@ -3024,6 +3093,10 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "請輸入密碼"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Enter a valid budget."
+msgstr "請輸入有效的預算。"
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -3129,7 +3202,6 @@ msgid "Every week"
 msgstr "每週"
 
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Everyone in this workspace uses the model selected by the owner."
 msgstr ""
 
@@ -3215,6 +3287,14 @@ msgstr "失敗。"
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
 msgstr "失敗處理"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Fallback"
+msgstr "備用連線"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Fallback priority"
+msgstr "備用優先順序"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
@@ -3919,6 +3999,10 @@ msgstr "低"
 msgid "Main model"
 msgstr "主模型"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Make available"
+msgstr "設為可用"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -4036,6 +4120,10 @@ msgstr "成員"
 #: src/pages/GroupPanel.tsx
 msgid "Members ({0})"
 msgstr "成員（{0}）"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again."
+msgstr "成員將再次需要自己的模型連線。"
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -4174,6 +4262,7 @@ msgstr "模式"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Model"
 msgstr "模型"
 
@@ -4196,10 +4285,19 @@ msgid "Model options"
 msgstr "模型選項"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/settings-nav.ts
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Models"
 msgstr "模型"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Models (one per line)"
+msgstr "模型（每行一個）"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Models and limits"
+msgstr "模型與限制"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4230,6 +4328,11 @@ msgstr "月"
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "每月"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Monthly budget (USD)"
+msgstr "每月預算（美元）"
 
 #: src/components/ModelCredits.tsx
 msgid "Monthly credits"
@@ -4288,6 +4391,7 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4451,6 +4555,10 @@ msgstr "下一頁"
 #: src/pages/SettingsOverlay.tsx
 msgid "Next settings sections"
 msgstr "下一組設定區段"
+
+#: src/pages/ServerAISettings.tsx
+msgid "No AI accounts assigned"
+msgstr "未指派 AI 帳戶"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
@@ -4740,6 +4848,10 @@ msgstr "在完整視窗中開啟"
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "開啟導覽"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Open sign-in page"
+msgstr "開啟登入頁面"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -5035,6 +5147,10 @@ msgstr "偏好設定"
 msgid "Preparing update…"
 msgstr ""
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "按 Shift+Escape 結束電腦控制。"
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5096,8 +5212,10 @@ msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "供應商"
 
@@ -5160,6 +5278,7 @@ msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr "重新連線"
@@ -5302,6 +5421,7 @@ msgstr "重新載入"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "移除"
 
@@ -5336,6 +5456,10 @@ msgstr "移除變化觸發器"
 msgid "Remove from every space?"
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove from workspace"
+msgstr "從工作區移除"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr "移除 Git 事件"
@@ -5360,6 +5484,10 @@ msgstr "移除技能 {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr "移除工作區模型？"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5528,8 +5656,10 @@ msgstr "正在還原工作空間"
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "重試"
@@ -5682,12 +5812,19 @@ msgstr "週六"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "儲存"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Save budget"
+msgstr "儲存預算"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5919,6 +6056,10 @@ msgstr "請填寫 Serenity 端點。"
 msgid "Server"
 msgstr "伺服器"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Server accounts"
+msgstr "伺服器帳戶"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
 msgstr "伺服器名稱"
@@ -5934,6 +6075,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "伺服器 URL"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr "設定工作區模型"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6034,6 +6179,7 @@ msgstr "側邊欄密度"
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Sign in"
@@ -6892,6 +7038,11 @@ msgstr "復原"
 msgid "Uninstall"
 msgstr "解除安裝"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Unlimited"
+msgstr "無限制"
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr "取消關聯"
@@ -7123,6 +7274,10 @@ msgstr ""
 msgid "Vault"
 msgstr "保管庫"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Verification code"
+msgstr "驗證碼"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "驗證並新增"
@@ -7328,6 +7483,10 @@ msgstr "工作空間"
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Workspace monthly budget (USD)"
+msgstr "工作區每月預算（美元）"
 
 #: src/lib/billing.ts
 msgid "year"

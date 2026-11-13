@@ -13,7 +13,12 @@ import {
   PrismaPushTokenStore,
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
-import type { appContract, Space, SpaceNavigation } from "@orkbot/contracts";
+import type { appContract, ComputerFrame, Space, SpaceNavigation } from "@orkbot/contracts";
+import {
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  ComputerFrameSchema,
+} from "@orkbot/contracts";
 import {
   claimSpaceDeletionForMember,
   deleteClaimedSpaceForMember,
@@ -83,6 +88,52 @@ describeWithDatabase("API authorization and resource isolation", () => {
   afterAll(async () => {
     await handles?.stop();
     rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("keeps native image frames scoped and rejects a computer revision changed during capture", async () => {
+    const owner = await signup(app, `frame-owner-${stamp}@orkbot.test`, "Owner");
+    const outsider = await signup(app, `frame-other-${stamp}@orkbot.test`, "Other");
+    const actor = await rpc<Actor>(app, owner, "me");
+    const bot = await rpc<Bot>(app, owner, "bots/create", botInput("Frame viewer"), actor.spaceId);
+    await rpc(app, owner, "computer/boot", { botId: bot.id }, actor.spaceId);
+    const frame = await rpc<ComputerFrame>(
+      app,
+      owner,
+      "computer/frame",
+      { botId: bot.id },
+      actor.spaceId,
+    );
+    expect(ComputerFrameSchema.safeParse(frame).success).toBe(true);
+    expect(
+      await rpc(app, owner, "computer/frame", { botId: bot.id, previous: frame.id }, actor.spaceId),
+    ).toBeNull();
+    await expectDenied(app, outsider, "computer/frame", { botId: bot.id }, actor.spaceId);
+    let captured!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      captured = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const observe = handles.sandbox.observe.bind(handles.sandbox);
+    const pending = vi
+      .spyOn(handles.sandbox, "observe")
+      .mockImplementationOnce(async (ref, context) => {
+        captured();
+        await blocked;
+        return observe(ref, context);
+      });
+    try {
+      const response = raw(app, owner, "computer/frame", { botId: bot.id }, actor.spaceId);
+      await started;
+      await db.bot.update({ where: { id: bot.id }, data: { screenGeneration: { increment: 1 } } });
+      release();
+      expect((await response).status).toBeGreaterThanOrEqual(400);
+    } finally {
+      release();
+      pending.mockRestore();
+    }
   });
 
   it("keeps another member's routine test run keys apart from a send's", async () => {
@@ -258,6 +309,63 @@ describeWithDatabase("API authorization and resource isolation", () => {
         },
       ],
       ["serverUpdates/policy", { automatic: true, expectedRevision: 0 }],
+      ["serverAI/status"],
+      [
+        "serverAI/beginOAuth",
+        {
+          provider: "openai-codex",
+          connectionId: null,
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/submitOAuthCode", { loginId: "missing", code: "fixture" }],
+      ["serverAI/completeOAuth", { loginId: "missing" }],
+      ["serverAI/finishOAuth", { loginId: "missing" }],
+      ["serverAI/cancelOAuth", { loginId: "missing" }],
+      ["serverAI/catalog"],
+      [
+        "serverAI/create",
+        {
+          connection: { provider: "test", apiKey: "not-a-real-key" },
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      [
+        "serverAI/reconnect",
+        { connectionId: "missing", connection: { provider: "test", apiKey: "not-a-real-key" } },
+      ],
+      [
+        "serverAI/update",
+        {
+          connectionId: "missing",
+          label: "Test",
+          models: ["test/model"],
+          concurrencyLimit: 1,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/offer", { connectionId: "missing", spaceId: "missing", available: true }],
+      [
+        "serverAI/configure",
+        {
+          connectionId: "missing",
+          enabled: true,
+          allowedModels: ["test/model"],
+          defaultModelId: "test/model",
+          isDefault: true,
+          fallback: false,
+          priority: 0,
+          monthlyBudgetMicros: null,
+        },
+      ],
+      ["serverAI/workspaceBudget", { monthlyBudgetMicros: null }],
+      ["serverAI/disable", { connectionId: "missing" }],
       ["models/list"],
       ["models/workspacePolicy"],
       [
@@ -369,6 +477,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/files", { botId: "missing-bot", path: "/" }],
       ["computer/readFile", { botId: "missing-bot", path: "MEMORY.md" }],
       ["computer/screenUrl", { botId: "missing-bot" }],
+      ["computer/frame", { botId: "missing-bot" }],
       ["computer/heartbeat", { botId: "missing-bot" }],
       ["computer/recover"],
       ["computer/reset"],
@@ -755,6 +864,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/files", { botId: ownerBot.id, path: "/" }],
       ["computer/readFile", { botId: ownerBot.id, path: "PRIVATE.md" }],
       ["computer/screenUrl", { botId: ownerBot.id }],
+      ["computer/frame", { botId: ownerBot.id }],
       ["computer/heartbeat", { botId: ownerBot.id }],
       ["routines/list", { botId: ownerBot.id }],
       ["routines/create", routineInput(ownerBot.id)],
@@ -1012,7 +1122,11 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const rpc = (path: string, headers: Record<string, string>) =>
       app.request(`/rpc/${path}`, {
         method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          ...headers,
+          "content-type": "application/json",
+        },
         body: JSON.stringify({ json: {} }),
       });
     const signIn = (password: string) =>
@@ -1056,7 +1170,12 @@ describeWithDatabase("API authorization and resource isolation", () => {
   it("uses the bearer session over another account's session cookie", async () => {
     const a = await phoneSession(app, `phone-cookie-a-${stamp}@orkbot.test`);
     const b = await phoneSession(app, `phone-cookie-b-${stamp}@orkbot.test`);
-    const both = { ...b.headers, cookie: a.cookie, "content-type": "application/json" };
+    const both = {
+      ...b.headers,
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      cookie: a.cookie,
+      "content-type": "application/json",
+    };
     const me = () =>
       app.request("/rpc/me", { method: "POST", headers: both, body: JSON.stringify({ json: {} }) });
 
@@ -1082,6 +1201,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         await app.request("/rpc/me", {
           method: "POST",
           headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
             origin: "orkbot://",
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
@@ -2191,7 +2311,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const connection = {
       provider: "openai-compatible",
       modelId: "arbitrary-model",
-      baseUrl: "http://localhost:8000/v1",
+      baseUrl: "https://models.example.test/v1",
     };
     const connected = await rpc<ModelCredential>(app, cookie, "models/connect", {
       ...connection,
@@ -2231,7 +2351,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const connection = {
       provider: "openai-compatible",
       modelId: "arbitrary-model",
-      baseUrl: "http://localhost:8000/v1",
+      baseUrl: "https://models.example.test/v1",
     };
     await rpc(app, cookie, "models/connect", {
       ...connection,
@@ -2548,7 +2668,11 @@ async function phoneSession(app: App, email: string) {
     (
       await app.request("/rpc/me", {
         method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          ...headers,
+          "content-type": "application/json",
+        },
         body: JSON.stringify({ json: {} }),
       })
     ).status;
@@ -2586,6 +2710,7 @@ async function raw(
   return app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       ...(cookie ? { cookie } : {}),
       ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}),

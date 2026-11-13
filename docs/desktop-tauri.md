@@ -4,10 +4,11 @@
 # Tauri desktop development
 
 `apps/desktop` uses Tauri 2 and carries the React renderer in its application bundle.
-The WebView keeps the selected server's origin for API requests and session cookies,
-then starts the packaged renderer on the server's minimal HTML document. The bundle
-is named **Ork**. It keeps the `run.orkbot.desktop.preview` identifier so existing
-Tauri profiles remain usable.
+Managed workspaces open a local document. Rust sends their HTTP requests through the
+shared installation transport, which pins the installation key inside TLS 1.3 and
+supports direct connections or an opaque relay when the server is behind NAT.
+The bundle is named **Ork**. It keeps the `run.orkbot.desktop.preview` identifier
+so existing Tauri profiles remain usable.
 
 ## Run and check locally
 
@@ -34,13 +35,14 @@ CI checks and builds Tauri on macOS, Windows and Linux in `desktop-tauri.yml`, w
 
 ## Server and session isolation
 
-The bundled setup page selects **Existing instance** or **This computer**. A server
+The bundled setup page selects an organization and workspace, or starts a local installation with **This computer**. A server
 switch waits for a candidate window to display a usable app before saving the new
 choice and replacing the current window. Failed candidates leave the previous choice
 and window intact.
 
-Windows and Linux use separate WebView data directories for each complete server
-origin, including its port. macOS 14 and later use a stable store per origin. Older
+Windows and Linux use separate WebView data directories for each Accounts identity,
+complete server origin and managed workspace target. macOS 14 and later use the same
+stable scope. Older
 supported macOS versions use incognito WebViews, so WebView cookies are cleared on
 exit or reconnect. The selected address is still saved.
 
@@ -50,17 +52,52 @@ unencrypted. OS user permissions control access, so software running as the same
 can read them. This storage avoids Keychain prompts. Sign in once after upgrading from
 a build that used Keychain. Windows and Linux use their system credential stores.
 
-The native bridge belongs to the selected server's top-level document. Rust checks its
+The native bridge belongs to one top-level application document. Rust checks its
 window, origin and private document proof before running a command, and checks again
 before delivering events. Navigation cancels browser-auth and dictation.
 Related SSO popups share the server's session without receiving native authority.
 The setup page has separate capabilities, while remote pages receive no direct
 filesystem or shell plugin permissions.
 
-The renderer and its stylesheet ship with the desktop app. Server deployments cannot
-replace them. The selected server's document remains trusted, including scripts its
-content policy permits, so an XSS in that document could call the permitted bridge
-actions.
+Managed workspaces start from static markup bundled with the app. The server supplies
+no executable page. On Windows, Tauri serves the document through its `orkrenderer`
+resource protocol, which WebView2 exposes at `http://orkrenderer.localhost`. macOS and
+Linux use a bounded loopback listener with a saved port. Both paths serve only
+application documents. Separate account and workspace profiles keep browser storage
+apart. Every request belongs to its document. Retiring it cancels pending work, and
+delayed callbacks are refused.
+
+Remote workspace selections keep one virtual installation origin and retain both
+connection routes. Desktop first probes the direct route through pinned TLS, then
+requests a relay ticket if that probe fails. This happens before the product window
+opens. Failed product requests are returned without automatic replay.
+
+Authentication stays in Rust. The native transport substitutes the selected product
+session for renderer-supplied authorization, then carries request and response
+bodies across IPC in chunks of at most 64 KiB. Logout blocks new requests immediately.
+Rust persists retired credentials alongside their installation pin so that cleanup
+can retry, and a relay retry must wait for the same Accounts identity to obtain a
+fresh short capability.
+
+Legacy connections still use server HTML and browser cookies. That document remains
+trusted, including scripts its content policy permits, until the connection is
+converted to a managed workspace.
+
+An activated personal workspace can renew its product session through the pinned
+direct route when Accounts is unavailable. Its private device key stays in the OS
+credential store: the data protection keychain on macOS, machine-bound DPAPI inside
+Credential Manager on Windows, and Secret Service with a machine identifier on Linux.
+No expiry is added to the Accounts token. Saved metadata alone grants no access.
+Cold restoration requires the same account, installation pin and workspace, and a
+local Docker restart also requires its completed ownership receipt. Logout persists
+denial before deleting keys. Only a fresh interactive Accounts sign-in can clear a
+failed-cleanup barrier, after the retired keys have been removed.
+
+macOS distribution embeds a profile for the app's own keychain group and signs the
+speech helper without that group. The manual desktop workflow tests key creation,
+lookup, signing and deletion inside the signed app. Windows CI exercises DPAPI and
+the installed credential provider. These OS checks and the offline acceptance run
+remain release gates until their results are recorded for the candidate.
 
 Desktop checks for the server's `nativeRenderer: "bundled-v1"` capability before
 opening a product window. Upgrade an older server first. An older desktop connected
@@ -68,9 +105,19 @@ to the new server receives an **Update Ork** link instead of an empty product wi
 
 **This computer** starts the shared Docker Compose stack through Rust. A private
 ownership probe protects reuse of the managed project, and its server address stays
-on loopback. Host computer access uses the native consent and revocation path backed
-by the existing server-owned computer protocol. See [Desktop app](desktop-app.md) for
-the account controls and permissions.
+on loopback. Managed workspaces keep computer tasks inside Docker. Host commands and
+direct host file access are disabled, including through previously paired desktops.
+See [Desktop app](desktop-app.md) for the account controls and permissions.
+
+Choose the organization first. The installer checks its Docker installation's fingerprint against Accounts, then waits for both the server and workspace acknowledgements before opening Ork. Restarting setup reuses the installation key and workspace operation. Initial setup records an audited workspace admin assignment and delegates local AI administration to the signed-in account. Reopening a completed installation preserves subsequent access removals.
+
+Local routes belong to one device. Setup keeps direct and tunnel routes when updating the Docker address, and other devices cannot select its loopback route. Disconnecting a server or changing its binding version requires operator recovery.
+
+## Organizations and workspaces
+
+Accounts supplies the version 2 organization, server and workspace catalog. Setup includes organizations without a server and shows workspaces that need provisioning or access. The account's default organization is shared across devices. Each desktop installation keeps its last workspace separately for each account and organization.
+
+A workspace link names the organization, server and workspace IDs. Rust fetches the current catalog before opening that exact target, and login grants stay bound to its installation key and connection version. An unavailable target leaves the chooser open. Late link and directory results are discarded after an account switch.
 
 ## Native capabilities
 
@@ -106,6 +153,7 @@ row records a source gap until its correction is verified. Linked tests describe
 | --- | --- | --- |
 | Bundled renderer and server handoff | Implemented: [renderer script tests](../apps/desktop/src/renderer-script.test.ts). Requires server capability `nativeRenderer: "bundled-v1"`. | Pending: cold launch and old-client/server compatibility. |
 | Accounts and saved server | Implemented: [Accounts](../apps/desktop/src-tauri/src/accounts.rs), [server login](../apps/desktop/src-tauri/src/server_login.rs). | Pending: restart restores login, default/single server selection, account/server switch, offline logout and pending revocation retry. |
+| Personal offline access | Implemented: [device lifecycle tests](../apps/desktop/src-tauri/src/personal_devices_tests.rs), [native key providers](../apps/desktop/src-tauri/src/personal_keys.rs). Key activation requires a matching server acknowledgment. | Pending: signed macOS and Windows OS key checks, offline cold restoration, logout and reconnect acceptance. |
 | WebView and credential isolation | Implemented: [profile](../apps/desktop/src-tauri/src/profile.rs), [macOS private storage tests](../apps/desktop/src-tauri/src/credentials_macos.rs). Persistent WebView cookies are unsupported on macOS 12/13 and use incognito instead. | Pending: per-origin/account isolation and older-macOS reconnect behavior. |
 | Browser OAuth/SSO and callbacks | Implemented: [browser auth](../apps/desktop/src-tauri/src/browser_auth.rs). | Pending: real configured callback, cancellation, expiration, replay and unrelated popup isolation. |
 | Passkeys | Implemented with signing/association gating on macOS 13.3+: [passkey tests](../apps/desktop/src/passkeys.test.ts). | Pending: registration and sign-in with an installed signed app and its configured relying party. Preserve existing RP registrations. |

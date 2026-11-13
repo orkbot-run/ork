@@ -20,6 +20,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 const capability = {
+  protocol: loaded.contracts.SERVER_PROTOCOL_RANGE,
   passwordAuth: false,
   sso: { name: "Example", availability: "unavailable" },
   passwordReset: false,
@@ -51,8 +52,8 @@ it("advertises its protocol while discovering a compatible server and preserves 
 });
 
 it.each([
-  { min: 2, max: 2 },
-  { min: 2, max: 3 },
+  { min: 1, max: 1 },
+  { min: 3, max: 3 },
 ])("rejects incompatible explicit server protocol ranges: %j", async (protocol) => {
   vi.stubGlobal(
     "fetch",
@@ -103,18 +104,18 @@ it("does not let the legacy capability schema hide an invalid protocol advertise
 it("retries protocol discovery after the server becomes compatible", async () => {
   const fetch = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 2, max: 2 } }))
-    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 1, max: 1 } }));
+    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 1, max: 1 } }))
+    .mockResolvedValueOnce(Response.json({ ...capability, protocol: { min: 2, max: 2 } }));
   vi.stubGlobal("fetch", fetch);
   await expect(fetchAuthCapabilities()).rejects.toThrow();
-  await expect(fetchAuthCapabilities()).resolves.toMatchObject({ protocol: { min: 1, max: 1 } });
+  await expect(fetchAuthCapabilities()).resolves.toMatchObject({ protocol: { min: 2, max: 2 } });
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
 it("treats an absent optional AI consent flag as unavailable without inventing a default", async () => {
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json({ ...capability, protocol: { min: 1, max: 1 } })),
+    vi.fn(async () => Response.json(capability)),
   );
   const result = await fetchAuthCapabilities();
   expect(result.aiConsent).toBeUndefined();
@@ -145,12 +146,14 @@ it("rejects HTTP errors", async () => {
   await expect(fetchAuthCapabilities()).rejects.toThrow();
 });
 
-it("accepts old capabilities for the bundled desktop client", async () => {
+it("keeps old capabilities available only for authentication and update recovery", async () => {
+  const { fetchRecoveryCapabilities } = await import("./auth-capabilities");
   vi.stubGlobal(
     "fetch",
     vi.fn(async () => Response.json({ passwordReset: false, resetUrl: null, billing: false })),
   );
-  await expect(fetchAuthCapabilities()).resolves.toEqual({
+  await expect(fetchAuthCapabilities()).rejects.toBeInstanceOf(Error);
+  await expect(fetchRecoveryCapabilities()).resolves.toEqual({
     passwordAuth: true,
     sso: null,
     passwordReset: false,

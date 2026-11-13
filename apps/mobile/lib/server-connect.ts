@@ -1,9 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { parseServerConnectLink, parseServerInitializeLink } from "@orkbot/contracts";
+import {
+  parseServerConnectLink,
+  parseServerInitializeLink,
+  parseWorkspaceLink,
+} from "@orkbot/contracts";
 
 let pending: string | null = null;
+let workspace: NonNullable<ReturnType<typeof parseWorkspaceLink>> | null = null;
+export const pendingWorkspaceConnect = () => workspace;
+export function clearWorkspaceConnect(
+  expected: NonNullable<ReturnType<typeof parseWorkspaceLink>>,
+) {
+  if (workspace !== expected) return;
+  workspace = null;
+  for (const listener of listeners) listener();
+}
 let initialization: { server: string; secret: string; account?: string } | null = null;
 const listeners = new Set<() => void>();
 
@@ -20,10 +33,19 @@ export function subscribeServerConnect(listener: () => void): () => void {
 
 /** Capture a server address only; following a link never grants access or saves a bookmark. */
 export function receiveServerConnect(input: string): boolean {
+  const target = parseWorkspaceLink(input);
+  if (target) {
+    workspace = target;
+    pending = null;
+    initialization = null;
+    for (const listener of listeners) listener();
+    return true;
+  }
   const initialize = parseServerInitializeLink(input);
   const server = initialize?.server ?? parseServerConnectLink(input);
   if (!server) return false;
   initialization = initialize;
+  workspace = null;
   pending = server;
   for (const listener of listeners) listener();
   return true;

@@ -182,6 +182,11 @@ pub async fn require_accounts_only(server: &Url) -> Result<(), String> {
         body.extend_from_slice(&chunk);
     }
     let value: Value = serde_json::from_slice(&body).map_err(|_| ERROR)?;
+    require_accounts_capabilities(&value)
+}
+
+pub(crate) fn require_accounts_capabilities(value: &Value) -> Result<(), String> {
+    const ERROR: &str = "This server must use Accounts sign-in with password sign-in disabled.";
     if value.get("passwordAuth") != Some(&Value::Bool(false))
         || !(value.get("accountsLogin") == Some(&Value::Bool(true))
             || value.get("sso").is_some_and(|sso| {

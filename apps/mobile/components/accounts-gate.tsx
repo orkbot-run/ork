@@ -1,16 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { SERVER_INSTALL_COMMAND, SERVER_UPDATE_RECOVERY_PROTOCOL } from "@orkbot/contracts";
+import type { IdentityCatalog } from "@orkbot/contracts";
+import {
+  initialCatalogOrganization,
+  initialCatalogWorkspace,
+  SERVER_INSTALL_COMMAND,
+  SERVER_UPDATE_RECOVERY_PROTOCOL,
+} from "@orkbot/contracts";
 import { isPersonalOrkId, seededLogoAvatarColor } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import * as SplashScreen from "expo-splash-screen";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ActivityIndicator,
   Alert,
   AppState,
+  Keyboard,
   ScrollView,
   Text,
   TextInput,
@@ -19,7 +26,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import Updates from "../app/(settings)/updates";
 import type { AccountServer } from "../lib/account-servers";
-import { accountServers, addAccountServer } from "../lib/account-servers";
+import {
+  accountDirectory,
+  accountServers,
+  addAccountServer,
+  setDefaultAccountOrganization,
+} from "../lib/account-servers";
 import {
   accountsIdentity,
   accountsVersion,
@@ -29,6 +41,7 @@ import {
   welcomeAccountsOrk,
 } from "../lib/accounts";
 import { continueWithAccountsServer } from "../lib/accounts-login";
+import { AccountsUnavailable } from "../lib/accounts-network";
 import { FORM_COLUMN_WIDTH } from "../lib/adaptive-layout";
 import {
   clearProductAccountSession,
@@ -40,28 +53,41 @@ import {
 } from "../lib/api";
 import { loadAppearancePreference } from "../lib/appearance";
 import {
-  displayApiHost,
   normalizeApiBase,
   requireAccountsSignIn,
   serverInitializationRequired,
 } from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
+import {
+  installationRevocationScope,
+  selectInstallationTransport,
+} from "../lib/installation-transport";
 import { useMobileTokens } from "../lib/native";
+import { continueWithPersonalServer, personalLoginSelection } from "../lib/personal-login";
+import {
+  lastOrganizationWorkspace,
+  saveSelectedWorkspace,
+  selectedWorkspace,
+} from "../lib/selected-workspace";
 import {
   clearServerConnect,
+  clearWorkspaceConnect,
   confirmServerInitialization,
   hasPendingServerInitialization,
   pendingServerConnect,
+  pendingWorkspaceConnect,
   subscribeServerConnect,
 } from "../lib/server-connect";
 import { serverHeaders } from "../lib/server-headers";
 import type { MobileServerPairing } from "../lib/server-pairing";
 import { beginServerPairing } from "../lib/server-pairing";
-import { currentSessionGeneration } from "../lib/session";
+import { currentSessionGeneration, subscribeSessionGeneration } from "../lib/session";
 import { continueWithSso } from "../lib/sso";
 import { errorText } from "../lib/user-error";
+import { WorkspacePickerContext } from "../lib/workspace-picker";
 import { LogoAvatar } from "./logo-avatar";
 import { NativeActionButton } from "./native-action-button";
+import { WorkspaceDirectory, workspaceEntries } from "./workspace-directory";
 
 const ACCOUNT_KEY = "orkbot.accounts.product-owner";
 const SERVER_KEY = "orkbot.accounts.selected-server";
@@ -85,6 +111,18 @@ type PairingWait = {
   generation: number;
   server: string;
   sessionGeneration: number;
+};
+
+type PickerOwner = {
+  account: string;
+  organizationId: string | null;
+  server: string;
+  sessionGeneration: number;
+  accountVersion: number;
+  linkGeneration: number;
+  workspaceScope: string;
+  retired: boolean;
+  presentation: "root" | "screen";
 };
 
 function serializeOwnership<T>(operation: () => Promise<T>): Promise<T> {
@@ -128,13 +166,41 @@ async function selectServer(
     if (!beforeSave()) return null;
     const savedOwner = await SecureStore.getItemAsync(ACCOUNT_KEY);
     if (!beforeSave() || savedOwner !== account) return null;
+    if (entry.workspace) {
+      await selectInstallationTransport(
+        account,
+        entry.url,
+        entry.workspace,
+        entry.relay,
+        entry.direct,
+      );
+      if (!beforeSave()) return null;
+    }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
     if (!beforeSave()) return null;
     await loadApiBase();
     if (!beforeSave()) return null;
     // Changing the endpoint may itself clear and replace the product session.
-    const saved = await saveApiBase(entry.url, serverHeaders(entry.url));
+    const saved = entry.workspace
+      ? await saveApiBase(entry.url, serverHeaders(entry.url), "workspace_switch")
+      : await saveApiBase(entry.url, serverHeaders(entry.url));
     if (!saved.ok) throw new Error(saved.error);
+    if (!current()) return null;
+    const previousWorkspace = await selectedWorkspace(account, entry.url);
+    if (!current()) return null;
+    if (JSON.stringify(previousWorkspace) !== JSON.stringify(entry.workspace ?? null)) {
+      await clearProductAccountSession("workspace_switch");
+      if (!current()) return null;
+    }
+    await saveSelectedWorkspace(account, entry.url, entry.workspace, entry.relay, entry.direct);
+    if (!current()) return null;
+    await selectInstallationTransport(
+      account,
+      entry.url,
+      entry.workspace,
+      entry.relay,
+      entry.direct,
+    );
     if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
     return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;
@@ -145,14 +211,21 @@ async function selectServer(
 export function AccountsGate({
   children,
   onSelected,
+  onWorkspaceSelected,
 }: {
   children?: ReactNode;
   onSelected?: () => void;
+  onWorkspaceSelected?: () => void;
 }) {
   const { t } = useI18n();
   const productGate = Boolean(children);
   const tokens = useMobileTokens();
   const version = useSyncExternalStore(subscribeAccounts, accountsVersion, accountsVersion);
+  useSyncExternalStore(
+    subscribeSessionGeneration,
+    currentSessionGeneration,
+    currentSessionGeneration,
+  );
   const linkGeneration = useRef(0);
   const subscribeLinks = useCallback(
     (listener: () => void) =>
@@ -168,6 +241,11 @@ export function AccountsGate({
     () => `${linkGeneration.current}:${pendingServerConnect() ?? ""}`,
   );
   const linkedServer = pendingServerConnect();
+  const linkedWorkspace = pendingWorkspaceConnect();
+  const pickerOwner = useRef<PickerOwner | null>(null);
+  const [pickerRetirement, setPickerRetirement] = useState(0);
+  const retiredPicker = useRef<(() => void) | null>(null);
+  const pickerRetirementFlight = useRef<Promise<void> | null>(null);
   const operationPending = useRef(false);
   const operationVersion = useRef(0);
   const [phase, setPhase] = useState<"loading" | "signed-out" | "servers" | "recovery" | "ready">(
@@ -175,6 +253,12 @@ export function AccountsGate({
   );
   const [orkAvatar, setOrkAvatar] = useState(welcomeOrk);
   const [servers, setServers] = useState<AccountServer[]>([]);
+  const [directory, setDirectory] = useState<IdentityCatalog | null>(null);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
+  const chosenOrganization = useRef<{ account: string; id: string | null }>({
+    account: "",
+    id: null,
+  });
   const [started, setStarted] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
@@ -197,6 +281,50 @@ export function AccountsGate({
   const [pairingForeground, setPairingForeground] = useState(
     AppState.currentState == null || AppState.currentState === "active",
   );
+
+  function ownsPicker(previous: PickerOwner | null): previous is PickerOwner {
+    return Boolean(
+      previous &&
+        !previous.retired &&
+        previous.account === owner.current &&
+        previous.accountVersion === accountsVersion() &&
+        previous.sessionGeneration === currentSessionGeneration() &&
+        previous.server === currentApiBase() &&
+        previous.linkGeneration === linkGeneration.current &&
+        previous.workspaceScope ===
+          JSON.stringify(installationRevocationScope(currentApiBase()) ?? null),
+    );
+  }
+
+  useEffect(() => {
+    // Passive unmount cleanup retires the old screens before a new transport can be selected.
+    const complete = retiredPicker.current;
+    retiredPicker.current = null;
+    complete?.();
+  }, [pickerRetirement]);
+  useEffect(
+    () => () => {
+      retiredPicker.current?.();
+      retiredPicker.current = null;
+    },
+    [],
+  );
+
+  async function retirePicker() {
+    if (pickerRetirementFlight.current) return pickerRetirementFlight.current;
+    if (!pickerOwner.current || pickerOwner.current.retired) return;
+    pickerOwner.current.retired = true;
+    const flight = new Promise<void>((resolve) => {
+      retiredPicker.current = resolve;
+    });
+    pickerRetirementFlight.current = flight;
+    setPickerRetirement((value) => value + 1);
+    try {
+      await flight;
+    } finally {
+      if (pickerRetirementFlight.current === flight) pickerRetirementFlight.current = null;
+    }
+  }
 
   function discardPairing(update = true) {
     const creating = pairingRequest.current;
@@ -224,17 +352,55 @@ export function AccountsGate({
     setPending(false);
     let verified = false;
     let directoryReady = false;
+    let personalAttempted = false;
+    const restorePersonal = async () => {
+      if (
+        !productGate ||
+        linkedServer ||
+        linkedWorkspace ||
+        personalAttempted ||
+        pickerOwner.current
+      )
+        return false;
+      personalAttempted = true;
+      const active = () =>
+        generation.current === current &&
+        accountsVersion() === version &&
+        linkGeneration.current === receivedLink;
+      const credential = await personalLoginSelection(verified ? owner.current : undefined);
+      if (!credential || !active()) return false;
+      await loadApiBase();
+      if (
+        !active() ||
+        currentApiBase() !== credential.origin ||
+        !(await adoptAccount(credential.account, active))
+      )
+        return false;
+      if (!(await continueWithPersonalServer(credential, active)) || !active()) return false;
+      owner.current = credential.account;
+      setServerRescue(false);
+      setReadyAt({ version, attempt });
+      setPhase("ready");
+      return true;
+    };
     void (async () => {
       await Promise.all([bootstrapI18n(), loadAppearancePreference()]);
       const identity = await accountsIdentity();
       if (generation.current !== current) return;
       if (!identity) {
+        await retirePicker();
+        if (generation.current !== current) return;
+        if (await restorePersonal()) return;
         if (!(await adoptAccount(null, () => generation.current === current))) return;
         owner.current = "";
         directoryOwner.current = "";
         knownServers.current.clear();
+        pickerOwner.current = null;
         setOrkAvatar(welcomeOrk);
         setServers([]);
+        setDirectory(null);
+        setOrganizationId(null);
+        chosenOrganization.current = { account: "", id: null };
         setDraft("");
         setReadyAt({ version, attempt });
         setPhase("signed-out");
@@ -242,13 +408,26 @@ export function AccountsGate({
       }
       setOrkAvatar(isPersonalOrkId(identity.orkAvatar) ? identity.orkAvatar : welcomeOrk);
       const account = JSON.stringify([identity.issuer, identity.subject]);
+      if (pickerOwner.current && pickerOwner.current.account !== account) {
+        await retirePicker();
+        if (generation.current !== current) return;
+        pickerOwner.current = null;
+      }
       if (!(await adoptAccount(account, () => generation.current === current))) return;
       owner.current = account;
       verified = true;
       const directorySession = currentSessionGeneration();
       const directoryServer = currentApiBase();
-      const entries = await accountServers(account);
+      const loaded = await accountDirectory(account);
+      const { entries, catalog } = loaded;
       if (generation.current !== current) return;
+      const organization =
+        chosenOrganization.current.account === account && chosenOrganization.current.id !== null
+          ? catalog.organizations.find((row) => row.id === chosenOrganization.current.id)
+          : initialCatalogOrganization(catalog);
+      chosenOrganization.current = { account, id: organization?.id ?? null };
+      setOrganizationId(organization?.id ?? null);
+      setDirectory(catalog);
       if (directoryOwner.current !== account) {
         directoryOwner.current = account;
         knownServers.current = new Set(entries.map((entry) => entry.id));
@@ -257,6 +436,28 @@ export function AccountsGate({
       directoryReady = true;
       setAdding(Boolean(linkedServer) || entries.length === 0);
       if (linkedServer) setDraft(linkedServer);
+      if (linkedWorkspace) {
+        const requestedOrganization = catalog.organizations.find(
+          (row) => row.id === linkedWorkspace.organizationId,
+        );
+        chosenOrganization.current = { account, id: requestedOrganization?.id ?? null };
+        setOrganizationId(requestedOrganization?.id ?? null);
+        const requested = entries.find(
+          (row) =>
+            row.workspace?.organizationId === linkedWorkspace.organizationId &&
+            row.workspace.serverId === linkedWorkspace.serverId &&
+            row.workspace.workspaceId === linkedWorkspace.workspaceId,
+        );
+        if (!requested) throw new Error(t("Workspace unavailable"));
+        await select(requested, {
+          current: () =>
+            generation.current === current && pendingWorkspaceConnect() === linkedWorkspace,
+          sessionGeneration: directorySession,
+          server: directoryServer,
+        });
+        return;
+      }
+
       if (
         PERSONAL_SERVER_CONNECTION_ENABLED &&
         linkedServer &&
@@ -300,10 +501,28 @@ export function AccountsGate({
         }
         if (generation.current !== current) return;
       }
-      if (productGate && !linkedServer) {
+      if (productGate && !linkedServer && organization && !pickerOwner.current) {
+        const remembered = await lastOrganizationWorkspace(account, organization.id);
         const selected = await SecureStore.getItemAsync(SERVER_KEY);
         if (generation.current !== current) return;
-        const previous = entries.find((entry) => `${account}:${entry.id}` === selected);
+        const available = workspaceEntries(organization, entries);
+        const legacy = available.find((entry) => `${account}:${entry.id}` === selected);
+        const legacyServer = organization.servers.find((server) =>
+          server.workspaces.some((workspace) => workspace.id === legacy?.id),
+        );
+        const target = initialCatalogWorkspace(
+          catalog,
+          organization.id,
+          remembered ??
+            (legacy && legacyServer ? { workspaceId: legacy.id, serverId: legacyServer.id } : null),
+        );
+        const previous =
+          target &&
+          available.find(
+            (entry) =>
+              entry.id === target.workspaceId &&
+              (!entry.workspace || entry.workspace.serverId === target.serverId),
+          );
         if (previous) {
           const selected = await selectServer(
             previous,
@@ -321,11 +540,30 @@ export function AccountsGate({
       setReadyAt({ version, attempt });
       setPhase("servers");
     })()
-      .catch((failure) => {
+      .catch(async (failure) => {
+        if (failure instanceof AccountsUnavailable) {
+          try {
+            if (await restorePersonal()) return;
+          } catch (personalFailure) {
+            failure = personalFailure;
+          }
+        }
         if (generation.current !== current) return;
+        if (!(failure instanceof AccountsUnavailable)) pickerOwner.current = null;
         setError(errorText(failure));
         setReadyAt({ version, attempt });
-        setPhase(verified ? (directoryReady ? "servers" : "recovery") : "signed-out");
+        const canReturn =
+          pickerOwner.current?.account === owner.current &&
+          pickerOwner.current.sessionGeneration === currentSessionGeneration();
+        setPhase(
+          canReturn
+            ? "recovery"
+            : verified
+              ? directoryReady
+                ? "servers"
+                : "recovery"
+              : "signed-out",
+        );
       })
       .finally(() => {
         if (generation.current === current) void SplashScreen.hideAsync().catch(() => undefined);
@@ -373,16 +611,14 @@ export function AccountsGate({
       if (!current()) return;
       if (!operationPending.current && !pairingRef.current) {
         try {
-          const entries = await accountServers(account);
+          const { entries, catalog } = await accountDirectory(account);
           if (!current()) return;
-          const changed =
-            entries.length !== knownServers.current.size ||
-            entries.some((entry) => !knownServers.current.has(entry.id));
+          setDirectory(catalog);
           const added = entries.some(
             (entry) => !knownServers.current.has(entry.id) && entry.url !== activeServer,
           );
           knownServers.current = new Set(entries.map((entry) => entry.id));
-          if (changed) setServers(entries);
+          setServers(entries);
           if (added && phase === "ready") {
             if (!discoveryAlert.current) {
               discoveryAlert.current = true;
@@ -468,8 +704,22 @@ export function AccountsGate({
     const identity = await accountsIdentity();
     if (!active() || !sessionCurrent()) return false;
     if (!identity || JSON.stringify([identity.issuer, identity.subject]) !== account) {
+      await retirePicker();
+      if (!active() || !sessionCurrent()) return false;
       setAttempt((value) => value + 1);
       return false;
+    }
+    await retirePicker();
+    if (!active() || !sessionCurrent()) return false;
+    if (entry.workspace) {
+      await selectInstallationTransport(
+        account,
+        entry.url,
+        entry.workspace,
+        entry.relay,
+        entry.direct,
+      );
+      if (!active() || !sessionCurrent()) return false;
     }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
     const probe = await probeCompatibleServer(entry.url, capabilities.needsServerUpdate);
@@ -486,12 +736,17 @@ export function AccountsGate({
     setServerRescue(selected === "older");
     knownServers.current.add(entry.id);
     confirmServerInitialization(entry.url, account!);
+    const explicitWorkspaceSelection = pickerOwner.current !== null;
+    pickerOwner.current = null;
+    if (entry.workspace) setOrganizationId(entry.workspace.organizationId);
     if (onSelected) onSelected();
     else {
+      if (explicitWorkspaceSelection) onWorkspaceSelected?.();
       setReadyAt({ version, attempt });
       setPhase("ready");
     }
     if (linkedServer) clearServerConnect(linkedServer);
+    if (linkedWorkspace) clearWorkspaceConnect(linkedWorkspace);
     return true;
   }
 
@@ -726,33 +981,113 @@ export function AccountsGate({
     }
   }
 
-  if (
+  const workspacePicker = useMemo(() => {
+    const open = (presentation: "root" | "screen") => {
+      Keyboard.dismiss();
+      pickerOwner.current = {
+        account: owner.current,
+        organizationId,
+        server: currentApiBase(),
+        sessionGeneration: currentSessionGeneration(),
+        accountVersion: accountsVersion(),
+        linkGeneration: linkGeneration.current,
+        workspaceScope: JSON.stringify(installationRevocationScope(currentApiBase()) ?? null),
+        retired: false,
+        presentation,
+      };
+      setAdding(false);
+      setPhase("servers");
+    };
+    return {
+      organization:
+        directory?.organizations.find((row) => row.id === organizationId)?.name ?? t("Workspace"),
+      open: () => open("root"),
+      openInScreen: () => open("screen"),
+    };
+  }, [directory, organizationId, t]);
+
+  async function cancelPicker() {
+    const previous = pickerOwner.current;
+    if (!ownsPicker(previous)) return;
+    // Browsing did not change this binding; selecting it again would retire its live streams.
+    pickerOwner.current = null;
+    chosenOrganization.current = { account: previous.account, id: previous.organizationId };
+    setOrganizationId(previous.organizationId);
+    setReadyAt({ version, attempt });
+    setPhase("ready");
+  }
+
+  const ready = Boolean(
     phase === "ready" &&
-    readyAt.version === version &&
-    readyAt.attempt === attempt &&
-    !linkedServer &&
-    children
-  )
-    return serverRescue ? (
-      <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
-        <Text>{t("Update this server before connecting with this version of Ork.")}</Text>
-        <Updates />
-        <NativeActionButton
-          label={t("Check again")}
-          onPress={() => setAttempt((value) => value + 1)}
-        />
-        <NativeActionButton
-          label={t("Back")}
-          prominence="secondary"
-          onPress={() => setPhase("servers")}
-        />
-      </SafeAreaView>
-    ) : (
-      children
+      readyAt.version === version &&
+      readyAt.attempt === attempt &&
+      !linkedServer &&
+      !linkedWorkspace &&
+      children,
+  );
+  const preservePicker = Boolean(
+    children &&
+      !serverRescue &&
+      phase !== "signed-out" &&
+      ownsPicker(pickerOwner.current) &&
+      pickerOwner.current.workspaceScope !== "null" &&
+      !linkedServer &&
+      !linkedWorkspace,
+  );
+  const surface = (gate: ReactNode) => {
+    const activePicker = preservePicker ? pickerOwner.current : null;
+    const inScreen = activePicker?.presentation === "screen";
+    const hideProduct = preservePicker && !inScreen;
+    return (
+      <WorkspacePickerContext
+        value={{
+          ...workspacePicker,
+          screen: inScreen ? gate : null,
+          dismissScreen: () => {
+            if (activePicker && pickerOwner.current === activePicker && !pending)
+              void action(cancelPicker);
+          },
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          {(ready && !serverRescue) || preservePicker ? (
+            <View
+              key="product"
+              testID="workspace-product"
+              style={{ flex: 1, opacity: hideProduct ? 0 : 1 }}
+              pointerEvents={hideProduct ? "none" : "auto"}
+              accessibilityElementsHidden={hideProduct}
+              importantForAccessibility={hideProduct ? "no-hide-descendants" : "auto"}
+            >
+              {children}
+            </View>
+          ) : null}
+          {inScreen ? null : gate}
+        </View>
+      </WorkspacePickerContext>
+    );
+  };
+  if (ready)
+    return surface(
+      serverRescue ? (
+        <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
+          <Text>{t("Update this server before connecting with this version of Ork.")}</Text>
+          <Updates />
+          <NativeActionButton
+            label={t("Check again")}
+            onPress={() => setAttempt((value) => value + 1)}
+          />
+          <NativeActionButton
+            label={t("Back")}
+            prominence="secondary"
+            onPress={() => setPhase("servers")}
+          />
+        </SafeAreaView>
+      ) : null,
     );
   const visiblePhase =
     readyAt.version === version && readyAt.attempt === attempt ? phase : "loading";
-  return (
+  return surface(
     <SafeAreaView style={{ flex: 1, backgroundColor: tokens.background }}>
       <ScrollView
         contentContainerStyle={{
@@ -766,22 +1101,26 @@ export function AccountsGate({
         }}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={{ alignItems: "center" }}>
-          <LogoAvatar
-            identity={orkAvatar}
-            color={seededLogoAvatarColor(orkAvatar)}
-            size={visiblePhase === "servers" || visiblePhase === "recovery" ? 112 : 220}
-            activity="idle"
-            motion="live"
-          />
-        </View>
+        {!pickerOwner.current ? (
+          <View style={{ alignItems: "center" }}>
+            <LogoAvatar
+              identity={orkAvatar}
+              color={seededLogoAvatarColor(orkAvatar)}
+              size={visiblePhase === "servers" || visiblePhase === "recovery" ? 112 : 220}
+              activity="idle"
+              motion="live"
+            />
+          </View>
+        ) : null}
         <Text
           accessibilityRole="header"
           style={{ fontSize: 30, fontWeight: "600", color: tokens.foreground, textAlign: "center" }}
         >
-          {visiblePhase === "servers" || visiblePhase === "recovery"
-            ? t("Server")
-            : t("Welcome to Ork")}
+          {pickerOwner.current
+            ? t("Workspace")
+            : visiblePhase === "servers" || visiblePhase === "recovery"
+              ? t("Server")
+              : t("Welcome to Ork")}
         </Text>
         {visiblePhase === "loading" ? (
           <ActivityIndicator accessibilityLabel={t("Loading…")} color={tokens.mutedForeground} />
@@ -806,15 +1145,48 @@ export function AccountsGate({
           <>
             {visiblePhase === "servers" ? (
               <>
-                {servers.map((entry) => (
-                  <NativeActionButton
-                    key={entry.id}
-                    label={entry.name ?? displayApiHost(entry.url)}
-                    busy={pending}
-                    disabled={Boolean(pairing)}
-                    onPress={() => void action(() => select(entry))}
+                {directory ? (
+                  <WorkspaceDirectory
+                    catalog={directory}
+                    entries={servers}
+                    organizationId={organizationId}
+                    pending={pending || !!pairing}
+                    onOrganization={(id) =>
+                      void action(async () => {
+                        const account = owner.current;
+                        const current = generation.current;
+                        const organization = directory.organizations.find((row) => row.id === id);
+                        if (!organization) return;
+                        chosenOrganization.current = { account, id };
+                        setOrganizationId(id);
+                        const remembered = await lastOrganizationWorkspace(account, id);
+                        if (owner.current !== account || generation.current !== current) return;
+                        const available = workspaceEntries(organization, servers);
+                        const target = initialCatalogWorkspace(directory, id, remembered);
+                        const previous =
+                          target &&
+                          available.find(
+                            (row) =>
+                              row.id === target.workspaceId &&
+                              (!row.workspace || row.workspace.serverId === target.serverId),
+                          );
+                        if (previous) await select(previous);
+                      })
+                    }
+                    onDefault={(id) =>
+                      void action(async () => {
+                        const account = owner.current;
+                        const current = generation.current;
+                        await setDefaultAccountOrganization(id, account);
+                        if (owner.current === account && generation.current === current)
+                          setDirectory((value) =>
+                            value ? { ...value, defaultOrganizationId: id } : value,
+                          );
+                      })
+                    }
+                    onSelect={(entry) => void action(() => select(entry))}
                   />
-                ))}
+                ) : null}
                 {PERSONAL_SERVER_CONNECTION_ENABLED &&
                 adding &&
                 (linkedServer || pairing || hasPendingServerInitialization(draft)) ? (
@@ -969,6 +1341,14 @@ export function AccountsGate({
                 onPress={() => setAttempt((value) => value + 1)}
               />
             ) : null}
+            {ownsPicker(pickerOwner.current) && !linkedServer && !linkedWorkspace ? (
+              <NativeActionButton
+                label={t("Cancel")}
+                prominence="secondary"
+                disabled={pending}
+                onPress={() => void action(cancelPicker)}
+              />
+            ) : null}
             <NativeActionButton
               label={t("Sign out")}
               prominence="plain"
@@ -985,6 +1365,6 @@ export function AccountsGate({
           </Text>
         ) : null}
       </ScrollView>
-    </SafeAreaView>
+    </SafeAreaView>,
   );
 }

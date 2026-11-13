@@ -22,6 +22,7 @@ import {
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
 import type { MessageBlock } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ACTIVE_RUN_STATUSES, ONCE_ROUTINE_CRON, resolveScreenProxySecret } from "@orkbot/core";
 import { openScreenCapability } from "@orkbot/core/node/screen-capability";
 import {
@@ -212,19 +213,31 @@ describeJourneys("required product journeys", () => {
       expect(await rpc(app, outsider, "computer/updates")).toEqual([]);
       const duplicate = await app.request("/rpc/computer/update", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
         body: JSON.stringify({ json: { botId: bot.id } }),
       });
       expect(duplicate.status).toBe(409);
       const stopped = await app.request("/rpc/computer/stop", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
         body: JSON.stringify({ json: { botId: bot.id } }),
       });
       expect(stopped.status).toBe(409);
       const switched = await app.request("/rpc/bots/setComputer", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Cookie: cookie },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
         body: JSON.stringify({ json: { botId: bot.id, mode: "dedicated" } }),
       });
       expect(switched.status).toBe(409);
@@ -4363,6 +4376,7 @@ async function raw(app: App, cookie: string, proc: string, body: unknown = {}) {
   return app.request(`/rpc/${proc}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

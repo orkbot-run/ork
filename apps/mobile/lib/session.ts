@@ -15,7 +15,7 @@ import { forgetReferrals } from "./referral";
 import { rememberSignedIn } from "./returning-user";
 import { clearFailedSends } from "./thread-feedback";
 
-type SessionClearReason = "session_rejected" | "logout" | "account_switch";
+type SessionClearReason = "session_rejected" | "logout" | "account_switch" | "workspace_switch";
 type SessionSaveReason = "sign_in";
 type SessionRotationReason = "reauthentication" | "password_change";
 export type SessionChangeReason =

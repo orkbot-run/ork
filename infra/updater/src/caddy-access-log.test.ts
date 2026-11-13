@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Native credential checks follow LICENSE.md.
+
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -22,6 +26,8 @@ describe.each(caddyfiles)("%s access log", (filename) => {
       "request>headers>Proxy-Authorization delete",
       "request>headers>Cookie delete",
       "request>headers>Referer delete",
+      "request>headers>X-Orkbot-Desktop-Stack-Token delete",
+      "request>headers>X-Orkbot-Local-Settings-Token delete",
       "resp_headers>Set-Cookie delete",
       "resp_headers>Location delete",
     ]) {

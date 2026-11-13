@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ComposerDraftScope } from "./composer-draft";
-import { readComposerDraft, writeComposerDraft } from "./composer-draft";
+import { clearComposerDrafts, readComposerDraft, writeComposerDraft } from "./composer-draft";
 import {
   clearComposerDraftAttachments,
   DRAFT_ATTACHMENT_MAX_BYTES,
@@ -18,7 +18,14 @@ import {
 
 vi.mock("./api", () => ({ currentApiBase: () => "https://api.example.test" }));
 
-const login = vi.hoisted(() => ({ namespace: "login-a" as string | undefined }));
+const login = vi.hoisted(() => ({
+  namespace: "login-a" as string | undefined,
+  workspaceOwner: undefined as string | undefined,
+}));
+vi.mock("./workspace-draft-session", () => ({
+  workspaceDraftOwner: () => login.workspaceOwner,
+  hasManagedWorkspace: () => !!login.workspaceOwner,
+}));
 vi.mock("./artifact-cache-session", () => ({ currentArtifactCacheSession: () => login.namespace }));
 
 const files = vi.hoisted(() => new Map<string, string>());
@@ -139,6 +146,7 @@ function legacyDraft(body: string) {
 beforeEach(() => {
   files.clear();
   login.namespace = "login-a";
+  login.workspaceOwner = undefined;
   failing.partial = false;
   failing.partialMove = false;
   failing.marker = false;
@@ -378,4 +386,47 @@ it("recovers the complete prior attachment record after a silent partial native 
   failing.partialMove = false;
   expect(writeComposerDraftAttachments(scope, [attachment("second")])).toBe(true);
   expect(readComposerDraftAttachments(scope).map((item) => item.id)).toEqual(["second"]);
+});
+
+it("restores only the exact managed workspace draft and attachment after A to B to A", () => {
+  const a = { ...scope, workspaceOwner: "a".repeat(64) };
+  const b = { ...scope, workspaceOwner: "b".repeat(64), namespace: "login-b" };
+  login.workspaceOwner = a.workspaceOwner;
+  expect(writeComposerDraft(a, "Workspace A draft", [])).toBe(true);
+  expect(writeComposerDraftAttachments(a, [attachment()])).toBe(true);
+  login.namespace = b.namespace;
+  login.workspaceOwner = b.workspaceOwner;
+  expect(readComposerDraft(b).text).toBe("");
+  expect(readComposerDraftAttachments(b)).toEqual([]);
+  expect(writeComposerDraft(a, "Late A draft", [])).toBe(false);
+  expect(writeComposerDraftAttachments(a, [attachment("late")])).toBe(false);
+  expect(writeComposerDraft(b, "Workspace B draft", [])).toBe(true);
+  expect(writeComposerDraftAttachments(b, [attachment("file-b")])).toBe(true);
+  login.namespace = "login-return-a";
+  login.workspaceOwner = a.workspaceOwner;
+  const restored = { ...a, namespace: login.namespace };
+  expect(readComposerDraft(restored).text).toBe("Workspace A draft");
+  expect(readComposerDraftAttachments(restored).map((item) => item.id)).toEqual(["file-a"]);
+  expect(readComposerDraft(b).text).toBe("");
+  expect(readComposerDraftAttachments(b)).toEqual([]);
+  login.workspaceOwner = "c".repeat(64);
+  expect(readComposerDraft({ ...restored, workspaceOwner: login.workspaceOwner }).text).toBe("");
+  expect(
+    readComposerDraftAttachments({ ...restored, workspaceOwner: login.workspaceOwner }),
+  ).toEqual([]);
+});
+
+it("keeps managed drafts during product session restoration and removes them on explicit account retirement", () => {
+  const managed = { ...scope, workspaceOwner: "d".repeat(64) };
+  login.workspaceOwner = managed.workspaceOwner;
+  expect(writeComposerDraft(managed, "Managed draft", [])).toBe(true);
+  expect(writeComposerDraftAttachments(managed, [attachment()])).toBe(true);
+  clearComposerDrafts(false);
+  clearComposerDraftAttachments(false);
+  expect(readComposerDraft(managed).text).toBe("Managed draft");
+  expect(readComposerDraftAttachments(managed)).toHaveLength(1);
+  clearComposerDrafts();
+  clearComposerDraftAttachments();
+  expect(readComposerDraft(managed).text).toBe("");
+  expect(readComposerDraftAttachments(managed)).toEqual([]);
 });

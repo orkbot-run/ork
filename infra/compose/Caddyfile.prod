@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Inherited Apache-2.0 configuration is preserved. New credential filters follow LICENSE.md.
 # JSON access logs on stdout. Caddy already masks Authorization and Cookie; these filters also
 # drop them, Set-Cookie, Referer (a page URL can hold a reset token), and the one-time tokens
 # and screen capabilities the app carries in URLs.
@@ -10,6 +13,8 @@
 			request>headers>Proxy-Authorization delete
 			request>headers>Cookie delete
 			request>headers>Referer delete
+			request>headers>X-Orkbot-Desktop-Stack-Token delete
+			request>headers>X-Orkbot-Local-Settings-Token delete
 			resp_headers>Set-Cookie delete
 			# Native sign-in redirects carry the session cookie in the app callback URL.
 			resp_headers>Location delete

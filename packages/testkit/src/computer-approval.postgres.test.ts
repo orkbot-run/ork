@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioConnector, FakeComposioClient, FakeSandboxProvider } from "@orkbot/adapters";
 import type { AiConsentStatus } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
 import { sessionCookieHeader } from "./index.js";
@@ -245,7 +246,12 @@ async function rpc<T>(
 ): Promise<T> {
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: fixtureOrigin },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: fixtureOrigin,
+    },
     body: JSON.stringify({ json: input }),
   });
   const body = (await response.json()) as { json?: T; error?: { message?: string } };

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { serve } from "@hono/node-server";
 import type { createApp } from "@orkbot/api/app";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { abortableDelay, RESPONSE_STREAMING_STORAGE_KEY } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import type { PrismaClient, ThreadEvents } from "@orkbot/db";
@@ -323,7 +324,10 @@ async function seedThread(prisma: PrismaClient, botId: string, name: string, siz
 }
 
 async function rpc<T>(page: Page, procedure: string, body: unknown): Promise<T> {
-  const response = await page.request.post(`/rpc/${procedure}`, { data: { json: body } });
+  const response = await page.request.post(`/rpc/${procedure}`, {
+    headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
+    data: { json: body },
+  });
   const parsed = (await response.json()) as { json?: T; error?: { message?: string } };
   if (!response.ok() || parsed.error) {
     throw new Error(`${procedure} ${response.status()}: ${parsed.error?.message ?? "failed"}`);

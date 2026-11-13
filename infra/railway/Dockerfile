@@ -9,9 +9,9 @@ RUN corepack enable
 WORKDIR /app
 COPY --chmod=755 . .
 RUN corepack install && chmod -R a+rX "${COREPACK_HOME}"
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm --filter orkbot --filter @orkbot/api... --filter @orkbot/worker... --filter @orkbot/web... --filter @orkbot/sandbox-supervisor... install --frozen-lockfile --store-dir=/pnpm/store
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm --filter orkbot --filter @orkbot/api... --filter @orkbot/worker... --filter @orkbot/relay... --filter @orkbot/web... --filter @orkbot/sandbox-supervisor... install --frozen-lockfile --store-dir=/pnpm/store
 RUN pnpm --filter @orkbot/db generate
-RUN pnpm --filter @orkbot/api --filter @orkbot/worker build
+RUN pnpm --filter @orkbot/api --filter @orkbot/worker --filter @orkbot/relay build
 RUN ORKBOT_ALLOW_DEV_SECRETS=1 pnpm --filter @orkbot/web build
 RUN node scripts/stage-server-runtime.mjs /runtime
 

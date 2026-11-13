@@ -561,6 +561,10 @@ msgstr "Adicione um gatilho para executar esta rotina."
 msgid "Add a voice provider key and pick a voice in Voice settings."
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Add AI account"
+msgstr "Adicionar conta de IA"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Add an HTTPS server URL."
 msgstr "Adicione um URL do servidor HTTPS."
@@ -737,6 +741,10 @@ msgstr ""
 msgid "Allowed in this space"
 msgstr ""
 
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Allowed models"
+msgstr "Modelos permitidos"
+
 #: src/components/AskCard.tsx
 msgid "Allowed once"
 msgstr "Permitido uma vez"
@@ -829,8 +837,10 @@ msgstr ""
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/model-settings/compatible-key-field.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API key"
 msgstr "Chave de API"
 
@@ -851,6 +861,8 @@ msgid "API token"
 msgstr ""
 
 #: src/components/ComputerProviderSettings.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "API URL"
 msgstr ""
 
@@ -1137,6 +1149,7 @@ msgstr "O bot está observando, não agindo"
 msgid "Bot models"
 msgstr ""
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "Tela do bot"
@@ -1229,7 +1242,9 @@ msgstr "Não pode ler imagens"
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/model-settings/space-bots-model.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
@@ -1238,6 +1253,7 @@ msgstr "Não pode ler imagens"
 #: src/pages/shell/create-bot-dialog.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/SpaceSettingOverrides.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Cancel"
 msgstr "Cancelar"
 
@@ -1421,12 +1437,17 @@ msgid "Choose a new password"
 msgstr "Escolha uma nova senha"
 
 #: src/pages/Onboarding.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Choose a provider"
 msgstr ""
 
 #: src/components/ApprovalRuleToolPicker.tsx
 msgid "Choose a tool"
 msgstr "Escolher uma ferramenta"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Choose at least one model and enter valid limits."
+msgstr "Escolha pelo menos um modelo e informe limites válidos."
 
 #: src/pages/shell/agent-import.tsx
 msgid "Choose backup"
@@ -1520,6 +1541,7 @@ msgid "Close memory settings"
 msgstr "Fechar configurações de memória"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Close model settings"
 msgstr "Fechar configurações do modelo"
@@ -1623,6 +1645,10 @@ msgstr ""
 msgid "Complete"
 msgstr "Concluir"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Complete sign-in"
+msgstr "Concluir login"
+
 #: src/components/SubagentCard.tsx
 msgid "Completed"
 msgstr "Concluído"
@@ -1636,6 +1662,10 @@ msgstr "Computador"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Computer access is approved separately."
 msgstr "O acesso ao computador é aprovado separadamente."
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "Controles do computador"
 
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
@@ -1679,6 +1709,10 @@ msgstr ""
 #: src/components/ComputersUnavailableHint.tsx
 msgid "Computers unavailable"
 msgstr "Computadores indisponíveis"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Concurrent requests"
+msgstr "Solicitações simultâneas"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Configure a plugin catalog on the server to connect apps."
@@ -1787,7 +1821,12 @@ msgstr "Conectado"
 msgid "Connected {0}."
 msgstr "Conectado {0}."
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Connected, but could not refresh."
+msgstr "Conectado, mas não foi possível atualizar."
+
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -1965,6 +2004,10 @@ msgstr "Não foi possível limpar a conversa"
 #: src/components/ComputerUpdateProgress.tsx
 msgid "Could not complete action"
 msgstr ""
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Could not complete AI account sign-in."
+msgstr "Não foi possível concluir o login na conta de IA."
 
 #: src/pages/McpOAuthCallback.tsx
 msgid "Could not complete OAuth"
@@ -2171,7 +2214,9 @@ msgid "Could not load MCP servers"
 msgstr "Não foi possível carregar os servidores MCP"
 
 #: src/pages/model-settings/use-model-settings.ts
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Could not load model settings"
 msgstr "Não foi possível carregar as configurações do modelo"
 
@@ -2188,6 +2233,10 @@ msgstr "Não foi possível carregar as opções de login"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Não foi possível carregar a habilidade"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "Não foi possível carregar a área de trabalho."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -2322,10 +2371,13 @@ msgstr ""
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/bot-reply-mode.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/shell/use-space-roster.ts
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Could not save"
 msgstr "Não foi possível salvar"
 
@@ -2654,6 +2706,7 @@ msgstr ""
 #: src/pages/model-settings/role-model-picker.tsx
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/ServerAISettings.tsx
 msgid "Default"
 msgstr "Padrão"
 
@@ -2670,6 +2723,10 @@ msgstr "Padrão do Hermes"
 #: src/pages/shell/agent-import.tsx
 msgid "Default from OpenClaw"
 msgstr "Padrão do OpenClaw"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Default model"
+msgstr "Modelo padrão"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
@@ -2820,6 +2877,10 @@ msgstr "Você quis dizer <0>{emailSuggestion}</0>?"
 #: src/pages/shell/bot-panel.tsx
 msgid "Disable a tool"
 msgstr "Desativar uma ferramenta"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Disable account"
+msgstr "Desativar conta"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Disabled"
@@ -2972,6 +3033,10 @@ msgstr "Cada nome só pode ser usado uma vez."
 msgid "Edit"
 msgstr "Editar"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Edit AI account"
+msgstr "Editar conta de IA"
+
 #: src/components/AskCard.tsx
 msgid "Edit first"
 msgstr "Editar primeiro"
@@ -3008,6 +3073,10 @@ msgstr "É necessário verificar o e-mail"
 msgid "Enable {0}"
 msgstr "Ativar {0}"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Enabled"
+msgstr "Ativado"
+
 #: src/components/ComputerProviderSettings.tsx
 msgid "End user ID"
 msgstr ""
@@ -3023,6 +3092,10 @@ msgstr ""
 #: src/lib/user-error.ts
 msgid "Enter a password"
 msgstr "Digite uma senha"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Enter a valid budget."
+msgstr "Informe um orçamento válido."
 
 #: src/lib/user-error.ts
 msgid "Enter a valid email"
@@ -3128,7 +3201,6 @@ msgid "Every week"
 msgstr "A cada semana"
 
 #: src/pages/shell/bot-panel.tsx
-#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Everyone in this workspace uses the model selected by the owner."
 msgstr ""
 
@@ -3214,6 +3286,14 @@ msgstr "Falhou."
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
 msgstr "Tratamento de falhas"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Fallback"
+msgstr "Conexão de reserva"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Fallback priority"
+msgstr "Prioridade da conexão de reserva"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Fields that mark a change"
@@ -3918,6 +3998,10 @@ msgstr "Baixo"
 msgid "Main model"
 msgstr "Modelo principal"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Make available"
+msgstr "Disponibilizar"
+
 #: src/pages/BillingSettingsPanel.tsx
 #: src/pages/SettingsOverlay.tsx
 msgid "Manage"
@@ -4035,6 +4119,10 @@ msgstr "Membro"
 #: src/pages/GroupPanel.tsx
 msgid "Members ({0})"
 msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Members will need their own model connection again."
+msgstr "Os membros precisarão novamente de suas próprias conexões com modelos."
 
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemorySettingsOverlay.tsx
@@ -4173,6 +4261,7 @@ msgstr "Modo"
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/agent-import.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Model"
 msgstr "Modelo"
 
@@ -4195,10 +4284,19 @@ msgid "Model options"
 msgstr "Opções do modelo"
 
 #: src/pages/ModelSettingsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/settings-nav.ts
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Models"
 msgstr "Modelos"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Models (one per line)"
+msgstr "Modelos (um por linha)"
+
+#: src/pages/ServerAISettings.tsx
+msgid "Models and limits"
+msgstr "Modelos e limites"
 
 #: src/components/ModelCredits.tsx
 msgid "Models at provider cost"
@@ -4229,6 +4327,11 @@ msgstr ""
 #: src/lib/cron.ts
 msgid "Monthly"
 msgstr "Mensalmente"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Monthly budget (USD)"
+msgstr "Orçamento mensal (USD)"
 
 #: src/components/ModelCredits.tsx
 msgid "Monthly credits"
@@ -4287,6 +4390,7 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/OrganizationSettingsPanel.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -4450,6 +4554,10 @@ msgstr "Próxima página"
 #: src/pages/SettingsOverlay.tsx
 msgid "Next settings sections"
 msgstr ""
+
+#: src/pages/ServerAISettings.tsx
+msgid "No AI accounts assigned"
+msgstr "Nenhuma conta de IA atribuída"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "No apps match your search."
@@ -4739,6 +4847,10 @@ msgstr "Abrir em janela cheia"
 #: src/pages/shell/chat-header.tsx
 msgid "Open navigation"
 msgstr "Abrir a navegação"
+
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Open sign-in page"
+msgstr "Abrir página de login"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Open work"
@@ -5034,6 +5146,10 @@ msgstr "Preferências"
 msgid "Preparing update…"
 msgstr ""
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "Pressione Shift+Escape para sair dos controles do computador."
+
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -5095,8 +5211,10 @@ msgid "Protocol"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Provider"
 msgstr "Provedor"
 
@@ -5159,6 +5277,7 @@ msgstr ""
 
 #: src/components/integrations/plugin-marketplace.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Reconnect"
 msgstr ""
@@ -5301,6 +5420,7 @@ msgstr "Recarregar"
 #: src/pages/ModelRoleSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Remove"
 msgstr "Remover"
 
@@ -5335,6 +5455,10 @@ msgstr "Remover gatilho de alteração"
 msgid "Remove from every space?"
 msgstr ""
 
+#: src/pages/ServerAISettings.tsx
+msgid "Remove from workspace"
+msgstr "Remover do espaço de trabalho"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Remove Git event"
 msgstr ""
@@ -5359,6 +5483,10 @@ msgstr "Remover habilidade {0}"
 #: src/components/integrations/plugin-marketplace.tsx
 msgid "Remove skills"
 msgstr ""
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Remove the workspace model?"
+msgstr "Remover o modelo do espaço de trabalho?"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
@@ -5527,8 +5655,10 @@ msgstr ""
 #: src/pages/AdminAccessPage.tsx
 #: src/pages/Auth.tsx
 #: src/pages/ModelRoleSettings.tsx
+#: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/PluginSubmissionsPanel.tsx
+#: src/pages/ServerAISettings.tsx
 #: src/pages/SpaceSettingOverrides.tsx
 msgid "Retry"
 msgstr "Tentar novamente"
@@ -5681,12 +5811,19 @@ msgstr "sábado"
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/model-settings/connection-controls.tsx
 #: src/pages/model-settings/providers-section.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/WorkspaceModelPolicy.tsx
 msgid "Save"
 msgstr "Salvar"
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Save budget"
+msgstr "Salvar orçamento"
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Save the workspace and install current software."
@@ -5918,6 +6055,10 @@ msgstr ""
 msgid "Server"
 msgstr "Servidor"
 
+#: src/pages/ServerAISettings.tsx
+msgid "Server accounts"
+msgstr "Contas do servidor"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Server name"
 msgstr "Nome do servidor"
@@ -5933,6 +6074,10 @@ msgstr ""
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Server URL"
 msgstr "URL do servidor"
+
+#: src/pages/WorkspaceModelPolicy.tsx
+msgid "Set workspace model"
+msgstr "Definir modelo do espaço de trabalho"
 
 #: src/components/call/CallCard.tsx
 #: src/components/SidebarFooter.tsx
@@ -6033,6 +6178,7 @@ msgstr ""
 #: src/lib/localized-provider-hint.ts
 #: src/pages/Auth.tsx
 #: src/pages/model-settings/connection-controls.tsx
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/Onboarding.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Sign in"
@@ -6891,6 +7037,11 @@ msgstr "Desfazer"
 msgid "Uninstall"
 msgstr ""
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Unlimited"
+msgstr "Ilimitado"
+
 #: src/pages/MessagingSettingsPanel.tsx
 msgid "Unlink"
 msgstr ""
@@ -7122,6 +7273,10 @@ msgstr ""
 msgid "Vault"
 msgstr "Cofre"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
+msgid "Verification code"
+msgstr "Código de verificação"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
 msgstr "Verificar e adicionar"
@@ -7327,6 +7482,10 @@ msgstr ""
 #: src/pages/WorkspaceModelPolicy.tsx
 msgid "Workspace model"
 msgstr ""
+
+#: src/pages/model-settings/workspace-ai-account-form.tsx
+msgid "Workspace monthly budget (USD)"
+msgstr "Orçamento mensal do espaço de trabalho (USD)"
 
 #: src/lib/billing.ts
 msgid "year"

@@ -15,6 +15,7 @@ import {
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
 import type { CapabilityInstall, ConnectionCatalogSnapshot, SourcePreset } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { appliedModelRole, runAsSystem, runAsTenant, updateModelRole } from "@orkbot/db";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "./index.js";
@@ -101,7 +102,12 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     const before = await system.connection.count({ where: { userId: actor.userId } });
     const rejected = await app.request("/rpc/connections/begin", {
       method: "POST",
-      headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+      headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+        "content-type": "application/json",
+        cookie,
+        origin: "http://127.0.0.1:5173",
+      },
       body: JSON.stringify({
         json: { connectorId: "unknown", provider: "GMAIL", displayName: "Mail" },
       }),
@@ -198,7 +204,12 @@ describeWithDatabase("Composio catalog reconciliation", () => {
     ]) {
       const response = await app.request("/rpc/capabilities/install", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          cookie,
+          origin: "http://127.0.0.1:5173",
+        },
         body: JSON.stringify({ json: input }),
       });
       expect(response.status).toBe(400);
@@ -857,6 +868,7 @@ async function rpc<T>(app: App, cookie: string, procedure: string, body: unknown
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

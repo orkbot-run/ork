@@ -15,10 +15,22 @@ import expo.modules.kotlin.modules.ModuleDefinition
 
 class OrkNotificationsModule : Module() {
   private var incomingReceiver: android.content.BroadcastReceiver? = null
+  private var requestDispatcher: String? = null
   override fun definition() = ModuleDefinition {
     Name("OrkNotifications")
     Constants("supportsSenderAvatars" to true)
-    Events("onIncomingCallChanged")
+    Events("onIncomingCallChanged", "onBackgroundRequest")
+    OnCreate {
+      requestDispatcher = NotificationRequests.install { request -> sendEvent("onBackgroundRequest", request) }
+    }
+    OnDestroy { requestDispatcher?.let { NotificationRequests.uninstall(it) } }
+    AsyncFunction("configureBackgroundSession") { scope: String, endpoint: String, token: String, space: String ->
+      NotificationRequests.configure(scope, endpoint, token, space)
+    }
+    AsyncFunction("respondBackgroundRequest") { id: String, scope: String, status: Int, body: String ->
+      NotificationRequests.reply(id, scope, status, body)
+    }
+    AsyncFunction("clearBackgroundSessions") { NotificationRequests.clear() }
     AsyncFunction("configureMessageSession") { scope: String ->
       OrkNotificationService.configureMessageSession(context(), scope)
     }
@@ -97,6 +109,7 @@ class OrkNotificationsModule : Module() {
     AsyncFunction("stop") { clearSession: Boolean ->
       val context = context()
       if (clearSession) {
+        NotificationRequests.clear()
         OrkNotificationService.clearSession(context)
         val storage = NotificationStorage(context)
         storage.token = ""

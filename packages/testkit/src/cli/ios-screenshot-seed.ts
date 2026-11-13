@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import type { BotSecretDestination, MessageBlock } from "@orkbot/contracts";
-import { encodeCardSecret, encodeContactSecret, encodeLoginSecret } from "@orkbot/contracts";
+import {
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  encodeCardSecret,
+  encodeContactSecret,
+  encodeLoginSecret,
+} from "@orkbot/contracts";
 import { allocateTicketNumber, createDb, createThreadMessage, ensureBoard } from "@orkbot/db";
 import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { PNG } from "pngjs";
@@ -888,7 +894,11 @@ async function rpc<T>(
 ): Promise<T> {
   const response = await fetch(`${apiUrl}/rpc/${procedure}`, {
     method: "POST",
-    headers: { "content-type": "application/json", ...headers },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      ...headers,
+    },
     body: JSON.stringify({ json: body }),
   });
   const text = await response.text();

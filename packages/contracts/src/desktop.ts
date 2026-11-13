@@ -3,6 +3,8 @@
 // Inherited Apache-2.0 material is preserved. Native auth and pairing are Ork additions.
 // Modified by Ork contributors to remove the legacy setup bridge.
 
+import type { WorkspaceTarget } from "./workspace-selection.js";
+
 /** A native host can share its server session with an SSO popup without exposing commands. */
 export interface OrkNativeAuth {
   readonly ssoPopup: true;
@@ -104,6 +106,7 @@ export interface OrkDesktop {
   accounts?: {
     signIn: () => Promise<OrkDesktopAccount>;
     session: () => Promise<OrkDesktopAccount | null>;
+    workspaceTarget?: () => Promise<WorkspaceTarget | null>;
     logout: () => Promise<void>;
     /** Retry only captured retired credentials; live credentials remain native. */
     retryRevocations?: () => Promise<void>;
@@ -112,6 +115,8 @@ export interface OrkDesktop {
       origin: string;
       challenge: string;
     }) => Promise<{ grant: string; expiresAt: number }>;
+    /** Native orchestration keeps installation sessions and device proofs outside the renderer. */
+    signInToServer?: () => Promise<void>;
     /** Released once to the confirmed server document, never persisted in its bookmark. */
     consumeServerInitializationSecret?: () => Promise<string | null>;
   };
@@ -193,6 +198,8 @@ export interface OrkDesktop {
   };
   update: OrkDesktopUpdate;
   oauth: {
+    /** Capture a registered MCP callback before network loading; no product session enters the popup. */
+    capture?: (authorizationUrl: string, expectedState: string) => Promise<OrkDesktopOAuthCallback>;
     /**
      * Open system-browser auth. A redirect_uri must be HTTP loopback with state;
      * URLs without a redirect use backend polling. Optional for older desktops.

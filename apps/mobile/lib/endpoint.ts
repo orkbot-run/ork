@@ -12,10 +12,12 @@ import {
 } from "@orkbot/contracts";
 import { cancelResponseBody, readBoundedJsonResponse, withAbort } from "@orkbot/core";
 import { t } from "./i18n";
+import { fetchInstallation } from "./installation-transport";
 import { DEFAULT_API, LOCAL_API } from "./server-config";
 
 export const API_PROBE_TIMEOUT_MS = 8_000;
 export const MAX_API_PROBE_RESPONSE_BYTES = 64 * 1024;
+const requestServer: typeof fetch = (input, init) => fetchInstallation(input, init ?? {});
 
 /** The app never falls back to an older server's local credential forms. */
 export async function requireAccountsSignIn(
@@ -26,7 +28,7 @@ export async function requireAccountsSignIn(
   if (!parsed.ok || parsed.url !== url) throw new Error("Invalid server address.");
   const signal = AbortSignal.timeout(API_PROBE_TIMEOUT_MS);
   const response = await withAbort(
-    fetch(`${url}/api/auth/capabilities`, {
+    fetchInstallation(`${url}/api/auth/capabilities`, {
       headers,
       credentials: "omit",
       redirect: "error",
@@ -91,7 +93,7 @@ export function requireSupportedProtocol(
 /** Read initialization state without sending Accounts or product credentials. */
 export async function serverInitializationRequired(
   url: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = requestServer,
   signal?: AbortSignal,
 ): Promise<boolean> {
   const parsed = normalizeApiBase(url);
@@ -196,7 +198,7 @@ export function apiBaseWarning(url: string): string | null {
 
 export async function probeApiBase(
   input: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = requestServer,
   headers: Record<string, string> = {},
   protocol: number = CLIENT_PROTOCOL_VERSION,
 ): Promise<EndpointResult> {

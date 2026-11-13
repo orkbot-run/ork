@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { WorkspaceTargetSchema } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { desktopBridge } from "./desktop";
 
@@ -25,15 +26,22 @@ async function request(path: string, body: unknown): Promise<Record<string, unkn
 /** Exchange an audience-bound native proof; the Accounts bearer never enters the renderer. */
 export async function signInWithNativeAccounts(): Promise<void> {
   const accounts = desktopBridge()?.accounts;
+  if (accounts?.signInToServer) {
+    await accounts.signInToServer();
+    return;
+  }
   if (!accounts?.createServerLoginGrant) throw new Error("Could not continue");
   const origin = window.location.origin;
-  const challenge = await request("/api/auth/native/challenge", {});
+  const selected = await accounts.workspaceTarget?.();
+  const workspace = selected ? WorkspaceTargetSchema.parse(selected) : null;
+  if (window.location.origin !== origin) throw new Error("Could not continue");
+  const challenge = await request(`/api/auth/native/${workspace ? "workspace/" : ""}challenge`, {});
   if (
     typeof challenge.challenge !== "string" ||
     !/^[A-Za-z0-9_-]{43}$/.test(challenge.challenge) ||
     typeof challenge.expiresAt !== "number" ||
     challenge.expiresAt <= Date.now() / 1000 ||
-    typeof challenge.bootstrapRequired !== "boolean"
+    (workspace ? challenge.version !== 2 : typeof challenge.bootstrapRequired !== "boolean")
   )
     throw new Error("Could not continue");
   let bootstrapSecret: string | undefined;
@@ -56,7 +64,7 @@ export async function signInWithNativeAccounts(): Promise<void> {
     expiresAt <= Date.now() / 1000
   )
     throw new Error("Could not continue");
-  const complete = await request("/api/auth/native/complete", {
+  const complete = await request(`/api/auth/native/${workspace ? "workspace/" : ""}complete`, {
     challenge: challenge.challenge,
     grant,
     ...(bootstrapSecret ? { bootstrapSecret } : {}),
@@ -65,7 +73,8 @@ export async function signInWithNativeAccounts(): Promise<void> {
     !complete.user ||
     typeof complete.user !== "object" ||
     !("id" in complete.user) ||
-    typeof complete.user.id !== "string"
+    typeof complete.user.id !== "string" ||
+    (workspace && complete.workspaceId !== workspace.workspaceId)
   )
     throw new Error("Could not continue");
   initializationSecrets.delete(accounts);

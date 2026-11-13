@@ -19,6 +19,9 @@ import * as runMessages from "./run-messages.js";
 const sink = createTestSink();
 
 const provisionComputer = vi.hoisted(() => vi.fn());
+const retireWorkspaceRun = vi.hoisted(() => vi.fn());
+
+vi.mock("./workspace-run-retirement.js", () => ({ retireWorkspaceRun }));
 
 vi.mock("./computer-lifecycle.js", async (importOriginal) => ({
   ...(await importOriginal<typeof ComputerLifecycleModule>()),
@@ -61,6 +64,9 @@ async function runRoutine(
     cancelRun?: boolean;
     onRunStarted?: () => void;
     backgroundHelperWithoutComputer?: boolean;
+    managedWorkspace?: boolean;
+    authorizeWork?: Parameters<typeof createRunExecutor>[0]["authorizeWork"];
+    onRuntimeStart?: () => void;
   } = {},
 ) {
   const attachment: Extract<MessageBlock, { kind: "file" | "image" }> = {
@@ -96,6 +102,13 @@ async function runRoutine(
     leaseFence: 0,
     leaseExpiresAt: null as Date | null,
     wakeAt: null as Date | null,
+    ...(options.managedWorkspace
+      ? {
+          centralWorkspaceId: "workspace-1",
+          workspaceMembershipVersion: "membership-1",
+          personalDeviceId: null,
+        }
+      : {}),
   };
   const toolResults: unknown[] = [];
   const steeringInputs: unknown[] = [];
@@ -103,6 +116,7 @@ async function runRoutine(
   // relay; the executor still sees the option's signal through AbortSignal.any.
   const shutdownRelay = new AbortController();
   const runtimeRun = vi.fn(async function* (request: AgentRunRequest) {
+    options.onRuntimeStart?.();
     if (options.cancelRun) run.status = "cancelled";
     if (options.steering && !options.steeringAfterFirst) {
       steeringInputs.push(...((await request.claimSteering?.([])) ?? []));
@@ -360,6 +374,17 @@ async function runRoutine(
     jobs: { enqueue },
     notifications: { send: vi.fn(async () => undefined) },
     secrets: options.secrets ?? [],
+    authorizeWork: options.authorizeWork,
+    serverAIModels: options.managedWorkspace
+      ? {
+          resolve: async () => ({
+            model: { provider: "anthropic", id: "claude-sonnet-4-6", apiKey: crypto.randomUUID() },
+            redact: [],
+            secretId: "fixture-connection",
+          }),
+          fallbacks: async () => [],
+        }
+      : undefined,
     shutdownSignal: options.shutdownSignal
       ? AbortSignal.any([options.shutdownSignal, shutdownRelay.signal])
       : undefined,
@@ -415,6 +440,11 @@ beforeEach(() => {
   installLogger(createLogger({ service: "test", sinks: [sink] }));
   provisionComputer.mockReset();
   provisionComputer.mockResolvedValue(COMPUTER);
+  retireWorkspaceRun.mockReset();
+  retireWorkspaceRun.mockImplementation(async (_deps, run) => {
+    Object.assign(run, { status: "cancelled", leaseOwner: null, leaseExpiresAt: null });
+    return true;
+  });
 });
 
 it.each(["direct", "group"] as const)(
@@ -945,6 +975,78 @@ describe("run computer provisioning", () => {
     expect(resumed.finalizeRun).toHaveBeenCalledWith(
       expect.objectContaining({ outcome: "completed" }),
     );
+  });
+
+  it("retires an observed workspace revocation even when shutdown follows before finally", async () => {
+    const shutdown = new AbortController();
+    const permission = new AbortController();
+    const dispose = vi.fn();
+    const result = await runRoutine([], {
+      managedWorkspace: true,
+      authorizeWork: async () => ({ signal: permission.signal, dispose }),
+      shutdownSignal: shutdown.signal,
+      onRuntimeStart: () => {
+        permission.abort();
+        shutdown.abort();
+      },
+    });
+    expect(result.runtimeRun).toHaveBeenCalledOnce();
+    expect(retireWorkspaceRun).toHaveBeenCalledExactlyOnceWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: "run-1",
+        spaceId: "space-1",
+        userId: "user-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        taskId: "task-1",
+        centralWorkspaceId: "workspace-1",
+        workspaceMembershipVersion: "membership-1",
+        personalDeviceId: null,
+      }),
+      { owner: "worker-1", fence: 1 },
+    );
+    expect(result.run.status).toBe("cancelled");
+    expect(result.finalizeRun).not.toHaveBeenCalled();
+    expect(continueJobs(result.enqueue)).toEqual([]);
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("requeues an allowed workspace when normal shutdown then disposes its permission", async () => {
+    const shutdown = new AbortController();
+    const permission = new AbortController();
+    const result = await runRoutine([], {
+      managedWorkspace: true,
+      authorizeWork: async () => ({ signal: permission.signal, dispose: vi.fn() }),
+      shutdownSignal: shutdown.signal,
+      onRuntimeStart: () => {
+        shutdown.abort();
+        permission.abort();
+      },
+    });
+    expect(result.runtimeRun).toHaveBeenCalledOnce();
+    expect(retireWorkspaceRun).not.toHaveBeenCalled();
+    expect(result.finalizeRun).not.toHaveBeenCalled();
+    expect(result.run).toMatchObject({ status: "queued", leaseOwner: null });
+    expect(continueJobs(result.enqueue)).toHaveLength(1);
+  });
+
+  it("requeues when initial authority resolves null after shutdown disposed the authority", async () => {
+    const shutdown = new AbortController();
+    const result = await runRoutine([], {
+      managedWorkspace: true,
+      authorizeWork: async () => {
+        shutdown.abort();
+        await Promise.resolve();
+        return null;
+      },
+      shutdownSignal: shutdown.signal,
+    });
+    expect(result.runtimeRun).not.toHaveBeenCalled();
+    expect(retireWorkspaceRun).not.toHaveBeenCalled();
+    expect(result.finalizeRun).not.toHaveBeenCalled();
+    expect(result.run).toMatchObject({ status: "queued", leaseOwner: null });
+    expect(continueJobs(result.enqueue)).toHaveLength(1);
   });
 
   it("requeues a run whose stream ends after shutdown instead of completing it", async () => {

@@ -11,11 +11,12 @@ import type {
   Run,
   TaughtSkill,
 } from "@orkbot/contracts";
-import { computerCapabilitiesFor } from "@orkbot/core";
+import { COMPUTER_FRAME_SOURCE, computerCapabilitiesFor } from "@orkbot/core";
 import { BotAvatar, Button } from "@orkbot/ui-web";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { ComputerMaintenanceActions } from "../../components/ComputerMaintenanceActions";
+import { NativeComputerScreen } from "../../components/NativeComputerScreen";
 import { TeachCaptureOverlay } from "../../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../../components/teach/TeachRecordingChrome";
@@ -205,21 +206,31 @@ export function ComputerOverlay({
             embeddedScreenUrl &&
             !computerScreenError ? (
             <>
-              <iframe
-                key={screenFrameKey}
-                title={t`Bot screen`}
-                ref={screenFrameRef}
-                src={embeddedScreenUrl}
-                sandbox={screenIframeSandbox(embeddedScreenUrl)}
-                className="h-full w-full border-0 bg-black"
-                allow="clipboard-read; clipboard-write; fullscreen"
-                style={{
-                  pointerEvents:
-                    recordingSkill || !hasControl || !computerCapabilitiesFor(computer).control
-                      ? "none"
-                      : "auto",
-                }}
-              />
+              {embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
+                <NativeComputerScreen
+                  key={screenFrameKey}
+                  botId={bot.id}
+                  interactive={
+                    hasControl && !recordingSkill && computerCapabilitiesFor(computer).control
+                  }
+                />
+              ) : (
+                <iframe
+                  key={screenFrameKey}
+                  title={t`Bot screen`}
+                  ref={screenFrameRef}
+                  src={embeddedScreenUrl}
+                  sandbox={screenIframeSandbox(embeddedScreenUrl)}
+                  className="h-full w-full border-0 bg-black"
+                  allow="clipboard-read; clipboard-write; fullscreen"
+                  style={{
+                    pointerEvents:
+                      recordingSkill || !hasControl || !computerCapabilitiesFor(computer).control
+                        ? "none"
+                        : "auto",
+                  }}
+                />
+              )}
               {bot ? (
                 <TeachCaptureOverlay
                   botId={bot.id}

@@ -17,6 +17,7 @@ const runtimePaths = [
   "NOTICE",
   "apps/api",
   "apps/worker",
+  "apps/relay",
   "apps/web/package.json",
   "apps/web/node_modules",
   "apps/web/dist",

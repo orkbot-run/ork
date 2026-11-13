@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
 import {
   activeBotId,
@@ -83,6 +84,49 @@ test("opening and releasing the computer keep a view-only stream; a failed relea
   await expect(take).toBeVisible();
   await chrome.getByRole("button", { name: "Close computer" }).click();
   await expect(chrome).toBeHidden();
+});
+
+test("native computer images and control stay on authenticated HTTP", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `native-frames-${Date.now()}@orkbot.test`, "password12", "Computer");
+  await completeOnboarding(page);
+  await page.evaluate(() => {
+    window.orkbotDesktop = { accounts: { signInToServer: async () => {} } } as never;
+  });
+  await openComputerPanel(page);
+  await page.getByTestId("computer-preview").hover();
+  await page.getByTestId("computer-preview-open").click();
+  const chrome = page.getByTestId("computer-chrome");
+  const image = page.getByRole("img", { name: "Bot screen", exact: true }).last();
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() => image.evaluate((element) => (element as HTMLImageElement).naturalWidth))
+    .toBeGreaterThan(0);
+  await captureScreenshot(page, testInfo, "native-computer-http-images");
+  await chrome.getByRole("button", { name: "Take control", exact: true }).click();
+  const controls = page.getByRole("application", { name: "Computer controls", exact: true });
+  await expect(controls).toBeVisible();
+  const pointer = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/rpc/computer/input") &&
+      response.request().postDataJSON()?.json.kind === "pointer",
+  );
+  await controls.click({ position: { x: 100, y: 100 } });
+  expect((await pointer).ok()).toBe(true);
+  const key = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/rpc/computer/input") &&
+      response.request().postDataJSON()?.json.payload.key === "ctrl+a",
+  );
+  await page.keyboard.press("Control+a");
+  expect((await key).ok()).toBe(true);
+  await page.keyboard.press("Shift+Escape");
+  await expect(controls).not.toBeFocused();
+  await captureScreenshot(page, testInfo, "native-computer-http-control");
+  await chrome.getByRole("button", { name: "Release control", exact: true }).click();
+  await expect(controls).toHaveCount(0);
+  await expect(image).toBeVisible();
 });
 
 test("an active Team bot must be stopped before user takeover", async ({ page }, testInfo) => {
@@ -204,6 +248,9 @@ function threadSnapshot(page: Page, botId: string) {
 }
 
 async function rpcResponse(page: Page, procedure: string, body: unknown) {
-  const response = await page.request.post(`/rpc/${procedure}`, { data: { json: body } });
+  const response = await page.request.post(`/rpc/${procedure}`, {
+    headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
+    data: { json: body },
+  });
   return { ok: response.ok(), status: response.status() };
 }

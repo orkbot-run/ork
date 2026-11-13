@@ -7,6 +7,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioConnector, FakeComposioClient } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
 import { allowFixtureAiDataSharing } from "./fixture-ai-consent.js";
@@ -107,7 +108,12 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
       };
       const rejected = await handles.app.request("/rpc/threads/send", {
         method: "POST",
-        headers: { "content-type": "application/json", cookie, origin: fixtureOrigin },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          cookie,
+          origin: fixtureOrigin,
+        },
         body: JSON.stringify({ json: { ...input, imageHandling: "confirm" } }),
       });
       expect(rejected.status).toBe(409);
@@ -174,7 +180,12 @@ async function rpc<T>(
 ): Promise<T> {
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: fixtureOrigin },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: fixtureOrigin,
+    },
     body: JSON.stringify({ json: input }),
   });
   const body = (await response.json()) as { json?: T; error?: { message?: string } };

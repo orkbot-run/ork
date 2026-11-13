@@ -24,9 +24,25 @@ export const echoedQuery = (query: string) =>
 
 /** The catalog models this user's connections, or hosted credits, can run. */
 export async function connectedModelChoices(
-  deps: Pick<BotModelChangeDeps, "prisma" | "secretStore" | "hostedProvider">,
+  deps: Pick<BotModelChangeDeps, "prisma" | "secretStore" | "hostedProvider" | "serverAIModels">,
   scope: Pick<Actor, "userId" | "spaceId">,
 ): Promise<ModelChoice[]> {
+  const assigned = await deps.serverAIModels?.assignedAccounts(scope);
+  if (assigned) {
+    const choices = new Map<string, ModelChoice>();
+    for (const account of assigned)
+      for (const id of account.allowedModels) {
+        if (!account.models.includes(id)) continue;
+        const entry = listPiCatalog().find(
+          (row) => row.provider === account.provider && row.id === id,
+        );
+        choices.set(
+          JSON.stringify([account.provider, id]),
+          entry ?? { provider: account.provider, providerName: account.label, id, label: id },
+        );
+      }
+    return [...choices.values()];
+  }
   const auth = await modelCredentialAuthKindsForSpace(
     deps.prisma,
     deps.secretStore,
@@ -143,7 +159,7 @@ const choiceKey = (choice: ModelChoice) => `${choice.provider}/${choice.id}`;
  * to one provider; `preferredProvider` breaks ties toward it.
  */
 export async function resolveModelChoice(
-  deps: Pick<BotModelChangeDeps, "prisma" | "secretStore" | "hostedProvider">,
+  deps: Pick<BotModelChangeDeps, "prisma" | "secretStore" | "hostedProvider" | "serverAIModels">,
   scope: Pick<Actor, "userId" | "spaceId">,
   input: { model: string; provider?: string; preferredProvider?: string | null },
 ): Promise<ModelChoiceResult> {

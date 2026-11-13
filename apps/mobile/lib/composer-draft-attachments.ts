@@ -18,10 +18,16 @@ const pins = new Map<string, number>();
 function root() {
   return new Directory(Paths.document, "composer-attachments-v1");
 }
+function managedRoot() {
+  return new Directory(Paths.document, "composer-workspace-attachments-v2");
+}
+function roots() {
+  return [root(), managedRoot()];
+}
 function folder(scope: ComposerDraftScope) {
   return new Directory(
-    root(),
-    encodeURIComponent(scope.namespace),
+    scope.workspaceOwner ? managedRoot() : root(),
+    encodeURIComponent(scope.workspaceOwner ?? scope.namespace),
     encodeURIComponent(scope.apiBase),
     encodeURIComponent(scope.userId),
   );
@@ -136,13 +142,13 @@ export function writeComposerDraftAttachments(
       if (!target.exists && !temporary.exists && !backup.exists) return true;
     }
 
-    const entries = walk(root());
+    const entries = roots().flatMap(walk);
     for (const entry of entries) {
       if (
         entry.uri === target.uri ||
         (pins.has(entry.uri.replace(/\.(tmp|bak)$/, "")) &&
           entry.uri.startsWith(
-            `${new Directory(root(), encodeURIComponent(scope.namespace)).uri.replace(/\/$/, "")}/`,
+            `${new Directory(scope.workspaceOwner ? managedRoot() : root(), encodeURIComponent(scope.workspaceOwner ?? scope.namespace)).uri.replace(/\/$/, "")}/`,
           ))
       )
         continue;
@@ -156,10 +162,12 @@ export function writeComposerDraftAttachments(
       )
         entry.delete();
     }
-    const retained = walk(root()).filter(
-      (entry) =>
-        entry.uri !== target.uri && entry.uri !== temporary.uri && entry.uri !== backup.uri,
-    );
+    const retained = roots()
+      .flatMap(walk)
+      .filter(
+        (entry) =>
+          entry.uri !== target.uri && entry.uri !== temporary.uri && entry.uri !== backup.uri,
+      );
     const payload = JSON.stringify({
       version: 1,
       updatedAt: Date.now(),
@@ -209,9 +217,10 @@ export function writeComposerDraftAttachments(
   }
 }
 
-export function clearComposerDraftAttachments(): void {
+export function clearComposerDraftAttachments(includeManaged = true): void {
   try {
-    if (root().exists) root().delete();
+    for (const directory of includeManaged ? roots() : [root()])
+      if (directory.exists) directory.delete();
   } catch {
     /* A new login namespace cannot read a leftover source. */
   }

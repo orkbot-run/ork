@@ -676,8 +676,15 @@ export interface ModelCallObserver {
     /** Explicit adapter-known write bucket required by this request, not a billing prediction. */
     cacheWriteRetention?: "1h";
   }): string | Promise<string>;
+  /** A per-call authorization lease may end a provider request before it produces more data. */
+  signalForCall?(reservationId: string): AbortSignal | undefined;
   afterCall(reservationId: string, usage: AgentUsage | null): void | Promise<void>;
   onRequestId?(reservationId: string, providerRequestId: string): void | Promise<void>;
+  /** Only quota metadata is exposed; response bodies and other headers stay in the provider adapter. */
+  onResponse?(
+    reservationId: string,
+    response: { status: number; retryAfter: string | null },
+  ): void | Promise<void>;
 }
 
 export type AgentRuntimeEvent =

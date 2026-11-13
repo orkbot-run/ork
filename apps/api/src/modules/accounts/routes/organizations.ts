@@ -19,6 +19,20 @@ import { ORPCError } from "@orpc/server";
 import type { RouterContext } from "#modules/platform/routes/context";
 import { deleteOrganization } from "../account-deletion.js";
 
+async function requireLocalOrganizationManagement(
+  ctx: RouterContext,
+  spaceId: string,
+  organizationId?: string,
+) {
+  const managed = await ctx.deps.prisma.centralWorkspaceBinding.findFirst({
+    where: {
+      OR: [{ spaceId }, ...(organizationId ? [{ localOrganizationId: organizationId }] : [])],
+    },
+    select: { id: true },
+  });
+  if (managed) throw new ORPCError("FORBIDDEN");
+}
+
 export function organizationsRoutes(ctx: RouterContext) {
   const { deps, authed } = ctx;
   return {
@@ -30,6 +44,7 @@ export function organizationsRoutes(ctx: RouterContext) {
       ),
       create: authed.organizations.create.handler(({ context, input }) =>
         runAsSystem("create an organization for its owner", async () => {
+          await requireLocalOrganizationManagement(ctx, context.actor.spaceId);
           let organization: Awaited<ReturnType<typeof createOrganizationForUser>>;
           try {
             organization = await createOrganizationForUser(deps.prisma, {
@@ -53,6 +68,11 @@ export function organizationsRoutes(ctx: RouterContext) {
       ),
       rename: authed.organizations.rename.handler(({ context, input }) =>
         runAsSystem("rename an organization for its owner", async () => {
+          await requireLocalOrganizationManagement(
+            ctx,
+            context.actor.spaceId,
+            input.organizationId,
+          );
           let renamed: { id: string; name: string };
           try {
             renamed = await renameOrganization(deps.prisma, {
@@ -75,6 +95,11 @@ export function organizationsRoutes(ctx: RouterContext) {
       ),
       remove: authed.organizations.remove.handler(({ context, input }) =>
         runAsSystem("delete an organization with its content", async () => {
+          await requireLocalOrganizationManagement(
+            ctx,
+            context.actor.spaceId,
+            input.organizationId,
+          );
           const { userId } = context.actor;
           try {
             await deleteOrganization(deps, userId, input.organizationId);

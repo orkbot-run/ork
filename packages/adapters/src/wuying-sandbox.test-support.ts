@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 fixtures are preserved. Bounded path trimming follows LICENSE.md.
+
 import type { WuyingControlPlane, WuyingDesktopStatus } from "./wuying-openapi.js";
 import type { WuyingDesktopTools, WuyingToolResult } from "./wuying-sandbox.js";
 import { WuyingSandboxProvider, WuyingToolError } from "./wuying-sandbox.js";
@@ -208,7 +212,9 @@ export class FakeWuyingDesktop implements WuyingDesktopTools, WuyingControlPlane
 }
 
 function key(path: string) {
-  return path.replace(/\\+$/, "").toLowerCase();
+  let end = path.length;
+  while (end > 0 && path[end - 1] === "\\") end--;
+  return path.slice(0, end).toLowerCase();
 }
 
 function parent(path: string) {

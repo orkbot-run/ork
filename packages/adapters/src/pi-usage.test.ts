@@ -309,6 +309,83 @@ describe("Pi usage accounting", () => {
       await once(server, "close");
     }
   }, 30000);
+  it("coordinates a real SDK quota rejection without overriding its fetch", async () => {
+    let requests = 0;
+    const server = createServer((_request, response) => {
+      requests++;
+      response.writeHead(429, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            message: "fixture quota",
+            details: [
+              { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "120.25s" },
+            ],
+          },
+        }),
+      );
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("missing listener");
+      const quota = vi.fn();
+      const order: string[] = [];
+      const stream = observedPiStream(
+        builtinModels(),
+        {
+          ...model,
+          provider: "google",
+          api: "google-generative-ai",
+          baseUrl: `http://127.0.0.1:${address.port}`,
+        },
+        { messages: [{ role: "user", content: "fixture", timestamp: 1 }] },
+        { apiKey: "fixture" },
+        () => {},
+        {
+          beforeCall: async () => "exact-account",
+          onResponse: async (id, response) => {
+            order.push("quota");
+            quota(id, response);
+          },
+          afterCall: async () => {
+            order.push("settle");
+          },
+        },
+      );
+      for await (const event of stream) if (event.type === "error") order.push("error");
+      expect(quota).toHaveBeenCalledExactlyOnceWith("exact-account", {
+        status: 429,
+        retryAfter: "121",
+      });
+      expect(order).toEqual(["quota", "settle", "error"]);
+      expect(requests).toBe(1);
+    } finally {
+      server.close();
+      server.closeAllConnections();
+      await once(server, "close");
+    }
+  });
+
+  it("reports only quota metadata before exposing a provider rejection", async () => {
+    const onResponse = vi.fn();
+    const wrapped = usageReportingFetch(
+      async () =>
+        new Response("private provider text", {
+          status: 429,
+          headers: { "retry-after": "120", "x-private-token": "secret" },
+        }),
+      new Set(),
+      undefined,
+      onResponse,
+    );
+    const response = await wrapped("https://example.test");
+    expect(onResponse).toHaveBeenCalledExactlyOnceWith({ status: 429, retryAfter: "120" });
+    expect(await response.text()).toBe("private provider text");
+  });
   it("persists a generation id before exposing the first SSE chunk", async () => {
     let release = () => {};
     let entered = () => {};
@@ -434,6 +511,31 @@ describe("Pi usage accounting", () => {
       }),
     );
     expect(events[0]).toMatchObject({ costUsd: 0.125, costSource: "provider-reported" });
+  });
+
+  it("refuses a revoked per-call lease before opening the provider stream", async () => {
+    const streamSimple = vi.fn();
+    const afterCall = vi.fn();
+    const stream = await observedPiStream(
+      { streamSimple } as unknown as Parameters<typeof observedPiStream>[0],
+      model,
+      { messages: [] },
+      undefined,
+      vi.fn(),
+      {
+        beforeCall: () => "reserved-call",
+        signalForCall: () => AbortSignal.abort(new Error("AI assignment revoked")),
+        afterCall,
+      },
+    );
+    for await (const _event of stream) {
+    }
+    expect(streamSimple).not.toHaveBeenCalled();
+    expect(afterCall).toHaveBeenCalledWith(
+      "reserved-call",
+      expect.objectContaining({ costUsd: 0, usageSource: "not-started" }),
+    );
+    expect((await stream.result()).stopReason).toBe("error");
   });
 
   it("settles a thrown provider call before exposing the terminal event", async () => {

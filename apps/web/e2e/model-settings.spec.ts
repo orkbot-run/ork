@@ -5,7 +5,7 @@
 import type { IncomingMessage } from "node:http";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { AiConsentStatus } from "@orkbot/contracts";
+import type { AiConsentStatus, ModelCatalogEntry, RpcOutput } from "@orkbot/contracts";
 import {
   activeBotId,
   captureScreenshot,
@@ -28,6 +28,190 @@ const LOCAL_MODEL_REPLY = "OpenAI-compatible endpoint verified end to end.";
 test.afterEach(async ({ page }) => {
   // Finish intercepted responses before the browser context is disposed.
   await page.unrouteAll({ behavior: "wait" });
+});
+
+test("the native renderer manages shared AI on its connected server", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `workspace-model-${Date.now()}@orkbot.test`, "password12", "Workspace Owner");
+  await completeOnboarding(page);
+  const catalog = await rpc<ModelCatalogEntry[]>(page, "models/list", {});
+  const model = catalog.find(
+    (entry) =>
+      entry.provider === "openrouter" &&
+      entry.auth !== "oauth" &&
+      !entry.placeholder &&
+      entry.protocol !== "decisions" &&
+      !entry.connection?.routingFields?.some((field) => field.required),
+  );
+  expect(model).toBeDefined();
+  await openUserSettings(page, "models");
+  const section = page.getByRole("region", { name: "Workspace model", exact: true });
+  await section.getByRole("button", { name: "Set workspace model", exact: true }).click();
+  await section.getByLabel("Provider", { exact: true }).selectOption(model!.provider);
+  await section.getByLabel("Model", { exact: true }).fill(model!.id);
+  await section.getByLabel("API key", { exact: true }).fill("fake-workspace-model-key");
+  await section.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(section.getByLabel("API key", { exact: true })).toHaveCount(0);
+  await expect(section).toContainText(model!.id);
+  const policy = await rpc<{
+    canManage: boolean;
+    policy: { provider: string; modelId: string } | null;
+  }>(page, "models/workspacePolicy", {});
+  expect(policy).toMatchObject({
+    canManage: true,
+    policy: { provider: model!.provider, modelId: model!.id },
+  });
+  expect(JSON.stringify(policy)).not.toContain("fake-workspace-model-key");
+  await captureScreenshot(page, testInfo, "shared-model-on-connected-server");
+  const retired = await page.request.post("/api/workspace/model-control", {
+    data: { action: "get", grant: "retired-fake-grant" },
+  });
+  expect(retired.status()).toBe(404);
+  await section.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(section).not.toContainText(model!.id);
+  expect((await rpc<{ policy: unknown }>(page, "models/workspacePolicy", {})).policy).toBeNull();
+});
+
+test("managed workspace settings show assigned accounts and server administration", async ({
+  page,
+}, testInfo) => {
+  await signup(
+    page,
+    `server-ai-settings-${Date.now()}@orkbot.test`,
+    "password12",
+    "Workspace member",
+  );
+  await completeOnboarding(page);
+  const catalog = await rpc<ModelCatalogEntry[]>(page, "models/list", {});
+  const account = {
+    id: "shared-account",
+    label: "Shared account",
+    provider: "openai-compatible",
+    models: ["small-model", "large-model"],
+    state: "active" as const,
+    revision: 1,
+    concurrencyLimit: 4,
+    monthlyBudgetMicros: 50_000_000,
+  };
+  const status: RpcOutput<"serverAI/status"> = {
+    available: true,
+    spaceId: "workspace-fixture",
+    workspaceMonthlyBudgetMicros: 25_000_000,
+    canManageServer: true,
+    canManageWorkspace: true,
+    accounts: [account],
+    connections: [
+      {
+        ...account,
+        enabled: true,
+        allowedModels: account.models,
+        defaultModelId: "small-model",
+        isDefault: true,
+        fallback: false,
+        priority: 0,
+        assignmentRevision: 1,
+      },
+    ],
+  };
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({ json: { json: { managed: true, canManage: false, policy: null } } }),
+  );
+  await page.route("**/rpc/serverAI/status", (route) => route.fulfill({ json: { json: status } }));
+  await page.route("**/rpc/serverAI/catalog", (route) =>
+    route.fulfill({ json: { json: catalog } }),
+  );
+  await openUserSettings(page, "models");
+  await expect(page.getByTestId("server-ai-ready")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Shared account", exact: true })).toContainText(
+    "small-model",
+  );
+  await expect(page.getByRole("region", { name: "Server accounts", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add provider", exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "installation-ai-accounts");
+  await page.getByRole("button", { name: "Models and limits", exact: true }).click();
+  await expect(page.getByLabel("Monthly budget (USD)", { exact: true })).toHaveValue("50");
+  await expect(page.getByLabel("Default model", { exact: true })).toHaveValue("small-model");
+  await page.getByLabel("Fallback priority", { exact: true }).scrollIntoViewIfNeeded();
+  await captureScreenshot(page, testInfo, "installation-ai-workspace-limits");
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Add AI account", exact: true }).click();
+  await expect(page.getByLabel("Concurrent requests", { exact: true })).toHaveValue("8");
+  await page.getByRole("button", { name: "Save", exact: true }).scrollIntoViewIfNeeded();
+  await captureScreenshot(page, testInfo, "installation-ai-add-account");
+});
+
+test("a managed bot can choose between assigned accounts with the same model", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `bot-ai-accounts-${Date.now()}@orkbot.test`, "password12", "Workspace member");
+  await completeOnboarding(page);
+  const botId = await activeBotId(page);
+  await page.route("**/rpc/models/workspacePolicy", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          managed: true,
+          canManage: false,
+          policy: { provider: "openai", modelId: "shared-model" },
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/models/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            managed: true,
+            provider: "openai",
+            id: "shared-model",
+            label: "Shared model",
+            credentialIds: ["account-one", "account-two"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      json: {
+        json: ["one", "two"].map((name) => ({
+          id: `account-${name}`,
+          managed: true,
+          provider: "openai",
+          label: `Account ${name}`,
+          hasKey: true,
+          isDefault: name === "one",
+          enabledModelIds: ["shared-model"],
+        })),
+      },
+    }),
+  );
+  let saved: Record<string, unknown> | undefined;
+  await page.route("**/rpc/bots/update", async (route) => {
+    saved = (route.request().postDataJSON() as { json: Record<string, unknown> }).json;
+    await route.fulfill({ json: { json: await rpc(page, "bots/get", { botId }) } });
+  });
+  await openBotPanelTab(page, "Advanced");
+  const settings = page.getByTestId("bot-settings");
+  const picker = settings.getByRole("combobox", { name: "Model", exact: true });
+  await expect(picker).toBeVisible();
+  await expect(picker.locator("option")).toHaveText([
+    "Space default",
+    "Shared model (Account one)",
+    "Shared model (Account two)",
+  ]);
+  await picker.selectOption({ label: "Shared model (Account two)" });
+  await captureScreenshot(page, testInfo, "bot-ai-account-picker");
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => saved?.modelConnectionId).toBe("account-two");
+  expect(saved).toMatchObject({
+    modelProvider: "openai",
+    modelId: "shared-model",
+    modelConnectionId: "account-two",
+  });
 });
 
 test("model settings cleanup frames", { tag: "@nightly" }, async ({ page }, testInfo) => {
@@ -160,9 +344,9 @@ test("connects, lists, and uses an OpenAI-compatible endpoint", async ({ page },
       try {
         completionBodies.push(await readJsonBody(request));
         completionHeaders.push(request.headers["x-session"]);
-      } catch (error) {
+      } catch {
         response.writeHead(400, { "content-type": "text/plain" });
-        response.end(String(error));
+        response.end("Invalid fixture request");
         return;
       }
       response.writeHead(200, {

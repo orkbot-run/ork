@@ -9,11 +9,19 @@ import type { PrismaClient } from "./client.js";
 import { Prisma } from "./client.js";
 import type { PageShareSecret } from "./page-shares.js";
 import { deletePageShareSecrets } from "./page-shares.js";
+import { runAsSystemInTransaction } from "./row-security.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 /** Per member, per organization: one person cannot fan out unbounded boundaries. */
 const MAX_SPACES_PER_MEMBER = 32;
+
+export class CentralWorkspaceCreationRequiredError extends Error {
+  constructor() {
+    super("Create workspaces in Accounts.");
+    this.name = "CentralWorkspaceCreationRequiredError";
+  }
+}
 
 export class SpaceLimitError extends Error {
   constructor() {
@@ -164,6 +172,16 @@ export async function createSpaceForMember(
         });
         if (!currentMembership) throw new IsolationError();
         await lockOrganizationSpaces(tx, currentMembership.organizationId);
+        const central = await runAsSystemInTransaction(
+          tx,
+          "check whether Accounts manages workspace creation",
+          () =>
+            tx.centralWorkspaceBinding.findFirst({
+              where: { localOrganizationId: currentMembership.organizationId },
+              select: { id: true },
+            }),
+        );
+        if (central) throw new CentralWorkspaceCreationRequiredError();
         const deleting = await tx.space.count({
           where: {
             organizationId: currentMembership.organizationId,

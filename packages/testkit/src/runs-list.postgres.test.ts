@@ -2,6 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { RunActivityRow } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import type { PrismaClient } from "@orkbot/db";
 import { createThreadMessage } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -301,6 +302,7 @@ async function raw(app: App, cookie: string, proc: string, body: unknown) {
   return app.request(`/rpc/${proc}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

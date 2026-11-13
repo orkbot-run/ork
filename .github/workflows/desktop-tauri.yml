@@ -97,6 +97,25 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
       - run: pnpm install --frozen-lockfile
+      - name: Prepare macOS personal signing identity
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          identity_dir="$RUNNER_TEMP/ork-personal-key-qualification"
+          mkdir -m 700 "$identity_dir"
+          trap 'rm -rf "$identity_dir"' ERR
+          export APPLE_API_KEY_PATH="$identity_dir/notarization.p8"
+          node apps/desktop/scripts/macos-distribution.ts prepare "$APPLE_API_KEY_PATH"
+          printf '%s' '{"bundle":{"targets":["app"]}}' > "$identity_dir/config.json"
+          node apps/desktop/scripts/macos-distribution.ts identity "$identity_dir/config.json"
       - name: Run native unit tests
         run: pnpm --filter @orkbot/desktop tauri:test
       - name: Check native code
@@ -123,6 +142,31 @@ jobs:
           else
             pnpm --filter @orkbot/desktop tauri:build
           fi
+      - name: Verify Windows personal key protection
+        if: runner.os == 'Windows' && github.event_name != 'release'
+        shell: bash
+        run: apps/desktop/src-tauri/target/release/orkbot-desktop-preview.exe --personal-device-key-check
+      - name: Qualify signed macOS personal keys
+        if: runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          identity_dir="$RUNNER_TEMP/ork-personal-key-qualification"
+          trap 'rm -rf "$identity_dir"' EXIT
+          export APPLE_API_KEY_PATH="$identity_dir/notarization.p8"
+          pnpm --filter @orkbot/desktop tauri:build --bundles app --config "$identity_dir/config.json"
+          node apps/desktop/scripts/macos-distribution.ts keychain apps/desktop/src-tauri/target/release/bundle/macos/Ork.app
+      - name: Remove macOS qualification credentials
+        if: always() && runner.os == 'macOS' && github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: rm -rf "$RUNNER_TEMP/ork-personal-key-qualification"
       - name: Build signed updates
         if: >-
           github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v') &&
@@ -152,6 +196,10 @@ jobs:
             node apps/desktop/scripts/macos-distribution.ts prepare "$APPLE_API_KEY_PATH"
           fi
           node apps/desktop/scripts/tauri-release.ts prepare "$RUNNER_TEMP/tauri-release.json"
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            trap 'rm -f "$APPLE_API_KEY_PATH"; rm -rf "$RUNNER_TEMP/tauri-release.json.identity"' EXIT
+            node apps/desktop/scripts/macos-distribution.ts identity "$RUNNER_TEMP/tauri-release.json"
+          fi
           if [[ "$RUNNER_OS" == Linux ]]; then
             jq -s '.[0] * .[1]' "$RUNNER_TEMP/tauri-release.json" "$RUNNER_TEMP/linux-webkit.json" > "$RUNNER_TEMP/linux-release.json"
             mv "$RUNNER_TEMP/linux-release.json" "$RUNNER_TEMP/tauri-release.json"

@@ -12,6 +12,8 @@ import { NoneSandboxProvider } from "./none-sandbox.js";
 export interface SandboxProviderOptions {
   hostComputerUrl?: string;
   hostComputerToken?: string;
+  /** Fresh installation policy. A managed workspace cannot grant host filesystem authority. */
+  hostAccessAllowed?: () => Promise<boolean>;
   supervisorUrl?: string;
   supervisorToken?: string;
   e2bApiKey?: string;
@@ -95,6 +97,10 @@ export async function createSandboxProvider(
     );
   }
   const sandboxKind = parsed.data;
+  if (opts.hostAccessAllowed && !["none", "docker", "fake"].includes(sandboxKind))
+    return new NoneSandboxProvider(
+      "Workspace installations require an isolated Docker computer provider.",
+    );
   switch (sandboxKind) {
     case "none":
       return new NoneSandboxProvider();
@@ -218,6 +224,7 @@ export async function createSandboxProvider(
       return new DockerSandboxProvider(
         opts.supervisorUrl ?? "http://127.0.0.1:7091",
         opts.supervisorToken,
+        Boolean(opts.hostAccessAllowed),
       );
     case "desktop":
       assertHostCommandsAllowed();

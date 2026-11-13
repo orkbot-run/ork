@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited endpoint validation is preserved. Canonical installation origins follow LICENSE.md.
+
 package com.orkbot.notifications
 
 import java.net.URI
@@ -13,6 +17,9 @@ internal fun isAllowedNotificationEndpoint(endpoint: String): Boolean {
   val scheme = uri.scheme?.lowercase() ?: return false
   val host = uri.host ?: return false
   if (host.isEmpty()) return false
+  if (host.trimEnd('.').endsWith(".installation.ork.invalid", ignoreCase = true)) {
+    return isInstallationNotificationEndpoint(endpoint)
+  }
   if (scheme == "https") return true
   return scheme == "http" && isLanOrLocalHost(host)
 }

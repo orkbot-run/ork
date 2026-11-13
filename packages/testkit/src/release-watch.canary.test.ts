@@ -9,6 +9,7 @@ import {
   RELEASE_WATCH_GITHUB_TOOL_NAMES,
   resolveReleaseWatchEvalModelId,
 } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { afterAll, describe, expect, it } from "vitest";
 import { sessionCookieHeader } from "./index.js";
@@ -206,7 +207,12 @@ type Snap = {
 async function rpc<T>(app: App, cookie: string, proc: string, body: unknown = {}): Promise<T> {
   const res = await app.request(`/rpc/${proc}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: "http://127.0.0.1:5173",
+    },
     body: JSON.stringify({ json: body }),
   });
   const parsed = (await res.json()) as { json?: T; error?: { message?: string } };

@@ -14,13 +14,17 @@ import {
   configureNotificationSessionWriter,
   setNotificationSessionScope,
 } from "./notification-session";
+import type { NativeNotificationTransport } from "./notification-transport";
+import { prepareNotificationTransport } from "./notification-transport";
 import { serverHeaders } from "./server-headers";
 import { currentSessionGeneration } from "./session";
 
-const notificationModule = requireOptionalNativeModule<{
-  configureMessageSession?: (scope: string) => Promise<void>;
-  configureIncomingSession?: (endpoint: string, headers: Record<string, string>) => Promise<void>;
-}>("OrkNotifications");
+const notificationModule = requireOptionalNativeModule<
+  Partial<NativeNotificationTransport> & {
+    configureMessageSession?: (scope: string) => Promise<void>;
+    configureIncomingSession?: (endpoint: string, headers: Record<string, string>) => Promise<void>;
+  }
+>("OrkNotifications");
 configureNotificationSessionWriter(async (scope) => {
   await notificationModule?.configureMessageSession?.(scope);
 });
@@ -57,6 +61,13 @@ export async function registerPushToken() {
     );
     const current = () =>
       owner.sessionGeneration === currentSessionGeneration() && owner.apiBase === currentApiBase();
+    if (current() && notificationModule?.configureIncomingSession)
+      await prepareNotificationTransport(
+        notificationModule,
+        owner.apiBase,
+        owner.headers.authorization.replace(/^Bearer /, ""),
+        "",
+      );
     if (current())
       await notificationModule?.configureIncomingSession?.(owner.apiBase, {
         ...serverHeaders(owner.apiBase),

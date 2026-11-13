@@ -22,7 +22,8 @@
     "./railway-sandbox": "./src/railway-sandbox.ts",
     "./kubernetes-sandbox": "./src/kubernetes-sandbox.ts",
     "./incus-sandbox": "./src/incus-sandbox.ts",
-    "./wuying-sandbox": "./src/wuying-sandbox.ts"
+    "./wuying-sandbox": "./src/wuying-sandbox.ts",
+    "./installation-transport": "./src/installation-transport.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
@@ -55,7 +56,6 @@
     "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
     "@opentelemetry/resources": "2.12.0",
     "@opentelemetry/sdk-trace-node": "2.12.0",
-    "@photon-ai/chat-adapter-imessage": "3.2.0",
     "@orkbot/adapter-kit": "workspace:*",
     "@orkbot/contracts": "workspace:*",
     "@orkbot/core": "workspace:*",
@@ -63,6 +63,7 @@
     "@orkbot/logging": "workspace:*",
     "@orkbot/memory": "workspace:*",
     "@orkbot/page-kit": "workspace:*",
+    "@photon-ai/chat-adapter-imessage": "3.2.0",
     "@stripe/link-sdk": "0.15.0",
     "chat": "4.44.0",
     "chat-adapter-sendblue": "0.2.0",
@@ -86,6 +87,7 @@
   },
   "devDependencies": {
     "@chat-adapter/tests": "4.41.1",
+    "@orkbot/auth": "workspace:*",
     "@types/jsdom": "30.0.0",
     "@types/nodemailer": "8.0.2",
     "@types/pg": "8.23.1",

@@ -4,6 +4,7 @@
 // Apache-2.0 covers imported tests; Ork's stale Space-selection regression is PolyForm-covered.
 // Modified by Ork contributors to cover playback while a prior selection is still persisting.
 
+import { SERVER_PROTOCOL_RANGE } from "@orkbot/contracts";
 import * as SecureStore from "expo-secure-store";
 import * as Speech from "expo-speech";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -136,7 +137,8 @@ describe("read-aloud across session changes", () => {
       vi.fn(async (input: string | URL, init?: RequestInit) => {
         const url = String(input);
         requests.push(url);
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -429,7 +431,8 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -466,7 +469,8 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }
@@ -502,7 +506,8 @@ describe("read-aloud across session changes", () => {
       "fetch",
       vi.fn(async (input: string | URL) => {
         const url = String(input);
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE });
         if (url.endsWith("/rpc/aiConsent/status")) {
           return Response.json({ json: { version: "2026-09-14", recipients: [] } });
         }

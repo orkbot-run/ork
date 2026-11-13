@@ -135,6 +135,7 @@ export const BotSchema = z.object({
   autoSpeak: z.boolean(),
   modelProvider: z.string().nullable(),
   modelId: z.string().nullable(),
+  modelConnectionId: Id.nullable().optional(),
   thinkingLevel: ThinkingLevelSchema.nullable(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
@@ -465,6 +466,7 @@ export const UpdateBotInput = z
     autoSpeak: z.boolean().optional(),
     modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
     modelId: z.string().trim().min(1).max(200).nullable().optional(),
+    modelConnectionId: Id.nullable().optional(),
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),
@@ -478,6 +480,13 @@ export const UpdateBotInput = z
   .superRefine((value, ctx) => {
     const providerProvided = value.modelProvider !== undefined;
     const modelProvided = value.modelId !== undefined;
+    if (value.modelConnectionId && (!value.modelProvider || !value.modelId)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "An AI account requires a model",
+        path: ["modelConnectionId"],
+      });
+    }
     if (!providerProvided && !modelProvided) return;
     // Reject partial shapes like `{ modelId: null }` (provider omitted) so a
     // clear cannot succeed without updating both persisted fields.
@@ -1613,6 +1622,7 @@ export const ModelConnectionMetadataSchema = z.object({
 export type ModelConnectionMetadata = z.infer<typeof ModelConnectionMetadataSchema>;
 
 export const ModelCredentialSchema = z.object({
+  managed: z.boolean().optional(),
   /** Computed space preference order; credentials themselves remain newest first. */
   preferenceRank: z.number().int().nonnegative().optional(),
   ...ModelContextLimitsSchema.shape,
@@ -2017,6 +2027,8 @@ export const ServerUpdateRequestSchema = z.object({
 export type ServerUpdateRequest = z.infer<typeof ServerUpdateRequestSchema>;
 
 export const MeSchema = z.object({
+  /** The installation's configured origin for external callbacks and webhook addresses. */
+  serverOrigin: z.string().url().optional(),
   maxUploadSizeBytes: z.number().int().positive().optional(),
   maxAttachmentsPerMessage: z.number().int().positive().optional(),
   ticketBoardEnabled: z.boolean(),

@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { SERVER_PROTOCOL_RANGE } from "@orkbot/contracts";
 import { afterEach, expect, it, vi } from "vitest";
 import { requireAccountsSignIn } from "./endpoint";
 
@@ -8,11 +9,13 @@ vi.mock("./i18n", () => ({ t: (value: string) => value }));
 afterEach(() => vi.unstubAllGlobals());
 
 it("checks the product's Accounts-only capability without any central credential", async () => {
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(
-      Response.json({ passwordAuth: false, sso: { name: "Accounts", availability: "available" } }),
-    );
+  const fetcher = vi.fn().mockResolvedValue(
+    Response.json({
+      protocol: SERVER_PROTOCOL_RANGE,
+      passwordAuth: false,
+      sso: { name: "Accounts", availability: "available" },
+    }),
+  );
   vi.stubGlobal("fetch", fetcher);
   await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
     accountsLogin: false,
@@ -41,33 +44,38 @@ it.each([
 it("accepts native Accounts proofs without an OIDC provider", async () => {
   vi.stubGlobal(
     "fetch",
-    vi
-      .fn()
-      .mockResolvedValue(Response.json({ passwordAuth: false, accountsLogin: true, sso: null })),
+    vi.fn().mockResolvedValue(
+      Response.json({
+        protocol: SERVER_PROTOCOL_RANGE,
+        passwordAuth: false,
+        accountsLogin: true,
+        sso: null,
+      }),
+    ),
   );
   await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
     accountsLogin: true,
   });
 });
 
-it.each([undefined, { min: 1, max: 1 }, { min: 1.0, max: Number.MAX_SAFE_INTEGER }])(
-  "accepts a legacy or supported protocol range %j",
-  async (protocol) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        Response.json({
-          passwordAuth: false,
-          accountsLogin: true,
-          protocol,
-        }),
-      ),
-    );
-    await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
-      accountsLogin: true,
-    });
-  },
-);
+it.each([
+  { min: 2, max: 2 },
+  { min: 1.0, max: Number.MAX_SAFE_INTEGER },
+])("accepts a supported protocol range %j", async (protocol) => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(
+      Response.json({
+        passwordAuth: false,
+        accountsLogin: true,
+        protocol,
+      }),
+    ),
+  );
+  await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
+    accountsLogin: true,
+  });
+});
 
 it.each([
   null,
@@ -103,7 +111,7 @@ it("asks for an app update when the server requires a newer protocol", async () 
       Response.json({
         passwordAuth: false,
         accountsLogin: true,
-        protocol: { min: 2, max: 3 },
+        protocol: { min: 3, max: 3 },
       }),
     ),
   );
@@ -111,3 +119,19 @@ it("asks for an app update when the server requires a newer protocol", async () 
     "Update Ork to connect to this server.",
   );
 });
+
+it.each([undefined, { min: 1, max: 1 }])(
+  "requires a server update for old discovery %j",
+  async (protocol) => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(Response.json({ passwordAuth: false, accountsLogin: true, protocol })),
+    );
+    await expect(requireAccountsSignIn("https://server.example.test")).resolves.toEqual({
+      accountsLogin: true,
+      needsServerUpdate: true,
+    });
+  },
+);

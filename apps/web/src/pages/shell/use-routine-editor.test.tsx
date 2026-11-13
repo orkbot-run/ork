@@ -39,9 +39,11 @@ let finishUpdate: (saved: Routine) => void;
 const update = vi.fn();
 const rotateWebhookSecret = vi.fn();
 let activeBot: Bot;
+let serverOrigin: string | undefined;
 
 function Harness() {
   editor = useRoutineEditor({
+    serverOrigin,
     rpc: { routines: { update }, bots: { rotateWebhookSecret } } as unknown as ReturnType<
       typeof createSpaceRpc
     >,
@@ -59,9 +61,26 @@ function Harness() {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   activeBot = { id: "bot-1", webhookConfigured: false } as Bot;
+  serverOrigin = undefined;
   update.mockImplementation(() => new Promise<Routine>((resolve) => (finishUpdate = resolve)));
   root = createRoot(document.createElement("div"));
   act(() => root.render(<Harness />));
+});
+
+it("copies the installation's callback addresses instead of the bundled renderer's origin", () => {
+  serverOrigin = "https://installation.example.test";
+  act(() => root.render(<Harness />));
+  expect(editor.editorProps!.webhook.path).toBe(
+    "https://installation.example.test/api/v1/bots/bot-1/webhook",
+  );
+  expect(editor.editorProps!.githubPath).toBe(
+    "https://installation.example.test/api/v1/bots/bot-1/github",
+  );
+});
+
+it("keeps unqualified callback paths relative until the installation origin is available", () => {
+  expect(editor.editorProps!.webhook.path).toBe("/api/v1/bots/bot-1/webhook");
+  expect(editor.editorProps!.githubPath).toBe("/api/v1/bots/bot-1/github");
 });
 
 afterEach(() => {

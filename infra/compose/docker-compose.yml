@@ -7,6 +7,8 @@
 # when .env (or the shell) sets it and left unset otherwise. Keep in sync with the code:
 # infra/updater/src/compose-env.test.ts fails when a read is missing here or a key is unused.
 x-app-environment: &app-environment
+  ACCOUNTS_ISSUER: ${ACCOUNTS_ISSUER:-https://api.ork.run}
+  AUTH_ACCOUNTS_ENABLED: ${AUTH_ACCOUNTS_ENABLED:-false}
   # Runtime
   NODE_ENV: ${NODE_ENV:-production}
   # The app's own login, subject to row-level security (docs/self-host-configuration.md#database-roles).
@@ -400,7 +402,6 @@ services:
       BETTER_AUTH_URL:
       WEB_ORIGIN:
       AUTH_PASSWORD_ENABLED: "false"
-      AUTH_ACCOUNTS_ENABLED:
       ORKBOT_BOOTSTRAP_SECRET:
       AUTH_BREACHED_PASSWORD_CHECK_ENABLED: ${AUTH_BREACHED_PASSWORD_CHECK_ENABLED:-false}
       PASSKEY_APPLE_APP_IDS:

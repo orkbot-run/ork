@@ -5,7 +5,7 @@
 import type { ComputerMode, ComputerStatus as ContractComputerStatus } from "@orkbot/contracts";
 import { isLocalhostOrLoopbackIp, isPrivateNetworkHost } from "@orkbot/contracts";
 import type { ScreenPageState } from "@orkbot/core";
-import { isRetryableError, SCREEN_PAGE_STATES } from "@orkbot/core";
+import { COMPUTER_FRAME_SOURCE, isRetryableError, SCREEN_PAGE_STATES } from "@orkbot/core";
 import { t } from "./i18n";
 
 export const COMPUTER_HEARTBEAT_MS = 60_000;
@@ -56,6 +56,7 @@ export async function readScreenUrl(
 /** Point a loopback noVNC URL at the same host the app uses for the API. */
 export function embeddableScreenUrl(url: string | null, apiBase: string): string | null {
   if (!url) return null;
+  if (url === COMPUTER_FRAME_SOURCE) return url;
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;

@@ -23,13 +23,34 @@ fn digest(origin: &Url, identity: (&str, &str)) -> [u8; 32] {
     hash.finalize().into()
 }
 
-#[cfg(any(not(target_os = "macos"), test))]
+fn workspace_digest(
+    origin: &Url,
+    identity: (&str, &str),
+    workspace: Option<&crate::server_directory::WorkspaceTarget>,
+    epoch: &str,
+) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"orkbot-login-workspace-webview-v2\0");
+    hash.update(digest(origin, identity));
+    hash.update(epoch.as_bytes());
+    hash.update(serde_json::to_vec(&workspace).expect("workspace identity can be serialized"));
+    hash.finalize().into()
+}
+
+pub fn valid_epoch(epoch: &str) -> bool {
+    epoch.len() == 64
+        && epoch
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+#[cfg(test)]
 fn directory_name(origin: &Url, identity: (&str, &str)) -> String {
     let digest = digest(origin, identity);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(test)]
 fn store_identifier(origin: &Url, identity: (&str, &str)) -> [u8; 16] {
     let mut identifier = [0; 16];
     identifier.copy_from_slice(&digest(origin, identity)[..16]);
@@ -47,13 +68,18 @@ pub fn configure<'a, R: Runtime, M: Manager<R>>(
     directory: &Path,
     origin: &Url,
     identity: (&str, &str),
+    workspace: Option<&crate::server_directory::WorkspaceTarget>,
+    epoch: &str,
 ) -> WebviewWindowBuilder<'a, R, M> {
+    let digest = workspace_digest(origin, identity, workspace, epoch);
     #[cfg(target_os = "macos")]
     {
         let _ = directory;
         let version = objc2_foundation::NSProcessInfo::processInfo().operatingSystemVersion();
         if persistent_store_available(version.majorVersion) {
-            builder.data_store_identifier(store_identifier(origin, identity))
+            let mut identifier = [0; 16];
+            identifier.copy_from_slice(&digest[..16]);
+            builder.data_store_identifier(identifier)
         } else {
             // WKWebView silently falls back to its shared persistent store before macOS 14.
             builder.incognito(true)
@@ -62,9 +88,12 @@ pub fn configure<'a, R: Runtime, M: Manager<R>>(
     #[cfg(not(target_os = "macos"))]
     {
         builder.data_directory(
-            directory
-                .join("webviews")
-                .join(directory_name(origin, identity)),
+            directory.join("webviews").join(
+                digest
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>(),
+            ),
         )
     }
 }
@@ -74,6 +103,38 @@ mod tests {
     use super::*;
 
     const IDENTITY: (&str, &str) = ("https://accounts.example.com", "subject-a");
+
+    #[test]
+    fn workspaces_and_rebindings_never_share_a_browser_profile() {
+        let origin = Url::parse("https://server.example.com").unwrap();
+        let mut target = crate::server_directory::WorkspaceTarget {
+            organization_id: "10000000-0000-4000-8000-000000000001".into(),
+            server_id: "20000000-0000-4000-8000-000000000001".into(),
+            workspace_id: "30000000-0000-4000-8000-000000000001".into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        let first = workspace_digest(&origin, IDENTITY, Some(&target), &"a".repeat(64));
+        assert_ne!(
+            first,
+            workspace_digest(&origin, IDENTITY, None, &"a".repeat(64))
+        );
+        assert_eq!(
+            first,
+            workspace_digest(&origin, IDENTITY, Some(&target), &"a".repeat(64))
+        );
+        target.workspace_id = "30000000-0000-4000-8000-000000000002".into();
+        assert_ne!(
+            first,
+            workspace_digest(&origin, IDENTITY, Some(&target), &"a".repeat(64))
+        );
+        target.workspace_id = "30000000-0000-4000-8000-000000000001".into();
+        target.binding_version = 2;
+        assert_ne!(
+            first,
+            workspace_digest(&origin, IDENTITY, Some(&target), &"a".repeat(64))
+        );
+    }
 
     #[test]
     fn profiles_are_stable_for_one_origin_and_isolate_ports_schemes_and_hosts() {
@@ -143,5 +204,23 @@ mod tests {
         assert!(!persistent_store_available(13));
         assert!(persistent_store_available(14));
         assert!(persistent_store_available(26));
+    }
+
+    #[test]
+    fn a_new_login_cannot_reuse_the_previous_accounts_draft_profile() {
+        let origin = Url::parse("https://server.example.test").unwrap();
+        let first = workspace_digest(&origin, IDENTITY, None, &"a".repeat(64));
+        assert_eq!(
+            first,
+            workspace_digest(&origin, IDENTITY, None, &"a".repeat(64))
+        );
+        assert_ne!(
+            first,
+            workspace_digest(&origin, IDENTITY, None, &"b".repeat(64))
+        );
+        assert!(valid_epoch(&"a".repeat(64)));
+        for invalid in ["", "../old", &"g".repeat(64), &"A".repeat(64)] {
+            assert!(!valid_epoch(invalid));
+        }
     }
 }

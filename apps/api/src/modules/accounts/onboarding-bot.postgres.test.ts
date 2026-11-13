@@ -95,6 +95,7 @@ describePostgres("onboarding bots across Spaces (PostgreSQL)", () => {
       sandbox: {},
       env: {
         agentRuntime: "pi",
+        webOrigin: "http://localhost:5173",
         defaultProvider: "fixture-provider",
         defaultModel: "fixture-model",
         deploymentModelConfigured: false,

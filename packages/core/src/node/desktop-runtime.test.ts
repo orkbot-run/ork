@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 desktop tests are preserved. Shell quoting regressions follow LICENSE.md.
+
 import type { ChildProcess } from "node:child_process";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -77,6 +81,18 @@ function waitForReady(file: string) {
 }
 
 const roots: string[] = [];
+it("quotes metacharacters as one literal POSIX shell argument without executing them", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "desktop-quote-"));
+  roots.push(root);
+  const marker = path.join(root, "must-not-exist");
+  const value = `space ' quote \\ newline\n$(touch ${marker}); \`touch ${marker}\` #`;
+  const result = spawnSync("sh", ["-eu", "-c", `printf '%s' ${shellQuote(value)}`], {
+    encoding: "utf8",
+  });
+  expect(result.status, result.stderr).toBe(0);
+  expect(result.stdout).toBe(value);
+  expect(readdirSync(root)).toEqual([]);
+});
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });

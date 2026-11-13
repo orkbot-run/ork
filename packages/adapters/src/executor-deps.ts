@@ -26,10 +26,19 @@ import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import type { CodexLiveCatalog } from "./pi-codex-catalog.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
+import type { ServerAIModels } from "./server-ai-runtime.js";
 import type { TicketChangeNotifier } from "./ticket-changes.js";
 import type { UserDeviceGateway } from "./user-device-protocol.js";
 
 export interface ExecutorDeps {
+  serverAIModels?: ServerAIModels;
+  authorizeWork?: (scope: {
+    spaceId: string;
+    userId: string;
+    workspaceId?: string | null;
+    membershipVersion?: string | null;
+    personalDeviceId?: string | null;
+  }) => Promise<{ signal: AbortSignal; dispose(): void } | null | undefined>;
   /** The present moment the agent is told; evals move it to a follow-up's due time. */
   now?: () => Date;
   maxUploadSizeBytes?: number;

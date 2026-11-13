@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
 import { accountsConfig, createAccountsDiscovery } from "@orkbot/contracts/accounts";
+import type { PendingWorkspaceRevocation } from "@orkbot/core";
 import {
   cancelResponseBody,
   createPendingRevocations,
@@ -9,6 +10,7 @@ import {
   withAbort,
 } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
+import { fetchInstallationRevocation } from "./installation-transport";
 
 const STORAGE_KEY = "orkbot.pending-revocations";
 const discover = createAccountsDiscovery();
@@ -43,15 +45,18 @@ const pending = createPendingRevocations({
         token_type_hint: entry.tokenType!,
       }).toString();
     }
+    const init: RequestInit = {
+      method: "POST",
+      headers,
+      body,
+      credentials: "omit",
+      redirect: "error",
+      signal,
+    };
     const response = await withAbort(
-      fetch(endpoint, {
-        method: "POST",
-        headers,
-        body,
-        credentials: "omit",
-        redirect: "error",
-        signal,
-      }),
+      entry.kind === "session"
+        ? fetchInstallationRevocation(endpoint, init, entry.workspace)
+        : fetch(endpoint, init),
       signal,
     );
     try {
@@ -72,7 +77,9 @@ export const queueSessionRevocation = (
   origin: string,
   token: string,
   headers: Record<string, string>,
-) => pending.enqueue({ kind: "session", origin, token, headers });
+  workspace?: PendingWorkspaceRevocation,
+) =>
+  pending.enqueue({ kind: "session", origin, token, headers, ...(workspace ? { workspace } : {}) });
 
 export const queueAccountsRevocation = (
   origin: string,

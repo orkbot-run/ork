@@ -33,6 +33,8 @@ import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ModelCredential } from "../lib/model-auth";
 import { useSpaceQueries } from "../lib/query";
+import { selectedSpaceId } from "../lib/rpc";
+import { useBoundSpaceId } from "../lib/space-rpc";
 import type { ModelRoleConnectIntent } from "./ModelRoleSettings";
 import { ModelRoleSettings } from "./ModelRoleSettings";
 import { CompatibleModelFields } from "./model-settings/compatible-model-fields";
@@ -41,9 +43,34 @@ import { ConnectionNameField, ProvidersSection } from "./model-settings/provider
 import type { ConnectableProvider } from "./model-settings/role-model-picker";
 import { SpaceBotsModelNotice } from "./model-settings/space-bots-model";
 import { useModelSettings } from "./model-settings/use-model-settings";
+import { AISettingsFrame, ServerAISettings } from "./ServerAISettings";
 import { WorkspaceModelPolicy } from "./WorkspaceModelPolicy";
 
-export function ModelSettingsOverlay({
+export function ModelSettingsOverlay(props: Parameters<typeof LegacyModelSettingsOverlay>[0]) {
+  const { t } = useLingui();
+  const queries = useSpaceQueries();
+  const policy = useQuery(queries.models.workspacePolicy.queryOptions());
+  if (policy.isPending)
+    return (
+      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
+        <Spinner />
+      </AISettingsFrame>
+    );
+  if (policy.isError)
+    return (
+      <AISettingsFrame embedded={props.embedded} onClose={props.onClose}>
+        <p role="alert" className="text-sm text-destructive">{t`Could not load model settings`}</p>
+        <Button variant="outline" onClick={() => void policy.refetch()}>
+          <Trans>Retry</Trans>
+        </Button>
+      </AISettingsFrame>
+    );
+  if (policy.data.managed)
+    return <ServerAISettings embedded={props.embedded} onClose={props.onClose} />;
+  return <LegacyModelSettingsOverlay {...props} />;
+}
+
+function LegacyModelSettingsOverlay({
   onClose,
   embedded = false,
   scope,
@@ -59,6 +86,7 @@ export function ModelSettingsOverlay({
 }) {
   const { t } = useLingui();
   const model = useModelSettings(onClose, scope);
+  const policySpaceId = useBoundSpaceId() ?? selectedSpaceId();
   const queries = useSpaceQueries();
   const policyQuery = useQuery(queries.models.workspacePolicy.queryOptions());
   const {
@@ -270,7 +298,17 @@ export function ModelSettingsOverlay({
     <>
       {policyQuery.data &&
       (scope === "space" || policyQuery.data.canManage || policyQuery.data.policy) ? (
-        <WorkspaceModelPolicy value={policyQuery.data} />
+        <WorkspaceModelPolicy
+          key={JSON.stringify([model.me?.userId, policySpaceId])}
+          value={policyQuery.data}
+          catalog={catalog}
+          client={model.rpc}
+          isCurrent={model.isCurrent}
+          onChanged={async () => {
+            await policyQuery.refetch();
+            await refresh();
+          }}
+        />
       ) : null}
       {policyQuery.isPending ? (
         <p className="mb-4 text-sm text-muted-foreground">

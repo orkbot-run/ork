@@ -5,6 +5,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { expect, it } from "vitest";
 import { discardBotIntroRun } from "../../../../../packages/testkit/src/discard-bot-intro.js";
 import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
@@ -45,27 +46,41 @@ it.skipIf(!databaseUrl)(
       // Signed out, only `health` is callable, so a large body is discarded unread.
       const signedOut = await handles.app.request("/rpc/me", {
         method: "POST",
-        headers: { "content-type": "application/json", origin, cookie: "session=forged" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          origin,
+          cookie: "session=forged",
+        },
         body: JSON.stringify({ json: { padding: "a".repeat(1024 * 1024) } }),
       });
       expect(signedOut.status).toBe(401);
       const health = await handles.app.request("/rpc/health", {
         method: "POST",
-        headers: { "content-type": "application/json", origin },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          origin,
+        },
         body: JSON.stringify({ json: {} }),
       });
       expect(health.status).toBe(200);
       const call = (procedure: string, json: unknown = {}) =>
         handles.app.request(`/rpc/${procedure}`, {
           method: "POST",
-          headers: { "content-type": "application/json", cookie, origin },
+          headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+            "content-type": "application/json",
+            cookie,
+            origin,
+          },
           body: JSON.stringify({ json }),
         });
 
       const me = await call("me");
       expect(me.status).toBe(200);
       expect(await me.json()).toMatchObject({
-        json: { maxUploadSizeBytes, maxAttachmentsPerMessage: 8 },
+        json: { serverOrigin: origin, maxUploadSizeBytes, maxAttachmentsPerMessage: 8 },
       });
 
       const bot = await call("bots/create", {

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// Inherited Apache-2.0 catalog tests are preserved. Parser regressions follow LICENSE.md.
+
 import { MODEL_KEY_FORMAT_ERROR } from "@orkbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { defaultCatalogModelId } from "./model-selection.js";
@@ -7,6 +11,7 @@ import {
   catalogModelServesAgents,
   catalogProviderProbeBaseUrl,
   hiddenCatalogModel,
+  isCatalogProviderBaseUrl,
   listPiCatalog,
   offeredCatalog,
   probeCatalogProviderModels,
@@ -17,6 +22,19 @@ import { probeOpenAiCompatibleModels } from "./pi-openai-compatible-provider.js"
 import { MODEL_CONNECT_TIMEOUT_MS } from "./pi-runtime-limits.js";
 
 describe("catalog provider authentication", () => {
+  it("normalizes long trailing slash runs without changing the catalog origin", () => {
+    expect(
+      isCatalogProviderBaseUrl(
+        "openrouter",
+        ` https://openrouter.ai/api/v1${"/".repeat(100_000)} `,
+      ),
+    ).toBe(true);
+    expect(
+      isCatalogProviderBaseUrl("openrouter", `https://other.example${"/".repeat(100_000)}`),
+    ).toBe(false);
+    expect(isCatalogProviderBaseUrl("openrouter", "/".repeat(100_000))).toBe(false);
+  });
+
   it("refuses a key that cannot travel in a header without calling the provider", async () => {
     const fetchImpl = vi.fn<typeof fetch>();
     await expect(
@@ -493,6 +511,14 @@ describe("Pi model catalog", () => {
 });
 
 describe("catalogModelLabel", () => {
+  it("handles long untrusted labels and nested display suffixes without backtracking", () => {
+    const unmarked = `${"\t".repeat(100_000)}latestx`;
+    expect(catalogModelLabel("model", unmarked)).toBe(unmarked);
+    expect(catalogModelLabel("model", `Model${"\t".repeat(100_000)}latest`)).toBe("Model");
+    expect(catalogModelLabel("model", "Model latest (A (B)")).toBe("Model");
+    expect(catalogModelLabel("model", "Model latest (latest) (tag)")).toBe("Model latest");
+    expect(catalogModelLabel("model", "Model latest (tag) extra")).toBe("Model latest (tag) extra");
+  });
   const providerModelIds = [
     "claude-opus-4-5",
     "claude-opus-4-5-20251101",

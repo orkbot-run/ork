@@ -119,7 +119,7 @@ describe("probeApiBase", () => {
       "https://app.example.com/rpc/health",
       expect.objectContaining({
         method: "POST",
-        headers: expect.objectContaining({ "x-orkbot-protocol": "1" }),
+        headers: expect.objectContaining({ "x-orkbot-protocol": "2" }),
       }),
     );
   });

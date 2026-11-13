@@ -1,3 +1,7 @@
+<!-- SPDX-FileCopyrightText: 2026 Ork contributors (modifications) -->
+<!-- SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0 -->
+<!-- Inherited recovery instructions remain Apache-2.0; personal access safeguards are PolyForm-covered. -->
+
 # Backup and restore
 
 Back up the database and application data, keep encrypted copies off the server, and recover to
@@ -24,12 +28,13 @@ path that is a symlink or a non-directory. Stop bot computers and any other proc
 write to this database or tree before running the script.
 
 The SQL import runs in one transaction and stops on the first error, including conflicts with
-existing tables. An invalid archive or failed import leaves the current data tree unchanged.
+existing tables. An invalid archive or failed import leaves the application's current files
+in place. Recovery can add personal-access verification metadata before the import.
 After SQL succeeds, the script moves the current tree to `data.rollback.<random>/data`,
 prints that path, and replaces `data/` with the saved tree. Files absent from the snapshot
 do not remain in the active tree. A missing homes archive or an empty archive from omitted homes
-leaves `data/` unchanged. An archive containing an empty `data/` directory replaces it with an
-empty tree.
+keeps the existing files in place. An archive containing an empty `data/` directory removes
+the earlier files. Recovery writes its personal-access verification markers in either case.
 
 Application services start only after the import and tree replacement succeed. Once writer
 shutdown starts, a later failure or interruption makes the script attempt to stop the API,
@@ -46,6 +51,16 @@ need that rollback. This script does not consume the production snapshot's custo
 ```bash
 ./scripts/restore.sh backups/<stamp>
 ```
+
+The script preserves the union of snapshot and current personal revocation markers after
+stopping the application writers. Corrupt or linked journal entries stop recovery before
+the database import. Keep this journal with every rollback pair.
+
+Restoration keeps personal device admissions closed until the server persists a newly signed
+Accounts projection. Accounts must be reachable once before personal offline access resumes.
+Each restore adds its own verification marker, including recovery without an appdata archive.
+Startup and rollback must use an image that supports this verification. Earlier personal-access
+images ignore these markers.
 
 ## Production backups
 
@@ -172,6 +187,9 @@ printf 'Record this rollback pair:\nDatabase dump: %s\nData tree on deploy@app.e
 age -d -i orkbot-backup.key <stamp>/appdata.tgz.age | ssh deploy@app.example.com \
   "sudo tar -xzf - --numeric-owner -C '$RESTORE/staged'"
 
+ssh deploy@app.example.com \
+  "cd /srv/orkbot && sudo bash scripts/preserve-personal-revocations.sh '$APPDATA' '$RESTORE/staged'"
+
 age -d -i orkbot-backup.key <stamp>/orkbot.dump.age | ssh deploy@app.example.com \
   "cd /srv/orkbot && $COMPOSE exec -T postgres sh -c 'pg_restore --clean --if-exists --no-owner --exit-on-error --single-transaction -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'"
 
@@ -198,7 +216,9 @@ Record the printed database dump path together with its matching remote `$RESTOR
 tree path. Keep that pair until you have checked the restored application. Do not remove the
 Docker volume while you need the rollback tree. For rollback after SQL commits, keep the
 application stopped and restore the recorded `$ROLLBACK_DUMP` into a freshly created empty
-database. Move the failed active tree to a separate path for diagnosis, then move that attempt's
+database. First run `scripts/preserve-personal-revocations.sh` with the failed active tree as
+the source and the recorded rollback tree as the destination. Move the failed active tree to
+a separate path for diagnosis, then move that attempt's
 recorded `$RESTORE/previous` tree back to `$APPDATA` and recreate the application containers.
 If the first directory move failed, the old tree is still at `$APPDATA`. Inspect both paths
 before moving anything. Switching the tree alone does not roll back the database.
@@ -292,6 +312,9 @@ unless it names a zone:
 ```bash
 COMPOSE="sudo docker compose --env-file .env -f infra/compose/docker-compose.prod.yml"
 ssh deploy@app.example.com "cd /srv/orkbot && $COMPOSE stop api worker web pitr postgres"
+APPDATA="$(ssh deploy@app.example.com "sudo docker volume inspect --format '{{.Mountpoint}}' orkbot-prod_appdata")"
+ssh deploy@app.example.com \
+  "cd /srv/orkbot && sudo bash scripts/preserve-personal-revocations.sh '$APPDATA' '$APPDATA'"
 ssh deploy@app.example.com \
   "cd /srv/orkbot && sudo infra/compose/pitr.sh restore '2026-01-31 09:41:00+00' orkbot-prod_postgres" \
   < orkbot-backup.key

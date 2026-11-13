@@ -9,6 +9,7 @@ import { getArtifactById } from "./artifacts";
 vi.mock("./ai-consent", () => ({ promptAiConsent: vi.fn() }));
 
 import type { RpcInput } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_VERSION, SERVER_PROTOCOL_RANGE } from "@orkbot/contracts";
 import {
   dismissableAskMessageIds,
   isServerUnreachable,
@@ -116,7 +117,7 @@ describe("mobile API authentication", () => {
       const result = { ok: true };
       const fetch = vi.fn(async (input: unknown) =>
         String(input).endsWith("/api/auth/capabilities")
-          ? Response.json({ aiConsent: true })
+          ? Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE })
           : Response.json({ json: result }),
       );
       vi.stubGlobal("fetch", fetch);
@@ -336,7 +337,9 @@ describe("mobile API authentication", () => {
       },
     });
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
-      expect(new Headers(init?.headers).get("x-orkbot-protocol")).toBe("1");
+      expect(new Headers(init?.headers).get("x-orkbot-protocol")).toBe(
+        String(CLIENT_PROTOCOL_VERSION),
+      );
       const { response } = await handler.handle(new Request(input, init), { prefix: "/rpc" });
       if (!response) throw new Error("The real RPC handler did not match the request");
       return response;
@@ -492,7 +495,7 @@ describe("mobile API authentication", () => {
 
       expect(SecureStore.deleteItemAsync).not.toHaveBeenCalledWith("orkbot.session_token");
       expect(await authHeaders(null)).toEqual({
-        "x-orkbot-protocol": "1",
+        "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
         authorization: "Bearer fake-session",
       });
     });
@@ -628,6 +631,7 @@ describe("mobile API authentication", () => {
         jsonResponse({
           passwordAuth: true,
           sso: null,
+          protocol: SERVER_PROTOCOL_RANGE,
           passwordReset: true,
           resetUrl: "https://orkbot.test/reset-password",
         }),
@@ -638,6 +642,7 @@ describe("mobile API authentication", () => {
     await expect(passwordResetCapabilities()).resolves.toEqual({
       passwordAuth: true,
       sso: null,
+      protocol: SERVER_PROTOCOL_RANGE,
       passwordReset: true,
       resetUrl: "https://orkbot.test/reset-password",
     });
@@ -661,6 +666,7 @@ describe("mobile API authentication", () => {
       "fetch",
       vi.fn(async () =>
         jsonResponse({
+          protocol: SERVER_PROTOCOL_RANGE,
           passwordReset: true,
           resetUrl: "https://orkbot.test/reset-password",
           billing: false,
@@ -670,6 +676,7 @@ describe("mobile API authentication", () => {
     await expect(passwordResetCapabilities()).resolves.toEqual({
       passwordAuth: true,
       sso: null,
+      protocol: SERVER_PROTOCOL_RANGE,
       passwordReset: true,
       resetUrl: "https://orkbot.test/reset-password",
       billing: false,
@@ -1669,7 +1676,7 @@ describe("mobile API authentication", () => {
       expect(init).toMatchObject({ credentials: "omit", redirect: "error" });
       expect(new Headers(init?.headers).has("authorization")).toBe(false);
       expect(init?.body).toBeUndefined();
-      return Response.json({ aiConsent: false, protocol: { min: 1, max: 1 } });
+      return Response.json({ aiConsent: false, protocol: SERVER_PROTOCOL_RANGE });
     });
     vi.stubGlobal("fetch", fetchMock);
     for (const proc of [
@@ -1710,7 +1717,8 @@ describe("mobile API authentication", () => {
       vi.fn(async (input) => {
         const path = new URL(String(input)).pathname;
         paths.push(path);
-        if (path === "/api/auth/capabilities") return Response.json({ aiConsent: available });
+        if (path === "/api/auth/capabilities")
+          return Response.json({ aiConsent: available, protocol: SERVER_PROTOCOL_RANGE });
         expect(path).toBe("/rpc/aiConsent/status");
         return Response.json({
           json: {
@@ -1748,7 +1756,8 @@ describe("mobile API authentication", () => {
           return new Promise<Response>((resolve) => {
             resolveA = resolve;
           });
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: false });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: false, protocol: SERVER_PROTOCOL_RANGE });
         throw new Error("Unexpected RPC after a server change");
       });
       vi.stubGlobal("fetch", fetchMock);
@@ -1760,7 +1769,7 @@ describe("mobile API authentication", () => {
           ok: true,
         });
         await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
-        resolveA(Response.json({ aiConsent: availableA }));
+        resolveA(Response.json({ aiConsent: availableA, protocol: SERVER_PROTOCOL_RANGE }));
         await rejectedA;
         expect(paths).toEqual([
           `${initialBase}/api/auth/capabilities`,
@@ -1782,7 +1791,7 @@ describe("mobile API authentication", () => {
         return new Promise<Response>((resolve) => {
           resolveOld = resolve;
         });
-      return Response.json({ aiConsent: false });
+      return Response.json({ aiConsent: false, protocol: SERVER_PROTOCOL_RANGE });
     });
     vi.stubGlobal("fetch", fetchMock);
     const old = rpc("threads/send", { botId: "bot" });
@@ -1790,7 +1799,7 @@ describe("mobile API authentication", () => {
     await vi.waitFor(() => expect(resolveOld).toBeTypeOf("function"));
     await clearSessionToken();
     await expect(rpc("threads/send", { botId: "bot" })).rejects.toThrow("Update your server");
-    resolveOld(Response.json({ aiConsent: true }));
+    resolveOld(Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE }));
     await rejectedOld;
     expect(lookups).toBe(2);
   });
@@ -1809,7 +1818,8 @@ describe("mobile API authentication", () => {
           return new Promise<Response>((resolve) => {
             resolveA = resolve;
           });
-        if (url.endsWith("/api/auth/capabilities")) return Response.json({ aiConsent: true });
+        if (url.endsWith("/api/auth/capabilities"))
+          return Response.json({ aiConsent: true, protocol: SERVER_PROTOCOL_RANGE });
         if (url.endsWith("/rpc/aiConsent/status"))
           return Response.json({
             json: { scope: "account-space", version: "2026-09-14", recipients: [] },
@@ -1823,7 +1833,7 @@ describe("mobile API authentication", () => {
     try {
       expect(await saveApiBase("https://capabilities-b.example.test")).toMatchObject({ ok: true });
       await expect(rpc("threads/send", { botId: "bot" })).resolves.toEqual({ ok: true });
-      resolveA(Response.json({ aiConsent: false }));
+      resolveA(Response.json({ aiConsent: false, protocol: SERVER_PROTOCOL_RANGE }));
       await rejectedOld;
       await expect(rpc("threads/send", { botId: "bot" })).resolves.toEqual({ ok: true });
       expect(paths.filter((path) => path === `${initialBase}/rpc/threads/send`)).toEqual([]);
@@ -1848,15 +1858,17 @@ describe("mobile API authentication", () => {
   it("blocks mobile message and attachment submission when AI sharing is declined", async () => {
     vi.mocked(promptAiConsent).mockResolvedValue(false);
     const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
-      jsonResponse({
-        json: {
-          scope: "account-space",
-          version: "2026-09-14",
-          recipients: [
-            { key: "provider", name: "Example AI", use: "model", detail: "", allowed: false },
-          ],
-        },
-      }),
+      new URL(String(_url)).pathname === "/api/auth/capabilities"
+        ? jsonResponse({ protocol: SERVER_PROTOCOL_RANGE })
+        : jsonResponse({
+            json: {
+              scope: "account-space",
+              version: "2026-09-14",
+              recipients: [
+                { key: "provider", name: "Example AI", use: "model", detail: "", allowed: false },
+              ],
+            },
+          }),
     );
     vi.stubGlobal("fetch", fetchMock);
     for (const proc of ["threads/send", "artifacts/create", "routines/create"] as const) {
@@ -1915,6 +1927,8 @@ describe("mobile API authentication", () => {
       vi.fn(async (url) => {
         const path = new URL(String(url)).pathname;
         calls.push(path);
+        if (path === "/api/auth/capabilities")
+          return jsonResponse({ protocol: SERVER_PROTOCOL_RANGE });
         return jsonResponse({
           json: path.endsWith("/status")
             ? {
@@ -1945,6 +1959,8 @@ describe("mobile API authentication", () => {
       vi.fn(async (url, options) => {
         const path = new URL(String(url)).pathname;
         calls.push({ path, body: options?.body ? JSON.parse(String(options.body)).json : {} });
+        if (path === "/api/auth/capabilities")
+          return jsonResponse({ protocol: SERVER_PROTOCOL_RANGE });
         return jsonResponse({
           json: path.endsWith("/status")
             ? {
@@ -2000,6 +2016,8 @@ describe("mobile API authentication", () => {
       vi.fn(async (url) => {
         const path = new URL(String(url)).pathname;
         calls.push(path);
+        if (path === "/api/auth/capabilities")
+          return jsonResponse({ protocol: SERVER_PROTOCOL_RANGE });
         if (path.endsWith("/status"))
           return jsonResponse({
             json: {
@@ -2033,6 +2051,8 @@ describe("mobile API authentication", () => {
       vi.fn(async (url) => {
         const path = new URL(String(url)).pathname;
         calls.push(path);
+        if (path === "/api/auth/capabilities")
+          return jsonResponse({ protocol: SERVER_PROTOCOL_RANGE });
         return jsonResponse({
           json: {
             scope: "account-space",
@@ -2083,7 +2103,7 @@ describe("mobile API authentication", () => {
     await selectSpace("space-support");
 
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2196,7 +2216,7 @@ describe("mobile API authentication", () => {
       error: "Could not clear the previous server session",
     });
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2239,7 +2259,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2268,7 +2288,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       "x-orkbot-space-id": "space-support",
     });
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith("orkbot.space_id", "space-support");
@@ -2313,7 +2333,7 @@ describe("mobile API authentication", () => {
       key === "orkbot.session_token" ? "session-token" : null,
     );
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2368,7 +2388,7 @@ describe("mobile API authentication", () => {
     await expect(saveApiBase("https://third-server.example")).resolves.toMatchObject({ ok: false });
 
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -2396,7 +2416,7 @@ describe("mobile API authentication", () => {
     });
     expect(currentApiBase()).toBe(previous);
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       authorization: "Bearer session-token",
       "x-orkbot-space-id": "space-support",
     });
@@ -3374,7 +3394,7 @@ describe("mobile API authentication", () => {
       error: "Could not save the server URL",
     });
     await expect(authHeaders()).resolves.toEqual({
-      "x-orkbot-protocol": "1",
+      "x-orkbot-protocol": String(CLIENT_PROTOCOL_VERSION),
       "x-orkbot-space-id": "space-support",
     });
     expect(storage.get("orkbot.space_rollback")).toBe(

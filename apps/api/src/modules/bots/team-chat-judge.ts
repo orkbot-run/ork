@@ -5,6 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { AgentRunModel, AgentRuntime, SecretStore } from "@orkbot/adapter-kit";
+import type { ServerAIModels } from "@orkbot/adapters";
 import {
   deploymentModelRole,
   formatCurrentTimeInstruction,
@@ -115,6 +116,7 @@ export function parseTeamChatEngagementDecision(
 }
 
 interface ModelTeamChatEngagementJudgeDeps {
+  serverAIModels?: ServerAIModels;
   prisma: PrismaClient;
   runtime: AgentRuntime;
   secrets: SecretStore;
@@ -228,8 +230,10 @@ export class ModelTeamChatEngagementJudge implements TeamChatEngagementJudge {
         prisma: this.deps.prisma,
         secretStore: this.deps.secrets,
         mcpAllowPrivateEndpoint: this.deps.allowPrivateEndpoint,
+        serverAIModels: this.deps.serverAIModels,
       },
       bot.spaceId,
+      bot,
     );
     if (workspace) return { model: workspace.model };
     const settings = await this.deps.prisma.deploymentSettings.findUnique({

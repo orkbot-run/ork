@@ -3,6 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },

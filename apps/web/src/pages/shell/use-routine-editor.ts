@@ -19,6 +19,7 @@ import {
 
 export function useRoutineEditor({
   rpc,
+  serverOrigin,
   active,
   activeBotId,
   timezone,
@@ -28,6 +29,7 @@ export function useRoutineEditor({
   messageProviders,
 }: {
   rpc: ReturnType<typeof createSpaceRpc>;
+  serverOrigin?: string;
   active: Bot | undefined;
   activeBotId: RefObject<string | undefined>;
   timezone: string | null | undefined;
@@ -58,6 +60,7 @@ export function useRoutineEditor({
     });
   const routineSaveRequest = useRef(0);
   const routineRunPending = useRef(false);
+  const publicPath = (path: string) => (serverOrigin ? new URL(path, serverOrigin).href : path);
   const addSkillRoutine = useCallback((name: string, prompt: string) => {
     setRoutineDraft({ ...emptyRoutineDraft(), name, prompt });
     setRevealedWebhookSecrets({});
@@ -97,17 +100,11 @@ export function useRoutineEditor({
         editing: editingRoutine,
         timezone: editingRoutine?.timezone ?? timezone ?? localTimezone(),
         webhook: {
-          path:
-            typeof window !== "undefined"
-              ? `${window.location.origin}/api/v1/bots/${active.id}/webhook`
-              : `/api/v1/bots/${active.id}/webhook`,
+          path: publicPath(`/api/v1/bots/${encodeURIComponent(active.id)}/webhook`),
           secret: routineWebhookSecret,
           configured: active.webhookConfigured || Boolean(routineWebhookSecret),
         },
-        githubPath:
-          typeof window !== "undefined"
-            ? `${window.location.origin}/api/v1/bots/${active.id}/github`
-            : `/api/v1/bots/${active.id}/github`,
+        githubPath: publicPath(`/api/v1/bots/${encodeURIComponent(active.id)}/github`),
         messageProviders,
         saving: savingRoutine,
         running: runningRoutine,

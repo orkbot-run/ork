@@ -13,6 +13,7 @@ import {
   PipedreamConnector,
   ThirdPartyConnectorEmulator,
 } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { callRequestClientNonce } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { createThreadMessage } from "@orkbot/db";
@@ -207,36 +208,41 @@ function startDeviceControlServer(
   prisma: PrismaClient,
   fixture: Awaited<ReturnType<typeof seedFixture>>,
 ): Server {
-  const routes: Record<string, () => Promise<unknown>> = {
-    "/expand-notifications": () => adb(["shell", "cmd", "statusbar", "expand-notifications"]),
-    "/share-text": () =>
-      adb([
-        "shell",
-        "am start -a android.intent.action.SEND -t text/plain",
-        "--es android.intent.extra.TEXT 'Shared from another app'",
-        "-n run.orkbot.app/.MainActivity",
-      ]),
-    "/ring": () => ringFromResearcher(prisma, fixture),
-    "/connect-voice": () =>
-      rpc(app, fixture.cookie, "voice/connect", {
-        provider: "scripted",
-        apiKey: "fixture-voice-key",
-      }),
-  };
   const server = createServer((req, res) => {
-    const route = req.method === "GET" ? routes[req.url ?? ""] : undefined;
-    if (!route) {
-      res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-      res.end("not found");
-      return;
+    let work: Promise<unknown>;
+    switch (req.method === "GET" ? req.url : undefined) {
+      case "/expand-notifications":
+        work = adb(["shell", "cmd", "statusbar", "expand-notifications"]);
+        break;
+      case "/share-text":
+        work = adb([
+          "shell",
+          "am start -a android.intent.action.SEND -t text/plain",
+          "--es android.intent.extra.TEXT 'Shared from another app'",
+          "-n run.orkbot.app/.MainActivity",
+        ]);
+        break;
+      case "/ring":
+        work = ringFromResearcher(prisma, fixture);
+        break;
+      case "/connect-voice":
+        work = rpc(app, fixture.cookie, "voice/connect", {
+          provider: "scripted",
+          apiKey: "fixture-voice-key",
+        });
+        break;
+      default:
+        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+        res.end("not found");
+        return;
     }
-    route().then(
+    work.then(
       () => {
         res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
         res.end("ok");
       },
       (error: unknown) => {
-        console.error(`Device control ${req.url} failed`, error);
+        console.error("Device control request failed", error);
         res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
         res.end("failed");
       },
@@ -533,6 +539,7 @@ async function rpc<T>(app: App, cookie: string, procedure: string, body: unknown
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: WEB_ORIGIN,

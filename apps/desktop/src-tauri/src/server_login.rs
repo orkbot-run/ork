@@ -101,6 +101,99 @@ pub async fn issue(
     issue_at(&endpoint, token, origin, challenge, current).await
 }
 
+pub async fn issue_workspace(
+    token: &str,
+    target: &crate::server_directory::WorkspaceTarget,
+    challenge: &str,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
+    issue_workspace_device(token, target, challenge, None, current).await
+}
+
+pub async fn issue_workspace_device(
+    token: &str,
+    target: &crate::server_directory::WorkspaceTarget,
+    challenge: &str,
+    device: Option<serde_json::Value>,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
+    target.validate()?;
+    let endpoint = crate::server_directory::origin()
+        .join("/api/identity/v2/login-grants")
+        .map_err(|_| ERROR)?;
+    let mut body = serde_json::json!({
+        "organizationId": target.organization_id, "serverId": target.server_id,
+        "workspaceId": target.workspace_id, "challenge": challenge,
+    });
+    if let Some(device) = device {
+        body["personalDevice"] = device;
+    }
+    issue_payload_at(&endpoint, token, challenge, body, current).await
+}
+
+pub async fn issue_relay(
+    token: &str,
+    selection: &crate::installation_transport::Selection,
+    current: impl Fn() -> bool,
+) -> Result<String, String> {
+    if !selection.valid() || !current() {
+        return Err(ERROR.into());
+    }
+    let expected = selection.relay_origin.as_deref().ok_or(ERROR)?;
+    let endpoint = crate::server_directory::origin()
+        .join("/api/identity/v2/relay-tickets")
+        .map_err(|_| ERROR)?;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|_| ERROR)?;
+    let mut response = client.post(endpoint).bearer_auth(token).json(&serde_json::json!({
+        "organizationId":selection.target.organization_id, "serverId":selection.target.server_id,
+        "workspaceId":selection.target.workspace_id,
+    })).send().await.map_err(|_| ERROR)?;
+    if !current()
+        || response.status() != reqwest::StatusCode::OK
+        || response
+            .content_length()
+            .is_some_and(|size| size > MAX_RESPONSE as u64)
+    {
+        return Err(ERROR.into());
+    }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
+        if !current() || chunk.len() > MAX_RESPONSE.saturating_sub(bytes.len()) {
+            return Err(ERROR.into());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| ERROR)?;
+    let grant = value["grant"]
+        .as_str()
+        .filter(|grant| {
+            !grant.is_empty()
+                && grant.len() <= 16 * 1024
+                && grant
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+        })
+        .ok_or(ERROR)?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| ERROR)?
+        .as_secs();
+    if !current()
+        || value["relayOrigin"].as_str() != Some(expected)
+        || value["expiresAt"]
+            .as_u64()
+            .is_none_or(|expiry| expiry <= now || expiry > now + 60)
+    {
+        return Err(ERROR.into());
+    }
+    Ok(grant.into())
+}
+
 async fn issue_at(
     endpoint: &Url,
     token: &str,
@@ -115,12 +208,31 @@ async fn issue_at(
     if canonical != *origin {
         return Err(ERROR.into());
     }
+    issue_payload_at(endpoint, token, challenge, serde_json::json!({"origin": origin.origin().ascii_serialization(), "challenge": challenge}), current).await
+}
+
+async fn issue_payload_at(
+    endpoint: &Url,
+    token: &str,
+    challenge: &str,
+    body: serde_json::Value,
+    current: impl Fn() -> bool,
+) -> Result<Grant, String> {
+    if !valid_challenge(challenge) || !current() {
+        return Err(ERROR.into());
+    }
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(15))
         .build()
         .map_err(|_| ERROR)?;
-    let mut response = client.post(endpoint.clone()).bearer_auth(token).json(&serde_json::json!({"origin": origin.origin().ascii_serialization(), "challenge":challenge})).send().await.map_err(|_| ERROR)?;
+    let mut response = client
+        .post(endpoint.clone())
+        .bearer_auth(token)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|_| ERROR)?;
     if !current()
         || !response.status().is_success()
         || response

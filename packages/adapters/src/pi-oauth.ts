@@ -296,6 +296,19 @@ export type StoredModelSecret =
       maxImagesPerPrompt?: number;
     } & StoredModelLimits);
 
+export type PiInstallationAIIntent = {
+  accountKey: string;
+  bindingVersion: number;
+  membershipVersion: string;
+  sessionId: string;
+  connectionId: string | null;
+  connectionRevision: number | null;
+  label: string;
+  models: string[];
+  concurrencyLimit: number;
+  monthlyBudgetMicros: number | null;
+};
+
 export type PiOAuthConnected = {
   status: "connected";
   credential: OAuthCredential;
@@ -307,6 +320,7 @@ export type PiOAuthConnected = {
   makeDefault?: boolean;
   /** Which copy of the member's models makeDefault sets; omitted means the one that applies. */
   settingsScope?: SettingsScope;
+  installation?: PiInstallationAIIntent;
   label?: string;
   signal: AbortSignal;
 };
@@ -351,6 +365,7 @@ type BeginInput = SignInActor & {
   thinkingLevel?: string | null;
   makeDefault?: boolean;
   settingsScope?: SettingsScope;
+  installation?: PiInstallationAIIntent;
   label?: string;
   /** The client has no loopback listener, so the provider shows the code to paste. */
   codePage?: boolean;
@@ -380,6 +395,7 @@ type Session = {
   thinkingLevel?: string | null;
   makeDefault?: boolean;
   settingsScope?: SettingsScope;
+  installation?: PiInstallationAIIntent;
   label?: string;
   abort: AbortController;
   state: SessionState;
@@ -1099,7 +1115,19 @@ export class PiOAuthLogins {
   constructor(
     private readonly loginFn: LoginFn = defaultLogin,
     private readonly handoff?: PiOAuthHandoffStore,
+    private readonly namespace: "personal" | "server-ai" = "personal",
   ) {}
+
+  private scope(input: BeginInput): string {
+    const value = oauthScopeKey(input.userId, input.spaceId, input.provider, input.credentialId);
+    return this.namespace === "server-ai" ? `server-ai:${value}` : value;
+  }
+
+  private handoffScope() {
+    return this.namespace === "server-ai"
+      ? { startsWith: "server-ai:" }
+      : { not: { startsWith: "server-ai:" } };
+  }
 
   async begin(input: BeginInput): Promise<PiOAuthBegin> {
     // The pasted code can reach another API process (a deploy replaces this one), which
@@ -1129,7 +1157,7 @@ export class PiOAuthLogins {
       throw input.signal.reason ?? new Error("Sign-in cancelled.");
     }
 
-    const scope = oauthScopeKey(input.userId, input.spaceId, input.provider, input.credentialId);
+    const scope = this.scope(input);
     const lockKey = oauthProviderKey(input.userId, input.provider);
     const prepared = await this.withReplacementLock(lockKey, input.signal, async () => {
       await this.retireActiveSession(scope, input.signal);
@@ -1148,6 +1176,7 @@ export class PiOAuthLogins {
         thinkingLevel: input.thinkingLevel,
         makeDefault: input.makeDefault,
         settingsScope: input.settingsScope,
+        installation: input.installation,
         label: input.label,
         abort,
         state: "pending",
@@ -1323,6 +1352,7 @@ export class PiOAuthLogins {
       thinkingLevel: input.thinkingLevel,
       makeDefault: input.makeDefault,
       settingsScope: input.settingsScope,
+      installation: input.installation,
       label: input.label,
       codePage: input.codePage,
       verifier,
@@ -1343,7 +1373,7 @@ export class PiOAuthLogins {
         },
         { recordId: loginId, ephemeral: true },
       );
-      const scope = oauthScopeKey(input.userId, input.spaceId, input.provider, input.credentialId);
+      const scope = this.scope(input);
       await runAsTenant(actor, async () => {
         const created = await handoff.prisma.modelOAuthSession.create({
           data: {
@@ -1384,6 +1414,7 @@ export class PiOAuthLogins {
         where: {
           id: loginId,
           ...actor,
+          scope: this.handoffScope(),
           createdAt: { gte: new Date(Date.now() - PASTED_CODE_TTL_SECONDS * 1000) },
         },
         select: { ciphertext: true },
@@ -1413,13 +1444,27 @@ export class PiOAuthLogins {
     const actor = { userId: session.userId, spaceId: session.spaceId };
     try {
       const deleted = await runAsTenant(actor, () =>
-        handoff.prisma.modelOAuthSession.deleteMany({ where: { id: session.id, ...actor } }),
+        handoff.prisma.modelOAuthSession.deleteMany({
+          where: { id: session.id, ...actor, scope: this.handoffScope() },
+        }),
       );
       return deleted.count;
     } catch (error) {
       getLogger().error("model sign-in hand-off not deleted", error);
       return 0;
     }
+  }
+
+  /** Installation routes use their own namespace and verify this context before accepting a code. */
+  async installationContext(
+    loginId: string,
+    actor: SignInActor,
+  ): Promise<PiInstallationAIIntent | undefined> {
+    if (this.namespace !== "server-ai") return undefined;
+    const session = this.pending.get(loginId) ?? (await this.resume(loginId, actor));
+    if (!session || session.userId !== actor.userId || session.spaceId !== actor.spaceId)
+      return undefined;
+    return session.installation;
   }
 
   complete(loginId: string, actor: { userId: string; spaceId: string }): PiOAuthComplete {
@@ -1445,6 +1490,7 @@ export class PiOAuthLogins {
         thinkingLevel: session.thinkingLevel,
         makeDefault: session.makeDefault,
         settingsScope: session.settingsScope,
+        installation: session.installation,
         label: session.label,
         signal: session.abort.signal,
       };
@@ -1596,7 +1642,7 @@ export class PiOAuthLogins {
         if (handoff) {
           await runAsSystem("retire a disconnected provider's sign-ins in every Space", () =>
             handoff.prisma.modelOAuthSession.deleteMany({
-              where: { userId: input.userId, provider: input.provider },
+              where: { userId: input.userId, provider: input.provider, scope: this.handoffScope() },
             }),
           );
         }

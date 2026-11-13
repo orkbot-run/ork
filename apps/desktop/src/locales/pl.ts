@@ -4,7 +4,22 @@
 // Preserves the inherited Polish catalog and adds the progressive Ork welcome.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Workspace unavailable": "Workspace niedostępny",
+  "Workspace unavailable.": "Workspace niedostępny.",
+  "Server unavailable. Try again or choose a workspace.":
+    "Serwer niedostępny. Spróbuj ponownie lub wybierz workspace.",
+  "This workspace link is no longer active.": "Ten link do workspace'u nie jest już aktywny.",
+  Organization: "Organizacja",
+  "Choose organization": "Wybierz organizację",
+  "Organization unavailable": "Organizacja niedostępna",
+  "No servers connected": "Brak podłączonych serwerów",
+  "Set as default organization": "Ustaw jako domyślną organizację",
+  "Preparing workspace": "Przygotowywanie workspace'u",
+  "Access required": "Wymagany dostęp",
+  "Server unavailable": "Serwer niedostępny",
   "Update Ork to connect to this server.": "Zaktualizuj Ork, aby połączyć się z tym serwerem.",
+  "Could not save the selected files. Remove a file or try again.":
+    "Nie udało się zapisać wybranych plików. Usuń plik lub spróbuj ponownie.",
   // Menus
   "About {name}": "O {name}",
   "Check for Updates…": "Sprawdź aktualizacje…",
@@ -247,6 +262,9 @@ export const PL_MESSAGES: Record<string, string> = {
     "Usługi Ork zarządzane przez aplikację nie są gotowe. Ponów konfigurację.",
 
   // Docker
+  "Could not complete local installation. Retry to continue.":
+    "Nie udało się dokończyć instalacji lokalnej. Ponów próbę, aby kontynuować.",
+  "Installation identity changed": "Tożsamość instalacji uległa zmianie",
   "Docker is not installed on this computer.": "Docker nie jest zainstalowany na tym komputerze.",
   "Docker is installed, but Docker Compose is missing. Install Docker Desktop or the docker-compose-plugin.":
     "Docker jest zainstalowany, ale brakuje Docker Compose. Zainstaluj Docker Desktop lub docker-compose-plugin.",

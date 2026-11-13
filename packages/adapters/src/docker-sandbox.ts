@@ -109,6 +109,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   constructor(
     private readonly supervisorUrl: string,
     supervisorToken?: string,
+    private readonly workspaceIsolation = false,
   ) {
     this.supervisorToken = supervisorToken ?? resolveSupervisorToken(process.env);
   }
@@ -163,7 +164,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   }
 
   private url(path: string) {
-    return `${this.supervisorUrl.replace(/\/$/, "")}${path}`;
+    return `${this.supervisorUrl.replace(/\/$/, "")}${this.workspaceIsolation ? "/workspace/v2" : ""}${path}`;
   }
 
   private headers(context: AdapterContext, botId?: string) {

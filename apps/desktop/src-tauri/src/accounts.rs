@@ -104,6 +104,12 @@ mod tests {
     fn discovery() -> Discovery {
         serde_json::from_value(json!({"issuer":"https://identity.example.com", "authorization_endpoint":"https://identity.example.com/authorize", "token_endpoint":"https://identity.example.com/token", "userinfo_endpoint":"https://identity.example.com/userinfo", "jwks_uri":"https://identity.example.com/jwks", "revocation_endpoint":null, "code_challenge_methods_supported":["S256"], "id_token_signing_alg_values_supported":["RS256"], "token_endpoint_auth_methods_supported":["none"], "response_types_supported":["code"], "authorization_response_iss_parameter_supported":true})).unwrap()
     }
+    fn fixture_nonce() -> &'static str {
+        static NONCE: OnceLock<String> = OnceLock::new();
+        NONCE
+            .get_or_init(|| Proof::new().expect("create test login proof").nonce)
+            .as_str()
+    }
     fn credential() -> Credential {
         Credential {
             account: Account {
@@ -114,7 +120,7 @@ mod tests {
             },
             access_token: "old-access".into(),
             refresh_token: Some("old-refresh".into()),
-            nonce: "nonce-a".into(),
+            nonce: fixture_nonce().into(),
         }
     }
 
@@ -300,7 +306,7 @@ mod tests {
 
     #[test]
     fn id_tokens_require_signature_nonce_issuer_audience_expiry_and_subject_continuity() {
-        let claims = json!({"iss":config().issuer,"aud":config().client_id,"sub":"subject-a","iat":now(),"exp":now()+300,"nonce":"nonce-a"});
+        let claims = json!({"iss":config().issuer,"aud":config().client_id,"sub":"subject-a","iat":now(),"exp":now()+300,"nonce":fixture_nonce()});
         let token = signed(&claims);
         let mut hashed = claims.clone();
         hashed["at_hash"] = json!(URL_SAFE_NO_PAD.encode(&Sha256::digest(b"access-a")[..16]));
@@ -308,7 +314,7 @@ mod tests {
             &signed(&hashed),
             &signing().1,
             &config(),
-            Some(("nonce-a", true)),
+            Some((fixture_nonce(), true)),
             None,
         )
         .unwrap();
@@ -318,7 +324,7 @@ mod tests {
             &signed(&claims),
             &signing().1,
             &config(),
-            Some(("nonce-a", false)),
+            Some((fixture_nonce(), false)),
             Some("subject-a"),
         )
         .unwrap();
@@ -364,7 +370,7 @@ mod tests {
                 &token,
                 &signing().1,
                 &config(),
-                Some(("nonce-a", true)),
+                Some((fixture_nonce(), true)),
                 None
             )
             .unwrap()
@@ -390,7 +396,7 @@ mod tests {
                     &signed(&invalid),
                     &signing().1,
                     &config(),
-                    Some(("nonce-a", true)),
+                    Some((fixture_nonce(), true)),
                     None
                 )
                 .is_err(),
@@ -1044,6 +1050,23 @@ mod tests {
         );
         assert!(store.get(&config().key(&central)).unwrap().is_none());
         assert!(store.get(&config().key(&legacy)).unwrap().is_some());
+        let retained: Credential =
+            serde_json::from_str(&store.get(&config().key(&legacy)).unwrap().unwrap()).unwrap();
+        let mut fresh = credential();
+        fresh.account.expires_at = now() + 300;
+        fresh.nonce = Proof::new().unwrap().nonce;
+        accounts
+            .save(&config().key(&central), &fresh)
+            .await
+            .unwrap();
+        let authorization = accounts
+            .authorization_config(&central, &config())
+            .await
+            .unwrap();
+        assert_ne!(
+            authorization.profile_epoch(),
+            login_profile_epoch(&retained.nonce)
+        );
     }
 
     #[tokio::test]
@@ -1070,8 +1093,10 @@ mod tests {
         assert!(authorization.directory_bearer().is_err());
         let mut central_authorization = Authorization {
             account: authorization.account.clone(),
+            profile_epoch: authorization.profile_epoch.clone(),
             token: "central-access".into(),
             generation: authorization.generation,
+            personal: None,
         };
         central_authorization.account.issuer = crate::server_directory::origin()
             .origin()
@@ -1118,6 +1143,40 @@ mod tests {
             .lock()
             .unwrap()
             .contains_key(&config().key(&fixture.origin)));
+    }
+
+    #[tokio::test]
+    async fn login_profile_epoch_survives_refresh_and_restart_but_changes_on_interactive_login() {
+        let fixture = Fixture::new(false).await;
+        let expected = login_profile_epoch(&credential().nonce);
+        let refreshed = fixture
+            .accounts
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_eq!(refreshed.profile_epoch(), expected);
+        let restarted = Accounts::new(Store(fixture.store.clone()));
+        let restored = restarted
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_eq!(restored.profile_epoch(), expected);
+        // A successful interactive exchange replaces the nonce even if old profile data remains.
+        let mut next = credential();
+        next.account.expires_at = now() + 300;
+        next.nonce = Proof::new().unwrap().nonce;
+        restarted
+            .save(&config().key(&fixture.origin), &next)
+            .await
+            .unwrap();
+        let replacement = restarted
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_ne!(replacement.profile_epoch(), expected);
+        assert!(!serde_json::to_string(&replacement.account)
+            .unwrap()
+            .contains(replacement.profile_epoch()));
     }
 }
 
@@ -1209,18 +1268,34 @@ pub(crate) struct Authorization {
     pub account: Account,
     token: String,
     generation: u64,
+    personal: Option<PersonalAuthority>,
+    profile_epoch: String,
+}
+
+pub(crate) struct PersonalAuthority {
+    pub selection: crate::installation_transport::Selection,
+    pub device_id: String,
+    pub epoch: u64,
 }
 
 impl Authorization {
+    pub(crate) fn profile_epoch(&self) -> &str {
+        &self.profile_epoch
+    }
     pub(crate) fn directory_bearer(&self) -> Result<&str, String> {
-        if self.account.issuer
-            != crate::server_directory::origin()
-                .origin()
-                .ascii_serialization()
+        if self.personal.is_some()
+            || self.token.is_empty()
+            || self.account.issuer
+                != crate::server_directory::origin()
+                    .origin()
+                    .ascii_serialization()
         {
             return Err("This build must use the central Accounts issuer.".into());
         }
         Ok(&self.token)
+    }
+    pub(crate) fn personal(&self) -> Option<&PersonalAuthority> {
+        self.personal.as_ref()
     }
 }
 
@@ -1230,6 +1305,17 @@ struct Credential {
     access_token: String,
     refresh_token: Option<String>,
     nonce: String,
+}
+
+fn login_profile_epoch(nonce: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"orkbot-login-profile-v1\0");
+    digest.update(nonce.as_bytes());
+    digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -1557,6 +1643,37 @@ impl Accounts {
             .await
     }
 
+    pub(crate) async fn queue_installation_logout(
+        &self,
+        selection: crate::installation_transport::Selection,
+        token: String,
+    ) -> Result<(), String> {
+        self.revocations
+            .enqueue(crate::revocations::Target::Installation { selection, token })
+            .await
+    }
+
+    pub(crate) async fn retry_installation_revocations(&self, authorization: &Authorization) {
+        let account = crate::settings::account_key(authorization.account.identity());
+        self.revocations
+            .flush_installations(&account, |selection| async move {
+                if !self.is_current(authorization) {
+                    return Err(ERROR.into());
+                }
+                if !selection.uses_relay() {
+                    return Ok(None);
+                }
+                crate::server_login::issue_relay(
+                    authorization.directory_bearer()?,
+                    &selection,
+                    || self.is_current(authorization),
+                )
+                .await
+                .map(Some)
+            })
+            .await;
+    }
+
     pub(crate) fn retry_revocations(&self) {
         if self.revocations.is_known_empty() || self.revocations.is_running() {
             return;
@@ -1621,11 +1738,89 @@ impl Accounts {
     pub(crate) fn is_current(&self, authorization: &Authorization) -> bool {
         !self.signing_in.load(Ordering::SeqCst)
             && authorization.generation == self.generation.load(Ordering::SeqCst)
-            && authorization.account.expires_at > now()
+            && (authorization.personal.is_some() || authorization.account.expires_at > now())
+    }
+
+    /// The caller must validate the exact OS-held key before creating this local-only authority.
+    pub(crate) fn personal_authorization(
+        &self,
+        credential: &crate::personal_devices::Credential,
+        epoch: u64,
+    ) -> Result<Authorization, String> {
+        if !crate::profile::valid_epoch(&credential.profile_epoch) {
+            return Err("Sign in to Accounts first.".into());
+        }
+        let authorization = Authorization {
+            account: credential.account.clone(),
+            token: String::new(),
+            generation: self.generation.load(Ordering::SeqCst),
+            profile_epoch: credential.profile_epoch.clone(),
+            personal: Some(PersonalAuthority {
+                selection: credential.selection.clone(),
+                device_id: credential.device_id.clone(),
+                epoch,
+            }),
+        };
+        if !self.is_current(&authorization) {
+            return Err(ERROR.into());
+        }
+        Ok(authorization)
     }
 
     pub(crate) async fn authorization(&self, origin: &Url) -> Result<Authorization, String> {
         self.authorization_config(origin, &Config::build()?).await
+    }
+
+    /// Identity metadata only. Reading it never renews or grants central authorization.
+    pub(crate) async fn local_account(&self, origin: &Url) -> Result<Option<Account>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let _operation = self.operation.lock().await;
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err(ERROR.into());
+        }
+        let config = Config::build()?;
+        let Some(raw) = self.store.get(config.key(origin)).await? else {
+            return Ok(None);
+        };
+        if raw.len() > 128 * 1024 {
+            return Err(ERROR.into());
+        }
+        let stored: Credential = serde_json::from_str(&raw).map_err(|_| ERROR)?;
+        if stored.account.issuer != config.issuer
+            || generation != self.generation.load(Ordering::SeqCst)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some(stored.account))
+    }
+
+    /// Read only the durable login lifetime; this never renews or creates central authority.
+    pub(crate) async fn local_profile_epoch(
+        &self,
+        origin: &Url,
+    ) -> Result<Option<(String, String)>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let _operation = self.operation.lock().await;
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err(ERROR.into());
+        }
+        let config = Config::build()?;
+        let Some(raw) = self.store.get(config.key(origin)).await? else {
+            return Ok(None);
+        };
+        if raw.len() > 128 * 1024 {
+            return Err(ERROR.into());
+        }
+        let stored: Credential = serde_json::from_str(&raw).map_err(|_| ERROR)?;
+        if stored.account.issuer != config.issuer
+            || generation != self.generation.load(Ordering::SeqCst)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some((
+            crate::settings::account_key(stored.account.identity()),
+            login_profile_epoch(&stored.nonce),
+        )))
     }
 
     async fn authorization_config(
@@ -1639,9 +1834,11 @@ impl Accounts {
             .await?
             .ok_or("Sign in to Accounts first.")?;
         let authorization = Authorization {
+            profile_epoch: login_profile_epoch(&credential.nonce),
             account: credential.account,
             token: credential.access_token,
             generation,
+            personal: None,
         };
         if !self.is_current(&authorization) {
             return Err("Accounts sign-in changed. Try again.".into());

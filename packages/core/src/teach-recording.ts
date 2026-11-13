@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited teaching input helpers are preserved. Unicode input support follows LICENSE.md.
+
 export const DEFAULT_TEACH_RECORDING_TTL_MS = 10 * 60 * 1000;
 
 export function teachRecordingTtlMs(): number {
@@ -24,7 +28,7 @@ export function teachCaptureKey(
   modifiers?: { metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean },
 ): string | null {
   if (modifiers?.metaKey || modifiers?.ctrlKey || modifiers?.altKey) return null;
-  if (key.length === 1) return key;
+  if (Array.from(key).length === 1) return key;
   return SPECIAL_TEACH_KEYS.has(key) ? key : null;
 }
 
@@ -52,7 +56,7 @@ const X11_KEYSYM_BY_DOM_KEY: Record<string, string> = {
 export function computerInputForDomKey(
   key: string,
 ): { kind: "clipboard"; text: string } | { kind: "key"; key: string } {
-  if (key.length === 1) return { kind: "clipboard", text: key };
+  if (Array.from(key).length === 1) return { kind: "clipboard", text: key };
   return { kind: "key", key: X11_KEYSYM_BY_DOM_KEY[key] ?? key };
 }
 

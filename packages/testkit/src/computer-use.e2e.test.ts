@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { ComputerRef, SandboxProvider } from "@orkbot/adapter-kit";
 import type { createApp } from "@orkbot/api/app";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { computerTestSandbox } from "./computer-test-config.js";
 import { sessionCookieHeader } from "./index.js";
@@ -279,7 +280,12 @@ type RunState = { status: string; error: string | null };
 async function rpc<T>(app: App, cookie: string, procedure: string, body: unknown): Promise<T> {
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: "http://127.0.0.1:5173",
+    },
     body: JSON.stringify({ json: body }),
   });
   const parsed = (await response.json()) as { json?: T; error?: { message?: string } };

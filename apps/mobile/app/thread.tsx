@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
 import { Thread } from "../components/thread/thread-screen";
 import { currentApiBase, selectedSpaceId } from "../lib/api";
 import { t, useI18n } from "../lib/i18n";
+import { installationRevocationScope } from "../lib/installation-transport";
 import { integrationsCacheScope } from "../lib/integrations-cache";
 import { useMobileTokens } from "../lib/native";
 import {
@@ -34,6 +35,7 @@ export default function ThreadRoute() {
   useEffect(() => {
     if (generation !== ready) return;
     const apiBase = currentApiBase();
+    const workspace = JSON.stringify(installationRevocationScope(apiBase) ?? null);
     let cancelled = false;
     let notified = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -45,10 +47,11 @@ export default function ThreadRoute() {
             !cancelled &&
             scope &&
             generation === currentSessionGeneration() &&
-            apiBase === currentApiBase()
+            apiBase === currentApiBase() &&
+            workspace === JSON.stringify(installationRevocationScope(apiBase) ?? null)
           )
             setOwner({
-              key: JSON.stringify([apiBase, scope.userId]),
+              key: JSON.stringify([apiBase, scope.userId, scope.spaceId, workspace]),
               generation,
               userId: scope.userId,
             });

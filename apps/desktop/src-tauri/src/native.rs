@@ -35,8 +35,26 @@ pub struct Document {
 pub enum Command {
     #[serde(rename = "accounts.signIn")]
     AccountsSignIn,
+    #[serde(rename = "accounts.signInToServer")]
+    AccountsSignInToServer,
+    #[serde(rename = "transport.open")]
+    TransportOpen { id: String, input: String },
+    #[serde(rename = "transport.start")]
+    TransportStart { id: String },
+    #[serde(rename = "transport.write")]
+    TransportWrite { id: String, bytes: String },
+    #[serde(rename = "transport.finish")]
+    TransportFinish { id: String },
+    #[serde(rename = "transport.head")]
+    TransportHead { id: String },
+    #[serde(rename = "transport.read")]
+    TransportRead { id: String },
+    #[serde(rename = "transport.cancel")]
+    TransportCancel { id: String },
     #[serde(rename = "accounts.session")]
     AccountsSession,
+    #[serde(rename = "accounts.workspaceTarget")]
+    AccountsWorkspaceTarget,
     #[serde(rename = "accounts.logout")]
     AccountsLogout,
     #[serde(rename = "accounts.retryRevocations")]
@@ -89,6 +107,8 @@ pub enum Command {
     },
     #[serde(rename = "oauth.open")]
     OAuthOpen { url: String },
+    #[serde(rename = "oauth.capture")]
+    OAuthCapture { url: String, expected_state: String },
     #[serde(rename = "oauth.cancel")]
     OAuthCancel { url: String },
     #[serde(rename = "speech.start")]
@@ -281,12 +301,24 @@ pub fn grant<R: tauri::Runtime>(
     )
 }
 
+#[cfg(test)]
 pub fn initialization_script(
     label: &str,
     origin: &Url,
     proof: &str,
     speech: bool,
     computer: bool,
+) -> String {
+    initialization_script_with_transport(label, origin, proof, speech, computer, false)
+}
+
+pub fn initialization_script_with_transport(
+    label: &str,
+    origin: &Url,
+    proof: &str,
+    speech: bool,
+    computer: bool,
+    transport: bool,
 ) -> String {
     let config = serde_json::json!({
         "origin": origin.origin().ascii_serialization(),
@@ -295,6 +327,7 @@ pub fn initialization_script(
         "speech": speech,
         "computer": computer,
         "label": label,
+        "transport": transport,
     });
     format!(
         "(() => {{ const config = {config}; {}\n{} }})();",

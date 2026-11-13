@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
 // Inherited Apache-2.0 renderer bootstrap from main.tsx is retained for the native shell.
 
+import "./lib/composer-draft-flush";
 import "./zod-config";
 import "./monitoring-bootstrap";
 import { BotAvatarActivityProvider, Toaster, TooltipProvider } from "@orkbot/ui-web";

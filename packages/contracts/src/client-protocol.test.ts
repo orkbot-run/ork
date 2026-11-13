@@ -21,10 +21,11 @@ describe("RPC protocol compatibility", () => {
     });
   });
 
-  it("advertises the implemented protocol without changing legacy version one", () => {
+  it("requires workspace protocol two while preserving legacy discovery and recovery", () => {
     expect(CLIENT_PROTOCOL_HEADER).toBe("x-orkbot-protocol");
-    expect(CLIENT_PROTOCOL_VERSION).toBe(1);
-    expect(protocolRangeSchema.parse(SERVER_PROTOCOL_RANGE)).toEqual({ min: 1, max: 1 });
+    expect(CLIENT_PROTOCOL_VERSION).toBe(2);
+    expect(protocolRangeSchema.parse(SERVER_PROTOCOL_RANGE)).toEqual({ min: 2, max: 2 });
+    expect(supportsProtocolVersion(SERVER_PROTOCOL_RANGE, 1)).toBe(false);
     expect(supportsProtocolVersion(SERVER_PROTOCOL_RANGE)).toBe(true);
     expect(parseClientProtocolHeader(undefined)).toBe(1);
     expect(parseClientProtocolHeader(null)).toBe(1);

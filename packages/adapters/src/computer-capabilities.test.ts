@@ -55,6 +55,20 @@ describe("configured computer capabilities", () => {
     ).toEqual({ start: false, screen: true, control: true, terminal: true });
   });
 
+  it("immediately hides a retained host screen after installation enrollment", async () => {
+    let allowed = true;
+    const provider = new HostAwareSandbox(
+      new NoneSandboxProvider(),
+      new FakeSandboxProvider(),
+      async () => true,
+      async () => allowed,
+    );
+    const input = { computer: { kind: "desktop", botId: "home", providerRef: "active" } } as const;
+    expect((await inspectComputerCapabilities(provider, input)).screen).toBe(true);
+    allowed = false;
+    expect((await inspectComputerCapabilities(provider, input)).screen).toBe(false);
+  });
+
   it("resolves an account's saved target before its first computer row exists", async () => {
     const loadOwn = vi.fn(async () => null);
     const loadOwnForUser = vi.fn(async () => ({ provider: "desktop", values: {} }));

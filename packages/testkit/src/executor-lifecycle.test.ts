@@ -9,6 +9,7 @@ import {
   releaseComputerExecutionLease,
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { approvalEffectKey } from "@orkbot/core/node/approval-effect-key";
 import {
   createThreadEvents,
@@ -1411,6 +1412,7 @@ describeIntegration("run executor lifecycle", () => {
     const response = await handles.app.request(`/rpc/${procedure}`, {
       method: "POST",
       headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
         "content-type": "application/json",
         origin: "http://127.0.0.1:5173",
         cookie,

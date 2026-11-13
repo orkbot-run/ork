@@ -1,0 +1,27 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.orkbot.transport'
+version = '0.1.0'
+
+android {
+  namespace 'com.orkbot.transport'
+  defaultConfig {
+    versionName '0.1.0'
+    consumerProguardFiles 'consumer-rules.pro'
+  }
+  sourceSets.main {
+    java.srcDir '../generated/android/kotlin'
+    jniLibs.srcDir '../generated/android/jniLibs'
+  }
+}
+
+dependencies {
+  implementation 'net.java.dev.jna:jna:5.19.1@aar'
+  implementation 'org.rustls:rustls-platform-verifier:0.2.0'
+}

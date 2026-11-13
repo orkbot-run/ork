@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+appId: run.orkbot.app
+name: Connected workspace computer
+tags:
+  - native-accounts
+---
+# Run against an already authorized workspace in a native Accounts build.
+# ORKBOT_SCREENSHOT_BOT_ID must belong to that workspace and support screen control.
+- launchApp:
+    stopApp: false
+- openLink: "orkbot:///computer?botId=${ORKBOT_SCREENSHOT_BOT_ID}"
+- extendedWaitUntil:
+    visible: "Open computer"
+    timeout: 30000
+- tapOn: "Open computer"
+- extendedWaitUntil:
+    visible:
+      id: "native-computer-frame"
+    timeout: 30000
+- assertNotVisible: "Could not connect to the computer screen"
+- takeScreenshot: "native-workspace-computer-view"
+- tapOn: "Take control"
+- extendedWaitUntil:
+    visible: "You have control"
+    timeout: 15000
+- tapOn:
+    id: "native-computer-frame"
+- tapOn: "Show keyboard"
+- inputText: "Native workspace input"
+- tapOn: "Tab"
+- tapOn:
+    text: "Hide keyboard"
+    optional: true
+- assertVisible: "Show keyboard"
+- takeScreenshot: "native-workspace-computer-control"
+- tapOn: "Release"
+- assertNotVisible: "You have control"
+- assertVisible:
+    id: "native-computer-frame"
+- assertNotVisible: "Close computer"
+- assertVisible: "Open computer"

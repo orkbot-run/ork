@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
 import type { AiConsentStatus } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 
 type FixtureApp = {
   request(input: string, init?: RequestInit): Response | Promise<Response>;
@@ -17,7 +18,12 @@ export async function allowFixtureAiDataSharing(
   const call = async (procedure: string, input: unknown) => {
     const response = await app.request(`/rpc/aiConsent/${procedure}`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie, origin },
+      headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+        "content-type": "application/json",
+        cookie,
+        origin,
+      },
       body: JSON.stringify({ json: input }),
       signal: AbortSignal.timeout(15_000),
     });

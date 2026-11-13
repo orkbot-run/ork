@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors
 
-import { isPrivateNetworkHost, parseServerHeaders } from "@orkbot/contracts";
+import type { WorkspaceTarget } from "@orkbot/contracts";
+import { isPrivateNetworkHost, parseServerHeaders, WorkspaceTargetSchema } from "@orkbot/contracts";
+
+export type PendingWorkspaceRevocation = { account: string; target: WorkspaceTarget };
 
 export type PendingRevocation = {
   kind: "session" | "oauth";
@@ -11,6 +14,7 @@ export type PendingRevocation = {
   headers?: Record<string, string>;
   clientId?: string;
   tokenType?: "access_token" | "refresh_token";
+  workspace?: PendingWorkspaceRevocation;
 };
 
 export const REVOCATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -20,6 +24,35 @@ export const MAX_REVOCATION_STORE_CHARS = 128 * 1024;
 function valid(entry: PendingRevocation, now: number): boolean {
   if (!entry || typeof entry !== "object") return false;
   if (entry.kind !== "session" && entry.kind !== "oauth") return false;
+  if (entry.workspace !== undefined) {
+    if (
+      entry.kind !== "session" ||
+      !entry.workspace ||
+      typeof entry.workspace.account !== "string" ||
+      entry.workspace.account.length > 4096 ||
+      !WorkspaceTargetSchema.safeParse(entry.workspace.target).success
+    )
+      return false;
+    try {
+      const owner = JSON.parse(entry.workspace.account);
+      if (
+        !Array.isArray(owner) ||
+        owner.length !== 2 ||
+        owner.some((value) => typeof value !== "string" || !value)
+      )
+        return false;
+      const issuer = new URL(owner[0]);
+      if (
+        issuer.protocol !== "https:" ||
+        issuer.origin !== owner[0] ||
+        issuer.username ||
+        issuer.password
+      )
+        return false;
+    } catch {
+      return false;
+    }
+  }
   if (
     typeof entry.token !== "string" ||
     !entry.token ||

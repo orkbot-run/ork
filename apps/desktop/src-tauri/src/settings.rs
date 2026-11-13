@@ -30,6 +30,7 @@ pub struct Setup {
     pub mode: InstanceMode,
     pub server_url: Url,
     pub account: Option<String>,
+    pub workspace: Option<crate::server_directory::WorkspaceTarget>,
 }
 
 impl Setup {
@@ -82,7 +83,10 @@ pub fn load(dir: &Path) -> Option<Setup> {
     }
     let value: Value = serde_json::from_slice(&contents).ok()?;
     let object = value.as_object()?;
-    if object.len() != 2 + usize::from(object.contains_key("account")) {
+    if object.len()
+        != 2 + usize::from(object.contains_key("account"))
+            + usize::from(object.contains_key("workspace"))
+    {
         return None;
     }
     let account = match object.get("account") {
@@ -103,10 +107,21 @@ pub fn load(dir: &Path) -> Option<Setup> {
     if mode == InstanceMode::New && !valid_managed_origin(&server_url) {
         return None;
     }
+    let workspace = match object.get("workspace") {
+        Some(value) => {
+            let target: crate::server_directory::WorkspaceTarget =
+                serde_json::from_value(value.clone()).ok()?;
+            target.validate().ok()?;
+            account.as_ref()?;
+            Some(target)
+        }
+        None => None,
+    };
     Some(Setup {
         mode,
         server_url,
         account,
+        workspace,
     })
 }
 
@@ -141,6 +156,13 @@ pub fn save(dir: &Path, setup: &Setup) -> Result<(), String> {
     });
     if let Some(account) = &setup.account {
         value["account"] = json!(account);
+    }
+    if let Some(workspace) = &setup.workspace {
+        if setup.account.is_none() {
+            return Err(SAVE_ERROR.into());
+        }
+        workspace.validate()?;
+        value["workspace"] = serde_json::to_value(workspace).map_err(|_| SAVE_ERROR)?;
     }
     let contents = serde_json::to_vec(&value).map_err(|_| SAVE_ERROR)?;
     let mut temporary = tempfile::NamedTempFile::new_in(dir).map_err(|_| SAVE_ERROR)?;
@@ -212,6 +234,7 @@ mod tests {
                 mode: InstanceMode::Existing,
                 server_url: url.clone(),
                 account: None,
+                workspace: None,
             },
         )
     }
@@ -222,6 +245,7 @@ mod tests {
             mode: InstanceMode::New,
             server_url: Url::parse("http://127.0.0.1:45173").unwrap(),
             account: None,
+            workspace: None,
         };
         super::save(dir.path(), &setup).unwrap();
         assert_eq!(super::load(dir.path()).unwrap().mode, InstanceMode::New);
@@ -237,6 +261,7 @@ mod tests {
                     mode: InstanceMode::New,
                     server_url: Url::parse(target).unwrap(),
                     account: None,
+                    workspace: None,
                 }
             )
             .is_err());
@@ -257,6 +282,7 @@ mod tests {
             mode: InstanceMode::Existing,
             server_url: Url::parse("https://product.example.test").unwrap(),
             account: Some(account_key(identity)),
+            workspace: None,
         };
         super::save(dir.path(), &setup).unwrap();
         let saved = super::load(dir.path()).unwrap();

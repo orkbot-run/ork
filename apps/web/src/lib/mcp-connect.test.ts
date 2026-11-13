@@ -2,10 +2,14 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "./mcp-connect";
+import { connectMcpOauth, MCP_OAUTH_CHANNEL, mcpOAuthRedirectUri } from "./mcp-connect";
 import { rpc } from "./rpc";
 
-vi.mock("./rpc", () => ({ rpc: { mcp: { oauth: { begin: vi.fn() } } } }));
+const context = vi.hoisted(() => ({ isCurrent: vi.fn(() => true) }));
+vi.mock("./rpc", () => {
+  const rpc = { mcp: { oauth: { begin: vi.fn(), complete: vi.fn() } } };
+  return { rpc, captureRpcContext: () => ({ client: rpc, isCurrent: context.isCurrent }) };
+});
 
 const authorization = "https://identity.example.test/authorize?state=fixture";
 
@@ -38,6 +42,8 @@ function environment(native: "desktop" | "hint" | "browser" = "desktop") {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  context.isCurrent.mockReset().mockReturnValue(true);
+  vi.mocked(rpc.mcp.oauth.complete).mockReset().mockResolvedValue({ ok: true });
   vi.mocked(rpc.mcp.oauth.begin).mockReset().mockResolvedValue({
     status: "authorization_required",
     sessionId: "session-fixture",
@@ -66,7 +72,6 @@ it.each(["desktop", "hint"] as const)(
     await expect(connectMcpOauth("server-fixture")).resolves.toBe("connected");
     expect(rpc.mcp.oauth.begin).toHaveBeenCalledWith({
       serverId: "server-fixture",
-      redirectUri: "https://server.example.test/mcp/oauth/callback",
     });
     expect(open).toHaveBeenCalledWith("about:blank", MCP_OAUTH_CHANNEL, expect.any(String));
     expect(navigated).toBe(authorization);
@@ -124,4 +129,54 @@ it("does not open an authorization popup when the server is already connected", 
   vi.mocked(rpc.mcp.oauth.begin).mockResolvedValue({ status: "already_connected" });
   await expect(connectMcpOauth("server-fixture")).resolves.toBe("already_connected");
   expect(open).not.toHaveBeenCalled();
+});
+
+it("uses the installation callback address in bundled-renderer setup", () => {
+  expect(mcpOAuthRedirectUri("https://installation.example.test")).toBe(
+    "https://installation.example.test/mcp/oauth/callback",
+  );
+  expect(mcpOAuthRedirectUri()).toBe("/mcp/oauth/callback");
+});
+
+it("captures the native callback and completes through the initiating workspace session", async () => {
+  const { open } = environment();
+  const capture = vi.fn().mockResolvedValue({ code: "provider-code", state: "session-fixture" });
+  window.orkbotDesktop = { oauth: { capture } } as never;
+  await expect(connectMcpOauth("server-fixture")).resolves.toBe("connected");
+  expect(capture).toHaveBeenCalledWith(authorization, "session-fixture");
+  expect(rpc.mcp.oauth.complete).toHaveBeenCalledWith({
+    sessionId: "session-fixture",
+    code: "provider-code",
+    state: "session-fixture",
+  });
+  expect(open).not.toHaveBeenCalled();
+});
+
+it.each(["session", "state", "failure"])(
+  "rejects late or mismatched native completion (%s)",
+  async (change) => {
+    environment();
+    const capture = vi.fn(async () => {
+      if (change === "failure") throw new Error("closed");
+      if (change === "session") context.isCurrent.mockReturnValue(false);
+      return {
+        code: "provider-code",
+        state: change === "state" ? "other-session" : "session-fixture",
+      };
+    });
+    window.orkbotDesktop = { oauth: { capture } } as never;
+    await expect(connectMcpOauth("server-fixture")).resolves.toBe("cancelled");
+    expect(rpc.mcp.oauth.complete).not.toHaveBeenCalled();
+  },
+);
+
+it("reports a failed server-side token exchange instead of treating it as user cancellation", async () => {
+  environment();
+  window.orkbotDesktop = {
+    oauth: {
+      capture: vi.fn().mockResolvedValue({ code: "provider-code", state: "session-fixture" }),
+    },
+  } as never;
+  vi.mocked(rpc.mcp.oauth.complete).mockRejectedValue(new Error("Token exchange rejected"));
+  await expect(connectMcpOauth("server-fixture")).rejects.toThrow("Token exchange rejected");
 });

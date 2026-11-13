@@ -101,12 +101,16 @@ vi.mock("./appearance", () => ({ mobileTokens: () => ({}) }));
 vi.mock("./message-action-sheet", () => ({ presentMessageActionSheet: vi.fn() }));
 vi.mock("./live-notifications", () => ({ afterChatNotifyChange: vi.fn(async () => undefined) }));
 
-vi.mock("./session", () => ({ currentSessionGeneration: () => 1 }));
+vi.mock("./session", () => ({
+  currentSessionGeneration: () => 1,
+  subscribeSessionGeneration: () => () => {},
+}));
 // Cache updates reach the screen inside act instead of on a later timer.
 notifyManager.setScheduler((callback) => callback());
 vi.mock("./api", () => ({
   currentApiBase: () => "https://app.example.test",
   spaceSelectionSeq: () => 0,
+  subscribeConfirmedSpaceSwitch: () => () => {},
   loadSessionToken: async () => "token",
   captureApiRequestContext: async () => ({ headers: {} }),
   selectedSpaceId: () => "space-fixture",
@@ -455,6 +459,20 @@ vi.mock("./i18n", () => {
   return { t, useI18n: () => ({ t }) };
 });
 vi.mock("../components/settings-group", () => ({
+  SettingsInputRow: ({
+    value,
+    onChangeText,
+    accessibilityLabel,
+  }: {
+    value: string;
+    onChangeText: (value: string) => void;
+    accessibilityLabel: string;
+  }) =>
+    createElement("input", {
+      value,
+      "aria-label": accessibilityLabel,
+      onChange: (event: { target: { value: string } }) => onChangeText(event.target.value),
+    }),
   SettingsGroup: ({
     label,
     footer,
@@ -643,7 +661,8 @@ describe("chat settings model row", () => {
     mocks.params = { botId: "bot-fixture" };
     mocks.workspacePolicy = { provider: "company", modelId: "shared-model" };
     await render();
-    expect(container.textContent).toContain("company · shared-model");
+    expect(container.textContent).toContain("company");
+    expect(container.textContent).toContain("shared-model");
     expect(container.querySelector('button[aria-label="Model"]')).toBeNull();
     expect(container.textContent).toContain(
       "Everyone in this workspace uses the model selected by the owner.",
@@ -1093,14 +1112,35 @@ describe("model role lists", () => {
       button.textContent?.includes(name),
     )!;
 
-  it("shows an enforced workspace model without giving its owner editing controls", async () => {
-    mocks.workspaceCanManage = true;
+  it("shows the enforced workspace model without giving a member editing controls", async () => {
+    mocks.workspaceCanManage = false;
     mocks.workspacePolicy = { provider: "company", modelId: "shared-model" };
     await renderModels();
-    expect(container.textContent).toContain("company · shared-model");
+    expect(container.textContent).toContain("company");
+    expect(container.textContent).toContain("shared-model");
     expect(container.textContent).not.toContain("Set workspace model");
     expect(container.textContent).not.toContain("Change model");
     expect(container.textContent).not.toContain("Remove");
+  });
+
+  it("lets the owner save a shared key on the selected server", async () => {
+    mocks.workspaceCanManage = true;
+    await renderModels();
+    await act(async () => buttonWithText("Set workspace model")!.click());
+    editField("Model", "company-model");
+    editField("API key", "fake-private-workspace-key");
+    await act(async () => buttonWithText("Save")!.click());
+    expect(mocks.rpc).toHaveBeenCalledWith(
+      "models/setWorkspacePolicy",
+      expect.objectContaining({
+        provider: "openrouter",
+        modelId: "company-model",
+        apiKey: "fake-private-workspace-key",
+        credentialId: null,
+      }),
+    );
+    expect(container.querySelector('input[aria-label="API key"]')).toBeNull();
+    expect(container.textContent).not.toContain("fake-private-workspace-key");
   });
 
   it("numbers the main model and its fallbacks, then offers Add fallback", async () => {

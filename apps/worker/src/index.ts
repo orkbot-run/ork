@@ -6,6 +6,7 @@
 // Ork adds optional durable messaging progress admission.
 
 import { hostname } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import type { JobPublisher, JobWorkerHost } from "@orkbot/adapter-kit";
 import {
@@ -13,6 +14,10 @@ import {
   IntegrationProviderSettings,
   unwrapEnvFromKeyManager,
 } from "@orkbot/adapters";
+import { InstallationClient } from "@orkbot/auth/installation-client";
+import { FilePersonalRevocations } from "@orkbot/auth/personal-revocations";
+import { WorkspaceAuthority } from "@orkbot/auth/workspace-authority";
+import { startWorkspaceAuthority } from "@orkbot/auth/workspace-authority-service";
 import { phoneCallSettings } from "@orkbot/core";
 import { loadRootEnv } from "@orkbot/core/node/load-root-env";
 import { stopOnShutdownSignals } from "@orkbot/core/node/shutdown-signals";
@@ -79,6 +84,8 @@ import {
   resolveDeploymentModel,
   resolvePiSessionRoot,
   resolveSandboxProvider,
+  ServerAICatalog,
+  ServerAIModels,
   sandboxProviderOptionsFromEnv,
   shutdownPiTelemetry,
   UserDevices,
@@ -141,6 +148,57 @@ async function main() {
   prisma = withSecretPersistence(prisma, secrets);
   installSecurityEventStore(prisma);
   installAuditEventStore(prisma);
+  const accountsIssuer = process.env.ACCOUNTS_ISSUER ?? "https://api.ork.run";
+  if (process.env.NODE_ENV === "production" && accountsIssuer !== "https://api.ork.run")
+    throw new Error("Unsupported production Accounts issuer");
+  const installation =
+    process.env.AUTH_ACCOUNTS_ENABLED === "true"
+      ? new InstallationClient(prisma, {
+          issuer: accountsIssuer,
+          encryptionKey: resolveEncryptionKey(process.env),
+        })
+      : undefined;
+  const workspaceAuthority = installation
+    ? new WorkspaceAuthority(
+        prisma,
+        installation,
+        accountsIssuer,
+        realtime,
+        new FilePersonalRevocations(
+          join(process.env.DATA_DIR ?? "./data", "identity", "personal-revocations"),
+        ),
+      )
+    : undefined;
+  const hostAccessAllowed = installation
+    ? async () => !(await installation.registered())
+    : undefined;
+  const stopWorkspaceAuthority =
+    installation && workspaceAuthority
+      ? startWorkspaceAuthority(
+          installation,
+          workspaceAuthority,
+          (error) => logger.error("Workspace authority synchronization failed", error),
+          realtime,
+        )
+      : undefined;
+  const serverAI = workspaceAuthority
+    ? new ServerAICatalog({
+        prisma,
+        secrets,
+        realtime,
+        principal: async () => null,
+        authorizeWork: (actor) =>
+          workspaceAuthority.work(actor.spaceId, actor.userId, actor.membershipVersion),
+      })
+    : undefined;
+  const serverAIModels = serverAI
+    ? new ServerAIModels({
+        prisma,
+        secrets,
+        catalog: serverAI,
+        allowPrivateEndpoint: process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true",
+      })
+    : undefined;
   const unreadableMasterKeys = await verifyContentKeys(prisma);
   if (unreadableMasterKeys.length)
     logger.error("Stored space keys need master keys that are not configured", undefined, {
@@ -176,6 +234,7 @@ async function main() {
     sandboxKind: sandboxProvider,
     sandboxOptions: {
       ...sandboxProviderOptionsFromEnv(process.env),
+      hostAccessAllowed,
       supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
       supervisorToken:
         sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
@@ -184,7 +243,7 @@ async function main() {
   const allowPrivateEndpoint = process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true";
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, {}, allowPrivateEndpoint);
   const mcpStdio = {
-    stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
+    stdioEnabled: process.env.MCP_STDIO_ENABLED === "true" && !installation,
     allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
       .split(",")
       .map((v) => v.trim())
@@ -284,6 +343,8 @@ async function main() {
     voip: await createApnsVoipProvider(apnsVoipConfig(process.env)),
   });
   const executor = createRunExecutor({
+    serverAIModels,
+    authorizeWork: workspaceAuthority ? (scope) => workspaceAuthority.execution(scope) : undefined,
     maxUploadSizeBytes,
     mediaGeneration,
     prisma,
@@ -334,6 +395,7 @@ async function main() {
         : new UserDevices({
             prisma,
             forwardSecret: userDeviceForwardSecret(resolveEncryptionKey(process.env)),
+            allowHostAccess: hostAccessAllowed,
           }),
     paymentWallet,
     shutdownSignal: shutdown.signal,
@@ -407,6 +469,8 @@ async function main() {
     (stopped ??= (async () => {
       stopping = true;
       shutdown.abort();
+      await stopWorkspaceAuthority?.();
+      serverAI?.dispose();
       stopStallWatch();
       try {
         await stopHealth?.();

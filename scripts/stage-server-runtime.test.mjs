@@ -37,7 +37,7 @@ test("stages the server and proxy without native clients or product renderer sou
       "NOTICE",
     ])
       write(file);
-    for (const directory of ["api", "worker"]) write(`apps/${directory}/dist/index.js`);
+    for (const directory of ["api", "worker", "relay"]) write(`apps/${directory}/dist/index.js`);
     write("apps/api/dist/cli/server-claim.js", "server claim CLI");
     for (const directory of [
       "adapter-kit",
@@ -94,6 +94,10 @@ test("stages the server and proxy without native clients or product renderer sou
     assert.equal(
       readFileSync(path.join(destination, "apps/api/dist/cli/server-claim.js"), "utf8"),
       "server claim CLI",
+    );
+    assert.equal(
+      readFileSync(path.join(destination, "apps/relay/dist/index.js"), "utf8"),
+      "fixture",
     );
 
     for (const file of computerHelpers)

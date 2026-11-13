@@ -134,3 +134,11 @@ Native login proofs establish a server session without a fresh reauthentication 
 With native Accounts login, account deletion, full account export and revealing stored
 secrets remain blocked until a separate fresh-confirmation protocol is available.
 Signing in again cannot provide that confirmation.
+
+## Personal device admissions
+
+The server can retain a personal owner's device admission after verifying a signed Accounts login and proof of the device's P-256 private key. Offline session renewal uses a single-use challenge signed by that key and checks the exact installation, workspace, binding version and membership revision. Corporate access still expires within 300 seconds.
+
+Revocation markers live under `DATA_DIR/identity/personal-revocations`. Preserve them with the database when backing up or restoring an installation, because they prevent a restored row from reviving a credential whose revocation was already received. Personal queued runs require reader version 5 and retain the device admission that authorized them when they were created.
+
+Mobile builds with `OrkIdentity` store device keys in iOS Keychain or AndroidKeyStore. Renewal verifies an installation signature before signing the server's challenge. Logout deletes the keys and persists a denial marker. Restored personal admissions need a fresh Accounts verification. Desktop integration and the full iOS acceptance run remain release gates.

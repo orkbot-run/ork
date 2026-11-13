@@ -89,6 +89,16 @@ impl LocalStackState {
 }
 
 pub type StateListener = Arc<dyn Fn(LocalStackState) + Send + Sync>;
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceOperation {
+    organization_id: String,
+    server_id: String,
+    binding_version: u64,
+    key_fingerprint: String,
+    pub operation_id: String,
+    pub completed: bool,
+}
 type LineListener = Arc<dyn Fn(String) + Send + Sync>;
 type Environment = BTreeMap<String, OsString>;
 
@@ -204,6 +214,120 @@ impl LocalStack {
             .unwrap_or_else(|error| error.into_inner())
             .web_url
             .clone()
+    }
+
+    /// The receipt contains only public operation IDs. It survives app and daemon restarts.
+    pub fn owns_workspace(&self, target: &crate::server_directory::WorkspaceTarget) -> bool {
+        let Some(bytes) =
+            read_owned_private(&self.directory.join(".desktop-workspace-operation"), 1024)
+        else {
+            return false;
+        };
+        let Ok(receipt) = serde_json::from_slice::<WorkspaceOperation>(&bytes) else {
+            return false;
+        };
+        receipt.completed
+            && receipt.organization_id == target.organization_id
+            && receipt.server_id == target.server_id
+            && receipt.binding_version == target.binding_version
+            && receipt.key_fingerprint == target.key_fingerprint
+            && crate::server_directory::uuid(&receipt.operation_id)
+    }
+
+    pub fn workspace_operation(
+        &self,
+        organization_id: &str,
+        server_id: &str,
+        binding_version: u64,
+        key_fingerprint: &str,
+    ) -> Result<WorkspaceOperation, String> {
+        if !crate::server_directory::uuid(organization_id)
+            || !crate::server_directory::uuid(server_id)
+            || binding_version == 0
+            || key_fingerprint.len() != 64
+            || !key_fingerprint
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("Workspace unavailable".into());
+        }
+        let path = self.directory.join(".desktop-workspace-operation");
+        if fs::symlink_metadata(&path).is_ok() {
+            let saved = read_private(&path, 1024).ok_or("Workspace unavailable")?;
+            let value: WorkspaceOperation =
+                serde_json::from_slice(&saved).map_err(|_| "Workspace unavailable")?;
+            if value.organization_id != organization_id
+                || value.server_id != server_id
+                || value.binding_version != binding_version
+                || value.key_fingerprint != key_fingerprint
+                || !crate::server_directory::uuid(&value.operation_id)
+            {
+                return Err("Workspace unavailable".into());
+            }
+            return Ok(value);
+        }
+        let operation = WorkspaceOperation {
+            organization_id: organization_id.to_owned(),
+            server_id: server_id.to_owned(),
+            binding_version,
+            key_fingerprint: key_fingerprint.to_owned(),
+            operation_id: crate::server_directory::device_id(
+                &self.directory.join("workspace-operation"),
+            )?,
+            completed: false,
+        };
+        write_private(
+            &path,
+            &serde_json::to_vec(&operation).map_err(|_| "Workspace unavailable")?,
+        )?;
+        Ok(operation)
+    }
+
+    pub fn complete_workspace_operation(
+        &self,
+        mut operation: WorkspaceOperation,
+    ) -> Result<(), String> {
+        operation.completed = true;
+        write_private(
+            &self.directory.join(".desktop-workspace-operation"),
+            &serde_json::to_vec(&operation).map_err(|_| "Workspace unavailable")?,
+        )
+    }
+
+    pub async fn installation(&self, body: serde_json::Value) -> Result<serde_json::Value, String> {
+        const ERROR: &str = "Could not complete local installation. Retry to continue.";
+        if self.account_key.is_none() || !self.matches_desired_stack().await {
+            return Err(ERROR.into());
+        }
+        let token = read_token(&self.directory).ok_or(ERROR)?;
+        let client = reqwest::Client::builder()
+            .no_proxy()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(Duration::from_secs(60))
+            .build()
+            .map_err(|_| ERROR)?;
+        let mut response = client
+            .post(
+                self.web_url()
+                    .join("/api/desktop-settings/installation")
+                    .map_err(|_| ERROR)?,
+            )
+            .header("x-orkbot-desktop-stack-token", token)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|_| ERROR)?;
+        if !response.status().is_success() {
+            return Err(ERROR.into());
+        }
+        let mut bytes = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| ERROR)? {
+            if chunk.len() > (16 * 1024_usize).saturating_sub(bytes.len()) {
+                return Err(ERROR.into());
+            }
+            bytes.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&bytes).map_err(|_| ERROR.into())
     }
 
     /// A second click joins the existing intent instead of starting another Compose process.
@@ -848,9 +972,8 @@ fn read_regular_file(path: &Path, limit: u64, private: bool) -> Option<Vec<u8>> 
             return None;
         }
     }
-    #[cfg(not(unix))]
-    if private {
-        // Without an ACL ownership check, an old instance remains unbound and untouched.
+    #[cfg(windows)]
+    if private && !crate::private_files_windows::owned(&file) {
         return None;
     }
     let mut contents = Vec::new();
@@ -872,8 +995,11 @@ pub(crate) fn reparse_point(metadata: &Metadata) -> bool {
 
 pub(crate) fn write_private(path: &Path, contents: &[u8]) -> Result<(), String> {
     let directory = path.parent().ok_or("The local server path is invalid.")?;
-    let mut file = tempfile::NamedTempFile::new_in(directory)
-        .map_err(|_| "Could not write local server settings.")?;
+    #[cfg(windows)]
+    let temporary = crate::private_files_windows::temporary(directory);
+    #[cfg(not(windows))]
+    let temporary = tempfile::NamedTempFile::new_in(directory);
+    let mut file = temporary.map_err(|_| "Could not write local server settings.")?;
     file.write_all(contents)
         .map_err(|_| "Could not write local server settings.")?;
     file.as_file()
@@ -1870,6 +1996,88 @@ mod tests {
         ]);
         stack.runner = runner.clone();
         (root, stack, runner)
+    }
+
+    #[test]
+    fn workspace_registration_receipt_survives_restart_without_regranting_or_rebinding() {
+        let (_root, stack, _) = fixture(vec![]);
+        private_directory(&stack.directory).unwrap();
+        let organization = "00000000-0000-4000-8000-000000000001";
+        let server = "00000000-0000-4000-8000-000000000002";
+        let mut target = crate::server_directory::WorkspaceTarget {
+            organization_id: organization.into(),
+            server_id: server.into(),
+            workspace_id: "00000000-0000-4000-8000-000000000003".into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        assert!(!stack.owns_workspace(&target));
+        assert!(!stack
+            .directory
+            .join(".desktop-workspace-operation")
+            .exists());
+        let first = stack
+            .workspace_operation(organization, server, 1, &"a".repeat(64))
+            .unwrap();
+        let id = first.operation_id.clone();
+        assert!(!first.completed);
+        stack.complete_workspace_operation(first).unwrap();
+        assert!(stack.owns_workspace(&target));
+        target.binding_version += 1;
+        assert!(!stack.owns_workspace(&target));
+
+        let restarted = LocalStack::new(
+            stack.directory.clone(),
+            stack.resources.clone(),
+            stack.image_tag.clone(),
+            None,
+            None,
+        );
+        let receipt = restarted
+            .workspace_operation(organization, server, 1, &"a".repeat(64))
+            .unwrap();
+        assert_eq!(receipt.operation_id, id);
+        assert!(receipt.completed);
+        assert!(restarted
+            .workspace_operation(organization, server, 2, &"a".repeat(64))
+            .is_err());
+        assert!(restarted
+            .workspace_operation(server, organization, 1, &"a".repeat(64))
+            .is_err());
+        assert!(restarted
+            .workspace_operation(organization, server, 1, &"b".repeat(64))
+            .is_err());
+        fs::write(
+            stack.directory.join(".desktop-workspace-operation"),
+            " ".repeat(1025),
+        )
+        .unwrap();
+        assert!(restarted
+            .workspace_operation(organization, server, 1, &"a".repeat(64))
+            .is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_registration_never_reads_a_link_to_another_installation() {
+        let (root, stack, _) = fixture(vec![]);
+        private_directory(&stack.directory).unwrap();
+        let outside = root.path().join("outside");
+        fs::write(&outside, "{}").unwrap();
+        std::os::unix::fs::symlink(
+            &outside,
+            stack.directory.join(".desktop-workspace-operation"),
+        )
+        .unwrap();
+        assert!(stack
+            .workspace_operation(
+                "00000000-0000-4000-8000-000000000001",
+                "00000000-0000-4000-8000-000000000002",
+                1,
+                &"a".repeat(64)
+            )
+            .is_err());
+        assert_eq!(fs::read_to_string(outside).unwrap(), "{}");
     }
 
     #[tokio::test]

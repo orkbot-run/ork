@@ -15,13 +15,14 @@ const calls = vi.hoisted(() => ({
   })),
   approve: vi.fn(async () => ({ ok: true })),
 }));
-vi.mock("../../lib/rpc", () => ({
-  rpc: {
+vi.mock("../../lib/rpc", () => {
+  const rpc = {
     connections: { begin: calls.begin, complete: calls.complete },
     onboarding: { appConnected: calls.mark },
     mcp: { oauth: { begin: calls.oauthBegin }, assignments: { approve: calls.approve } },
-  },
-}));
+  };
+  return { rpc, captureRpcContext: () => ({ client: rpc, isCurrent: () => true }) };
+});
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>

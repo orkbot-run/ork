@@ -2,18 +2,20 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import type { IdentityCatalog, WorkspaceTarget } from "@orkbot/contracts";
 import { tokensForAppearance } from "@orkbot/ui-tokens";
 import * as Clipboard from "expo-clipboard";
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Alert } from "react-native";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { redirectSystemPath } from "../app/+native-intent";
 import { AccountsGate } from "../components/accounts-gate";
-import { accountServers, addAccountServer } from "./account-servers";
+import { accountServers, addAccountServer, setDefaultAccountOrganization } from "./account-servers";
 import { accountsIdentity, continueWithAccounts, signOutAccounts } from "./accounts";
 import { continueWithAccountsServer } from "./accounts-login";
+import { AccountsUnavailable } from "./accounts-network";
 import {
   clearProductAccountSession,
   currentApiBase,
@@ -24,20 +26,39 @@ import {
 } from "./api";
 import type * as Endpoint from "./endpoint";
 import { requireAccountsSignIn, serverInitializationRequired } from "./endpoint";
-
-import { clearServerConnect, pendingServerConnect, receiveServerConnect } from "./server-connect";
+import { selectInstallationTransport } from "./installation-transport";
+import type { PersonalCredential } from "./personal-device";
+import { continueWithPersonalServer, personalLoginSelection } from "./personal-login";
+import type * as SelectedWorkspace from "./selected-workspace";
+import { saveSelectedWorkspace, selectedWorkspace } from "./selected-workspace";
+import {
+  clearServerConnect,
+  clearWorkspaceConnect,
+  pendingServerConnect,
+  pendingWorkspaceConnect,
+  receiveServerConnect,
+} from "./server-connect";
 import type { MobileServerPairing } from "./server-pairing";
 import { beginServerPairing } from "./server-pairing";
 import { currentSessionGeneration } from "./session";
 import { continueWithSso } from "./sso";
+import { useWorkspacePickerScreen } from "./workspace-picker";
 
 vi.mock("../app/(settings)/updates", () => ({ default: () => <div>Server updates</div> }));
+vi.mock("./personal-login", () => ({
+  personalLoginSelection: vi.fn(async () => null),
+  continueWithPersonalServer: vi.fn(async () => false),
+}));
 
 const state = vi.hoisted(() => ({
   storage: new Map<string, string>(),
+  catalog: null as IdentityCatalog | null,
   version: 0,
   listeners: new Set<() => void>(),
   appListeners: new Set<(state: string) => void>(),
+  sessionListeners: new Set<() => void>(),
+  transportScope: null as { account: string; target: WorkspaceTarget } | null,
+  closePickerScreen: null as (() => void) | null,
 }));
 vi.mock("expo-secure-store", () => ({
   getItemAsync: async (key: string) => state.storage.get(key) ?? null,
@@ -62,8 +83,31 @@ vi.mock("react-native", () => ({
     },
   },
   ActivityIndicator: () => <span>Loading</span>,
+  Keyboard: { dismiss: vi.fn() },
   Linking: { openURL: vi.fn().mockResolvedValue(undefined) },
-  View: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  View: ({
+    children,
+    testID,
+    pointerEvents,
+    accessibilityElementsHidden,
+    importantForAccessibility,
+  }: {
+    children: ReactNode;
+    testID?: string;
+    pointerEvents?: string;
+    accessibilityElementsHidden?: boolean;
+    importantForAccessibility?: string;
+  }) => (
+    <div
+      data-testid={testID}
+      data-pointer-events={pointerEvents}
+      data-accessibility={importantForAccessibility}
+      aria-hidden={accessibilityElementsHidden}
+      hidden={accessibilityElementsHidden}
+    >
+      {children}
+    </div>
+  ),
   ScrollView: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Text: ({ children }: { children: ReactNode }) => <span>{children}</span>,
   TextInput: ({
@@ -102,6 +146,62 @@ vi.mock("../components/native-action-button", () => ({
     </button>
   ),
 }));
+vi.mock("../components/settings-group", () => ({
+  SettingsGroup: ({ label, children }: { label?: string; children: ReactNode }) => (
+    <section aria-label={label}>{children}</section>
+  ),
+  SettingsRow: ({
+    title,
+    value,
+    disabled,
+    onPress,
+  }: {
+    title: string;
+    value?: string;
+    disabled?: boolean;
+    onPress?: () => void;
+  }) =>
+    onPress ? (
+      <button type="button" disabled={disabled} onClick={onPress}>
+        {title}
+        {value}
+      </button>
+    ) : (
+      <div>
+        {title}
+        {value}
+      </div>
+    ),
+}));
+vi.mock("../components/menu-picker", () => ({
+  MenuPickerMenu: ({
+    label,
+    choices,
+    value,
+    disabled,
+    onChange,
+  }: {
+    label: string;
+    choices: { key: string; label: string }[];
+    value: string;
+    disabled?: boolean;
+    onChange(key: string): void;
+  }) => (
+    <select
+      aria-label={label}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="" />
+      {choices.map((choice) => (
+        <option key={choice.key} value={choice.key}>
+          {choice.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
 vi.mock("./native", () => ({ useMobileTokens: () => tokensForAppearance("light") }));
 vi.mock("./appearance", () => ({ loadAppearancePreference: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("./i18n", () => ({
@@ -130,9 +230,64 @@ vi.mock("./accounts", () => ({
     return () => state.listeners.delete(listener);
   },
 }));
-vi.mock("./account-servers", () => ({ accountServers: vi.fn(), addAccountServer: vi.fn() }));
+vi.mock("./account-servers", () => {
+  const accountServers = vi.fn();
+  return {
+    accountServers,
+    addAccountServer: vi.fn(),
+    setDefaultAccountOrganization: vi.fn(async () => {}),
+    accountDirectory: async (owner: string) => {
+      const entries = await accountServers(owner);
+      return {
+        entries,
+        catalog: state.catalog ?? {
+          version: 2,
+          defaultOrganizationId: "00000000-0000-4000-8000-000000000010",
+          organizations: [
+            {
+              id: "00000000-0000-4000-8000-000000000010",
+              name: "Personal",
+              type: "personal",
+              role: "admin",
+              servers: entries.map((entry: { id: string; url: string; name?: string }) => ({
+                id: entry.id,
+                name: "Server",
+                state: "ready",
+                bindingVersion: 1,
+                keyFingerprint: "a".repeat(64),
+                routes: [],
+                workspaces: [
+                  {
+                    id: entry.id,
+                    name: entry.name ?? new URL(entry.url).host,
+                    canOpen: true,
+                    state: "ready",
+                    role: "admin",
+                  },
+                  {
+                    id: "00000000-0000-4000-8000-000000000099",
+                    name: "Another workspace",
+                    canOpen: true,
+                    state: "ready",
+                    role: "admin",
+                  },
+                ],
+              })),
+            },
+          ],
+        },
+      };
+    },
+  };
+});
 vi.mock("./incoming-share", () => ({ receiveIncomingShare: vi.fn() }));
-vi.mock("./session", () => ({ currentSessionGeneration: vi.fn(() => 1) }));
+vi.mock("./session", () => ({
+  currentSessionGeneration: vi.fn(() => 1),
+  subscribeSessionGeneration: (listener: () => void) => {
+    state.sessionListeners.add(listener);
+    return () => state.sessionListeners.delete(listener);
+  },
+}));
 vi.mock("./sso", () => ({ continueWithSso: vi.fn() }));
 vi.mock("./accounts-login", () => ({ continueWithAccountsServer: vi.fn() }));
 vi.mock("./server-pairing", () => ({ beginServerPairing: vi.fn() }));
@@ -180,13 +335,21 @@ beforeEach(() => {
     cancel: vi.fn().mockResolvedValue(undefined),
   };
   vi.mocked(beginServerPairing).mockReset().mockResolvedValue(pairing);
+  const workspace = pendingWorkspaceConnect();
+  if (workspace) clearWorkspaceConnect(workspace);
   const linked = pendingServerConnect();
   if (linked) clearServerConnect(linked);
   state.storage.clear();
+  state.catalog = null;
   state.version = 0;
   state.listeners.clear();
   state.appListeners.clear();
+  state.sessionListeners.clear();
+  state.transportScope = null;
+  state.closePickerScreen = null;
   vi.mocked(accountsIdentity).mockResolvedValue(null);
+  vi.mocked(personalLoginSelection).mockReset().mockResolvedValue(null);
+  vi.mocked(continueWithPersonalServer).mockReset().mockResolvedValue(false);
   vi.mocked(currentSessionGeneration).mockReset().mockReturnValue(1);
   vi.mocked(currentApiBase).mockReturnValue(remote.url);
   vi.mocked(continueWithSso).mockResolvedValue(true);
@@ -377,15 +540,91 @@ it("ignores an alert action after the account changes", async () => {
   expect(host.textContent).not.toContain("new.example.test");
   expect(host.textContent).toContain("Get started");
 });
-async function render() {
+function PickerControl({ inScreen = false }: { inScreen?: boolean }) {
+  const picker = useWorkspacePickerScreen();
+  state.closePickerScreen = picker?.dismissScreen ?? null;
+  if (inScreen && picker?.screen) return picker.screen;
+  return (
+    <button type="button" onClick={inScreen ? picker?.openInScreen : picker?.open}>
+      Pick workspace
+    </button>
+  );
+}
+
+async function render(onWorkspaceSelected?: () => void) {
   await act(async () =>
     root.render(
-      <AccountsGate>
-        <span>Product screen</span>
+      <AccountsGate onWorkspaceSelected={onWorkspaceSelected}>
+        <span>
+          Product screen
+          <PickerControl />
+        </span>
       </AccountsGate>,
     ),
   );
 }
+
+function offlineCredential(): PersonalCredential {
+  return {
+    version: 1,
+    account: JSON.stringify([identity.issuer, identity.subject]),
+    origin: remote.url,
+    scope: "public-scope",
+    deviceId: "00000000-0000-4000-8000-000000000004",
+    target: {
+      organizationId: "00000000-0000-4000-8000-000000000010",
+      serverId: remote.id,
+      workspaceId: "00000000-0000-4000-8000-000000000003",
+      bindingVersion: 1,
+      keyFingerprint: "a".repeat(64),
+    },
+  };
+}
+it("opens the exact activated personal workspace after an Accounts transport outage", async () => {
+  const credential = offlineCredential();
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue(credential);
+  vi.mocked(continueWithPersonalServer).mockResolvedValue(true);
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(continueWithPersonalServer).toHaveBeenCalledWith(credential, expect.any(Function));
+  expect(accountServers).not.toHaveBeenCalled();
+});
+it("can renew a personal credential when the rotating Accounts token was already retired", async () => {
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  vi.mocked(continueWithPersonalServer).mockResolvedValue(true);
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(accountServers).not.toHaveBeenCalled();
+});
+it("does not use personal fallback after an authoritative Accounts refusal", async () => {
+  vi.mocked(accountsIdentity).mockRejectedValue(new Error("Access refused"));
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(personalLoginSelection).not.toHaveBeenCalled();
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
+it("does not open a remembered personal workspace from a different current route", async () => {
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue({
+    ...offlineCredential(),
+    origin: "https://other.example.test",
+  });
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
+it("keeps a deep link explicit instead of falling back to the remembered workspace", async () => {
+  receiveServerConnect(
+    "orkbot://workspace?organization=00000000-0000-4000-8000-000000000010&server=00000000-0000-4000-8000-000000000001&workspace=00000000-0000-4000-8000-000000000003",
+  );
+  vi.mocked(accountsIdentity).mockRejectedValue(new AccountsUnavailable());
+  vi.mocked(personalLoginSelection).mockResolvedValue(offlineCredential());
+  await render();
+  expect(host.textContent).not.toContain("Product screen");
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+});
 
 it("requires Accounts before product screens, directory lookup or product requests", async () => {
   await render();
@@ -1404,4 +1643,536 @@ xit("does not bookmark a normal recovery that finishes authentication for the pr
   expect(addAccountServer).not.toHaveBeenCalled();
   expect(rpc).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain("Product screen");
+});
+
+const personalId = "00000000-0000-4000-8000-000000000010";
+const companyId = "00000000-0000-4000-8000-000000000020";
+const installationId = "00000000-0000-4000-8000-000000000030";
+function managedDirectory(defaultOrganizationId: string | null = personalId) {
+  const workspace = {
+    organizationId: companyId,
+    serverId: installationId,
+    workspaceId: remote.id,
+    bindingVersion: 2,
+    keyFingerprint: "a".repeat(64),
+  };
+  state.catalog = {
+    version: 2,
+    defaultOrganizationId,
+    organizations: [
+      { id: personalId, name: "Personal", type: "personal", role: "admin", servers: [] },
+      {
+        id: companyId,
+        name: "Company",
+        type: "shared",
+        role: "member",
+        servers: [
+          {
+            id: installationId,
+            name: "Company server",
+            state: "ready",
+            bindingVersion: 2,
+            keyFingerprint: "a".repeat(64),
+            routes: [],
+            workspaces: [
+              {
+                id: remote.id,
+                name: "Company workspace",
+                state: "ready",
+                canOpen: true,
+                role: "member",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+  ]);
+  vi.mocked(accountsIdentity).mockResolvedValue(identity);
+  return workspace;
+}
+async function chooseOrganization(id: string) {
+  await act(async () => {
+    const picker = host.querySelector('select[aria-label="Organization"]') as HTMLSelectElement;
+    picker.value = id;
+    picker.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+it("keeps an empty default organization visible and restores the device's workspace after an explicit organization change", async () => {
+  const workspace = managedDirectory();
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  expect(host.textContent).toContain("No servers connected");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await chooseOrganization(companyId);
+  expect(host.textContent).toContain("Product screen");
+  expect(await selectedWorkspace(owner, remote.url)).toEqual(workspace);
+  expect(setDefaultAccountOrganization).not.toHaveBeenCalled();
+});
+
+it("uses an explicit workspace link before the central organization default", async () => {
+  const workspace = managedDirectory();
+  const link = `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=${remote.id}`;
+  expect(redirectSystemPath({ path: link, initial: true })).toBe("/");
+  await render();
+  expect(host.textContent).toContain("Product screen");
+  expect(
+    await selectedWorkspace(JSON.stringify([identity.issuer, identity.subject]), remote.url),
+  ).toEqual(workspace);
+  expect(pendingWorkspaceConnect()).toBeNull();
+});
+
+it("never substitutes the default organization when a workspace link is inaccessible", async () => {
+  managedDirectory(companyId);
+  receiveServerConnect(
+    `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=00000000-0000-4000-8000-000000000099`,
+  );
+  await render();
+  expect(host.textContent).toContain("Workspace unavailable");
+  expect(host.textContent).not.toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await click("Retry");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("saves the default organization centrally only after an explicit preference action", async () => {
+  managedDirectory(null);
+  await render();
+  expect(saveApiBase).not.toHaveBeenCalled();
+  await chooseOrganization(personalId);
+  await click("Set as default organization");
+  expect(setDefaultAccountOrganization).toHaveBeenCalledExactlyOnceWith(
+    personalId,
+    JSON.stringify([identity.issuer, identity.subject]),
+  );
+  expect(host.textContent).toContain("Default organization");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+vi.mock("./installation-transport", () => ({
+  installationRevocationScope: () => state.transportScope ?? undefined,
+  selectInstallationTransport: vi.fn(
+    async (account: string, _origin: string, target?: WorkspaceTarget) => {
+      state.transportScope = target ? { account, target } : null;
+    },
+  ),
+}));
+vi.mock("./selected-workspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof SelectedWorkspace>()),
+  selectedInstallationRoutes: async () => ({}),
+}));
+
+it("reopens the managed directory without signing out or replacing the active workspace", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const selectionCompleted = vi.fn();
+  await render(selectionCompleted);
+  expect(host.textContent).toContain("Product screen");
+  vi.mocked(saveApiBase).mockClear();
+  vi.mocked(clearProductAccountSession).mockClear();
+  await click("Pick workspace");
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
+  expect(host.textContent).toContain("Company workspace");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  expect(clearProductAccountSession).not.toHaveBeenCalled();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
+  await click("Cancel");
+  expect(host.textContent).toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+  expect(signOutAccounts).not.toHaveBeenCalled();
+  expect(await selectedWorkspace(owner, remote.url)).toEqual(workspace);
+  expect(selectionCompleted).not.toHaveBeenCalled();
+});
+
+it("switches a managed workspace through the existing scoped selection and saves device history", async () => {
+  const workspace = managedDirectory(companyId);
+  const secondId = "00000000-0000-4000-8000-000000000098";
+  state.catalog!.organizations[1]!.servers[0]!.workspaces.push({
+    id: secondId,
+    name: "Second workspace",
+    state: "ready",
+    canOpen: true,
+    role: "member",
+  });
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+    {
+      ...remote,
+      id: secondId,
+      name: "Second workspace",
+      workspace: { ...workspace, workspaceId: secondId },
+    },
+  ]);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const selectionCompleted = vi.fn();
+  await render(selectionCompleted);
+  expect(selectionCompleted).not.toHaveBeenCalled();
+  vi.mocked(clearProductAccountSession).mockClear();
+  await click("Pick workspace");
+  await click("Second workspace");
+  expect(host.textContent).toContain("Product screen");
+  expect(await selectedWorkspace(owner, remote.url)).toEqual({
+    ...workspace,
+    workspaceId: secondId,
+  });
+  expect(clearProductAccountSession).toHaveBeenCalledOnce();
+  expect(signOutAccounts).not.toHaveBeenCalled();
+  expect(setDefaultAccountOrganization).not.toHaveBeenCalled();
+  expect(selectionCompleted).toHaveBeenCalledOnce();
+});
+
+it("lets the current session cancel an explicit picker during an Accounts outage without selecting another organization", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  await render();
+  await click("Pick workspace");
+  vi.mocked(accountsIdentity).mockRejectedValueOnce(new AccountsUnavailable());
+  vi.mocked(saveApiBase).mockClear();
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(host.textContent).toContain("Could not reach Accounts");
+  expect(host.textContent).toContain("Cancel");
+  expect(host.querySelector('[data-testid="workspace-product"]')?.getAttribute("aria-hidden")).toBe(
+    "true",
+  );
+  await click("Cancel");
+  expect(host.textContent).toContain("Product screen");
+  expect(saveApiBase).not.toHaveBeenCalled();
+});
+
+it("preserves the account modal and its thread draft, file and active work when the picker is cancelled", async () => {
+  const workspace = managedDirectory(companyId);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const mounted = vi.fn();
+  const retired = vi.fn();
+  let dismissAccount = () => {};
+  function Navigator() {
+    const [route, setRoute] = useState("inbox");
+    const [prepared, setPrepared] = useState(false);
+    dismissAccount = () => setRoute("thread");
+    useEffect(() => {
+      mounted();
+      return retired;
+    }, []);
+    return (
+      <section data-current-route={route}>
+        {route === "inbox" ? (
+          <button type="button" onClick={() => setRoute("thread")}>
+            Open thread A
+          </button>
+        ) : (
+          <>
+            <span>Thread A</span>
+            <button type="button" onClick={() => setPrepared(true)}>
+              Prepare draft, file and work
+            </button>
+            {prepared ? <span>Draft A - file-A.png - Running A</span> : null}
+            {route === "account" ? (
+              <section role="dialog" aria-label="Account modal">
+                <PickerControl inScreen />
+                <button type="button" onClick={() => setRoute("thread")}>
+                  Close account
+                </button>
+              </section>
+            ) : (
+              <button type="button" onClick={() => setRoute("account")}>
+                Open account modal
+              </button>
+            )}
+          </>
+        )}
+      </section>
+    );
+  }
+  await act(async () =>
+    root.render(
+      <AccountsGate>
+        <Navigator />
+      </AccountsGate>,
+    ),
+  );
+  await click("Open thread A");
+  await click("Prepare draft, file and work");
+  await click("Open account modal");
+  await click("Pick workspace");
+  vi.mocked(selectInstallationTransport).mockClear();
+  const retained = host.querySelector('[data-testid="workspace-product"]');
+  expect(retained?.getAttribute("aria-hidden")).toBe("false");
+  expect(retained?.getAttribute("data-pointer-events")).toBe("auto");
+  expect(host.querySelector('[aria-label="Account modal"]')?.textContent).toContain("Cancel");
+  expect(retired).not.toHaveBeenCalled();
+  vi.mocked(accountsIdentity).mockRejectedValueOnce(new AccountsUnavailable());
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(retired).not.toHaveBeenCalled();
+  await click("Cancel");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(host.querySelector('[aria-label="Account modal"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  await click("Close account");
+  expect(host.querySelector('[data-current-route="thread"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  expect(mounted).toHaveBeenCalledTimes(1);
+  expect(retired).not.toHaveBeenCalled();
+  await click("Open account modal");
+  await click("Pick workspace");
+  await act(async () => dismissAccount());
+  expect(host.textContent).not.toContain("Cancel");
+  expect(host.querySelector('[data-current-route="thread"]')).not.toBeNull();
+  expect(host.textContent).toContain("Draft A - file-A.png - Running A");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(mounted).toHaveBeenCalledOnce();
+  expect(retired).not.toHaveBeenCalled();
+});
+
+async function trackedPicker() {
+  const workspace = managedDirectory(companyId);
+  const secondId = "00000000-0000-4000-8000-000000000098";
+  state.catalog!.organizations[1]!.servers[0]!.workspaces.push({
+    id: secondId,
+    name: "Second workspace",
+    state: "ready",
+    canOpen: true,
+    role: "member",
+  });
+  vi.mocked(accountServers).mockResolvedValue([
+    { ...remote, name: "Company workspace", workspace },
+    {
+      ...remote,
+      id: secondId,
+      name: "Second workspace",
+      workspace: { ...workspace, workspaceId: secondId },
+    },
+  ]);
+  const owner = JSON.stringify([identity.issuer, identity.subject]);
+  state.storage.set("orkbot.accounts.product-owner", owner);
+  await saveSelectedWorkspace(owner, remote.url, workspace);
+  const retired = vi.fn();
+  const received = vi.fn();
+  const subscriptions: { signal: AbortSignal; emit(): void }[] = [];
+  function Product() {
+    const [privateData, setPrivateData] = useState(false);
+    useEffect(() => {
+      const controller = new AbortController();
+      subscriptions.push({
+        signal: controller.signal,
+        emit: () => {
+          if (!controller.signal.aborted) received();
+        },
+      });
+      return () => {
+        controller.abort();
+        retired();
+      };
+    }, []);
+    return (
+      <section>
+        <PickerControl />
+        <button type="button" onClick={() => setPrivateData(true)}>
+          Prepare private A
+        </button>
+        {privateData ? <span>Private A draft, file and running state</span> : null}
+      </section>
+    );
+  }
+  const renderProduct = () =>
+    act(async () =>
+      root.render(
+        <AccountsGate>
+          <Product />
+        </AccountsGate>,
+      ),
+    );
+  await renderProduct();
+  await click("Prepare private A");
+  await click("Pick workspace");
+  return { workspace, secondId, retired, received, subscriptions, renderProduct };
+}
+
+it.each(["account", "session", "target", "workspace-link"])(
+  "retires a retained navigator and rejects a stale screen dismiss after a newer %s",
+  async (change) => {
+    const tracked = await trackedPicker();
+    const staleDismiss = state.closePickerScreen!;
+    expect(staleDismiss).toBeTypeOf("function");
+    if (change === "account") {
+      vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "another-account" });
+      await act(async () => {
+        state.version++;
+        for (const listener of state.listeners) listener();
+      });
+    } else if (change === "session") {
+      await act(async () => {
+        vi.mocked(currentSessionGeneration).mockReturnValue(2);
+        for (const listener of state.sessionListeners) listener();
+      });
+    } else if (change === "target") {
+      state.transportScope = {
+        account: JSON.stringify([identity.issuer, identity.subject]),
+        target: { ...tracked.workspace, workspaceId: tracked.secondId },
+      };
+      await tracked.renderProduct();
+    } else {
+      await act(async () => {
+        receiveServerConnect(
+          `orkbot://workspace?organization=${companyId}&server=${installationId}&workspace=${tracked.secondId}`,
+        );
+      });
+    }
+    expect(tracked.retired).toHaveBeenCalled();
+    expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+    expect(host.textContent).not.toContain("Private A draft");
+    const selections = vi.mocked(selectInstallationTransport).mock.calls.length;
+    await act(async () => staleDismiss());
+    expect(vi.mocked(selectInstallationTransport).mock.calls).toHaveLength(selections);
+    tracked.subscriptions[0]!.emit();
+    expect(tracked.received).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain("Private A draft");
+  },
+);
+
+it("unmounts and aborts the old subscription before selecting the B transport", async () => {
+  const tracked = await trackedPicker();
+  const observations: boolean[] = [];
+  const select = vi.mocked(selectInstallationTransport).getMockImplementation()!;
+  vi.mocked(selectInstallationTransport).mockImplementationOnce(async (...args) => {
+    observations.push(tracked.subscriptions[0]!.signal.aborted);
+    await select(...args);
+  });
+  await click("Second workspace");
+  expect(observations).toEqual([true]);
+  expect(tracked.retired).toHaveBeenCalledOnce();
+  expect(host.textContent).not.toContain("Private A draft");
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).not.toHaveBeenCalled();
+});
+
+it("does not complete a pending old-account selection after an account change", async () => {
+  const tracked = await trackedPicker();
+  let release!: (value: typeof identity) => void;
+  vi.mocked(accountsIdentity).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  await click("Second workspace");
+  vi.mocked(selectInstallationTransport).mockClear();
+  vi.mocked(accountsIdentity).mockResolvedValue({ ...identity, subject: "another-account" });
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+    release(identity);
+  });
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+  expect(
+    vi
+      .mocked(selectInstallationTransport)
+      .mock.calls.some((args) => args[2]?.workspaceId === tracked.secondId),
+  ).toBe(false);
+  expect(host.textContent).not.toContain("Private A draft");
+});
+
+it("fences concurrent selection and account-refresh authorization before replacing credentials", async () => {
+  const tracked = await trackedPicker();
+  let finishSelection!: (value: typeof identity) => void;
+  let finishRefresh!: (value: null) => void;
+  vi.mocked(accountsIdentity)
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSelection = resolve;
+        }),
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRefresh = resolve;
+        }),
+    );
+  await click("Second workspace");
+  await act(async () => {
+    state.version++;
+    for (const listener of state.listeners) listener();
+  });
+  expect(finishSelection).toBeTypeOf("function");
+  expect(finishRefresh).toBeTypeOf("function");
+  const credentialChanges: boolean[] = [];
+  vi.mocked(clearProductAccountSession).mockImplementationOnce(async () => {
+    credentialChanges.push(tracked.subscriptions[0]!.signal.aborted);
+  });
+  vi.mocked(selectInstallationTransport).mockClear();
+  await act(async () => {
+    finishSelection(identity);
+    finishRefresh(null);
+  });
+  expect(credentialChanges).toEqual([true]);
+  expect(tracked.retired).toHaveBeenCalledOnce();
+  expect(host.textContent).toContain("Get started");
+  expect(host.textContent).not.toContain("Private A draft");
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).not.toHaveBeenCalled();
+});
+
+it("keeps the same live subscription when browsing the picker is cancelled", async () => {
+  const tracked = await trackedPicker();
+  vi.mocked(selectInstallationTransport).mockClear();
+  await click("Cancel");
+  expect(tracked.subscriptions).toHaveLength(1);
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(false);
+  tracked.subscriptions[0]!.emit();
+  expect(tracked.received).toHaveBeenCalledOnce();
+  expect(tracked.retired).not.toHaveBeenCalled();
+  expect(selectInstallationTransport).not.toHaveBeenCalled();
+  expect(host.textContent).toContain("Private A draft, file and running state");
+});
+
+it("retires a known signed-out picker before deferred credential cleanup and cannot dismiss back into it", async () => {
+  const tracked = await trackedPicker();
+  const staleDismiss = state.closePickerScreen!;
+  let finish!: () => void;
+  vi.mocked(clearProductAccountSession).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  vi.mocked(accountsIdentity).mockResolvedValue(null);
+  await act(async () => {
+    for (const listener of state.appListeners) listener("active");
+  });
+  expect(finish).toBeTypeOf("function");
+  expect(tracked.subscriptions[0]!.signal.aborted).toBe(true);
+  expect(host.textContent).not.toContain("Private A draft");
+  const selections = vi.mocked(selectInstallationTransport).mock.calls.length;
+  await act(async () => staleDismiss());
+  expect(vi.mocked(selectInstallationTransport).mock.calls).toHaveLength(selections);
+  expect(continueWithPersonalServer).not.toHaveBeenCalled();
+  await act(async () => finish());
+  expect(host.textContent).toContain("Get started");
+  expect(host.textContent).not.toContain("Private A draft");
 });

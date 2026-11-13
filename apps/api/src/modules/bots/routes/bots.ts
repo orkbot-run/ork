@@ -363,6 +363,7 @@ export function botsRoutes(ctx: RouterContext) {
             computerMode: source.computer?.scope === "dedicated" ? "dedicated" : "team",
             modelProvider: source.modelProvider,
             modelId: source.modelId,
+            modelConnectionId: source.modelConnectionId,
             thinkingLevel: source.thinkingLevel,
             disabledBuiltinTools: source.disabledBuiltinTools,
           })
@@ -413,6 +414,10 @@ export function botsRoutes(ctx: RouterContext) {
           provider:
             input.modelProvider !== undefined ? input.modelProvider : existing.modelProvider,
           model: input.modelId !== undefined ? input.modelId : existing.modelId,
+          connectionId:
+            input.modelProvider !== undefined
+              ? input.modelConnectionId
+              : existing.modelConnectionId,
           thinkingLevel: input.thinkingLevel,
           current: { provider: existing.modelProvider, model: existing.modelId },
         });
@@ -457,7 +462,11 @@ export function botsRoutes(ctx: RouterContext) {
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
             ...(input.modelProvider !== undefined
-              ? { modelProvider: modelChange.provider, modelId: modelChange.model }
+              ? {
+                  modelProvider: modelChange.provider,
+                  modelId: modelChange.model,
+                  modelConnectionId: input.modelConnectionId ?? null,
+                }
               : {}),
             ...(input.thinkingLevel !== undefined ? { thinkingLevel } : {}),
             ...(input.teamChatAmbientEnabled !== undefined

@@ -7,15 +7,18 @@ import { fetchFresh } from "@orkbot/core/query";
 import { isCancelledError, useQuery } from "@tanstack/react-query";
 import type { Href } from "expo-router";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LoadFailure } from "../../components/load-failure";
 import { ModelProviders } from "../../components/model-providers";
 import type { ConnectableProvider, ModelConnectIntent } from "../../components/model-role-settings";
 import { ModelRoleSettings } from "../../components/model-role-settings";
+import { ServerAISettings } from "../../components/server-ai-settings";
 import { SpaceBotsModel } from "../../components/space-bots-model";
+import { WorkspaceModelSettings } from "../../components/workspace-model-settings";
 import type { MobileBot, MobileModel, MobileModelCredential } from "../../lib/api";
+import { spaceSelectionSeq, subscribeConfirmedSpaceSwitch } from "../../lib/api";
 import { mobileTokens } from "../../lib/appearance";
 import { useI18n } from "../../lib/i18n";
 import type { ModelConnectionRequest } from "../../lib/model-connection-request";
@@ -24,6 +27,7 @@ import type { ModelPickerRequest } from "../../lib/model-picker-selection";
 import { closeModelPicker, openModelPicker } from "../../lib/model-picker-selection";
 import { native, useThemedStyles } from "../../lib/native";
 import { queryClient, rpcQuery } from "../../lib/query";
+import { currentSessionGeneration, subscribeSessionGeneration } from "../../lib/session";
 import { captureSettingsContext, settingsTarget } from "../../lib/settings-target";
 import { useSideInsets } from "../../lib/side-insets";
 import { errorText } from "../../lib/user-error";
@@ -37,6 +41,59 @@ const noBots: MobileBot[] = [];
  * Space, it edits that Space's override instead of the account's.
  */
 export default function Models() {
+  const params = useLocalSearchParams<{ spaceId?: string }>();
+  const session = useSyncExternalStore(
+    subscribeSessionGeneration,
+    currentSessionGeneration,
+    currentSessionGeneration,
+  );
+  const selection = useSyncExternalStore(
+    subscribeConfirmedSpaceSwitch,
+    spaceSelectionSeq,
+    spaceSelectionSeq,
+  );
+  const target = useMemo(() => settingsTarget(params.spaceId), [params.spaceId]);
+  const owner = useMemo(() => captureSettingsContext(target), [target, session, selection]);
+  const spaceId = target.scope === "space" ? target.spaceId : undefined;
+  const policy = useQuery(
+    {
+      ...rpcQuery("models/workspacePolicy", undefined, spaceId),
+      queryFn: () => owner.send("models/workspacePolicy"),
+    },
+    queryClient,
+  );
+  const styles = useThemedStyles(createModelsStyles);
+  const sideInsets = useSideInsets();
+  const { t } = useI18n();
+  if (policy.isPending) return <ActivityIndicator />;
+  if (policy.isError)
+    return (
+      <LoadFailure
+        message={t("Could not load model settings")}
+        onRetry={() => void policy.refetch()}
+      />
+    );
+  if (!policy.data.managed) return <LegacyModels key={`${session}:${selection}`} />;
+  return (
+    <SafeAreaView edges={["bottom"]} style={styles.screen}>
+      <ScrollView
+        style={sideInsets}
+        contentContainerStyle={styles.content}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+      >
+        <ServerAISettings
+          key={`${session}:${selection}`}
+          send={owner.send}
+          isCurrent={owner.isCurrent}
+          spaceId={spaceId}
+        />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+function LegacyModels() {
   const params = useLocalSearchParams<{ spaceId?: string }>();
   const target = useMemo(() => settingsTarget(params.spaceId), [params.spaceId]);
   const owner = useMemo(() => captureSettingsContext(target), [target]);
@@ -270,21 +327,15 @@ export default function Models() {
             {shownError}
           </Text>
         ) : null}
-        {workspacePolicy?.policy ? (
-          <View style={{ gap: 12 }}>
-            <Text
-              accessibilityRole="header"
-              style={{ color: native.label, fontWeight: "600", fontSize: 16 }}
-            >
-              {t("Workspace model")}
-            </Text>
-            <Text style={{ color: native.secondaryLabel }}>
-              {t("Everyone in this workspace uses the model selected by the owner.")}
-            </Text>
-            <Text style={{ color: native.label }}>
-              {workspacePolicy.policy.provider} · {workspacePolicy.policy.modelId}
-            </Text>
-          </View>
+        {workspacePolicy ? (
+          <WorkspaceModelSettings
+            key={JSON.stringify([me?.userId, spaceId ?? me?.spaceId])}
+            value={workspacePolicy}
+            catalog={catalog}
+            send={rpc}
+            isCurrent={current}
+            onChanged={() => load()}
+          />
         ) : null}
         {me && workspacePolicy && !workspacePolicy.policy ? (
           <>

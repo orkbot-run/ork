@@ -71,8 +71,13 @@ export function connectionDisplayName(
  * instead of nesting brackets.
  */
 export function withConnectionName(label: string, connection: string): string {
-  const named = connection.match(/^(.+) \((.+)\)$/);
-  return `${label} (${named ? `${named[1]}, ${named[2]}` : connection})`;
+  const open = connection.lastIndexOf(" (");
+  const named =
+    open > 0 &&
+    open + 2 < connection.length - 1 &&
+    connection.endsWith(")") &&
+    !/[\n\r\u2028\u2029]/.test(connection);
+  return `${label} (${named ? `${connection.slice(0, open)}, ${connection.slice(open + 2, -1)}` : connection})`;
 }
 
 /**

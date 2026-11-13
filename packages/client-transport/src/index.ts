@@ -13,6 +13,8 @@ export type { RpcJsonEnvelope } from "./codec.js";
 export { decodeRpcJson, encodeRpcJson, rpcHttpError } from "./codec.js";
 export type { RpcEventOptions } from "./events.js";
 export { RPC_IDLE_TIMEOUT_MS, RPC_MAX_BYTES, readRpcEvents } from "./events.js";
+export type { NativeHttpBridge, NativeHttpContext } from "./native-fetch.js";
+export { createNativeFetch } from "./native-fetch.js";
 export { requestSignal, throwIfAborted } from "./signal.js";
 
 export type RpcTransportCall<T extends ClientContext> = ClientOptions<T> & {

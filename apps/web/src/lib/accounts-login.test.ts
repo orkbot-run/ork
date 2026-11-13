@@ -36,6 +36,16 @@ function setup(bootstrapRequired = false) {
   return { createServerLoginGrant, consumeServerInitializationSecret, fetcher };
 }
 
+it("delegates native installation authentication without exposing the grant to the renderer", async () => {
+  const state = setup();
+  const signInToServer = vi.fn(async () => undefined);
+  window.orkbotDesktop!.accounts!.signInToServer = signInToServer;
+  await signInWithNativeAccounts();
+  expect(signInToServer).toHaveBeenCalledOnce();
+  expect(state.createServerLoginGrant).not.toHaveBeenCalled();
+  expect(state.fetcher).not.toHaveBeenCalled();
+});
+
 it("sends only the proof to the current server and never opens an OIDC popup", async () => {
   const state = setup();
   await signInWithNativeAccounts();
@@ -53,6 +63,35 @@ it("sends only the proof to the current server and never opens an OIDC popup", a
   });
   expect(request.headers.authorization).toBeUndefined();
   expect(request.redirect).toBe("error");
+});
+
+it("uses the native-selected workspace without asking the renderer to choose grant identifiers", async () => {
+  const state = setup();
+  const workspace = {
+    organizationId: "10000000-0000-4000-8000-000000000001",
+    serverId: "20000000-0000-4000-8000-000000000001",
+    workspaceId: "30000000-0000-4000-8000-000000000001",
+    bindingVersion: 1,
+    keyFingerprint: "a".repeat(64),
+  };
+  window.orkbotDesktop!.accounts!.workspaceTarget = vi.fn().mockResolvedValue(workspace);
+  state.fetcher.mockImplementation(async (path: string) =>
+    Response.json(
+      path.endsWith("challenge")
+        ? { version: 2, challenge: "c".repeat(43), expiresAt: Date.now() / 1000 + 60 }
+        : { user: { id: "local-user" }, workspaceId: workspace.workspaceId },
+    ),
+  );
+  await signInWithNativeAccounts();
+  expect(state.fetcher.mock.calls.map(([path]) => path)).toEqual([
+    "/api/auth/native/workspace/challenge",
+    "/api/auth/native/workspace/complete",
+  ]);
+  expect(state.createServerLoginGrant).toHaveBeenCalledWith({
+    origin: window.location.origin,
+    challenge: "c".repeat(43),
+  });
+  expect(state.consumeServerInitializationSecret).not.toHaveBeenCalled();
 });
 
 it("uses the operator's secret only when the server requires initialization", async () => {

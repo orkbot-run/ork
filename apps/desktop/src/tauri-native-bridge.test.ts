@@ -15,6 +15,7 @@ type NativeRequest = {
 type NativeInvoke = (command: string, request: NativeRequest) => Promise<unknown>;
 
 class TestWindow extends EventTarget {
+  fetch = vi.fn<typeof fetch>(async () => new Response("ordinary"));
   readonly location: { origin: string; protocol: string };
   readonly top: TestWindow | object;
   declare orkbotDesktop?: OrkDesktop;
@@ -71,6 +72,7 @@ function runBridge(
     platform?: string;
     speech?: boolean;
     computer?: boolean;
+    transport?: boolean;
     randomByte?: number;
     timeOrigin?: number;
     invoke?: NativeInvoke;
@@ -84,6 +86,7 @@ function runBridge(
     platform: options.platform ?? "darwin",
     speech: options.speech ?? false,
     computer: options.computer ?? false,
+    transport: options.transport ?? false,
   };
   const currentOrigin = options.currentOrigin ?? origin;
   const window = new TestWindow(
@@ -98,7 +101,24 @@ function runBridge(
   const timeOrigin = options.timeOrigin ?? 1_700_000_000_000.125;
   const context = vm.createContext({
     window,
-    crypto: { getRandomValues: random },
+    crypto: { getRandomValues: random, randomUUID: () => "44444444-4444-4444-8444-444444444444" },
+    URL,
+    Request,
+    Response,
+    Headers,
+    FormData,
+    URLSearchParams,
+    Blob,
+    ReadableStream,
+    AbortController,
+    Uint8Array,
+    ArrayBuffer,
+    TextEncoder,
+    TextDecoder,
+    atob,
+    btoa,
+    setTimeout,
+    clearTimeout,
     performance: { timeOrigin },
     __nativeInvoke: invoke,
     __nativeWebviewLabel: options.currentLabel ?? config.label,
@@ -144,6 +164,96 @@ function nativeEventLiteral(origin: string, document: string, kind: string, payl
 }
 
 describe("Tauri native bridge", () => {
+  it("streams browser-encoded multipart files through bounded native upload chunks", async () => {
+    let finish!: () => void;
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    let headers: { name: string; value: string }[] = [];
+    const chunks: number[] = [];
+    const { window } = runBridge({
+      transport: true,
+      invoke: async (_command, request) => {
+        switch (request.command.type) {
+          case "transport.open":
+            headers = JSON.parse(request.command.input as string).headers;
+            return;
+          case "transport.write":
+            chunks.push(atob(request.command.bytes as string).length);
+            return true;
+          case "transport.finish":
+            finish();
+            return;
+          case "transport.head":
+            await finished;
+            return { status: 200, headers: [] };
+          case "transport.read":
+            return null;
+        }
+      },
+    });
+    const body = new FormData();
+    body.set(
+      "file",
+      new Blob([new Uint8Array(2 * 1024 * 1024)], { type: "application/octet-stream" }),
+      "fixture.bin",
+    );
+    const response = await window.fetch("/rpc/artifacts/upload", { method: "POST", body });
+    await response.text();
+    expect(headers.find((header) => header.name === "content-type")?.value).toMatch(
+      /^multipart\/form-data; boundary=/,
+    );
+    expect(chunks.reduce((sum, length) => sum + length, 0)).toBeGreaterThan(2 * 1024 * 1024);
+    expect(Math.max(...chunks)).toBeLessThanOrEqual(64 * 1024);
+  });
+
+  it("uses pull-based native HTTP for the selected origin and leaves external requests separate", async () => {
+    const inputs: Record<string, unknown>[] = [];
+    let reads = 0;
+    const { window, invoke } = runBridge({
+      transport: true,
+      invoke: async (_command, request) => {
+        switch (request.command.type) {
+          case "transport.open":
+            inputs.push(JSON.parse(request.command.input as string));
+            return;
+          case "transport.head":
+            return { status: 200, headers: [{ name: "content-type", value: "text/plain" }] };
+          case "transport.read":
+            return reads++ === 0 ? btoa("native reply") : null;
+        }
+      },
+    });
+    const response = await window.fetch("/rpc/me", { method: "POST", body: "{}" });
+    expect(desktop(window).accounts?.createServerLoginGrant).toBeUndefined();
+    expect(desktop(window).accounts?.consumeServerInitializationSecret).toBeUndefined();
+    expect(reads).toBe(0);
+    expect(await response.text()).toBe("native reply");
+    expect(inputs).toMatchObject([{ method: "POST", path: "/rpc/me", hasBody: true }]);
+    expect(invoke.mock.calls[0]?.[1].command.type).toBe("hello");
+    await desktop(window).accounts?.signInToServer?.();
+    expect(
+      invoke.mock.calls.some(([, request]) => request.command.type === "accounts.signInToServer"),
+    ).toBe(true);
+    expect(await (await window.fetch("https://public.example.test/asset")).text()).toBe("ordinary");
+  });
+
+  it("cancels native streams on page retirement and refuses subsequent same-origin work", async () => {
+    const { window, invoke } = runBridge({
+      transport: true,
+      invoke: async (_command, request) => {
+        if (request.command.type === "transport.head") return { status: 200, headers: [] };
+      },
+    });
+    await window.fetch("/rpc/events", { method: "POST" });
+    window.dispatchEvent(new Event("pagehide"));
+    await Promise.resolve();
+    await expect(window.fetch("/rpc/me")).rejects.toThrow("changed");
+    expect(
+      invoke.mock.calls.some(([, request]) => request.command.type === "transport.cancel"),
+    ).toBe(true);
+  });
+
   it.each([
     { topLevel: false },
     { currentOrigin: "https://app.example.com.evil" },

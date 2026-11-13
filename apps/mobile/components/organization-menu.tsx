@@ -1,3 +1,8 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 organization menus are preserved; managed workspace selection follows LICENSE.md.
+
+import type { MenuAction } from "@expo/ui/community/menu";
 import { MenuView } from "@expo/ui/community/menu";
 import type { OrganizationList } from "@orkbot/contracts";
 import { typeScale } from "@orkbot/ui-tokens";
@@ -11,6 +16,7 @@ import {
   organizationSwitchActions,
   switchOrganization,
 } from "../lib/organizations";
+import { useWorkspacePicker } from "../lib/workspace-picker";
 import { NativeSymbol } from "./native-symbol";
 
 /** Switches to the organization row picked from a menu. */
@@ -29,25 +35,32 @@ export function useOrganizationMenuAction(list: OrganizationList | undefined) {
 export function OrganizationTitleMenu({ list }: { list: OrganizationList | undefined }) {
   const styles = useThemedStyles(createStyles);
   const onAction = useOrganizationMenuAction(list);
-  const actions = organizationSwitchActions(list);
+  const picker = useWorkspacePicker();
+  const { t } = useI18n();
+  const actions: MenuAction[] = picker
+    ? [{ id: "workspace", title: t("Workspace") }]
+    : organizationSwitchActions(list);
   const active = activeOrganization(list);
-  if (actions.length === 0 || !active) return null;
+  const name = picker?.organization ?? active?.name;
+  if (actions.length === 0 || !name) return null;
   return (
     <MenuView
       actions={actions}
       colorScheme={resolveMobileAppearance()}
       style={styles.anchor}
-      onPressAction={({ nativeEvent }) => onAction(nativeEvent.event)}
+      onPressAction={({ nativeEvent }) =>
+        picker && nativeEvent.event === "workspace" ? picker.open() : onAction(nativeEvent.event)
+      }
     >
       <View
         accessible
         accessibilityRole="button"
-        accessibilityLabel={active.name}
+        accessibilityLabel={name}
         testID="organization-menu"
         style={styles.title}
       >
         <Text numberOfLines={1} style={styles.name}>
-          {active.name}
+          {name}
         </Text>
         <NativeSymbol
           ios="chevron.down"

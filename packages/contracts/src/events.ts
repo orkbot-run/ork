@@ -106,6 +106,7 @@ export type SecretAskPurpose = z.infer<typeof SecretAskPurpose>;
 export const BotSettingsValuesSchema = z.object({
   modelProvider: z.string().trim().min(1).max(80).nullable().optional(),
   modelId: z.string().trim().min(1).max(200).nullable().optional(),
+  modelConnectionId: Id.nullable().optional(),
   thinkingLevel: ThinkingLevelSchema.nullable().optional(),
   autoSpeak: z.boolean().optional(),
   voiceId: z.string().max(120).nullable().optional(),

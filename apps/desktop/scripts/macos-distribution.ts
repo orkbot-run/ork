@@ -3,10 +3,11 @@
 
 import { execFileSync } from "node:child_process";
 import { createPrivateKey } from "node:crypto";
-import { mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { preparePersonalProfile } from "./macos-personal-profile.ts";
 
 export const APPLE_RELEASE_SECRETS = [
   "APPLE_CERTIFICATE",
@@ -36,6 +37,40 @@ export function validateAppleSigning(env: NodeJS.ProcessEnv) {
 }
 
 type Command = (command: string, args: string[]) => string;
+
+export function personalKeyDiagnostics(error: unknown, args: string[]): string {
+  if (
+    args.length !== 1 ||
+    args[0] !== "--personal-device-key-check" ||
+    !error ||
+    typeof error !== "object"
+  )
+    return "";
+  const diagnostics = new Set<string>();
+  for (const key of ["stdout", "stderr"] as const) {
+    const value = key in error ? (error as Record<string, unknown>)[key] : undefined;
+    if (typeof value !== "string" && !Buffer.isBuffer(value)) continue;
+    const output = value.toString();
+    if (output.length > 16_384) continue;
+    for (const line of output.split(/\r?\n/)) {
+      const match =
+        /^ORK_PERSONAL_KEY_CHECK stage=(random|create|read|sign|verify|delete|deleted-read|lookup|access-control|generate) (?:code=(-?\d{1,10})|category=operation)$/.exec(
+          line,
+        );
+      if (
+        !match ||
+        (match[2] !== undefined &&
+          (Number(match[2]) < -2_147_483_648 || Number(match[2]) > 2_147_483_647))
+      )
+        continue;
+      diagnostics.add(line);
+      if (diagnostics.size === 3) break;
+    }
+    if (diagnostics.size === 3) break;
+  }
+  return [...diagnostics].join("; ");
+}
+
 const checked: Command = (command, args) => {
   try {
     return execFileSync(command, args, {
@@ -43,9 +78,12 @@ const checked: Command = (command, args) => {
       timeout: 20 * 60_000,
       stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch {
+  } catch (error) {
     // Signing tool diagnostics can include private identities and account metadata.
-    throw new Error(`macOS distribution validation failed: ${path.basename(command)}.`);
+    const diagnostics = personalKeyDiagnostics(error, args);
+    throw new Error(
+      `macOS distribution validation failed: ${path.basename(command)}.${diagnostics ? ` ${diagnostics}` : ""}`,
+    );
   }
 };
 
@@ -53,6 +91,22 @@ export function verifyMacApp(app: string, run: Command = checked) {
   run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app]);
   run("/usr/bin/xcrun", ["stapler", "validate", app]);
   run("/usr/sbin/spctl", ["--assess", "--type", "execute", app]);
+  verifyMacPersonalKey(app, run);
+}
+
+export function verifyMacPersonalKey(app: string, run: Command = checked) {
+  run("/bin/test", ["-f", path.join(app, "Contents/embedded.provisionprofile")]);
+  const executable = run("/usr/bin/plutil", [
+    "-extract",
+    "CFBundleExecutable",
+    "raw",
+    "-o",
+    "-",
+    path.join(app, "Contents/Info.plist"),
+  ]).trim();
+  if (!/^[A-Za-z0-9_-][A-Za-z0-9_.-]{0,127}$/.test(executable))
+    throw new Error("Invalid macOS application executable.");
+  run(path.join(app, "Contents/MacOS", executable), ["--personal-device-key-check"]);
 }
 
 /** Validate the shipped updater archive as well as the installer, before publishing either. */
@@ -114,6 +168,19 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (command === "prepare") {
     validateAppleSigning(process.env);
     writeFileSync(file, process.env.APPLE_API_PRIVATE_KEY!, { mode: 0o600, flag: "wx" });
+  } else if (command === "identity") {
+    validateAppleSigning(process.env);
+    const config = JSON.parse(readFileSync(file, "utf8"));
+    const identity = await preparePersonalProfile(`${file}.identity`, process.env, checked);
+    config.bundle ??= {};
+    config.bundle.macOS = {
+      ...config.bundle.macOS,
+      ...identity,
+      files: { ...config.bundle.macOS?.files, ...identity.files },
+    };
+    writeFileSync(file, JSON.stringify(config), { mode: 0o600 });
+  } else if (command === "keychain") {
+    verifyMacPersonalKey(file);
   } else if (command === "verify") {
     verifyMacDistribution(file, process.env);
   } else throw new Error("Invalid macOS release command.");

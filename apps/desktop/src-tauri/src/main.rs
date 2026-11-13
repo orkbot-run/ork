@@ -10,16 +10,25 @@ mod credentials;
 mod document;
 mod host_computer;
 mod host_runner;
+mod installation_login;
+mod installation_transport;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
+mod local_enrollment;
 mod local_stack;
 mod local_stack_scope;
 mod locale;
 mod menu;
 mod native;
+mod oauth_capture;
 mod pairing;
 mod passkeys;
+mod personal_devices;
+mod personal_keys;
+#[cfg(windows)]
+mod private_files_windows;
 mod profile;
+mod renderer_host;
 #[cfg(any(windows, test))]
 mod revocation_storage;
 mod revocations;
@@ -61,6 +70,8 @@ struct DesktopState {
     sequence: AtomicU64,
     switching: tokio::sync::Mutex<()>,
     sessions: native::Sessions,
+    transport: installation_transport::Transport,
+    personal_devices: personal_devices::PersonalDevices,
     browser_auth: browser_auth::BrowserAuth,
     accounts: accounts::Accounts,
     accounts_started: Mutex<AccountsStarted>,
@@ -73,6 +84,7 @@ struct DesktopState {
     pairings: pairing::Pairings,
     warm_generation: AtomicU64,
     pending_server: Mutex<Option<String>>,
+    pending_workspace: Mutex<Option<server_link::WorkspaceLink>>,
     initialization: Mutex<Option<server_link::Initialization>>,
     opening_server: Mutex<Option<OpeningServer>>,
     pending_bookmark: Mutex<Option<server_link::Bookmark>>,
@@ -125,6 +137,7 @@ struct OpeningServer {
     origin: String,
     account: String,
     intent: u64,
+    workspace: Option<server_directory::WorkspaceTarget>,
 }
 
 impl OpeningServer {
@@ -202,13 +215,13 @@ impl DesktopState {
     }
 }
 
-/// Choose a scope only from a current verified Accounts authorization.
+/// Choose a scope from a current central authorization or an exact OS-held personal credential.
 fn select_local_stack(
     app: &tauri::AppHandle,
     state: &DesktopState,
     authorization: &accounts::Authorization,
 ) -> Result<(Arc<local_stack::LocalStack>, u64), String> {
-    require_account(state, authorization)?;
+    require_native_account(state, authorization)?;
     let owner = settings::account_key(authorization.account.identity());
     let callback_app = app.clone();
     let callback_owner = owner.clone();
@@ -245,7 +258,7 @@ fn select_local_stack(
         },
         || state.accounts.is_current(authorization),
     )?;
-    require_account(state, authorization)?;
+    require_native_account(state, authorization)?;
     if let Some(host) = &state.host_computer {
         if let Some(connection) = stack.host_connection() {
             host.select_connection(&connection);
@@ -259,7 +272,7 @@ fn require_current_stack(
     authorization: &accounts::Authorization,
     stack: &Arc<local_stack::LocalStack>,
 ) -> Result<(), String> {
-    require_account(state, authorization)?;
+    require_native_account(state, authorization)?;
     if state
         .stack
         .lock()
@@ -280,6 +293,8 @@ fn current_server_account(
 ) -> bool {
     let owner = settings::account_key(authorization.account.identity());
     state.accounts.is_current(authorization)
+        && (authorization.personal().is_none()
+            || require_native_account(state, authorization).is_ok())
         && state.sessions.is_current(document)
         && (opening_server_matches(state, document, Some(&owner))
             || (active_document(app).is_some_and(|active| active.owner() == document.owner())
@@ -290,14 +305,97 @@ fn current_server_account(
                     .and_then(|setup| setup.clone())
                     .is_some_and(|setup| {
                         setup.belongs_to(authorization.account.identity())
-                            && setup.server_url.origin() == document.origin.origin()
+                            && setup.server_url.origin()
+                                == document_server_origin(state, document).origin()
                     })))
+}
+
+fn document_server_origin(state: &DesktopState, document: &native::Document) -> Url {
+    state
+        .transport
+        .logical_origin(&document.label, &document.origin)
+        .unwrap_or_else(|| document.origin.clone())
+}
+
+async fn installation_ticket(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    document: &native::Document,
+) -> Result<Option<String>, String> {
+    let selection = state
+        .transport
+        .selected(&document.label)
+        .ok_or("Native connection changed")?;
+    if !selection.uses_relay() {
+        return Ok(None);
+    }
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let current = || {
+        current_server_account(app, state, document, &authorization)
+            && selection.account == settings::account_key(authorization.account.identity())
+            && state.transport.selected(&document.label).as_ref() == Some(&selection)
+    };
+    server_login::issue_relay(authorization.directory_bearer()?, &selection, current)
+        .await
+        .map(Some)
+}
+
+fn retry_installation_revocations(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<DesktopState>();
+        if let Ok(authorization) = state
+            .accounts
+            .authorization(&server_directory::origin())
+            .await
+        {
+            state
+                .accounts
+                .retry_installation_revocations(&authorization)
+                .await;
+        }
+    });
 }
 
 fn active_document(app: &tauri::AppHandle) -> Option<native::Document> {
     let state = app.try_state::<DesktopState>()?;
     let label = state.active_window.lock().ok()?.clone()?;
     state.sessions.current(&label)
+}
+
+fn document_workspace(
+    state: &DesktopState,
+    document: &native::Document,
+    authorization: &accounts::Authorization,
+) -> Result<Option<server_directory::WorkspaceTarget>, String> {
+    let account = settings::account_key(authorization.account.identity());
+    if let Some(opening) = state
+        .opening_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .as_ref()
+    {
+        if opening.permits(
+            document,
+            Some(&account),
+            state.restore_intent.load(Ordering::SeqCst),
+        ) {
+            return Ok(opening.workspace.clone());
+        }
+    }
+    Ok(state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .as_ref()
+        .filter(|setup| {
+            setup.belongs_to(authorization.account.identity())
+                && setup.server_url.origin() == document_server_origin(state, document).origin()
+        })
+        .and_then(|setup| setup.workspace.clone()))
 }
 
 fn send_native_event(
@@ -329,6 +427,7 @@ fn send_native_event(
 
 fn cancel_native_document(app: &tauri::AppHandle, label: &str) {
     if let Some(state) = app.try_state::<DesktopState>() {
+        state.transport.remove(label);
         if let Some(document) = state.sessions.invalidate(label) {
             let owner = native::owner(label, &document);
             state.browser_auth.cancel_owner(&owner);
@@ -383,6 +482,9 @@ async fn native_command(
         }
         auth::close_popup(&app, window.label());
     }
+    if matches!(command, Command::Hello { .. }) {
+        state.transport.document(&document.label, &document.id);
+    }
     let active = state
         .active_window
         .lock()
@@ -392,8 +494,17 @@ async fn native_command(
     let opening_auth = matches!(
         &command,
         native::Command::AccountsCreateServerLoginGrant { .. }
+            | native::Command::AccountsWorkspaceTarget
             | native::Command::AccountsConsumeServerInitializationSecret
             | native::Command::ServerRemember
+            | native::Command::TransportOpen { .. }
+            | native::Command::TransportStart { .. }
+            | native::Command::TransportWrite { .. }
+            | native::Command::TransportFinish { .. }
+            | native::Command::TransportHead { .. }
+            | native::Command::TransportRead { .. }
+            | native::Command::TransportCancel { .. }
+            | native::Command::AccountsSignInToServer
     ) && opening_server_matches(&state, &document, None);
     if !active && !command.read_only() && !opening_auth {
         return Err("This desktop window is not active.".into());
@@ -401,7 +512,56 @@ async fn native_command(
     let owner = document.owner();
     let unit = serde_json::Value::Null;
     match command {
+        Command::TransportOpen { id, input } => {
+            let ticket = installation_ticket(&app, &state, &document).await?;
+            state
+                .transport
+                .open(&document.label, &document.id, &id, &input, ticket)?;
+            Ok(unit)
+        }
+        Command::TransportStart { id } => {
+            state
+                .transport
+                .start(&document.label, &document.id, &id)
+                .await?;
+            Ok(unit)
+        }
+        Command::TransportWrite { id, bytes } => Ok(serde_json::json!(
+            state
+                .transport
+                .write(&document.label, &document.id, &id, &bytes)
+                .await?
+        )),
+        Command::TransportFinish { id } => {
+            state
+                .transport
+                .finish(&document.label, &document.id, &id)
+                .await?;
+            Ok(unit)
+        }
+        Command::TransportHead { id } => {
+            state
+                .transport
+                .head(&document.label, &document.id, &id)
+                .await
+        }
+        Command::TransportRead { id } => Ok(serde_json::json!(
+            state
+                .transport
+                .read(&document.label, &document.id, &id)
+                .await?
+        )),
+        Command::TransportCancel { id } => {
+            state.transport.cancel(&document.label, &document.id, &id);
+            Ok(unit)
+        }
+        Command::AccountsSignInToServer => {
+            installation_login::sign_in(&app, &state, &document).await
+        }
         Command::AccountsSignIn => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err("Use server settings to change Accounts sign-in.".into());
+            }
             let opener_app = app.clone();
             let opener_owner = owner.clone();
             let account = state
@@ -437,10 +597,24 @@ async fn native_command(
         }
         Command::AccountsRetryRevocations => {
             state.accounts.retry_revocations();
+            retry_installation_revocations(&app);
             Ok(unit)
         }
         Command::AccountsSession => {
-            let account = state.accounts.session(&document.origin).await?;
+            if let Some(credential) =
+                installation_login::personal_credential(&app, &state, &document).await?
+            {
+                return serde_json::to_value(credential.account)
+                    .map_err(|_| "Accounts session unavailable.".into());
+            }
+            let account = state
+                .accounts
+                .session(&if state.transport.selected(&document.label).is_some() {
+                    server_directory::origin()
+                } else {
+                    document.origin.clone()
+                })
+                .await?;
             if !state.sessions.is_current(&document)
                 || active_document(&app).is_none_or(|current| current.owner() != owner)
             {
@@ -448,7 +622,27 @@ async fn native_command(
             }
             serde_json::to_value(account).map_err(|_| "Accounts session unavailable.".into())
         }
+        Command::AccountsWorkspaceTarget => {
+            if let Some(credential) =
+                installation_login::personal_credential(&app, &state, &document).await?
+            {
+                return serde_json::to_value(credential.selection.target)
+                    .map_err(|_| "Could not continue".into());
+            }
+            let authorization = state
+                .accounts
+                .authorization(&server_directory::origin())
+                .await?;
+            if !current_server_account(&app, &state, &document, &authorization) {
+                return Err("Could not continue".into());
+            }
+            serde_json::to_value(document_workspace(&state, &document, &authorization)?)
+                .map_err(|_| "Could not continue".into())
+        }
         Command::AccountsCreateServerLoginGrant { origin, challenge } => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err("Native installation sign-in must run in Rust.".into());
+            }
             let audience = server_login::audience_for_document(&document.origin, &origin)?;
             if !server_login::valid_challenge(&challenge) {
                 return Err("Could not continue".into());
@@ -457,16 +651,35 @@ async fn native_command(
                 .accounts
                 .authorization(&server_directory::origin())
                 .await?;
-            let result = server_login::issue(
-                authorization.directory_bearer()?,
-                &audience,
-                &challenge,
-                || current_server_account(&app, &state, &document, &authorization),
-            )
-            .await?;
+            let workspace = document_workspace(&state, &document, &authorization)?;
+            let result = if let Some(target) = workspace {
+                if !current_server_account(&app, &state, &document, &authorization) {
+                    return Err("Could not continue".into());
+                }
+                server_login::issue_workspace(
+                    authorization.directory_bearer()?,
+                    &target,
+                    &challenge,
+                    || current_server_account(&app, &state, &document, &authorization),
+                )
+                .await?
+            } else {
+                server_login::issue(
+                    authorization.directory_bearer()?,
+                    &audience,
+                    &challenge,
+                    || current_server_account(&app, &state, &document, &authorization),
+                )
+                .await?
+            };
             serde_json::to_value(result).map_err(|_| "Could not continue".into())
         }
         Command::AccountsConsumeServerInitializationSecret => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err(
+                    "This installation does not accept a renderer bootstrap secret.".into(),
+                );
+            }
             let authorization = state
                 .accounts
                 .authorization(&server_directory::origin())
@@ -667,6 +880,20 @@ async fn native_command(
             updates::set_channel(&app, channel).await?,
         )
         .map_err(|_| "Update state unavailable.")?),
+        Command::OAuthCapture {
+            url,
+            expected_state,
+        } => {
+            let callback =
+                oauth_capture::capture(&app, &document.label, &url, &expected_state).await?;
+            if !state.sessions.is_current(&document)
+                || active_document(&app).is_none_or(|current| current.owner() != owner)
+            {
+                return Err("This sign-in window is no longer active.".into());
+            }
+            serde_json::to_value(callback)
+                .map_err(|_| "Could not complete integration sign-in.".into())
+        }
         Command::OAuthOpen { url } => {
             let expected_owner = owner.clone();
             state
@@ -736,6 +963,7 @@ fn managed_stack(
     let stacks = state.stack.lock().ok()?;
     let stack = stacks.snapshot();
     if setup.mode != settings::InstanceMode::New
+        || setup.workspace.is_some()
         || setup.account.as_deref() != stacks.owner()
         || !stacks.is_selected(&stack)
         || setup.server_url.origin() != stack.web_url().origin()
@@ -845,8 +1073,19 @@ fn start_server_discovery(app: tauri::AppHandle) {
             let Ok(bearer) = authorization.directory_bearer() else {
                 continue;
             };
-            let Ok(servers) = directory.list(bearer, &device).await else {
+            let Ok(catalog) = directory.catalog_for_device(bearer, &device).await else {
                 continue;
+            };
+            let servers = if catalog.has_organizations() {
+                let Ok(servers) = catalog.discovery_servers() else {
+                    continue;
+                };
+                servers
+            } else {
+                let Ok(servers) = directory.list(bearer, &device).await else {
+                    continue;
+                };
+                servers
             };
             if !discovery_session_current(&state, generation, &authorization)
                 || !current_server_account(&app, &state, &document, &authorization)
@@ -860,7 +1099,9 @@ fn start_server_discovery(app: tauri::AppHandle) {
                 authorization.account.identity(),
                 generation,
                 &servers,
-                &document.origin.origin().ascii_serialization(),
+                &document_server_origin(&state, &document)
+                    .origin()
+                    .ascii_serialization(),
             ) {
                 continue;
             }
@@ -1009,6 +1250,8 @@ fn cancel_server_pairings(state: &DesktopState) {
 }
 
 fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String> {
+    state.transport.block_all();
+    state.personal_devices.invalidate();
     cancel_server_pairings(state);
     let generation = state.reset_accounts_started()?;
     cancel_restore(state);
@@ -1024,6 +1267,10 @@ fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String>
         .map_err(|_| "Desktop state unavailable.")? = None;
     *state
         .pending_server
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")? = None;
+    *state
+        .pending_workspace
         .lock()
         .map_err(|_| "Desktop state unavailable.")? = None;
     *state
@@ -1058,6 +1305,7 @@ async fn clear_accounts_credentials(
     if !current() {
         return Err("Accounts sign-in changed. Try again.".into());
     }
+    let personal_cleanup = state.personal_devices.forget_all();
     state
         .accounts
         .logout(&account_logout_origins(legacy)?, current)
@@ -1065,6 +1313,7 @@ async fn clear_accounts_credentials(
     if !current() {
         return Err("Accounts sign-in changed. Try again.".into());
     }
+    personal_cleanup?;
     Ok(())
 }
 
@@ -1086,7 +1335,7 @@ fn logout_document_matches(
             .and_then(|setup| setup.clone())
             .is_some_and(|setup| {
                 setup.account.as_deref() == account
-                    && setup.server_url.origin() == document.origin.origin()
+                    && setup.server_url.origin() == document_server_origin(state, document).origin()
             })
 }
 
@@ -1156,6 +1405,32 @@ async fn finish_setup_accounts_logout(
     receiver.await.map_err(|_| "Desktop window unavailable.")?
 }
 
+fn require_native_account(
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+) -> Result<(), String> {
+    let Some(personal) = authorization.personal() else {
+        return require_account(state, authorization);
+    };
+    if !state.accounts.is_current(authorization) || personal.epoch != state.personal_devices.epoch()
+    {
+        return Err("Personal sign-in changed. Try again.".into());
+    }
+    let credential = state
+        .personal_devices
+        .credential(&personal.selection)?
+        .ok_or("Personal workspace unavailable")?;
+    if credential.device_id != personal.device_id
+        || !credential
+            .account
+            .identity()
+            .eq(&authorization.account.identity())
+    {
+        return Err("Personal workspace unavailable".into());
+    }
+    Ok(())
+}
+
 fn require_account(state: &DesktopState, account: &accounts::Authorization) -> Result<(), String> {
     account.directory_bearer()?;
     if state.accounts.is_current(account) {
@@ -1163,6 +1438,32 @@ fn require_account(state: &DesktopState, account: &accounts::Authorization) -> R
     } else {
         Err("Accounts sign-in changed. Try again.".into())
     }
+}
+
+fn adopt_setup_account(
+    state: &DesktopState,
+    account: &accounts::Account,
+    generation: u64,
+) -> Result<(), String> {
+    let gate = state
+        .accounts_started
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if gate.generation != generation {
+        return Err("Accounts sign-in changed. Try again.".into());
+    }
+    let mut setup = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if setup
+        .as_ref()
+        .is_some_and(|setup| !setup.belongs_to(account.identity()))
+    {
+        settings::clear(&state.directory)?;
+        *setup = None;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1176,7 +1477,28 @@ async fn setup_accounts_session<R: tauri::Runtime>(
         .lock()
         .map_err(|_| "Desktop state unavailable.")?
         .generation;
-    let account = state.accounts.session(&server_directory::origin()).await?;
+    if let Some(account) = state
+        .accounts
+        .local_account(&server_directory::origin())
+        .await?
+    {
+        adopt_setup_account(&state, &account, generation)?;
+    }
+    let online = state.accounts.session(&server_directory::origin()).await;
+    let personal = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .clone()
+        .and_then(|setup| state.personal_devices.saved(&setup).ok().flatten());
+    let account = match online {
+        Ok(Some(account)) => Some(account),
+        Ok(None) => personal.map(|credential| credential.account),
+        Err(error) => match personal {
+            Some(credential) => Some(credential.account),
+            None => return Err(error),
+        },
+    };
     require_setup(&window)?;
     state
         .accounts_started
@@ -1227,13 +1549,19 @@ async fn setup_accounts_sign_in(
         )
         .await;
     retire_server_windows(&app, &state);
-    if result.is_ok() {
+    if let Ok(account) = &result {
         require_setup(&window)?;
-        state
+        adopt_setup_account(&state, account, generation)?;
+        let mut gate = state
             .accounts_started
             .lock()
-            .map_err(|_| "Desktop state unavailable.")?
-            .complete(generation, true)?;
+            .map_err(|_| "Desktop state unavailable.")?;
+        if gate.generation != generation {
+            return Err("Accounts sign-in changed. Try again.".into());
+        }
+        // Failed personal cleanup retains its durable barrier while company login stays usable.
+        let _ = state.personal_devices.after_interactive_sign_in();
+        gate.complete(generation, true)?;
     }
     result
 }
@@ -1315,11 +1643,57 @@ async fn list_workspaces<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let workspaces = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     Ok(workspaces)
+}
+
+#[tauri::command]
+async fn workspace_catalog<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+) -> Result<server_directory::WorkspaceCatalog, String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let catalog = server_directory::Directory::new()?
+        .catalog_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(catalog)
+}
+
+#[tauri::command]
+async fn set_default_organization<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    organization_id: Option<String>,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    server_directory::Directory::new()?
+        .set_default_organization(
+            authorization.directory_bearer()?,
+            organization_id.as_deref(),
+        )
+        .await?;
+    require_setup(&window)?;
+    require_account(&state, &authorization)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1334,7 +1708,10 @@ async fn check_workspace<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let workspace = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?
         .into_iter()
         .find(|workspace| workspace.id == id)
@@ -1671,8 +2048,21 @@ async fn connect_workspace(
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
     id: String,
+    link: Option<server_link::WorkspaceLink>,
 ) -> Result<(), String> {
     require_setup(&window)?;
+    let intent = state.restore_intent.load(Ordering::SeqCst);
+    if let Some(link) = &link {
+        if state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .as_ref()
+            != Some(link)
+        {
+            return Err("This workspace link is no longer active.".into());
+        }
+    }
     let authorization = state
         .accounts
         .authorization(&server_directory::origin())
@@ -1683,7 +2073,10 @@ async fn connect_workspace(
         .map_err(|_| "A connection is already in progress.")?;
     // Re-fetch from the authenticated directory so the renderer cannot choose an arbitrary URL.
     let workspace = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?
         .into_iter()
         .find(|workspace| workspace.id == id)
@@ -1691,19 +2084,74 @@ async fn connect_workspace(
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
-    server::probe_server(&target).await?;
+    let mode = prepare_workspace_route(&app, &state, &authorization, &target).await?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Err("This connection is no longer active.".into());
+    }
+    if let Some(link) = &link {
+        let selected = workspace.target.as_ref().ok_or("Workspace unavailable.")?;
+        if link.organization_id != selected.organization_id
+            || link.server_id != selected.server_id
+            || link.workspace_id != selected.workspace_id
+        {
+            return Err("Workspace unavailable.".into());
+        }
+    }
     open_server(
         &window,
         &app,
         &state,
         settings::Setup {
-            mode: settings::InstanceMode::Existing,
+            mode,
             server_url: target,
             account: None,
+            workspace: workspace.target,
         },
         &authorization,
     )
-    .await
+    .await?;
+    if state.restore_intent.load(Ordering::SeqCst) == intent {
+        let mut pending = state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?;
+        if link.is_none() || pending.as_ref() == link.as_ref() {
+            *pending = None;
+        }
+    }
+    Ok(())
+}
+
+async fn prepare_workspace_route(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+    target: &url::Url,
+) -> Result<settings::InstanceMode, String> {
+    require_account(state, authorization)?;
+    if matches!(target.host_str(), Some("127.0.0.1" | "[::1]")) {
+        let (stack, intent) = select_local_stack(app, state, authorization)?;
+        if !stack.matches_saved_url(&target.origin().ascii_serialization()) {
+            return Err("This local server is no longer active.".into());
+        }
+        let result = stack.start_for(intent).await;
+        require_current_stack(state, authorization, &stack)?;
+        if stack.intent() != intent
+            || result.phase != local_stack::LocalStackPhase::Ready
+            || !stack.matches_desired_stack().await
+        {
+            return Err(result
+                .message
+                .unwrap_or_else(|| "Could not start the local server.".into()));
+        }
+        server::probe_server(target).await?;
+        require_current_stack(state, authorization, &stack)?;
+        Ok(settings::InstanceMode::New)
+    } else {
+        server::probe_server(target).await?;
+        require_account(state, authorization)?;
+        Ok(settings::InstanceMode::Existing)
+    }
 }
 
 async fn connect_directory_server(
@@ -1726,7 +2174,10 @@ async fn connect_directory_server(
                 authorization,
                 directory,
                 device,
-                Some(&server.url),
+                LocalServerSelection {
+                    expected_url: Some(&server.url),
+                    organization_id: None,
+                },
             )
             .await
         }
@@ -1741,6 +2192,7 @@ async fn connect_directory_server(
                     mode: settings::InstanceMode::Existing,
                     server_url: target,
                     account: None,
+                    workspace: None,
                 },
                 authorization,
             )
@@ -1756,6 +2208,8 @@ struct SetupState {
     mode: settings::InstanceMode,
     startup: Startup,
     pending_server: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pending_workspace: Option<server_link::WorkspaceLink>,
     #[serde(skip_serializing_if = "Option::is_none")]
     initializing_server: Option<String>,
 }
@@ -1828,6 +2282,11 @@ fn setup_state<R: tauri::Runtime>(
             .map_err(|_| "Desktop state unavailable.")?
             .as_ref()
             .map(|initialization| initialization.origin.clone()),
+        pending_workspace: state
+            .pending_workspace
+            .lock()
+            .map_err(|_| "Desktop state unavailable.")?
+            .clone(),
         pending_server: state
             .pending_server
             .lock()
@@ -1891,6 +2350,7 @@ async fn connect_server(
             mode: settings::InstanceMode::Existing,
             server_url: target,
             account: None,
+            workspace: None,
         },
         &authorization,
     )
@@ -1921,6 +2381,7 @@ async fn connect_local_server(
     window: WebviewWindow,
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
+    organization_id: Option<String>,
 ) -> Result<(), String> {
     require_setup(&window)?;
     let authorization = state
@@ -1940,9 +2401,17 @@ async fn connect_local_server(
         &authorization,
         &directory,
         &device,
-        None,
+        LocalServerSelection {
+            expected_url: None,
+            organization_id: organization_id.as_deref(),
+        },
     )
     .await
+}
+
+struct LocalServerSelection<'a> {
+    expected_url: Option<&'a str>,
+    organization_id: Option<&'a str>,
 }
 
 async fn start_local_server(
@@ -1952,14 +2421,26 @@ async fn start_local_server(
     authorization: &accounts::Authorization,
     directory: &server_directory::Directory,
     device: &str,
-    expected_url: Option<&str>,
+    selection: LocalServerSelection<'_>,
 ) -> Result<(), String> {
+    let LocalServerSelection {
+        expected_url,
+        organization_id,
+    } = selection;
     require_setup(window)?;
+    let organization_id = directory
+        .catalog_for_device(authorization.directory_bearer()?, device)
+        .await?
+        .local_organization(organization_id)?;
+    require_account(state, authorization)?;
     let (stack, intent) = select_local_stack(app, state, authorization)?;
     if expected_url.is_some_and(|url| !stack.matches_saved_url(url)) {
         return Err("This saved local instance is unavailable for this account. Choose This computer to create or open your instance.".into());
     }
     require_current_stack(state, authorization, &stack)?;
+    if let Some(host) = &state.host_computer {
+        host.activate(None);
+    }
     let result = stack.start_for(intent).await;
     require_setup(window)?;
     let authorization = state
@@ -1978,13 +2459,23 @@ async fn start_local_server(
             "The local server address changed. Choose This computer to open your instance.".into(),
         );
     }
-    directory
-        .add(
-            authorization.directory_bearer()?,
-            &stack.web_url(),
-            server_directory::Kind::Local,
-            device,
-        )
+    let enrollment = local_enrollment::LocalEnrollment {
+        directory,
+        stack: &stack,
+        token: authorization.directory_bearer()?,
+        organization_id: &organization_id,
+        device_id: device,
+        subject: authorization.account.identity().1,
+    };
+    let workspace = enrollment
+        .connect(|| {
+            require_setup(window)?;
+            require_current_stack(state, &authorization, &stack)?;
+            if stack.intent() != intent {
+                return Err("The start was interrupted. Retry to continue.".into());
+            }
+            Ok(())
+        })
         .await?;
     open_server(
         window,
@@ -1994,6 +2485,7 @@ async fn start_local_server(
             mode: settings::InstanceMode::New,
             server_url: stack.web_url(),
             account: None,
+            workspace: workspace.target,
         },
         &authorization,
     )
@@ -2028,10 +2520,66 @@ async fn open_server(
         .map_err(|_| "Desktop state unavailable.")?
         .generation;
     require_setup(window)?;
-    require_account(state, authorization)?;
-    server::require_accounts_only(&choice.server_url).await?;
+    require_native_account(state, authorization)?;
+    let pinned = if let Some(personal) = authorization.personal() {
+        let credential = state
+            .personal_devices
+            .saved(&choice)?
+            .ok_or("Personal workspace unavailable")?;
+        if credential.device_id != personal.device_id
+            || credential.selection.target != personal.selection.target
+            || credential.selection.account != personal.selection.account
+        {
+            return Err("Personal workspace unavailable".into());
+        }
+        let mut selection = credential.selection;
+        selection.prefer_relay = false;
+        if selection.uses_relay() {
+            return Err("Connect directly to this installation to work without Accounts.".into());
+        }
+        selection.probe(None).await?;
+        Some(selection)
+    } else if let Some(workspace) = &choice.workspace {
+        let catalog = server_directory::Directory::new()?
+            .catalog_for_device(
+                authorization.directory_bearer()?,
+                &server_directory::device_id(&state.directory)?,
+            )
+            .await?;
+        let mut selection = installation_transport::Selection {
+            account: settings::account_key(authorization.account.identity()),
+            origin: choice.server_url.origin().ascii_serialization(),
+            target: workspace.clone(),
+            relay_origin: catalog.relay_origin(workspace, &choice.server_url)?,
+            direct_origin: catalog.direct_origin(workspace, &choice.server_url)?,
+            prefer_relay: false,
+        };
+        let direct_failed = if selection.uses_relay() {
+            true
+        } else {
+            selection.probe(None).await.is_err()
+        };
+        if direct_failed {
+            if selection.relay_origin.is_none() {
+                return Err("Could not connect to this installation. Try again.".into());
+            }
+            selection.prefer_relay = true;
+            let ticket =
+                server_login::issue_relay(authorization.directory_bearer()?, &selection, || {
+                    require_setup(window).is_ok()
+                        && require_native_account(state, authorization).is_ok()
+                        && state.restore_intent.load(Ordering::SeqCst) == intent
+                })
+                .await?;
+            selection.probe(Some(ticket)).await?;
+        }
+        Some(selection)
+    } else {
+        server::require_accounts_only(&choice.server_url).await?;
+        None
+    };
     require_setup(window)?;
-    require_account(state, authorization)?;
+    require_native_account(state, authorization)?;
     let local = if choice.mode == settings::InstanceMode::New {
         let stack = state.stack_snapshot();
         require_current_stack(state, authorization, &stack)?;
@@ -2050,14 +2598,49 @@ async fn open_server(
         require_setup(window)?;
         require_current_stack(state, authorization, stack)?;
     }
-    let target = choice.server_url.clone();
+    let previous_document = state.active_window.lock().ok().and_then(|label| {
+        label
+            .as_ref()
+            .and_then(|label| state.sessions.current(label))
+    });
+    let _drafts = if let Some(document) = previous_document {
+        if let Some(previous) = app.get_webview_window(&document.label) {
+            Some(
+                document::flush_drafts(
+                    &previous,
+                    Duration::from_secs(3),
+                    state.transport.selected(&document.label).is_some(),
+                    || {
+                        state.sessions.is_current(&document)
+                            && require_native_account(state, authorization).is_ok()
+                            && state.restore_intent.load(Ordering::SeqCst) == intent
+                    },
+                )
+                .await?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let logical = choice.server_url.clone();
+    let target = if choice.workspace.is_some() {
+        state.transport.renderer(&state.directory).await?
+    } else {
+        logical.clone()
+    };
     let label = format!("server-{}", state.sequence.fetch_add(1, Ordering::Relaxed));
     let origin = target.origin();
     let popup_app = app.clone();
     let popup_parent = label.clone();
     let popup_origin = target.clone();
     let proof = state.sessions.insert(&label, &target)?;
+    if let Some(selection) = pinned {
+        state.transport.select(&label, selection)?;
+    }
     if native::grant(app, &label, &target).is_err() {
+        state.transport.remove(&label);
         state.sessions.remove(&label);
         return Err("Could not secure the desktop window.".into());
     }
@@ -2066,6 +2649,7 @@ async fn open_server(
         origin: target.origin().ascii_serialization(),
         account: settings::account_key(authorization.account.identity()),
         intent,
+        workspace: choice.workspace.clone(),
     };
     if let Some(initialization) = state
         .initialization
@@ -2084,11 +2668,16 @@ async fn open_server(
         label: label.clone(),
     };
     let navigation_target = target.clone();
+    let bundled = choice.workspace.is_some();
+    let navigation_origin = target.origin();
+    let navigation_app = app.clone();
     let builder = profile::configure(
         WebviewWindowBuilder::new(app, &label, WebviewUrl::External(target.clone())),
         &state.directory,
-        &target,
+        &logical,
         authorization.account.identity(),
+        choice.workspace.as_ref(),
+        authorization.profile_epoch(),
     );
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -2102,17 +2691,25 @@ async fn open_server(
         .visible(false)
         .disable_drag_drop_handler()
         .initialization_script(auth::initialization_script(&target))
-        .initialization_script(native::initialization_script(
+        .initialization_script(native::initialization_script_with_transport(
             &label,
             &target,
             &proof,
             state.speech.available(),
             choice.mode == settings::InstanceMode::New && state.host_computer.is_some(),
+            choice.workspace.is_some(),
         ))
         // WebKit navigation policy callbacks include subframes. Their loads must
         // not retire the main document or open an artifact in the system browser.
-        .on_navigation(|url| match url.scheme() {
-            "http" | "https" => url.username().is_empty() && url.password().is_none(),
+        .on_navigation(move |url| match url.scheme() {
+            "http" | "https" => {
+                if bundled && url.origin() != navigation_origin {
+                    open_external(&navigation_app, url);
+                    false
+                } else {
+                    url.username().is_empty() && url.password().is_none()
+                }
+            }
             "about" => matches!(url.path(), "blank" | "srcdoc"),
             "data" | "blob" => true,
             _ => false,
@@ -2139,6 +2736,7 @@ async fn open_server(
     let next = match next {
         Ok(next) => next,
         Err(_) => {
+            state.transport.remove(&label);
             state.sessions.remove(&label);
             return Err("Could not open that server.".into());
         }
@@ -2147,7 +2745,7 @@ async fn open_server(
     if let Err(error) = document::wait_for_document(&next, Duration::from_secs(20))
         .await
         .and_then(|()| require_setup(window))
-        .and_then(|()| require_account(state, authorization))
+        .and_then(|()| require_native_account(state, authorization))
         .and_then(|()| {
             if let Some(stack) = &local {
                 require_current_stack(state, authorization, stack)?;
@@ -2204,6 +2802,17 @@ async fn open_server(
         } else {
             "Could not show that server or restore the previous choice.".into()
         });
+    }
+    if let Some(workspace) = &choice.workspace {
+        if server_directory::remember_workspace(
+            &state.directory,
+            authorization.account.identity(),
+            workspace,
+        )
+        .is_err()
+        {
+            eprintln!("Could not save the workspace preference.");
+        }
     }
     *state
         .setup
@@ -2263,6 +2872,23 @@ fn clear_server_link<R: tauri::Runtime>(
 }
 
 #[tauri::command]
+fn clear_workspace_link<R: tauri::Runtime>(
+    window: WebviewWindow<R>,
+    state: State<'_, DesktopState>,
+    target: server_link::WorkspaceLink,
+) -> Result<(), String> {
+    require_setup(&window)?;
+    let mut pending = state
+        .pending_workspace
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?;
+    if pending.as_ref() == Some(&target) {
+        *pending = None;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_setup(&window)?;
     app.exit(0);
@@ -2270,6 +2896,28 @@ fn quit_setup(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String
 }
 
 fn receive_server_link(app: &tauri::AppHandle, input: &str) {
+    if let Some(workspace) = server_link::parse_workspace(input) {
+        let Some(state) = app.try_state::<DesktopState>() else {
+            return;
+        };
+        cancel_server_pairings(&state);
+        cancel_restore(&state);
+        if let Ok(mut pending) = state.pending_workspace.lock() {
+            *pending = Some(workspace.clone());
+        }
+        if let Ok(mut pending) = state.pending_server.lock() {
+            *pending = None;
+        }
+        if let Ok(mut pending) = state.initialization.lock() {
+            *pending = None;
+        }
+        update_startup(app, Startup::idle());
+        if let Ok(window) = setup_window(app, true) {
+            let _ = window.emit("desktop-workspace-link", workspace);
+        }
+        return;
+    }
+
     let initialization = server_link::parse_initialization(input);
     let initializing = initialization.is_some();
     let Some(origin) = server_link::parse(input).or_else(|| {
@@ -2284,6 +2932,9 @@ fn receive_server_link(app: &tauri::AppHandle, input: &str) {
     };
     cancel_server_pairings(&state);
     cancel_restore(&state);
+    if let Ok(mut pending) = state.pending_workspace.lock() {
+        *pending = None;
+    }
     if let Ok(mut pending) = state.initialization.lock() {
         *pending = initialization;
     }
@@ -2326,6 +2977,25 @@ async fn clear_server_session(
     let current = || logout.is_current(state) && logout_document_matches(state, document, account);
     if !current() {
         return Err("Accounts sign-in changed. Try again.".into());
+    }
+    if state.transport.selected(&document.label).is_some() {
+        let queued = if let Some((selection, token)) = state
+            .transport
+            .captured_session(&document.label, &document.id)?
+        {
+            state
+                .accounts
+                .queue_installation_logout(selection, token)
+                .await
+        } else {
+            Ok(())
+        };
+        state
+            .transport
+            .retire_session(&document.label, &document.id)?;
+        queued?;
+        state.accounts.retry_revocations();
+        return Ok(());
     }
     let cookie_window = window.clone();
     let cookie_url = document
@@ -2615,10 +3285,7 @@ fn focus_active<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> bool {
     // The warm-window reaper checks this generation under the same active-window lock.
     state.warm_generation.fetch_add(1, Ordering::Relaxed);
     drop(active);
-    if show_only_window(&window).is_err() {
-        return false;
-    }
-    true
+    show_only_window(&window).is_ok()
 }
 
 fn saved_server<'a>(
@@ -2681,7 +3348,12 @@ fn cancel_restore(state: &DesktopState) {
 }
 
 fn begin_restore(state: &DesktopState) -> Option<u64> {
-    if !state.accounts_have_started()
+    if state
+        .pending_workspace
+        .lock()
+        .ok()
+        .is_some_and(|pending| pending.is_some())
+        || !state.accounts_have_started()
         || !state.setup_ready.load(Ordering::SeqCst)
         || state
             .pending_server
@@ -2712,6 +3384,80 @@ fn retire_warm_window(state: &DesktopState, label: &str, generation: u64) -> boo
     true
 }
 
+async fn restore_personal_server(
+    app: &tauri::AppHandle,
+    window: &WebviewWindow,
+    intent: u64,
+) -> Result<bool, String> {
+    let state = app.state::<DesktopState>();
+    require_setup(window)?;
+    let epoch = state.personal_devices.epoch();
+    let Some(choice) = state
+        .setup
+        .lock()
+        .map_err(|_| "Desktop state unavailable.")?
+        .clone()
+    else {
+        return Ok(false);
+    };
+    let Some(credential) = state.personal_devices.saved(&choice)? else {
+        return Ok(false);
+    };
+    if let Some((account, profile_epoch)) = state
+        .accounts
+        .local_profile_epoch(&server_directory::origin())
+        .await?
+    {
+        if account != credential.selection.account || profile_epoch != credential.profile_epoch {
+            return Ok(false);
+        }
+    }
+    let authorization = state.accounts.personal_authorization(&credential, epoch)?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Ok(false);
+    }
+    require_native_account(&state, &authorization)?;
+    if choice.mode == settings::InstanceMode::New {
+        let (stack, stack_intent) = select_local_stack(app, &state, &authorization)?;
+        if !stack.owns_workspace(&credential.selection.target)
+            || !stack.matches_saved_url(choice.server_url.as_str())
+        {
+            return Err(
+                "Reconnect this installation through Accounts to verify its ownership.".into(),
+            );
+        }
+        let result = stack.start_for(stack_intent).await;
+        require_setup(window)?;
+        require_current_stack(&state, &authorization, &stack)?;
+        if result.phase != local_stack::LocalStackPhase::Ready
+            || !stack.matches_saved_url(choice.server_url.as_str())
+        {
+            return Err(result
+                .message
+                .unwrap_or_else(|| "Could not resume this local installation.".into()));
+        }
+    }
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        return Ok(false);
+    }
+    update_startup(
+        app,
+        Startup {
+            phase: "opening",
+            server_id: Some(credential.selection.target.workspace_id.clone()),
+            kind: (choice.mode == settings::InstanceMode::New)
+                .then_some(server_directory::Kind::Local),
+            message: None,
+        },
+    );
+    open_server(window, app, &state, choice, &authorization).await?;
+    if state.restore_intent.load(Ordering::SeqCst) != intent {
+        retire_server_windows(app, &state);
+        return Ok(false);
+    }
+    Ok(true)
+}
+
 async fn restore_saved_server(
     app: &tauri::AppHandle,
     window: &WebviewWindow,
@@ -2722,37 +3468,78 @@ async fn restore_saved_server(
     if !state.accounts_have_started() || state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
-    if state
-        .accounts
-        .session(&server_directory::origin())
-        .await?
-        .is_none()
-    {
-        return Ok(false);
-    }
-    let authorization = state
+    let authorization = match state
         .accounts
         .authorization(&server_directory::origin())
-        .await?;
+        .await
+    {
+        Ok(authorization) => authorization,
+        Err(_) => return restore_personal_server(app, window, intent).await,
+    };
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);
     }
     let device = server_directory::device_id(&state.directory)?;
     let directory = server_directory::Directory::new()?;
+    let catalog = match directory
+        .catalog_for_device(authorization.directory_bearer()?, &device)
+        .await
+    {
+        Ok(catalog) => catalog,
+        Err(error) => {
+            return match restore_personal_server(app, window, intent).await {
+                Ok(true) => Ok(true),
+                Ok(false) => Err(error),
+                Err(error) => Err(error),
+            }
+        }
+    };
+    require_account(&state, &authorization)?;
+    if catalog.has_organizations() {
+        let Some(workspace) =
+            catalog.initial_workspace(&state.directory, authorization.account.identity())?
+        else {
+            return Ok(false);
+        };
+        if state.restore_intent.load(Ordering::SeqCst) != intent {
+            return Ok(false);
+        }
+        let target = server::normalize_server_url(&workspace.url)?;
+        let mode = prepare_workspace_route(app, &state, &authorization, &target).await?;
+        require_account(&state, &authorization)?;
+        update_startup(
+            app,
+            Startup {
+                phase: "opening",
+                server_id: Some(workspace.id.clone()),
+                kind: (mode == settings::InstanceMode::New)
+                    .then_some(server_directory::Kind::Local),
+                message: None,
+            },
+        );
+        show_setup(app).map_err(|_| "Could not open server settings.")?;
+        open_server(
+            window,
+            app,
+            &state,
+            settings::Setup {
+                mode,
+                server_url: target,
+                account: None,
+                workspace: workspace.target,
+            },
+            &authorization,
+        )
+        .await?;
+        if state.restore_intent.load(Ordering::SeqCst) != intent {
+            retire_server_windows(app, &state);
+            return Ok(false);
+        }
+        return Ok(true);
+    }
     let entries = directory
         .list(authorization.directory_bearer()?, &device)
         .await?;
-    // Do not silently open a personal server when there are company workspaces to choose from.
-    if let Ok(Ok(workspaces)) = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        directory.workspaces(authorization.directory_bearer()?),
-    )
-    .await
-    {
-        if !workspaces.is_empty() {
-            return Ok(false);
-        }
-    }
     require_account(&state, &authorization)?;
     let server = {
         let choice = state
@@ -2988,6 +3775,14 @@ fn app_context<R: tauri::Runtime>() -> tauri::Context<R> {
 }
 
 fn main() {
+    if let Some(passed) = personal_keys::check_cli() {
+        if passed {
+            println!("Personal device key check passed.");
+        } else {
+            eprintln!("Personal device key check failed.");
+        }
+        std::process::exit(if passed { 0 } else { 1 });
+    }
     #[cfg(target_os = "linux")]
     if let Some(appdir) = std::env::var_os("APPDIR") {
         let webkit =
@@ -3000,11 +3795,12 @@ fn main() {
             );
         }
     }
-    tauri::Builder::default()
+    renderer_host::configure(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             if !args.iter().any(|argument| {
                 server_link::parse(argument).is_some()
                     || server_link::parse_initialization(argument).is_some()
+                    || server_link::parse_workspace(argument).is_some()
             }) {
                 show_active_or_setup(app);
             }
@@ -3020,6 +3816,8 @@ fn main() {
             setup_accounts_logout,
             list_servers,
             list_workspaces,
+            workspace_catalog,
+            set_default_organization,
             check_workspace,
             set_default_server,
             create_server_installation,
@@ -3038,6 +3836,7 @@ fn main() {
             local_stack_state,
             quit_setup,
             clear_server_link,
+            clear_workspace_link,
             native_command
         ])
         .setup(|app| {
@@ -3082,11 +3881,13 @@ fn main() {
                 host_computer,
                 computer_choice: tokio::sync::Mutex::new(()),
                 computer_prompt: std::sync::atomic::AtomicBool::new(false),
-                directory,
+                directory: directory.clone(),
                 active_window: Mutex::new(None),
                 sequence: AtomicU64::new(1),
                 switching: tokio::sync::Mutex::new(()),
                 sessions: native::Sessions::default(),
+                transport: installation_transport::Transport::default(),
+                personal_devices: personal_devices::PersonalDevices::system(&directory),
                 browser_auth,
                 accounts: accounts::Accounts::new(credential_store.clone()),
                 accounts_started: Mutex::new(AccountsStarted::default()),
@@ -3099,6 +3900,7 @@ fn main() {
                 pairings: pairing::Pairings::new(credential_store),
                 warm_generation: AtomicU64::new(0),
                 pending_server: Mutex::new(None),
+                pending_workspace: Mutex::new(None),
                 initialization: Mutex::new(None),
                 opening_server: Mutex::new(None),
                 pending_bookmark: Mutex::new(None),
@@ -3201,7 +4003,27 @@ fn main() {
 mod tests {
     use super::*;
 
-    fn test_state(directory: &std::path::Path) -> DesktopState {
+    #[derive(Default)]
+    struct TestCredentials(Mutex<std::collections::HashMap<String, String>>);
+    impl credentials::CredentialStore for TestCredentials {
+        fn get(&self, key: &str) -> Result<Option<String>, String> {
+            Ok(self.0.lock().unwrap().get(key).cloned())
+        }
+        fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            self.0
+                .lock()
+                .unwrap()
+                .insert(key.to_owned(), value.to_owned());
+            Ok(())
+        }
+        fn delete(&self, key: &str) -> Result<(), String> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+    }
+
+    pub(crate) fn test_state(directory: &std::path::Path) -> DesktopState {
+        let store = credentials::Store(Arc::new(TestCredentials::default()));
         DesktopState {
             directory: directory.to_owned(),
             setup: Mutex::new(None),
@@ -3221,8 +4043,10 @@ mod tests {
             sequence: AtomicU64::new(1),
             switching: tokio::sync::Mutex::new(()),
             sessions: native::Sessions::default(),
+            transport: installation_transport::Transport::default(),
+            personal_devices: personal_devices::PersonalDevices::system(directory),
             browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
-            accounts: accounts::Accounts::default(),
+            accounts: accounts::Accounts::new(store.clone()),
             accounts_started: Mutex::new(AccountsStarted::default()),
             server_pairings: server_pairing::Attempts::default(),
             restoring: std::sync::atomic::AtomicBool::new(false),
@@ -3230,9 +4054,10 @@ mod tests {
             setup_ready: std::sync::atomic::AtomicBool::new(false),
             startup: Mutex::new(Startup::idle()),
             speech: speech::SpeechManager::new(PathBuf::new()),
-            pairings: pairing::Pairings::default(),
+            pairings: pairing::Pairings::new(store),
             warm_generation: AtomicU64::new(0),
             pending_server: Mutex::new(None),
+            pending_workspace: Mutex::new(None),
             initialization: Mutex::new(None),
             opening_server: Mutex::new(None),
             pending_bookmark: Mutex::new(None),
@@ -3247,6 +4072,7 @@ mod tests {
             origin: "https://server.example.test".into(),
             account: "account-a".into(),
             intent: 3,
+            workspace: None,
         };
         let mut document = native::Document {
             label: "server-new".into(),
@@ -3425,6 +4251,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: origin.clone(),
             account: Some("a".repeat(64)),
+            workspace: None,
         });
         let logout = begin_accounts_logout(&state).unwrap();
         reset_setup_after_product_logout(
@@ -3469,6 +4296,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: origin,
             account: Some("b".repeat(64)),
+            workspace: None,
         });
         let logout = begin_accounts_logout(&state).unwrap();
         assert!(reset_setup_after_product_logout(
@@ -3504,6 +4332,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: Url::parse("https://server.example.test").unwrap(),
             account: Some("a".repeat(64)),
+            workspace: None,
         });
         assert!(!state.accounts_have_started());
         assert_eq!(state.startup.lock().unwrap().phase, "idle");
@@ -3653,6 +4482,7 @@ mod tests {
                 mode,
                 server_url: Url::parse(url).unwrap(),
                 account: Some(settings::account_key(identity)),
+                workspace: None,
             };
             settings::save(directory.path(), &choice).unwrap();
             let mut choice = settings::load(directory.path()).unwrap();
@@ -3713,6 +4543,7 @@ mod tests {
             mode: settings::InstanceMode::Existing,
             server_url: Url::parse(&entries[1].url).unwrap(),
             account: Some(settings::account_key(identity)),
+            workspace: None,
         };
         let preference = server_directory::Preference {
             server_id: Some(entries[0].id.clone()),
@@ -3795,6 +4626,9 @@ mod tests {
                 setup_accounts_session,
                 list_servers,
                 list_workspaces,
+                workspace_catalog,
+                set_default_organization,
+                clear_workspace_link,
                 check_workspace,
                 set_default_server,
                 create_server_installation,
@@ -3842,6 +4676,12 @@ mod tests {
                 tauri::ipc::InvokeBody::Json(
                     serde_json::json!({"requestId": "fixture-request", "origin": "https://server.example.test", "rawUrl": "https://server.example.test"}),
                 )
+            } else if command == "set_default_organization" {
+                tauri::ipc::InvokeBody::Json(serde_json::json!({ "organizationId": null }))
+            } else if command == "clear_workspace_link" {
+                tauri::ipc::InvokeBody::Json(
+                    serde_json::json!({ "target": { "organizationId": "00000000-0000-4000-8000-000000000001", "serverId": "00000000-0000-4000-8000-000000000001", "workspaceId": "00000000-0000-4000-8000-000000000001" } }),
+                )
             } else {
                 tauri::ipc::InvokeBody::default()
             },
@@ -3880,6 +4720,25 @@ mod tests {
                 serde_json::json!({"serverUrl": null, "mode": "existing", "startup": {"phase": "idle"}, "pendingServer": null}),
             ),
         );
+        for command in ["workspace_catalog", "set_default_organization"] {
+            let error = tauri::test::get_ipc_response(&setup, request(command, local)).unwrap_err();
+            assert!(
+                [
+                    serde_json::json!("Sign in to Accounts first."),
+                    serde_json::json!("Set ORK_ACCOUNTS_ISSUER before building the desktop app."),
+                    serde_json::json!(
+                        "Set ORK_ACCOUNTS_DESKTOP_CLIENT_ID before building the desktop app."
+                    ),
+                ]
+                .contains(&error),
+                "{error}"
+            );
+        }
+        tauri::test::assert_ipc_response(
+            &setup,
+            request("clear_workspace_link", local),
+            Ok(serde_json::Value::Null),
+        );
         for (window, origin) in [
             (&setup, "https://orkbot.example.com"),
             (&other, local),
@@ -3889,6 +4748,9 @@ mod tests {
                 "setup_accounts_session",
                 "list_servers",
                 "list_workspaces",
+                "workspace_catalog",
+                "set_default_organization",
+                "clear_workspace_link",
                 "check_workspace",
                 "connect_workspace",
                 "set_default_server",
@@ -3924,6 +4786,55 @@ mod tests {
         }
         assert!(
             tauri::test::get_ipc_response(&setup, request("plugin:updater|check", local)).is_err()
+        );
+    }
+    #[test]
+    fn adopting_another_account_clears_only_the_current_picker_and_preserves_owned_data_and_history(
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let state = test_state(directory.path());
+        let identity = ("https://api.ork.run", "account-a");
+        let target = server_directory::WorkspaceTarget {
+            organization_id: "11111111-1111-4111-8111-111111111111".into(),
+            server_id: "22222222-2222-4222-8222-222222222222".into(),
+            workspace_id: "33333333-3333-4333-8333-333333333333".into(),
+            binding_version: 1,
+            key_fingerprint: "b".repeat(64),
+        };
+        let choice = settings::Setup {
+            mode: settings::InstanceMode::Existing,
+            server_url: Url::parse("https://installation.example.test").unwrap(),
+            account: Some(settings::account_key(identity)),
+            workspace: Some(target.clone()),
+        };
+        settings::save(directory.path(), &choice).unwrap();
+        *state.setup.lock().unwrap() = Some(choice.clone());
+        server_directory::remember_workspace(directory.path(), identity, &target).unwrap();
+        std::fs::write(
+            directory.path().join("owned-data"),
+            "keep this installation's data",
+        )
+        .unwrap();
+        let account: accounts::Account = serde_json::from_value(serde_json::json!({
+            "issuer":"https://api.ork.run", "subject":"account-b", "userinfo":{"sub":"account-b"}, "expiresAt":0,
+        })).unwrap();
+        assert!(adopt_setup_account(&state, &account, 1).is_err());
+        assert!(state.setup.lock().unwrap().is_some());
+        adopt_setup_account(&state, &account, 0).unwrap();
+        assert!(state.setup.lock().unwrap().is_none());
+        assert!(settings::load(directory.path()).is_none());
+        assert_eq!(
+            server_directory::workspace_history(
+                directory.path(),
+                identity,
+                &target.organization_id
+            )
+            .unwrap(),
+            Some(target)
+        );
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("owned-data")).unwrap(),
+            "keep this installation's data"
         );
     }
 }

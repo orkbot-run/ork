@@ -1,6 +1,11 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited backup coverage remains Apache-2.0; personal revocation cases are PolyForm-covered.
+
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
+  chownSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -40,6 +45,7 @@ function fixture() {
   for (const script of [
     "scripts/backup.sh",
     "scripts/restore.sh",
+    "scripts/preserve-personal-revocations.sh",
     "infra/compose/backup-prod.sh",
     "infra/compose/backup-drill.sh",
   ]) {
@@ -92,6 +98,10 @@ if (args[0] === "inspect") {
 } else if (args.includes("ps")) {
   console.log("example-api-container");
 } else if (args.includes("stop")) {
+  if (process.env.LIVE_REVOCATION_PATH) {
+    fs.mkdirSync(require("node:path").dirname(process.env.LIVE_REVOCATION_PATH), { recursive: true });
+    fs.writeFileSync(process.env.LIVE_REVOCATION_PATH, "revoked\\n");
+  }
   const state = JSON.parse(fs.readFileSync(process.env.SERVICE_STATE, "utf8"));
   const fail = process.env.FAIL_INITIAL_STOP === "1" && !fs.existsSync(process.env.STOP_FAILURE_USED);
   const services = args.slice(args.indexOf("stop") + 1);
@@ -246,7 +256,9 @@ esac
   chmodSync(path.join(bin, "pg_restore"), 0o755);
   // No inherited deployment settings, credentials, or executable search paths.
   const env = {
-    PATH: [bin, path.dirname(process.execPath), "/usr/bin", "/bin"].join(path.delimiter),
+    PATH: [bin, path.dirname(process.execPath), "/usr/bin", "/bin", "/usr/sbin", "/sbin"].join(
+      path.delimiter,
+    ),
     COMMAND_LOG: path.join(root, "commands.jsonl"),
     SQL_INPUT: path.join(root, "input.sql"),
     SQL_SERVICE_STATE: path.join(root, "sql-service-state"),
@@ -482,6 +494,203 @@ describe("development restore failures", () => {
     return f;
   }
 
+  const revokedId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const journal = "data/identity/personal-revocations";
+  function snapshotData(f: ReturnType<typeof fixture>, prepare: (source: string) => void) {
+    const source = path.join(f.root, "snapshot-source");
+    write(path.join(source, "data/home.txt"), "backed-up home");
+    prepare(source);
+    execFileSync("/usr/bin/tar", [
+      "-czf",
+      path.join(f.checkout, "backups/example/homes.tgz"),
+      "-C",
+      source,
+      "data",
+    ]);
+  }
+
+  it("preserves the union of snapshot and later revocations without replacing installation keys", () => {
+    const f = restoreFixture();
+    snapshotData(f, (source) => {
+      write(path.join(source, journal, revokedId(1)), "revoked\n");
+      write(path.join(source, "data/identity/installation.json"), "snapshot identity");
+    });
+    write(path.join(f.checkout, journal, revokedId(2)), "revoked\n");
+    write(path.join(f.checkout, "data/identity/installation.json"), "current identity");
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+    expect(result.status, result.stderr).toBe(0);
+    for (const id of [revokedId(1), revokedId(2)]) {
+      const marker = path.join(f.checkout, journal, id);
+      expect(readFileSync(marker, "utf8")).toBe("revoked\n");
+      expect(statSync(marker).mode & 0o777).toBe(0o600);
+    }
+    expect(statSync(path.join(f.checkout, journal)).mode & 0o777).toBe(0o700);
+    expect(readFileSync(path.join(f.checkout, "data/identity/installation.json"), "utf8")).toBe(
+      "snapshot identity",
+    );
+    const rollback = readdirSync(f.checkout).find((name) => name.startsWith("data.rollback."))!;
+    expect(readFileSync(path.join(f.checkout, rollback, journal, revokedId(2)), "utf8")).toBe(
+      "revoked\n",
+    );
+    expect(
+      readFileSync(path.join(f.checkout, rollback, "data/identity/installation.json"), "utf8"),
+    ).toBe("current identity");
+  });
+
+  it("includes a revocation received after archive staging and before the writers stop", () => {
+    const f = restoreFixture();
+    const marker = path.join(f.checkout, journal, revokedId(3));
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")], {
+      LIVE_REVOCATION_PATH: marker,
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(readFileSync(marker, "utf8")).toBe("revoked\n");
+  });
+
+  it.skipIf(process.getuid?.() !== 0)(
+    "keeps the recovered journal readable and writable by the runtime user",
+    () => {
+      const f = restoreFixture();
+      const marker = path.join(f.checkout, journal, revokedId(1));
+      write(marker, "revoked\n");
+      for (const file of [
+        path.join(f.checkout, "data/identity"),
+        path.join(f.checkout, journal),
+        marker,
+      ])
+        chownSync(file, 1000, 1000);
+      const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+      expect(result.status, result.stderr).toBe(0);
+      const directory = path.join(f.checkout, journal);
+      const barrier = readdirSync(directory).find((name) => name.startsWith(".restore-required."))!;
+      for (const file of [directory, marker, path.join(directory, barrier)]) {
+        expect(statSync(file).uid).toBe(1000);
+        expect(statSync(file).gid).toBe(1000);
+      }
+      chmodSync(f.root, 0o755);
+      chmodSync(f.checkout, 0o755);
+      const reading = spawnSync(
+        process.execPath,
+        [
+          "-e",
+          `
+      const fs = require("node:fs"), path = require("node:path");
+      const [journal, marker, barrier, next] = process.argv.slice(1);
+      if (fs.readFileSync(marker, "utf8") !== "revoked\\n" || fs.readFileSync(barrier, "utf8") !== "pending\\n") process.exit(1);
+      fs.writeFileSync(path.join(journal, next), "revoked\\n", { mode: 0o600 });
+    `,
+          directory,
+          marker,
+          path.join(directory, barrier),
+          revokedId(2),
+        ],
+        { uid: 1000, gid: 1000, encoding: "utf8" },
+      );
+      expect(reading.status, reading.stderr).toBe(0);
+    },
+  );
+
+  it.each(["live", "snapshot"])(
+    "refuses corrupt %s revocations before restoring the database",
+    (side) => {
+      const f = restoreFixture();
+      const prepare = (root: string) =>
+        write(path.join(root, journal, revokedId(1)), "revoked\n\n");
+      if (side === "live") prepare(f.checkout);
+      else snapshotData(f, prepare);
+      const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain("personal revocation marker is unreadable");
+      expect(existsSync(f.env.SQL_INPUT)).toBe(false);
+      expect(f.serviceStates()).toEqual(stoppedWriters);
+      expect(readFileSync(path.join(f.checkout, "data/home.txt"), "utf8")).toBe("current home");
+    },
+  );
+
+  it.each(
+    ["live", "snapshot"].flatMap((side) =>
+      ["identity", "personal-revocations", "marker"].map((kind) => ({ side, kind })),
+    ),
+  )("refuses a linked revocation $kind in $side data", ({ side, kind }) => {
+    const f = restoreFixture();
+    const outside = path.join(f.root, "outside");
+    write(path.join(outside, "keep.txt"), "outside data");
+    const prepare = (source: string) => {
+      const destination =
+        kind === "identity"
+          ? path.join(source, "data/identity")
+          : kind === "personal-revocations"
+            ? path.join(source, journal)
+            : path.join(source, journal, revokedId(1));
+      mkdirSync(path.dirname(destination), { recursive: true });
+      symlinkSync(kind === "marker" ? path.join(outside, "keep.txt") : outside, destination);
+    };
+    if (side === "snapshot") snapshotData(f, prepare);
+    else prepare(f.checkout);
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+    expect(result.status).not.toBe(0);
+    expect(existsSync(f.env.SQL_INPUT)).toBe(false);
+    expect(readFileSync(path.join(outside, "keep.txt"), "utf8")).toBe("outside data");
+  });
+
+  it.each(["directory", "fifo", "invalid name"])(
+    "refuses a revocation %s without reading it",
+    (kind) => {
+      const f = restoreFixture();
+      const entry = path.join(
+        f.checkout,
+        journal,
+        kind === "invalid name" ? ".unexpected" : revokedId(1),
+      );
+      mkdirSync(path.dirname(entry), { recursive: true });
+      if (kind === "directory") mkdirSync(entry);
+      else if (kind === "fifo") execFileSync("mkfifo", [entry]);
+      else write(entry, "revoked\n");
+      const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+      expect(result.status).not.toBe(0);
+      expect(existsSync(f.env.SQL_INPUT)).toBe(false);
+      expect(f.serviceStates()).toEqual(stoppedWriters);
+    },
+  );
+
+  it("leaves the live journal intact when database restoration fails", () => {
+    const f = restoreFixture();
+    const marker = path.join(f.checkout, journal, revokedId(4));
+    write(marker, "revoked\n");
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")], {
+      FAIL_SQL: "1",
+    });
+    expect(result.status).toBe(3);
+    expect(readFileSync(marker, "utf8")).toBe("revoked\n");
+    expect(readdirSync(f.checkout).some((name) => name.startsWith("data.rollback."))).toBe(false);
+    expect(f.serviceStates()).toEqual(stoppedWriters);
+  });
+
+  it.each(["missing", "omitted"])("validates revocations before SQL when homes are %s", (kind) => {
+    const f = restoreFixture();
+    const archive = path.join(f.checkout, "backups/example/homes.tgz");
+    if (kind === "missing") rmSync(archive);
+    else execFileSync("/usr/bin/tar", ["-czf", archive, "--files-from", "/dev/null"]);
+    write(path.join(f.checkout, journal, revokedId(1)), "corrupted");
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+    expect(result.status).not.toBe(0);
+    expect(existsSync(f.env.SQL_INPUT)).toBe(false);
+    expect(f.serviceStates()).toEqual(stoppedWriters);
+  });
+
+  it("ignores an unfinished atomic marker while retaining completed revocations", () => {
+    const f = restoreFixture();
+    write(path.join(f.checkout, journal, revokedId(1)), "revoked\n");
+    write(path.join(f.checkout, journal, `${revokedId(2)}.${revokedId(3)}.tmp`), "revo");
+    const result = f.run("scripts/restore.sh", [path.join(f.checkout, "backups/example")]);
+    expect(result.status, result.stderr).toBe(0);
+    const entries = readdirSync(path.join(f.checkout, journal));
+    expect(entries.filter((name) => !name.startsWith(".restore-required."))).toEqual([
+      revokedId(1),
+    ]);
+    expect(entries.filter((name) => name.startsWith(".restore-required."))).toHaveLength(1);
+  });
+
   it.each([false, true])(
     "restores files and starts services only after SQL succeeds: %s",
     (fail) => {
@@ -666,7 +875,7 @@ PATH=/usr/bin:/bin exec mv "$@"
     expect(result.status, result.stderr).toBe(0);
     expect(readFileSync(f.env.SQL_INPUT, "utf8")).toContain("CREATE TABLE example");
     if (kind === "empty data") {
-      expect(readdirSync(path.join(f.checkout, "data"))).toEqual([]);
+      expect(readdirSync(path.join(f.checkout, "data"))).toEqual(["identity"]);
       const rollback = readdirSync(f.checkout).find((name) => name.startsWith("data.rollback."));
       expect(rollback).toBeDefined();
       expect(readFileSync(path.join(f.checkout, rollback!, "data/home.txt"), "utf8")).toBe(

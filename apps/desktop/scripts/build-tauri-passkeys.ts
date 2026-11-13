@@ -6,6 +6,7 @@ import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PASSKEY_RP_ID, passkeyEntitlements } from "../src/passkeys.js";
+import { configuredPersonalIdentity, signingKeychain } from "./macos-build-keychain.ts";
 
 type Profile = {
   team: unknown;
@@ -72,85 +73,114 @@ function checkedOutput(command: string, args: string[], input?: string, timeout 
 
 export function buildTauri(args: string[]) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-  const profile = process.env.PASSKEY_PROFILE?.trim();
+  const personal = configuredPersonalIdentity(args, root);
+  const passkeys = process.env.PASSKEY_PROFILE?.trim();
+  const profile = passkeys || personal?.profile;
   const extra: string[] = [];
-  if (profile) {
-    if (process.platform !== "darwin") throw new Error("Passkey profiles require a macOS build.");
-    const identity = process.env.APPLE_SIGNING_IDENTITY?.trim();
-    if (!identity || identity === "-" || args.includes("--no-sign"))
-      throw new Error("A passkey build requires an Apple signing identity.");
-    const config = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"));
-    const decoded = checkedOutput("/usr/bin/security", ["cms", "-D", "-i", path.resolve(profile)]);
-    const extract = (key: string, format: string) =>
-      checkedOutput("/usr/bin/plutil", ["-extract", key, format, "-o", "-", "-"], decoded).trim();
-    const developerMode = process.env.ORKBOT_PASSKEY_DEVELOPER_MODE === "1";
-    const team = validatePasskeyProfile(
-      {
-        team: JSON.parse(extract("TeamIdentifier", "json")),
-        expires: extract("ExpirationDate", "raw"),
-        entitlements: JSON.parse(extract("Entitlements", "json")),
-      },
-      config.identifier,
-      PASSKEY_RP_ID,
-      developerMode,
-    );
-    const base = readFileSync(path.join(root, "src-tauri/Entitlements.plist"), "utf8");
-    const entitlements = passkeyEntitlements(base, team, config.identifier, { developerMode });
-    // Prepare first, then sign a separate copy. Tauri otherwise gives every sidecar the app's entitlements.
-    checkedOutput(
-      process.execPath,
-      [path.join(root, "scripts/prepare-tauri.mjs")],
-      undefined,
-      120_000,
-    );
-    const output = path.join(root, "build/tauri-passkeys");
-    mkdirSync(output, { recursive: true, mode: 0o700 });
-    const entitlementPath = path.join(output, "Entitlements.plist");
-    const profilePath = path.join(output, "embedded.provisionprofile");
-    const helperPath = path.join(output, "orkbot-speech");
-    writeFileSync(entitlementPath, entitlements, { mode: 0o600 });
-    copyFileSync(path.resolve(profile), profilePath);
-    copyFileSync(path.join(root, "build/tauri-native/orkbot-speech"), helperPath);
-    checkedOutput(
-      "/usr/bin/codesign",
-      [
-        "--force",
-        "--sign",
-        identity,
-        "--options",
-        "runtime",
-        "--timestamp",
-        "--entitlements",
-        path.join(root, "src-tauri/Entitlements.plist"),
+  const cleanup =
+    profile && process.platform === "darwin"
+      ? signingKeychain(process.env, (command, args) =>
+          checkedOutput(command, args, undefined, 60_000),
+        )
+      : undefined;
+  try {
+    if (profile) {
+      if (process.platform !== "darwin") throw new Error("Passkey profiles require a macOS build.");
+      const identity = process.env.APPLE_SIGNING_IDENTITY?.trim();
+      if (!identity || identity === "-" || args.includes("--no-sign"))
+        throw new Error("A passkey build requires an Apple signing identity.");
+      const config = JSON.parse(readFileSync(path.join(root, "src-tauri/tauri.conf.json"), "utf8"));
+      const decoded = checkedOutput("/usr/bin/security", [
+        "cms",
+        "-D",
+        "-i",
+        path.resolve(profile),
+      ]);
+      const extract = (key: string, format: string) =>
+        checkedOutput("/usr/bin/plutil", ["-extract", key, format, "-o", "-", "-"], decoded).trim();
+      const developerMode = process.env.ORKBOT_PASSKEY_DEVELOPER_MODE === "1";
+      const team = passkeys
+        ? validatePasskeyProfile(
+            {
+              team: JSON.parse(extract("TeamIdentifier", "json")),
+              expires: extract("ExpirationDate", "raw"),
+              entitlements: JSON.parse(extract("Entitlements", "json")),
+            },
+            config.identifier,
+            PASSKEY_RP_ID,
+            developerMode,
+          )
+        : JSON.parse(extract("TeamIdentifier", "json"))[0];
+      if (typeof team !== "string" || !/^[A-Z0-9]{10}$/.test(team))
+        throw new Error("Invalid macOS signing team.");
+      const base = readFileSync(path.join(root, "src-tauri/Entitlements.plist"), "utf8");
+      const entitlements = passkeys
+        ? passkeyEntitlements(base, team, config.identifier, { developerMode })
+        : readFileSync(personal!.entitlements, "utf8");
+      // Prepare first, then sign a separate copy. Tauri otherwise gives every sidecar the app's entitlements.
+      checkedOutput(
+        process.execPath,
+        [path.join(root, "scripts/prepare-tauri.mjs")],
+        undefined,
+        120_000,
+      );
+      const output = path.join(root, "build/tauri-passkeys");
+      mkdirSync(output, { recursive: true, mode: 0o700 });
+      const entitlementPath = path.join(output, "Entitlements.plist");
+      const profilePath = path.join(output, "embedded.provisionprofile");
+      const helperPath = path.join(output, "orkbot-speech");
+      writeFileSync(entitlementPath, entitlements, { mode: 0o600 });
+      copyFileSync(path.resolve(profile), profilePath);
+      copyFileSync(path.join(root, "build/tauri-native/orkbot-speech"), helperPath);
+      checkedOutput(
+        "/usr/bin/codesign",
+        [
+          "--force",
+          "--sign",
+          identity,
+          "--options",
+          "runtime",
+          "--timestamp",
+          "--entitlements",
+          path.join(root, "src-tauri/Entitlements.plist"),
+          helperPath,
+        ],
+        undefined,
+        120_000,
+      );
+      checkedOutput("/usr/bin/codesign", [
+        "--verify",
+        "--strict",
+        "--test-requirement",
+        `=anchor apple generic and certificate leaf[subject.OU] = "${team}"`,
         helperPath,
-      ],
-      undefined,
-      120_000,
+      ]);
+      // Pass an overlay only for this invocation. Default builds never load stale signing files.
+      extra.push(
+        "--config",
+        JSON.stringify(passkeyBundleConfig(entitlementPath, profilePath, helperPath)),
+      );
+    }
+    const entry = process.env.npm_execpath;
+    const useEntry = entry && path.isAbsolute(entry);
+    const environment = { ...process.env };
+    if (cleanup) {
+      delete environment.APPLE_CERTIFICATE;
+      delete environment.APPLE_CERTIFICATE_PASSWORD;
+    }
+    const result = spawnSync(
+      useEntry ? process.execPath : "pnpm",
+      [...(useEntry ? [entry] : []), "exec", "tauri", "build", ...args, ...extra],
+      {
+        cwd: root,
+        stdio: "inherit",
+        env: environment,
+      },
     );
-    checkedOutput("/usr/bin/codesign", [
-      "--verify",
-      "--strict",
-      "--test-requirement",
-      `=anchor apple generic and certificate leaf[subject.OU] = "${team}"`,
-      helperPath,
-    ]);
-    // Pass an overlay only for this invocation. Default builds never load stale signing files.
-    extra.push(
-      "--config",
-      JSON.stringify(passkeyBundleConfig(entitlementPath, profilePath, helperPath)),
-    );
+    if (result.error || result.status !== 0) throw new Error("The Tauri build failed.");
+  } finally {
+    cleanup?.();
   }
-  const entry = process.env.npm_execpath;
-  const useEntry = entry && path.isAbsolute(entry);
-  const result = spawnSync(
-    useEntry ? process.execPath : "pnpm",
-    [...(useEntry ? [entry] : []), "exec", "tauri", "build", ...args, ...extra],
-    {
-      cwd: root,
-      stdio: "inherit",
-    },
-  );
-  if (result.error || result.status !== 0) throw new Error("The Tauri build failed.");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

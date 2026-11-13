@@ -103,6 +103,11 @@ import {
   useTrustedLinkSites,
 } from "../lib/trusted-link-sites";
 import { startUnsentSends } from "../lib/unsent-sends";
+import type { WorkspaceNavigationReset } from "../lib/workspace-navigation-reset";
+import {
+  captureWorkspaceNavigationReset,
+  useWorkspaceNavigationReset,
+} from "../lib/workspace-navigation-reset";
 import { InboxPane } from "./index";
 
 // Before anything renders: text grows with the iOS text size only up to a fixed maximum.
@@ -275,7 +280,13 @@ function ChatContentProviders({
 
 export const unstable_settings = { anchor: "index" };
 
-function LayoutContent() {
+function LayoutContent({
+  navigationReset,
+  completeNavigationReset,
+}: {
+  navigationReset: WorkspaceNavigationReset | null;
+  completeNavigationReset: (pending: WorkspaceNavigationReset) => void;
+}) {
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
   // Beside the list a chat swaps in place, the way it does when picked from a sidebar.
@@ -283,6 +294,11 @@ function LayoutContent() {
   const canInvite = Boolean(useReferral());
   const chatAnimation = split ? "none" : undefined;
   const [ready, setReady] = useState(false);
+  const resettingWorkspace = useWorkspaceNavigationReset(
+    navigationReset,
+    ready,
+    completeNavigationReset,
+  );
   useNotificationResponses(ready);
   const callSession = useSyncExternalStore(
     subscribeSessionGeneration,
@@ -380,7 +396,10 @@ function LayoutContent() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView
+      style={{ flex: 1, opacity: resettingWorkspace ? 0 : 1 }}
+      pointerEvents={resettingWorkspace ? "none" : "auto"}
+    >
       <KeyboardProvider>
         {ready ? (
           <ChatContentProviders loadRemoteImages={loadRemoteImages}>
@@ -574,10 +593,20 @@ function LayoutContent() {
 }
 
 export default function Layout() {
+  const route = JSON.stringify([usePathname(), useGlobalSearchParams()]);
+  const [navigationReset, setNavigationReset] = useState<WorkspaceNavigationReset | null>(null);
+  const completeNavigationReset = useCallback((completed: WorkspaceNavigationReset) => {
+    setNavigationReset((current) => (current === completed ? null : current));
+  }, []);
   return (
     <AppErrorBoundary>
-      <AccountsGate>
-        <LayoutContent />
+      <AccountsGate
+        onWorkspaceSelected={() => setNavigationReset(captureWorkspaceNavigationReset(route))}
+      >
+        <LayoutContent
+          navigationReset={navigationReset}
+          completeNavigationReset={completeNavigationReset}
+        />
       </AccountsGate>
     </AppErrorBoundary>
   );

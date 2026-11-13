@@ -221,7 +221,17 @@ final class IncomingCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate,
     savedSession()?.headers["authorization"]?.isEmpty == false
   }
   private func decline(_ call: [String: String]) {
-    guard expiry(call) > Date(), let saved = savedSession(),
+    guard expiry(call) > Date(), let saved = savedSession() else { return }
+    if NotificationRequests.isReservedEndpoint(saved.base) {
+      let task = UIApplication.shared.beginBackgroundTask(expirationHandler: nil)
+      NotificationRequests.shared.decline(endpoint: saved.base,
+        token: saved.headers["authorization"]?.replacingOccurrences(of: "Bearer ", with: "", options: [.anchored]) ?? "",
+        callId: call["callId"] ?? "") { _ in
+          DispatchQueue.main.async { if task != .invalid { UIApplication.shared.endBackgroundTask(task) } }
+        }
+      return
+    }
+    guard
       let url = URL(string: saved.base.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/rpc/notifications/declineIncomingCall")
     else { return }
     var request = URLRequest(url: url)
@@ -243,9 +253,25 @@ final class IncomingCalls: NSObject, PKPushRegistryDelegate, CXProviderDelegate,
 
 public class OrkNotificationsModule: Module {
   private var observer: NSObjectProtocol?
+  private var requestDispatcher: UUID?
   public func definition() -> ModuleDefinition {
     Name("OrkNotifications")
-    Events("onIncomingCallChanged")
+    Events("onIncomingCallChanged", "onBackgroundRequest")
+    OnCreate {
+      self.requestDispatcher = NotificationRequests.shared.install { [weak self] request in
+        self?.sendEvent("onBackgroundRequest", request)
+      }
+    }
+    OnDestroy {
+      if let id = self.requestDispatcher { NotificationRequests.shared.uninstall(id) }
+    }
+    AsyncFunction("configureBackgroundSession") { (scope: String, endpoint: String, token: String, space: String) in
+      try NotificationRequests.shared.configure(scope, endpoint: endpoint, token: token, space: space)
+    }
+    AsyncFunction("respondBackgroundRequest") { (id: String, scope: String, status: Int, body: String) in
+      try NotificationRequests.shared.reply(id, scope: scope, status: status, body: body)
+    }
+    AsyncFunction("clearBackgroundSessions") { NotificationRequests.shared.clear() }
     OnStartObserving {
       self.observer = NotificationCenter.default.addObserver(forName: IncomingCalls.changed, object: nil, queue: .main) { [weak self] _ in
         self?.sendEvent("onIncomingCallChanged", [:])

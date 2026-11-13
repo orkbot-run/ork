@@ -77,6 +77,11 @@ pass for the same revision. Installed apps check hourly and
 download new versions automatically, then ask before restarting to install them.
 macOS publication requires Developer ID signing, notarization and Gatekeeper checks.
 Configure the six Apple signing secrets listed in the desktop release guide.
+The signing API credential must manage the app's macOS bundle identifier and
+Developer ID provisioning profiles. The workflow reuses a matching active profile
+or creates one, verifies its certificate and app-specific keychain entitlement,
+then embeds it in the app. A manual run also builds a signed app and exercises its
+personal device key inside the OS credential store. This check publishes no release.
 Platform signing uses separate keys. See [Desktop releases](desktop-release.md)
 for setup, first installation and verification limits.
 

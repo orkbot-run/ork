@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { FakeSandboxProvider } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { runAsSystem } from "@orkbot/db";
 import { expect, it } from "vitest";
 import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
@@ -48,7 +49,12 @@ it.skipIf(!databaseUrl).each([
     for (const procedure of ["me", "bootstrap"]) {
       const response = await handles.app.request(`/rpc/${procedure}`, {
         method: "POST",
-        headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          "content-type": "application/json",
+          cookie,
+          origin: "http://127.0.0.1:5173",
+        },
         body: JSON.stringify({ json: {} }),
       });
       expect(response.status).toBe(200);

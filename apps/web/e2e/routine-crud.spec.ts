@@ -20,6 +20,36 @@ async function addScheduleTrigger(page: Page, freq: string) {
   await page.getByRole("menuitem", { name: freq, exact: true }).click();
 }
 
+test("webhook addresses use the configured installation origin", async ({ page }, testInfo) => {
+  await signup(page, `routine-origin-${Date.now()}@orkbot.test`, "password12", "Routine origin");
+  await completeOnboarding(page);
+  const botId = activeBotId(page);
+  await rpc(page, "routines/create", {
+    botId,
+    name: "Webhook report",
+    prompt: "Prepare the report.",
+    crons: [],
+    timezone: "UTC",
+    active: false,
+    webhookEnabled: true,
+  });
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.json.me.serverOrigin = "https://installation.example.test";
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  await openBotPanelTab(page, "Routines");
+  await page.getByRole("button", { name: /Webhook report/ }).click();
+  await expect(
+    page.getByText(`https://installation.example.test/api/v1/bots/${botId}/webhook`, {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "routine-installation-webhook-address");
+});
+
 test("a delayed schedule is visible only while the routine is active", async ({
   page,
 }, testInfo) => {

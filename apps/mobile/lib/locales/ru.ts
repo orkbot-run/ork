@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const RU_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "Подключено, но обновить не удалось",
+
+  "Access required": "Требуется доступ",
+  "Add AI account": "Добавить аккаунт ИИ",
+  "Allowed models": "Разрешенные модели",
+  "Choose at least one model and enter valid limits.":
+    "Выберите хотя бы одну модель и укажите допустимые лимиты.",
+  "Choose organization": "Выберите организацию",
+  "Complete sign-in": "Завершить вход",
+  "Concurrent requests": "Одновременные запросы",
+  "Default model": "Модель по умолчанию",
+  "Default organization": "Организация по умолчанию",
+  "Disable account": "Отключить аккаунт",
+  "Edit AI account": "Изменить аккаунт ИИ",
+  Enabled: "Включено",
+  "Enter a valid budget.": "Укажите допустимый бюджет.",
+  Fallback: "Резервное подключение",
+  "Fallback priority": "Приоритет резервного подключения",
+  "Make available": "Предоставить доступ",
+  "Models and limits": "Модели и лимиты",
+  "Monthly budget (USD)": "Месячный бюджет (USD)",
+  "No AI accounts assigned": "Аккаунты ИИ не назначены",
+  "No available workspaces": "Нет доступных рабочих пространств",
+  "No servers connected": "Нет подключенных серверов",
+  "Open sign-in page": "Открыть страницу входа",
+  "Preparing workspace": "Подготовка рабочего пространства",
+  "Remove from workspace": "Удалить из рабочего пространства",
+  "Save budget": "Сохранить бюджет",
+  "Server accounts": "Аккаунты сервера",
+  "Server unavailable": "Сервер недоступен",
+  "Set as default organization": "Сделать организацией по умолчанию",
+  Unlimited: "Без ограничений",
+  "Verification code": "Код подтверждения",
+  Workspace: "Рабочее пространство",
+  "Workspace monthly budget (USD)": "Месячный бюджет рабочего пространства (USD)",
+  "Workspace unavailable": "Рабочее пространство недоступно",
+
   "API URL": "Адрес API",
   "Choose a provider": "Выберите поставщика",
   "Choose one model and API key for everyone in this workspace.":

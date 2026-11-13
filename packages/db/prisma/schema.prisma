@@ -26,6 +26,8 @@ model AiDataConsent {
 }
 
 model User {
+  centralWorkspaceAccess CentralWorkspaceAccess[]
+  personalWorkspaceDevices PersonalWorkspaceDevice[]
   threadSnoozes ThreadSnooze[]
   serverUpdateConsents ServerUpdateControl[]
   aiDataConsents AiDataConsent[]
@@ -114,6 +116,7 @@ model SignupSurvey {
 }
 
 model Session {
+  centralBinding       CentralSessionBinding?
   id                   String   @id
   expiresAt            DateTime
   token                String
@@ -280,6 +283,7 @@ model Organization {
   referredBy   Referral?           @relation("ReferredOrganization")
   referrals    Referral[]          @relation("ReferrerOrganization")
   modelPolicy  WorkspaceModelPolicy?
+  serverAIConnections ServerAIConnection[]
 
   @@unique([slug])
   @@map("organization")
@@ -449,6 +453,10 @@ model Member {
 }
 
 model Space {
+  aiConnections WorkspaceAIConnection[]
+  aiPolicy AIWorkspacePolicy?
+  aiUsageReservations AIUsageReservation[]
+  centralBinding             CentralWorkspaceBinding?
   aiDataConsents              AiDataConsent[]
   id                          String                       @id
   organizationId              String
@@ -804,6 +812,7 @@ model Bot {
   autoSpeak         Boolean           @default(false)
   modelProvider     String?
   modelId           String?
+  modelConnectionId String?
   thinkingLevel     String?
   disabledBuiltinTools String[] @default([])
   webhookSecretId   String?
@@ -1047,6 +1056,7 @@ model Run {
   trigger              String
   modelProvider        String?
   modelId              String?
+  modelConnectionId    String?
   thinkingLevel        String?
   // True when these columns are the model the run must keep. A later attempt
   // may record the model it used in the same columns without setting this.
@@ -1059,6 +1069,9 @@ model Run {
   /// Minimum execution reader protocol; monotonic so older workers cannot replay newer effects.
   replyMode            String            @default("chat")
   requiredReaderVersion Int              @default(0)
+  personalDeviceId String?
+  centralWorkspaceId   String?
+  workspaceMembershipVersion String?
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
@@ -2505,4 +2518,198 @@ model ServerUpdateRequest {
   @@index([installationId, createdAt])
   @@index([installationId, revision])
   @@map("server_update_requests")
+}
+
+/// Installation keys and central authority snapshots are available only in a system context.
+model InstallationIdentity {
+  id String @id @default("local")
+  issuer String
+  publicKey String
+  privateKeyCipher String
+  keyFingerprint String
+  operationId String
+  challenge String
+  requestedOrganizationId String?
+  localOrganizationId String?
+  enrollmentGrantId String?
+  enrollmentId String?
+  receiptCipher String?
+  serverId String?
+  centralOrganizationId String?
+  bindingVersion Int @default(1)
+  state String @default("unregistered")
+  projectionGrant String?
+  verifiedAt DateTime?
+  validUntil DateTime?
+  transportOwnerId String?
+  transportLeaseUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("installation_identity")
+}
+
+/// The operator's explicit mapping preserves the existing local organization and space IDs.
+model CentralWorkspaceBinding {
+  id String @id
+  serverId String
+  centralOrganizationId String
+  localOrganizationId String
+  spaceId String @unique
+  space Space @relation(fields: [spaceId, localOrganizationId], references: [id, organizationId], onDelete: Restrict)
+  operationId String @unique
+  bindingVersion Int
+  permissionVersion Int
+  state String
+  members Json
+  verifiedAt DateTime
+  validUntil DateTime
+  sessions CentralSessionBinding[]
+  accessEntries CentralWorkspaceAccess[]
+  personalDevices PersonalWorkspaceDevice[]
+
+  @@unique([spaceId, localOrganizationId])
+  @@map("central_workspace_bindings")
+}
+
+/// Each native product session is scoped to one exact central workspace and admission revision.
+model CentralSessionBinding {
+  sessionId String @id
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace CentralWorkspaceBinding @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  centralSubject String
+  membershipVersion String
+  personalDeviceId String?
+  personalDevice PersonalWorkspaceDevice? @relation(fields: [personalDeviceId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  createdAt DateTime @default(now())
+
+  @@index([workspaceId, centralSubject])
+  @@map("central_session_bindings")
+}
+
+/// Keep local settings while central authority disables an assignment.
+model CentralWorkspaceAccess {
+  workspaceId String
+  workspace CentralWorkspaceBinding @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  centralSubject String
+  role String
+  membershipVersion String
+  active Boolean @default(true)
+
+  @@id([workspaceId, userId])
+  @@map("central_workspace_access")
+}
+
+
+/// Explicit operator delegation, scoped to the installation binding that granted it.
+model AIConnectionAdministrator {
+  accountKey String @id
+  bindingVersion Int
+  createdAt DateTime @default(now())
+  @@map("ai_connection_administrators")
+}
+
+/// Provider accounts and encrypted credential references stay on this installation.
+model ServerAIConnection {
+  id String @id @default(uuid())
+  localOrganizationId String
+  organization Organization @relation(fields: [localOrganizationId], references: [id], onDelete: Cascade)
+  label String
+  provider String
+  models Json
+  secretId String
+  secretRef String
+  state String @default("active")
+  revision Int @default(1)
+  credentialVersion Int @default(1)
+  concurrencyLimit Int @default(8)
+  monthlyBudgetMicros BigInt?
+  blockedUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  workspaces WorkspaceAIConnection[]
+  reservations AIUsageReservation[]
+  @@index([localOrganizationId, state])
+  @@map("server_ai_connections")
+}
+
+/// Server administrators offer accounts; workspace administrators enable a permitted subset.
+model WorkspaceAIConnection {
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  connectionId String
+  connection ServerAIConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  available Boolean @default(true)
+  enabled Boolean @default(false)
+  allowedModels Json
+  defaultModelId String?
+  isDefault Boolean @default(false)
+  fallback Boolean @default(false)
+  priority Int @default(0)
+  revision Int @default(1)
+  bindingVersion Int
+  monthlyBudgetMicros BigInt?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@id([spaceId, connectionId])
+  @@map("workspace_ai_connections")
+}
+
+model AIWorkspacePolicy {
+  spaceId String @id
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  monthlyBudgetMicros BigInt?
+  revision Int @default(1)
+  @@map("ai_workspace_policies")
+}
+
+/// Unknown provider spend remains reserved after a worker disappears until reconciled.
+model AIUsageReservation {
+  operationId String @id
+  connectionId String
+  connection ServerAIConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  modelId String
+  userId String
+  runId String?
+  period String
+  reservedMicros BigInt
+  estimateKnown Boolean @default(true)
+  chargedMicros BigInt?
+  accountRevision Int
+  assignmentRevision Int
+  bindingVersion Int
+  leaseUntil DateTime
+  completedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([connectionId, period])
+  @@index([spaceId, period])
+  @@index([connectionId, completedAt, leaseUntil])
+  @@map("ai_usage_reservations")
+}
+
+/// A centrally activated personal credential requires the device key on every offline login.
+model PersonalWorkspaceDevice {
+  id String @id
+  workspaceId String
+  workspace CentralWorkspaceBinding @relation(fields: [workspaceId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  centralSubject String
+  membershipVersion String
+  registryVersion Int
+  permissionVersion Int
+  bindingVersion Int
+  keyFingerprint String
+  publicKey String
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  sessions CentralSessionBinding[]
+
+  @@index([workspaceId, userId])
+  @@map("personal_workspace_devices")
 }

@@ -10,6 +10,8 @@ import {
   credentialForModel,
   filterModelChoices,
   groupModelChoices,
+  modelOptionKey,
+  parseModelOptionKey,
   pickCatalogModelId,
   popularModelProvidersFirst,
   resolveSelectableModelId,
@@ -556,5 +558,56 @@ describe("connectionMaxTokensField", () => {
     expect(connectionMaxTokensField("openai-compatible", 8_000)).toBe("8000");
     expect(connectionMaxTokensField("anthropic", undefined)).toBe("");
     expect(connectionMaxTokensField("anthropic", 2_000)).toBe("2000");
+  });
+});
+
+describe("installation account model choices", () => {
+  it("keeps two accounts for the same model distinct and round trips delimiter characters", () => {
+    const credentials = ["one", "two"].map((id) => ({
+      id,
+      managed: true,
+      provider: "openai",
+      label: id,
+      enabledModelIds: ["model::a"],
+    }));
+    const choices = connectedModelChoices(credentials, [
+      { managed: true, provider: "openai", id: "model::a", label: "Model" },
+    ]);
+    expect(choices).toHaveLength(2);
+    expect(new Set(choices.map((row) => row.key)).size).toBe(2);
+    for (const [i, row] of choices.entries())
+      expect(parseModelOptionKey(row.key)).toEqual({
+        provider: "openai",
+        modelId: "model::a",
+        connectionId: credentials[i]!.id,
+      });
+    expect(modelOptionKey("openai", "model::a")).toBe("openai::model::a");
+    expect(parseModelOptionKey("openai::model::a")).toEqual({
+      provider: "openai",
+      modelId: "model::a",
+    });
+  });
+  it("rejects malformed account keys and never offers a retired model from stale metadata", () => {
+    for (const key of [
+      "connection:null",
+      'connection:["openai","model"]',
+      'connection:["openai","model",""]',
+      'connection:["openai","model",{}]',
+    ])
+      expect(parseModelOptionKey(key)).toBeNull();
+    expect(
+      connectedModelChoices(
+        [
+          {
+            id: "one",
+            managed: true,
+            provider: "openai",
+            label: "One",
+            enabledModelIds: ["retired"],
+          },
+        ],
+        [{ managed: true, provider: "openai", id: "current", label: "Current" }],
+      ),
+    ).toEqual([]);
   });
 });

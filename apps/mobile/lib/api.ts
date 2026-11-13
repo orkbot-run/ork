@@ -74,6 +74,10 @@ import {
 } from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
 import { identityLabels } from "./identity-display";
+import {
+  installationRevocationScope,
+  invalidateInstallationTransport,
+} from "./installation-transport";
 import { resumeLiveNotifications } from "./live-notifications";
 import {
   beginMobileAvatarFeed,
@@ -193,6 +197,15 @@ export function currentApiBase() {
   const parsed = normalizeApiBase(cachedApiBase ?? defaultApiBase());
   if (!parsed.ok) throw new Error(parsed.error);
   return parsed.url;
+}
+
+/** Public scope only. Native images and input must retire when this identity changes. */
+export function nativeInstallationScope(): string | null {
+  const origin = currentApiBase();
+  const workspace = installationRevocationScope(origin);
+  return workspace
+    ? JSON.stringify([origin, currentSessionGeneration(), selectedSpaceId(), workspace])
+    : null;
 }
 
 export async function loadApiBase() {
@@ -429,9 +442,12 @@ export function configureSessionEndHangUp(hangUp: (() => Promise<void>) | undefi
 }
 
 /** A central account change must never restore the previous product identity. */
-export async function clearProductAccountSession(): Promise<void> {
+export async function clearProductAccountSession(
+  reason: "account_switch" | "workspace_switch" = "account_switch",
+): Promise<void> {
   await hangUpBeforeCredentialsCleared?.().catch(() => undefined);
-  const cleared = await clearSessionToken("account_switch");
+  invalidateInstallationTransport();
+  const cleared = await clearSessionToken(reason);
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();
   const storage = await Promise.all([
@@ -444,7 +460,9 @@ export async function clearProductAccountSession(): Promise<void> {
 }
 
 /** Clears session + space for an endpoint change. Restores both if either wipe fails. */
-async function clearCredentialsForEndpointChange(): Promise<
+async function clearCredentialsForEndpointChange(
+  reason: "account_switch" | "workspace_switch" = "account_switch",
+): Promise<
   | {
       ok: true;
       previousToken: string;
@@ -471,7 +489,7 @@ async function clearCredentialsForEndpointChange(): Promise<
       result: { ok: false, error: t("Could not clear the previous server session") },
     };
   }
-  const sessionCleared = await clearSessionToken("account_switch");
+  const sessionCleared = await clearSessionToken(reason);
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();
   const spaceCleared = await clearStoredValue(SPACE_KEY);
@@ -549,6 +567,7 @@ async function recoverSpaceRollback(apiBase: string) {
 export async function saveApiBase(
   input: string,
   headers: Record<string, string> = {},
+  reason: "account_switch" | "workspace_switch" = "account_switch",
 ): Promise<EndpointResult> {
   const parsed = normalizeApiBase(input);
   if (!parsed.ok) return parsed;
@@ -562,7 +581,7 @@ export async function saveApiBase(
       }
     | undefined;
   if (parsed.url !== previous) {
-    const result = await clearCredentialsForEndpointChange();
+    const result = await clearCredentialsForEndpointChange(reason);
     if (!result.ok) return result.result;
     cleared = result;
   }
@@ -990,10 +1009,13 @@ export async function fetchMobileJson<T>(
 export async function signOut() {
   const server = currentApiBase();
   const headers = { ...serverHeaders(server) };
+  const workspace = installationRevocationScope(server);
   // Invalidate both local identities before any network operation. Retirement reads the old
   // bearer within the credential-write queue, then persists it before deleting the live slot.
   const clearingSession = clearSessionToken("logout", (token) =>
-    queueSessionRevocation(server, token, headers),
+    workspace
+      ? queueSessionRevocation(server, token, headers, workspace)
+      : queueSessionRevocation(server, token, headers),
   );
   const clearingSpace = clearSpace();
   const clearingAccounts = signOutAccounts().then(

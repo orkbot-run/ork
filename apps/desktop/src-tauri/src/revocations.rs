@@ -24,6 +24,10 @@ const RETENTION: u64 = 7 * 24 * 60 * 60;
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) enum Target {
+    Installation {
+        selection: crate::installation_transport::Selection,
+        token: String,
+    },
     Session {
         origin: String,
         cookies: String,
@@ -46,6 +50,12 @@ struct Pending {
 impl Target {
     fn valid(&self) -> bool {
         let token = match self {
+            Self::Installation { selection, token } => {
+                if !selection.valid() {
+                    return false;
+                }
+                token
+            }
             Self::Session { origin, cookies } => {
                 if origin.len() > 4096 {
                     return false;
@@ -262,6 +272,12 @@ impl Revocations {
             };
             for record in snapshot {
                 let accepted = match &record.target {
+                    Target::Installation { selection, token } => {
+                        // Relay capabilities require a fresh matching Accounts session. Never
+                        // deliver these credentials through the ordinary HTTP logout fallback.
+                        (!selection.uses_relay() || selection.direct_origin.is_some())
+                            && selection.revoke(token, None).await
+                    }
                     Target::Session { origin, cookies } => {
                         let Ok(origin) = Url::parse(origin) else {
                             continue;
@@ -331,10 +347,89 @@ impl Revocations {
     }
 }
 
+impl Revocations {
+    /// Only the matching current Accounts identity may mint a new relay capability for a retry.
+    pub async fn flush_installations<F, Fut>(&self, account: &str, mut ticket: F)
+    where
+        F: FnMut(crate::installation_transport::Selection) -> Fut,
+        Fut: std::future::Future<Output = Result<Option<String>, String>>,
+    {
+        let snapshot = {
+            let _operation = self.coordination.operation.lock().await;
+            let Ok(pending) = self.load().await else {
+                return;
+            };
+            pending
+        };
+        for record in snapshot {
+            let Target::Installation { selection, token } = &record.target else {
+                continue;
+            };
+            if selection.account != account {
+                continue;
+            }
+            let Ok(ticket) = ticket(selection.clone()).await else {
+                continue;
+            };
+            if !selection.revoke(token, ticket).await {
+                continue;
+            }
+            let _operation = self.coordination.operation.lock().await;
+            let Ok(mut pending) = self.load().await else {
+                return;
+            };
+            pending.retain(|entry| {
+                entry.created_at != record.created_at || entry.target != record.target
+            });
+            if self.save(&pending).await.is_err() {
+                return;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::credentials::CredentialStore;
+
+    #[tokio::test]
+    async fn installation_logout_waits_for_the_matching_identity_and_keeps_failed_retries() {
+        let store = Arc::new(MemoryStore::default());
+        let queue = Revocations::new(Store(store));
+        let id = "11111111-1111-4111-8111-111111111111";
+        let selection = crate::installation_transport::Selection {
+            account: "a".repeat(64),
+            origin: format!("https://{id}.installation.ork.invalid"),
+            relay_origin: Some("https://relay.example.test".into()),
+            direct_origin: None,
+            prefer_relay: false,
+            target: crate::server_directory::WorkspaceTarget {
+                organization_id: id.into(),
+                server_id: id.into(),
+                workspace_id: id.into(),
+                binding_version: 1,
+                key_fingerprint: "b".repeat(64),
+            },
+        };
+        let target = Target::Installation {
+            selection,
+            token: "retired-product-session".into(),
+        };
+        queue.enqueue(target.clone()).await.unwrap();
+        queue
+            .flush_installations(&"c".repeat(64), |_| async {
+                panic!("another account cannot mint the capability")
+            })
+            .await;
+        assert_eq!(queue.load().await.unwrap().len(), 1);
+        queue
+            .flush_installations(&"a".repeat(64), |_| async {
+                Err("Accounts unavailable".into())
+            })
+            .await;
+        assert!(queue.load().await.unwrap()[0].target == target);
+    }
     use std::{
         collections::HashMap,
         sync::{atomic::AtomicU16, Mutex as StdMutex},

@@ -5,6 +5,7 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { sessionCookieHeader } from "../../../../../packages/testkit/src/index.js";
 import { createApp } from "../../app.js";
@@ -43,7 +44,12 @@ describePostgres("ticket board app wiring", () => {
       const call = (procedure: string) =>
         handles.app.request(`/rpc/${procedure}`, {
           method: "POST",
-          headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+          headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+            "content-type": "application/json",
+            cookie,
+            origin: "http://127.0.0.1:5173",
+          },
           body: JSON.stringify({ json: {} }),
         });
       const me = await call("me");

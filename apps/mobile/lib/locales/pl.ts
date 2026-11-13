@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const PL_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "Połączono, ale nie udało się odświeżyć",
+
+  "Access required": "Wymagany dostęp",
+  "Add AI account": "Dodaj konto AI",
+  "Allowed models": "Dozwolone modele",
+  "Choose at least one model and enter valid limits.":
+    "Wybierz co najmniej jeden model i podaj poprawne limity.",
+  "Choose organization": "Wybierz organizację",
+  "Complete sign-in": "Dokończ logowanie",
+  "Concurrent requests": "Równoczesne żądania",
+  "Default model": "Domyślny model",
+  "Default organization": "Domyślna organizacja",
+  "Disable account": "Wyłącz konto",
+  "Edit AI account": "Edytuj konto AI",
+  Enabled: "Włączone",
+  "Enter a valid budget.": "Podaj poprawny budżet.",
+  Fallback: "Połączenie zastępcze",
+  "Fallback priority": "Priorytet połączenia zastępczego",
+  "Make available": "Udostępnij",
+  "Models and limits": "Modele i limity",
+  "Monthly budget (USD)": "Miesięczny budżet (USD)",
+  "No AI accounts assigned": "Nie przydzielono kont AI",
+  "No available workspaces": "Brak dostępnych przestrzeni roboczych",
+  "No servers connected": "Nie podłączono serwerów",
+  "Open sign-in page": "Otwórz stronę logowania",
+  "Preparing workspace": "Przygotowywanie przestrzeni roboczej",
+  "Remove from workspace": "Usuń z przestrzeni roboczej",
+  "Save budget": "Zapisz budżet",
+  "Server accounts": "Konta na serwerze",
+  "Server unavailable": "Serwer niedostępny",
+  "Set as default organization": "Ustaw jako domyślną organizację",
+  Unlimited: "Bez limitu",
+  "Verification code": "Kod weryfikacyjny",
+  Workspace: "Przestrzeń robocza",
+  "Workspace monthly budget (USD)": "Miesięczny budżet przestrzeni roboczej (USD)",
+  "Workspace unavailable": "Przestrzeń robocza niedostępna",
+
   "Choose a provider": "Wybierz dostawcę",
   "Everyone in this workspace uses the model selected by the owner.":
     "Wszyscy w tym workspace’ie korzystają z modelu wybranego przez właściciela.",

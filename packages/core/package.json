@@ -4,6 +4,7 @@
   "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "exports": {
+    "./async": "./src/async.ts",
     ".": {
       "types": "./src/index.ts",
       "development": "./src/index.ts",

@@ -23,12 +23,10 @@ env:
   TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
 
 jobs:
-  # Pull requests skip suites their files cannot affect (see .github/scripts/changed-areas.sh); a
-  # job skipped by `if` still satisfies a required check. Main skips this job, and with it every
-  # job that needs it. Web E2E checks its own areas instead, so its shards start with the first jobs.
+  # Pull requests skip suites their files cannot affect. Main and manual runs qualify every
+  # dependent area. Web E2E checks its own PR areas so its shards start with the first jobs.
   changes:
     name: Changed areas
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -45,7 +43,12 @@ jobs:
           filter: blob:none
           sparse-checkout: .github
       - id: areas
-        run: bash .github/scripts/changed-areas.sh >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            bash .github/scripts/changed-areas.sh >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' web=true server=true native=true compose=true >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Production builds
@@ -200,6 +203,77 @@ jobs:
     steps:
       - run: test "${{ needs.static-checks.result }}" = success && test "${{ needs.unit-tests-shard.result }}" = success
 
+  native-transport:
+    name: Installation TLS (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+        working-directory: packages/client-transport/native
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - name: Check installation transport
+        run: |
+          cargo fmt -- --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --lib
+      - name: Build iOS transport and check Swift bindings
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add aarch64-apple-ios-sim
+          cargo build --locked --lib --target aarch64-apple-ios-sim
+          cargo build --locked --features bindgen
+          cargo run --locked --features bindgen --bin ork-transport-bindgen -- generate --library target/debug/libork_installation_transport.dylib --language swift --out-dir "$RUNNER_TEMP/ork-transport-bindings" --no-format
+          xcrun swiftc -typecheck -I "$RUNNER_TEMP/ork-transport-bindings" -Xcc "-fmodule-map-file=$RUNNER_TEMP/ork-transport-bindings/ork_installation_transportFFI.modulemap" "$RUNNER_TEMP/ork-transport-bindings/ork_installation_transport.swift"
+          xcrun swiftc -typecheck -target arm64-apple-ios16.4-simulator -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" -I "$RUNNER_TEMP/ork-transport-bindings" -Xcc "-fmodule-map-file=$RUNNER_TEMP/ork-transport-bindings/ork_installation_transportFFI.modulemap" "$RUNNER_TEMP/ork-transport-bindings/ork_installation_transport.swift" apple/*.swift
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        if: runner.os != 'Windows'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: runner.os != 'Windows'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install native conformance dependencies
+        if: runner.os != 'Windows'
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: Test Apple HTTP through the installation server
+        if: runner.os == 'macOS'
+        working-directory: .
+        run: pnpm exec tsx packages/client-transport/native/apple/tests/run.ts "$RUNNER_TEMP/ork-transport-bindings"
+      - name: Build Android transport
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          pnpm --filter @orkbot/mobile exec expo prebuild --platform android --no-install
+          cd apps/mobile/android
+          ./gradlew :orkbot-transport:compileDebugKotlin :app:checkDebugAarMetadata --console=plain
+      - name: Test iOS device credentials in Keychain
+        if: runner.os == 'macOS'
+        working-directory: .
+        run: |
+          gem install --user-install xcodeproj --version 1.28.1 --no-document
+          runtime="$(xcrun simctl list runtimes --json | jq -r '[.runtimes[] | select(.isAvailable and (.identifier | contains(".iOS-")))] | last.identifier')"
+          test "$runtime" != null
+          device_type="$(xcrun simctl list runtimes --json | jq -r --arg runtime "$runtime" '[.runtimes[] | select(.identifier == $runtime) | .supportedDeviceTypes[] | select(.productFamily == "iPhone")] | first.identifier')"
+          test "$device_type" != null
+          device="$(xcrun simctl create 'Ork identity tests' "$device_type" "$runtime")"
+          trap 'xcrun simctl delete "$device"' EXIT
+          ruby apps/mobile/modules/orkbot-identity/tests/run-ios-tests.rb "$device" "$RUNNER_TEMP/ork-personal-tests"
+
   native-computer:
     name: Native computer (${{ matrix.os }})
     needs: changes
@@ -257,7 +331,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.areas.outputs.server != 'false'
-      - run: pnpm test:integration --shard=${{ matrix.shard }}/2
+      # Each worker clones a database and opens separate pools on the shared runner.
+      - run: pnpm test:integration --shard=${{ matrix.shard }}/2 --workers=2
         if: steps.areas.outputs.server != 'false'
         env:
           VERIFY_LOGGING: '1'

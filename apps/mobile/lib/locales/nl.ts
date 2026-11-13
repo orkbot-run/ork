@@ -3,6 +3,43 @@
 // Inherited Apache-2.0 material is preserved. Welcome-flow changes follow LICENSE.md.
 
 export const NL_MESSAGES: Record<string, string> = {
+  "Connected, but could not refresh": "Verbonden, maar vernieuwen is mislukt",
+
+  "Access required": "Toegang vereist",
+  "Add AI account": "AI-account toevoegen",
+  "Allowed models": "Toegestane modellen",
+  "Choose at least one model and enter valid limits.":
+    "Kies minstens één model en voer geldige limieten in.",
+  "Choose organization": "Organisatie kiezen",
+  "Complete sign-in": "Aanmelding voltooien",
+  "Concurrent requests": "Gelijktijdige verzoeken",
+  "Default model": "Standaardmodel",
+  "Default organization": "Standaardorganisatie",
+  "Disable account": "Account uitschakelen",
+  "Edit AI account": "AI-account bewerken",
+  Enabled: "Ingeschakeld",
+  "Enter a valid budget.": "Voer een geldig budget in.",
+  Fallback: "Reserveverbinding",
+  "Fallback priority": "Prioriteit reserveverbinding",
+  "Make available": "Beschikbaar maken",
+  "Models and limits": "Modellen en limieten",
+  "Monthly budget (USD)": "Maandelijks budget (USD)",
+  "No AI accounts assigned": "Geen AI-accounts toegewezen",
+  "No available workspaces": "Geen werkruimten beschikbaar",
+  "No servers connected": "Geen servers verbonden",
+  "Open sign-in page": "Aanmeldpagina openen",
+  "Preparing workspace": "Werkruimte voorbereiden",
+  "Remove from workspace": "Uit werkruimte verwijderen",
+  "Save budget": "Budget opslaan",
+  "Server accounts": "Serveraccounts",
+  "Server unavailable": "Server niet beschikbaar",
+  "Set as default organization": "Als standaardorganisatie instellen",
+  Unlimited: "Onbeperkt",
+  "Verification code": "Verificatiecode",
+  Workspace: "Werkruimte",
+  "Workspace monthly budget (USD)": "Maandelijks budget van werkruimte (USD)",
+  "Workspace unavailable": "Werkruimte niet beschikbaar",
+
   "API URL": "API-adres",
   "Choose a provider": "Kies een aanbieder",
   "Choose one model and API key for everyone in this workspace.":

@@ -27,7 +27,7 @@ export async function autoReviewCheckerProvider(
 ): Promise<AutoReviewProvider> {
   const { runId, spaceId, userId, botId, threadId } = scope;
   const { injectedReview, memberChecker, backups, registerSecrets } = options;
-  const workspace = await resolveWorkspaceModel(deps, spaceId);
+  const workspace = await resolveWorkspaceModel(deps, spaceId, scope);
   if (workspace) {
     registerSecrets(workspace.redact);
     const model = workspace.model;
@@ -47,6 +47,8 @@ export async function autoReviewCheckerProvider(
         contextWindow: model.contextWindow,
         maxTokens: model.maxTokens,
         reasoning: model.reasoning,
+        oauth: model.oauth,
+        callObserver: model.callObserver,
         runId,
         spaceId,
         userId,
