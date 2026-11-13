@@ -35,6 +35,7 @@ test("first boot generates private role-specific secrets without operator creden
   const web = readRuntimeConfig(join(options.root, "web/environment.json"));
   const migrate = readRuntimeConfig(join(options.root, "migrate/environment.json"));
   assert.equal(api.AUTH_ACCOUNTS_ENABLED, "true");
+  assert.equal(worker.AUTH_ACCOUNTS_ENABLED, "true");
   assert.equal(api.AUTH_PASSWORD_ENABLED, "false");
   assert.equal(api.ORKBOT_BOOTSTRAP_SECRET, result.bootstrapSecret);
   assert.equal(api.BETTER_AUTH_URL, origin);
@@ -67,6 +68,28 @@ test("restart and interrupted initialization reuse every credential", (t) => {
   assert.deepEqual(resumed, first);
   assert.equal(readFileSync(join(options.root, "installation.json"), "utf8"), state);
   assert.equal(readFileSync(join(options.root, "api/environment.json"), "utf8"), original);
+});
+
+test("upgrades only the exact previously generated worker configuration without rotating credentials", (t) => {
+  const options = fixture(t);
+  initialize(options);
+  const state = readFileSync(join(options.root, "installation.json"), "utf8");
+  const api = readFileSync(join(options.root, "api/environment.json"), "utf8");
+  const workerPath = join(options.root, "worker/environment.json");
+  const current = readFileSync(workerPath, "utf8");
+  const legacy = JSON.parse(current);
+  delete legacy.AUTH_ACCOUNTS_ENABLED;
+  writeFileSync(workerPath, `${JSON.stringify(legacy)}\n`);
+  initialize(options);
+  assert.equal(readFileSync(workerPath, "utf8"), current);
+  assert.equal(lstatSync(workerPath).mode & 0o777, 0o600);
+  assert.equal(readRuntimeConfig(workerPath).AUTH_ACCOUNTS_ENABLED, "true");
+  assert.equal(readFileSync(join(options.root, "installation.json"), "utf8"), state);
+  assert.equal(readFileSync(join(options.root, "api/environment.json"), "utf8"), api);
+  const changed = `${JSON.stringify({ ...legacy, AGENT_RUNTIME: "operator-choice" })}\n`;
+  writeFileSync(workerPath, changed);
+  assert.throws(() => initialize(options));
+  assert.equal(readFileSync(workerPath, "utf8"), changed);
 });
 
 test("optional operator update configuration survives bootstrap without changing secrets", (t) => {

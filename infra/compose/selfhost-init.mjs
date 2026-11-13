@@ -16,7 +16,7 @@ import {
   renameSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const SECRET_KEYS = [
   "databaseOwner",
@@ -82,11 +82,12 @@ function exists(path) {
   }
 }
 
-function save(path, value, uid) {
+function save(path, value, uid, previous) {
   if (exists(path)) {
-    if (read(path) !== value)
+    const current = read(path);
+    if (current === value) return;
+    if (current !== previous)
       throw new ConfigurationError("Existing self-host configuration differs; it was kept.");
-    return;
   }
   const temporary = `${path}.${randomBytes(8).toString("hex")}.tmp`;
   const fd = openSync(
@@ -102,6 +103,12 @@ function save(path, value, uid) {
   }
   if (uid !== undefined) chownSync(temporary, uid, uid);
   renameSync(temporary, path);
+  const parent = openSync(dirname(path), constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    fsyncSync(parent);
+  } finally {
+    closeSync(parent);
+  }
 }
 
 /** Initialization is serialized by Compose; persisted state makes interrupted runs resumable. */
@@ -187,7 +194,7 @@ export function initialize({
       SIGNUPS_ENABLED: "false",
       ORKBOT_BOOTSTRAP_SECRET: secret.bootstrap,
     },
-    worker: shared,
+    worker: { ...shared, AUTH_ACCOUNTS_ENABLED: "true" },
     web: {
       NODE_ENV: "production",
       ORKBOT_HOST: url.hostname,
@@ -202,7 +209,9 @@ export function initialize({
   for (const [role, values] of Object.entries(roles)) {
     const path = join(root, role);
     directory(path);
-    save(join(path, "environment.json"), `${JSON.stringify(values)}\n`, uid);
+    // Upgrade only the exact generated predecessor; operator changes are never overwritten.
+    const previous = role === "worker" ? `${JSON.stringify(shared)}\n` : undefined;
+    save(join(path, "environment.json"), `${JSON.stringify(values)}\n`, uid, previous);
     if (uid !== undefined) chownSync(path, uid, uid);
   }
   const databaseDirectory = join(root, "database");
