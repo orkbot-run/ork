@@ -972,9 +972,8 @@ fn read_regular_file(path: &Path, limit: u64, private: bool) -> Option<Vec<u8>> 
             return None;
         }
     }
-    #[cfg(not(unix))]
-    if private {
-        // Without an ACL ownership check, an old instance remains unbound and untouched.
+    #[cfg(windows)]
+    if private && !crate::private_files_windows::owned(&file) {
         return None;
     }
     let mut contents = Vec::new();
@@ -996,8 +995,11 @@ pub(crate) fn reparse_point(metadata: &Metadata) -> bool {
 
 pub(crate) fn write_private(path: &Path, contents: &[u8]) -> Result<(), String> {
     let directory = path.parent().ok_or("The local server path is invalid.")?;
-    let mut file = tempfile::NamedTempFile::new_in(directory)
-        .map_err(|_| "Could not write local server settings.")?;
+    #[cfg(windows)]
+    let temporary = crate::private_files_windows::temporary(directory);
+    #[cfg(not(windows))]
+    let temporary = tempfile::NamedTempFile::new_in(directory);
+    let mut file = temporary.map_err(|_| "Could not write local server settings.")?;
     file.write_all(contents)
         .map_err(|_| "Could not write local server settings.")?;
     file.as_file()

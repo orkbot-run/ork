@@ -6,6 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createJobReconciler } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import {
   claimSteering,
   createBackgroundHelper,
@@ -82,7 +83,12 @@ describe.skipIf(!enabled)("background helper product flow (PostgreSQL)", () => {
       const call = async <T>(procedure: string, body: unknown): Promise<T> => {
         const response = await handles.app.request(`/rpc/${procedure}`, {
           method: "POST",
-          headers: { "content-type": "application/json", origin, cookie },
+          headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+            "content-type": "application/json",
+            origin,
+            cookie,
+          },
           body: JSON.stringify({ json: body }),
         });
         expect(response.ok).toBe(true);
@@ -182,7 +188,12 @@ describe.skipIf(!enabled)("background helper product flow (PostgreSQL)", () => {
       const request = (cookie: string, procedure: string, body: unknown = {}) =>
         handles.app.request(`/rpc/${procedure}`, {
           method: "POST",
-          headers: { "content-type": "application/json", origin, cookie },
+          headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+            "content-type": "application/json",
+            origin,
+            cookie,
+          },
           body: JSON.stringify({ json: body }),
         });
       const call = async <T>(cookie: string, procedure: string, body: unknown = {}): Promise<T> => {

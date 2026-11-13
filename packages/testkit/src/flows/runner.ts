@@ -12,6 +12,7 @@ import type {
   SandboxProvider,
 } from "@orkbot/adapter-kit";
 import type { MessageBlock } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { WORKING_RUN_STATUSES } from "@orkbot/core";
 import type { createDb } from "@orkbot/db";
 import type { EvalJudge, JudgeInput, Judgment } from "../evals/judge.js";
@@ -137,7 +138,12 @@ export async function runFlow<World>(
   const rpc = async <T>(procedure: string, body: unknown): Promise<T> => {
     const response = await handles.app.request(`/rpc/${procedure}`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+      headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+        "content-type": "application/json",
+        cookie,
+        origin: "http://127.0.0.1:5173",
+      },
       body: JSON.stringify({ json: body }),
     });
     const parsed = (await response.json()) as { json?: T; error?: { message?: string } };

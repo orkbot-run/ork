@@ -14,6 +14,7 @@ import {
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
 import type { appContract, Space, SpaceNavigation } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import {
   claimSpaceDeletionForMember,
   deleteClaimedSpaceForMember,
@@ -1069,7 +1070,11 @@ describeWithDatabase("API authorization and resource isolation", () => {
     const rpc = (path: string, headers: Record<string, string>) =>
       app.request(`/rpc/${path}`, {
         method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          ...headers,
+          "content-type": "application/json",
+        },
         body: JSON.stringify({ json: {} }),
       });
     const signIn = (password: string) =>
@@ -1113,7 +1118,12 @@ describeWithDatabase("API authorization and resource isolation", () => {
   it("uses the bearer session over another account's session cookie", async () => {
     const a = await phoneSession(app, `phone-cookie-a-${stamp}@orkbot.test`);
     const b = await phoneSession(app, `phone-cookie-b-${stamp}@orkbot.test`);
-    const both = { ...b.headers, cookie: a.cookie, "content-type": "application/json" };
+    const both = {
+      ...b.headers,
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      cookie: a.cookie,
+      "content-type": "application/json",
+    };
     const me = () =>
       app.request("/rpc/me", { method: "POST", headers: both, body: JSON.stringify({ json: {} }) });
 
@@ -1139,6 +1149,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
         await app.request("/rpc/me", {
           method: "POST",
           headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
             origin: "orkbot://",
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
@@ -2605,7 +2616,11 @@ async function phoneSession(app: App, email: string) {
     (
       await app.request("/rpc/me", {
         method: "POST",
-        headers: { ...headers, "content-type": "application/json" },
+        headers: {
+          [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+          ...headers,
+          "content-type": "application/json",
+        },
         body: JSON.stringify({ json: {} }),
       })
     ).status;
@@ -2643,6 +2658,7 @@ async function raw(
   return app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       ...(cookie ? { cookie } : {}),
       ...(spaceId ? { "x-orkbot-space-id": spaceId } : {}),

@@ -8,6 +8,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { ComposioConnector, FakeComposioClient } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { describe, expect, it } from "vitest";
 import { discardBotIntroRun } from "./discard-bot-intro.js";
 import { allowFixtureAiDataSharing } from "./fixture-ai-consent.js";
@@ -103,7 +104,12 @@ describe.skipIf(!enabled)("earlier files through history tools", () => {
       const rpc = async <T>(procedure: string, input: unknown): Promise<T> => {
         const response = await handles.app.request(`/rpc/${procedure}`, {
           method: "POST",
-          headers: { "content-type": "application/json", cookie, origin },
+          headers: {
+            [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+            "content-type": "application/json",
+            cookie,
+            origin,
+          },
           body: JSON.stringify({ json: input }),
         });
         const body = (await response.json()) as { json: T; error?: { message: string } };

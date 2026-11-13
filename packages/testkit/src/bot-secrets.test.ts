@@ -4,6 +4,7 @@ import path from "node:path";
 import type { AgentRuntimeEvent } from "@orkbot/adapter-kit";
 import { EncryptedSecretStore, ScriptedAgentRuntime } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { resolveEncryptionKey } from "@orkbot/core";
 import { answerRunInput, runAsSystem, runAsTenant } from "@orkbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -597,6 +598,7 @@ describeIntegration("reusable credential lifecycle", () => {
           const response = await handles.app.request("/rpc/threads/answer", {
             method: "POST",
             headers: {
+              [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
               "content-type": "application/json",
               origin: "http://127.0.0.1:5173",
               cookie: seeded.cookie,
@@ -704,6 +706,7 @@ describeIntegration("reusable credential lifecycle", () => {
     const response = await handles.app.request(`/rpc/${procedure}`, {
       method: "POST",
       headers: {
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
         "content-type": "application/json",
         origin: "http://127.0.0.1:5173",
         cookie,

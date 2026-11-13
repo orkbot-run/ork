@@ -24,6 +24,8 @@ mod pairing;
 mod passkeys;
 mod personal_devices;
 mod personal_keys;
+#[cfg(windows)]
+mod private_files_windows;
 mod profile;
 mod renderer_host;
 #[cfg(any(windows, test))]

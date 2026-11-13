@@ -11,6 +11,7 @@ import {
   messageBot,
 } from "@orkbot/adapters";
 import type { MessageBlock, ModelConnectInput, RunStatus } from "@orkbot/contracts";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { ACTIVE_RUN_STATUSES, attachmentComputerPath, isTerminal } from "@orkbot/core";
 import type { createDb } from "@orkbot/db";
 import { createThreadEvents } from "@orkbot/db";
@@ -1144,7 +1145,12 @@ export async function runTrial(
 async function rpc<T>(app: App, cookie: string, proc: string, body: unknown = {}): Promise<T> {
   const res = await app.request(`/rpc/${proc}`, {
     method: "POST",
-    headers: { "content-type": "application/json", cookie, origin: "http://127.0.0.1:5173" },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "content-type": "application/json",
+      cookie,
+      origin: "http://127.0.0.1:5173",
+    },
     body: JSON.stringify({ json: body }),
     signal: AbortSignal.timeout(15_000),
   });

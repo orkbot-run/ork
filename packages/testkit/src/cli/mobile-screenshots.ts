@@ -13,6 +13,7 @@ import {
   PipedreamConnector,
   ThirdPartyConnectorEmulator,
 } from "@orkbot/adapters";
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { callRequestClientNonce } from "@orkbot/core";
 import type { PrismaClient } from "@orkbot/db";
 import { createThreadMessage } from "@orkbot/db";
@@ -533,6 +534,7 @@ async function rpc<T>(app: App, cookie: string, procedure: string, body: unknown
   const response = await app.request(`/rpc/${procedure}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: WEB_ORIGIN,

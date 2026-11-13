@@ -5,7 +5,11 @@ import path from "node:path";
 import { EncryptedSecretStore } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
 import type { PageDetail, PageSummary, ThreadSnapshot } from "@orkbot/contracts";
-import { SHARED_PAGE_PATH_PREFIX } from "@orkbot/contracts";
+import {
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  SHARED_PAGE_PATH_PREFIX,
+} from "@orkbot/contracts";
 import { deletePageShareSecrets } from "@orkbot/db";
 import { pageViewerCode } from "@orkbot/page-kit/compile";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -1114,6 +1118,7 @@ async function raw(app: App, cookie: string, proc: string, body: unknown, spaceI
   return app.request(`/rpc/${proc}`, {
     method: "POST",
     headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
       "content-type": "application/json",
       cookie,
       origin: "http://127.0.0.1:5173",

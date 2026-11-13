@@ -8,6 +8,35 @@ import path from "node:path";
 const API = "https://api.appstoreconnect.apple.com";
 const BUNDLE = "run.orkbot.desktop.preview";
 const FAILURE = "Could not prepare the macOS personal keychain identity.";
+const NETWORK_CODES = new Set([
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ENETUNREACH",
+  "ENOTFOUND",
+  "ETIMEDOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+  "CERT_HAS_EXPIRED",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+]);
+
+function networkCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object") return undefined;
+  if ("name" in error && error.name === "TimeoutError") return "TIMEOUT";
+  if ("code" in error && typeof error.code === "string" && NETWORK_CODES.has(error.code))
+    return error.code;
+  const cause = "cause" in error ? error.cause : undefined;
+  if (
+    cause &&
+    typeof cause === "object" &&
+    "code" in cause &&
+    typeof cause.code === "string" &&
+    NETWORK_CODES.has(cause.code)
+  )
+    return cause.code;
+  return undefined;
+}
 type Command = (command: string, args: string[]) => string;
 interface Resource {
   type: string;
@@ -64,8 +93,9 @@ export class AppleProfiles {
         redirect: "error",
         signal: AbortSignal.timeout(15_000),
       });
-    } catch {
-      throw new Error(FAILURE);
+    } catch (error) {
+      const code = networkCode(error);
+      throw new Error(code ? `${FAILURE} Apple connection ${code}.` : FAILURE);
     }
     if (!response.ok || Number(response.headers.get("content-length") ?? 0) > 4 * 1024 * 1024) {
       await response.body?.cancel().catch(() => undefined);

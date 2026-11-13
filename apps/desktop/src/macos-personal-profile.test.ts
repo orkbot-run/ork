@@ -26,6 +26,20 @@ const valid = () => ({
   },
 });
 
+it("reports only an allowlisted network failure code without exposing request diagnostics", async () => {
+  const network = vi.fn<typeof fetch>(async () => {
+    throw new TypeError("private identity and bearer diagnostic", {
+      cause: { code: "ENETUNREACH" },
+    });
+  });
+  await expect(new AppleProfiles(env, network).list("/v1/profiles")).rejects.toThrow(
+    "Apple connection ENETUNREACH",
+  );
+  await expect(new AppleProfiles(env, network).list("/v1/profiles")).rejects.not.toThrow(
+    "private identity",
+  );
+});
+
 it("derives only this app's access group from its authorized prefix and preserves required app entitlements", () => {
   expect(
     ownEntitlements(valid(), certificate, identity, {
