@@ -11,6 +11,7 @@ import org.json.JSONObject
 import uniffi.ork_installation_transport.HttpHeader
 import uniffi.ork_installation_transport.HttpRequest
 import uniffi.ork_installation_transport.InstallationConnection
+import uniffi.ork_installation_transport.RelayRoute
 
 internal data class InstallationSelection(
   val account: String,
@@ -20,8 +21,16 @@ internal data class InstallationSelection(
   val workspaceId: String,
   val bindingVersion: ULong,
   val keyFingerprint: String,
+  val relayOrigin: String?,
 ) {
-  fun connection() = InstallationConnection(origin, serverId, bindingVersion, keyFingerprint)
+  fun connection(ticket: String?) : InstallationConnection {
+    if (relayOrigin == null) {
+      require(ticket == null)
+      return InstallationConnection(origin, serverId, bindingVersion, keyFingerprint)
+    }
+    return InstallationConnection.viaRelay(origin, serverId, bindingVersion, keyFingerprint,
+      RelayRoute(relayOrigin, requireNotNull(ticket), organizationId, workspaceId))
+  }
 }
 
 /** Never hold the context lock while a request waits for network input or backpressure. */
@@ -57,8 +66,15 @@ internal class InstallationContexts {
     require(issuer.scheme == "https" && issuer.host != null && issuer.rawUserInfo == null && issuer.rawQuery == null && issuer.rawFragment == null)
     val origin = URI(json.getString("origin"))
     require(!(origin.scheme == "https" && origin.host.equals(issuer.host, true) && (if (origin.port == -1) 443 else origin.port) == (if (issuer.port == -1) 443 else issuer.port)))
-    val selected = InstallationSelection(account, origin.toString(), uuid(json.getString("organizationId")), uuid(json.getString("serverId")), uuid(json.getString("workspaceId")), revision(json.getDouble("bindingVersion")).toULong(), json.getString("keyFingerprint"))
-    selected.connection().use { it.cancel() }
+    val relayOrigin = if (json.has("relayOrigin")) json.getString("relayOrigin") else null
+    val selected = InstallationSelection(account, origin.toString(), uuid(json.getString("organizationId")), uuid(json.getString("serverId")), uuid(json.getString("workspaceId")), revision(json.getDouble("bindingVersion")).toULong(), json.getString("keyFingerprint"), relayOrigin)
+    InstallationConnection(selected.origin, selected.serverId, selected.bindingVersion, selected.keyFingerprint).use { it.cancel() }
+    if (relayOrigin != null) {
+      val relay = URI(relayOrigin)
+      require(relay.scheme == "https" && relay.host != null && relay.rawUserInfo == null && relay.rawQuery == null && relay.rawFragment == null && relay.rawPath.isNullOrEmpty())
+      require(!(relay.host.equals(issuer.host, true) && (if (relay.port == -1) 443 else relay.port) == (if (issuer.port == -1) 443 else issuer.port)))
+      require(relayOrigin != selected.origin && selected.origin == "https://${selected.serverId}.installation.ork.invalid")
+    }
     if (next == revision) require(selected == selection)
     else {
       requests.values.forEach { it.cancel() }
@@ -80,7 +96,7 @@ internal class InstallationContexts {
     synchronized(gate) {
       current(expected, version)
       require(uuid(id) == id && !requests.containsKey(id))
-      requests[id] = requireNotNull(selection).connection()
+      requests[id] = requireNotNull(selection).connection(if (json.has("relayTicket")) json.getString("relayTicket") else null)
       inputs[id] = request
     }
   }

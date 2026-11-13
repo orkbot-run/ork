@@ -149,6 +149,10 @@ async function selectServer(
     if (!beforeSave()) return null;
     const savedOwner = await SecureStore.getItemAsync(ACCOUNT_KEY);
     if (!beforeSave() || savedOwner !== account) return null;
+    if (entry.relay) {
+      await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
+      if (!beforeSave()) return null;
+    }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
     if (!beforeSave()) return null;
     await loadApiBase();
@@ -163,9 +167,9 @@ async function selectServer(
       await clearProductAccountSession();
       if (!current()) return null;
     }
-    await saveSelectedWorkspace(account, entry.url, entry.workspace);
+    await saveSelectedWorkspace(account, entry.url, entry.workspace, entry.relay);
     if (!current()) return null;
-    await selectInstallationTransport(account, entry.url, entry.workspace);
+    await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
     if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
     return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;
@@ -589,6 +593,10 @@ export function AccountsGate({
     if (!identity || JSON.stringify([identity.issuer, identity.subject]) !== account) {
       setAttempt((value) => value + 1);
       return false;
+    }
+    if (entry.relay) {
+      await selectInstallationTransport(account, entry.url, entry.workspace, entry.relay);
+      if (!active() || !sessionCurrent()) return false;
     }
     const capabilities = await requireAccountsSignIn(entry.url, serverHeaders(entry.url));
     const probe = await probeCompatibleServer(entry.url, capabilities.needsServerUpdate);

@@ -13,6 +13,7 @@ const denied = () => new Error("Personal device access unavailable");
 export class PersonalWorkspaceAccess {
   private readonly blocked = new Set<string>();
   private blockEverything = false;
+  private refusalBarrier?: Promise<void>;
   private readonly watches = new Map<string, Set<AbortController>>();
   constructor(
     private readonly prisma: PrismaClient,
@@ -254,6 +255,7 @@ export class PersonalWorkspaceAccess {
   }
   confirmed(workspaceIds: string[]): void {
     this.blockEverything = false;
+    this.refusalBarrier = undefined;
     for (const id of workspaceIds) this.blocked.delete(id);
   }
   restorationCheckpoint(): Promise<string[]> {
@@ -265,6 +267,13 @@ export class PersonalWorkspaceAccess {
   async refuseInstallation(): Promise<void> {
     this.blockEverything = true;
     for (const id of this.watches.keys()) this.invalidate(id);
+    try {
+      this.refusalBarrier ??= this.revocations?.refuseInstallation() ?? Promise.resolve();
+      await this.refusalBarrier;
+    } catch (error) {
+      this.refusalBarrier = undefined;
+      throw error;
+    }
     const devices = await runAsSystem(
       "resolve personal credentials for installation revocation",
       () =>

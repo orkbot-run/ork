@@ -3,8 +3,14 @@
 
 import type { NativeHttpBridge } from "@orkbot/client-transport";
 import { createNativeFetch } from "@orkbot/client-transport";
-import type { WorkspaceTarget } from "@orkbot/contracts";
-import { WorkspaceTargetSchema } from "@orkbot/contracts";
+import type { InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import {
+  installationRelayRouteSchema,
+  installationVirtualOrigin,
+  WorkspaceTargetSchema,
+} from "@orkbot/contracts";
+import { readBoundedJsonResponse } from "@orkbot/core";
+import { fetchAccounts } from "./accounts-network";
 
 interface NativeInstallation extends NativeHttpBridge {
   begin(): Promise<string>;
@@ -51,6 +57,7 @@ export async function selectInstallationTransport(
   account: string,
   origin: string,
   target?: WorkspaceTarget,
+  route?: InstallationRelayRoute,
 ): Promise<void> {
   if (!target) {
     invalidateInstallationTransport();
@@ -71,18 +78,107 @@ export async function selectInstallationTransport(
   const version = ++revision;
   pinnedOrigins.add(origin);
   const current = () => selected?.revision === version && revision === version;
+  const relayTicket = async (relay: InstallationRelayRoute, signal?: AbortSignal) => {
+    if (!current()) throw new Error("Native connection changed");
+    const { accountsAuthorization } = await import("./accounts");
+    const authorization = await accountsAuthorization();
+    if (
+      !current() ||
+      !authorization ||
+      JSON.stringify([authorization.issuer, authorization.subject]) !== account
+    )
+      throw new Error("Native connection changed");
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal?.reason);
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    try {
+      const response = await fetchAccounts(`${issuer.origin}/api/identity/v2/relay-tickets`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${authorization.accessToken}`,
+        },
+        body: JSON.stringify({
+          organizationId: workspace.organizationId,
+          serverId: workspace.serverId,
+          workspaceId: workspace.workspaceId,
+        }),
+        credentials: "omit",
+        redirect: "error",
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        void response.body?.cancel().catch(() => undefined);
+        throw new Error("Could not continue");
+      }
+      const value = await readBoundedJsonResponse<{
+        grant?: unknown;
+        expiresAt?: unknown;
+        relayOrigin?: unknown;
+      }>(response, 32 * 1024, controller.signal);
+      if (
+        !current() ||
+        value.relayOrigin !== relay.origin ||
+        typeof value.grant !== "string" ||
+        !value.grant ||
+        value.grant.length > 16 * 1024 ||
+        typeof value.expiresAt !== "number" ||
+        !Number.isSafeInteger(value.expiresAt) ||
+        value.expiresAt <= Date.now() / 1000 ||
+        value.expiresAt > Date.now() / 1000 + 60
+      )
+        throw new Error("Native connection changed");
+      return value.grant;
+    } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+    }
+  };
   const ready = enqueue(async () => {
+    if (!current()) throw new Error("Native connection changed");
+    let relay = route;
+    if (!relay && origin === installationVirtualOrigin(workspace.serverId)) {
+      const { selectedInstallationRelay } = await import("./selected-workspace");
+      relay = await selectedInstallationRelay(account, origin);
+      if (!relay) throw new Error("Native connection changed");
+    }
+    if (relay) {
+      relay = installationRelayRouteSchema.parse(relay);
+      if (
+        origin !== installationVirtualOrigin(workspace.serverId) ||
+        relay.origin === issuer.origin ||
+        relay.origin === origin
+      )
+        throw new Error("Native connection changed");
+    }
     if (!current()) throw new Error("Native connection changed");
     const bridge = await native();
     if (!current()) throw new Error("Native connection changed");
     session ??= await bridge.begin();
     const activeSession = session;
-    await bridge.select(activeSession, version, JSON.stringify({ account, origin, ...workspace }));
+    await bridge.select(
+      activeSession,
+      version,
+      JSON.stringify({
+        account,
+        origin,
+        ...workspace,
+        ...(relay ? { relayOrigin: relay.origin } : {}),
+      }),
+    );
     if (!current()) throw new Error("Native connection changed");
     const { randomUUID } = await import("expo-crypto");
     return createNativeFetch(
       bridge,
-      { session: activeSession, revision: version, origin, current },
+      {
+        session: activeSession,
+        revision: version,
+        origin,
+        current,
+        ...(relay ? { relayTicket: (signal?: AbortSignal) => relayTicket(relay, signal) } : {}),
+      },
       randomUUID,
     );
   });
@@ -100,11 +196,12 @@ export const fetchInstallation = (
   const url = new URL(
     typeof input === "string" || input instanceof URL ? String(input) : input.url,
   );
+  const virtual = url.hostname.endsWith(".installation.ork.invalid");
   if (!snapshot)
-    return pinnedOrigins.has(url.origin)
+    return pinnedOrigins.has(url.origin) || virtual
       ? Promise.reject(new Error("Native connection changed"))
       : fallback(input, init);
-  if (url.origin !== snapshot.origin && pinnedOrigins.has(url.origin))
+  if (url.origin !== snapshot.origin && (pinnedOrigins.has(url.origin) || virtual))
     return Promise.reject(new Error("Native connection changed"));
   if (url.origin === snapshot.issuer || url.origin !== snapshot.origin)
     return fallback(input, init);

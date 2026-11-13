@@ -20,6 +20,7 @@ COPY --chmod=755 apps/api/package.json apps/api/
 COPY --chmod=755 apps/accounts-web/package.json apps/accounts-web/
 COPY --chmod=755 apps/desktop/package.json apps/desktop/
 COPY --chmod=755 apps/mobile/package.json apps/mobile/
+COPY --chmod=755 apps/relay/package.json apps/relay/
 COPY --chmod=755 apps/web/package.json apps/web/
 COPY --chmod=755 apps/worker/package.json apps/worker/
 COPY --chmod=755 apps/www/package.json apps/www/
@@ -40,12 +41,12 @@ COPY --chmod=755 packages/ui-tokens/package.json packages/ui-tokens/
 COPY --chmod=755 packages/ui-web/package.json packages/ui-web/
 COPY --chmod=755 infra/sandboxes/supervisor/package.json infra/sandboxes/supervisor/
 COPY --chmod=755 infra/updater/package.json infra/updater/
-RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm --filter orkbot --filter @orkbot/api... --filter @orkbot/worker... --filter @orkbot/web... --filter @orkbot/sandbox-supervisor... install --frozen-lockfile --store-dir=/pnpm/store
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm --filter orkbot --filter @orkbot/api... --filter @orkbot/worker... --filter @orkbot/relay... --filter @orkbot/web... --filter @orkbot/sandbox-supervisor... install --frozen-lockfile --store-dir=/pnpm/store
 # Normalize modes: a restrictive host umask (e.g. 077 on hardened hosts) would otherwise
 # leave the copied tree unreadable to USER node at runtime.
 COPY --chmod=755 . .
 RUN pnpm --filter @orkbot/db generate
-RUN pnpm --filter @orkbot/api --filter @orkbot/worker build
+RUN pnpm --filter @orkbot/api --filter @orkbot/worker --filter @orkbot/relay build
 RUN ORKBOT_ALLOW_DEV_SECRETS=1 pnpm --filter @orkbot/web build
 RUN node scripts/stage-server-runtime.mjs /runtime
 

@@ -37,7 +37,19 @@ export function startWorkspaceAuthority(
             (payload) => {
               if (stopped) return;
               try {
-                const event = JSON.parse(payload) as { source?: unknown; ids?: unknown };
+                const event = JSON.parse(payload) as {
+                  source?: unknown;
+                  ids?: unknown;
+                  refused?: unknown;
+                };
+                if (
+                  typeof event.source === "string" &&
+                  event.source !== authority.processId &&
+                  event.refused === true
+                ) {
+                  void authority.refuseInstallation(configuration.serverId, false).catch(onError);
+                  return;
+                }
                 if (
                   event.source === authority.processId ||
                   typeof event.source !== "string" ||

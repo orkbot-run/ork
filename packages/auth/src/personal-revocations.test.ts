@@ -20,6 +20,16 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
 });
 describe("personal revocation journal", () => {
+  it("persists a whole-installation refusal before device IDs can be read from the database", async () => {
+    const directory = await fixture();
+    const journal = new FilePersonalRevocations(directory);
+    await journal.refuseInstallation();
+    const checkpoint = await new FilePersonalRevocations(directory).restorationCheckpoint();
+    expect(checkpoint).toHaveLength(1);
+    await journal.refuseInstallation();
+    await journal.confirmRestoration(checkpoint);
+    expect(await new FilePersonalRevocations(directory).restorationCheckpoint()).toHaveLength(1);
+  });
   it.skipIf(process.platform === "win32")(
     "recognizes and confirms the barrier written by the actual restore helper",
     async () => {

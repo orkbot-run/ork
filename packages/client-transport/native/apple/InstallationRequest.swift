@@ -13,9 +13,15 @@ public actor InstallationRequest {
   private var canceled = false
   private var completed = false
 
-  public init(origin: String, serverId: String, bindingVersion: UInt64, fingerprint: String) throws {
-    connection = try InstallationConnection(origin: origin, serverId: serverId,
-      bindingVersion: bindingVersion, keyFingerprint: fingerprint)
+  public init(origin: String, serverId: String, bindingVersion: UInt64, fingerprint: String,
+    relay: RelayRoute? = nil) throws {
+    if let relay {
+      connection = try InstallationConnection.viaRelay(origin: origin, serverId: serverId,
+        bindingVersion: bindingVersion, keyFingerprint: fingerprint, route: relay)
+    } else {
+      connection = try InstallationConnection(origin: origin, serverId: serverId,
+        bindingVersion: bindingVersion, keyFingerprint: fingerprint)
+    }
   }
 
   public func start(_ request: HttpRequest) async throws {

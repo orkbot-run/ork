@@ -1,8 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { WorkspaceTarget } from "@orkbot/contracts";
-import { WorkspaceTargetSchema } from "@orkbot/contracts";
+import type { InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import {
+  installationRelayRouteSchema,
+  installationVirtualOrigin,
+  WorkspaceTargetSchema,
+} from "@orkbot/contracts";
 import * as SecureStore from "expo-secure-store";
 import forge from "node-forge";
 
@@ -53,15 +57,35 @@ export async function selectedWorkspace(
     return null;
   }
 }
+export async function selectedInstallationRelay(
+  account: string,
+  server: string,
+): Promise<InstallationRelayRoute | undefined> {
+  const stored = JSON.parse((await SecureStore.getItemAsync(KEY)) ?? "null");
+  if (stored?.account !== account || stored.server !== server || stored.relay === undefined)
+    return undefined;
+  const target = WorkspaceTargetSchema.parse(stored.target);
+  if (server !== installationVirtualOrigin(target.serverId))
+    throw new Error("Native connection changed");
+  return installationRelayRouteSchema.parse(stored.relay);
+}
 export async function saveSelectedWorkspace(
   account: string,
   server: string,
   target?: WorkspaceTarget,
+  relay?: InstallationRelayRoute,
 ): Promise<void> {
   if (target) {
+    if (relay && server !== installationVirtualOrigin(target.serverId))
+      throw new Error("Native connection changed");
     await SecureStore.setItemAsync(
       KEY,
-      JSON.stringify({ account, server, target: WorkspaceTargetSchema.parse(target) }),
+      JSON.stringify({
+        account,
+        server,
+        target: WorkspaceTargetSchema.parse(target),
+        ...(relay ? { relay: installationRelayRouteSchema.parse(relay) } : {}),
+      }),
     );
     await SecureStore.setItemAsync(
       historyKey(account, target.organizationId),

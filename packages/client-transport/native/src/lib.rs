@@ -12,7 +12,7 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 mod http;
 pub use http::{HttpHeader, HttpRequest, HttpResponseHead, InstallationHttp};
 mod network;
-pub use network::InstallationConnection;
+pub use network::{InstallationConnection, RelayRoute};
 #[cfg(target_os = "android")]
 mod android;
 

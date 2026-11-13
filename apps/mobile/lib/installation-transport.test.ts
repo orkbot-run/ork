@@ -1,9 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
+  authorization: {
+    issuer: "https://accounts.example.test",
+    subject: "user-one",
+    accessToken: "central-token",
+  },
   available: true,
   begin: vi.fn(async () => "native-session"),
   select: vi.fn(
@@ -17,6 +22,7 @@ const state = vi.hoisted(() => ({
   start: vi.fn(async () => undefined),
   cancel: vi.fn(async () => undefined),
 }));
+vi.mock("./accounts", () => ({ accountsAuthorization: async () => state.authorization }));
 vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: () => (state.available ? state : null),
 }));
@@ -36,6 +42,91 @@ beforeEach(() => {
   vi.resetModules();
   vi.clearAllMocks();
   state.available = true;
+});
+afterEach(() => vi.unstubAllGlobals());
+
+it("never sends a reserved installation origin through ordinary HTTP, including before selection", async () => {
+  const { fetchInstallation } = await import("./installation-transport");
+  const fallback = vi.fn<typeof fetch>();
+  await expect(
+    fetchInstallation(`https://${target.serverId}.installation.ork.invalid/rpc/me`, {}, fallback),
+  ).rejects.toThrow("Native connection changed");
+  expect(fallback).not.toHaveBeenCalled();
+});
+
+it("obtains one relay capability per request and keeps Accounts and product bearers on separate channels", async () => {
+  const { selectInstallationTransport, fetchInstallation } = await import(
+    "./installation-transport"
+  );
+  const origin = `https://${target.serverId}.installation.ork.invalid`;
+  const relay = { origin: "https://relay.example.test" };
+  let count = 0;
+  const central = vi.fn<typeof fetch>(async () =>
+    Response.json({
+      grant: `relay-ticket-${++count}`,
+      expiresAt: Math.floor(Date.now() / 1000) + 60,
+      relayOrigin: relay.origin,
+    }),
+  );
+  vi.stubGlobal("fetch", central);
+  const fallback = vi.fn<typeof fetch>();
+  await selectInstallationTransport(account, origin, target, relay);
+  for (let n = 0; n < 2; n++)
+    await fetchInstallation(
+      `${origin}/api/events`,
+      { headers: { authorization: "Bearer product-token" } },
+      fallback,
+    );
+  expect(central).toHaveBeenCalledTimes(2);
+  expect(fallback).not.toHaveBeenCalled();
+  for (const [url, input] of central.mock.calls) {
+    expect(url).toBe("https://accounts.example.test/api/identity/v2/relay-tickets");
+    expect(new Headers(input?.headers).get("authorization")).toBe("Bearer central-token");
+    expect(input?.body).not.toContain("product-token");
+  }
+  expect(state.open.mock.calls.map((call) => JSON.parse(call[3]).relayTicket)).toEqual([
+    "relay-ticket-1",
+    "relay-ticket-2",
+  ]);
+  for (const call of state.open.mock.calls) {
+    const input = JSON.parse(call[3]);
+    expect(input.headers).toEqual([{ name: "authorization", value: "Bearer product-token" }]);
+    expect(call[3]).not.toContain("central-token");
+  }
+});
+
+it("rejects a changed relay and a late ticket after logout before opening the native request", async () => {
+  const { selectInstallationTransport, fetchInstallation, invalidateInstallationTransport } =
+    await import("./installation-transport");
+  const origin = `https://${target.serverId}.installation.ork.invalid`;
+  const relay = { origin: "https://relay.example.test" };
+  await selectInstallationTransport(account, origin, target, relay);
+  const value = {
+    grant: "short-ticket",
+    expiresAt: Math.floor(Date.now() / 1000) + 60,
+    relayOrigin: "https://other.example.test",
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json(value)),
+  );
+  await expect(fetchInstallation(`${origin}/rpc/me`, {})).rejects.toThrow(
+    "Native connection changed",
+  );
+  expect(state.open).not.toHaveBeenCalled();
+  let resolve!: (value: Response) => void;
+  const response = new Promise<Response>((complete) => {
+    resolve = complete;
+  });
+  const fetcher = vi.fn(async () => response);
+  vi.stubGlobal("fetch", fetcher);
+  const pending = fetchInstallation(`${origin}/rpc/me`, {});
+  const rejected = expect(pending).rejects.toThrow("Native connection changed");
+  await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce());
+  invalidateInstallationTransport();
+  resolve(Response.json({ ...value, relayOrigin: relay.origin }));
+  await rejected;
+  expect(state.open).not.toHaveBeenCalled();
 });
 
 it("sends product operations through native pinning and Accounts through its separate channel", async () => {

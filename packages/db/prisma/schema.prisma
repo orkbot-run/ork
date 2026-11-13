@@ -2541,6 +2541,8 @@ model InstallationIdentity {
   projectionGrant String?
   verifiedAt DateTime?
   validUntil DateTime?
+  transportOwnerId String?
+  transportLeaseUntil DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

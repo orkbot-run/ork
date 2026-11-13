@@ -11,6 +11,7 @@ private struct InstallationSelection: Decodable, Equatable {
   let workspaceId: String
   let bindingVersion: UInt64
   let keyFingerprint: String
+  let relayOrigin: String?
 }
 
 private struct InstallationHeader: Decodable {
@@ -23,6 +24,7 @@ private struct InstallationInput: Decodable {
   let path: String
   let headers: [InstallationHeader]
   let hasBody: Bool
+  let relayTicket: String?
 }
 
 /// A native session and monotonic selection revision fence every pending request.
@@ -64,6 +66,15 @@ public actor InstallationContexts {
     }
     _ = try InstallationRequest(origin: selected.origin, serverId: selected.serverId,
       bindingVersion: selected.bindingVersion, fingerprint: selected.keyFingerprint)
+    if let address = selected.relayOrigin {
+      guard let relay = URLComponents(string: address), relay.scheme == "https",
+        relay.host != nil, relay.user == nil, relay.password == nil, relay.query == nil,
+        relay.fragment == nil, relay.path.isEmpty,
+        !(relay.host?.lowercased() == issuer.host?.lowercased() &&
+          (relay.port ?? 443) == (issuer.port ?? 443)), address != selected.origin,
+        selected.origin == "https://\(selected.serverId).installation.ork.invalid"
+      else { throw InstallationRequestError.invalidTarget }
+    }
     if revision == self.revision {
       guard selected == selection else { throw InstallationRequestError.closed }
       return
@@ -84,8 +95,17 @@ public actor InstallationContexts {
       input.utf8.count <= 64 * 1024, let data = input.data(using: .utf8)
     else { throw InstallationRequestError.invalidTarget }
     let decoded = try JSONDecoder().decode(InstallationInput.self, from: data)
+    let relay: RelayRoute?
+    if let origin = selection.relayOrigin, let ticket = decoded.relayTicket {
+      relay = RelayRoute(origin: origin, ticket: ticket,
+        organizationId: selection.organizationId, workspaceId: selection.workspaceId)
+    } else {
+      guard selection.relayOrigin == nil, decoded.relayTicket == nil
+      else { throw InstallationRequestError.invalidTarget }
+      relay = nil
+    }
     let operation = try InstallationRequest(origin: selection.origin, serverId: selection.serverId,
-      bindingVersion: selection.bindingVersion, fingerprint: selection.keyFingerprint)
+      bindingVersion: selection.bindingVersion, fingerprint: selection.keyFingerprint, relay: relay)
     requests[id] = operation
     inputs[id] = HttpRequest(method: decoded.method, path: decoded.path,
       headers: decoded.headers.map { HttpHeader(name: $0.name, value: $0.value) }, hasBody: decoded.hasBody)

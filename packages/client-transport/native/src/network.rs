@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
 use futures_util::{SinkExt, StreamExt};
 use rustls::pki_types::ServerName;
@@ -38,6 +38,39 @@ struct Identity {
     binding_version: u64,
     key_fingerprint: String,
     certificate: String,
+    #[serde(default)]
+    origin: Option<String>,
+}
+
+#[derive(uniffi::Record)]
+pub struct RelayRoute {
+    pub origin: String,
+    pub ticket: String,
+    pub organization_id: String,
+    pub workspace_id: String,
+}
+
+// Accounts and product bearers have different purposes and must never reach the outer relay.
+fn relay_capability(route: &RelayRoute, connection: &InstallationConnection) -> bool {
+    if route.ticket.len() > 16 * 1024 {
+        return false;
+    }
+    let parts = route.ticket.split('.').collect::<Vec<_>>();
+    let claims = (|| {
+        if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+            return None;
+        }
+        let bytes = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+        serde_json::from_slice::<serde_json::Value>(&bytes).ok()
+    })();
+    let Some(claims) = claims else { return false };
+    claims["purpose"] == "ork-relay-channel-v1"
+        && claims["aud"] == route.origin
+        && claims["server_id"] == connection.server_id
+        && claims["binding_version"] == connection.binding_version
+        && claims["installation_key"] == connection.fingerprint
+        && claims["organization_id"] == route.organization_id
+        && claims["workspace_id"] == route.workspace_id
 }
 
 /// Bound the HTTP upgrade response before the WebSocket library starts enforcing frame limits.
@@ -86,7 +119,7 @@ impl AsyncWrite for BootstrapStream {
 
 type Socket = WebSocketStream<BootstrapStream>;
 
-async fn socket(address: &Url) -> Result<Socket, TransportError> {
+async fn socket(address: &Url, ticket: Option<&str>) -> Result<Socket, TransportError> {
     let host = address.host_str().ok_or(TransportError::InvalidRequest)?;
     let host = host.trim_start_matches('[').trim_end_matches(']');
     let tcp = TcpStream::connect((
@@ -128,6 +161,13 @@ async fn socket(address: &Url) -> Result<Socket, TransportError> {
     request
         .headers_mut()
         .insert("origin", HeaderValue::from_static("orkbot://"));
+    if let Some(ticket) = ticket {
+        request.headers_mut().insert(
+            "authorization",
+            HeaderValue::from_str(&format!("Bearer {ticket}"))
+                .map_err(|_| TransportError::InvalidRequest)?,
+        );
+    }
     let config = WebSocketConfig::default()
         .read_buffer_size(BUFFER_LIMIT)
         .write_buffer_size(0)
@@ -156,6 +196,7 @@ pub struct InstallationConnection {
     server_id: String,
     binding_version: u64,
     fingerprint: String,
+    relay_ticket: Option<String>,
     started: AtomicBool,
     canceled: CancellationToken,
     inner: Mutex<Option<Arc<InstallationHttp>>>,
@@ -201,7 +242,7 @@ impl InstallationConnection {
             .ok_or(TransportError::NotStarted)
     }
     async fn connect(&self) -> Result<Socket, TransportError> {
-        let mut socket = socket(&self.address).await?;
+        let mut socket = socket(&self.address, self.relay_ticket.as_deref()).await?;
         let message = socket
             .next()
             .await
@@ -226,8 +267,16 @@ impl InstallationConnection {
         let certificate = STANDARD
             .decode(identity.certificate)
             .map_err(|_| TransportError::InvalidIdentity)?;
+        let logical_origin = match (&self.relay_ticket, identity.origin) {
+            (Some(_), Some(origin)) => origin,
+            (Some(_), None) => return Err(TransportError::InvalidIdentity),
+            (None, Some(origin)) if origin != self.origin => {
+                return Err(TransportError::InvalidIdentity)
+            }
+            _ => self.origin.clone(),
+        };
         let operation =
-            InstallationHttp::new(certificate, self.fingerprint.clone(), self.origin.clone())?;
+            InstallationHttp::new(certificate, self.fingerprint.clone(), logical_origin)?;
         if self.canceled.is_cancelled() {
             operation.cancel();
             return Err(TransportError::Canceled);
@@ -283,11 +332,53 @@ impl InstallationConnection {
             server_id,
             binding_version,
             fingerprint: key_fingerprint,
+            relay_ticket: None,
             started: AtomicBool::new(false),
             canceled: CancellationToken::new(),
             inner: Mutex::new(None),
             drivers: Mutex::new(Vec::new()),
         }))
+    }
+
+    /// Only a short relay capability belongs on the outer connection. Product HTTP stays inside TLS.
+    #[uniffi::constructor]
+    pub fn via_relay(
+        origin: String,
+        server_id: String,
+        binding_version: u64,
+        key_fingerprint: String,
+        route: RelayRoute,
+    ) -> Result<Arc<Self>, TransportError> {
+        if origin != format!("https://{server_id}.installation.ork.invalid") {
+            return Err(TransportError::InvalidRequest);
+        }
+        let mut connection = Self::new(origin, server_id, binding_version, key_fingerprint)?;
+        let mut address = Url::parse(&route.origin).map_err(|_| TransportError::InvalidRequest)?;
+        if address.scheme() != "https"
+            || address.origin().ascii_serialization() != route.origin
+            || !address.username().is_empty()
+            || address.password().is_some()
+            || address.query().is_some()
+            || address.fragment().is_some()
+            || !relay_capability(&route, &connection)
+            || !route
+                .ticket
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+        {
+            return Err(TransportError::InvalidRequest);
+        }
+        let selected = Arc::get_mut(&mut connection).ok_or(TransportError::InvalidRequest)?;
+        if route.origin == selected.origin {
+            return Err(TransportError::InvalidRequest);
+        }
+        address
+            .set_scheme("wss")
+            .map_err(|_| TransportError::InvalidRequest)?;
+        address.set_path("/api/relay/v1/channels");
+        selected.address = address;
+        selected.relay_ticket = Some(route.ticket);
+        Ok(connection)
     }
 
     pub async fn start_request(&self, request: HttpRequest) -> Result<(), TransportError> {

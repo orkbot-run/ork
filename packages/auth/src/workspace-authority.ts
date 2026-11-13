@@ -54,8 +54,7 @@ export class WorkspaceAuthority {
           error instanceof InstallationRequestError &&
           [400, 401, 403, 409, 410, 426].includes(error.status)
         ) {
-          this.window.dispose();
-          await this.personal.refuseInstallation();
+          await this.refuseInstallation(configuration.serverId);
         }
         throw error;
       });
@@ -748,6 +747,19 @@ export class WorkspaceAuthority {
   invalidate(workspaceId: string): void {
     this.window.invalidate(workspaceId);
     this.personal.invalidate(workspaceId);
+  }
+
+  async refuseInstallation(serverId?: string, broadcast = true): Promise<void> {
+    this.window.dispose();
+    try {
+      await this.personal.refuseInstallation();
+    } finally {
+      if (serverId && broadcast && this.realtime)
+        await this.realtime.publish(
+          `installation-authority:${serverId}`,
+          JSON.stringify({ source: this.processId, refused: true }),
+        );
+    }
   }
 
   async work(

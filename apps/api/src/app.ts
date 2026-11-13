@@ -6,7 +6,6 @@
 
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { getRequestListener } from "@hono/node-server";
 import type {
   AgentContextStrategy,
   AgentRuntime,
@@ -230,6 +229,8 @@ import { mountAuditExportRoute } from "#modules/security/audit-export";
 import { cspReportRoutes } from "#modules/security/csp-report";
 import { createAuthResponseAudit } from "#modules/security/security-audit";
 import { createPendingServerUpdates, createServerUpdates } from "#modules/server-updates/service";
+import { installationHttpListener } from "#modules/transport/installation-http";
+import { startInstallationRelay } from "#modules/transport/installation-relay";
 import { createSpeechSummarizer } from "#modules/voice/speech-summary";
 import {
   mountVoiceHttpRoutes,
@@ -1778,9 +1779,19 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ? new InstallationTransport({
         origin: env.webOrigin,
         identity: () => installation.transportIdentity(),
-        listener: getRequestListener(app.fetch),
+        listener: installationHttpListener(env.webOrigin, app.fetch),
       })
     : undefined;
+  const stopInstallationRelay =
+    installation && workspaceAuthority && installationTransport
+      ? startInstallationRelay({
+          prisma,
+          installation,
+          authority: workspaceAuthority,
+          transport: installationTransport,
+          onError: (error) => logger.error("Installation relay unavailable", error),
+        })
+      : undefined;
   return {
     app,
     prisma,
@@ -1808,6 +1819,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
       installationTransport?.close();
+      await stopInstallationRelay?.();
       await stopServerClaim?.();
       await stopWorkspaceAuthority?.();
       serverAI?.dispose();

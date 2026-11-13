@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import type { IdentityCatalog, WorkspaceTarget } from "@orkbot/contracts";
-import { catalogWorkspace, identityCatalogSchema, isLoopbackHost } from "@orkbot/contracts";
+import type { IdentityCatalog, InstallationRelayRoute, WorkspaceTarget } from "@orkbot/contracts";
+import {
+  catalogWorkspace,
+  identityCatalogSchema,
+  installationRelayRouteSchema,
+  installationVirtualOrigin,
+  isLoopbackHost,
+} from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { accountsAuthorization, accountsConfiguration, accountsVersion } from "./accounts";
 import { fetchAccounts } from "./accounts-network";
@@ -17,6 +23,7 @@ export type AccountServer = {
   organizationName?: string;
   serverName?: string;
   workspace?: WorkspaceTarget;
+  relay?: InstallationRelayRoute;
 };
 
 function server(value: unknown): AccountServer {
@@ -90,13 +97,20 @@ export async function accountDirectory(
         });
         if (!selected) continue;
         const route = installation.routes.find((row) => row.kind === "direct");
-        if (!route) continue;
+        const tunnel = installation.routes.find((row) => row.kind === "tunnel");
+        if (!route && !tunnel) continue;
+        const relay =
+          !route && tunnel
+            ? installationRelayRouteSchema.parse({ origin: tunnel.address })
+            : undefined;
+        const url = route?.address ?? installationVirtualOrigin(installation.id);
         entries.push({
-          ...server({ id: workspace.id, url: route.address, kind: "selfhosted", deviceId: null }),
+          ...server({ id: workspace.id, url, kind: "selfhosted", deviceId: null }),
           name: workspace.name,
           organizationName: organization.name,
           serverName: installation.name,
           workspace: selected.target,
+          ...(relay ? { relay } : {}),
         });
       }
   return { catalog, entries };

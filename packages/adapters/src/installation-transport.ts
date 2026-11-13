@@ -56,6 +56,7 @@ export class InstallationTransport {
   });
   private readonly sockets = new Set<TLSSocket>();
   private readonly pending = new Set<Duplex>();
+  private readonly relaySockets = new Set<WebSocket>();
   private closed = false;
   private readonly http;
   private readonly authority: string;
@@ -142,41 +143,7 @@ export class InstallationTransport {
         if (this.closed || socket.destroyed) return socket.destroy();
         this.wss.handleUpgrade(request, socket, head, (ws) => {
           socket.off("error", onError);
-          ws.on("error", () => ws.terminate());
-          ws.on("message", (_bytes, binary) => {
-            if (!binary) ws.terminate();
-          });
-          ws.send(
-            JSON.stringify({
-              protocol: "ork-installation-tls-v1",
-              serverId: identity.serverId,
-              bindingVersion: identity.bindingVersion,
-              keyFingerprint: identity.keyFingerprint,
-              certificate: identity.certificate,
-            }),
-          );
-          const encrypted = encryptedStream(ws);
-          const tls = new TLSSocket(encrypted, {
-            isServer: true,
-            secureContext: identity.context,
-            ALPNProtocols: ["http/1.1"],
-            requestCert: false,
-          });
-          this.sockets.add(tls);
-          const handshake = setTimeout(() => tls.destroy(), 8_000);
-          handshake.unref();
-          const stopHandshake = () => clearTimeout(handshake);
-          // Decrypted data appears only after Node's TLS handshake succeeds.
-          tls.once("data", stopHandshake);
-          tls.on("error", () => tls.destroy());
-          encrypted.on("error", () => tls.destroy());
-          tls.once("close", () => {
-            stopHandshake();
-            this.sockets.delete(tls);
-            encrypted.destroy();
-            ws.terminate();
-          });
-          this.http.emit("connection", tls);
+          this.attachIdentity(ws, identity);
         });
       })
       .catch(() => {
@@ -185,11 +152,73 @@ export class InstallationTransport {
       });
   };
 
+  /** Attach an outbound relay socket after its one-time routing capability was accepted. */
+  async attach(socket: WebSocket): Promise<void> {
+    if (this.closed || socket.readyState !== 1) throw new Error("Installation transport closed");
+    this.relaySockets.add(socket);
+    socket.once("close", () => this.relaySockets.delete(socket));
+    const early = () => socket.terminate();
+    socket.on("message", early);
+    const timer = setTimeout(() => socket.terminate(), 8_000);
+    timer.unref();
+    try {
+      const identity = await this.options.identity();
+      if (this.closed || socket.readyState !== 1) throw new Error("Installation transport closed");
+      socket.off("message", early);
+      this.attachIdentity(socket, identity);
+    } catch (error) {
+      socket.terminate();
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private attachIdentity(ws: WebSocket, identity: InstallationTlsIdentity) {
+    ws.on("error", () => ws.terminate());
+    ws.on("message", (_bytes, binary) => {
+      if (!binary) ws.terminate();
+    });
+    ws.send(
+      JSON.stringify({
+        protocol: "ork-installation-tls-v1",
+        serverId: identity.serverId,
+        bindingVersion: identity.bindingVersion,
+        keyFingerprint: identity.keyFingerprint,
+        certificate: identity.certificate,
+        origin: this.options.origin,
+      }),
+    );
+    const encrypted = encryptedStream(ws);
+    const tls = new TLSSocket(encrypted, {
+      isServer: true,
+      secureContext: identity.context,
+      ALPNProtocols: ["http/1.1"],
+      requestCert: false,
+    });
+    this.sockets.add(tls);
+    const handshake = setTimeout(() => tls.destroy(), 8_000);
+    handshake.unref();
+    const stopHandshake = () => clearTimeout(handshake);
+    // Decrypted data appears only after Node's TLS handshake succeeds.
+    tls.once("data", stopHandshake);
+    tls.on("error", () => tls.destroy());
+    encrypted.on("error", () => tls.destroy());
+    tls.once("close", () => {
+      stopHandshake();
+      this.sockets.delete(tls);
+      encrypted.destroy();
+      ws.terminate();
+    });
+    this.http.emit("connection", tls);
+  }
+
   close() {
     this.closed = true;
     for (const socket of this.pending) socket.destroy();
     for (const socket of this.sockets) socket.destroy();
     for (const client of this.wss.clients) client.terminate();
+    for (const client of this.relaySockets) client.terminate();
     this.wss.close();
     this.http.closeAllConnections();
   }

@@ -6,6 +6,7 @@
   "exports": {
     "./personal-revocations": "./src/personal-revocations.ts",
     "./installation-client": "./src/installation-client.ts",
+    "./installation-transport-owner": "./src/installation-transport-owner.ts",
     "./workspace-authority": "./src/workspace-authority.ts",
     "./workspace-authority-service": "./src/workspace-authority-service.ts",
     ".": {

@@ -6,6 +6,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import {
   lastOrganizationWorkspace,
   saveSelectedWorkspace,
+  selectedInstallationRelay,
   selectedWorkspace,
 } from "./selected-workspace";
 
@@ -39,6 +40,21 @@ it("keeps device workspace history separately for each organization and account"
   expect(await lastOrganizationWorkspace("account-b", target.organizationId)).toBeNull();
   expect(await selectedWorkspace("account-b", "https://server.example.test")).toBeNull();
   expect(await selectedWorkspace("account-a", "https://other.example.test")).toBeNull();
+});
+
+it("retains a relay route only for its exact account and virtual installation origin", async () => {
+  const origin = `https://${target.serverId}.installation.ork.invalid`;
+  const relay = { origin: "https://relay.example.test" };
+  await saveSelectedWorkspace("account-a", origin, target, relay);
+  expect(await selectedInstallationRelay("account-a", origin)).toEqual(relay);
+  expect(await selectedInstallationRelay("account-b", origin)).toBeUndefined();
+  expect(
+    await selectedInstallationRelay("account-a", "https://other.example.test"),
+  ).toBeUndefined();
+  await expect(
+    saveSelectedWorkspace("account-a", "https://other.example.test", target, relay),
+  ).rejects.toThrow("Native connection changed");
+  expect(await selectedInstallationRelay("account-a", origin)).toEqual(relay);
 });
 
 it("clears active selection without granting authority from remembered metadata", async () => {

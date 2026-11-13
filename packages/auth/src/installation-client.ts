@@ -19,10 +19,14 @@ import {
   IDENTITY_LOGIN_PURPOSE,
   IDENTITY_LOGIN_SECONDS,
   IDENTITY_PROJECTION_PURPOSE,
+  INSTALLATION_TRANSPORT_LEASE_PURPOSE,
+  INSTALLATION_TRANSPORT_LEASE_SECONDS,
   identityAudience,
   installationRequestMessage,
+  installationRouteInputSchema,
   installationRoutesInputSchema,
   personalServerMessage,
+  RELAY_SERVER_PURPOSE,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import type { InstallationIdentity, PrismaClient } from "@orkbot/db";
@@ -49,15 +53,26 @@ export interface InstallationConfiguration {
   bindingVersion: number;
 }
 
+export interface InstallationTransportLease {
+  configuration: InstallationConfiguration;
+  ownerId: string;
+  expiresAt: number;
+  deadline: number;
+  relay?: { origin: string; ticket: string };
+}
+
 type AuthorityPurpose =
   | typeof IDENTITY_ENROLLMENT_PURPOSE
   | typeof IDENTITY_LOGIN_PURPOSE
   | typeof IDENTITY_ACCESS_PURPOSE
-  | typeof IDENTITY_PROJECTION_PURPOSE;
+  | typeof IDENTITY_PROJECTION_PURPOSE
+  | typeof INSTALLATION_TRANSPORT_LEASE_PURPOSE;
 
 type InstallationPath =
   | "/servers/synchronize"
   | "/servers/routes"
+  | "/servers/transport-lease"
+  | "/servers/transport-release"
   | "/workspaces/acknowledge"
   | "/enrollments/acknowledge";
 
@@ -419,6 +434,7 @@ export class InstallationClient {
         IDENTITY_LOGIN_PURPOSE,
         IDENTITY_ACCESS_PURPOSE,
         IDENTITY_PROJECTION_PURPOSE,
+        INSTALLATION_TRANSPORT_LEASE_PURPOSE,
       ].includes(purpose)
     )
       throw failure("Invalid installation authority purpose");
@@ -432,9 +448,12 @@ export class InstallationClient {
       algorithms: ["RS256"],
       requiredClaims: ["iss", "aud", "sub", "purpose", "iat", "exp", "jti"],
     });
-    const lifetime = [IDENTITY_ENROLLMENT_PURPOSE, IDENTITY_LOGIN_PURPOSE].includes(purpose)
-      ? IDENTITY_LOGIN_SECONDS
-      : IDENTITY_ACCESS_SECONDS;
+    const lifetime =
+      purpose === INSTALLATION_TRANSPORT_LEASE_PURPOSE
+        ? INSTALLATION_TRANSPORT_LEASE_SECONDS
+        : [IDENTITY_ENROLLMENT_PURPOSE, IDENTITY_LOGIN_PURPOSE].includes(purpose)
+          ? IDENTITY_LOGIN_SECONDS
+          : IDENTITY_ACCESS_SECONDS;
     const now = Math.floor(Date.now() / 1000);
     if (
       payload.purpose !== purpose ||
@@ -481,6 +500,96 @@ export class InstallationClient {
     const value = installationRoutesInputSchema.parse(routes);
     const { response } = await this.signedRequest("/servers/routes", { routes: value }, expected);
     if (response.ok !== true) throw failure("Installation routes were not published");
+  }
+
+  async transportLease(
+    ownerId: string,
+    configuration: InstallationConfiguration,
+  ): Promise<InstallationTransportLease> {
+    if (!UUID.test(ownerId)) throw failure("Invalid transport owner");
+    const { response, nonce, startedAt } = await this.signedRequest(
+      "/servers/transport-lease",
+      { ownerId },
+      configuration,
+    );
+    const claims = await this.verify(
+      response.grant,
+      INSTALLATION_TRANSPORT_LEASE_PURPOSE,
+      configuration,
+    );
+    const bound = (payload: JWTPayload) =>
+      payload.server_id === configuration.serverId &&
+      payload.sub === configuration.serverId &&
+      payload.organization_id === configuration.organizationId &&
+      payload.binding_version === configuration.bindingVersion &&
+      payload.installation_key === configuration.keyFingerprint &&
+      payload.lease_id === ownerId;
+    if (!bound(claims) || claims.nonce !== nonce || response.expiresAt !== claims.exp)
+      throw failure("Transport lease does not match this installation");
+    const now = performance.now();
+    const deadline = Math.min(
+      startedAt + (claims.exp! - claims.iat!) * 1000,
+      now + claims.exp! * 1000 - Date.now(),
+    );
+    if (deadline <= now) throw failure("Transport lease already expired");
+    let relay: InstallationTransportLease["relay"];
+    if (response.relayOrigin !== undefined || response.relayTicket !== undefined) {
+      const route = installationRouteInputSchema.parse({
+        kind: "tunnel",
+        address: response.relayOrigin,
+        deviceId: null,
+      });
+      if (
+        route.address === this.options.issuer ||
+        typeof response.relayTicket !== "string" ||
+        response.relayTicket.length > 16 * 1024
+      )
+        throw failure("Invalid relay authority");
+      const ticket = (
+        await jwtVerify(response.relayTicket, this.keys, {
+          issuer: this.options.issuer,
+          audience: route.address,
+          algorithms: ["RS256"],
+          requiredClaims: ["iss", "aud", "sub", "purpose", "iat", "exp", "jti"],
+        })
+      ).payload;
+      if (
+        !bound(ticket) ||
+        ticket.purpose !== RELAY_SERVER_PURPOSE ||
+        ticket.iat !== claims.iat ||
+        ticket.exp !== claims.exp ||
+        typeof ticket.jti !== "string" ||
+        !UUID.test(ticket.jti)
+      )
+        throw failure("Relay authority does not match this installation");
+      relay = { origin: route.address, ticket: response.relayTicket };
+    }
+    const current = await this.configuration();
+    if (
+      !current ||
+      Object.entries(configuration).some(
+        ([name, value]) => current[name as keyof InstallationConfiguration] !== value,
+      )
+    )
+      throw failure("Installation binding changed");
+    if (deadline <= performance.now()) throw failure("Transport lease already expired");
+    return {
+      configuration,
+      ownerId,
+      expiresAt: claims.exp!,
+      deadline,
+      ...(relay ? { relay } : {}),
+    };
+  }
+
+  async releaseTransport(ownerId: string, configuration: InstallationConfiguration): Promise<void> {
+    if (!UUID.test(ownerId)) throw failure("Invalid transport owner");
+    const { response } = await this.signedRequest(
+      "/servers/transport-release",
+      { ownerId },
+      configuration,
+    );
+    if (response.ok !== true) throw failure("Transport ownership was not released");
   }
 
   async signedRequest(path: InstallationPath, body: unknown, expected?: InstallationConfiguration) {

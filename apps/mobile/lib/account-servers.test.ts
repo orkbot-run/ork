@@ -37,62 +37,78 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("sends the central bearer only to the configured directory without a device ID", async () => {
-  const organizationId = "00000000-0000-4000-8000-000000000002";
-  const serverId = "00000000-0000-4000-8000-000000000003";
-  const routeId = "00000000-0000-4000-8000-000000000004";
-  const fetcher = vi.fn().mockResolvedValue(
-    Response.json({
-      version: 2,
-      defaultOrganizationId: organizationId,
-      organizations: [
-        {
-          id: organizationId,
-          name: "Company",
-          type: "shared",
-          role: "member",
-          servers: [
-            {
-              id: serverId,
-              name: "Server",
-              state: "ready",
-              bindingVersion: 1,
-              keyFingerprint: "a".repeat(64),
-              routes: [{ id: routeId, kind: "direct", address: remote.url, deviceId: null }],
-              workspaces: [
-                { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "member" },
-              ],
-            },
-          ],
+it.each(["direct", "tunnel"] as const)(
+  "opens a %s workspace while keeping the central bearer on Accounts",
+  async (kind) => {
+    const organizationId = "00000000-0000-4000-8000-000000000002";
+    const serverId = "00000000-0000-4000-8000-000000000003";
+    const routeId = "00000000-0000-4000-8000-000000000004";
+    const fetcher = vi.fn().mockResolvedValue(
+      Response.json({
+        version: 2,
+        defaultOrganizationId: organizationId,
+        organizations: [
+          {
+            id: organizationId,
+            name: "Company",
+            type: "shared",
+            role: "member",
+            servers: [
+              {
+                id: serverId,
+                name: "Server",
+                state: "ready",
+                bindingVersion: 1,
+                keyFingerprint: "a".repeat(64),
+                routes: [
+                  {
+                    id: routeId,
+                    kind,
+                    address: kind === "direct" ? remote.url : "https://relay.example.test",
+                    deviceId: null,
+                  },
+                ],
+                workspaces: [
+                  { id: remote.id, name: "Team", state: "ready", canOpen: true, role: "member" },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    expect(await accountServers()).toEqual([
+      {
+        ...remote,
+        ...(kind === "tunnel"
+          ? {
+              url: `https://${serverId}.installation.ork.invalid`,
+              relay: { origin: "https://relay.example.test" },
+            }
+          : {}),
+        name: "Team",
+        organizationName: "Company",
+        serverName: "Server",
+        workspace: {
+          organizationId,
+          serverId,
+          workspaceId: remote.id,
+          bindingVersion: 1,
+          keyFingerprint: "a".repeat(64),
         },
-      ],
-    }),
-  );
-  vi.stubGlobal("fetch", fetcher);
-  expect(await accountServers()).toEqual([
-    {
-      ...remote,
-      name: "Team",
-      organizationName: "Company",
-      serverName: "Server",
-      workspace: {
-        organizationId,
-        serverId,
-        workspaceId: remote.id,
-        bindingVersion: 1,
-        keyFingerprint: "a".repeat(64),
       },
-    },
-  ]);
-  expect(fetcher).toHaveBeenCalledWith(
-    "https://api.ork.run/api/identity/v2/catalog",
-    expect.objectContaining({
-      headers: { authorization: "Bearer central-bearer" },
-      credentials: "omit",
-      redirect: "error",
-    }),
-  );
-});
+    ]);
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://api.ork.run/api/identity/v2/catalog",
+      expect.objectContaining({
+        headers: { authorization: "Bearer central-bearer" },
+        credentials: "omit",
+        redirect: "error",
+      }),
+    );
+  },
+);
 it("never accepts a local computer as a workspace server", async () => {
   vi.stubGlobal(
     "fetch",

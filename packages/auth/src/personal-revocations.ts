@@ -7,6 +7,7 @@ import { lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 export interface PersonalRevocations {
+  refuseInstallation(): Promise<void>;
   revoked(deviceId: string): Promise<boolean>;
   revoke(deviceIds: string[]): Promise<void>;
   restorationCheckpoint(): Promise<string[]>;
@@ -18,6 +19,28 @@ const restorationName = /^\.restore-required\.[a-zA-Z0-9]{12}$/;
 /** Tombstones survive process restarts and a failed projection database transaction. */
 export class FilePersonalRevocations implements PersonalRevocations {
   constructor(private readonly directory: string) {}
+  async refuseInstallation(): Promise<void> {
+    await mkdir(this.directory, { recursive: true, mode: 0o700 });
+    await this.checkDirectory();
+    const name = `${restorationPrefix}${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const file = await open(
+      path.join(this.directory, name),
+      constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+      0o600,
+    );
+    try {
+      await file.writeFile("pending\n");
+      await file.sync();
+    } finally {
+      await file.close();
+    }
+    const directory = await open(this.directory, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
+  }
   private file(deviceId: string) {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(deviceId))
       throw new Error("Invalid personal device ID");

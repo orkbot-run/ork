@@ -12,17 +12,20 @@ import {
 } from "node:crypto";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
+  INSTALLATION_TRANSPORT_LEASE_PURPOSE,
   identityAudience,
   installationRequestMessage,
   personalActivationMessage,
   personalOfflineMessage,
   personalServerMessage,
+  RELAY_SERVER_PURPOSE,
 } from "@orkbot/contracts";
 import { createDb, createSpaceForMember, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createLocalJWKSet, SignJWT } from "jose";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { createAuth } from "./index.js";
 import { InstallationClient } from "./installation-client.js";
+import { InstallationTransportOwner } from "./installation-transport-owner.js";
 import { oidcAccountSubject } from "./oidc.js";
 import { WorkspaceAuthority } from "./workspace-authority.js";
 
@@ -69,6 +72,9 @@ function broker() {
   const personalDevices = new Set<string>();
   let personalDeviceVersion = 0;
   let synchronizeStatus = 200;
+  let transportClaims: Record<string, unknown> = {};
+  let relayClaims: Record<string, unknown> = {};
+  let relayEnabled = true;
   let calls = 0;
   let state: "provisioning" | "ready" = "provisioning";
   let mapping: { localOrganizationId: string | null; localWorkspaceId: string | null } = {
@@ -164,6 +170,43 @@ function broker() {
         Buffer.from(headers.get("x-ork-proof-signature")!, "base64url"),
       ),
     ).toBe(true);
+    if (path.endsWith("/servers/transport-lease")) {
+      const base = {
+        iss: issuer,
+        sub: serverId,
+        iat: now,
+        exp: now + 45,
+        server_id: serverId,
+        organization_id: organizationId,
+        binding_version: 1,
+        installation_key: fingerprint(),
+        lease_id: body.ownerId,
+      };
+      const expiresAt = now + 45;
+      return Response.json({
+        grant: await sign({
+          ...base,
+          aud: identityAudience(serverId),
+          purpose: INSTALLATION_TRANSPORT_LEASE_PURPOSE,
+          nonce: proof.nonce,
+          jti: randomUUID(),
+          ...transportClaims,
+        }),
+        expiresAt,
+        ...(relayEnabled
+          ? {
+              relayOrigin: "https://relay.example.test",
+              relayTicket: await sign({
+                ...base,
+                aud: "https://relay.example.test",
+                purpose: RELAY_SERVER_PURPOSE,
+                jti: randomUUID(),
+                ...relayClaims,
+              }),
+            }
+          : {}),
+      });
+    }
     if (path.endsWith("/enrollments/acknowledge"))
       return Response.json({ state: "ready", serverId }, { status: failAck ? 503 : 200 });
     if (path.endsWith("/workspaces/acknowledge")) {
@@ -282,6 +325,15 @@ function broker() {
       members = [];
       permissionVersion++;
     },
+    transportClaims: (value: Record<string, unknown>) => {
+      transportClaims = value;
+    },
+    relayClaims: (value: Record<string, unknown>) => {
+      relayClaims = value;
+    },
+    relayEnabled: (value: boolean) => {
+      relayEnabled = value;
+    },
     readd: () => {
       members = [{ userId: "central-participant", role: "member", accessVersion: randomUUID() }];
       permissionVersion++;
@@ -296,6 +348,9 @@ describe.skipIf(!enabled)(
     let revokedDevices = new Set<string>();
     let restorationBarriers = new Set<string>();
     const revocations = {
+      refuseInstallation: async () => {
+        restorationBarriers.add(randomUUID());
+      },
       revoked: async (id: string) => revokedDevices.has(id),
       revoke: async (ids: string[]) => {
         for (const id of ids) revokedDevices.add(id);
@@ -336,6 +391,88 @@ describe.skipIf(!enabled)(
       server.approve();
       await installation.pollEnrollment();
     };
+    it("elects one transport process and fences takeover and stale cleanup on PostgreSQL", async () => {
+      await enroll();
+      const first = new InstallationTransportOwner(prisma!);
+      const second = new InstallationTransportOwner(prisma!);
+      const results = await Promise.all([first.acquire(), second.acquire()]);
+      expect(results.filter(Boolean)).toHaveLength(1);
+      const winner = results[0] ? first : second;
+      const loser = winner === first ? second : first;
+      const selected = results.find(Boolean)!;
+      expect(selected.deadline - performance.now()).toBeGreaterThan(45_000);
+      expect(selected.deadline - performance.now()).toBeLessThanOrEqual(60_000);
+      expect(await winner.active(selected.configuration)).toBe(true);
+      expect(await loser.active(selected.configuration)).toBe(false);
+      await loser.release();
+      expect(await winner.active(selected.configuration)).toBe(true);
+      expect(await winner.active({ ...selected.configuration, bindingVersion: 2 })).toBe(false);
+      await system(() =>
+        prisma!.installationIdentity.update({
+          where: { id: "local" },
+          data: { transportLeaseUntil: new Date(Date.now() - 1_000) },
+        }),
+      );
+      expect(await winner.active(selected.configuration)).toBe(false);
+      expect(await loser.acquire()).not.toBeNull();
+      await winner.release();
+      expect(await loser.active(selected.configuration)).toBe(true);
+      await loser.release();
+      expect(await loser.active(selected.configuration)).toBe(false);
+    });
+
+    it("does not elect transport ownership for an unpaired or failed installation", async () => {
+      const owner = new InstallationTransportOwner(prisma!);
+      await installation.ensureIdentity();
+      expect(await owner.acquire()).toBeNull();
+      await enroll();
+      await system(() =>
+        prisma!.installationIdentity.update({ where: { id: "local" }, data: { state: "failed" } }),
+      );
+      expect(await owner.acquire()).toBeNull();
+    });
+    it("verifies transport lease and relay authority against the elected owner and exact binding", async () => {
+      await enroll();
+      const configuration = (await installation.configuration())!;
+      const ownerId = randomUUID();
+      const lease = await installation.transportLease(ownerId, configuration);
+      expect(lease.ownerId).toBe(ownerId);
+      expect(lease.deadline).toBeGreaterThan(performance.now());
+      expect(lease.deadline - performance.now()).toBeLessThanOrEqual(45_000);
+      expect(lease.relay?.origin).toBe("https://relay.example.test");
+      expect(lease.relay?.ticket).toBeTruthy();
+      server.relayEnabled(false);
+      expect((await installation.transportLease(ownerId, configuration)).relay).toBeUndefined();
+    });
+
+    it.each([
+      { nonce: "different-request" },
+      { lease_id: "90000000-0000-4000-8000-000000000001" },
+      { binding_version: 2 },
+      { installation_key: "0".repeat(64) },
+      { purpose: "ork-server-login-v2" },
+      { organization_id: "90000000-0000-4000-8000-000000000002" },
+    ])("refuses a substituted transport lease (%j)", async (claims) => {
+      await enroll();
+      server.transportClaims(claims);
+      await expect(
+        installation.transportLease(randomUUID(), (await installation.configuration())!),
+      ).rejects.toThrow();
+    });
+
+    it.each([
+      { aud: identityAudience(serverId) },
+      { purpose: "ork-server-login-v2" },
+      { lease_id: "90000000-0000-4000-8000-000000000001" },
+      { binding_version: 2 },
+      { installation_key: "0".repeat(64) },
+    ])("refuses a substituted relay ticket (%j)", async (claims) => {
+      await enroll();
+      server.relayClaims(claims);
+      await expect(
+        installation.transportLease(randomUUID(), (await installation.configuration())!),
+      ).rejects.toThrow();
+    });
     it("provisions a clean installation once and resumes an acknowledgement lost after commit", async () => {
       await enroll();
       authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);

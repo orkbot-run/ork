@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+services:
+  relay:
+    image: ${ORKBOT_SERVER_IMAGE:?Set ORKBOT_SERVER_IMAGE to an immutable server image}
+    command: ["node", "--enable-source-maps", "apps/relay/dist/index.js"]
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      NODE_ENV: production
+      ORK_ACCOUNTS_ISSUER: ${ORK_ACCOUNTS_ISSUER:?Set ORK_ACCOUNTS_ISSUER}
+      ORK_RELAY_ORIGIN: ${ORK_RELAY_ORIGIN:?Set ORK_RELAY_ORIGIN}
+      PORT: "3210"
+      HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3210:3210"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3210/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    stop_grace_period: 15s
+    deploy:
+      replicas: 1
+      update_config:
+        parallelism: 1
+        order: stop-first

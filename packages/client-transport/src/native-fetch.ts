@@ -26,6 +26,7 @@ export interface NativeHttpContext {
   revision: number;
   origin: string;
   current(): boolean;
+  relayTicket?(signal?: AbortSignal): Promise<string>;
 }
 
 const CHUNK = 64 * 1024;
@@ -257,6 +258,9 @@ export function createNativeFetch(
           path: `${url.pathname}${url.search}`,
           headers: Array.from(headers, ([name, value]) => ({ name, value })),
           hasBody: body != null,
+          ...(context.relayTicket
+            ? { relayTicket: await checked(context.relayTicket(signal ?? undefined)) }
+            : {}),
         }),
       );
       void opened
