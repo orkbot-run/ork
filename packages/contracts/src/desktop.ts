@@ -198,6 +198,8 @@ export interface OrkDesktop {
   };
   update: OrkDesktopUpdate;
   oauth: {
+    /** Capture a registered MCP callback before network loading; no product session enters the popup. */
+    capture?: (authorizationUrl: string, expectedState: string) => Promise<OrkDesktopOAuthCallback>;
     /**
      * Open system-browser auth. A redirect_uri must be HTTP loopback with state;
      * URLs without a redirect use backend polling. Optional for older desktops.

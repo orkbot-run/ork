@@ -61,6 +61,16 @@ Native apps never send those tokens to saved servers. Switching central accounts
 retires product sessions and pending operations before the next account opens.
 Desktop also keeps each account and server in a separate browser profile.
 
+## MCP authorization callbacks
+
+Bundled desktop clients ask the installation to choose its registered MCP callback.
+The native host opens an unprivileged, temporary browser profile and captures the exact
+callback before loading it. It checks the origin, path and unique OAuth state, then
+returns the code only to the initiating document. The authenticated workspace session
+completes the token exchange. Changing accounts or workspaces cancels completion.
+The provider receives the installation's configured callback address, even when the
+installation is reached through relay. Browser clients retain their popup flow.
+
 ## Server connection links
 
 Opening a self-hosted server in a browser shows its address, a pairing-code field and an

@@ -98,12 +98,14 @@ export function McpServersOverlay({
   onClose,
   editServerId,
   stdioEnabled,
+  serverOrigin,
 }: {
   onClose: () => void;
   /** Opens with this server's form, as an import's setup checklist does. */
   editServerId?: string;
   /** Whether this deployment runs stdio servers. */
   stdioEnabled: boolean;
+  serverOrigin?: string;
 }) {
   const { t } = useLingui();
   const [editing, setEditing] = useState<McpServer | null>(null);
@@ -778,7 +780,7 @@ export function McpServersOverlay({
                     <Input
                       id="mcp-oauth-redirect-uri"
                       readOnly
-                      value={mcpOAuthRedirectUri()}
+                      value={mcpOAuthRedirectUri(serverOrigin)}
                       onFocus={(e) => e.target.select()}
                     />
                   </Field>

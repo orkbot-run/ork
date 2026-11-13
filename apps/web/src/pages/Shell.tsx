@@ -1444,6 +1444,7 @@ function SpaceShell() {
           paletteActions={paletteActions}
         />
         <AppOverlays
+          serverOrigin={bootstrapMe?.serverOrigin}
           overlay={overlay}
           setOverlay={setOverlay}
           activeBotId={activeBotId.current}

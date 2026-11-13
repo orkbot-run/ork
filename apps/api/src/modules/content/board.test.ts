@@ -103,6 +103,7 @@ it.each([false, true])("includes the board capability in me (%s)", async (ticket
     prisma,
     env: {
       ticketBoardEnabled,
+      webOrigin: "http://localhost:5173",
       phoneCallsEnabled: ticketBoardEnabled,
       defaultProvider: "fake",
       defaultModel: "fake-model",

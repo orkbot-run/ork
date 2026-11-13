@@ -127,6 +127,15 @@ if (
       setChannel: (channel) => call("update.setChannel", { channel }),
     },
     oauth: {
+      ...(config.transport
+        ? {
+            capture: (url: string, expectedState: string) =>
+              call<OrkDesktopOAuthCallback>("oauth.capture", {
+                url,
+                expected_state: expectedState,
+              }),
+          }
+        : {}),
       open: (url) => call("oauth.open", { url }),
       cancel: (url) => call("oauth.cancel", { url }),
       onCallback: (listener) => subscribe<OrkDesktopOAuthCallback>("oauth", listener),

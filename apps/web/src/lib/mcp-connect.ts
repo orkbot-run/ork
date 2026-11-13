@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited OAuth completion is preserved; native popup session handling is an Ork addition.
 
-import { supportsNativeSsoPopup } from "./desktop";
+import { desktopBridge, supportsNativeSsoPopup } from "./desktop";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
-import { rpc } from "./rpc";
+import { captureRpcContext } from "./rpc";
 
 export { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 
@@ -23,13 +23,26 @@ export type McpOauthResult =
  * The BroadcastChannel (not window.opener) is the completion signal because
  * provider login pages with COOP sever the opener link. */
 /** Where providers send the user back; a pre-registered client must allow it. */
-export function mcpOAuthRedirectUri(): string {
-  return `${window.location.origin}/mcp/oauth/callback`;
+export function mcpOAuthRedirectUri(serverOrigin?: string): string {
+  return serverOrigin ? new URL("/mcp/oauth/callback", serverOrigin).href : "/mcp/oauth/callback";
 }
 
 export async function connectMcpOauth(serverId: string): Promise<McpOauthResult> {
-  const started = await rpc.mcp.oauth.begin({ serverId, redirectUri: mcpOAuthRedirectUri() });
+  const { client, isCurrent } = captureRpcContext();
+  const started = await client.mcp.oauth.begin({ serverId });
+  if (!isCurrent()) return "cancelled";
   if (started.status !== "authorization_required") return started.status;
+  const capture = desktopBridge()?.oauth?.capture;
+  if (capture) {
+    const callback = await capture(started.authorizationUrl, started.sessionId).catch(() => null);
+    if (!callback || !isCurrent() || callback.state !== started.sessionId) return "cancelled";
+    await client.mcp.oauth.complete({
+      sessionId: started.sessionId,
+      code: callback.code,
+      state: callback.state,
+    });
+    return isCurrent() ? "connected" : "cancelled";
+  }
   const native = supportsNativeSsoPopup();
   const popup = window.open(
     native ? "about:blank" : started.authorizationUrl,

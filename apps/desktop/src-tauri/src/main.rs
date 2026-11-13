@@ -20,6 +20,7 @@ mod local_stack_scope;
 mod locale;
 mod menu;
 mod native;
+mod oauth_capture;
 mod pairing;
 mod passkeys;
 mod personal_devices;
@@ -879,6 +880,20 @@ async fn native_command(
             updates::set_channel(&app, channel).await?,
         )
         .map_err(|_| "Update state unavailable.")?),
+        Command::OAuthCapture {
+            url,
+            expected_state,
+        } => {
+            let callback =
+                oauth_capture::capture(&app, &document.label, &url, &expected_state).await?;
+            if !state.sessions.is_current(&document)
+                || active_document(&app).is_none_or(|current| current.owner() != owner)
+            {
+                return Err("This sign-in window is no longer active.".into());
+            }
+            serde_json::to_value(callback)
+                .map_err(|_| "Could not complete integration sign-in.".into())
+        }
         Command::OAuthOpen { url } => {
             let expected_owner = owner.clone();
             state

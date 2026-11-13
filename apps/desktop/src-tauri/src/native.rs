@@ -107,6 +107,8 @@ pub enum Command {
     },
     #[serde(rename = "oauth.open")]
     OAuthOpen { url: String },
+    #[serde(rename = "oauth.capture")]
+    OAuthCapture { url: String, expected_state: String },
     #[serde(rename = "oauth.cancel")]
     OAuthCancel { url: String },
     #[serde(rename = "speech.start")]
