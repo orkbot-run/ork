@@ -10,7 +10,7 @@ use std::{
         io::{AsRawHandle, FromRawHandle, OwnedHandle},
     },
     path::Path,
-    ptr::null_mut,
+    ptr::{null_mut, NonNull},
 };
 use windows_sys::Win32::{
     Foundation::{LocalFree, INVALID_HANDLE_VALUE},
@@ -19,10 +19,10 @@ use windows_sys::Win32::{
             ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW,
             GetSecurityInfo, SDDL_REVISION_1, SE_FILE_OBJECT,
         },
-        EqualSid, GetAce, GetSecurityDescriptorControl, GetTokenInformation, IsValidAcl,
-        IsValidSid, IsWellKnownSid, TokenUser, WinLocalSystemSid, ACCESS_ALLOWED_ACE, ACE_HEADER,
-        ACL, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSID, SECURITY_ATTRIBUTES,
-        SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
+        EqualSid, GetAce, GetLengthSid, GetSecurityDescriptorControl, GetTokenInformation,
+        IsValidAcl, IsValidSid, IsWellKnownSid, TokenUser, WinLocalSystemSid, ACCESS_ALLOWED_ACE,
+        ACE_HEADER, ACL, DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSID,
+        SECURITY_ATTRIBUTES, SE_DACL_PROTECTED, TOKEN_QUERY, TOKEN_USER,
     },
     Storage::FileSystem::{
         CreateFileW, CREATE_NEW, FILE_ALL_ACCESS, FILE_ATTRIBUTE_NORMAL, FILE_GENERIC_READ,
@@ -177,18 +177,20 @@ pub(crate) fn owned(file: &File) -> bool {
         return false;
     }
     let _sd = Allocation(sd);
+    let Some(acl) = NonNull::new(acl) else {
+        return false;
+    };
     let mut control = 0;
     let mut revision = 0;
     // SAFETY: All descriptor fields below were returned together by GetSecurityInfo.
     unsafe {
         if owner.is_null()
-            || acl.is_null()
             || IsValidSid(owner) == 0
             || EqualSid(owner, user.sid()) == 0
-            || IsValidAcl(acl) == 0
+            || IsValidAcl(acl.as_ptr()) == 0
             || GetSecurityDescriptorControl(sd, &mut control, &mut revision) == 0
             || control & SE_DACL_PROTECTED == 0
-            || (*acl).AceCount != 2
+            || acl.as_ref().AceCount != 2
         {
             return false;
         }
@@ -196,20 +198,28 @@ pub(crate) fn owned(file: &File) -> bool {
         let mut system = false;
         for index in 0..2 {
             let mut ace = null_mut();
-            if GetAce(acl, index, &mut ace) == 0 || ace.is_null() {
+            if GetAce(acl.as_ptr(), index, &mut ace) == 0 {
                 return false;
             }
-            let header = &*ace.cast::<ACE_HEADER>();
+            let Some(ace) = NonNull::new(ace) else {
+                return false;
+            };
+            let header = ace.cast::<ACE_HEADER>().as_ref();
             // ACCESS_ALLOWED_ACE_TYPE is zero. Other ACE types or inherited rights fail closed.
             if header.AceType != 0
                 || header.AceFlags != 0
-                || (header.AceSize as usize) < std::mem::size_of::<ACCESS_ALLOWED_ACE>()
+                || (header.AceSize as usize)
+                    < std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart) + 8
             {
                 return false;
             }
-            let ace = &*ace.cast::<ACCESS_ALLOWED_ACE>();
+            let ace = ace.cast::<ACCESS_ALLOWED_ACE>().as_ref();
             let sid = std::ptr::addr_of!(ace.SidStart).cast_mut().cast();
-            if ace.Mask != FILE_ALL_ACCESS || IsValidSid(sid) == 0 {
+            if ace.Mask != FILE_ALL_ACCESS
+                || IsValidSid(sid) == 0
+                || GetLengthSid(sid) as usize
+                    > header.AceSize as usize - std::mem::offset_of!(ACCESS_ALLOWED_ACE, SidStart)
+            {
                 return false;
             }
             if EqualSid(sid, user.sid()) != 0 {
