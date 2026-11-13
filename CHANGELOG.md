@@ -9,6 +9,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-13
+
+### Security
+
+- Workspace access is separate from organization administration. Grants bind access to the selected workspace and installation, and queued AI work checks its current account assignment before running.
+- Business access expires within five minutes without central verification. Known revocations stop further work immediately.
+
+### Added
+
+- Choose an organization, server and workspace in the desktop app. Each workspace keeps its own drafts and attachments.
+- Connect several AI accounts on a self-hosted server, including accounts from the same provider, then offer selected models to individual workspaces with their own budgets and permitted fallback accounts.
+- Resume interrupted Docker setup and reconnect retained installations while preserving their identity and data. Reconnection requires fresh approval and does not restore revoked access assignments.
+- Previously activated personal workspaces support local offline use on the activated device. Signing out removes that device's retained authorization.
+
+### Changed
+
+- Configure AI in the app connected to your server. Ork Accounts handles organizations, members, server enrollment and access assignments.
+- Managed remote desktop connections use the installation's pinned identity and TLS 1.3 over direct and relay routes.
+
+### Self-host upgrade notes
+
+- Upgrade the desktop app and self-hosted server together before enabling the new workspace features. Older clients require an update. Mobile binaries will follow separately.
+- Back up the database, server configuration and data before upgrading, preserve the installation identity, and explicitly map retained local organizations and workspaces when registration requires operator input. Ambiguous mappings require operator review. See [Accounts and server setup](docs/self-host-accounts.md).
+- Keep recovery compatible with the new authorization model. Restoring an older image does not reverse migrations or safely restore the previous access rules.
+
 ## [1.3.0] - 2026-11-11
 
 ### Security
