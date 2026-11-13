@@ -80,7 +80,7 @@ it.skipIf(!databaseUrl)(
       const me = await call("me");
       expect(me.status).toBe(200);
       expect(await me.json()).toMatchObject({
-        json: { maxUploadSizeBytes, maxAttachmentsPerMessage: 8 },
+        json: { serverOrigin: origin, maxUploadSizeBytes, maxAttachmentsPerMessage: 8 },
       });
 
       const bot = await call("bots/create", {

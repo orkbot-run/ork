@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
@@ -12,11 +13,15 @@ test("opening a bot in another space switches in place, without a page reload", 
   await signup(page, `space-switch-${stamp}@orkbot.test`, "password12", "Space Switcher");
   await completeOnboarding(page);
   const otherSpace = await page.request.post("/rpc/spaces/create", {
+    headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
     data: { json: { name: "Second space" } },
   });
   const { json: space } = (await otherSpace.json()) as { json: { id: string } };
   const created = await page.request.post("/rpc/bots/create", {
-    headers: { "x-orkbot-space-id": space.id },
+    headers: {
+      [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      "x-orkbot-space-id": space.id,
+    },
     data: {
       json: {
         name: "Scout",

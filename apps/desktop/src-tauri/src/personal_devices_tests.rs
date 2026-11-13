@@ -93,14 +93,14 @@ fn activate(vault: &PersonalDevices, selection: &Selection) -> Credential {
     vault.activate(staged, &expected).unwrap();
     vault.credential(selection).unwrap().unwrap()
 }
-fn nonce() -> String {
+fn random_nonce() -> String {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).unwrap();
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
 fn challenge(credential: &Credential, server: &SigningKey) -> Value {
-    let nonce = nonce();
+    let nonce = random_nonce();
     let signature: Signature = server.sign(
         proof(credential, "ork-personal-device-server-v1", &nonce)
             .to_string()
@@ -123,7 +123,7 @@ fn pending_activation_has_no_authority_and_signs_only_the_exact_grant_bound_mess
     let selection = selection(&server);
     let staged = vault.stage(&selection, &account()).unwrap();
     assert!(vault.credential(&selection).unwrap().is_none());
-    let nonce = nonce();
+    let nonce = random_nonce();
     let signature = vault
         .activation_proof(&staged, &nonce, "native-grant")
         .unwrap();
@@ -149,7 +149,7 @@ fn pending_activation_has_no_authority_and_signs_only_the_exact_grant_bound_mess
     )
     .unwrap();
     assert!(vault
-        .activation_proof(&staged, "invalid", "native-grant")
+        .activation_proof(&staged, &format!("!{}", random_nonce()), "native-grant")
         .is_err());
     let mut wrong = completed(&staged.credential);
     wrong["personalDevice"]["target"]["workspaceId"] =
@@ -236,7 +236,7 @@ fn offline_device_proof_requires_the_pinned_servers_fresh_exact_challenge() {
             1 => changed["expiresAt"] = json!(u64::MAX),
             2 => changed["target"]["bindingVersion"] = json!(2),
             3 => changed["target"]["deviceId"] = json!("44444444-4444-4444-8444-444444444444"),
-            4 => changed["challenge"] = json!(nonce()),
+            4 => changed["challenge"] = json!(random_nonce()),
             _ => {
                 changed["publicKey"] = json!(URL_SAFE_NO_PAD.encode(
                     SigningKey::random(&mut rand_core::OsRng)
@@ -300,7 +300,9 @@ fn logout_fences_an_already_staged_activation_and_corrupt_metadata_fails_closed(
     let staged = vault.stage(&selected, &account()).unwrap();
     let result = completed(&staged.credential);
     vault.forget_all().unwrap();
-    assert!(vault.activation_proof(&staged, &nonce(), "grant").is_err());
+    assert!(vault
+        .activation_proof(&staged, &random_nonce(), "grant")
+        .is_err());
     assert!(vault.activate(staged, &result).is_err());
     crate::local_stack::write_private(&vault.path(), b"corrupt").unwrap();
     assert!(vault.credential(&selected).is_err());

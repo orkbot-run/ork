@@ -514,6 +514,7 @@ function SpaceShell() {
     addSkillRoutine,
   } = useRoutineEditor({
     rpc,
+    serverOrigin: bootstrapMe?.serverOrigin,
     active,
     activeBotId,
     timezone: bootstrapMe?.timezone,

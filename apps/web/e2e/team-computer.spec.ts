@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import type { Page } from "@playwright/test";
 import {
   activeBotId,
@@ -204,6 +205,9 @@ function threadSnapshot(page: Page, botId: string) {
 }
 
 async function rpcResponse(page: Page, procedure: string, body: unknown) {
-  const response = await page.request.post(`/rpc/${procedure}`, { data: { json: body } });
+  const response = await page.request.post(`/rpc/${procedure}`, {
+    headers: { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) },
+    data: { json: body },
+  });
   return { ok: response.ok(), status: response.status() };
 }

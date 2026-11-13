@@ -67,6 +67,7 @@ export async function meDto(deps: RouterDeps, actor: Actor): Promise<Me> {
     getAccountComputerSettings(deps, actor).catch(() => null),
   ]);
   return {
+    serverOrigin: new URL(deps.env.webOrigin).origin,
     ticketBoardEnabled: deps.env.ticketBoardEnabled === true,
     phoneCallsEnabled: deps.env.phoneCallsEnabled === true,
     navLinks: deps.env.navLinks ?? [],
