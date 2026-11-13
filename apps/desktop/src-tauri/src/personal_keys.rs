@@ -20,6 +20,45 @@ pub(crate) trait DeviceKeys: Send + Sync {
 
 pub(crate) struct SystemKeys;
 
+fn diagnostic_message(stage: &str, code: Option<i64>, requested: bool) -> Option<String> {
+    if !requested
+        || ![
+            "random",
+            "create",
+            "read",
+            "sign",
+            "verify",
+            "delete",
+            "deleted-read",
+            "lookup",
+            "access-control",
+            "generate",
+        ]
+        .contains(&stage)
+    {
+        return None;
+    }
+    let detail = match code {
+        Some(code) => format!("code={}", i32::try_from(code).ok()?),
+        None => "category=operation".into(),
+    };
+    Some(format!("ORK_PERSONAL_KEY_CHECK stage={stage} {detail}"))
+}
+
+fn check_requested(arguments: &[String]) -> bool {
+    arguments.len() == 2 && arguments[1] == "--personal-device-key-check"
+}
+
+fn diagnose(stage: &str, code: Option<i64>) {
+    if let Some(message) = diagnostic_message(
+        stage,
+        code,
+        check_requested(&std::env::args().collect::<Vec<_>>()),
+    ) {
+        eprintln!("{message}");
+    }
+}
+
 /// Runs inside the signed app bundle so the OS evaluates its real provisioning entitlements.
 pub(crate) fn check_cli() -> Option<bool> {
     let arguments: Vec<_> = std::env::args().collect();
@@ -29,7 +68,7 @@ pub(crate) fn check_cli() -> Option<bool> {
     {
         return None;
     }
-    if arguments.len() != 2 {
+    if !check_requested(&arguments) {
         return Some(false);
     }
     Some(check_system_key().is_ok())
@@ -41,14 +80,19 @@ fn check_system_key() -> Result<(), String> {
         pkcs8::DecodePublicKey,
     };
     let mut nonce = [0u8; 16];
-    getrandom::fill(&mut nonce).map_err(|_| ERROR)?;
+    getrandom::fill(&mut nonce).map_err(|_| {
+        diagnose("random", None);
+        ERROR
+    })?;
     let label = format!(
         "run.orkbot.personal-device.self-check.{}",
         URL_SAFE_NO_PAD.encode(nonce)
     );
     let keys = SystemKeys;
+    let mut stage = "create";
     let checked = (|| {
         let public = keys.create(&label)?;
+        stage = "read";
         if keys.public_key(&label)?.as_deref() != Some(&public) {
             return Err(ERROR.to_owned());
         }
@@ -56,9 +100,11 @@ fn check_system_key() -> Result<(), String> {
             "ork-personal-device-key-check-v1:{}",
             URL_SAFE_NO_PAD.encode(nonce)
         );
+        stage = "sign";
         let signature = URL_SAFE_NO_PAD
             .decode(keys.sign(&label, message.as_bytes())?)
             .map_err(|_| ERROR)?;
+        stage = "verify";
         let key =
             VerifyingKey::from_public_key_der(&URL_SAFE_NO_PAD.decode(public).map_err(|_| ERROR)?)
                 .map_err(|_| ERROR)?;
@@ -68,9 +114,19 @@ fn check_system_key() -> Result<(), String> {
         )
         .map_err(|_| ERROR.to_owned())
     })();
+    if checked.is_err() {
+        diagnose(stage, None);
+    }
     let deleted = keys.forget(&label);
+    if deleted.is_err() {
+        diagnose("delete", None);
+    }
     checked.and(deleted)?;
-    if keys.public_key(&label)?.is_some() {
+    let remaining = keys
+        .public_key(&label)
+        .inspect_err(|_| diagnose("deleted-read", None))?;
+    if remaining.is_some() {
+        diagnose("deleted-read", None);
         return Err(ERROR.into());
     }
     Ok(())
@@ -120,6 +176,10 @@ mod platform {
                 Some(SearchResult::Ref(Reference::Key(key))) => Ok(Some(key)),
                 _ => Err(ERROR.into()),
             },
+            Err(error) => {
+                diagnose("lookup", Some(i64::from(error.code())));
+                Err(ERROR.into())
+            }
             _ => Err(ERROR.into()),
         }
     }
@@ -141,7 +201,10 @@ mod platform {
                 Some(ProtectionMode::AccessibleAfterFirstUnlockThisDeviceOnly),
                 0,
             )
-            .map_err(|_| ERROR)?;
+            .map_err(|error| {
+                diagnose("access-control", Some(i64::from(error.code())));
+                ERROR
+            })?;
             let mut options = GenerateKeyOptions::default();
             options
                 .set_key_type(KeyType::ec_sec_prime_random())
@@ -151,7 +214,10 @@ mod platform {
                 .set_access_control(access)
                 .set_synchronizable(false);
             // The private SecKey never has an external representation requested by this app.
-            let created = SecKey::new(&options).map_err(|_| ERROR)?;
+            let created = SecKey::new(&options).map_err(|error| {
+                diagnose("generate", Some(error.code() as i64));
+                ERROR
+            })?;
             let result = public(&created);
             if result.is_err() {
                 let _ = self.forget(label);
@@ -165,15 +231,58 @@ mod platform {
             let key = key(label)?.ok_or(ERROR)?;
             key.create_signature(Algorithm::ECDSASignatureMessageX962SHA256, message)
                 .map(|signature| URL_SAFE_NO_PAD.encode(signature))
-                .map_err(|_| ERROR.into())
+                .map_err(|error| {
+                    diagnose("sign", Some(error.code() as i64));
+                    ERROR.into()
+                })
         }
         fn forget(&self, label: &str) -> Result<(), String> {
             match query(label).delete() {
                 Ok(()) => Ok(()),
                 Err(error) if error.code() == -25300 => Ok(()),
-                Err(_) => Err(ERROR.into()),
+                Err(error) => {
+                    diagnose("delete", Some(i64::from(error.code())));
+                    Err(ERROR.into())
+                }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn diagnostics_require_the_exact_native_check_and_only_static_stages_and_statuses() {
+        let arguments = |values: &[&str]| {
+            values
+                .iter()
+                .map(|value| value.to_string())
+                .collect::<Vec<_>>()
+        };
+        assert!(check_requested(&arguments(&[
+            "app",
+            "--personal-device-key-check"
+        ])));
+        for values in [
+            vec!["app"],
+            vec!["app", "--personal-device-key-check", "other"],
+            vec!["app", "--other"],
+        ] {
+            assert!(!check_requested(&arguments(&values)));
+        }
+        assert_eq!(
+            diagnostic_message("lookup", Some(-34018), true).as_deref(),
+            Some("ORK_PERSONAL_KEY_CHECK stage=lookup code=-34018")
+        );
+        assert_eq!(
+            diagnostic_message("verify", None, true).as_deref(),
+            Some("ORK_PERSONAL_KEY_CHECK stage=verify category=operation")
+        );
+        assert!(diagnostic_message("lookup", Some(-34018), false).is_none());
+        assert!(diagnostic_message("private-label", None, true).is_none());
+        assert!(diagnostic_message("lookup", Some(i64::MAX), true).is_none());
     }
 }
 

@@ -8,6 +8,7 @@ import path from "node:path";
 import { expect, it, vi } from "vitest";
 import {
   APPLE_RELEASE_SECRETS,
+  personalKeyDiagnostics,
   validateAppleSigning,
   verifyMacApp,
   verifyMacDistribution,
@@ -28,6 +29,28 @@ const env = {
   APPLE_API_PRIVATE_KEY: privateKey,
   APPLE_API_KEY_PATH: "/private/fixture-key.p8",
 };
+
+it("exposes only bounded static self-check stages and numeric OS status, never signing diagnostics", () => {
+  const error = {
+    stdout: "private account metadata\nORK_PERSONAL_KEY_CHECK stage=lookup code=-34018\n",
+    stderr: Buffer.from(
+      "private key bytes\nORK_PERSONAL_KEY_CHECK stage=create category=operation\n",
+    ),
+  };
+  expect(personalKeyDiagnostics(error, ["--personal-device-key-check"])).toBe(
+    "ORK_PERSONAL_KEY_CHECK stage=lookup code=-34018; ORK_PERSONAL_KEY_CHECK stage=create category=operation",
+  );
+  for (const args of [[], ["--personal-device-key-check", "other"], ["--verify"]])
+    expect(personalKeyDiagnostics(error, args)).toBe("");
+  for (const stderr of [
+    "ORK_PERSONAL_KEY_CHECK stage=private-label code=-34018",
+    "ORK_PERSONAL_KEY_CHECK stage=lookup code=-34018 private account",
+    "ORK_PERSONAL_KEY_CHECK stage=lookup category=private-key",
+    "ORK_PERSONAL_KEY_CHECK stage=lookup code=9999999999",
+    `ORK_PERSONAL_KEY_CHECK stage=lookup code=-34018\n${"x".repeat(16_384)}`,
+  ])
+    expect(personalKeyDiagnostics({ stderr }, ["--personal-device-key-check"])).toBe("");
+});
 
 it("fails closed with secret names only when Apple distribution credentials are missing", () => {
   for (const name of APPLE_RELEASE_SECRETS)

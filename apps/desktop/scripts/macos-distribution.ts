@@ -37,6 +37,40 @@ export function validateAppleSigning(env: NodeJS.ProcessEnv) {
 }
 
 type Command = (command: string, args: string[]) => string;
+
+export function personalKeyDiagnostics(error: unknown, args: string[]): string {
+  if (
+    args.length !== 1 ||
+    args[0] !== "--personal-device-key-check" ||
+    !error ||
+    typeof error !== "object"
+  )
+    return "";
+  const diagnostics = new Set<string>();
+  for (const key of ["stdout", "stderr"] as const) {
+    const value = key in error ? (error as Record<string, unknown>)[key] : undefined;
+    if (typeof value !== "string" && !Buffer.isBuffer(value)) continue;
+    const output = value.toString();
+    if (output.length > 16_384) continue;
+    for (const line of output.split(/\r?\n/)) {
+      const match =
+        /^ORK_PERSONAL_KEY_CHECK stage=(random|create|read|sign|verify|delete|deleted-read|lookup|access-control|generate) (?:code=(-?\d{1,10})|category=operation)$/.exec(
+          line,
+        );
+      if (
+        !match ||
+        (match[2] !== undefined &&
+          (Number(match[2]) < -2_147_483_648 || Number(match[2]) > 2_147_483_647))
+      )
+        continue;
+      diagnostics.add(line);
+      if (diagnostics.size === 3) break;
+    }
+    if (diagnostics.size === 3) break;
+  }
+  return [...diagnostics].join("; ");
+}
+
 const checked: Command = (command, args) => {
   try {
     return execFileSync(command, args, {
@@ -44,9 +78,12 @@ const checked: Command = (command, args) => {
       timeout: 20 * 60_000,
       stdio: ["ignore", "pipe", "pipe"],
     });
-  } catch {
+  } catch (error) {
     // Signing tool diagnostics can include private identities and account metadata.
-    throw new Error(`macOS distribution validation failed: ${path.basename(command)}.`);
+    const diagnostics = personalKeyDiagnostics(error, args);
+    throw new Error(
+      `macOS distribution validation failed: ${path.basename(command)}.${diagnostics ? ` ${diagnostics}` : ""}`,
+    );
   }
 };
 
