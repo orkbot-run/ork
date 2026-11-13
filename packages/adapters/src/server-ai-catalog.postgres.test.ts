@@ -423,6 +423,55 @@ describe.skipIf(!enabled)("server AI accounts and usage admission on PostgreSQL"
     await settle(other, 10);
   });
 
+  it.each(["UTC", "Europe/Warsaw"])(
+    "pins a %s startup session to UTC before renewing a real execution claim",
+    async (timezone) => {
+      const url = new URL(process.env.DATABASE_URL!);
+      // Startup options exercise the actual pool guard without changing another test session.
+      url.searchParams.set("options", `-c timezone=${timezone}`);
+      const isolated = createDb(url.href, { encryptContent: false, poolMax: 1 });
+      const instance = new ServerAICatalog({
+        prisma: isolated.prisma,
+        secrets,
+        realtime,
+        principal: async (actor) => (actor.userId === admin.userId ? adminKey : null),
+        authorizeWork: async () => ({ signal: new AbortController().signal, dispose() {} }),
+      });
+      let reserved: AIExecutionClaim | undefined;
+      try {
+        const [session] = await isolated.pool
+          .query<{ zone: string }>("SELECT current_setting('TimeZone') AS zone")
+          .then((result) => result.rows);
+        expect(session?.zone).toBe("UTC");
+        const account = await catalog.create(admin, input("Heartbeat timezone", 1));
+        await assign(account.id);
+        reserved = await claim(account.id, member, 0, instance);
+        const before = await system(() =>
+          isolated.prisma.aIUsageReservation.findUniqueOrThrow({
+            where: { operationId: reserved!.operationId },
+          }),
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, 20));
+        await expect(instance.heartbeat(reserved)).resolves.toBeUndefined();
+        const renewed = await system(() =>
+          isolated.prisma.aIUsageReservation.findUniqueOrThrow({
+            where: { operationId: reserved!.operationId },
+          }),
+        );
+        expect(renewed.leaseUntil.getTime()).toBeGreaterThan(before.leaseUntil.getTime());
+        expect(renewed.leaseUntil.getTime() - Date.now()).toBeGreaterThan(25_000);
+        expect(renewed.leaseUntil.getTime() - Date.now()).toBeLessThanOrEqual(30_100);
+        await expect(claim(account.id, member, 0, instance)).rejects.toMatchObject({
+          code: "busy",
+        });
+      } finally {
+        if (reserved) await instance.settle(reserved, 0).catch(() => undefined);
+        instance.dispose();
+        await isolated.pool.end();
+      }
+    },
+  );
+
   it("keeps explicit selections separate from default and fallback permissions", async () => {
     const first = await catalog.create(admin, input("Default"));
     const second = await catalog.create(admin, input("Explicit only"));
