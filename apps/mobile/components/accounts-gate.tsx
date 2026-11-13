@@ -57,6 +57,7 @@ import {
   serverInitializationRequired,
 } from "../lib/endpoint";
 import { bootstrapI18n, useI18n } from "../lib/i18n";
+import { selectInstallationTransport } from "../lib/installation-transport";
 import { useMobileTokens } from "../lib/native";
 import { continueWithPersonalServer, personalLoginSelection } from "../lib/personal-login";
 import {
@@ -163,6 +164,8 @@ async function selectServer(
       if (!current()) return null;
     }
     await saveSelectedWorkspace(account, entry.url, entry.workspace);
+    if (!current()) return null;
+    await selectInstallationTransport(account, entry.url, entry.workspace);
     if (!current()) return null;
     await SecureStore.setItemAsync(SERVER_KEY, `${account}:${entry.id}`);
     return current() ? (capabilities.needsServerUpdate ? "older" : "compatible") : null;

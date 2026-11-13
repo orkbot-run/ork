@@ -11,6 +11,10 @@ use x509_parser::prelude::{FromDer, X509Certificate};
 
 mod http;
 pub use http::{HttpHeader, HttpRequest, HttpResponseHead, InstallationHttp};
+mod network;
+pub use network::InstallationConnection;
+#[cfg(target_os = "android")]
+mod android;
 
 uniffi::setup_scaffolding!();
 
@@ -37,6 +41,8 @@ pub enum TransportError {
     NotStarted,
     #[error("The installation HTTP request was canceled")]
     Canceled,
+    #[error("The installation network channel was refused")]
+    NetworkRefused,
 }
 
 #[derive(uniffi::Record)]
@@ -241,7 +247,7 @@ impl InstallationTls {
     }
 
     /// The native socket owner closes the associated relay channel after sending close-notify.
-    pub fn close(&self) -> Result<Vec<u8>, TransportError> {
+    pub fn close_notify(&self) -> Result<Vec<u8>, TransportError> {
         let mut channel = self.channel.lock().map_err(|_| TransportError::Closed)?;
         if channel.closed {
             return Ok(Vec::new());

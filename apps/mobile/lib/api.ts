@@ -74,6 +74,7 @@ import {
 } from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
 import { identityLabels } from "./identity-display";
+import { invalidateInstallationTransport } from "./installation-transport";
 import { resumeLiveNotifications } from "./live-notifications";
 import {
   beginMobileAvatarFeed,
@@ -431,6 +432,7 @@ export function configureSessionEndHangUp(hangUp: (() => Promise<void>) | undefi
 /** A central account change must never restore the previous product identity. */
 export async function clearProductAccountSession(): Promise<void> {
   await hangUpBeforeCredentialsCleared?.().catch(() => undefined);
+  invalidateInstallationTransport();
   const cleared = await clearSessionToken("account_switch");
   cachedSpaceId = "";
   bumpSpaceSelectionGeneration();

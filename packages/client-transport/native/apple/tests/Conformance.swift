@@ -30,7 +30,9 @@ struct Check: Decodable { let uploads: Int; let canceled: Int; let opaque: Bool 
     }
     let upload = try operation()
     try await upload.start(HttpRequest(method: "POST", path: "/files", headers: [HttpHeader(name: "authorization", value: "Bearer native-conformance-token")], hasBody: true))
-    for _ in 0..<64 { try await upload.writeBody(Data(repeating: 0x42, count: 32 * 1024)) }
+    for _ in 0..<64 {
+      guard try await upload.writeBody(Data(repeating: 0x42, count: 32 * 1024)) else { fatalError("upload refused") }
+    }
     try await upload.finishBody()
     let head = try await upload.responseHead()
     guard head.status == 201 else { fatalError("wrong status") }
@@ -61,6 +63,52 @@ struct Check: Decodable { let uploads: Int; let canceled: Int; let opaque: Bool 
     while let bytes = try await checks.readBody() { data.append(bytes) }
     let result = try JSONDecoder().decode(Check.self, from: data)
     guard result.uploads == 1, result.canceled == 1, result.opaque else { fatalError("failed checks") }
-    print("PASS: native Swift/Rust HTTP, 2 MB upload/download, SSE, cancellation, pin refusal and opaque TCP relay")
+    let contexts = InstallationContexts()
+    let session = await contexts.begin()
+    let target = String(data: try JSONSerialization.data(withJSONObject: [
+      "account": "[\"https://accounts.example.test\",\"native-user\"]",
+      "origin": endpoint.origin,
+      "organizationId": "20000000-0000-4000-8000-000000000001",
+      "serverId": endpoint.serverId,
+      "workspaceId": "30000000-0000-4000-8000-000000000001",
+      "bindingVersion": endpoint.bindingVersion,
+      "keyFingerprint": endpoint.fingerprint,
+    ]), encoding: .utf8)!
+    func input(_ path: String) throws -> String {
+      String(data: try JSONSerialization.data(withJSONObject: [
+        "method": "GET", "path": path, "hasBody": false,
+        "headers": [["name": "authorization", "value": "Bearer native-conformance-token"]],
+      ]), encoding: .utf8)!
+    }
+    func refuses(_ operation: () async throws -> Void) async {
+      do { try await operation(); fatalError("stale native context accepted") } catch {}
+    }
+    try await contexts.select(session: session, revision: 2, target: target)
+    let prepared = UUID().uuidString.lowercased()
+    try await contexts.open(session: session, revision: 2, id: prepared, input: input("/events"))
+    await contexts.cancel(session: session, revision: 2, id: prepared)
+    await refuses { try await contexts.start(session: session, revision: 2, id: prepared) }
+    await refuses { try await contexts.select(session: session, revision: 1, target: target) }
+    let oldId = UUID().uuidString.lowercased()
+    try await contexts.open(session: session, revision: 2, id: oldId, input: input("/cancel"))
+    try await contexts.start(session: session, revision: 2, id: oldId)
+    _ = try await contexts.head(session: session, revision: 2, id: oldId)
+    guard try await contexts.read(session: session, revision: 2, id: oldId) != nil else { fatalError("missing scoped event") }
+    let late = Task { try await contexts.read(session: session, revision: 2, id: oldId) }
+    await Task.yield()
+    try await contexts.select(session: session, revision: 3, target: target)
+    await refuses { _ = try await late.value }
+    await refuses { _ = try await contexts.head(session: session, revision: 2, id: oldId) }
+    await refuses { try await contexts.select(session: session, revision: 2, target: target) }
+    let replacement = await contexts.begin()
+    try await contexts.select(session: replacement, revision: 1, target: target)
+    await contexts.end(session: session)
+    let newId = UUID().uuidString.lowercased()
+    try await contexts.open(session: replacement, revision: 1, id: newId, input: input("/events"))
+    try await contexts.start(session: replacement, revision: 1, id: newId)
+    guard try await contexts.head(session: replacement, revision: 1, id: newId).status == 200 else { fatalError("new context closed by stale logout") }
+    while try await contexts.read(session: replacement, revision: 1, id: newId) != nil {}
+    await contexts.end(session: replacement)
+    print("PASS: native Swift/Rust HTTP, files, SSE, cancellation, pins, opaque relay and selection fencing")
   }
 }

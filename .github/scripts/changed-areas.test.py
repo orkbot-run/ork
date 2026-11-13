@@ -67,6 +67,8 @@ class ChangedAreasTests(unittest.TestCase):
         cases = [
             ("apps/mobile/app/screen.tsx", expect()),
             ("apps/mobile/modules/orkbot-identity/ios/PersonalDeviceStore.swift", expect("native")),
+            ("apps/mobile/modules/orkbot-transport/android/build.gradle", expect("native")),
+            ("apps/mobile/plugins/with-installation-transport.js", expect("native")),
             (".agents/skills/x/SKILL.md", expect()),
             ("CHANGELOG.md", expect()),
             ("docs/getting-started.md", expect("web")),

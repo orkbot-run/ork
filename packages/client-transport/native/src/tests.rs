@@ -115,7 +115,7 @@ fn tls13_carries_requests_files_streams_and_cancellation_as_opaque_bytes() {
         }
         assert_eq!(plaintext, event);
     }
-    let close = client.close().unwrap();
+    let close = client.close_notify().unwrap();
     let mut input = Cursor::new(close);
     server.read_tls(&mut input).unwrap();
     assert!(server.process_new_packets().unwrap().peer_has_closed());

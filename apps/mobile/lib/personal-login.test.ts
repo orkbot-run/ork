@@ -223,3 +223,4 @@ it("refuses a previous account's credential after the verified identity changes 
   expect(await personalLoginSelection()).toBeNull();
   expect(state.credential).not.toHaveBeenCalled();
 });
+vi.mock("./installation-transport", () => ({ selectInstallationTransport: async () => undefined }));

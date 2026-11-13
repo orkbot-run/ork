@@ -10,6 +10,7 @@ import {
 import { createPersonalOrkId, isPersonalOrkId, readBoundedJsonResponse } from "@orkbot/core";
 import * as SecureStore from "expo-secure-store";
 import { fetchAccounts } from "./accounts-network";
+import { invalidateInstallationTransport } from "./installation-transport";
 import { queueAccountsRevocation, retryPendingRevocations } from "./pending-revocations";
 import { invalidatePersonalRequests, signOutPersonalDevices } from "./personal-device";
 import { clearServerInitialization } from "./server-connect";
@@ -343,6 +344,7 @@ async function exchange(
 export async function continueWithAccounts(welcomeOrk?: string): Promise<boolean> {
   if (signingIn) return false;
   signingIn = true;
+  invalidateInstallationTransport();
   invalidatePersonalRequests();
   const owner = ++generation;
   try {
@@ -531,6 +533,7 @@ async function validAccessToken(): Promise<string | null> {
 
 /** Clears local tokens before attempting optional revocation; no end-session endpoint is needed. */
 export async function signOutAccounts(): Promise<void> {
+  invalidateInstallationTransport();
   clearServerInitialization();
   const personalWipe = signOutPersonalDevices();
   const pendingRefresh = refreshSnapshot;

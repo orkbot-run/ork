@@ -4,6 +4,7 @@
 import { personalOfflineMessage, personalServerMessage } from "@orkbot/contracts";
 import { accountsConfiguration, accountsLocalIdentity, accountsVersion } from "./accounts";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
+import { selectInstallationTransport } from "./installation-transport";
 import type { PersonalCredential } from "./personal-device";
 import {
   personalCredential,
@@ -66,6 +67,8 @@ export async function continueWithPersonalServer(
     if (!result.response.ok || result.invalidJson) throw refused();
     return result.body;
   };
+  check();
+  await selectInstallationTransport(credential.account, origin, credential.target);
   check();
   const challenge = await request("challenge", { deviceId: credential.deviceId });
   const target = { ...credential.target, deviceId: credential.deviceId };

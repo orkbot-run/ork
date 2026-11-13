@@ -433,3 +433,4 @@ it("preserves a newer initialization link when an older attempt completes", asyn
   expect(await continueWithAccountsServer()).toBe(true);
   expect(serverInitializationSecret(state.origin, account)).toBe("b".repeat(43));
 });
+vi.mock("./installation-transport", () => ({ selectInstallationTransport: async () => undefined }));

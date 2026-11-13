@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["OrkTransportModule"], "podspecPath": "OrkTransport.podspec" },
+  "android": { "modules": ["com.orkbot.transport.OrkTransportModule"] }
+}

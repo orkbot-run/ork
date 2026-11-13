@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { once } from "node:events";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, globSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
 import { connect, createServer as createTcpServer } from "node:net";
@@ -145,7 +145,9 @@ try {
     "-Xcc",
     `-fmodule-map-file=${join(bindings, "ork_installation_transportFFI.modulemap")}`,
     join(bindings, "ork_installation_transport.swift"),
-    join(native, "apple/InstallationRequest.swift"),
+    ...globSync("apple/*.swift", { cwd: native })
+      .sort()
+      .map((file) => join(native, file)),
     join(source, "Conformance.swift"),
     "-L",
     library,

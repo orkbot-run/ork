@@ -1703,3 +1703,4 @@ it("saves the default organization centrally only after an explicit preference a
   expect(host.textContent).toContain("Default organization");
   expect(saveApiBase).not.toHaveBeenCalled();
 });
+vi.mock("./installation-transport", () => ({ selectInstallationTransport: async () => undefined }));

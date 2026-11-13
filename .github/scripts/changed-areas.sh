@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+# Modified by Ork contributors to include installation transport and device credentials.
 # Prints which CI areas a pull request's merge commit can affect, as GitHub step outputs.
 # web: anything beyond the mobile app and agent notes. e2e: web, minus the worker, which the E2E
 # server never loads (it imports the server adapters in-process). server (the Postgres journeys):
@@ -37,7 +40,7 @@ while IFS= read -r file; do
       native=true
       compose=true
       ;;
-    packages/client-transport/native/* | apps/mobile/modules/orkbot-identity/* | apps/desktop/* | scripts/pnpm*.mjs | packages/adapter-kit/* | packages/core/src/node/* | \
+    packages/client-transport/native/* | apps/mobile/modules/orkbot-identity/* | apps/mobile/modules/orkbot-transport/* | apps/mobile/plugins/with-installation-transport.js | apps/desktop/* | scripts/pnpm*.mjs | packages/adapter-kit/* | packages/core/src/node/* | \
       packages/adapters/src/*computer* | packages/adapters/src/*desktop* | \
       packages/adapters/src/*sandbox* | packages/adapters/src/*host-* | \
       packages/adapters/src/home* | packages/adapters/src/native-shell* | \

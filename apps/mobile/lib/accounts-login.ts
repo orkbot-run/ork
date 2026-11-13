@@ -6,6 +6,7 @@ import { accountsAuthorization, accountsVersion } from "./accounts";
 import { AccountsUnavailable } from "./accounts-network";
 import { clearSpace, currentApiBase, fetchMobileJson } from "./api";
 import { t } from "./i18n";
+import { selectInstallationTransport } from "./installation-transport";
 import type { StagedPersonalDevice } from "./personal-device";
 import {
   activatePersonalDevice,
@@ -63,6 +64,8 @@ export async function continueWithAccountsServer(): Promise<boolean> {
     const authorization = authorizationResult;
     const account = JSON.stringify([authorization.issuer, authorization.subject]);
     const workspace = await selectedWorkspace(account, server);
+    await selectInstallationTransport(account, server, workspace ?? undefined);
+    if (!unchanged()) throw new Error(t("Could not continue"));
     const current = async () => {
       const latest = await accountsAuthorization();
       if (

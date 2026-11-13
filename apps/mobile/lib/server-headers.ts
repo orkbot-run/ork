@@ -1,5 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache header handling is preserved. Pinned native routing is an Ork addition.
+
 import { parseServerHeaders } from "@orkbot/contracts";
 import * as SecureStore from "expo-secure-store";
+import { fetchInstallation } from "./installation-transport";
 
 const SERVER_HEADERS_KEY = "orkbot.server_headers";
 
@@ -68,8 +73,8 @@ export function fetchServer(
 ): ReturnType<typeof fetch> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const extra = Object.entries(serverHeadersForUrl(url, apiBase));
-  if (extra.length === 0) return fetchImpl(input, init);
+  if (extra.length === 0) return fetchInstallation(input, init, fetchImpl);
   const headers = new Headers(init.headers);
   for (const [name, value] of extra) headers.set(name, value);
-  return fetchImpl(input, { ...init, headers, redirect: "error" });
+  return fetchInstallation(input, { ...init, headers, redirect: "error" }, fetchImpl);
 }
