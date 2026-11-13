@@ -45,6 +45,53 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+it("retires a workspace session only through its exact current account, admission and installation pin", async () => {
+  const {
+    selectInstallationTransport,
+    installationRevocationScope,
+    fetchInstallationRevocation,
+    invalidateInstallationTransport,
+  } = await import("./installation-transport");
+  const fallback = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fallback);
+  await selectInstallationTransport(account, origin, target);
+  const captured = installationRevocationScope(origin)!;
+  const init = { method: "POST", headers: { authorization: "Bearer retired-product-session" } };
+  invalidateInstallationTransport();
+  await expect(
+    fetchInstallationRevocation(`${origin}/api/auth/sign-out`, init, captured),
+  ).rejects.toThrow("Native connection changed");
+  for (const changed of [
+    { ...target, workspaceId: id(7) },
+    { ...target, bindingVersion: 2 },
+    { ...target, keyFingerprint: "b".repeat(64) },
+  ]) {
+    await selectInstallationTransport(account, origin, changed);
+    await expect(
+      fetchInstallationRevocation(`${origin}/api/auth/sign-out`, init, captured),
+    ).rejects.toThrow("Native connection changed");
+  }
+  await selectInstallationTransport(
+    JSON.stringify(["https://accounts.example.test", "other-user"]),
+    origin,
+    target,
+  );
+  await expect(
+    fetchInstallationRevocation(`${origin}/api/auth/sign-out`, init, captured),
+  ).rejects.toThrow("Native connection changed");
+  expect(state.open).not.toHaveBeenCalled();
+  expect(fallback).not.toHaveBeenCalled();
+  await selectInstallationTransport(account, origin, target);
+  expect(
+    (await fetchInstallationRevocation(`${origin}/api/auth/sign-out`, init, captured)).status,
+  ).toBe(204);
+  expect(state.open).toHaveBeenCalledOnce();
+  expect(JSON.parse(state.open.mock.calls[0]![3]).headers).toEqual([
+    { name: "authorization", value: "Bearer retired-product-session" },
+  ]);
+  expect(fallback).not.toHaveBeenCalled();
+});
+
 it("never sends a reserved installation origin through ordinary HTTP, including before selection", async () => {
   const { fetchInstallation } = await import("./installation-transport");
   const fallback = vi.fn<typeof fetch>();

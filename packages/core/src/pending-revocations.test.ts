@@ -38,6 +38,32 @@ const retired = (token = "old-session") => ({
 });
 
 describe("pending session revocation", () => {
+  it("persists the workspace target across process restart without authorizing a different account", async () => {
+    const h = harness();
+    const workspace = {
+      account: JSON.stringify(["https://accounts.example.test", "user-one"]),
+      target: {
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        serverId: "10000000-0000-4000-8000-000000000002",
+        workspaceId: "10000000-0000-4000-8000-000000000003",
+        bindingVersion: 1,
+        keyFingerprint: "a".repeat(64),
+      },
+    };
+    await h.queue.enqueue({ ...retired(), workspace });
+    await h.restart().retry();
+    expect(h.send).toHaveBeenCalledWith(expect.objectContaining({ workspace }));
+    expect(h.entries()[0].workspace).toEqual(workspace);
+    await expect(
+      h.queue.enqueue({ ...retired(), workspace: { ...workspace, account: "corrupt" } }),
+    ).rejects.toThrow("Invalid pending revocation");
+    await expect(
+      h.queue.enqueue({
+        ...retired(),
+        workspace: { ...workspace, target: { ...workspace.target, keyFingerprint: "corrupt" } },
+      }),
+    ).rejects.toThrow("Invalid pending revocation");
+  });
   it("does not lose a logout trigger behind an empty startup flush", async () => {
     let stored: string | null = null;
     let release!: () => void;

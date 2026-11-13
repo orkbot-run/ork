@@ -9,6 +9,7 @@ import {
   installationVirtualOrigin,
   WorkspaceTargetSchema,
 } from "@orkbot/contracts";
+import type { PendingWorkspaceRevocation } from "@orkbot/core";
 import { readBoundedJsonResponse } from "@orkbot/core";
 import { fetchAccounts } from "./accounts-network";
 
@@ -24,6 +25,8 @@ let queue: Promise<unknown> = Promise.resolve();
 let loading: Promise<NativeInstallation> | undefined;
 const pinnedOrigins = new Set<string>();
 let selected: {
+  account: string;
+  target: WorkspaceTarget;
   origin: string;
   issuer: string;
   revision: number;
@@ -182,8 +185,44 @@ export async function selectInstallationTransport(
       randomUUID,
     );
   });
-  selected = { origin, issuer: issuer.origin, revision: version, ready };
+  selected = {
+    account,
+    target: workspace,
+    origin,
+    issuer: issuer.origin,
+    revision: version,
+    ready,
+  };
   await ready;
+}
+
+/** Capture before logout invalidates native state; retired credentials retain their exact scope. */
+export function installationRevocationScope(
+  origin: string,
+): PendingWorkspaceRevocation | undefined {
+  const snapshot = selected;
+  return snapshot?.origin === origin
+    ? { account: snapshot.account, target: { ...snapshot.target } }
+    : undefined;
+}
+
+export function fetchInstallationRevocation(
+  input: string,
+  init: RequestInit,
+  expected?: PendingWorkspaceRevocation,
+): ReturnType<typeof fetch> {
+  if (!expected) return fetchInstallation(input, init);
+  const snapshot = selected;
+  if (
+    !snapshot ||
+    new URL(input).origin !== snapshot.origin ||
+    expected.account !== snapshot.account ||
+    Object.entries(snapshot.target).some(
+      ([key, value]) => expected.target[key as keyof WorkspaceTarget] !== value,
+    )
+  )
+    return Promise.reject(new Error("Native connection changed"));
+  return snapshot.ready.then((fetch) => fetch(input, init));
 }
 
 /** Accounts always uses its own HTTP channel, even if a catalog contains a bad server origin. */

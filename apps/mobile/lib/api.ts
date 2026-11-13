@@ -74,7 +74,10 @@ import {
 } from "./endpoint";
 import { getActiveUiLocale, t } from "./i18n";
 import { identityLabels } from "./identity-display";
-import { invalidateInstallationTransport } from "./installation-transport";
+import {
+  installationRevocationScope,
+  invalidateInstallationTransport,
+} from "./installation-transport";
 import { resumeLiveNotifications } from "./live-notifications";
 import {
   beginMobileAvatarFeed,
@@ -992,10 +995,13 @@ export async function fetchMobileJson<T>(
 export async function signOut() {
   const server = currentApiBase();
   const headers = { ...serverHeaders(server) };
+  const workspace = installationRevocationScope(server);
   // Invalidate both local identities before any network operation. Retirement reads the old
   // bearer within the credential-write queue, then persists it before deleting the live slot.
   const clearingSession = clearSessionToken("logout", (token) =>
-    queueSessionRevocation(server, token, headers),
+    workspace
+      ? queueSessionRevocation(server, token, headers, workspace)
+      : queueSessionRevocation(server, token, headers),
   );
   const clearingSpace = clearSpace();
   const clearingAccounts = signOutAccounts().then(
