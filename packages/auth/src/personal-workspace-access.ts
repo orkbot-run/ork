@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 import type { PersonalDevice, PersonalDeviceTarget, WorkspaceProjection } from "@orkbot/contracts";
-import type { PersonalWorkspaceDevice, PrismaClient } from "@orkbot/db";
+import type { PersonalWorkspaceDevice, Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import type { InstallationClient } from "./installation-client.js";
 import type { NativeLoginIdentity } from "./native-accounts-login.js";
-import type { PersonalRevocations } from "./personal-revocations.js";
+import type { PersonalRevocationScope, PersonalRevocations } from "./personal-revocations.js";
 
 const denied = () => new Error("Personal device access unavailable");
 /** Durable personal authority is separate from the expiring corporate projection cache. */
@@ -14,6 +14,7 @@ export class PersonalWorkspaceAccess {
   private readonly blocked = new Set<string>();
   private blockEverything = false;
   private refusalBarrier?: Promise<void>;
+  private refusalScope?: string;
   private readonly watches = new Map<string, Set<AbortController>>();
   constructor(
     private readonly prisma: PrismaClient,
@@ -31,7 +32,7 @@ export class PersonalWorkspaceAccess {
     const configuration = await this.installation.configuration();
     if (
       !this.revocations ||
-      (await this.revocations.restorationCheckpoint()).length > 0 ||
+      (await this.revocations.restorationCheckpoint(configuration ?? undefined)).length > 0 ||
       (await this.revocations.revoked(device.id)) ||
       !workspace ||
       !configuration ||
@@ -107,9 +108,11 @@ export class PersonalWorkspaceAccess {
   async device(id: string): Promise<PersonalWorkspaceDevice | null> {
     return runAsSystem("verify a personal device against its retained admission", async () => {
       const device = await this.prisma.personalWorkspaceDevice.findUnique({ where: { id } });
+      const admissionConfiguration = await this.installation.configuration();
       if (
         !this.revocations ||
-        (await this.revocations.restorationCheckpoint()).length > 0 ||
+        !admissionConfiguration ||
+        (await this.revocations.restorationCheckpoint(admissionConfiguration)).length > 0 ||
         (await this.revocations.revoked(id)) ||
         !device ||
         device.revokedAt ||
@@ -214,10 +217,16 @@ export class PersonalWorkspaceAccess {
     return { signal: controller.signal, dispose };
   }
 
-  async restrict(projection: WorkspaceProjection): Promise<void> {
+  async restrict(
+    projection: WorkspaceProjection,
+    transaction?: Prisma.TransactionClient,
+  ): Promise<void> {
     const devices = await runAsSystem(
       "compare durable personal admissions with a received projection",
-      () => this.prisma.personalWorkspaceDevice.findMany({ where: { revokedAt: null } }),
+      () =>
+        (transaction ?? this.prisma).personalWorkspaceDevice.findMany({
+          where: { revokedAt: null },
+        }),
     );
     const revoked = devices.filter((device) => {
       const workspace = projection.workspaces.find((value) => value.id === device.workspaceId);
@@ -242,7 +251,7 @@ export class PersonalWorkspaceAccess {
     for (const device of revoked) this.invalidate(device.workspaceId);
     await this.revocations?.revoke(revoked.map((device) => device.id));
     await runAsSystem("persist personal revocations before updating the projection", () =>
-      this.prisma.personalWorkspaceDevice.updateMany({
+      (transaction ?? this.prisma).personalWorkspaceDevice.updateMany({
         where: { id: { in: revoked.map((device) => device.id) } },
         data: { revokedAt: new Date() },
       }),
@@ -256,35 +265,51 @@ export class PersonalWorkspaceAccess {
   confirmed(workspaceIds: string[]): void {
     this.blockEverything = false;
     this.refusalBarrier = undefined;
+    this.refusalScope = undefined;
     for (const id of workspaceIds) this.blocked.delete(id);
   }
-  restorationCheckpoint(): Promise<string[]> {
-    return this.revocations?.restorationCheckpoint() ?? Promise.resolve([]);
+  async restorationCheckpoint(scope?: PersonalRevocationScope): Promise<string[]> {
+    return (
+      this.revocations?.restorationCheckpoint(
+        scope ?? (await this.installation.configuration()) ?? undefined,
+      ) ?? []
+    );
   }
   async confirmRestoration(checkpoint: readonly string[]): Promise<void> {
     await this.revocations?.confirmRestoration(checkpoint);
   }
-  async refuseInstallation(): Promise<void> {
+  async refuseInstallation(
+    transaction?: Prisma.TransactionClient,
+    scope?: PersonalRevocationScope,
+  ): Promise<void> {
     this.blockEverything = true;
     for (const id of this.watches.keys()) this.invalidate(id);
+    const key = JSON.stringify(scope ?? null);
+    if (!this.refusalBarrier || this.refusalScope !== key) {
+      this.refusalScope = key;
+      this.refusalBarrier = this.revocations?.refuseInstallation(scope) ?? Promise.resolve();
+    }
+    const barrier = this.refusalBarrier;
     try {
-      this.refusalBarrier ??= this.revocations?.refuseInstallation() ?? Promise.resolve();
-      await this.refusalBarrier;
+      await barrier;
     } catch (error) {
-      this.refusalBarrier = undefined;
+      if (this.refusalBarrier === barrier) {
+        this.refusalBarrier = undefined;
+        this.refusalScope = undefined;
+      }
       throw error;
     }
     const devices = await runAsSystem(
       "resolve personal credentials for installation revocation",
       () =>
-        this.prisma.personalWorkspaceDevice.findMany({
+        (transaction ?? this.prisma).personalWorkspaceDevice.findMany({
           where: { revokedAt: null },
           select: { id: true },
         }),
     );
     await this.revocations?.revoke(devices.map((device) => device.id));
     await runAsSystem("persist known installation revocation for personal credentials", () =>
-      this.prisma.personalWorkspaceDevice.updateMany({
+      (transaction ?? this.prisma).personalWorkspaceDevice.updateMany({
         where: { revokedAt: null },
         data: { revokedAt: new Date() },
       }),

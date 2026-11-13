@@ -1,28 +1,45 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import { lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
+export interface PersonalRevocationScope {
+  serverId: string;
+  bindingVersion: number;
+  keyFingerprint: string;
+}
+function scopeKey(scope: PersonalRevocationScope): string {
+  if (
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(scope.serverId) ||
+    !Number.isSafeInteger(scope.bindingVersion) ||
+    scope.bindingVersion < 1 ||
+    !/^[a-f0-9]{64}$/.test(scope.keyFingerprint)
+  )
+    throw new Error("Invalid personal revocation scope");
+  return createHash("sha256")
+    .update(JSON.stringify([scope.serverId, scope.bindingVersion, scope.keyFingerprint]))
+    .digest("hex");
+}
 export interface PersonalRevocations {
-  refuseInstallation(): Promise<void>;
+  refuseInstallation(scope?: PersonalRevocationScope): Promise<void>;
   revoked(deviceId: string): Promise<boolean>;
   revoke(deviceIds: string[]): Promise<void>;
-  restorationCheckpoint(): Promise<string[]>;
+  restorationCheckpoint(scope?: PersonalRevocationScope): Promise<string[]>;
   confirmRestoration(checkpoint: readonly string[]): Promise<void>;
 }
 const marker = "revoked\n";
 const restorationPrefix = ".restore-required.";
-const restorationName = /^\.restore-required\.[a-zA-Z0-9]{12}$/;
+const restorationName = /^\.restore-required\.(?:binding\.[a-f0-9]{64}\.)?[a-zA-Z0-9]{12}$/;
 /** Tombstones survive process restarts and a failed projection database transaction. */
 export class FilePersonalRevocations implements PersonalRevocations {
   constructor(private readonly directory: string) {}
-  async refuseInstallation(): Promise<void> {
+  async refuseInstallation(scope?: PersonalRevocationScope): Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
     await this.checkDirectory();
-    const name = `${restorationPrefix}${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const name = `${restorationPrefix}${scope ? `binding.${scopeKey(scope)}.` : ""}${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const file = await open(
       path.join(this.directory, name),
       constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -55,7 +72,8 @@ export class FilePersonalRevocations implements PersonalRevocations {
       throw new Error("Personal revocation directory is unsafe");
   }
   /** Each restore adds a unique barrier. A request can clear only the barriers it observed. */
-  async restorationCheckpoint(): Promise<string[]> {
+  async restorationCheckpoint(scope?: PersonalRevocationScope): Promise<string[]> {
+    const key = scope ? scopeKey(scope) : undefined;
     await this.checkDirectory();
     const entries = await readdir(this.directory).catch((error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") return [];
@@ -81,7 +99,13 @@ export class FilePersonalRevocations implements PersonalRevocations {
         await file.close();
       }
     }
-    return names;
+    return key
+      ? names.filter(
+          (name) =>
+            !name.startsWith(`${restorationPrefix}binding.`) ||
+            name.startsWith(`${restorationPrefix}binding.${key}.`),
+        )
+      : names;
   }
   async confirmRestoration(checkpoint: readonly string[]): Promise<void> {
     if (!checkpoint.length) return;

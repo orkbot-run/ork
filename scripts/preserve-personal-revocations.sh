@@ -33,7 +33,7 @@ validate_revocations() {
         echo "personal revocation marker is unreadable" >&2
         return 1
       }
-    elif [[ "$name" =~ ^\.restore-required\.[a-zA-Z0-9]{12}$ ]]; then
+    elif [[ "$name" =~ ^\.restore-required\.(binding\.[a-f0-9]{64}\.)?[a-zA-Z0-9]{12}$ ]]; then
       cmp -s "$file" <(printf 'pending\n') || {
         echo "personal restoration marker is unreadable" >&2
         return 1
@@ -61,12 +61,12 @@ preserve_revocations() {
     # Copy directory ownership without replacing installation keys or other snapshot data.
     tar -cf - --no-recursion -C "$SOURCE" identity identity/personal-revocations | \
       tar -xf - -C "$DESTINATION"
-    shopt -s nullglob
+    shopt -s nullglob dotglob
     for file in "$source"/*; do
       [[ "$file" != *.tmp ]] || continue
       cp -p "$file" "$destination/"
     done
-    shopt -u nullglob
+    shopt -u nullglob dotglob
   fi
   private_directory "$DESTINATION/identity" "$DESTINATION"
   private_directory "$destination" "$DESTINATION/identity"

@@ -11,9 +11,9 @@ import {
   personalDeviceSchema,
   workspaceProjectionSchema,
 } from "@orkbot/contracts";
-import type { PrismaClient } from "@orkbot/db";
+import type { Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
-import type { InstallationClient } from "./installation-client.js";
+import type { InstallationClient, InstallationConfiguration } from "./installation-client.js";
 import { InstallationRequestError } from "./installation-client.js";
 import type { NativeLoginGrant, NativeLoginIdentity } from "./native-accounts-login.js";
 import { oidcAccountSubject } from "./oidc.js";
@@ -46,15 +46,15 @@ export class WorkspaceAuthority {
   async synchronize(): Promise<WorkspaceProjection> {
     const configuration = await this.installation.configuration();
     if (!configuration) throw refused();
-    const restoration = await this.personal.restorationCheckpoint();
+    const restoration = await this.personal.restorationCheckpoint(configuration);
     const { response, nonce, startedAt } = await this.installation
-      .signedRequest("/servers/synchronize", { personalDeviceProtocol: 1 })
+      .signedRequest("/servers/synchronize", { personalDeviceProtocol: 1 }, configuration)
       .catch(async (error) => {
         if (
           error instanceof InstallationRequestError &&
           [400, 401, 403, 409, 410, 426].includes(error.status)
         ) {
-          await this.refuseInstallation(configuration.serverId);
+          await this.refuseInstallation(configuration.serverId, true, undefined, configuration);
         }
         throw error;
       });
@@ -84,10 +84,7 @@ export class WorkspaceAuthority {
     )
       throw refused();
     this.window.validate(projection, startedAt);
-    // A received revocation takes effect even if persisting its projection subsequently fails.
-    const changed = new Set(this.window.restrict(projection, startedAt));
-    for (const id of changed) this.personal.invalidate(id);
-    await this.personal.restrict(projection);
+    const changed = new Set<string>();
     try {
       await runAsSystem("persist a freshly verified workspace projection", () =>
         this.prisma.$transaction(async (tx) => {
@@ -106,6 +103,29 @@ export class WorkspaceAuthority {
           )
             throw refused();
           const previous = await tx.centralWorkspaceBinding.findMany();
+          // Validate every local mapping before any memory change or irreversible device tombstone.
+          for (const binding of previous) {
+            const workspace = projection.workspaces.find((value) => value.id === binding.id);
+            if (
+              workspace &&
+              (workspace.permissionVersion < binding.permissionVersion ||
+                workspace.operationId !== binding.operationId ||
+                (workspace.localOrganizationId &&
+                  workspace.localOrganizationId !== binding.localOrganizationId) ||
+                (workspace.localWorkspaceId && workspace.localWorkspaceId !== binding.spaceId) ||
+                (binding.state === "ready" &&
+                  binding.bindingVersion === projection.bindingVersion &&
+                  workspace.permissionVersion === binding.permissionVersion &&
+                  (workspace.state === "provisioning" ||
+                    (workspace.state === "ready" &&
+                      (!workspace.localOrganizationId || !workspace.localWorkspaceId)))))
+            )
+              throw refused();
+          }
+          // Only the locked current binding may restrict memory or durable device evidence.
+          for (const id of this.window.restrict(projection, startedAt)) changed.add(id);
+          for (const id of changed) this.personal.invalidate(id);
+          await this.personal.restrict(projection, tx);
           for (const binding of previous) {
             const workspace = projection.workspaces.find((value) => value.id === binding.id);
             if (
@@ -115,15 +135,6 @@ export class WorkspaceAuthority {
               projection.bindingVersion !== binding.bindingVersion
             )
               changed.add(binding.id);
-            if (
-              workspace &&
-              (workspace.permissionVersion < binding.permissionVersion ||
-                workspace.operationId !== binding.operationId ||
-                (workspace.localOrganizationId &&
-                  workspace.localOrganizationId !== binding.localOrganizationId) ||
-                (workspace.localWorkspaceId && workspace.localWorkspaceId !== binding.spaceId))
-            )
-              throw refused();
             await tx.centralWorkspaceAccess.updateMany({
               where: { workspaceId: binding.id },
               data: { active: false },
@@ -223,13 +234,69 @@ export class WorkspaceAuthority {
         for (let i = 0; i < ids.length; i += 64)
           await this.realtime.publish(
             `installation-authority:${configuration.serverId}`,
-            JSON.stringify({ source: this.processId, ids: ids.slice(i, i + 64) }),
+            JSON.stringify({
+              source: this.processId,
+              ids: ids.slice(i, i + 64),
+              serverId: configuration.serverId,
+              bindingVersion: configuration.bindingVersion,
+              keyFingerprint: configuration.keyFingerprint,
+            }),
           );
       }
     }
-    await this.personal.confirmRestoration(restoration);
-    this.window.apply(projection, startedAt);
-    this.personal.confirmed(projection.workspaces.map((workspace) => workspace.id));
+    // Persistence must commit before restoring personal access, and the binding may change meanwhile.
+    await runAsSystem("admit the still-current committed workspace projection", () =>
+      this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+        const current = async () => {
+          const identity = await tx.installationIdentity.findUniqueOrThrow({
+            where: { id: "local" },
+          });
+          if (
+            identity.state !== "ready" ||
+            identity.issuer !== this.issuer ||
+            identity.serverId !== configuration.serverId ||
+            identity.centralOrganizationId !== configuration.organizationId ||
+            identity.bindingVersion !== configuration.bindingVersion ||
+            identity.keyFingerprint !== configuration.keyFingerprint
+          )
+            throw refused();
+          if (identity.projectionGrant !== String(response.grant)) {
+            const latest = await this.installation.verify(
+              identity.projectionGrant,
+              IDENTITY_PROJECTION_PURPOSE,
+              configuration,
+            );
+            const policy = (value: WorkspaceProjection) =>
+              JSON.stringify(
+                Object.fromEntries(
+                  Object.entries(value).filter(
+                    ([key]) => key !== "verifiedAt" && key !== "expiresAt",
+                  ),
+                ),
+              );
+            const latestProjection = workspaceProjectionSchema.parse({
+              serverId: latest.serverId,
+              organizationId: latest.organizationId,
+              bindingVersion: latest.bindingVersion,
+              keyFingerprint: latest.keyFingerprint,
+              verifiedAt: latest.verifiedAt,
+              expiresAt: latest.expiresAt,
+              workspaces: latest.workspaces,
+            });
+            if (policy(latestProjection) !== policy(projection)) throw refused();
+            // JWT verification may await key discovery; a timed-out transaction has lost its fence.
+            await tx.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+          }
+        };
+        await current();
+        await this.personal.confirmRestoration(restoration);
+        // An expired transaction cannot authorize a delayed filesystem completion to reopen memory.
+        await current();
+        this.window.apply(projection, startedAt);
+        this.personal.confirmed(projection.workspaces.map((workspace) => workspace.id));
+      }),
+    );
     return projection;
   }
 
@@ -744,21 +811,107 @@ export class WorkspaceAuthority {
     return this.window.watch(scope.workspaceId, scope.subject, scope.revision);
   }
 
+  async invalidateProjection(
+    configuration: InstallationConfiguration,
+    workspaceIds: string[],
+  ): Promise<boolean> {
+    return runAsSystem("fence a projection invalidation by installation binding", () =>
+      this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+        const identity = await tx.installationIdentity.findUnique({ where: { id: "local" } });
+        if (
+          !identity ||
+          identity.issuer !== this.issuer ||
+          identity.serverId !== configuration.serverId ||
+          identity.centralOrganizationId !== configuration.organizationId ||
+          identity.bindingVersion !== configuration.bindingVersion ||
+          identity.keyFingerprint !== configuration.keyFingerprint
+        )
+          return false;
+        for (const id of workspaceIds) this.invalidate(id);
+        return true;
+      }),
+    );
+  }
+
   invalidate(workspaceId: string): void {
     this.window.invalidate(workspaceId);
     this.personal.invalidate(workspaceId);
   }
 
-  async refuseInstallation(serverId?: string, broadcast = true): Promise<void> {
+  private refusalPayload(configuration: InstallationConfiguration): string {
+    return JSON.stringify({
+      source: this.processId,
+      refused: true,
+      serverId: configuration.serverId,
+      bindingVersion: configuration.bindingVersion,
+      keyFingerprint: configuration.keyFingerprint,
+    });
+  }
+
+  /** Publish only after rollback; consumers fence this captured binding before applying effects. */
+  async broadcastRefusal(configuration: InstallationConfiguration): Promise<void> {
+    await this.realtime?.publish(
+      `installation-authority:${configuration.serverId}`,
+      this.refusalPayload(configuration),
+    );
+  }
+
+  async refuseInstallation(
+    serverId?: string,
+    broadcast = true,
+    transaction?: Prisma.TransactionClient,
+    expected?: InstallationConfiguration,
+  ): Promise<void> {
+    if (!transaction) {
+      if (!expected || expected.serverId !== serverId) throw refused();
+      try {
+        await runAsSystem("fence a bound installation refusal", () =>
+          this.prisma.$transaction((tx) =>
+            this.refuseInstallation(serverId, broadcast, tx, expected),
+          ),
+        );
+      } catch (error) {
+        // A rollback cannot publish NOTIFY; recipients still gate this known refusal by binding.
+        if (broadcast) await this.broadcastRefusal(expected);
+        throw error;
+      }
+      return;
+    }
+    if (expected && transaction) {
+      await transaction.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+    }
+    const identity = await transaction.installationIdentity.findUnique({ where: { id: "local" } });
+    if (
+      expected &&
+      (!identity ||
+        identity.issuer !== this.issuer ||
+        identity.serverId !== expected.serverId ||
+        identity.centralOrganizationId !== expected.organizationId ||
+        identity.bindingVersion !== expected.bindingVersion ||
+        identity.keyFingerprint !== expected.keyFingerprint)
+    )
+      return;
+    if (!identity?.serverId || !identity.centralOrganizationId || identity.serverId !== serverId)
+      throw refused();
     this.window.dispose();
     try {
-      await this.personal.refuseInstallation();
+      await this.personal.refuseInstallation(transaction, {
+        serverId: identity.serverId!,
+        bindingVersion: identity.bindingVersion,
+        keyFingerprint: identity.keyFingerprint,
+      });
     } finally {
-      if (serverId && broadcast && this.realtime)
-        await this.realtime.publish(
-          `installation-authority:${serverId}`,
-          JSON.stringify({ source: this.processId, refused: true }),
-        );
+      if (serverId && broadcast && this.realtime) {
+        const payload = this.refusalPayload({
+          serverId: identity.serverId,
+          organizationId: identity.centralOrganizationId,
+          bindingVersion: identity.bindingVersion,
+          keyFingerprint: identity.keyFingerprint,
+        });
+        const envelope = JSON.stringify({ topic: `installation-authority:${serverId}`, payload });
+        await transaction.$queryRaw`SELECT pg_notify('orkbot_events', ${envelope})::text`;
+      }
     }
   }
 

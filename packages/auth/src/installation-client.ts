@@ -29,7 +29,7 @@ import {
   RELAY_SERVER_PURPOSE,
 } from "@orkbot/contracts";
 import { readBoundedJsonResponse } from "@orkbot/core";
-import type { InstallationIdentity, PrismaClient } from "@orkbot/db";
+import type { InstallationIdentity, Prisma, PrismaClient } from "@orkbot/db";
 import { runAsSystem } from "@orkbot/db";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
@@ -328,6 +328,107 @@ export class InstallationClient {
       state: "approval-required" as const,
       ...(await this.beginEnrollment(name, organizationId)),
     };
+  }
+
+  /** Explicit operator recovery retains local identity but never trusts the previous admission. */
+  async reconnectEnrollment(
+    name: string,
+    organizationId: string,
+    refuse: (
+      serverId: string,
+      transaction: Prisma.TransactionClient,
+      configuration: InstallationConfiguration,
+    ) => Promise<void>,
+  ) {
+    if (typeof refuse !== "function") throw failure("Installation revocation is required");
+    await this.ensureIdentity();
+    const previous = await this.load();
+    if (
+      !UUID.test(organizationId) ||
+      !previous.serverId ||
+      previous.centralOrganizationId !== organizationId ||
+      (previous.requestedOrganizationId && previous.requestedOrganizationId !== organizationId)
+    )
+      throw failure("Installation organization selection changed");
+    if (name.trim() !== name || !name || name.length > 100)
+      throw failure("Invalid installation enrollment name");
+    if (["unregistered", "enrolling"].includes(previous.state))
+      return this.beginEnrollment(name, organizationId);
+    if (previous.state !== "ready")
+      throw failure("Confirm the pending installation enrollment before reconnecting");
+    try {
+      await this.signedRequest(
+        "/servers/synchronize",
+        {},
+        {
+          serverId: previous.serverId,
+          organizationId,
+          bindingVersion: previous.bindingVersion,
+          keyFingerprint: previous.keyFingerprint,
+        },
+      );
+      throw failure("Disconnect this installation through Accounts first");
+    } catch (error) {
+      // A timeout, outage or still-active binding cannot authorize a local trust reset.
+      if (!(error instanceof InstallationRequestError) || ![401, 410].includes(error.status))
+        throw error;
+    }
+    await runAsSystem("retire a refused installation binding for explicit operator recovery", () =>
+      this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM installation_identity WHERE id = 'local' FOR UPDATE`;
+        const saved = await tx.installationIdentity.updateMany({
+          where: {
+            id: "local",
+            issuer: this.options.issuer,
+            serverId: previous.serverId,
+            centralOrganizationId: organizationId,
+            bindingVersion: previous.bindingVersion,
+            operationId: previous.operationId,
+            keyFingerprint: previous.keyFingerprint,
+            state: "ready",
+          },
+          data: {
+            state: "unregistered",
+            operationId: randomUUID(),
+            challenge: randomBytes(32).toString("base64url"),
+            requestedOrganizationId: organizationId,
+            enrollmentId: null,
+            enrollmentGrantId: null,
+            receiptCipher: null,
+            projectionGrant: null,
+            verifiedAt: null,
+            validUntil: new Date(0),
+            transportOwnerId: null,
+            transportLeaseUntil: null,
+          },
+        });
+        if (saved.count !== 1) throw failure("Installation binding changed");
+        // The row lock fences every external revocation effect until the old binding is retired.
+        await refuse(previous.serverId!, tx, {
+          serverId: previous.serverId!,
+          organizationId,
+          bindingVersion: previous.bindingVersion,
+          keyFingerprint: previous.keyFingerprint,
+        });
+        const bindings = await tx.centralWorkspaceBinding.findMany({
+          select: { id: true, spaceId: true },
+        });
+        await tx.centralWorkspaceBinding.updateMany({
+          data: { state: "disabled", members: [], validUntil: new Date(0) },
+        });
+        await tx.centralWorkspaceAccess.updateMany({ data: { active: false } });
+        await tx.personalWorkspaceDevice.updateMany({
+          where: { revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+        await tx.aIConnectionAdministrator.deleteMany();
+        await tx.workspaceAIConnection.updateMany({
+          where: { spaceId: { in: bindings.map((binding) => binding.spaceId) } },
+          data: { enabled: false, available: false, revision: { increment: 1 } },
+        });
+      }),
+    );
+    return this.beginEnrollment(name, organizationId);
   }
 
   async beginEnrollment(name: string, expectedOrganizationId?: string) {
@@ -652,6 +753,9 @@ export class InstallationClient {
         grant.installation_key !== row.keyFingerprint ||
         typeof grant.server_id !== "string" ||
         !UUID.test(grant.server_id) ||
+        (row.serverId &&
+          (grant.server_id !== row.serverId ||
+            Number(grant.binding_version) <= row.bindingVersion)) ||
         typeof grant.organization_id !== "string" ||
         !UUID.test(grant.organization_id) ||
         grant.aud !== identityAudience(grant.server_id) ||

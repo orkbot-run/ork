@@ -20,6 +20,65 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
 });
 describe("personal revocation journal", () => {
+  it("retains late binding refusals without blocking another binding, key or server", async () => {
+    const directory = await fixture();
+    const journal = new FilePersonalRevocations(directory);
+    const scope = { serverId: randomUUID(), bindingVersion: 1, keyFingerprint: "a".repeat(64) };
+    const next = { ...scope, bindingVersion: 2 };
+    await journal.refuseInstallation(scope);
+    const old = await journal.restorationCheckpoint(scope);
+    expect(old).toHaveLength(1);
+    expect(await journal.restorationCheckpoint(next)).toEqual([]);
+    expect(
+      await journal.restorationCheckpoint({ ...scope, keyFingerprint: "b".repeat(64) }),
+    ).toEqual([]);
+    expect(await journal.restorationCheckpoint({ ...scope, serverId: randomUUID() })).toEqual([]);
+    await journal.refuseInstallation();
+    const global = await journal.restorationCheckpoint(next);
+    expect(global).toHaveLength(1);
+    expect(await journal.restorationCheckpoint(scope)).toHaveLength(2);
+    await journal.confirmRestoration(global);
+    expect(await journal.restorationCheckpoint(next)).toEqual([]);
+    expect(await journal.restorationCheckpoint(scope)).toEqual(old);
+    expect(await readdir(directory)).toEqual(old);
+  });
+  it.skipIf(process.platform === "win32")(
+    "preserves scoped evidence and a global restore barrier through the actual helper",
+    async () => {
+      const source = await fixture();
+      const destination = await fixture();
+      const journal = new FilePersonalRevocations(
+        path.join(source, "identity/personal-revocations"),
+      );
+      const scope = { serverId: randomUUID(), bindingVersion: 1, keyFingerprint: "a".repeat(64) };
+      const next = { ...scope, bindingVersion: 2 };
+      const device = randomUUID();
+      await journal.refuseInstallation(scope);
+      await journal.revoke([device]);
+      const original = await journal.restorationCheckpoint(scope);
+      execFileSync(
+        "/bin/bash",
+        [
+          path.resolve(import.meta.dirname, "../../../scripts/preserve-personal-revocations.sh"),
+          source,
+          destination,
+        ],
+        { env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" } },
+      );
+      const restored = new FilePersonalRevocations(
+        path.join(destination, "identity/personal-revocations"),
+      );
+      expect(await restored.revoked(device)).toBe(true);
+      const current = await restored.restorationCheckpoint(next);
+      expect(current).toHaveLength(1);
+      expect(await restored.restorationCheckpoint(scope)).toHaveLength(2);
+      await restored.confirmRestoration(current);
+      expect(await restored.restorationCheckpoint(next)).toEqual([]);
+      expect(await restored.restorationCheckpoint(scope)).toEqual(original);
+      expect(await restored.revoked(device)).toBe(true);
+    },
+  );
+
   it("persists a whole-installation refusal before device IDs can be read from the database", async () => {
     const directory = await fixture();
     const journal = new FilePersonalRevocations(directory);

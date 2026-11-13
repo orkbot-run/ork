@@ -75,7 +75,14 @@ it("treats a known Accounts refusal as installation revocation", async () => {
   f.transportLease.mockRejectedValue(new InstallationRequestError(401));
   const stop = startInstallationRelay(f.options);
   cleanups.push(stop);
-  await vi.waitFor(() => expect(f.refuseInstallation).toHaveBeenCalledWith(configuration.serverId));
+  await vi.waitFor(() =>
+    expect(f.refuseInstallation).toHaveBeenCalledWith(
+      configuration.serverId,
+      true,
+      undefined,
+      configuration,
+    ),
+  );
   expect(f.synchronize).not.toHaveBeenCalled();
 });
 

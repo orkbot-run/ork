@@ -10,6 +10,9 @@ import {
   verify,
   X509Certificate,
 } from "node:crypto";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
   INSTALLATION_TRANSPORT_LEASE_PURPOSE,
@@ -22,11 +25,12 @@ import {
 } from "@orkbot/contracts";
 import { createDb, createSpaceForMember, runAsSystem, runAsTenant } from "@orkbot/db";
 import { createLocalJWKSet, SignJWT } from "jose";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createAuth } from "./index.js";
 import { InstallationClient } from "./installation-client.js";
 import { InstallationTransportOwner } from "./installation-transport-owner.js";
 import { oidcAccountSubject } from "./oidc.js";
+import { FilePersonalRevocations } from "./personal-revocations.js";
 import { WorkspaceAuthority } from "./workspace-authority.js";
 
 const enabled =
@@ -69,6 +73,7 @@ function broker() {
     { userId: "central-participant", role: "member" as const, accessVersion: admission },
   ];
   let permissionVersion = 1;
+  let bindingVersion = 1;
   const personalDevices = new Set<string>();
   let personalDeviceVersion = 0;
   let synchronizeStatus = 200;
@@ -76,7 +81,8 @@ function broker() {
   let relayClaims: Record<string, unknown> = {};
   let relayEnabled = true;
   let calls = 0;
-  let state: "provisioning" | "ready" = "provisioning";
+  let timeOffset = 0;
+  let state: "provisioning" | "ready" | "disabled" = "provisioning";
   let mapping: { localOrganizationId: string | null; localWorkspaceId: string | null } = {
     localOrganizationId: null,
     localWorkspaceId: null,
@@ -93,7 +99,7 @@ function broker() {
     expect(init?.redirect).toBe("error");
     const path = new URL(String(url)).pathname;
     const body = JSON.parse(String(init?.body));
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000) + timeOffset;
     if (path.endsWith("/enrollments/start")) {
       const key = createPublicKey({
         key: Buffer.from(body.publicKey, "base64url"),
@@ -145,7 +151,7 @@ function broker() {
         installation_key: fingerprint(),
         server_id: serverId,
         organization_id: organizationId,
-        binding_version: 1,
+        binding_version: bindingVersion,
       });
       return Response.json({ state: "approved", grant });
     }
@@ -178,7 +184,7 @@ function broker() {
         exp: now + 45,
         server_id: serverId,
         organization_id: organizationId,
-        binding_version: 1,
+        binding_version: bindingVersion,
         installation_key: fingerprint(),
         lease_id: body.ownerId,
       };
@@ -226,7 +232,7 @@ function broker() {
       const projection: WorkspaceProjection = {
         serverId,
         organizationId,
-        bindingVersion: 1,
+        bindingVersion,
         keyFingerprint: fingerprint(),
         verifiedAt: now,
         expiresAt: now + 300,
@@ -290,7 +296,7 @@ function broker() {
         server_id: serverId,
         organization_id: organizationId,
         workspace_id: workspaceId,
-        binding_version: 1,
+        binding_version: bindingVersion,
         installation_key: fingerprint(),
         permission_version: permissionVersion,
         workspace_role: "member",
@@ -302,8 +308,25 @@ function broker() {
       });
     },
     calls: () => calls,
+    timeOffset: (value: number) => {
+      timeOffset = value;
+    },
     refuseSynchronization: (status: number) => {
       synchronizeStatus = status;
+    },
+    prepareReconnect: () => {
+      synchronizeStatus = 401;
+      approved = false;
+      bindingVersion++;
+      permissionVersion++;
+      members = [];
+      state = "disabled";
+    },
+    restoreWorkspace: () => {
+      state = "provisioning";
+    },
+    bindingVersion: (value: number) => {
+      bindingVersion = value;
     },
     revokeDevice: (id: string) => {
       personalDevices.delete(id);
@@ -638,6 +661,840 @@ describe.skipIf(!enabled)(
         });
       });
     };
+    it.each(["permission", "mapping"])(
+      "rejects a same-binding same-iat stale %s before touching a newer personal watch",
+      async (phase) => {
+        const clock = vi.spyOn(Date, "now").mockReturnValue(Math.floor(Date.now() / 1000) * 1000);
+        await provision();
+        if (phase === "mapping") server.restoreWorkspace();
+        let enter!: () => void;
+        let release!: () => void;
+        const entered = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        const hold = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const other = new InstallationClient(prisma!, {
+          issuer,
+          encryptionKey: "fixture-encryption-material".repeat(3),
+          keys,
+          request: async (url, init) => {
+            const response = await server.request(url, init);
+            if (new URL(String(url)).pathname.endsWith("/servers/synchronize")) {
+              enter();
+              await hold;
+            }
+            return response;
+          },
+        });
+        const stale = new WorkspaceAuthority(prisma!, other, issuer, undefined, revocations);
+        const pending = stale.synchronize().then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+        let client: Awaited<ReturnType<typeof personalClient>> | undefined;
+        let watch: { signal: AbortSignal; dispose(): void } | undefined;
+        try {
+          await Promise.race([entered, pending]);
+          if (phase === "permission") {
+            server.revoke();
+            await authority!.synchronize();
+            server.readd();
+          } else await authority!.provisionWorkspace(workspaceId);
+          await authority!.synchronize();
+          client = await personalClient(true);
+          const device = (await stale.personal.device(client.device.id))!;
+          expect(device).not.toBeNull();
+          watch = await stale.personal.watch(device);
+          expect(watch.signal.aborted).toBe(false);
+          expect(
+            (await stale.personalChallenge(device.id, "c".repeat(43))).target.bindingVersion,
+          ).toBe(1);
+          const latest = await system(() =>
+            prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+          );
+          expect(latest.verifiedAt!.getTime()).toBe(Date.now());
+          release();
+          const error = await pending;
+          expect(watch.signal.aborted).toBe(false);
+          expect(String(error)).toContain("Workspace authority unavailable");
+          expect(revokedDevices.has(device.id)).toBe(false);
+          expect(await stale.personal.device(device.id)).not.toBeNull();
+          expect(
+            (await stale.personalChallenge(device.id, "d".repeat(43))).target.bindingVersion,
+          ).toBe(1);
+          expect(
+            await system(() =>
+              prisma!.personalWorkspaceDevice.findUniqueOrThrow({ where: { id: device.id } }),
+            ),
+          ).toHaveProperty("revokedAt", null);
+          expect(stale.window.workspace(workspaceId)).toBeNull();
+        } finally {
+          release();
+          await pending;
+          watch?.dispose();
+          client?.auth.disposeOidcDiscovery();
+          stale.dispose();
+          clock.mockRestore();
+        }
+      },
+    );
+    it.each([false, true])(
+      "fences independent projection deadlines and exact registry policy (changed: %s)",
+      async (registryChanged) => {
+        await provision();
+        const firstDb = createDb(process.env.DATABASE_URL!, { encryptContent: false, poolMax: 1 });
+        const firstClient = new InstallationClient(firstDb.prisma, {
+          issuer,
+          encryptionKey: "fixture-encryption-material".repeat(3),
+          request: server.request,
+          keys,
+        });
+        const first = new WorkspaceAuthority(
+          firstDb.prisma,
+          firstClient,
+          issuer,
+          undefined,
+          revocations,
+        );
+        let enter!: () => void;
+        let release!: () => void;
+        const entered = new Promise<void>((resolve) => {
+          enter = resolve;
+        });
+        const hold = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const transaction = firstDb.prisma.$transaction.bind(firstDb.prisma) as (
+          callback: unknown,
+          options?: unknown,
+        ) => Promise<unknown>;
+        let calls = 0;
+        const spy = vi.spyOn(firstDb.prisma, "$transaction").mockImplementation((async (
+          callback: unknown,
+          options?: unknown,
+        ) => {
+          if (++calls === 2) {
+            enter();
+            await hold;
+          }
+          return transaction(callback, options);
+        }) as never);
+        const pending = first.synchronize().then(
+          (value) => ({ value, error: undefined }),
+          (error: unknown) => ({ value: undefined, error }),
+        );
+        let clock: ReturnType<typeof vi.spyOn> | undefined;
+        try {
+          await Promise.race([entered, pending]);
+          server.timeOffset(1);
+          if (registryChanged) server.revokeDevice(randomUUID());
+          const secondProjection = await authority!.synchronize();
+          release();
+          const result = await pending;
+          if (registryChanged) {
+            expect(String(result.error)).toContain("Workspace authority unavailable");
+            expect(first.window.workspace(workspaceId)).toBeNull();
+            return;
+          }
+          expect(result.error).toBeUndefined();
+          expect(result.value!.bindingVersion).toBe(secondProjection.bindingVersion);
+          expect(result.value!.verifiedAt).toBeLessThan(secondProjection.verifiedAt);
+          expect(result.value!.expiresAt).toBeLessThan(secondProjection.expiresAt);
+          expect(first.window.permits(workspaceId, "central-participant", admission)).toBe(true);
+          expect(authority!.window.permits(workspaceId, "central-participant", admission)).toBe(
+            true,
+          );
+          clock = vi.spyOn(Date, "now").mockReturnValue(result.value!.expiresAt * 1000 + 1);
+          expect(first.window.permits(workspaceId, "central-participant", admission)).toBe(false);
+          expect(authority!.window.permits(workspaceId, "central-participant", admission)).toBe(
+            true,
+          );
+        } finally {
+          clock?.mockRestore();
+          release();
+          await pending;
+          spy.mockRestore();
+          first.dispose();
+          await firstDb.prisma.$disconnect();
+          await firstDb.pool.end();
+        }
+      },
+    );
+    it("does not reopen personal memory or clear a newer global barrier after delayed restore IO loses its fence", async () => {
+      await provision();
+      const directory = await mkdtemp(path.join(tmpdir(), "ork-projection-restoration-"));
+      const journal = new FilePersonalRevocations(directory);
+      await journal.refuseInstallation();
+      authority!.dispose();
+      authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, journal);
+      const firstDb = createDb(process.env.DATABASE_URL!, { encryptContent: false, poolMax: 1 });
+      const firstClient = new InstallationClient(firstDb.prisma, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        request: server.request,
+        keys,
+      });
+      let enter!: () => void;
+      let release!: () => void;
+      let paused = false;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const first = new WorkspaceAuthority(firstDb.prisma, firstClient, issuer, undefined, {
+        refuseInstallation: journal.refuseInstallation.bind(journal),
+        revoked: journal.revoked.bind(journal),
+        revoke: journal.revoke.bind(journal),
+        restorationCheckpoint: journal.restorationCheckpoint.bind(journal),
+        confirmRestoration: async (checkpoint) => {
+          paused = true;
+          enter();
+          await hold;
+          await journal.confirmRestoration(checkpoint);
+        },
+      });
+      const confirmed = vi.spyOn(first.personal, "confirmed");
+      const transaction = firstDb.prisma.$transaction.bind(firstDb.prisma) as (
+        callback: unknown,
+        options?: object,
+      ) => Promise<unknown>;
+      let calls = 0;
+      const spy = vi
+        .spyOn(firstDb.prisma, "$transaction")
+        .mockImplementation((async (callback: unknown, options?: object) =>
+          transaction(callback, ++calls === 2 ? { ...options, timeout: 100 } : options)) as never);
+      const pending = first.synchronize().then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      let client: Awaited<ReturnType<typeof personalClient>> | undefined;
+      let watch: { signal: AbortSignal; dispose(): void } | undefined;
+      try {
+        await Promise.race([entered, pending]);
+        expect(paused).toBe(true);
+        server.prepareReconnect();
+        await installation.reconnectEnrollment("Installation", organizationId, (id, tx) =>
+          authority!.refuseInstallation(id, true, tx),
+        );
+        server.approve();
+        await installation.pollEnrollment();
+        server.refuseSynchronization(200);
+        await authority!.synchronize();
+        server.restoreWorkspace();
+        await authority!.synchronize();
+        await authority!.provisionWorkspace(workspaceId);
+        server.readd();
+        await authority!.synchronize();
+        client = await personalClient(true);
+        const device = (await first.personal.device(client.device.id))!;
+        expect(device).not.toBeNull();
+        watch = await first.personal.watch(device);
+        expect(watch.signal.aborted).toBe(false);
+        await journal.refuseInstallation();
+        const newBarrier = await journal.restorationCheckpoint(
+          (await installation.configuration())!,
+        );
+        expect(newBarrier).toHaveLength(1);
+        release();
+        expect(String(await pending)).toMatch(/closed|expired/i);
+        expect(confirmed).not.toHaveBeenCalled();
+        expect(first.window.workspace(workspaceId)).toBeNull();
+        expect(await journal.restorationCheckpoint((await installation.configuration())!)).toEqual(
+          newBarrier,
+        );
+        expect(await first.personal.device(device.id)).toBeNull();
+        expect(
+          await system(() =>
+            prisma!.personalWorkspaceDevice.findUniqueOrThrow({ where: { id: device.id } }),
+          ),
+        ).toHaveProperty("revokedAt", null);
+      } finally {
+        release();
+        await pending;
+        watch?.dispose();
+        client?.auth.disposeOidcDiscovery();
+        confirmed.mockRestore();
+        spy.mockRestore();
+        first.dispose();
+        await firstDb.prisma.$disconnect();
+        await firstDb.pool.end();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+    it("rejects an old signed projection before restricting a fresh personal credential and watch", async () => {
+      await provision();
+      const old = (await installation.configuration())!;
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const other = new InstallationClient(prisma!, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        keys,
+        request: async (url, init) => {
+          const response = await server.request(url, init);
+          if (new URL(String(url)).pathname.endsWith("/servers/synchronize")) {
+            enter();
+            await hold;
+          }
+          return response;
+        },
+      });
+      const stale = new WorkspaceAuthority(prisma!, other, issuer, undefined, revocations);
+      const pending = stale.synchronize();
+      const rejected = expect(pending).rejects.toThrow("Workspace authority unavailable");
+      let client: Awaited<ReturnType<typeof personalClient>> | undefined;
+      let watch: { signal: AbortSignal; dispose(): void } | undefined;
+      try {
+        await entered;
+        server.prepareReconnect();
+        await installation.reconnectEnrollment("Installation", organizationId, (id, tx) =>
+          authority!.refuseInstallation(id, true, tx),
+        );
+        server.approve();
+        await installation.pollEnrollment();
+        server.refuseSynchronization(200);
+        await authority!.synchronize();
+        server.restoreWorkspace();
+        await authority!.synchronize();
+        await authority!.provisionWorkspace(workspaceId);
+        server.readd();
+        await authority!.synchronize();
+        client = await personalClient(true);
+        const device = (await stale.personal.device(client.device.id))!;
+        expect(device).not.toBeNull();
+        watch = await stale.personal.watch(device);
+        expect(watch.signal.aborted).toBe(false);
+        expect(
+          (await stale.personalChallenge(device.id, "c".repeat(43))).target.bindingVersion,
+        ).toBe(2);
+        release();
+        await rejected;
+        expect(watch.signal.aborted).toBe(false);
+        expect(await stale.invalidateProjection(old, [workspaceId])).toBe(false);
+        expect(watch.signal.aborted).toBe(false);
+        expect(revokedDevices.has(device.id)).toBe(false);
+        expect(await stale.personal.device(device.id)).not.toBeNull();
+        expect(
+          (await stale.personalChallenge(device.id, "d".repeat(43))).target.bindingVersion,
+        ).toBe(2);
+        expect(
+          await system(() =>
+            prisma!.personalWorkspaceDevice.findUniqueOrThrow({ where: { id: device.id } }),
+          ),
+        ).toHaveProperty("revokedAt", null);
+        expect(stale.window.workspace(workspaceId)).toBeNull();
+      } finally {
+        release();
+        await pending.catch(() => undefined);
+        watch?.dispose();
+        client?.auth.disposeOidcDiscovery();
+        stale.dispose();
+      }
+    });
+    it("publishes only a bound failure fallback after rollback without a nested pool checkout", async () => {
+      await provision();
+      server.prepareReconnect();
+      const original = (await installation.configuration())!;
+      const single = createDb(process.env.DATABASE_URL!, { encryptContent: false, poolMax: 1 });
+      const client = new InstallationClient(single.prisma, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        request: server.request,
+        keys,
+      });
+      const directory = await mkdtemp(path.join(tmpdir(), "ork-refusal-fallback-"));
+      const journal = new FilePersonalRevocations(directory);
+      const notices: string[] = [];
+      const listener = await database!.pool.connect();
+      const receive = (notice: { payload?: string }) => {
+        if (notice.payload) notices.push(notice.payload);
+      };
+      listener.on("notification", receive);
+      await listener.query("LISTEN orkbot_events");
+      const fanout = {
+        publish: async (topic: string, payload: string) => {
+          await single.pool.query("SELECT pg_notify('orkbot_events', $1)", [
+            JSON.stringify({ topic, payload }),
+          ]);
+        },
+      };
+      const failing = new WorkspaceAuthority(single.prisma, client, issuer, fanout as never, {
+        refuseInstallation: async (scope) => {
+          await journal.refuseInstallation(scope);
+          throw new Error("fictional filesystem failure");
+        },
+        revoked: journal.revoked.bind(journal),
+        revoke: journal.revoke.bind(journal),
+        restorationCheckpoint: journal.restorationCheckpoint.bind(journal),
+        confirmRestoration: journal.confirmRestoration.bind(journal),
+      });
+      let captured: typeof original | undefined;
+      try {
+        await expect(
+          client.reconnectEnrollment(
+            "Installation",
+            organizationId,
+            async (id, tx, configuration) => {
+              captured = configuration;
+              await failing.refuseInstallation(id, true, tx);
+            },
+          ),
+        ).rejects.toThrow("fictional filesystem failure");
+        expect(await client.configuration()).toEqual(original);
+        expect(notices).toEqual([]);
+        expect(await journal.restorationCheckpoint(original)).toHaveLength(1);
+        // This is the failure-only CLI hook, after the transaction has released its connection.
+        await failing.broadcastRefusal(captured!);
+        await vi.waitFor(() => expect(notices).toHaveLength(1));
+        const notice = JSON.parse(JSON.parse(notices[0]!).payload);
+        expect(notice).toMatchObject({
+          serverId,
+          bindingVersion: 1,
+          keyFingerprint: original.keyFingerprint,
+          refused: true,
+        });
+        await client.reconnectEnrollment("Installation", organizationId, (id, tx) =>
+          authority!.refuseInstallation(id, true, tx),
+        );
+        server.approve();
+        await client.pollEnrollment();
+        server.refuseSynchronization(200);
+        await authority!.synchronize();
+        const dispose = vi.spyOn(authority!.window, "dispose");
+        const markers = [...restorationBarriers];
+        await authority!.refuseInstallation(serverId, false, undefined, {
+          ...original,
+          bindingVersion: notice.bindingVersion,
+          keyFingerprint: notice.keyFingerprint,
+        });
+        expect(dispose).not.toHaveBeenCalled();
+        expect([...restorationBarriers]).toEqual(markers);
+        expect(await journal.restorationCheckpoint((await client.configuration())!)).toEqual([]);
+        dispose.mockRestore();
+      } finally {
+        failing.dispose();
+        listener.off("notification", receive);
+        await listener.query("UNLISTEN orkbot_events");
+        listener.release();
+        await single.prisma.$disconnect();
+        await single.pool.end();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+    it("does not apply a late filesystem refusal to a newer binding after its transaction expires", async () => {
+      await provision();
+      const original = (await installation.configuration())!;
+      const directory = await mkdtemp(path.join(tmpdir(), "ork-expired-refusal-"));
+      const journal = new FilePersonalRevocations(directory);
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const delayedJournal = {
+        refuseInstallation: async (scope?: Parameters<typeof journal.refuseInstallation>[0]) => {
+          enter();
+          await hold;
+          await journal.refuseInstallation(scope);
+        },
+        revoked: journal.revoked.bind(journal),
+        revoke: journal.revoke.bind(journal),
+        restorationCheckpoint: journal.restorationCheckpoint.bind(journal),
+        confirmRestoration: journal.confirmRestoration.bind(journal),
+      };
+      const staleAuthority = new WorkspaceAuthority(
+        prisma!,
+        installation,
+        issuer,
+        undefined,
+        delayedJournal,
+      );
+      let failure: unknown;
+      const pending = system(() =>
+        prisma!.$transaction(
+          (tx) => staleAuthority.refuseInstallation(serverId, false, tx, original),
+          { timeout: 100 },
+        ),
+      ).catch((error) => {
+        failure = error;
+      });
+      try {
+        await Promise.race([entered, pending]);
+        server.prepareReconnect();
+        await installation.reconnectEnrollment("Installation", organizationId, (id, tx) =>
+          authority!.refuseInstallation(id, true, tx),
+        );
+        server.approve();
+        await installation.pollEnrollment();
+        server.refuseSynchronization(200);
+        await authority!.synchronize();
+        const next = (await installation.configuration())!;
+        expect(next.bindingVersion).toBe(2);
+        expect(await journal.restorationCheckpoint(next)).toEqual([]);
+        release();
+        await pending;
+        expect(String(failure)).toMatch(/closed|expired/i);
+        expect(await journal.restorationCheckpoint(original)).toHaveLength(1);
+        expect(await journal.restorationCheckpoint(next)).toEqual([]);
+        expect(await installation.configuration()).toEqual(next);
+        await journal.refuseInstallation();
+        expect(await journal.restorationCheckpoint(next)).toHaveLength(1);
+      } finally {
+        release();
+        await pending;
+        staleAuthority.dispose();
+        await rm(directory, { recursive: true, force: true });
+      }
+    });
+    it("serializes a blocked revocation without a nested checkout on a one-connection pool", async () => {
+      await provision();
+      server.prepareReconnect();
+      const single = createDb(process.env.DATABASE_URL!, { encryptContent: false, poolMax: 1 });
+      const first = new InstallationClient(single.prisma, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        request: server.request,
+        keys,
+      });
+      const notifications: string[] = [];
+      const listener = await database!.pool.connect();
+      const receive = (notice: { payload?: string }) => {
+        if (notice.payload) notifications.push(notice.payload);
+      };
+      listener.on("notification", receive);
+      await listener.query("LISTEN orkbot_events");
+      const firstAuthority = new WorkspaceAuthority(
+        single.prisma,
+        first,
+        issuer,
+        {
+          publish: async () => {
+            throw new Error("A transaction must not check out a second publisher connection");
+          },
+        } as never,
+        revocations,
+      );
+      let enter!: () => void;
+      let release!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve;
+      });
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let secondRefusals = 0;
+      try {
+        const firstAttempt = first.reconnectEnrollment(
+          "Installation",
+          organizationId,
+          async (id, tx) => {
+            await firstAuthority.refuseInstallation(id, true, tx);
+            enter();
+            await hold;
+          },
+        );
+        await Promise.race([entered, firstAttempt]);
+        let secondSent!: () => void;
+        const sent = new Promise<void>((resolve) => {
+          secondSent = resolve;
+        });
+        const other = new InstallationClient(prisma!, {
+          issuer,
+          encryptionKey: "fixture-encryption-material".repeat(3),
+          keys,
+          request: async (url, init) => {
+            const response = await server.request(url, init);
+            if (new URL(String(url)).pathname.endsWith("/servers/synchronize")) secondSent();
+            return response;
+          },
+        });
+        const secondAttempt = other.reconnectEnrollment(
+          "Installation",
+          organizationId,
+          async (id, tx) => {
+            secondRefusals++;
+            await authority!.refuseInstallation(id, true, tx);
+          },
+        );
+        const rejected = expect(secondAttempt).rejects.toThrow("Installation binding changed");
+        await Promise.race([sent, secondAttempt]);
+        expect(notifications).toEqual([]);
+        release();
+        await firstAttempt;
+        await rejected;
+        await vi.waitFor(() => expect(notifications.length).toBeGreaterThan(0));
+        const event = JSON.parse(JSON.parse(notifications[0]!).payload);
+        expect(event).toMatchObject({ serverId, bindingVersion: 1, refused: true });
+        expect(event.keyFingerprint).toMatch(/^[a-f0-9]{64}$/);
+        expect(secondRefusals).toBe(0);
+        server.approve();
+        expect(await first.pollEnrollment()).toMatchObject({ bindingVersion: 2 });
+      } finally {
+        release();
+        firstAuthority.dispose();
+        listener.off("notification", receive);
+        await listener.query("UNLISTEN orkbot_events");
+        listener.release();
+        await single.prisma.$disconnect();
+        await single.pool.end();
+      }
+    });
+    it("rejects a deferred old reconnect before revoking a newly acknowledged binding", async () => {
+      await provision();
+      let deliver!: () => void;
+      let received!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        received = resolve;
+      });
+      const delayed = new Promise<void>((resolve) => {
+        deliver = resolve;
+      });
+      const stale = new InstallationClient(prisma!, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        keys,
+        request: async (url, init) => {
+          if (new URL(String(url)).pathname.endsWith("/servers/synchronize")) {
+            received();
+            await delayed;
+            return Response.json({ error: "Refused old binding" }, { status: 401 });
+          }
+          return server.request(url, init);
+        },
+      });
+      let staleRefusals = 0;
+      const oldAttempt = stale.reconnectEnrollment(
+        "Installation",
+        organizationId,
+        async (id, transaction) => {
+          staleRefusals++;
+          await authority!.refuseInstallation(id, true, transaction);
+        },
+      );
+      const rejected = expect(oldAttempt).rejects.toThrow("Installation binding changed");
+      await waiting;
+      server.prepareReconnect();
+      await installation.reconnectEnrollment("Installation", organizationId, (id, transaction) =>
+        authority!.refuseInstallation(id, true, transaction),
+      );
+      server.approve();
+      await installation.pollEnrollment();
+      server.refuseSynchronization(200);
+      await authority!.synchronize();
+      await system(() =>
+        prisma!.personalWorkspaceDevice.create({
+          data: {
+            id: "identity-test-fresh-reconnect-device",
+            workspaceId,
+            userId: "identity-test-user",
+            centralSubject: "central-participant",
+            membershipVersion: admission,
+            registryVersion: 1,
+            permissionVersion: 2,
+            bindingVersion: 2,
+            keyFingerprint: "f".repeat(64),
+            publicKey: "newly-approved-device",
+          },
+        }),
+      );
+      const markers = [...restorationBarriers];
+      deliver();
+      await rejected;
+      expect(staleRefusals).toBe(0);
+      expect([...restorationBarriers]).toEqual(markers);
+      expect(revokedDevices.has("identity-test-fresh-reconnect-device")).toBe(false);
+      expect(
+        await system(() =>
+          prisma!.personalWorkspaceDevice.findUniqueOrThrow({
+            where: { id: "identity-test-fresh-reconnect-device" },
+          }),
+        ),
+      ).toHaveProperty("revokedAt", null);
+      expect(await installation.configuration()).toMatchObject({ serverId, bindingVersion: 2 });
+      // A late real fanout handler uses this same locked gate before touching memory, disk or DB.
+      await authority!.refuseInstallation(serverId, false, undefined, {
+        serverId,
+        organizationId,
+        bindingVersion: 1,
+        keyFingerprint: (await installation.configuration())!.keyFingerprint,
+      });
+      expect([...restorationBarriers]).toEqual(markers);
+      expect(
+        await system(() =>
+          prisma!.personalWorkspaceDevice.findUniqueOrThrow({
+            where: { id: "identity-test-fresh-reconnect-device" },
+          }),
+        ),
+      ).toHaveProperty("revokedAt", null);
+    });
+    it("reconnects only a centrally refused binding and preserves data without reviving old admission", async () => {
+      await provision();
+      const local = () =>
+        system(async () => ({
+          organization: await prisma!.organization.findUniqueOrThrow({
+            where: { id: "identity-test-org" },
+          }),
+          space: await prisma!.space.findUniqueOrThrow({ where: { id: "identity-test-space" } }),
+          members: await prisma!.member.findMany({
+            where: { organizationId: "identity-test-org" },
+          }),
+          spaceMembers: await prisma!.spaceMember.findMany({
+            where: { spaceId: "identity-test-space" },
+          }),
+        }));
+      const before = await local();
+      const original = await system(() =>
+        prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+      );
+      const running = await authority!.work("identity-test-space", "identity-test-user", admission);
+      expect(running).not.toBeNull();
+      await expect(
+        installation.reconnectEnrollment("Installation", organizationId, (serverId, transaction) =>
+          authority!.refuseInstallation(serverId, true, transaction),
+        ),
+      ).rejects.toThrow("Disconnect this installation through Accounts first");
+      server.refuseSynchronization(503);
+      await expect(
+        installation.reconnectEnrollment("Installation", organizationId, (serverId, transaction) =>
+          authority!.refuseInstallation(serverId, true, transaction),
+        ),
+      ).rejects.toThrow("503");
+      expect(
+        await system(() =>
+          prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+        ),
+      ).toEqual(original);
+      expect(running!.signal.aborted).toBe(false);
+      expect(restorationBarriers.size).toBe(0);
+      await expect(
+        installation.reconnectEnrollment("Installation", randomUUID(), (serverId, transaction) =>
+          authority!.refuseInstallation(serverId, true, transaction),
+        ),
+      ).rejects.toThrow("organization selection changed");
+      await system(async () => {
+        await prisma!.personalWorkspaceDevice.create({
+          data: {
+            id: "identity-test-reconnect-device",
+            workspaceId,
+            userId: "identity-test-user",
+            centralSubject: "central-participant",
+            membershipVersion: admission,
+            registryVersion: 1,
+            permissionVersion: 1,
+            bindingVersion: 1,
+            keyFingerprint: original.keyFingerprint,
+            publicKey: "fictional-existing-device-key",
+          },
+        });
+        await prisma!.aIConnectionAdministrator.create({
+          data: { accountKey: "identity-test-reconnect-admin", bindingVersion: 1 },
+        });
+        await prisma!.serverAIConnection.create({
+          data: {
+            id: "identity-test-reconnect-connection",
+            localOrganizationId: "identity-test-org",
+            label: "Existing account",
+            provider: "fixture",
+            models: ["model"],
+            secretId: "retained-secret-id",
+            secretRef: "fictional-encrypted-reference",
+          },
+        });
+        await prisma!.workspaceAIConnection.create({
+          data: {
+            spaceId: "identity-test-space",
+            connectionId: "identity-test-reconnect-connection",
+            enabled: true,
+            available: true,
+            allowedModels: ["model"],
+            bindingVersion: 1,
+          },
+        });
+      });
+      server.prepareReconnect();
+      const pending = await installation.reconnectEnrollment(
+        "Installation",
+        organizationId,
+        (serverId, transaction) => authority!.refuseInstallation(serverId, true, transaction),
+      );
+      expect(running!.signal.aborted).toBe(true);
+      expect(restorationBarriers.size).toBe(1);
+      running!.dispose();
+      expect(pending.keyFingerprint).toBe(original.keyFingerprint);
+      const recovering = await system(() =>
+        prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+      );
+      expect(recovering.operationId).not.toBe(original.operationId);
+      expect(recovering.challenge).not.toBe(original.challenge);
+      expect(recovering).toMatchObject({
+        serverId,
+        centralOrganizationId: organizationId,
+        publicKey: original.publicKey,
+        privateKeyCipher: original.privateKeyCipher,
+        localOrganizationId: original.localOrganizationId,
+        state: "enrolling",
+      });
+      expect(await installation.pollEnrollment()).toBeNull();
+      expect(await installation.configuration()).toBeNull();
+      expect(await local()).toEqual(before);
+      server.approve();
+      server.bindingVersion(1);
+      await expect(installation.pollEnrollment()).rejects.toThrow("proof does not match");
+      expect(await installation.configuration()).toBeNull();
+      server.bindingVersion(2);
+      expect(await installation.pollEnrollment()).toMatchObject({ serverId, bindingVersion: 2 });
+      server.refuseSynchronization(200);
+      await authority!.synchronize();
+      server.restoreWorkspace();
+      await authority!.synchronize();
+      await authority!.provisionWorkspace(workspaceId);
+      await authority!.synchronize();
+      expect(await local()).toEqual(before);
+      expect(
+        await authority!.work("identity-test-space", "identity-test-user", admission),
+      ).toBeNull();
+      await system(async () => {
+        expect(await prisma!.centralWorkspaceAccess.count({ where: { active: true } })).toBe(0);
+        expect(
+          await prisma!.personalWorkspaceDevice.findUniqueOrThrow({
+            where: { id: "identity-test-reconnect-device" },
+          }),
+        ).toHaveProperty("revokedAt", expect.any(Date));
+        expect(await prisma!.aIConnectionAdministrator.count()).toBe(0);
+        expect(
+          await prisma!.workspaceAIConnection.findUniqueOrThrow({
+            where: {
+              spaceId_connectionId: {
+                spaceId: "identity-test-space",
+                connectionId: "identity-test-reconnect-connection",
+              },
+            },
+          }),
+        ).toMatchObject({ enabled: false, available: false, bindingVersion: 1 });
+        expect(
+          await prisma!.serverAIConnection.findUniqueOrThrow({
+            where: { id: "identity-test-reconnect-connection" },
+          }),
+        ).toMatchObject({
+          secretId: "retained-secret-id",
+          secretRef: "fictional-encrypted-reference",
+        });
+      });
+    });
+
     it("keeps one encrypted installation key across concurrent initialization and restart", async () => {
       await Promise.all(Array.from({ length: 12 }, () => installation.ensureIdentity()));
       const row = await system(() =>

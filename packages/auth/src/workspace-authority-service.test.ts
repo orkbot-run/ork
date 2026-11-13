@@ -9,11 +9,30 @@ import { WorkspaceAuthority } from "./workspace-authority.js";
 import { startWorkspaceAuthority } from "./workspace-authority-service.js";
 
 const serverId = "10000000-0000-4000-8000-000000000001";
+const configuration = {
+  serverId,
+  organizationId: "20000000-0000-4000-8000-000000000001",
+  bindingVersion: 2,
+  keyFingerprint: "f".repeat(64),
+};
 
 it("broadcasts a known refusal even when persisting device revocations fails", async () => {
   const publish = vi.fn(async () => {});
   const authority = new WorkspaceAuthority(
-    {} as PrismaClient,
+    {
+      $transaction: async (run: (tx: unknown) => Promise<void>) =>
+        run({
+          $queryRaw: async () => [],
+          installationIdentity: {
+            findUnique: async () => ({
+              ...configuration,
+              issuer: "https://accounts.example.test",
+              centralOrganizationId: configuration.organizationId,
+            }),
+            findUniqueOrThrow: async () => configuration,
+          },
+        }),
+    } as unknown as PrismaClient,
     {} as InstallationClient,
     "https://accounts.example.test",
     { publish } as unknown as RealtimeFanout,
@@ -22,11 +41,19 @@ it("broadcasts a known refusal even when persisting device revocations fails", a
   vi.spyOn(authority.personal, "refuseInstallation").mockRejectedValue(
     new Error("disk unavailable"),
   );
-  await expect(authority.refuseInstallation(serverId)).rejects.toThrow("disk unavailable");
+  await expect(
+    authority.refuseInstallation(serverId, true, undefined, configuration),
+  ).rejects.toThrow("disk unavailable");
   expect(dispose).toHaveBeenCalledOnce();
   expect(publish).toHaveBeenCalledExactlyOnceWith(
     `installation-authority:${serverId}`,
-    JSON.stringify({ source: authority.processId, refused: true }),
+    JSON.stringify({
+      source: authority.processId,
+      refused: true,
+      serverId,
+      bindingVersion: configuration.bindingVersion,
+      keyFingerprint: configuration.keyFingerprint,
+    }),
   );
 });
 
@@ -41,7 +68,7 @@ it("applies another process's refusal without rebroadcasting it or accepting sel
     }),
   } as unknown as RealtimeFanout;
   const installation = {
-    configuration: vi.fn(async () => ({ serverId })),
+    configuration: vi.fn(async () => configuration),
   } as unknown as InstallationClient;
   const authority = new WorkspaceAuthority(
     {} as PrismaClient,
@@ -51,7 +78,7 @@ it("applies another process's refusal without rebroadcasting it or accepting sel
   );
   vi.spyOn(authority, "synchronize").mockResolvedValue({ workspaces: [] } as never);
   vi.spyOn(authority.personal, "refuseInstallation").mockResolvedValue();
-  const refuse = vi.spyOn(authority, "refuseInstallation");
+  const refuse = vi.spyOn(authority, "refuseInstallation").mockResolvedValue();
   const onError = vi.fn();
   const stop = startWorkspaceAuthority(installation, authority, onError, realtime);
   try {
@@ -60,7 +87,51 @@ it("applies another process's refusal without rebroadcasting it or accepting sel
     receive!(JSON.stringify({ source: 42, refused: true }));
     expect(refuse).not.toHaveBeenCalled();
     receive!(JSON.stringify({ source: "another-process", refused: true }));
-    await vi.waitFor(() => expect(refuse).toHaveBeenCalledExactlyOnceWith(serverId, false));
+    receive!(
+      JSON.stringify({
+        source: "another-process",
+        refused: true,
+        serverId,
+        bindingVersion: 1,
+        keyFingerprint: "invalid",
+      }),
+    );
+    expect(refuse).not.toHaveBeenCalled();
+    receive!(
+      JSON.stringify({
+        source: "another-process",
+        refused: true,
+        serverId,
+        bindingVersion: 1,
+        keyFingerprint: configuration.keyFingerprint,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(refuse).toHaveBeenCalledExactlyOnceWith(serverId, false, undefined, {
+        ...configuration,
+        bindingVersion: 1,
+      }),
+    );
+    const invalidate = vi.spyOn(authority, "invalidate");
+    const gate = vi.spyOn(authority, "invalidateProjection").mockResolvedValue(false);
+    const workspace = "30000000-0000-4000-8000-000000000001";
+    receive!(JSON.stringify({ source: "another-process", ids: [workspace] }));
+    expect(gate).not.toHaveBeenCalled();
+    receive!(
+      JSON.stringify({
+        source: "another-process",
+        ids: [workspace],
+        serverId,
+        bindingVersion: 1,
+        keyFingerprint: configuration.keyFingerprint,
+      }),
+    );
+    await vi.waitFor(() =>
+      expect(gate).toHaveBeenCalledExactlyOnceWith({ ...configuration, bindingVersion: 1 }, [
+        workspace,
+      ]),
+    );
+    expect(invalidate).not.toHaveBeenCalled();
     expect(realtime.publish).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
   } finally {

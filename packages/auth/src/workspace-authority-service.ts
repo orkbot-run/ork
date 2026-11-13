@@ -41,13 +41,30 @@ export function startWorkspaceAuthority(
                   source?: unknown;
                   ids?: unknown;
                   refused?: unknown;
+                  serverId?: unknown;
+                  bindingVersion?: unknown;
+                  keyFingerprint?: unknown;
                 };
                 if (
                   typeof event.source === "string" &&
                   event.source !== authority.processId &&
                   event.refused === true
                 ) {
-                  void authority.refuseInstallation(configuration.serverId, false).catch(onError);
+                  if (
+                    event.serverId !== configuration.serverId ||
+                    !Number.isSafeInteger(event.bindingVersion) ||
+                    Number(event.bindingVersion) < 1 ||
+                    typeof event.keyFingerprint !== "string" ||
+                    !/^[a-f0-9]{64}$/.test(event.keyFingerprint)
+                  )
+                    return;
+                  void authority
+                    .refuseInstallation(configuration.serverId, false, undefined, {
+                      ...configuration,
+                      bindingVersion: Number(event.bindingVersion),
+                      keyFingerprint: event.keyFingerprint,
+                    })
+                    .catch(onError);
                   return;
                 }
                 if (
@@ -59,9 +76,29 @@ export function startWorkspaceAuthority(
                   event.ids.some((id) => typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id))
                 )
                   return;
-                for (const id of event.ids) authority.invalidate(id);
-                if (refreshing) again = true;
-                else active = tick();
+                if (
+                  event.serverId !== configuration.serverId ||
+                  !Number.isSafeInteger(event.bindingVersion) ||
+                  Number(event.bindingVersion) < 1 ||
+                  typeof event.keyFingerprint !== "string" ||
+                  !/^[a-f0-9]{64}$/.test(event.keyFingerprint)
+                )
+                  return;
+                void authority
+                  .invalidateProjection(
+                    {
+                      ...configuration,
+                      bindingVersion: Number(event.bindingVersion),
+                      keyFingerprint: event.keyFingerprint,
+                    },
+                    event.ids as string[],
+                  )
+                  .then((applied) => {
+                    if (!applied || stopped) return;
+                    if (refreshing) again = true;
+                    else active = tick();
+                  })
+                  .catch(onError);
               } catch {
                 /* Invalid fanout cannot create authority. */
               }

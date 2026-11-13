@@ -252,11 +252,12 @@ export function startInstallationRelay(options: {
       closeNetwork();
       if (!stopped) {
         if (
+          owned &&
           error instanceof InstallationRequestError &&
           [400, 401, 403, 409, 410, 426].includes(error.status)
         ) {
           await options.authority
-            .refuseInstallation(owned?.configuration.serverId)
+            .refuseInstallation(owned.configuration.serverId, true, undefined, owned.configuration)
             .catch(() => options.onError(unavailable()));
         } else if (lease?.relay) {
           // A relay refusal alone is not central revocation authority.
