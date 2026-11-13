@@ -13,6 +13,8 @@ The server's `/api/installation-transport/v1` WebSocket sends a public certifica
 
 `InstallationConnection` owns the socket on all native platforms. The outer WebSocket uses system certificate trust. Its upgrade, certificate envelope and binary frames have size limits. Cookies, redirects and TLS session resumption are disabled. The inner installation pin is checked independently of outer TLS.
 
+Connection routes and the installation's logical HTTP origin can differ. The certificate envelope supplies the logical origin for direct and relay connections, while the catalog supplies the expected installation key. Changing the envelope cannot move product HTTP outside that pinned TLS channel. The server still checks its configured HTTP authority.
+
 The Expo module registers a request before starting its network operation. A cancellation received during registration prevents that operation from being sent. Native account sessions and monotonic workspace revisions fence pending reads, uploads and responses. Swift and Kotlin keep this lifecycle state, while Rust handles network I/O. The shared fetch adapter pulls response bytes only when the caller reads them.
 
 Expo prebuild compiles the module from source. Local builds require rustup and the platform SDK. Android also requires the NDK. Cloud builds can install Rust in ignored build output after checking the installer checksum. Apple output includes device and simulator libraries, and Android output includes all four supported ABIs with 16 KB page alignment. Generated bindings and binaries stay untracked.

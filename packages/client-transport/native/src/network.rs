@@ -268,13 +268,13 @@ impl InstallationConnection {
             .decode(identity.certificate)
             .map_err(|_| TransportError::InvalidIdentity)?;
         let logical_origin = match (&self.relay_ticket, identity.origin) {
-            (Some(_), Some(origin)) => origin,
+            (_, Some(origin)) => origin,
             (Some(_), None) => return Err(TransportError::InvalidIdentity),
-            (None, Some(origin)) if origin != self.origin => {
-                return Err(TransportError::InvalidIdentity)
-            }
             _ => self.origin.clone(),
         };
+        if logical_origin.len() > 2048 {
+            return Err(TransportError::InvalidIdentity);
+        }
         let operation =
             InstallationHttp::new(certificate, self.fingerprint.clone(), logical_origin)?;
         if self.canceled.is_cancelled() {

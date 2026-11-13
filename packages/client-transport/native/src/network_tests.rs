@@ -12,7 +12,7 @@ const SERVER: &str = "10000000-0000-4000-8000-000000000001";
 const ORGANIZATION: &str = "10000000-0000-4000-8000-000000000002";
 const WORKSPACE: &str = "10000000-0000-4000-8000-000000000003";
 
-struct RelayHeaders(String);
+struct RelayHeaders(Option<String>);
 impl tokio_tungstenite::tungstenite::handshake::server::Callback for RelayHeaders {
     fn on_request(
         self,
@@ -22,11 +22,16 @@ impl tokio_tungstenite::tungstenite::handshake::server::Callback for RelayHeader
         tokio_tungstenite::tungstenite::handshake::server::Response,
         tokio_tungstenite::tungstenite::handshake::server::ErrorResponse,
     > {
-        assert_eq!(request.uri().path(), "/api/relay/v1/channels");
-        assert_eq!(
-            request.headers()["authorization"],
-            format!("Bearer {}", self.0)
-        );
+        if let Some(ticket) = self.0 {
+            assert_eq!(request.uri().path(), "/api/relay/v1/channels");
+            assert_eq!(
+                request.headers()["authorization"],
+                format!("Bearer {ticket}")
+            );
+        } else {
+            assert_eq!(request.uri().path(), "/api/installation-transport/v1");
+            assert!(!request.headers().contains_key("authorization"));
+        }
         assert!(!format!("{:?}", request.headers()).contains("private-test-token"));
         Ok(response)
     }
@@ -109,96 +114,108 @@ fn relay_refuses_account_tokens_wrong_scopes_and_noncanonical_routes_before_netw
 
 #[tokio::test]
 async fn relay_capability_stays_outside_pinned_http_and_logical_origin_stays_inside() {
-    let (cert, key, fingerprint) = crate::tests::identity(false);
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let origin = format!("https://{}", listener.local_addr().unwrap());
-    let route = relay_route(&fingerprint, &origin);
-    let ticket = route.ticket.clone();
-    let mut client = InstallationConnection::via_relay(
-        format!("https://{SERVER}.installation.ork.invalid"),
-        SERVER.into(),
-        1,
-        fingerprint.clone(),
-        route,
-    )
-    .unwrap();
-    // This fixture covers inner TLS and headers. The separate outer TLS test uses platform trust.
-    Arc::get_mut(&mut client)
-        .unwrap()
-        .address
-        .set_scheme("ws")
-        .unwrap();
-    let server = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        let mut socket = tokio_tungstenite::accept_hdr_async(stream, RelayHeaders(ticket))
-            .await
+    for use_relay in [false, true] {
+        let (cert, key, fingerprint) = crate::tests::identity(false);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let origin = format!("https://{}", listener.local_addr().unwrap());
+        let route = relay_route(&fingerprint, &origin);
+        let ticket = use_relay.then(|| route.ticket.clone());
+        let mut client = if use_relay {
+            InstallationConnection::via_relay(
+                format!("https://{SERVER}.installation.ork.invalid"),
+                SERVER.into(),
+                1,
+                fingerprint.clone(),
+                route,
+            )
+            .unwrap()
+        } else {
+            InstallationConnection::new(
+                origin.replacen("https:", "http:", 1),
+                SERVER.into(),
+                1,
+                fingerprint.clone(),
+            )
+            .unwrap()
+        };
+        // This fixture covers inner TLS and headers. The separate outer TLS test uses platform trust.
+        Arc::get_mut(&mut client)
+            .unwrap()
+            .address
+            .set_scheme("ws")
             .unwrap();
-        socket.send(Message::Text(json!({ "protocol": "ork-installation-tls-v1", "serverId": SERVER,
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_hdr_async(stream, RelayHeaders(ticket))
+                .await
+                .unwrap();
+            socket.send(Message::Text(json!({ "protocol": "ork-installation-tls-v1", "serverId": SERVER,
             "bindingVersion": 1, "keyFingerprint": fingerprint, "certificate": STANDARD.encode(&cert),
             "origin": "http://127.0.0.1:5173" }).to_string().into())).await.unwrap();
-        let (mut writer, mut reader) = socket.split();
-        let (pump, inside) = tokio::io::duplex(BUFFER_LIMIT);
-        let (mut incoming, mut outgoing) = tokio::io::split(pump);
-        let input = tokio::spawn(async move {
-            while let Some(Ok(Message::Binary(bytes))) = reader.next().await {
-                assert!(!bytes.windows(18).any(|part| part == b"private-test-token"));
-                if outgoing.write_all(&bytes).await.is_err() {
-                    break;
+            let (mut writer, mut reader) = socket.split();
+            let (pump, inside) = tokio::io::duplex(BUFFER_LIMIT);
+            let (mut incoming, mut outgoing) = tokio::io::split(pump);
+            let input = tokio::spawn(async move {
+                while let Some(Ok(Message::Binary(bytes))) = reader.next().await {
+                    assert!(!bytes.windows(18).any(|part| part == b"private-test-token"));
+                    if outgoing.write_all(&bytes).await.is_err() {
+                        break;
+                    }
                 }
-            }
-        });
-        let output = tokio::spawn(async move {
-            let mut bytes = [0; 8192];
-            while let Ok(length) = incoming.read(&mut bytes).await {
-                if length == 0
-                    || writer
-                        .send(Message::Binary(bytes[..length].to_vec().into()))
-                        .await
-                        .is_err()
-                {
-                    break;
+            });
+            let output = tokio::spawn(async move {
+                let mut bytes = [0; 8192];
+                while let Ok(length) = incoming.read(&mut bytes).await {
+                    if length == 0
+                        || writer
+                            .send(Message::Binary(bytes[..length].to_vec().into()))
+                            .await
+                            .is_err()
+                    {
+                        break;
+                    }
                 }
-            }
+            });
+            let stream = tokio_rustls::TlsAcceptor::from(crate::tests::server_config(cert, key))
+                .accept(inside)
+                .await
+                .unwrap();
+            let _ = hyper::server::conn::http1::Builder::new()
+                .serve_connection(
+                    hyper_util::rt::TokioIo::new(stream),
+                    hyper::service::service_fn(
+                        |request: hyper::Request<hyper::body::Incoming>| async move {
+                            assert_eq!(request.headers()["host"], "127.0.0.1:5173");
+                            assert_eq!(
+                                request.headers()["authorization"],
+                                "Bearer private-test-token"
+                            );
+                            assert_eq!(request.uri().path(), "/private");
+                            Ok::<_, std::convert::Infallible>(hyper::Response::new(
+                                http_body_util::Full::new(bytes::Bytes::from_static(
+                                    b"private-response",
+                                )),
+                            ))
+                        },
+                    ),
+                )
+                .await;
+            input.abort();
+            output.abort();
         });
-        let stream = tokio_rustls::TlsAcceptor::from(crate::tests::server_config(cert, key))
-            .accept(inside)
+        client.start_request(request()).await.unwrap();
+        assert_eq!(client.response_head().await.unwrap().status, 200);
+        assert_eq!(
+            client.read_body().await.unwrap().unwrap(),
+            b"private-response"
+        );
+        assert!(client.read_body().await.unwrap().is_none());
+        client.cancel();
+        tokio::time::timeout(Duration::from_secs(2), server)
             .await
+            .unwrap()
             .unwrap();
-        let _ = hyper::server::conn::http1::Builder::new()
-            .serve_connection(
-                hyper_util::rt::TokioIo::new(stream),
-                hyper::service::service_fn(
-                    |request: hyper::Request<hyper::body::Incoming>| async move {
-                        assert_eq!(request.headers()["host"], "127.0.0.1:5173");
-                        assert_eq!(
-                            request.headers()["authorization"],
-                            "Bearer private-test-token"
-                        );
-                        assert_eq!(request.uri().path(), "/private");
-                        Ok::<_, std::convert::Infallible>(hyper::Response::new(
-                            http_body_util::Full::new(bytes::Bytes::from_static(
-                                b"private-response",
-                            )),
-                        ))
-                    },
-                ),
-            )
-            .await;
-        input.abort();
-        output.abort();
-    });
-    client.start_request(request()).await.unwrap();
-    assert_eq!(client.response_head().await.unwrap().status, 200);
-    assert_eq!(
-        client.read_body().await.unwrap().unwrap(),
-        b"private-response"
-    );
-    assert!(client.read_body().await.unwrap().is_none());
-    client.cancel();
-    tokio::time::timeout(Duration::from_secs(2), server)
-        .await
-        .unwrap()
-        .unwrap();
+    }
 }
 
 fn request() -> HttpRequest {
