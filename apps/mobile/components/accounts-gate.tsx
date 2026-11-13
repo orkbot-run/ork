@@ -196,9 +196,11 @@ async function selectServer(
 export function AccountsGate({
   children,
   onSelected,
+  onWorkspaceSelected,
 }: {
   children?: ReactNode;
   onSelected?: () => void;
+  onWorkspaceSelected?: () => void;
 }) {
   const { t } = useI18n();
   const productGate = Boolean(children);
@@ -662,10 +664,12 @@ export function AccountsGate({
     setServerRescue(selected === "older");
     knownServers.current.add(entry.id);
     confirmServerInitialization(entry.url, account!);
+    const explicitWorkspaceSelection = pickerOwner.current !== null;
     pickerOwner.current = null;
     if (entry.workspace) setOrganizationId(entry.workspace.organizationId);
     if (onSelected) onSelected();
     else {
+      if (explicitWorkspaceSelection) onWorkspaceSelected?.();
       setReadyAt({ version, attempt });
       setPhase("ready");
     }

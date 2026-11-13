@@ -46,6 +46,7 @@ function renameHarness(target: TargetSpace, currentOrganizationId: string | null
     callback(tx),
   );
   const prisma = {
+    centralWorkspaceBinding: { findFirst: vi.fn(async () => null) },
     $transaction: transaction,
     // The router checks membership before scoping the database to the target Space.
     spaceMember: {

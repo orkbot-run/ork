@@ -25,6 +25,7 @@ import {
   SpaceNotFoundError,
   setSpaceSettingOverride,
   spaceSettingOverrides,
+  workspaceNavigationFilter,
 } from "@orkbot/db";
 import { ORPCError } from "@orpc/server";
 import { otherSpaceOfBot } from "#modules/bots/bot-space";
@@ -45,6 +46,15 @@ async function asMemberOf<T>(
   spaceId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  if (spaceId !== actor.spaceId) {
+    const managed = await runAsSystem("check cross-workspace navigation", () =>
+      prisma.centralWorkspaceBinding.findFirst({
+        where: { spaceId: { in: [actor.spaceId, spaceId] } },
+        select: { id: true },
+      }),
+    );
+    if (managed) throw new ORPCError("NOT_FOUND", { message: new SpaceNotFoundError().message });
+  }
   const member = await prisma.spaceMember.findFirst({
     where: { spaceId, userId: actor.userId },
     select: { id: true },
@@ -233,8 +243,8 @@ export function spacesRoutes(ctx: RouterContext) {
   };
 }
 
-// Lists every Space the member belongs to, with each one's bots and threads, so it
-// reads across Spaces. Every query below is limited to the member's Spaces.
+// Legacy navigation spans local memberships. Managed navigation stays inside the
+// exact workspace capability, including previews and execution status.
 function spaceNavigationDto(
   deps: RouterDeps,
   actor: Actor,
@@ -257,8 +267,13 @@ async function memberSpaceNavigation(
     select: { organizationId: true },
   });
   if (!currentSpace) throw new IsolationError();
+  const navigationScope = await workspaceNavigationFilter(deps.prisma, actor);
   const memberships = await deps.prisma.spaceMember.findMany({
-    where: { userId: actor.userId, organizationId: currentSpace.organizationId },
+    where: {
+      userId: actor.userId,
+      organizationId: currentSpace.organizationId,
+      space: navigationScope,
+    },
     select: {
       spaceId: true,
       role: true,

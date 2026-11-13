@@ -12,6 +12,7 @@ import {
   SpaceDeletionInProgressError,
 } from "./spaces.js";
 import { withTransactionRetry } from "./transaction-retry.js";
+import { workspaceNavigationFilter } from "./workspace-navigation.js";
 
 export const MAX_ORGANIZATIONS_PER_USER = 10;
 
@@ -79,21 +80,31 @@ export async function listMemberOrganizations(
   prisma: PrismaClient,
   actor: Pick<Actor, "userId" | "spaceId">,
 ): Promise<OrganizationList> {
+  const navigationScope = await workspaceNavigationFilter(prisma, actor);
   const [current, organizations, memberships] = await Promise.all([
     prisma.space.findUnique({ where: { id: actor.spaceId }, select: { organizationId: true } }),
     prisma.organization.findMany({
-      where: { members: { some: { userId: actor.userId } }, ...LIVE },
+      where: {
+        members: { some: { userId: actor.userId } },
+        ...(navigationScope.id ? {} : LIVE),
+        AND: { spaces: { some: { ...navigationScope, deletingAt: null } } },
+      },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: {
         id: true,
         name: true,
-        spaces: { where: { isDefault: true }, select: { id: true }, take: 1 },
+        spaces: {
+          where: navigationScope,
+          orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }, { id: "asc" }],
+          select: { id: true },
+          take: 1,
+        },
         members: { where: { userId: actor.userId }, select: { role: true }, take: 1 },
         _count: { select: { members: true } },
       },
     }),
     prisma.spaceMember.findMany({
-      where: { userId: actor.userId, space: { deletingAt: null } },
+      where: { userId: actor.userId, space: { ...navigationScope, deletingAt: null } },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { spaceId: true, organizationId: true },
     }),
@@ -107,6 +118,7 @@ export async function listMemberOrganizations(
       defaultSpaceId: organization.spaces[0]!.id,
       // Phase one manages only organizations their owner has to themselves.
       canManage:
+        !navigationScope.id &&
         organization._count.members === 1 &&
         organization.members.some((member) => member.role.includes("owner")),
       spaceIds: memberships

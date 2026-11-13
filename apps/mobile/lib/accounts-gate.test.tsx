@@ -513,10 +513,10 @@ function PickerControl() {
   );
 }
 
-async function render() {
+async function render(onWorkspaceSelected?: () => void) {
   await act(async () =>
     root.render(
-      <AccountsGate>
+      <AccountsGate onWorkspaceSelected={onWorkspaceSelected}>
         <span>
           Product screen
           <PickerControl />
@@ -1728,7 +1728,8 @@ it("reopens the managed directory without signing out or replacing the active wo
   const owner = JSON.stringify([identity.issuer, identity.subject]);
   state.storage.set("orkbot.accounts.product-owner", owner);
   await saveSelectedWorkspace(owner, remote.url, workspace);
-  await render();
+  const selectionCompleted = vi.fn();
+  await render(selectionCompleted);
   expect(host.textContent).toContain("Product screen");
   vi.mocked(saveApiBase).mockClear();
   vi.mocked(clearProductAccountSession).mockClear();
@@ -1746,6 +1747,7 @@ it("reopens the managed directory without signing out or replacing the active wo
   expect(saveApiBase).not.toHaveBeenCalled();
   expect(signOutAccounts).not.toHaveBeenCalled();
   expect(await selectedWorkspace(owner, remote.url)).toEqual(workspace);
+  expect(selectionCompleted).not.toHaveBeenCalled();
 });
 
 it("switches a managed workspace through the existing scoped selection and saves device history", async () => {
@@ -1770,7 +1772,9 @@ it("switches a managed workspace through the existing scoped selection and saves
   const owner = JSON.stringify([identity.issuer, identity.subject]);
   state.storage.set("orkbot.accounts.product-owner", owner);
   await saveSelectedWorkspace(owner, remote.url, workspace);
-  await render();
+  const selectionCompleted = vi.fn();
+  await render(selectionCompleted);
+  expect(selectionCompleted).not.toHaveBeenCalled();
   vi.mocked(clearProductAccountSession).mockClear();
   await click("Pick workspace");
   await click("Second workspace");
@@ -1782,6 +1786,7 @@ it("switches a managed workspace through the existing scoped selection and saves
   expect(clearProductAccountSession).toHaveBeenCalledOnce();
   expect(signOutAccounts).not.toHaveBeenCalled();
   expect(setDefaultAccountOrganization).not.toHaveBeenCalled();
+  expect(selectionCompleted).toHaveBeenCalledOnce();
 });
 
 it("lets the current session cancel an explicit picker during an Accounts outage without selecting another organization", async () => {

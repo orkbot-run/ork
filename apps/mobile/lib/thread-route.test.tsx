@@ -4,7 +4,7 @@
 // @vitest-environment jsdom
 
 import type { ReactNode } from "react";
-import { act, createElement } from "react";
+import { act, createElement, useState } from "react";
 import type { Root } from "react-dom/client";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -18,6 +18,8 @@ const state = vi.hoisted(() => ({
   selectSpace: vi.fn(),
   replace: vi.fn(),
   params: {} as { spaceId?: string },
+  workspace: "workspace-A",
+  running: false,
 }));
 
 const { element } = vi.hoisted(() => ({
@@ -40,8 +42,27 @@ vi.mock("react-native", () => ({
   View: element("div"),
 }));
 vi.mock("../components/thread/thread-screen", () => ({
-  Thread: ({ userId, sessionEpoch }: { userId: string; sessionEpoch: number }) =>
-    createElement("main", { "data-owner-generation": sessionEpoch }, `thread:${userId}`),
+  Thread: ({ userId, sessionEpoch }: { userId: string; sessionEpoch: number }) => {
+    const [running] = useState(state.running);
+    return createElement(
+      "main",
+      { "data-owner-generation": sessionEpoch },
+      `thread:${userId}`,
+      running ? createElement("button", { type: "button" }, "Stop") : null,
+    );
+  },
+}));
+vi.mock("./installation-transport", () => ({
+  installationRevocationScope: () => ({
+    account: "same-account",
+    target: {
+      organizationId: "same-company",
+      serverId: "same-server",
+      workspaceId: state.workspace,
+      bindingVersion: 1,
+      keyFingerprint: "same-installation",
+    },
+  }),
 }));
 vi.mock("./api", () => ({
   currentApiBase: () => "https://app.example.test",
@@ -77,6 +98,8 @@ beforeEach(() => {
   state.selected = "space-1";
   state.generation = 1;
   state.ready = 1;
+  state.running = false;
+  state.workspace = "workspace-A";
   state.verify
     .mockReset()
     .mockResolvedValue({ apiBase: "https://app.example.test", userId: "user-1" });
@@ -120,6 +143,31 @@ it("shows the thread without switching when no space is requested", async () => 
   await render();
   expect(state.selectSpace).not.toHaveBeenCalled();
   expect(container.textContent).toBe("thread:user-1");
+});
+
+it("drops workspace A's active run when the same user opens B, and restores A independently", async () => {
+  state.running = true;
+  await render();
+  expect(container.querySelector("button")?.textContent).toBe("Stop");
+
+  state.workspace = "workspace-B";
+  state.running = false;
+  state.generation = 2;
+  state.ready = 2;
+  await act(async () => {
+    for (const listener of state.listeners) listener();
+  });
+  expect(container.textContent).toBe("thread:user-1");
+  expect(container.querySelector("button")).toBeNull();
+
+  state.workspace = "workspace-A";
+  state.running = true;
+  state.generation = 3;
+  state.ready = 3;
+  await act(async () => {
+    for (const listener of state.listeners) listener();
+  });
+  expect(container.querySelector("button")?.textContent).toBe("Stop");
 });
 
 it("keeps the hidden old user's verified generation until the replacement identity is confirmed", async () => {
