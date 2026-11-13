@@ -293,10 +293,15 @@ describe.skipIf(!enabled)(
   () => {
     let server: ReturnType<typeof broker>;
     let revokedDevices = new Set<string>();
+    let restorationBarriers = new Set<string>();
     const revocations = {
       revoked: async (id: string) => revokedDevices.has(id),
       revoke: async (ids: string[]) => {
         for (const id of ids) revokedDevices.add(id);
+      },
+      restorationCheckpoint: async () => [...restorationBarriers],
+      confirmRestoration: async (checkpoint: readonly string[]) => {
+        for (const marker of checkpoint) restorationBarriers.delete(marker);
       },
     };
     let installation: InstallationClient;
@@ -304,6 +309,7 @@ describe.skipIf(!enabled)(
     beforeEach(async () => {
       authority?.dispose();
       revokedDevices = new Set();
+      restorationBarriers = new Set();
       await system(async () => {
         await prisma!.centralSessionBinding.deleteMany();
         await prisma!.centralWorkspaceAccess.deleteMany();
@@ -983,6 +989,64 @@ describe.skipIf(!enabled)(
         } finally {
           auth.disposeOidcDiscovery();
         }
+      } finally {
+        client.auth.disposeOidcDiscovery();
+      }
+    });
+
+    it("requires fresh central verification after restoration and retains later revocations", async () => {
+      const client = await personalClient();
+      try {
+        restorationBarriers.add("restore-one");
+        authority!.dispose();
+        authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
+        expect(await authority.personal.device(client.device.id)).toBeNull();
+        await expect(
+          authority.personalChallenge(client.device.id, "c".repeat(43)),
+        ).rejects.toThrow();
+        server.refuseSynchronization(503);
+        await expect(authority.synchronize()).rejects.toThrow();
+        expect(restorationBarriers.size).toBe(1);
+        expect(await authority.personal.device(client.device.id)).toBeNull();
+        server.refuseSynchronization(200);
+        await authority.synchronize();
+        expect(restorationBarriers.size).toBe(0);
+        expect(await authority.personal.device(client.device.id)).not.toBeNull();
+        restorationBarriers.add("restore-two");
+        server.revokeDevice(client.device.id);
+        await authority.synchronize();
+        expect(restorationBarriers.size).toBe(0);
+        expect(await authority.personal.device(client.device.id)).toBeNull();
+        expect(revokedDevices.has(client.device.id)).toBe(true);
+      } finally {
+        client.auth.disposeOidcDiscovery();
+      }
+    });
+
+    it("does not clear the restoration barrier when persisting the verified projection fails", async () => {
+      const client = await personalClient();
+      try {
+        restorationBarriers.add("restore-persistence-failure");
+        await system(() =>
+          prisma!.installationIdentity.update({
+            where: { id: "local" },
+            data: { verifiedAt: new Date(Date.now() + 60_000) },
+          }),
+        );
+        authority!.dispose();
+        authority = new WorkspaceAuthority(prisma!, installation, issuer, undefined, revocations);
+        await expect(authority.synchronize()).rejects.toThrow();
+        expect(restorationBarriers.size).toBe(1);
+        expect(await authority.personal.device(client.device.id)).toBeNull();
+        await system(() =>
+          prisma!.installationIdentity.update({
+            where: { id: "local" },
+            data: { verifiedAt: new Date(0) },
+          }),
+        );
+        await authority.synchronize();
+        expect(restorationBarriers.size).toBe(0);
+        expect(await authority.personal.device(client.device.id)).not.toBeNull();
       } finally {
         client.auth.disposeOidcDiscovery();
       }

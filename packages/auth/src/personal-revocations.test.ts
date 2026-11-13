@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -19,6 +20,89 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
 });
 describe("personal revocation journal", () => {
+  it.skipIf(process.platform === "win32")(
+    "recognizes and confirms the barrier written by the actual restore helper",
+    async () => {
+      const source = await fixture();
+      const destination = await fixture();
+      const sourceJournal = path.join(source, "identity/personal-revocations");
+      await mkdir(sourceJournal, { recursive: true });
+      const id = randomUUID();
+      await writeFile(path.join(sourceJournal, id), "revoked\n");
+      execFileSync(
+        "/bin/bash",
+        [
+          path.resolve(import.meta.dirname, "../../../scripts/preserve-personal-revocations.sh"),
+          source,
+          destination,
+        ],
+        {
+          env: { PATH: "/usr/bin:/bin:/usr/sbin:/sbin" },
+        },
+      );
+      const journal = new FilePersonalRevocations(
+        path.join(destination, "identity/personal-revocations"),
+      );
+      const checkpoint = await journal.restorationCheckpoint();
+      expect(checkpoint).toHaveLength(1);
+      expect(await journal.revoked(id)).toBe(true);
+      await journal.confirmRestoration(checkpoint);
+      expect(await journal.restorationCheckpoint()).toEqual([]);
+      expect(await journal.revoked(id)).toBe(true);
+    },
+  );
+  it("clears only restoration barriers observed before a fresh verification", async () => {
+    const directory = await fixture();
+    const journal = new FilePersonalRevocations(directory);
+    const first = ".restore-required.aaaaaaaaaaaa";
+    const second = ".restore-required.bbbbbbbbbbbb";
+    expect(await journal.restorationCheckpoint()).toEqual([]);
+    await writeFile(path.join(directory, first), "pending\n", { mode: 0o600 });
+    const checkpoint = await journal.restorationCheckpoint();
+    await writeFile(path.join(directory, second), "pending\n", { mode: 0o600 });
+    const id = randomUUID();
+    await journal.revoke([id]);
+    await Promise.all([
+      journal.confirmRestoration(checkpoint),
+      journal.confirmRestoration(checkpoint),
+    ]);
+    expect(await new FilePersonalRevocations(directory).restorationCheckpoint()).toEqual([second]);
+    await journal.confirmRestoration([second]);
+    expect(await journal.restorationCheckpoint()).toEqual([]);
+    expect(await journal.revoked(id)).toBe(true);
+  });
+  it.each(["invalid name", "invalid contents", "directory"])(
+    "fails closed for a restoration marker with %s",
+    async (kind) => {
+      const directory = await fixture();
+      const file = path.join(
+        directory,
+        kind === "invalid name" ? ".restore-required.invalid" : ".restore-required.aaaaaaaaaaaa",
+      );
+      if (kind === "directory") await mkdir(file);
+      else await writeFile(file, kind === "invalid contents" ? "pending\n\n" : "pending\n");
+      await expect(
+        new FilePersonalRevocations(directory).restorationCheckpoint(),
+      ).rejects.toThrow();
+      await expect(
+        new FilePersonalRevocations(directory).confirmRestoration(["../outside"]),
+      ).rejects.toThrow("unsafe");
+    },
+  );
+  it.skipIf(process.platform === "win32")(
+    "does not follow a linked restoration marker",
+    async () => {
+      const directory = await fixture();
+      const outside = await fixture();
+      const target = path.join(outside, "untouched");
+      await writeFile(target, "pending\n");
+      await symlink(target, path.join(directory, ".restore-required.aaaaaaaaaaaa"));
+      await expect(
+        new FilePersonalRevocations(directory).restorationCheckpoint(),
+      ).rejects.toThrow();
+      expect(await readFile(target, "utf8")).toBe("pending\n");
+    },
+  );
   it("retains concurrent tombstones across restart without leaving partial files", async () => {
     const directory = await fixture();
     const first = new FilePersonalRevocations(directory);

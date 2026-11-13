@@ -30,6 +30,7 @@ export class PersonalWorkspaceAccess {
     const configuration = await this.installation.configuration();
     if (
       !this.revocations ||
+      (await this.revocations.restorationCheckpoint()).length > 0 ||
       (await this.revocations.revoked(device.id)) ||
       !workspace ||
       !configuration ||
@@ -107,6 +108,7 @@ export class PersonalWorkspaceAccess {
       const device = await this.prisma.personalWorkspaceDevice.findUnique({ where: { id } });
       if (
         !this.revocations ||
+        (await this.revocations.restorationCheckpoint()).length > 0 ||
         (await this.revocations.revoked(id)) ||
         !device ||
         device.revokedAt ||
@@ -253,6 +255,12 @@ export class PersonalWorkspaceAccess {
   confirmed(workspaceIds: string[]): void {
     this.blockEverything = false;
     for (const id of workspaceIds) this.blocked.delete(id);
+  }
+  restorationCheckpoint(): Promise<string[]> {
+    return this.revocations?.restorationCheckpoint() ?? Promise.resolve([]);
+  }
+  async confirmRestoration(checkpoint: readonly string[]): Promise<void> {
+    await this.revocations?.confirmRestoration(checkpoint);
   }
   async refuseInstallation(): Promise<void> {
     this.blockEverything = true;

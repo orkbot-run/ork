@@ -141,4 +141,4 @@ The server can retain a personal owner's device admission after verifying a sign
 
 Revocation markers live under `DATA_DIR/identity/personal-revocations`. Preserve them with the database when backing up or restoring an installation, because they prevent a restored row from reviving a credential whose revocation was already received. Personal queued runs require reader version 5 and retain the device admission that authorized them when they were created.
 
-Mobile builds with `OrkIdentity` store device keys in iOS Keychain or AndroidKeyStore. Renewal verifies an installation signature before signing the server's challenge. Logout deletes the keys and persists a denial marker. Desktop integration, restore safeguards and the full iOS acceptance run remain release gates.
+Mobile builds with `OrkIdentity` store device keys in iOS Keychain or AndroidKeyStore. Renewal verifies an installation signature before signing the server's challenge. Logout deletes the keys and persists a denial marker. Restored personal admissions need a fresh Accounts verification. Desktop integration and the full iOS acceptance run remain release gates.

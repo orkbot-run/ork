@@ -46,6 +46,7 @@ export class WorkspaceAuthority {
   async synchronize(): Promise<WorkspaceProjection> {
     const configuration = await this.installation.configuration();
     if (!configuration) throw refused();
+    const restoration = await this.personal.restorationCheckpoint();
     const { response, nonce, startedAt } = await this.installation
       .signedRequest("/servers/synchronize", { personalDeviceProtocol: 1 })
       .catch(async (error) => {
@@ -227,6 +228,7 @@ export class WorkspaceAuthority {
           );
       }
     }
+    await this.personal.confirmRestoration(restoration);
     this.window.apply(projection, startedAt);
     this.personal.confirmed(projection.workspaces.map((workspace) => workspace.id));
     return projection;

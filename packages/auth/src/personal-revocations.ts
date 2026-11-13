@@ -3,14 +3,18 @@
 
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 export interface PersonalRevocations {
   revoked(deviceId: string): Promise<boolean>;
   revoke(deviceIds: string[]): Promise<void>;
+  restorationCheckpoint(): Promise<string[]>;
+  confirmRestoration(checkpoint: readonly string[]): Promise<void>;
 }
 const marker = "revoked\n";
+const restorationPrefix = ".restore-required.";
+const restorationName = /^\.restore-required\.[a-zA-Z0-9]{12}$/;
 /** Tombstones survive process restarts and a failed projection database transaction. */
 export class FilePersonalRevocations implements PersonalRevocations {
   constructor(private readonly directory: string) {}
@@ -26,6 +30,51 @@ export class FilePersonalRevocations implements PersonalRevocations {
     });
     if (stat && (!stat.isDirectory() || stat.isSymbolicLink()))
       throw new Error("Personal revocation directory is unsafe");
+  }
+  /** Each restore adds a unique barrier. A request can clear only the barriers it observed. */
+  async restorationCheckpoint(): Promise<string[]> {
+    await this.checkDirectory();
+    const entries = await readdir(this.directory).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const names = entries.filter((name) => name.startsWith(restorationPrefix)).sort();
+    if (names.length > 128) throw new Error("Personal restoration verification is required");
+    for (const name of names) {
+      if (!restorationName.test(name)) throw new Error("Personal restoration marker is unsafe");
+      const file = await open(
+        path.join(this.directory, name),
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+      );
+      try {
+        const stat = await file.stat();
+        if (!stat.isFile() || stat.size !== 8)
+          throw new Error("Personal restoration marker is unreadable");
+        const bytes = Buffer.alloc(9);
+        const read = await file.read(bytes, 0, bytes.length, 0);
+        if (read.bytesRead !== 8 || bytes.subarray(0, 8).toString("utf8") !== "pending\n")
+          throw new Error("Personal restoration marker is unreadable");
+      } finally {
+        await file.close();
+      }
+    }
+    return names;
+  }
+  async confirmRestoration(checkpoint: readonly string[]): Promise<void> {
+    if (!checkpoint.length) return;
+    await this.checkDirectory();
+    for (const name of checkpoint) {
+      if (!restorationName.test(name)) throw new Error("Personal restoration marker is unsafe");
+      await unlink(path.join(this.directory, name)).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+    const directory = await open(this.directory, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      await directory.sync();
+    } finally {
+      await directory.close();
+    }
   }
   async revoked(deviceId: string): Promise<boolean> {
     await this.checkDirectory();
