@@ -977,6 +977,7 @@ msgstr "Escolher arquivo"
 msgid "Attachment"
 msgstr "Anexo"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Authentication"
 msgstr ""

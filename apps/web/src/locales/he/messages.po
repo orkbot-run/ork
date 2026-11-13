@@ -977,6 +977,7 @@ msgstr "צירוף קובץ"
 msgid "Attachment"
 msgstr "קובץ מצורף"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Authentication"
 msgstr ""

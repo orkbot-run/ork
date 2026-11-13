@@ -977,6 +977,7 @@ msgstr "Załącz plik"
 msgid "Attachment"
 msgstr "Załącznik"
 
+#: src/pages/model-settings/server-ai-account-form.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Authentication"
 msgstr "Uwierzytelnianie"

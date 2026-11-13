@@ -9,6 +9,13 @@ import { Button, Input, Label, NativeSelect, NativeSelectOption, Textarea } from
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { RpcClient } from "../../lib/rpc";
 
+function defaultModel(catalog: ModelCatalogEntry[], provider: string) {
+  const available = catalog.filter(
+    (row) => row.provider === provider && row.protocol !== "decisions" && !row.placeholder,
+  );
+  return (available.find((row) => row.recommended) ?? available[0])?.id ?? "";
+}
+
 export function ServerAIAccountForm({
   account,
   catalog,
@@ -31,9 +38,18 @@ export function ServerAIAccountForm({
       catalog.filter((row) => row.protocol !== "decisions").map((row) => [row.provider, row]),
     ).values(),
   ];
-  const [provider, setProvider] = useState(account?.provider ?? providers[0]?.provider ?? "");
-  const [label, setLabel] = useState(account?.label ?? "");
-  const [models, setModels] = useState(account?.models.join("\n") ?? "");
+  const initialProvider = account?.provider ?? providers[0]?.provider ?? "";
+  const [provider, setProvider] = useState(initialProvider);
+  const [label, setLabel] = useState(
+    account?.label ?? providers[0]?.providerName ?? initialProvider,
+  );
+  const [models, setModels] = useState(
+    () => account?.models.join("\n") ?? defaultModel(catalog, initialProvider),
+  );
+  const [authentication, setAuthentication] = useState<"sign-in" | "key">(() => {
+    const auth = providers.find((row) => row.provider === initialProvider)?.auth;
+    return auth === "oauth" || auth === "both" ? "sign-in" : "key";
+  });
   const [key, setKey] = useState("");
   const [url, setUrl] = useState("");
   const [budget, setBudget] = useState(formatAIBudget(account?.monthlyBudgetMicros ?? null));
@@ -78,8 +94,10 @@ export function ServerAIAccountForm({
   const locked = busy || oauthPending;
   const selected = providers.find((row) => row.provider === provider);
   const supportsOAuth = selected?.auth === "oauth" || selected?.auth === "both";
+  const subscriptionSignIn = supportsOAuth && authentication === "sign-in";
+  const acceptsKey = selected?.auth !== "oauth" && authentication === "key";
   async function signIn() {
-    if (pending.current || oauth.active || !isCurrent()) return;
+    if (pending.current || oauth.active || !subscriptionSignIn || !isCurrent()) return;
     setError(null);
     try {
       const limit = Number(concurrency);
@@ -107,8 +125,7 @@ export function ServerAIAccountForm({
   const fields =
     providers.find((row) => row.provider === provider)?.connection?.routingFields ?? [];
   async function save() {
-    if (pending.current || oauth.active || !isCurrent() || (!account && selected?.auth === "oauth"))
-      return;
+    if (pending.current || oauth.active || !isCurrent() || (!account && !acceptsKey)) return;
     const controller = new AbortController();
     pending.current = controller;
     setBusy(true);
@@ -192,8 +209,12 @@ export function ServerAIAccountForm({
           value={provider}
           disabled={locked || !!account}
           onChange={(event) => {
+            const next = providers.find((row) => row.provider === event.target.value);
             setProvider(event.target.value);
-            setModels("");
+            setModels(defaultModel(catalog, event.target.value));
+            setAuthentication(next?.auth === "oauth" || next?.auth === "both" ? "sign-in" : "key");
+            if (!label.trim() || label === (selected?.providerName ?? provider))
+              setLabel(next?.providerName ?? event.target.value);
             setKey("");
             setRouting({});
           }}
@@ -204,7 +225,33 @@ export function ServerAIAccountForm({
             </NativeSelectOption>
           ))}
         </NativeSelect>
+        {selected?.authHint ? (
+          <p className="text-sm text-muted-foreground">{selected.authHint}</p>
+        ) : null}
       </div>
+      {selected?.auth === "both" ? (
+        <div className="grid gap-2">
+          <Label htmlFor={`${id}-authentication`}>
+            <Trans>Authentication</Trans>
+          </Label>
+          <NativeSelect
+            id={`${id}-authentication`}
+            value={authentication}
+            disabled={locked}
+            onChange={(event) => {
+              setAuthentication(event.target.value === "sign-in" ? "sign-in" : "key");
+              setKey("");
+            }}
+          >
+            <NativeSelectOption value="sign-in">
+              {selected.oauthLabel ?? t`Sign in`}
+            </NativeSelectOption>
+            <NativeSelectOption value="key">
+              <Trans>API key</Trans>
+            </NativeSelectOption>
+          </NativeSelect>
+        </div>
+      ) : null}
       <div className="grid gap-2">
         <Label htmlFor={`${id}-models`}>
           <Trans>Models (one per line)</Trans>
@@ -218,7 +265,7 @@ export function ServerAIAccountForm({
           autoCorrect="off"
         />
       </div>
-      {provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
+      {acceptsKey && provider === OPENAI_COMPATIBLE_PROVIDER_ID ? (
         <div className="grid gap-2">
           <Label htmlFor={`${id}-url`}>
             <Trans>API URL</Trans>
@@ -232,7 +279,7 @@ export function ServerAIAccountForm({
           />
         </div>
       ) : null}
-      {fields.map((field) => (
+      {(acceptsKey ? fields : []).map((field) => (
         <div className="grid gap-2" key={field.key}>
           <Label htmlFor={`${id}-${field.key}`}>{field.label}</Label>
           <Input
@@ -245,19 +292,21 @@ export function ServerAIAccountForm({
           />
         </div>
       ))}
-      <div className="grid gap-2">
-        <Label htmlFor={`${id}-key`}>
-          <Trans>API key</Trans>
-        </Label>
-        <Input
-          id={`${id}-key`}
-          type="password"
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          disabled={locked}
-          autoComplete="off"
-        />
-      </div>
+      {acceptsKey ? (
+        <div className="grid gap-2">
+          <Label htmlFor={`${id}-key`}>
+            <Trans>API key</Trans>
+          </Label>
+          <Input
+            id={`${id}-key`}
+            type="password"
+            value={key}
+            onChange={(event) => setKey(event.target.value)}
+            disabled={locked}
+            autoComplete="off"
+          />
+        </div>
+      ) : null}
       <div className="grid gap-2">
         <Label htmlFor={`${id}-concurrency`}>
           <Trans>Concurrent requests</Trans>
@@ -323,16 +372,16 @@ export function ServerAIAccountForm({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        {supportsOAuth && !oauthPending ? (
+        {subscriptionSignIn && !oauthPending ? (
           <Button
             type="button"
             disabled={busy || !label.trim() || !models.trim()}
             onClick={() => void signIn()}
           >
-            <Trans>Sign in</Trans>
+            {selected?.oauthLabel ?? t`Sign in`}
           </Button>
         ) : null}
-        {account || selected?.auth !== "oauth" ? (
+        {account || acceptsKey ? (
           <Button type="submit" disabled={locked || !label.trim() || !models.trim() || !provider}>
             <Trans>Save</Trans>
           </Button>
