@@ -177,6 +177,7 @@ export function ServerAIAccountForm({
     <View style={{ gap: 12 }}>
       <SettingsGroup label={account ? t("Edit AI account") : t("Add AI account")}>
         <SettingsInputRow
+          testID="server-ai-account-name"
           accessibilityLabel={t("Name")}
           placeholder={t("Name")}
           value={label}
@@ -207,6 +208,7 @@ export function ServerAIAccountForm({
           </View>
         </MenuPickerMenu>
         <SettingsInputRow
+          testID="server-ai-account-models"
           accessibilityLabel={t("Models")}
           placeholder={t("Models")}
           multiline
@@ -243,6 +245,7 @@ export function ServerAIAccountForm({
           />
         ))}
         <SettingsInputRow
+          testID="server-ai-account-key"
           accessibilityLabel={t("API key")}
           placeholder={t("API key")}
           value={key}

@@ -80,6 +80,7 @@ export default function Models() {
         style={sideInsets}
         contentContainerStyle={styles.content}
         contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
       >
         <ServerAISettings
           key={`${session}:${selection}`}
