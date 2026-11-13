@@ -98,6 +98,12 @@ fn is_private_ipv6(address: Ipv6Addr) -> bool {
 /// Check the RPC health contract without following redirects or accepting unbounded bodies.
 pub async fn probe_server(server: &Url) -> Result<(), String> {
     let origin = normalize_server_url(server.as_str())?;
+    if origin
+        .host_str()
+        .is_some_and(|host| host.ends_with(".installation.ork.invalid"))
+    {
+        return Err("Workspace unavailable".into());
+    }
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(PROBE_TIMEOUT)
@@ -149,6 +155,23 @@ pub async fn probe_server(server: &Url) -> Result<(), String> {
         return Err("That address did not respond like an Ork server.".into());
     }
     Ok(())
+}
+
+/// Logical installation origins are checked by the pinned transport before the renderer opens.
+pub async fn probe_setup_server(
+    server: &Url,
+    workspace: Option<&crate::server_directory::WorkspaceTarget>,
+) -> Result<(), String> {
+    let server = normalize_server_url(server.as_str())?;
+    if let Some(workspace) = workspace {
+        workspace.validate()?;
+        if server.origin().ascii_serialization()
+            == format!("https://{}.installation.ork.invalid", workspace.server_id)
+        {
+            return Ok(());
+        }
+    }
+    probe_server(&server).await
 }
 
 /// Require native renderer support and safe sign-in before opening a product renderer.
@@ -452,6 +475,44 @@ mod tests {
             serde_json::from_str::<Value>(body).unwrap(),
             json!({"json": {}})
         );
+    }
+
+    #[tokio::test]
+    async fn managed_workspace_setup_defers_its_logical_origin_to_the_pinned_transport() {
+        let target = crate::server_directory::WorkspaceTarget {
+            organization_id: "10000000-0000-4000-8000-000000000001".into(),
+            server_id: "10000000-0000-4000-8000-000000000002".into(),
+            workspace_id: "10000000-0000-4000-8000-000000000003".into(),
+            binding_version: 1,
+            key_fingerprint: "a".repeat(64),
+        };
+        let logical = Url::parse(&format!(
+            "https://{}.installation.ork.invalid",
+            target.server_id
+        ))
+        .unwrap();
+        // The setup stage must not try DNS before open_server verifies the installation key.
+        probe_setup_server(&logical, Some(&target)).await.unwrap();
+        assert!(probe_server(&logical).await.is_err());
+        assert!(probe_setup_server(&logical, None).await.is_err());
+        let mut foreign = target.clone();
+        foreign.server_id = "10000000-0000-4000-8000-000000000004".into();
+        assert!(probe_setup_server(&logical, Some(&foreign)).await.is_err());
+        let mut invalid = target;
+        invalid.key_fingerprint = "invalid".into();
+        assert!(probe_setup_server(&logical, Some(&invalid)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn unmanaged_workspace_setup_still_checks_the_real_recovery_health_contract() {
+        let (server, request) = serve_once(http_response(
+            "200 OK",
+            r#"{"json":{"ok":true,"version":"0.7.0"}}"#,
+        ));
+        probe_setup_server(&server, None).await.unwrap();
+        let request = request.join().unwrap().to_ascii_lowercase();
+        assert!(request.starts_with("post /rpc/health http/1.1\r\n"));
+        assert!(!request.contains("authorization:") && !request.contains("cookie:"));
     }
 
     #[tokio::test]

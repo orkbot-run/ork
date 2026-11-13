@@ -1703,6 +1703,7 @@ async fn check_workspace<R: tauri::Runtime>(
     id: String,
 ) -> Result<bool, String> {
     require_setup(&window)?;
+    let intent = state.restore_intent.load(Ordering::SeqCst);
     let authorization = state
         .accounts
         .authorization(&server_directory::origin())
@@ -1719,7 +1720,15 @@ async fn check_workspace<R: tauri::Runtime>(
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
-    let reachable = server::probe_server(&target).await.is_ok();
+    let reachable = if let Some(workspace) = &workspace.target {
+        probe_managed_workspace(&state, &authorization, workspace, &target, || {
+            require_setup(&window).is_ok() && state.restore_intent.load(Ordering::SeqCst) == intent
+        })
+        .await
+        .is_ok()
+    } else {
+        server::probe_server(&target).await.is_ok()
+    };
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     Ok(reachable)
@@ -2084,7 +2093,14 @@ async fn connect_workspace(
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
-    let mode = prepare_workspace_route(&app, &state, &authorization, &target).await?;
+    let mode = prepare_workspace_route(
+        &app,
+        &state,
+        &authorization,
+        &target,
+        workspace.target.as_ref(),
+    )
+    .await?;
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Err("This connection is no longer active.".into());
     }
@@ -2127,6 +2143,7 @@ async fn prepare_workspace_route(
     state: &DesktopState,
     authorization: &accounts::Authorization,
     target: &url::Url,
+    workspace: Option<&server_directory::WorkspaceTarget>,
 ) -> Result<settings::InstanceMode, String> {
     require_account(state, authorization)?;
     if matches!(target.host_str(), Some("127.0.0.1" | "[::1]")) {
@@ -2148,7 +2165,7 @@ async fn prepare_workspace_route(
         require_current_stack(state, authorization, &stack)?;
         Ok(settings::InstanceMode::New)
     } else {
-        server::probe_server(target).await?;
+        server::probe_setup_server(target, workspace).await?;
         require_account(state, authorization)?;
         Ok(settings::InstanceMode::Existing)
     }
@@ -2506,6 +2523,51 @@ async fn cancel_setup_connection<R: tauri::Runtime>(
     Ok(())
 }
 
+async fn probe_managed_workspace(
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+    workspace: &server_directory::WorkspaceTarget,
+    origin: &url::Url,
+    current: impl Fn() -> bool,
+) -> Result<installation_transport::Selection, String> {
+    require_native_account(state, authorization)?;
+    if !current() {
+        return Err("This connection is no longer active.".into());
+    }
+    let catalog = server_directory::Directory::new()?
+        .catalog_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
+        .await?;
+    require_native_account(state, authorization)?;
+    if !current() {
+        return Err("This connection is no longer active.".into());
+    }
+    let selection = installation_transport::Selection {
+        account: settings::account_key(authorization.account.identity()),
+        origin: origin.origin().ascii_serialization(),
+        target: workspace.clone(),
+        relay_origin: catalog.relay_origin(workspace, origin)?,
+        direct_origin: catalog.direct_origin(workspace, origin)?,
+        prefer_relay: false,
+    };
+    let still_current = &current;
+    let selection = selection
+        .probe_available(|selection| async move {
+            server_login::issue_relay(authorization.directory_bearer()?, &selection, || {
+                still_current() && require_native_account(state, authorization).is_ok()
+            })
+            .await
+        })
+        .await?;
+    require_native_account(state, authorization)?;
+    if !current() {
+        return Err("This connection is no longer active.".into());
+    }
+    Ok(selection)
+}
+
 async fn open_server(
     window: &WebviewWindow,
     app: &tauri::AppHandle,
@@ -2540,40 +2602,13 @@ async fn open_server(
         selection.probe(None).await?;
         Some(selection)
     } else if let Some(workspace) = &choice.workspace {
-        let catalog = server_directory::Directory::new()?
-            .catalog_for_device(
-                authorization.directory_bearer()?,
-                &server_directory::device_id(&state.directory)?,
-            )
-            .await?;
-        let mut selection = installation_transport::Selection {
-            account: settings::account_key(authorization.account.identity()),
-            origin: choice.server_url.origin().ascii_serialization(),
-            target: workspace.clone(),
-            relay_origin: catalog.relay_origin(workspace, &choice.server_url)?,
-            direct_origin: catalog.direct_origin(workspace, &choice.server_url)?,
-            prefer_relay: false,
-        };
-        let direct_failed = if selection.uses_relay() {
-            true
-        } else {
-            selection.probe(None).await.is_err()
-        };
-        if direct_failed {
-            if selection.relay_origin.is_none() {
-                return Err("Could not connect to this installation. Try again.".into());
-            }
-            selection.prefer_relay = true;
-            let ticket =
-                server_login::issue_relay(authorization.directory_bearer()?, &selection, || {
-                    require_setup(window).is_ok()
-                        && require_native_account(state, authorization).is_ok()
-                        && state.restore_intent.load(Ordering::SeqCst) == intent
-                })
-                .await?;
-            selection.probe(Some(ticket)).await?;
-        }
-        Some(selection)
+        Some(
+            probe_managed_workspace(state, authorization, workspace, &choice.server_url, || {
+                require_setup(window).is_ok()
+                    && state.restore_intent.load(Ordering::SeqCst) == intent
+            })
+            .await?,
+        )
     } else {
         server::require_accounts_only(&choice.server_url).await?;
         None
@@ -3505,7 +3540,14 @@ async fn restore_saved_server(
             return Ok(false);
         }
         let target = server::normalize_server_url(&workspace.url)?;
-        let mode = prepare_workspace_route(app, &state, &authorization, &target).await?;
+        let mode = prepare_workspace_route(
+            app,
+            &state,
+            &authorization,
+            &target,
+            workspace.target.as_ref(),
+        )
+        .await?;
         require_account(&state, &authorization)?;
         update_startup(
             app,

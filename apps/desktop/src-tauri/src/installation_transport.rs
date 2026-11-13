@@ -17,6 +17,10 @@ use crate::server_directory::WorkspaceTarget;
 const ERROR: &str = "Native connection changed";
 const MAX_REQUESTS: usize = 256;
 
+#[cfg(test)]
+#[path = "installation_transport_probe_tests.rs"]
+mod probe_tests;
+
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Selection {
@@ -31,6 +35,24 @@ pub struct Selection {
 }
 
 impl Selection {
+    /// Check the pinned installation, using a relay capability only after direct transport fails.
+    pub async fn probe_available<F, Fut>(mut self, relay_ticket: F) -> Result<Self, String>
+    where
+        F: FnOnce(Self) -> Fut,
+        Fut: std::future::Future<Output = Result<String, String>>,
+    {
+        if !self.uses_relay() && self.probe(None).await.is_ok() {
+            return Ok(self);
+        }
+        if self.relay_origin.is_none() {
+            return Err("Could not connect to this installation. Try again.".into());
+        }
+        self.prefer_relay = true;
+        let ticket = relay_ticket(self.clone()).await?;
+        self.probe(Some(ticket)).await?;
+        Ok(self)
+    }
+
     pub fn uses_relay(&self) -> bool {
         self.prefer_relay || (self.direct_origin.is_none() && self.relay_origin.is_some())
     }

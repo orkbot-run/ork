@@ -59,9 +59,13 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 objc2-web-kit = { version = "0.3.2", default-features = false, features = ["std", "WKWebViewConfiguration", "WKUserContentController"] }
 
 [dev-dependencies]
+futures-util = { version = "0.3", features = ["sink"] }
+rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring"] }
 rsa = "0.9"
 plist = "1.10.3"
 tauri = { version = "2", features = ["test"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "rustls-tls-native-roots"] }
 
 [profile.release]
 codegen-units = 1
