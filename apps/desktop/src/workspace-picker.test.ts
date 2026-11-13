@@ -57,6 +57,20 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+it("opens the local route retained by native device filtering", () => {
+  const value = catalog();
+  value.organizations[1]!.servers[0]!.routes.push({
+    id: id(8),
+    kind: "local",
+    address: "http://127.0.0.1:45173",
+    deviceId: id(9),
+  });
+  const { entries, container, open } = render(value, id(2));
+  expect(entries[0]?.url).toBe("http://127.0.0.1:45173");
+  container.querySelector<HTMLButtonElement>(".workspace-choice")!.click();
+  expect(open).toHaveBeenCalledWith(id(5));
+});
+
 it("keeps organizations without servers in the chooser and waits for a choice", () => {
   const { container, entries, chooseOrganization, open } = render(catalog(), null);
   const select = container.querySelector("select")!;

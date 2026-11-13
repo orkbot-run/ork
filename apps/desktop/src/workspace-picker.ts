@@ -6,6 +6,16 @@ import { catalogWorkspace } from "@orkbot/contracts";
 
 export type DesktopWorkspace = { id: string; name: string; url: string };
 
+/** Native IPC has already removed local routes belonging to other devices. */
+export function desktopWorkspaceRoute(
+  routes: IdentityCatalog["organizations"][number]["servers"][number]["routes"],
+) {
+  return (
+    routes.find((row) => row.kind === "local" && row.deviceId !== null) ??
+    routes.find((row) => row.kind === "direct" && row.deviceId === null)
+  );
+}
+
 /** Present the complete catalog, including organizations and resources that cannot open yet. */
 export function renderWorkspacePicker(options: {
   document: Document;
@@ -65,9 +75,7 @@ export function renderWorkspacePicker(options: {
         serverId: server.id,
         workspaceId: workspace.id,
       });
-      const route = choice?.server.routes.find(
-        (row) => row.kind === "direct" && row.deviceId === null,
-      );
+      const route = choice && desktopWorkspaceRoute(choice.server.routes);
       const entry =
         choice && route ? { id: workspace.id, name: workspace.name, url: route.address } : null;
       const button = doc.createElement("button");

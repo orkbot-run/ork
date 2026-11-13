@@ -164,3 +164,19 @@ export function installationRequestMessage(
     bodyHash,
   ]);
 }
+
+export const desktopInstallationInputSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("enroll"), organizationId: z.uuid() }).strict(),
+  z
+    .object({
+      action: z.literal("complete"),
+      organizationId: z.uuid(),
+      serverId: z.uuid(),
+      workspaceId: z.uuid(),
+      bindingVersion: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+      keyFingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+      delegateAI: z.boolean(),
+      routes: installationRoutesInputSchema,
+    })
+    .strict(),
+]);

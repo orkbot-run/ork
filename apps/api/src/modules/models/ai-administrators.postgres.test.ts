@@ -100,4 +100,23 @@ describe.skipIf(!enabled)("explicit installation AI administrator delegation", (
     expect(await system(() => db!.prisma.aIConnectionAdministrator.count())).toBe(0);
     expect(await system(() => db!.prisma.auditEvent.count({ where: { organizationId } }))).toBe(0);
   });
+  it("does not delegate a resumed desktop request to a newer binding", async () => {
+    await expect(
+      setAIAdministrator(db!.prisma, {
+        accountKey,
+        fingerprint,
+        enabled: true,
+        expectedBindingVersion: 6,
+      }),
+    ).rejects.toThrow("Installation binding changed");
+    expect(await system(() => db!.prisma.aIConnectionAdministrator.count())).toBe(0);
+    expect(await system(() => db!.prisma.auditEvent.count({ where: { organizationId } }))).toBe(0);
+    await setAIAdministrator(db!.prisma, {
+      accountKey,
+      fingerprint,
+      enabled: true,
+      expectedBindingVersion: 7,
+    });
+    expect(await system(() => db!.prisma.aIConnectionAdministrator.count())).toBe(1);
+  });
 });

@@ -456,7 +456,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
         if (source.method !== "oauth" || source.oauth?.providerId !== "oidc") return;
         const native = nativeLoginProof();
         // The signed provider profile, never an email or client request, owns this instance.
-        if (env.singleAccountOwnerKey) {
+        if (env.singleAccountOwnerKey && !native?.centralWorkspace) {
           const subject = native?.subject ?? source.oauth.profile?.sub;
           const issuer = native?.issuer ?? env.oidc?.issuer;
           if (
@@ -849,7 +849,7 @@ export function createAuth(prisma: PrismaClient, env: AuthEnv) {
             }
             const provision = native?.allowProvision === true;
             const bypassAllowlist = (oidcSignIn && env.oidc?.allowSignupBypass) || provision;
-            if (env.singleAccountOwnerKey) {
+            if (env.singleAccountOwnerKey && !native?.centralWorkspace) {
               const accounts = user ? await ctx?.context.internalAdapter.findAccounts(user.id) : [];
               const owner = accounts?.find(
                 (account) =>

@@ -260,6 +260,9 @@ export const PL_MESSAGES: Record<string, string> = {
     "Usługi Ork zarządzane przez aplikację nie są gotowe. Ponów konfigurację.",
 
   // Docker
+  "Could not complete local installation. Retry to continue.":
+    "Nie udało się dokończyć instalacji lokalnej. Ponów próbę, aby kontynuować.",
+  "Installation identity changed": "Tożsamość instalacji uległa zmianie",
   "Docker is not installed on this computer.": "Docker nie jest zainstalowany na tym komputerze.",
   "Docker is installed, but Docker Compose is missing. Install Docker Desktop or the docker-compose-plugin.":
     "Docker jest zainstalowany, ale brakuje Docker Compose. Zainstaluj Docker Desktop lub docker-compose-plugin.",

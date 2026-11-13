@@ -22,7 +22,7 @@ import {
 import { logoAvatarTraits, seededLogoAvatarColor } from "@orkbot/core/logo-avatar-traits";
 import { createPersonalOrkId, isPersonalOrkId } from "@orkbot/core/personal-ork";
 import { PL_MESSAGES } from "./locales/pl.js";
-import { renderWorkspacePicker } from "./workspace-picker.js";
+import { desktopWorkspaceRoute, renderWorkspacePicker } from "./workspace-picker.js";
 
 type WorkspaceLink = Pick<WorkspaceTarget, "organizationId" | "serverId" | "workspaceId">;
 const workspaceLinkSchema = WorkspaceTargetSchema.pick({
@@ -277,8 +277,7 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
     await loadServers(version);
     if (!current(version) || account !== owner || pendingWorkspace !== pending) return;
     const choice = workspaceCatalog && catalogWorkspace(workspaceCatalog, pending);
-    if (!choice?.server.routes.some((route) => route.kind === "direct" && route.deviceId === null))
-      throw "Workspace unavailable";
+    if (!choice || !desktopWorkspaceRoute(choice.server.routes)) throw "Workspace unavailable";
     await openServer(version, "connect_workspace", { id: pending.workspaceId, link: pending });
     if (current(version) && pendingWorkspace === pending) pendingWorkspace = null;
   }
@@ -969,8 +968,26 @@ export function mountSetup(doc: Document, transport: SetupTransport) {
       show("selfhost");
     }
   });
-  on("local", "click", () => void connect("connect_local_server", undefined, true));
-  on("retry-local", "click", () => void connect("connect_local_server", undefined, true));
+  on(
+    "local",
+    "click",
+    () =>
+      void connect(
+        "connect_local_server",
+        { organizationId: selectedOrganizationId ?? null },
+        true,
+      ),
+  );
+  on(
+    "retry-local",
+    "click",
+    () =>
+      void connect(
+        "connect_local_server",
+        { organizationId: selectedOrganizationId ?? null },
+        true,
+      ),
+  );
   on("retry-server", "click", () => {
     if (failedServer)
       void connect(failedServer.command, { id: failedServer.id }, failedServer.local);

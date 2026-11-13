@@ -824,6 +824,34 @@ describe("bundled desktop setup", () => {
     expect(screen()).toBe("servers");
     expect(node("output").textContent).toBe("");
   });
+  it("passes the selected organization to the native installer and its retry", async () => {
+    const catalog = catalogFixture([
+      {
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        name: "Research",
+        url: "https://server.example.test",
+      },
+    ]);
+    const organizationId = catalog.organizations[0]!.id;
+    const { invoke } = await continueSetup({
+      invoke: async (name) => {
+        if (name === "setup_accounts_session") return account;
+        if (name === "workspace_catalog") return catalog;
+        if (name === "list_servers") return [];
+        if (name === "connect_local_server") throw "Docker stopped. Try again.";
+        return undefined;
+      },
+    });
+    node("local").click();
+    await flush();
+    node("retry-local").click();
+    await flush();
+    const calls = invoke.mock.calls.filter(([command]) => command === "connect_local_server");
+    expect(calls).toEqual([
+      ["connect_local_server", { organizationId }],
+      ["connect_local_server", { organizationId }],
+    ]);
+  });
 
   it("clears a late directory response when signing out", async () => {
     const directory = deferred<unknown>();

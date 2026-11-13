@@ -11,6 +11,7 @@ export async function setAIAdministrator(
     accountKey: string;
     fingerprint: string;
     enabled: boolean;
+    expectedBindingVersion?: number;
   },
 ): Promise<void> {
   if (!/^[a-f0-9]{64}$/.test(input.accountKey) || !/^[a-f0-9]{64}$/.test(input.fingerprint))
@@ -22,7 +23,9 @@ export async function setAIAdministrator(
       if (
         installation?.state !== "ready" ||
         !installation.localOrganizationId ||
-        installation.keyFingerprint !== input.fingerprint
+        installation.keyFingerprint !== input.fingerprint ||
+        (input.expectedBindingVersion !== undefined &&
+          installation.bindingVersion !== input.expectedBindingVersion)
       )
         throw new Error("Installation binding changed");
       if (input.enabled)

@@ -73,6 +73,10 @@ on loopback. Host computer access uses the native consent and revocation path ba
 by the existing server-owned computer protocol. See [Desktop app](desktop-app.md) for
 the account controls and permissions.
 
+Choose the organization first. The installer checks its Docker installation's fingerprint against Accounts, then waits for both the server and workspace acknowledgements before opening Ork. Restarting setup reuses the installation key and workspace operation. Initial setup records an audited workspace admin assignment and delegates local AI administration to the signed-in account. Reopening a completed installation preserves subsequent access removals.
+
+Local routes belong to one device. Setup keeps direct and tunnel routes when updating the Docker address, and other devices cannot select its loopback route. Disconnecting a server or changing its binding version requires operator recovery.
+
 ## Organizations and workspaces
 
 Accounts supplies the version 2 organization, server and workspace catalog. Setup includes organizations without a server and shows workspaces that need provisioning or access. The account's default organization is shared across devices. Each desktop installation keeps its last workspace separately for each account and organization.

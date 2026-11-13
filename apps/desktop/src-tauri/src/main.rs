@@ -12,6 +12,7 @@ mod host_computer;
 mod host_runner;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
+mod local_enrollment;
 mod local_stack;
 mod local_stack_scope;
 mod locale;
@@ -905,7 +906,7 @@ fn start_server_discovery(app: tauri::AppHandle) {
             let Ok(bearer) = authorization.directory_bearer() else {
                 continue;
             };
-            let Ok(catalog) = directory.catalog(bearer).await else {
+            let Ok(catalog) = directory.catalog_for_device(bearer, &device).await else {
                 continue;
             };
             let servers = if catalog.has_organizations() {
@@ -1390,7 +1391,10 @@ async fn list_workspaces<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let workspaces = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
@@ -1408,7 +1412,10 @@ async fn workspace_catalog<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let catalog = server_directory::Directory::new()?
-        .catalog(authorization.directory_bearer()?)
+        .catalog_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?;
     require_setup(&window)?;
     require_account(&state, &authorization)?;
@@ -1449,7 +1456,10 @@ async fn check_workspace<R: tauri::Runtime>(
         .authorization(&server_directory::origin())
         .await?;
     let workspace = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?
         .into_iter()
         .find(|workspace| workspace.id == id)
@@ -1811,7 +1821,10 @@ async fn connect_workspace(
         .map_err(|_| "A connection is already in progress.")?;
     // Re-fetch from the authenticated directory so the renderer cannot choose an arbitrary URL.
     let workspace = server_directory::Directory::new()?
-        .workspaces(authorization.directory_bearer()?)
+        .workspaces_for_device(
+            authorization.directory_bearer()?,
+            &server_directory::device_id(&state.directory)?,
+        )
         .await?
         .into_iter()
         .find(|workspace| workspace.id == id)
@@ -1819,7 +1832,7 @@ async fn connect_workspace(
     require_setup(&window)?;
     require_account(&state, &authorization)?;
     let target = server::normalize_server_url(&workspace.url)?;
-    server::probe_server(&target).await?;
+    let mode = prepare_workspace_route(&app, &state, &authorization, &target).await?;
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Err("This connection is no longer active.".into());
     }
@@ -1837,7 +1850,7 @@ async fn connect_workspace(
         &app,
         &state,
         settings::Setup {
-            mode: settings::InstanceMode::Existing,
+            mode,
             server_url: target,
             account: None,
             workspace: workspace.target,
@@ -1855,6 +1868,38 @@ async fn connect_workspace(
         }
     }
     Ok(())
+}
+
+async fn prepare_workspace_route(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    authorization: &accounts::Authorization,
+    target: &url::Url,
+) -> Result<settings::InstanceMode, String> {
+    require_account(state, authorization)?;
+    if matches!(target.host_str(), Some("127.0.0.1" | "[::1]")) {
+        let (stack, intent) = select_local_stack(app, state, authorization)?;
+        if !stack.matches_saved_url(&target.origin().ascii_serialization()) {
+            return Err("This local server is no longer active.".into());
+        }
+        let result = stack.start_for(intent).await;
+        require_current_stack(state, authorization, &stack)?;
+        if stack.intent() != intent
+            || result.phase != local_stack::LocalStackPhase::Ready
+            || !stack.matches_desired_stack().await
+        {
+            return Err(result
+                .message
+                .unwrap_or_else(|| "Could not start the local server.".into()));
+        }
+        server::probe_server(target).await?;
+        require_current_stack(state, authorization, &stack)?;
+        Ok(settings::InstanceMode::New)
+    } else {
+        server::probe_server(target).await?;
+        require_account(state, authorization)?;
+        Ok(settings::InstanceMode::Existing)
+    }
 }
 
 async fn connect_directory_server(
@@ -1877,7 +1922,10 @@ async fn connect_directory_server(
                 authorization,
                 directory,
                 device,
-                Some(&server.url),
+                LocalServerSelection {
+                    expected_url: Some(&server.url),
+                    organization_id: None,
+                },
             )
             .await
         }
@@ -2081,6 +2129,7 @@ async fn connect_local_server(
     window: WebviewWindow,
     app: tauri::AppHandle,
     state: State<'_, DesktopState>,
+    organization_id: Option<String>,
 ) -> Result<(), String> {
     require_setup(&window)?;
     let authorization = state
@@ -2100,9 +2149,17 @@ async fn connect_local_server(
         &authorization,
         &directory,
         &device,
-        None,
+        LocalServerSelection {
+            expected_url: None,
+            organization_id: organization_id.as_deref(),
+        },
     )
     .await
+}
+
+struct LocalServerSelection<'a> {
+    expected_url: Option<&'a str>,
+    organization_id: Option<&'a str>,
 }
 
 async fn start_local_server(
@@ -2112,9 +2169,18 @@ async fn start_local_server(
     authorization: &accounts::Authorization,
     directory: &server_directory::Directory,
     device: &str,
-    expected_url: Option<&str>,
+    selection: LocalServerSelection<'_>,
 ) -> Result<(), String> {
+    let LocalServerSelection {
+        expected_url,
+        organization_id,
+    } = selection;
     require_setup(window)?;
+    let organization_id = directory
+        .catalog_for_device(authorization.directory_bearer()?, device)
+        .await?
+        .local_organization(organization_id)?;
+    require_account(state, authorization)?;
     let (stack, intent) = select_local_stack(app, state, authorization)?;
     if expected_url.is_some_and(|url| !stack.matches_saved_url(url)) {
         return Err("This saved local instance is unavailable for this account. Choose This computer to create or open your instance.".into());
@@ -2138,13 +2204,23 @@ async fn start_local_server(
             "The local server address changed. Choose This computer to open your instance.".into(),
         );
     }
-    directory
-        .add(
-            authorization.directory_bearer()?,
-            &stack.web_url(),
-            server_directory::Kind::Local,
-            device,
-        )
+    let enrollment = local_enrollment::LocalEnrollment {
+        directory,
+        stack: &stack,
+        token: authorization.directory_bearer()?,
+        organization_id: &organization_id,
+        device_id: device,
+        subject: authorization.account.identity().1,
+    };
+    let workspace = enrollment
+        .connect(|| {
+            require_setup(window)?;
+            require_current_stack(state, &authorization, &stack)?;
+            if stack.intent() != intent {
+                return Err("The start was interrupted. Retry to continue.".into());
+            }
+            Ok(())
+        })
         .await?;
     open_server(
         window,
@@ -2154,7 +2230,7 @@ async fn start_local_server(
             mode: settings::InstanceMode::New,
             server_url: stack.web_url(),
             account: None,
-            workspace: None,
+            workspace: workspace.target,
         },
         &authorization,
     )
@@ -2957,7 +3033,9 @@ async fn restore_saved_server(
     }
     let device = server_directory::device_id(&state.directory)?;
     let directory = server_directory::Directory::new()?;
-    let catalog = directory.catalog(authorization.directory_bearer()?).await?;
+    let catalog = directory
+        .catalog_for_device(authorization.directory_bearer()?, &device)
+        .await?;
     require_account(&state, &authorization)?;
     if catalog.has_organizations() {
         let Some(workspace) =
@@ -2969,14 +3047,15 @@ async fn restore_saved_server(
             return Ok(false);
         }
         let target = server::normalize_server_url(&workspace.url)?;
-        server::probe_server(&target).await?;
+        let mode = prepare_workspace_route(app, &state, &authorization, &target).await?;
         require_account(&state, &authorization)?;
         update_startup(
             app,
             Startup {
                 phase: "opening",
                 server_id: Some(workspace.id.clone()),
-                kind: None,
+                kind: (mode == settings::InstanceMode::New)
+                    .then_some(server_directory::Kind::Local),
                 message: None,
             },
         );
@@ -2986,7 +3065,7 @@ async fn restore_saved_server(
             app,
             &state,
             settings::Setup {
-                mode: settings::InstanceMode::Existing,
+                mode,
                 server_url: target,
                 account: None,
                 workspace: workspace.target,
@@ -3456,7 +3535,27 @@ fn main() {
 mod tests {
     use super::*;
 
+    #[derive(Default)]
+    struct TestCredentials(Mutex<std::collections::HashMap<String, String>>);
+    impl credentials::CredentialStore for TestCredentials {
+        fn get(&self, key: &str) -> Result<Option<String>, String> {
+            Ok(self.0.lock().unwrap().get(key).cloned())
+        }
+        fn set(&self, key: &str, value: &str) -> Result<(), String> {
+            self.0
+                .lock()
+                .unwrap()
+                .insert(key.to_owned(), value.to_owned());
+            Ok(())
+        }
+        fn delete(&self, key: &str) -> Result<(), String> {
+            self.0.lock().unwrap().remove(key);
+            Ok(())
+        }
+    }
+
     fn test_state(directory: &std::path::Path) -> DesktopState {
+        let store = credentials::Store(Arc::new(TestCredentials::default()));
         DesktopState {
             directory: directory.to_owned(),
             setup: Mutex::new(None),
@@ -3477,7 +3576,7 @@ mod tests {
             switching: tokio::sync::Mutex::new(()),
             sessions: native::Sessions::default(),
             browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
-            accounts: accounts::Accounts::default(),
+            accounts: accounts::Accounts::new(store.clone()),
             accounts_started: Mutex::new(AccountsStarted::default()),
             server_pairings: server_pairing::Attempts::default(),
             restoring: std::sync::atomic::AtomicBool::new(false),
@@ -3485,7 +3584,7 @@ mod tests {
             setup_ready: std::sync::atomic::AtomicBool::new(false),
             startup: Mutex::new(Startup::idle()),
             speech: speech::SpeechManager::new(PathBuf::new()),
-            pairings: pairing::Pairings::default(),
+            pairings: pairing::Pairings::new(store),
             warm_generation: AtomicU64::new(0),
             pending_server: Mutex::new(None),
             pending_workspace: Mutex::new(None),

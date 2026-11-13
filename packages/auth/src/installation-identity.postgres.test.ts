@@ -465,8 +465,52 @@ describe.skipIf(!enabled)(
         bindingVersion: 1,
       });
     });
+    it("resumes local setup with the same key and operation after approval or acknowledgement is lost", async () => {
+      const pending = await installation.resumeEnrollment("This computer", organizationId);
+      expect(pending.state).toBe("approval-required");
+      const before = await system(() =>
+        prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+      );
+      await expect(installation.resumeEnrollment("This computer", workspaceId)).rejects.toThrow(
+        "organization selection changed",
+      );
+      server.approve();
+      server.failAcknowledgement(true);
+      await expect(installation.resumeEnrollment("This computer", organizationId)).rejects.toThrow(
+        "503",
+      );
+      installation = new InstallationClient(prisma!, {
+        issuer,
+        encryptionKey: "fixture-encryption-material".repeat(3),
+        request: server.request,
+        keys,
+      });
+      server.failAcknowledgement(false);
+      const ready = await installation.resumeEnrollment("This computer", organizationId);
+      expect(ready).toEqual({
+        state: "ready",
+        serverId,
+        organizationId,
+        bindingVersion: 1,
+        keyFingerprint: before.keyFingerprint,
+      });
+      expect(await installation.resumeEnrollment("This computer", organizationId)).toEqual(ready);
+      const after = await system(() =>
+        prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+      );
+      expect(after.operationId).toBe(before.operationId);
+      expect(after.publicKey).toBe(before.publicKey);
+      expect(after.privateKeyCipher).toBe(before.privateKeyCipher);
+    });
     it("publishes only validated origin routes using the durable installation proof", async () => {
       await enroll();
+      const configuration = (await installation.configuration())!;
+      await expect(
+        installation.publishRoutes([], { ...configuration, bindingVersion: 2 }),
+      ).rejects.toThrow("Installation binding changed");
+      await expect(
+        installation.publishRoutes([], { ...configuration, keyFingerprint: "c".repeat(64) }),
+      ).rejects.toThrow("Installation binding changed");
       await expect(
         installation.publishRoutes([
           { kind: "direct", address: "https://server.example.test", deviceId: null },
@@ -655,6 +699,8 @@ describe.skipIf(!enabled)(
         signupsEnabled: "false",
         signupAllowlist: "",
         workspaceAuthority: authority!,
+        singleAccount: true,
+        singleAccountOwnerKey: oidcAccountSubject(issuer, "local-installer-owner"),
       });
       const call = (path: string, body: object) =>
         system(() =>
@@ -779,6 +825,8 @@ describe.skipIf(!enabled)(
         signupsEnabled: "false",
         signupAllowlist: "",
         workspaceAuthority: authority!,
+        singleAccount: true,
+        singleAccountOwnerKey: oidcAccountSubject(issuer, "local-installer-owner"),
       });
       const call = (path: string, body: object) =>
         system(() =>

@@ -256,6 +256,26 @@ export class InstallationClient {
     };
   }
 
+  /** Resume the same installation after a lost approval or acknowledgement response. */
+  async resumeEnrollment(name: string, organizationId: string) {
+    await this.ensureIdentity();
+    const row = await this.load();
+    if (
+      !UUID.test(organizationId) ||
+      (row.requestedOrganizationId && row.requestedOrganizationId !== organizationId) ||
+      (row.centralOrganizationId && row.centralOrganizationId !== organizationId)
+    )
+      throw failure("Installation organization selection changed");
+    if (["ready", "binding", "enrolling"].includes(row.state)) {
+      const configuration = await this.pollEnrollment();
+      if (configuration) return { state: "ready" as const, ...configuration };
+    }
+    return {
+      state: "approval-required" as const,
+      ...(await this.beginEnrollment(name, organizationId)),
+    };
+  }
+
   async beginEnrollment(name: string, expectedOrganizationId?: string) {
     await this.ensureIdentity();
     let row = await this.load();
@@ -396,16 +416,24 @@ export class InstallationClient {
     return payload;
   }
 
-  async publishRoutes(routes: unknown): Promise<void> {
+  async publishRoutes(routes: unknown, expected?: InstallationConfiguration): Promise<void> {
     const value = installationRoutesInputSchema.parse(routes);
-    const { response } = await this.signedRequest("/servers/routes", { routes: value });
+    const { response } = await this.signedRequest("/servers/routes", { routes: value }, expected);
     if (response.ok !== true) throw failure("Installation routes were not published");
   }
 
-  async signedRequest(path: InstallationPath, body: unknown) {
+  async signedRequest(path: InstallationPath, body: unknown, expected?: InstallationConfiguration) {
     const row = await this.load();
     if (!row.serverId || !["ready", "binding"].includes(row.state))
       throw failure("Installation is not bound");
+    if (
+      expected &&
+      (row.serverId !== expected.serverId ||
+        row.centralOrganizationId !== expected.organizationId ||
+        row.bindingVersion !== expected.bindingVersion ||
+        row.keyFingerprint !== expected.keyFingerprint)
+    )
+      throw failure("Installation binding changed");
     const proof = {
       serverId: row.serverId,
       bindingVersion: row.bindingVersion,

@@ -80,7 +80,10 @@ impl Workspace {
             || self.name.is_empty()
             || self.name.chars().count() > if self.target.is_some() { 310 } else { 100 }
             || self.name.chars().any(char::is_control)
-            || url.scheme() != "https"
+            || !(url.scheme() == "https"
+                || (self.target.is_some()
+                    && url.scheme() == "http"
+                    && matches!(url.host_str(), Some("127.0.0.1" | "[::1]"))))
             || self.url != url.origin().ascii_serialization()
         {
             return Err(ERROR.into());
@@ -143,6 +146,74 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
+    pub fn local_installation_routes(
+        &self,
+        target: &WorkspaceTarget,
+        origin: &Url,
+        device_id: &str,
+    ) -> Result<Vec<serde_json::Value>, String> {
+        target.validate()?;
+        if !uuid(device_id) || !matches!(origin.host_str(), Some("127.0.0.1" | "[::1]")) {
+            return Err(ERROR.into());
+        }
+        let server = self
+            .organizations
+            .iter()
+            .find(|row| row.id == target.organization_id)
+            .and_then(|row| {
+                row.servers
+                    .iter()
+                    .find(|server| server.id == target.server_id)
+            })
+            .ok_or(ERROR)?;
+        if server.state != "ready"
+            || server.binding_version != target.binding_version
+            || server.key_fingerprint.as_deref() != Some(&target.key_fingerprint)
+            || !server
+                .workspaces
+                .iter()
+                .any(|row| row.id == target.workspace_id)
+        {
+            return Err(ERROR.into());
+        }
+        let mut routes: Vec<_> = server.routes.iter()
+            .filter(|row| !(row.kind == "local" && row.device_id.as_deref() == Some(device_id)))
+            .map(|row| serde_json::json!({ "kind": row.kind, "address": row.address, "deviceId": row.device_id })).collect();
+        routes.push(serde_json::json!({ "kind": "local", "address": origin.origin().ascii_serialization(), "deviceId": device_id }));
+        if routes.len() > 8 {
+            return Err(ERROR.into());
+        }
+        Ok(routes)
+    }
+
+    fn for_device(mut self, device_id: Option<&str>) -> Self {
+        for organization in &mut self.organizations {
+            for server in &mut organization.servers {
+                server.routes.retain(|route| {
+                    route.kind != "local"
+                        || device_id.is_some_and(|id| route.device_id.as_deref() == Some(id))
+                });
+            }
+        }
+        self
+    }
+
+    pub fn local_organization(&self, selected: Option<&str>) -> Result<String, String> {
+        let id = selected.or(self.default_organization_id.as_deref());
+        let organization = self
+            .organizations
+            .iter()
+            .find(|row| Some(row.id.as_str()) == id)
+            .or_else(|| {
+                (id.is_none() && self.organizations.len() == 1).then(|| &self.organizations[0])
+            });
+        let organization = organization.ok_or("Choose organization")?;
+        if !matches!(organization.role.as_str(), "admin" | "manager") {
+            return Err("Workspace unavailable".into());
+        }
+        Ok(organization.id.clone())
+    }
+
     pub fn has_organizations(&self) -> bool {
         !self.organizations.is_empty()
     }
@@ -241,7 +312,13 @@ impl WorkspaceCatalog {
                 let route = server
                     .routes
                     .iter()
-                    .find(|route| route.kind == "direct" && route.device_id.is_none());
+                    .find(|route| route.kind == "local" && route.device_id.is_some())
+                    .or_else(|| {
+                        server
+                            .routes
+                            .iter()
+                            .find(|route| route.kind == "direct" && route.device_id.is_none())
+                    });
                 if server.state != "ready" {
                     continue;
                 }
@@ -249,6 +326,22 @@ impl WorkspaceCatalog {
                     continue;
                 };
                 if !uuid(&route.id) {
+                    return Err(ERROR.into());
+                }
+                let route_url = normalize_server_url(&route.address)?;
+                if (route.kind == "local"
+                    && !matches!(route_url.host_str(), Some("127.0.0.1" | "[::1]")))
+                    || (route.kind == "direct"
+                        && (route_url.scheme() != "https"
+                            || route_url.host_str().is_some_and(|host| {
+                                host == "localhost"
+                                    || host.ends_with(".localhost")
+                                    || host
+                                        .trim_matches(['[', ']'])
+                                        .parse::<std::net::IpAddr>()
+                                        .is_ok_and(|ip| ip.is_loopback())
+                            })))
+                {
                     return Err(ERROR.into());
                 }
                 for workspace in server.workspaces {
@@ -580,6 +673,16 @@ fn installation_command(
 }
 
 impl Directory {
+    #[cfg(test)]
+    pub(crate) fn for_test(endpoint: Url) -> Self {
+        Self {
+            endpoint,
+            client: Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap(),
+        }
+    }
     pub fn new() -> Result<Self, String> {
         Ok(Self {
             endpoint: Url::parse(API).expect("The Accounts directory endpoint is fixed"),
@@ -636,8 +739,35 @@ impl Directory {
             .map_err(|_| ERROR)?;
         let catalog: WorkspaceCatalog =
             json(self.send(Method::GET, endpoint, token, None).await?).await?;
+        catalog.clone().for_device(None).workspaces()?;
+        Ok(catalog)
+    }
+
+    pub async fn catalog_for_device(
+        &self,
+        token: &str,
+        device_id: &str,
+    ) -> Result<WorkspaceCatalog, String> {
+        if !uuid(device_id) {
+            return Err(ERROR.into());
+        }
+        let catalog = self.catalog(token).await?.for_device(Some(device_id));
         catalog.clone().workspaces()?;
         Ok(catalog)
+    }
+
+    pub async fn identity_request<T: DeserializeOwned>(
+        &self,
+        token: &str,
+        method: Method,
+        path: &str,
+        body: serde_json::Value,
+    ) -> Result<T, String> {
+        if !path.starts_with("/api/identity/v2/") {
+            return Err(ERROR.into());
+        }
+        let endpoint = self.endpoint.join(path).map_err(|_| ERROR)?;
+        json(self.send(method, endpoint, token, Some(body)).await?).await
     }
 
     pub async fn set_default_organization(
@@ -668,8 +798,19 @@ impl Directory {
         Ok(())
     }
 
+    #[cfg(test)]
     pub async fn workspaces(&self, token: &str) -> Result<Vec<Workspace>, String> {
         self.catalog(token).await?.workspaces()
+    }
+
+    pub async fn workspaces_for_device(
+        &self,
+        token: &str,
+        device_id: &str,
+    ) -> Result<Vec<Workspace>, String> {
+        self.catalog_for_device(token, device_id)
+            .await?
+            .workspaces()
     }
 
     pub async fn create_installation(&self, token: &str) -> Result<InstallationCommand, String> {
@@ -1395,6 +1536,91 @@ mod tests {
                 "workspaces": [{"id": DEVICE, "name": "Studio", "state": "ready", "canOpen": true, "role": "member"}]
             }]
         }]})
+    }
+
+    #[test]
+    fn local_workspace_routes_are_only_available_on_the_registered_device() {
+        let mut value = workspace_catalog();
+        let local = "http://127.0.0.1:45173";
+        value["organizations"][0]["servers"][0]["routes"] = serde_json::json!([
+            {"id": DEVICE, "kind": "local", "address": local, "deviceId": DEVICE}
+        ]);
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(catalog
+            .clone()
+            .for_device(None)
+            .workspaces()
+            .unwrap()
+            .is_empty());
+        assert!(catalog
+            .clone()
+            .for_device(Some("00000000-0000-4000-8000-000000000002"))
+            .workspaces()
+            .unwrap()
+            .is_empty());
+        let workspaces = catalog.for_device(Some(DEVICE)).workspaces().unwrap();
+        assert_eq!(workspaces.len(), 1);
+        assert_eq!(workspaces[0].url, local);
+    }
+
+    #[test]
+    fn refreshing_a_local_route_preserves_other_routes_and_requires_the_exact_installation() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["servers"][0]["routes"].as_array_mut().unwrap().push(serde_json::json!({
+            "id": DEVICE, "kind": "local", "address": "http://127.0.0.1:45174", "deviceId": DEVICE
+        }));
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        let target = catalog
+            .clone()
+            .workspaces()
+            .unwrap()
+            .pop()
+            .unwrap()
+            .target
+            .unwrap();
+        let origin = Url::parse("http://127.0.0.1:45173").unwrap();
+        let routes = catalog
+            .local_installation_routes(&target, &origin, DEVICE)
+            .unwrap();
+        assert_eq!(routes.len(), 2);
+        assert_eq!(routes[0]["kind"], "direct");
+        assert_eq!(routes[1]["address"], "http://127.0.0.1:45173");
+        assert_eq!(routes[1]["deviceId"], DEVICE);
+        let mut stale = target.clone();
+        stale.binding_version += 1;
+        assert!(catalog
+            .local_installation_routes(&stale, &origin, DEVICE)
+            .is_err());
+        stale = target.clone();
+        stale.key_fingerprint = "b".repeat(64);
+        assert!(catalog
+            .local_installation_routes(&stale, &origin, DEVICE)
+            .is_err());
+        assert!(catalog
+            .local_installation_routes(
+                &target,
+                &Url::parse("http://elsewhere.example.test").unwrap(),
+                DEVICE
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn local_installation_requires_an_explicit_or_default_administrable_organization() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["role"] = serde_json::json!("admin");
+        let first = value["organizations"][0]["id"].as_str().unwrap().to_owned();
+        let mut second = value["organizations"][0].clone();
+        second["id"] = serde_json::json!("00000000-0000-4000-8000-000000000002");
+        value["organizations"].as_array_mut().unwrap().push(second);
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        assert!(catalog.local_organization(None).is_err());
+        assert_eq!(catalog.local_organization(Some(&first)).unwrap(), first);
+        assert!(catalog.local_organization(Some("unknown")).is_err());
+        value["defaultOrganizationId"] = serde_json::json!(first);
+        value["organizations"][0]["role"] = serde_json::json!("member");
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(catalog.local_organization(None).is_err());
     }
 
     #[tokio::test]

@@ -169,6 +169,7 @@ import { mountAccountExportRoute } from "#modules/accounts/account-export";
 import { mountAccountImportRoute } from "#modules/accounts/account-import";
 import { expireNonOidcSessions } from "#modules/accounts/accounts-only-sessions";
 import { mountAuthCallback } from "#modules/accounts/auth-callback";
+import { mountDesktopInstallation } from "#modules/accounts/desktop-installation";
 import { managedAccountKeyForRequest } from "#modules/accounts/managed-account";
 import { createBillingService } from "#modules/billing/billing";
 import { mountBillingRoutes } from "#modules/billing/billing-webhook";
@@ -201,6 +202,7 @@ import {
 import { createMessagingReceipts } from "#modules/messaging/messaging-receipts";
 import { mountMessagingWebhookRoutes } from "#modules/messaging/messaging-webhook";
 import { mountWebhookHttpRoutes } from "#modules/messaging/webhook";
+import { setAIAdministrator } from "#modules/models/ai-administrators";
 import { mountAppAssociation, nativePasskeys } from "#modules/platform/app-association";
 import { authorizedResponse } from "#modules/platform/authorized-response";
 import { clientBuildMiddleware, readDeployedWebBuild } from "#modules/platform/client-build";
@@ -621,7 +623,11 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   ]);
   integrationSettings.warmDirectories();
   if (env.passwordAuth === false && (env.oidc || env.accountsEnabled)) {
-    await expireNonOidcSessions(prisma, env.oidc?.issuer ?? accountsIssuer, env.desktopAccountKey);
+    await expireNonOidcSessions(
+      prisma,
+      env.oidc?.issuer ?? accountsIssuer,
+      installation && (await installation.registered()) ? undefined : env.desktopAccountKey,
+    );
   }
   const pushTokens = new PrismaPushTokenStore(prisma, env.encryptionKey);
   const notifications =
@@ -1046,12 +1052,12 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   app.use("*", async (c, next) => {
     if (
       !env.accountsEnabled ||
-      env.desktopAccountKey ||
       c.req.path.startsWith("/rpc/") ||
       c.req.path.startsWith("/api/auth/native/") ||
       c.req.path === "/api/auth/sign-out"
     )
       return next();
+    if (env.desktopAccountKey && !(await installation?.registered())) return next();
     if (!c.req.header("cookie") && !c.req.header("authorization")) return next();
     const session = await runAsSystem("workspace session", () =>
       auth.api.getSession({ headers: c.req.raw.headers }),
@@ -1149,6 +1155,19 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     const response = await auth.handler(withClientIp(emptyAuthBodyAsJson(c.req.raw), ip));
     await auditAuthResponse(path, ip, response);
     return response;
+  });
+  mountDesktopInstallation(app, {
+    token: env.desktopStackToken,
+    accountKey: env.desktopAccountKey,
+    installation,
+    authority: workspaceAuthority,
+    delegate: (accountKey, fingerprint, expectedBindingVersion) =>
+      setAIAdministrator(prisma, {
+        accountKey,
+        fingerprint,
+        expectedBindingVersion,
+        enabled: true,
+      }),
   });
   mountLocalComputerHost(app, {
     token: env.desktopStackToken,
