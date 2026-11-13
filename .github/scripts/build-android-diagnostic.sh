@@ -5,7 +5,7 @@
 set -euo pipefail
 gradle="${1:?Gradle executable is required}"
 mirror="${2:?Maven mirror init script is required}"
-args=(app:assembleRelease -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
+args=(app:assembleRelease :orkbot-notifications:testDebugUnitTest -PreactNativeArchitectures=arm64-v8a --no-daemon --max-workers=2
   "-Dorg.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=1g")
 if "$gradle" "${args[@]}" --init-script "$mirror"; then
   exit 0

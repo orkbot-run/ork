@@ -1,10 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -33,11 +34,25 @@ function workflowJob(name: string): string {
 
 describe("Android APK release workflow", () => {
   it("supports on-demand and reusable workflows with diagnostic defaults", () => {
-    expect(workflow).toMatch(/^on:\n {2}workflow_dispatch:/m);
+    expect(workflow).toMatch(/^on:/m);
+    expect(workflow).toMatch(/^ {2}workflow_dispatch:/m);
     expect(workflow).toMatch(/^ {2}workflow_call:/m);
     const triggers = workflow.split("\npermissions:")[0];
     expect(triggers?.match(/default: diagnostic/g)).toHaveLength(2);
-    expect(triggers).not.toMatch(/^\s+(push|pull_request):/m);
+    expect(triggers).toContain("push:\n    branches: [main]");
+    expect(triggers).toContain("pull_request:\n    paths: *android_build_paths");
+    for (const source of [
+      "apps/mobile/**",
+      "packages/chat-ui/**",
+      "packages/client-transport/**",
+      "packages/contracts/**",
+      "packages/core/**",
+      "packages/logging/**",
+      "packages/ui-tokens/**",
+      "packages/ui-web/**",
+      "pnpm-lock.yaml",
+    ])
+      expect(triggers).toContain(source);
     expect(workflow).toContain("permissions:\n  contents: read");
     expect(workflow).toContain("if: github.ref == 'refs/heads/main'");
     expect(workflow).toContain("persist-credentials: false");
@@ -58,9 +73,46 @@ describe("Android APK release workflow", () => {
       path.resolve(import.meta.dirname, "../../../.github/scripts/build-android-diagnostic.sh"),
       "utf8",
     );
-    expect(script).toContain("app:assembleRelease -PreactNativeArchitectures=arm64-v8a");
+    expect(script).toContain("app:assembleRelease :orkbot-notifications:testDebugUnitTest");
+    expect(script).toContain("-PreactNativeArchitectures=arm64-v8a");
     expect(diagnostic).toContain("actions/upload-artifact@");
     expect(diagnostic).toContain("outputs/apk/release/app-release.apk");
+    expect(diagnostic).toContain("verify-android-apk.sh");
+    expect(workflowJob("configuration")).not.toContain("secrets.");
+  });
+
+  it("rebuilds Android when any resolved mobile workspace changes", () => {
+    const repository = path.resolve(import.meta.dirname, "../../..");
+    const workspaces = new Map<string, string>();
+    for (const entry of readdirSync(path.join(repository, "packages"))) {
+      const directory = `packages/${entry}`;
+      const manifest = path.join(repository, directory, "package.json");
+      if (!existsSync(manifest)) continue;
+      const { name } = JSON.parse(readFileSync(manifest, "utf8"));
+      workspaces.set(name, directory);
+    }
+    // Leaf workspaces can be absent from pnpm's importer list, so read the declared runtime graph.
+    const dependencies = new Set<string>();
+    function visit(directory: string) {
+      if (dependencies.has(directory)) return;
+      dependencies.add(directory);
+      const manifest = JSON.parse(
+        readFileSync(path.join(repository, directory, "package.json"), "utf8"),
+      );
+      for (const [name, version] of Object.entries({
+        ...manifest.dependencies,
+        ...manifest.optionalDependencies,
+      })) {
+        if (typeof version !== "string" || !version.startsWith("workspace:")) continue;
+        const target = workspaces.get(name);
+        if (!target) throw new Error(`Unknown workspace dependency: ${name}`);
+        visit(target);
+      }
+    }
+    visit("apps/mobile");
+    expect(dependencies.has("packages/avatar")).toBe(true);
+    const triggers = workflow.split("\npermissions:")[0];
+    for (const dependency of dependencies) expect(triggers).toContain(`- ${dependency}/**`);
   });
 
   it.each([
@@ -103,6 +155,64 @@ exit "$TEST_FALLBACK_FAIL"
       expect(calls).toHaveLength(scenario.expectedCalls);
       expect(calls[0]).toContain("--init-script /tmp/mirror.init.gradle");
       if (calls.length === 2) expect(calls[1]).not.toContain("--init-script");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { fault: "none", succeeds: true },
+    { fault: "signature", succeeds: false },
+    { fault: "package", succeeds: false },
+    { fault: "missing-library", succeeds: false },
+    { fault: "invalid-library", succeeds: false },
+    { fault: "renamed-binding", succeeds: false },
+    { fault: "corrupt-archive", succeeds: false },
+    { fault: "missing-dex", succeeds: false },
+  ])("qualifies the APK and rejects broken native packaging: $fault", ({ fault, succeeds }) => {
+    const root = mkdtempSync(path.join(tmpdir(), "ork-apk-verification-"));
+    try {
+      const payload = path.join(root, "payload");
+      const libraries = path.join(payload, "lib/arm64-v8a");
+      const tools = path.join(root, "sdk/build-tools/36.0.0");
+      mkdirSync(libraries, { recursive: true });
+      mkdirSync(tools, { recursive: true });
+      if (fault !== "missing-dex") {
+        writeFileSync(path.join(payload, "classes.dex"), "synthetic dex fixture");
+      }
+      for (const name of ["libork_installation_transport.so", "libjnidispatch.so"]) {
+        if (fault === "missing-library" && name === "libjnidispatch.so") continue;
+        writeFileSync(
+          path.join(libraries, name),
+          fault === "invalid-library" ? "invalid" : Buffer.from([0x7f, 0x45, 0x4c, 0x46]),
+        );
+      }
+      const apk = path.join(root, "fixture.apk");
+      execFileSync("zip", ["-qr", apk, "."], { cwd: payload });
+      if (fault === "corrupt-archive") writeFileSync(apk, "invalid archive");
+      // SDK command boundaries are faked here; the workflow runs real Android tools on the built APK.
+      const commands = {
+        apksigner: `exit ${fault === "signature" ? 1 : 0}`,
+        aapt2: `echo "package: name='${fault === "package" ? "example.wrong" : "run.orkbot.app"}' versionCode='1'"`,
+        dexdump: `cat <<'DEX'
+Class descriptor  : 'Lcom/sun/jna/${fault === "renamed-binding" ? "Renamed" : "Native"};'
+Class descriptor  : 'Luniffi/ork_installation_transport/UniffiLib;'
+Class descriptor  : 'Lorg/rustls/platformverifier/CertificateVerifier;'
+Class descriptor  : 'Lcom/orkbot/transport/OrkTransportModule;'
+DEX`,
+      };
+      for (const [name, body] of Object.entries(commands)) {
+        const file = path.join(tools, name);
+        writeFileSync(file, `#!/usr/bin/env bash\nset -euo pipefail\n${body}\n`);
+        chmodSync(file, 0o755);
+      }
+      const result = spawnSync(
+        "bash",
+        [path.resolve(import.meta.dirname, "../../../.github/scripts/verify-android-apk.sh"), apk],
+        { encoding: "utf8", env: { ...process.env, ANDROID_HOME: path.join(root, "sdk") } },
+      );
+      expect(result.status === 0, result.stderr).toBe(succeeds);
+      if (succeeds) expect(result.stdout).toContain("native bindings verified");
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -167,7 +277,7 @@ exit "$TEST_FALLBACK_FAIL"
     expect(release).toContain("gh release create");
     expect(release).toContain("--profile android-apk");
     const configuration = workflowJob("configuration");
-    expect(configuration).toContain("EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL");
+    expect(configuration).toContain("EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL");
     expect(configuration).toContain('echo "mode=$mode" >> "$GITHUB_OUTPUT"');
     expect(configuration).toMatch(/if \(\( \$\{#missing\[@\]\} \)\); then\n.*\n\s+exit 1/);
   });

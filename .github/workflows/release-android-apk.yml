@@ -9,6 +9,28 @@ env:
   ORK_ACCOUNTS_MOBILE_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_MOBILE_CLIENT_ID }}
 
 on:
+  push:
+    branches: [main]
+    paths: &android_build_paths
+      - .github/workflows/release-android-apk.yml
+      - .github/scripts/*android*
+      - apps/mobile/**
+      - packages/avatar/**
+      - packages/chat-ui/**
+      - packages/client-transport/**
+      - packages/contracts/**
+      - packages/core/**
+      - packages/logging/**
+      - packages/ui-tokens/**
+      - packages/ui-web/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .npmrc
+      - tsconfig*.json
+      - patches/**
+  pull_request:
+    paths: *android_build_paths
   workflow_dispatch:
     inputs:
       mode:
@@ -26,8 +48,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-android-apk
-  cancel-in-progress: false
+  group: release-android-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   configuration:
@@ -42,7 +64,6 @@ jobs:
         env:
           REQUESTED_MODE: ${{ inputs.mode }}
           RELEASE_REF: ${{ github.ref }}
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
           EXPO_OWNER: ${{ vars.EXPO_OWNER }}
           EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
@@ -57,7 +78,7 @@ jobs:
             eas)
               [[ "$RELEASE_REF" == refs/heads/main ]] || { echo "EAS releases must run from main." >&2; exit 1; }
               missing=()
-              for name in EXPO_TOKEN EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL ORK_ACCOUNTS_MOBILE_CLIENT_ID; do
+              for name in EXPO_PROJECT_ID EXPO_OWNER EXPO_PUBLIC_API_URL ORK_ACCOUNTS_MOBILE_CLIENT_ID; do
                 [[ -n "${!name}" ]] || missing+=("$name")
               done
               if (( ${#missing[@]} )); then
@@ -95,6 +116,8 @@ jobs:
           java-version: 17
       - uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4.4.3
       - run: pnpm install --frozen-lockfile
+      - name: Check Android build controls
+        run: pnpm exec vitest run apps/mobile/plugins/with-android-r8.test.js apps/mobile/lib/android-platform-contract.test.ts apps/mobile/lib/release-apk-workflow.test.ts
       - name: Generate local Android project
         run: pnpm --filter @orkbot/mobile exec expo prebuild --platform android --no-install
       - name: Prepare verified Gradle distribution
@@ -108,6 +131,8 @@ jobs:
       - name: Build development-signed standalone APK
         working-directory: apps/mobile/android
         run: bash "$GITHUB_WORKSPACE/.github/scripts/build-android-diagnostic.sh" ./gradlew "$GITHUB_WORKSPACE/.github/scripts/android-maven-mirror.init.gradle"
+      - name: Verify diagnostic APK signature and native bindings
+        run: bash .github/scripts/verify-android-apk.sh apps/mobile/android/app/build/outputs/apk/release/app-release.apk
       - name: Upload diagnostic APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
