@@ -57,6 +57,13 @@ it("embeds one notification extension whose version follows the app across prebu
     expect(
       readFileSync(join(directory, "AgentNotifications/NotificationService.swift"), "utf8"),
     ).toContain("UNNotificationServiceExtension");
+    const entitlements = readFileSync(
+      join(directory, "AgentNotifications/AgentNotifications.entitlements"),
+      "utf8",
+    );
+    expect(entitlements).not.toContain("com.apple.developer.usernotifications.communication");
+    expect(entitlements).toContain("com.apple.security.application-groups");
+    expect(entitlements).toContain("group.run.orkbot.app");
     writeFileSync(file, written);
     expect(() => xcode.project(file).parseSync()).not.toThrow();
   } finally {
@@ -64,7 +71,7 @@ it("embeds one notification extension whose version follows the app across prebu
   }
 });
 
-it("lists the extension for EAS signing with the communication entitlement", () => {
+it("keeps communication capability on the app and shares only the session marker with its extension", () => {
   const app = JSON.parse(readFileSync(join(__dirname, "..", "app.json"), "utf8")).expo;
   const extension = app.extra.eas.build.experimental.ios.appExtensions.find(
     (entry) => entry.targetName === "AgentNotifications",
@@ -73,7 +80,6 @@ it("lists the extension for EAS signing with the communication entitlement", () 
     targetName: "AgentNotifications",
     bundleIdentifier: `${app.ios.bundleIdentifier}.notifications`,
     entitlements: {
-      "com.apple.developer.usernotifications.communication": true,
       "com.apple.security.application-groups": ["group.run.orkbot.app"],
     },
   });

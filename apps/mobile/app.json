@@ -162,8 +162,7 @@
                   "targetName": "AgentNotifications",
                   "bundleIdentifier": "run.orkbot.app.notifications",
                   "entitlements": {
-                    "com.apple.security.application-groups": ["group.run.orkbot.app"],
-                    "com.apple.developer.usernotifications.communication": true
+                    "com.apple.security.application-groups": ["group.run.orkbot.app"]
                   }
                 }
               ]

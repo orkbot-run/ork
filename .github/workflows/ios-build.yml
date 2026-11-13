@@ -1,0 +1,130 @@
+# SPDX-FileCopyrightText: 2026 Ork contributors
+# SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
+
+name: ios-build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/avatar/**'
+      - 'packages/chat-ui/**'
+      - 'packages/client-transport/**'
+      - 'packages/contracts/**'
+      - 'packages/core/**'
+      - 'packages/logging/**'
+      - 'packages/ui-tokens/**'
+      - 'packages/ui-web/**'
+      - 'patches/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+      - 'tsconfig*.json'
+      - '.github/workflows/ios-build.yml'
+      - '.github/scripts/app-store-review*.mjs'
+      - '.github/scripts/ios-release.mjs'
+  pull_request:
+    paths:
+      - 'apps/mobile/**'
+      - 'packages/avatar/**'
+      - 'packages/chat-ui/**'
+      - 'packages/client-transport/**'
+      - 'packages/contracts/**'
+      - 'packages/core/**'
+      - 'packages/logging/**'
+      - 'packages/ui-tokens/**'
+      - 'packages/ui-web/**'
+      - 'patches/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.npmrc'
+      - 'tsconfig*.json'
+      - '.github/workflows/ios-build.yml'
+      - '.github/scripts/app-store-review*.mjs'
+      - '.github/scripts/ios-release.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  simulator:
+    name: Build iOS simulator app
+    runs-on: xcode-27
+    timeout-minutes: 120
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+      EXPO_NO_TELEMETRY: '1'
+      EXPO_NO_DOTENV: '1'
+      CI: '1'
+      EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL || 'https://server.example.test' }}
+      ORK_ACCOUNTS_ISSUER: ${{ vars.ORK_ACCOUNTS_ISSUER || 'https://api.ork.run' }}
+      ORK_ACCOUNTS_MOBILE_CLIENT_ID: ${{ vars.ORK_ACCOUNTS_MOBILE_CLIENT_ID || 'ios-simulator-ci' }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Verify Xcode and install native Rust compiler
+        run: |
+          xcodebuild -version
+          xcodebuild -version | head -1 | grep -E '^Xcode (27\.[1-9]|2[89]\.|[3-9][0-9]\.)'
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check mobile types and build controls
+        run: |
+          pnpm --filter @orkbot/mobile check
+          node --test .github/scripts/app-store-review.test.mjs
+      - name: Generate native iOS project and installation transport
+        run: pnpm --filter @orkbot/mobile exec expo prebuild --platform ios --no-install
+      - name: Install native pods
+        working-directory: apps/mobile/ios
+        run: pod install
+      - name: Build unsigned simulator app with embedded JavaScript
+        run: |
+          xcodebuild \
+            -workspace apps/mobile/ios/Ork.xcworkspace \
+            -scheme Ork \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ork-ios-simulator-build" \
+            -resultBundlePath "$RUNNER_TEMP/ork-ios-simulator.xcresult" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" DEVELOPMENT_TEAM="" \
+            RCT_NO_LAUNCH_PACKAGER=1
+      - name: Verify and package the simulator app
+        run: |
+          app="$RUNNER_TEMP/ork-ios-simulator-build/Build/Products/Release-iphonesimulator/Ork.app"
+          test -s "$app/Ork"
+          test -s "$app/main.jsbundle"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Info.plist")" = run.orkbot.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneSimulator
+          ditto -c -k --sequesterRsrc --keepParent "$app" "$RUNNER_TEMP/Ork-ios-simulator.zip"
+      - name: Upload simulator app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-ios-simulator-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/Ork-ios-simulator.zip
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload failed build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ork-ios-simulator-diagnostics-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ork-ios-simulator.xcresult
+          if-no-files-found: ignore
+          retention-days: 3

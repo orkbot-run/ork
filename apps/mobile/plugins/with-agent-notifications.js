@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
-// Inherited Apache material is preserved; the notification session marker entitlement is an Ork addition.
+// Inherited Apache material is preserved; notification capability scoping is an Ork change.
 
 const fs = require("node:fs");
 const path = require("node:path");
@@ -9,7 +9,6 @@ const { addPbxGroupWithOwnFiles } = require("./pbx-group");
 
 const TARGET = "AgentNotifications";
 const SOURCE = path.join(__dirname, "..", "native", "notifications", "NotificationService.swift");
-const ENTITLEMENT = "com.apple.developer.usernotifications.communication";
 
 const INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -29,7 +28,7 @@ const INFO_PLIST = `<?xml version="1.0" encoding="UTF-8"?>
 
 const ENTITLEMENTS = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>${ENTITLEMENT}</key><true/>
+<plist version="1.0"><dict>
 <key>com.apple.security.application-groups</key><array><string>group.run.orkbot.app</string></array>
 </dict></plist>
 `;
