@@ -26,6 +26,7 @@ export * from "./events.js";
 export * from "./history.js";
 export * from "./identity.js";
 export * from "./ids.js";
+export * from "./installation-transport.js";
 export * from "./integration-settings.js";
 export * from "./local-settings.js";
 export * from "./markdown-text.js";

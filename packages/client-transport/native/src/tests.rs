@@ -6,7 +6,7 @@ use rcgen::{CertificateParams, DnType, KeyPair, PublicKeyData};
 use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::{ServerConfig, ServerConnection};
 
-fn identity(expired: bool) -> (Vec<u8>, Vec<u8>, String) {
+pub(crate) fn identity(expired: bool) -> (Vec<u8>, Vec<u8>, String) {
     let key = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).unwrap();
     let digest = Sha256::digest(key.subject_public_key_info());
     let fingerprint: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -20,7 +20,7 @@ fn identity(expired: bool) -> (Vec<u8>, Vec<u8>, String) {
     (cert.der().to_vec(), key.serialize_der(), fingerprint)
 }
 
-fn server(certificate: Vec<u8>, key: Vec<u8>) -> ServerConnection {
+pub(crate) fn server_config(certificate: Vec<u8>, key: Vec<u8>) -> Arc<ServerConfig> {
     let mut config =
         ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
             .with_protocol_versions(&[&rustls::version::TLS13])
@@ -32,7 +32,11 @@ fn server(certificate: Vec<u8>, key: Vec<u8>) -> ServerConnection {
             )
             .unwrap();
     config.alpn_protocols = vec![b"http/1.1".to_vec()];
-    ServerConnection::new(Arc::new(config)).unwrap()
+    Arc::new(config)
+}
+
+fn server(certificate: Vec<u8>, key: Vec<u8>) -> ServerConnection {
+    ServerConnection::new(server_config(certificate, key)).unwrap()
 }
 
 fn server_receive(server: &mut ServerConnection, encrypted: &[u8]) -> (Vec<u8>, Vec<u8>) {

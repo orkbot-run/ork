@@ -6,6 +6,7 @@
 
 import { hostname } from "node:os";
 import { join } from "node:path";
+import { getRequestListener } from "@hono/node-server";
 import type {
   AgentContextStrategy,
   AgentRuntime,
@@ -107,6 +108,7 @@ import {
   verifyModelServesAgents,
   withSecretPersistence,
 } from "@orkbot/adapters";
+import { InstallationTransport } from "@orkbot/adapters/installation-transport";
 import {
   authorizeWorkspaceSession,
   createAuth,
@@ -1772,6 +1774,13 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
           realtime,
         )
       : undefined;
+  const installationTransport = installation
+    ? new InstallationTransport({
+        origin: env.webOrigin,
+        identity: () => installation.transportIdentity(),
+        listener: getRequestListener(app.fetch),
+      })
+    : undefined;
   return {
     app,
     prisma,
@@ -1786,10 +1795,19 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     runtime,
     awaitIdle: inMemoryJobs ? () => inMemoryJobs.awaitIdle() : undefined,
     backgroundFailures: inMemoryJobs ? () => inMemoryJobs.failureCounts() : undefined,
-    handleUpgrade: userDeviceHub?.handleUpgrade,
+    handleUpgrade:
+      installationTransport || userDeviceHub
+        ? (request, socket, head) => {
+            if (installationTransport?.accepts(request))
+              installationTransport.handleUpgrade(request, socket, head);
+            else if (userDeviceHub) userDeviceHub.handleUpgrade(request, socket, head);
+            else socket.destroy();
+          }
+        : undefined,
     stop: async () => {
       // Handlers still running would otherwise query the pool after it ends.
       const requestsSettled = settleWithTimeout(inFlight.settled(), REQUEST_DRAIN_MS);
+      installationTransport?.close();
       await stopServerClaim?.();
       await stopWorkspaceAuthority?.();
       serverAI?.dispose();

@@ -12,7 +12,8 @@
       "types": "./src/index.ts",
       "development": "./src/index.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./installation-tls": "./src/installation-tls.ts"
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
@@ -26,11 +27,13 @@
     "@orkbot/core": "workspace:*",
     "@orkbot/db": "workspace:*",
     "@orkbot/ui-tokens": "workspace:*",
+    "@peculiar/x509": "1.14.3",
     "better-auth": "1.7.16",
     "jose": "6.2.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-email": "6.11.6",
+    "reflect-metadata": "0.2.2",
     "zod": "4.6.7"
   },
   "devDependencies": {

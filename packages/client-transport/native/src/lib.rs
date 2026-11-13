@@ -9,12 +9,15 @@ use rustls::{ClientConfig, ClientConnection, RootCertStore};
 use sha2::{Digest, Sha256};
 use x509_parser::prelude::{FromDer, X509Certificate};
 
+mod http;
+pub use http::{HttpHeader, HttpRequest, HttpResponseHead, InstallationHttp};
+
 uniffi::setup_scaffolding!();
 
 const MAX_CHUNK: usize = 256 * 1024;
 const BUFFER_LIMIT: usize = 64 * 1024;
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
+#[derive(Clone, Debug, thiserror::Error, uniffi::Error)]
 pub enum TransportError {
     #[error("Invalid installation certificate or key fingerprint")]
     InvalidIdentity,
@@ -24,6 +27,16 @@ pub enum TransportError {
     Closed,
     #[error("The transport chunk is too large")]
     ChunkTooLarge,
+    #[error("Invalid installation HTTP request")]
+    InvalidRequest,
+    #[error("The installation HTTP request was refused")]
+    HttpRefused,
+    #[error("The installation HTTP request has already started")]
+    AlreadyStarted,
+    #[error("The installation HTTP request has not started")]
+    NotStarted,
+    #[error("The installation HTTP request was canceled")]
+    Canceled,
 }
 
 #[derive(uniffi::Record)]
@@ -72,32 +85,54 @@ fn installation_name(value: &str) -> Result<String, TransportError> {
     ))
 }
 
+fn client_config(
+    certificate: Vec<u8>,
+    key_fingerprint: &str,
+) -> Result<(Arc<ClientConfig>, ServerName<'static>), TransportError> {
+    if certificate.len() > 16 * 1024 || fingerprint(&certificate)? != key_fingerprint {
+        return Err(TransportError::InvalidIdentity);
+    }
+    let name = installation_name(key_fingerprint)?;
+    let mut roots = RootCertStore::empty();
+    roots
+        .add(CertificateDer::from(certificate))
+        .map_err(|_| TransportError::InvalidIdentity)?;
+    let provider = rustls::crypto::ring::default_provider();
+    let mut config = ClientConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .map_err(|_| TransportError::TlsRefused)?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    config.alpn_protocols = vec![b"http/1.1".to_vec()];
+    config.enable_early_data = false;
+    config.resumption = rustls::client::Resumption::disabled();
+    Ok((
+        Arc::new(config),
+        ServerName::try_from(name).map_err(|_| TransportError::InvalidIdentity)?,
+    ))
+}
+
+fn verify_peer(connection: &ClientConnection, expected: &str) -> Result<(), TransportError> {
+    let peer = connection
+        .peer_certificates()
+        .and_then(|certificates| certificates.first())
+        .ok_or(TransportError::TlsRefused)?;
+    if fingerprint(peer.as_ref())? != expected
+        || connection.protocol_version() != Some(rustls::ProtocolVersion::TLSv1_3)
+        || connection.alpn_protocol() != Some(b"http/1.1")
+    {
+        return Err(TransportError::TlsRefused);
+    }
+    Ok(())
+}
+
 #[uniffi::export]
 impl InstallationTls {
     #[uniffi::constructor]
     pub fn new(certificate: Vec<u8>, key_fingerprint: String) -> Result<Arc<Self>, TransportError> {
-        if certificate.len() > 16 * 1024 || fingerprint(&certificate)? != key_fingerprint {
-            return Err(TransportError::InvalidIdentity);
-        }
-        let name = installation_name(&key_fingerprint)?;
-        let mut roots = RootCertStore::empty();
-        roots
-            .add(CertificateDer::from(certificate))
-            .map_err(|_| TransportError::InvalidIdentity)?;
-        let provider = rustls::crypto::ring::default_provider();
-        let mut config = ClientConfig::builder_with_provider(Arc::new(provider))
-            .with_protocol_versions(&[&rustls::version::TLS13])
-            .map_err(|_| TransportError::TlsRefused)?
-            .with_root_certificates(roots)
-            .with_no_client_auth();
-        config.alpn_protocols = vec![b"http/1.1".to_vec()];
-        config.enable_early_data = false;
-        config.resumption = rustls::client::Resumption::disabled();
-        let mut connection = ClientConnection::new(
-            Arc::new(config),
-            ServerName::try_from(name).map_err(|_| TransportError::InvalidIdentity)?,
-        )
-        .map_err(|_| TransportError::TlsRefused)?;
+        let (config, name) = client_config(certificate, &key_fingerprint)?;
+        let mut connection =
+            ClientConnection::new(config, name).map_err(|_| TransportError::TlsRefused)?;
         connection.set_buffer_limit(Some(BUFFER_LIMIT));
         Ok(Arc::new(Self {
             channel: Mutex::new(Channel {
@@ -137,18 +172,7 @@ impl InstallationTls {
             };
             peer_closed |= state.peer_has_closed();
             if !channel.connection.is_handshaking() && !channel.verified {
-                let peer = channel
-                    .connection
-                    .peer_certificates()
-                    .and_then(|certificates| certificates.first())
-                    .ok_or(TransportError::TlsRefused)?;
-                if fingerprint(peer.as_ref())? != channel.fingerprint {
-                    channel.closed = true;
-                    return Err(TransportError::TlsRefused);
-                }
-                if channel.connection.protocol_version() != Some(rustls::ProtocolVersion::TLSv1_3)
-                    || channel.connection.alpn_protocol() != Some(b"http/1.1")
-                {
+                if verify_peer(&channel.connection, &channel.fingerprint).is_err() {
                     channel.closed = true;
                     return Err(TransportError::TlsRefused);
                 }

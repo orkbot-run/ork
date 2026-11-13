@@ -8,6 +8,7 @@ import {
   randomUUID,
   sign,
   verify,
+  X509Certificate,
 } from "node:crypto";
 import type { WorkspaceProjection } from "@orkbot/contracts";
 import {
@@ -388,6 +389,32 @@ describe.skipIf(!enabled)(
             await prisma!.organization.delete({ where: { id: createdOrganization } });
           });
       }
+    });
+
+    it("opens transport only after pairing and keeps the enrolled key across certificate renewal", async () => {
+      await installation.ensureIdentity();
+      await expect(installation.transportIdentity()).rejects.toThrow("unavailable");
+      await enroll();
+      const identity = await installation.transportIdentity();
+      const repeated = await installation.transportIdentity();
+      const row = await system(() =>
+        prisma!.installationIdentity.findUniqueOrThrow({ where: { id: "local" } }),
+      );
+      const certificate = new X509Certificate(Buffer.from(identity.certificate, "base64"));
+      expect(
+        certificate.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
+      ).toBe(row.publicKey);
+      expect(identity).toMatchObject({
+        serverId,
+        bindingVersion: row.bindingVersion,
+        keyFingerprint: row.keyFingerprint,
+      });
+      expect(repeated.certificate).toBe(identity.certificate);
+      expect(identity).not.toHaveProperty("privateKey");
+      await system(() =>
+        prisma!.installationIdentity.update({ where: { id: "local" }, data: { state: "pending" } }),
+      );
+      await expect(installation.transportIdentity()).rejects.toThrow("unavailable");
     });
 
     it("requires explicit mapping when local organizations already contain data", async () => {

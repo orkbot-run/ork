@@ -15,10 +15,20 @@ crate-type = ["lib", "staticlib", "cdylib"]
 rustls = { version = "0.23.46", default-features = false, features = ["std", "ring", "tls12"] }
 sha2 = "0.10"
 thiserror = "2"
-uniffi = "0.32.2"
+uniffi = { version = "0.32.2", features = ["tokio"] }
 x509-parser = "0.18"
+bytes = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tokio = { version = "1", features = ["io-util", "sync", "rt-multi-thread", "time", "macros"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+url = "2"
 
 [dev-dependencies]
+hyper = { version = "1", features = ["server", "http1"] }
+tokio = { version = "1", features = ["net"] }
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring"] }
 
 [features]

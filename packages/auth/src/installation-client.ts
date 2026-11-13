@@ -30,6 +30,7 @@ import { runAsSystem } from "@orkbot/db";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import type { JWTPayload, JWTVerifyGetKey } from "jose";
 import { createRemoteJWKSet, customFetch, jwtVerify } from "jose";
+import { createInstallationTlsIdentity } from "./installation-tls.js";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const NONCE = /^[A-Za-z0-9_-]{43}$/;
@@ -65,6 +66,11 @@ export class InstallationClient {
   private readonly encryptionKey: string;
   private readonly request: typeof fetch;
   private readonly keys: JWTVerifyGetKey;
+  private tlsIdentity?: {
+    fingerprint: string;
+    expiresAt: number;
+    result: ReturnType<typeof createInstallationTlsIdentity>;
+  };
   constructor(
     private readonly prisma: PrismaClient,
     private readonly options: {
@@ -256,6 +262,37 @@ export class InstallationClient {
       keyFingerprint: row.keyFingerprint,
       bindingVersion: row.bindingVersion,
     };
+  }
+
+  async transportIdentity() {
+    const row = await this.load();
+    if (row.state !== "ready" || !row.serverId || !row.centralOrganizationId)
+      throw failure("Installation transport is unavailable");
+    if (
+      !this.tlsIdentity ||
+      this.tlsIdentity.fingerprint !== row.keyFingerprint ||
+      this.tlsIdentity.expiresAt <= Date.now()
+    ) {
+      this.tlsIdentity = {
+        fingerprint: row.keyFingerprint,
+        expiresAt: Date.now() + 3_600_000,
+        result: this.privateKey(row).then((key) =>
+          createInstallationTlsIdentity(key, row.keyFingerprint),
+        ),
+      };
+    }
+    const cached = this.tlsIdentity;
+    try {
+      return {
+        serverId: row.serverId,
+        bindingVersion: row.bindingVersion,
+        keyFingerprint: row.keyFingerprint,
+        ...(await cached.result),
+      };
+    } catch (error) {
+      if (this.tlsIdentity === cached) this.tlsIdentity = undefined;
+      throw error;
+    }
   }
 
   /** Resume the same installation after a lost approval or acknowledgement response. */
