@@ -3,6 +3,7 @@
 
 import { createHash, generateKeyPairSync, X509Certificate } from "node:crypto";
 import { EventEmitter, once } from "node:events";
+import type { IncomingMessage } from "node:http";
 import { Agent, createServer, request } from "node:http";
 import type { TLSSocket } from "node:tls";
 import { connect } from "node:tls";
@@ -156,6 +157,15 @@ async function openResponse(
     },
     agent,
   });
+  let received: IncomingMessage | undefined;
+  result.once("response", (response) => {
+    received = response;
+  });
+  // once(response) owns errors only until headers arrive. Preserve response failures
+  // afterward, while a completed body may be followed by a harmless TLS close error.
+  result.on("error", (error) => {
+    if (received && !received.complete) received.destroy(error);
+  });
   const ready = once(result, "response");
   if (body) {
     for (let offset = 0; offset < body.length; offset += 32 * 1024) {
@@ -219,9 +229,13 @@ describe("installation transport", () => {
     const f = await fixture();
     const socket = await channel(f);
     await once(socket, "secureConnect");
-    const result = await send(socket, {}, undefined, "/large");
-    expect(result.status).toBe(200);
-    expect(result.content).toBe("X".repeat(2 * 1024 * 1024));
+    const response = await openResponse(socket, {}, undefined, "/large");
+    // Close the outer channel before HTTP's own end listener flushes TLS shutdown.
+    response.prependOnceListener("end", () => f.clients[0]!.close());
+    let content = "";
+    for await (const part of response) content += part;
+    expect(response.statusCode).toBe(200);
+    expect(content).toBe("X".repeat(2 * 1024 * 1024));
   });
 
   it("closes the TLS client when its WebSocket closes before the TLS shutdown write", async () => {
@@ -234,6 +248,31 @@ describe("installation transport", () => {
     await closed;
     expect(socket.destroyed).toBe(true);
     expect(f.calls).toHaveLength(0);
+  });
+
+  it("rejects an active response when its channel fails after response headers", async () => {
+    const f = await fixture();
+    const socket = await channel(f);
+    await once(socket, "secureConnect");
+    const response = await openResponse(socket, {}, undefined, "/stream");
+    const reading = (async () => {
+      for await (const _part of response) {
+        // Keep consuming the active response until cancellation rejects it.
+      }
+    })();
+    const failed = expect(reading).rejects.toThrow();
+    f.clients[0]!.close();
+    socket.end();
+    await failed;
+    expect(f.calls).toHaveLength(1);
+  });
+
+  it("rejects a request whose channel closes before response headers", async () => {
+    const f = await fixture();
+    const socket = await channel(f);
+    await once(socket, "secureConnect");
+    f.adapter.close();
+    await expect(send(socket)).rejects.toThrow();
   });
 
   it("refuses another logical origin before dispatching a request", async () => {
