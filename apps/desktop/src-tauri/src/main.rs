@@ -3546,7 +3546,7 @@ fn main() {
             );
         }
     }
-    tauri::Builder::default()
+    renderer_host::configure(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, _| {
             if !args.iter().any(|argument| {
                 server_link::parse(argument).is_some()

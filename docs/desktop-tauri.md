@@ -59,13 +59,13 @@ Related SSO popups share the server's session without receiving native authority
 The setup page has separate capabilities, while remote pages receive no direct
 filesystem or shell plugin permissions.
 
-Managed workspaces start from a static loopback document. The server supplies no
-executable page. Rust limits this listener to application document routes, and a
-saved port preserves the local origin after restart while separate account and
-workspace profiles keep browser storage apart. Every request belongs to its
-document. Retiring the document cancels pending work. Delayed callbacks are refused.
-The listener keeps each socket until its peer completes the TCP shutdown, following
-Winsock's requirements for reopening the saved port.
+Managed workspaces start from static markup bundled with the app. The server supplies
+no executable page. On Windows, Tauri serves the document through its `orkrenderer`
+resource protocol, which WebView2 exposes at `http://orkrenderer.localhost`. macOS and
+Linux use a bounded loopback listener with a saved port. Both paths serve only
+application documents. Separate account and workspace profiles keep browser storage
+apart. Every request belongs to its document. Retiring it cancels pending work, and
+delayed callbacks are refused.
 
 Remote workspace selections keep one virtual installation origin and retain both
 connection routes. Desktop first probes the direct route through pinned TLS, then
