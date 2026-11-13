@@ -20,7 +20,7 @@
     "@orkbot/core": "workspace:*",
     "@orkbot/ui-web": "workspace:*",
     "@vercel/functions": "3.10.6",
-    "astro": "7.4.1",
+    "astro": "7.4.7",
     "posthog-js": "1.445.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
