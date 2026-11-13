@@ -534,9 +534,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     prisma,
     secrets,
     {
-      stdioEnabled: env.mcpStdioEnabled,
       allowedCommands: env.mcpStdioAllowedCommands,
       ...env.mcpStdio,
+      stdioEnabled: env.mcpStdioEnabled && !installation,
       discoveryLimits: env.mcpDiscovery,
       network: remoteConnectors,
       events,
@@ -1027,8 +1027,8 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       serverVersion: env.serverVersion,
       integrationsCatalogUrl: env.integrationsCatalogUrl,
       mcpAllowPrivateEndpoint: env.mcpAllowPrivateEndpoint,
-      desktopHostChoiceEnabled: Boolean(env.desktopStackToken),
-      mcpStdioEnabled: env.mcpStdioEnabled,
+      desktopHostChoiceEnabled: Boolean(env.desktopStackToken) && !installation,
+      mcpStdioEnabled: env.mcpStdioEnabled && !installation,
       mcpStdioAllowedCommands: env.mcpStdioAllowedCommands,
     },
   });

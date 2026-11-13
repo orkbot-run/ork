@@ -139,6 +139,7 @@ async function createBaseRunSandbox(
       });
       return settings?.computerHost === "this-mac";
     },
+    opts.hostAccessAllowed,
   );
 }
 
@@ -149,6 +150,7 @@ export class HostAwareSandbox implements SandboxProvider {
     private readonly isolated: SandboxProvider,
     private readonly host: SandboxProvider,
     private readonly hostEnabled: () => Promise<boolean>,
+    private readonly hostAccessAllowed?: () => Promise<boolean>,
   ) {
     if (isolated.pageBrowser || host.pageBrowser) {
       this.pageBrowser = async (computer, request, context) => {
@@ -195,9 +197,15 @@ export class HostAwareSandbox implements SandboxProvider {
         homeKey: input.homeKey,
       }))().catch(() => unavailable);
     const active = input.computer
-      ? this.authorized(input.computer)
-          .then((provider) => inspectComputerCapabilities(provider, input))
-          .catch(() => unavailable)
+      ? (async () => {
+          if (
+            input.computer!.kind === "desktop" &&
+            this.hostAccessAllowed &&
+            !(await this.hostAccessAllowed())
+          )
+            return unavailable;
+          return inspectComputerCapabilities(this.route(input.computer!), input);
+        })().catch(() => unavailable)
       : next;
     return { ...(await active), start: (await next).start };
   }

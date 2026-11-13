@@ -233,7 +233,7 @@ async function main() {
   const allowPrivateEndpoint = process.env.MCP_ALLOW_PRIVATE_ENDPOINT === "true";
   const mcpOAuth = new McpOAuthBroker(prisma, secrets, {}, allowPrivateEndpoint);
   const mcpStdio = {
-    stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
+    stdioEnabled: process.env.MCP_STDIO_ENABLED === "true" && !installation,
     allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
       .split(",")
       .map((v) => v.trim())

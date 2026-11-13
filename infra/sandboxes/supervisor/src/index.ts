@@ -115,6 +115,7 @@ import {
   withKeyedLock,
   workspaceTarget,
 } from "./supervisor-logic.js";
+import { assertWorkspaceComputerIsolation } from "./workspace-isolation.js";
 
 loadRootEnv();
 
@@ -193,6 +194,42 @@ const app = new Hono();
 
 export { app as supervisorApp };
 
+app.all("/workspace/v2/*", async (c) => {
+  if (!hasValidBearerToken(c.req.header("authorization"), supervisorToken))
+    return c.json({ error: "unauthorized" }, 401);
+  const url = new URL(c.req.url);
+  url.pathname = url.pathname.slice("/workspace/v2".length);
+  if (url.pathname !== "/computers" && !url.pathname.startsWith("/computers/")) return c.notFound();
+  const headers = new Headers(c.req.raw.headers);
+  headers.set("x-orkbot-workspace-isolation", "2");
+  const match = /^\/computers\/([^/]+)(.*)$/.exec(url.pathname);
+  const cleanup =
+    match &&
+    ((c.req.method === "DELETE" && ["", "/screen"].includes(match[2]!)) ||
+      (c.req.method === "POST" && match[2] === "/stop"));
+  try {
+    if (!cleanup && computerMounts.length)
+      throw new Error("Workspace computers cannot use shared host mounts");
+    if (match && !cleanup) {
+      const botId = c.req.header("x-orkbot-bot-id");
+      const { info } = await managedContainer(
+        decodeURIComponent(match[1]!),
+        botId,
+        c.req.header("x-orkbot-space-id"),
+      );
+      const runtime = await inspectSupervisorContainer();
+      assertWorkspaceComputerIsolation(
+        info,
+        computerHomeStorage(path.join(dataDir, "homes", botId!), dataDir, runtime),
+      );
+    }
+    return await app.fetch(new Request(url, new Request(c.req.raw, { headers })));
+  } catch (error) {
+    getLogger().warn("workspace_computer.refused", { error });
+    return c.json({ error: "Workspace computer isolation could not be verified" }, 409);
+  }
+});
+
 app.use("*", requestLogging());
 
 export function resolveDockerSocketPath(
@@ -265,6 +302,8 @@ app.post("/computers", async (c) => {
       const existing = await findBotContainer(body.botId, body.spaceId);
       if (existing) {
         const info = await existing.inspect();
+        if (c.req.header("x-orkbot-workspace-isolation") === "2")
+          assertWorkspaceComputerIsolation(info, storage);
         const desired = await docker.getImage(COMPUTER_IMAGE).inspect();
         const controlPublishOk = controlPortPublicationMatches(
           info.HostConfig.PortBindings,

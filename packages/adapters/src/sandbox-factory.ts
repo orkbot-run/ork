@@ -97,6 +97,10 @@ export async function createSandboxProvider(
     );
   }
   const sandboxKind = parsed.data;
+  if (opts.hostAccessAllowed && !["none", "docker", "fake"].includes(sandboxKind))
+    return new NoneSandboxProvider(
+      "Workspace installations require an isolated Docker computer provider.",
+    );
   switch (sandboxKind) {
     case "none":
       return new NoneSandboxProvider();
@@ -220,6 +224,7 @@ export async function createSandboxProvider(
       return new DockerSandboxProvider(
         opts.supervisorUrl ?? "http://127.0.0.1:7091",
         opts.supervisorToken,
+        Boolean(opts.hostAccessAllowed),
       );
     case "desktop":
       assertHostCommandsAllowed();

@@ -24,6 +24,27 @@ const context = {
 };
 
 describe("Docker sandbox", () => {
+  it("never executes a managed command through an older supervisor route", async () => {
+    const legacyExecution = vi.fn();
+    const fetch = vi.fn(async (input: string | URL | Request) => {
+      if (new URL(String(input)).pathname === "/computers/computer/exec") legacyExecution();
+      return new Response("Not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetch);
+    const provider = new DockerSandboxProvider("http://legacy.test", "fixture-token", true);
+    const events: ProcessEvent[] = [];
+    for await (const event of provider.execute(
+      { id: "computer", botId: "bot", kind: "docker", providerRef: "computer" },
+      { argv: ["pwd"] },
+      context,
+    ))
+      events.push(event);
+    expect(events).toContainEqual({ type: "exit", code: 1 });
+    expect(legacyExecution).not.toHaveBeenCalled();
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "http://legacy.test/workspace/v2/computers/computer/exec",
+    );
+  });
   it("refuses an older supervisor before invoking its legacy file listing or read route", async () => {
     const legacyIO = vi.fn();
     const fetch = vi.fn(async (input: string | URL | Request) => {

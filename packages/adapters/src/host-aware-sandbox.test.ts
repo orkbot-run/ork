@@ -59,6 +59,25 @@ describe("host-aware sandbox", () => {
     ).rejects.toThrow("isolated computer provider");
   });
 
+  it.each([
+    "e2b",
+    "novita",
+    "daytona",
+    "createos",
+    "boat",
+    "boxd",
+    "railway",
+    "kubernetes",
+    "incus",
+    "wuying",
+  ])("refuses an unverified workspace isolation boundary for %s", async (kind) => {
+    const sandbox = await createRunSandbox(kind, { hostAccessAllowed: async () => false });
+    expect(sandbox.describe().id).toBe("none");
+    await expect(sandbox.provision({ botId: "home", homePath: "/unused" }, ctx)).rejects.toThrow(
+      "isolated Docker",
+    );
+  });
+
   it("never falls back to backend execution when the native connection is missing", async () => {
     const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
     const sandbox = await createRunSandbox("docker", {
