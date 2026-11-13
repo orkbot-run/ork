@@ -46,7 +46,7 @@ gh workflow run release-mobile.yml --ref main \
   -f build_ios=true -f submit_ios=false -f android_mode=diagnostic
 ```
 
-The runner uses Xcode 27.1 or newer, Node 24 and the existing Rust transport build scripts. It installs dependencies, checks Expo package compatibility and TypeScript, runs release-control tests, performs `expo prebuild --platform ios --no-install`, and installs CocoaPods before archiving for a generic iOS device.
+The runner selects Xcode 27.2 from GitHub's `xcode-27` image, checks the Xcode 27.1 minimum, and uses Node 24 with the existing Rust transport build scripts. It installs dependencies, checks Expo package compatibility and TypeScript, runs release-control tests, performs `expo prebuild --platform ios --no-install`, and installs CocoaPods before archiving for a generic iOS device.
 
 The build fails if the identity or transport pod is missing, native modules are absent from Expo's generated provider, or the compiled device transport library is unavailable. After export, it verifies the app signature, bundle ID, version, embedded JavaScript bundle, native module presence and matching extension versions. The exported app must use the dedicated distribution certificate.
 

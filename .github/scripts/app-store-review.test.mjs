@@ -598,7 +598,9 @@ test("export verification checks extension inventory, versions and distribution 
 test("active workflow keeps iOS on native GitHub build and explicit upload without automatic review or EAS credentials", () => {
   const source = readFileSync(new URL("../workflows/release-mobile.yml", import.meta.url), "utf8");
   const ios = source.split("  ios:\n")[1].split("  android:\n")[0];
-  assert.match(ios, /runs-on: macos-latest/);
+  assert.match(ios, /runs-on: xcode-27/);
+  assert.match(ios, /DEVELOPER_DIR: \/Applications\/Xcode_27\.2\.app\/Contents\/Developer/);
+  assert.match(ios, /grep -E '\^Xcode \(27/);
   assert.match(ios, /expo prebuild --platform ios --no-install/);
   assert.match(ios, /if: inputs.build_ios \|\| inputs.submit_ios/);
   assert.match(ios, /if: always\(\)\n {8}run: node \.github\/scripts\/ios-release\.mjs cleanup/);

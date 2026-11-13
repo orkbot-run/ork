@@ -67,9 +67,10 @@ jobs:
     name: Build signed iOS IPA
     needs: configuration
     if: inputs.build_ios || inputs.submit_ios
-    runs-on: macos-latest
+    runs-on: xcode-27
     timeout-minutes: 180
     env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       EXPO_PUBLIC_API_URL: ${{ vars.EXPO_PUBLIC_API_URL }}
       EXPO_NO_TELEMETRY: '1'
       CI: '1'
