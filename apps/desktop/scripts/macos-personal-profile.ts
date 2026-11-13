@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { execFileSync } from "node:child_process";
 import { createPrivateKey, sign, X509Certificate } from "node:crypto";
 import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -38,6 +39,79 @@ function networkCode(error: unknown): string | undefined {
   return undefined;
 }
 type Command = (command: string, args: string[]) => string;
+type CurlCommand = (args: string[], configuration: string) => Buffer;
+
+/** Use the distribution host's HTTPS client without putting bearer tokens in process arguments. */
+export function appleSystemFetch(
+  run: CurlCommand = (args, configuration) =>
+    execFileSync("/usr/bin/curl", args, {
+      input: configuration,
+      timeout: 20_000,
+      maxBuffer: 4 * 1024 * 1024 + 1024,
+      stdio: ["pipe", "pipe", "pipe"],
+    }),
+): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? "GET";
+    if (
+      url.origin !== API ||
+      url.username ||
+      url.password ||
+      !url.pathname.startsWith("/v1/") ||
+      !["GET", "POST"].includes(method)
+    )
+      throw new Error(FAILURE);
+    const headers = new Headers(init?.headers);
+    if (
+      [...headers.keys()].some((name) => !["authorization", "content-type"].includes(name)) ||
+      (init?.body !== undefined && typeof init.body !== "string")
+    )
+      throw new Error(FAILURE);
+    const configuration = [
+      `url = ${JSON.stringify(url.href)}`,
+      ...[...headers].map(([name, value]) => `header = ${JSON.stringify(`${name}: ${value}`)}`),
+      ...(typeof init?.body === "string" ? [`data-binary = ${JSON.stringify(init.body)}`] : []),
+    ].join("\n");
+    let output: Buffer;
+    try {
+      output = run(
+        [
+          "--silent",
+          "--show-error",
+          "--proto",
+          "=https",
+          "--max-time",
+          "15",
+          "--connect-timeout",
+          "8",
+          "--max-filesize",
+          "4194304",
+          "--max-redirs",
+          "0",
+          "--request",
+          method,
+          "--config",
+          "-",
+          "--write-out",
+          "\n%{http_code}",
+        ],
+        configuration,
+      );
+    } catch {
+      throw new Error(FAILURE);
+    }
+    const status = output.subarray(-4).toString("ascii");
+    if (!/^\n[2-5][0-9]{2}$/.test(status) || output.length > 4 * 1024 * 1024 + 4)
+      throw new Error(FAILURE);
+    const body = output.subarray(0, -4);
+    const code = Number(status.slice(1));
+    return new Response([204, 205, 304].includes(code) ? null : new Uint8Array(body), {
+      status: code,
+      headers: { "content-type": "application/json", "content-length": String(body.length) },
+    });
+  };
+}
 interface Resource {
   type: string;
   id: string;
@@ -231,7 +305,7 @@ export async function preparePersonalProfile(
   directory: string,
   env: NodeJS.ProcessEnv,
   run: Command,
-  network: typeof fetch = fetch,
+  network: typeof fetch = appleSystemFetch(),
 ) {
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   chmodSync(directory, 0o700);

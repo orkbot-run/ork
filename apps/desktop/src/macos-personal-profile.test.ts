@@ -3,7 +3,11 @@
 
 import { generateKeyPairSync, verify } from "node:crypto";
 import { expect, it, vi } from "vitest";
-import { AppleProfiles, ownEntitlements } from "../scripts/macos-personal-profile.js";
+import {
+  AppleProfiles,
+  appleSystemFetch,
+  ownEntitlements,
+} from "../scripts/macos-personal-profile.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const env = {
@@ -24,6 +28,55 @@ const valid = () => ({
     "com.apple.developer.team-identifier": "ABCDE12345",
     "keychain-access-groups": ["LEGACY1234.*"],
   },
+});
+
+it("uses system HTTPS with bounded responses, no redirects, and credentials only on stdin", async () => {
+  const run = vi.fn(() => Buffer.from('{"data":[]}\n200'));
+  const api = new AppleProfiles(env, appleSystemFetch(run));
+  await expect(api.list("/v1/profiles")).resolves.toEqual([]);
+  const [args, configuration] = run.mock.calls[0]! as unknown as [string[], string];
+  expect(args).toEqual(
+    expect.arrayContaining([
+      "--proto",
+      "=https",
+      "--max-time",
+      "15",
+      "--max-filesize",
+      "4194304",
+      "--config",
+      "-",
+    ]),
+  );
+  expect(args).not.toContain("--location");
+  expect(args).not.toContain("--insecure");
+  expect(args.join(" ")).not.toContain("Bearer");
+  expect(configuration).toContain("authorization: Bearer ");
+  const redirected = vi.fn(() => Buffer.from("{}\n302"));
+  await expect(
+    new AppleProfiles(env, appleSystemFetch(redirected)).list("/v1/profiles"),
+  ).rejects.toThrow("Apple API status 302");
+  expect(redirected).toHaveBeenCalledOnce();
+});
+
+it("redacts system HTTPS errors and refuses invalid or oversized transport output", async () => {
+  const failed = appleSystemFetch(() => {
+    throw new Error("private signing identity and bearer");
+  });
+  await expect(failed("https://api.appstoreconnect.apple.com/v1/profiles")).rejects.toThrow(
+    "Could not prepare",
+  );
+  await expect(failed("https://untrusted.example.test/v1/profiles")).rejects.not.toThrow(
+    "private signing",
+  );
+  for (const output of [
+    Buffer.from("invalid"),
+    Buffer.from("{}\n000"),
+    Buffer.concat([Buffer.alloc(4 * 1024 * 1024 + 1), Buffer.from("\n200")]),
+  ]) {
+    await expect(
+      appleSystemFetch(() => output)("https://api.appstoreconnect.apple.com/v1/profiles"),
+    ).rejects.toThrow("Could not prepare");
+  }
 });
 
 it("reports only an allowlisted network failure code without exposing request diagnostics", async () => {
