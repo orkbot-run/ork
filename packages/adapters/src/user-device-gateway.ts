@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 device transport is preserved. Workspace host restrictions follow LICENSE.md.
+
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { networkInterfaces } from "node:os";
@@ -211,6 +215,7 @@ export class UserDeviceHub {
       address: string;
       pingIntervalMs?: number;
       authorizeSession?: (userId: string, sessionId: string) => Promise<boolean>;
+      allowHostAccess?: () => Promise<boolean>;
     },
   ) {
     this.address = deps.address;
@@ -226,6 +231,7 @@ export class UserDeviceHub {
   private async lookup(
     header: string | null | undefined,
   ): Promise<{ device?: AuthenticatedDevice; reason?: UserDeviceRevokeReason }> {
+    if (this.deps.allowHostAccess && !(await this.deps.allowHostAccess())) return {};
     const token = userDeviceBearer(header);
     if (!token) return {};
     const hash = hashUserDeviceToken(token);
@@ -298,6 +304,10 @@ export class UserDeviceHub {
 
   /** Registers a connected device socket; a newer socket for the same device replaces the older. */
   async attach(device: AuthenticatedDevice, socket: UserDeviceSocket): Promise<string> {
+    if (this.deps.allowHostAccess && !(await this.deps.allowHostAccess())) {
+      socket.close(4003, "Access unavailable");
+      throw new UserDeviceOfflineError();
+    }
     const connectionId = randomUUID();
     const entry: LiveDevice = { device, connectionId, socket, pending: new Map(), alive: true };
     const previous = this.live.get(device.id);
@@ -366,6 +376,10 @@ export class UserDeviceHub {
   ): AsyncIterable<unknown> {
     const entry = this.live.get(route.deviceId);
     if (!entry || !this.holds(route)) throw new UserDeviceOfflineError();
+    if (this.deps.allowHostAccess && !(await this.deps.allowHostAccess())) {
+      this.drop(entry, REVOKED_MESSAGE, [4003, "Access unavailable"]);
+      throw new UserDeviceOfflineError();
+    }
     signal.throwIfAborted();
     const id = randomUUID();
     const queue = new FrameQueue();
@@ -561,6 +575,7 @@ export class UserDevices implements UserDeviceGateway {
       /** Present in API processes, which hold device sockets. */
       hub?: UserDeviceHub;
       fetch?: typeof fetch;
+      allowHostAccess?: () => Promise<boolean>;
     },
   ) {
     this.fetch = deps.fetch ?? fetch;
@@ -661,6 +676,7 @@ export class UserDevices implements UserDeviceGateway {
   }
 
   private async route(userId: string, deviceId?: string) {
+    if (this.deps.allowHostAccess && !(await this.deps.allowHostAccess())) return null;
     const connection = await runAsSystem("find a user's connected device", () =>
       this.deps.prisma.userDeviceConnection.findFirst({
         where: {

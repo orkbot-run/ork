@@ -69,9 +69,9 @@ to the new server receives an **Update Ork** link instead of an empty product wi
 
 **This computer** starts the shared Docker Compose stack through Rust. A private
 ownership probe protects reuse of the managed project, and its server address stays
-on loopback. Host computer access uses the native consent and revocation path backed
-by the existing server-owned computer protocol. See [Desktop app](desktop-app.md) for
-the account controls and permissions.
+on loopback. Managed workspaces keep computer tasks inside Docker. Host commands and
+direct host file access are disabled, including through previously paired desktops.
+See [Desktop app](desktop-app.md) for the account controls and permissions.
 
 Choose the organization first. The installer checks its Docker installation's fingerprint against Accounts, then waits for both the server and workspace acknowledgements before opening Ork. Restarting setup reuses the installation key and workspace operation. Initial setup records an audited workspace admin assignment and delegates local AI administration to the signed-in account. Reopening a completed installation preserves subsequent access removals.
 

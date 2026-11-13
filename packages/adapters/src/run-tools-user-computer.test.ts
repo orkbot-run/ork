@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace host restrictions follow LICENSE.md.
+
 import { describe, expect, it, vi } from "vitest";
 import type { HostComputerRequest } from "./host-computer-protocol.js";
 import type { RunContext } from "./run-context.js";
@@ -39,6 +43,7 @@ function setup(execute: (signal: AbortSignal) => AsyncIterable<unknown>, secrets
     deps: { userDevices: gateway },
     bot: { id: "bot-1" },
     runId: "run-1",
+    run: { centralWorkspaceId: null },
     source: { userComputerOwner: "user-1" },
     context: { signal: controller.signal },
     secrets,
@@ -55,6 +60,15 @@ function setup(execute: (signal: AbortSignal) => AsyncIterable<unknown>, secrets
 }
 
 describe("userComputerGate", () => {
+  it("denies managed workspace runs before reading old approvals or sending a host request", async () => {
+    const f = setup(async function* () {
+      yield { type: "exit", code: 0 };
+    });
+    f.ctx.run.centralWorkspaceId = "central-workspace";
+    await expect(userComputerGate(f.ctx, false, "user_computer_shell", {})).resolves.toBe("deny");
+    await userComputerShell(f.ctx, f.call({ command: "read-credentials" }));
+    expect(f.requests).toEqual([]);
+  });
   it("finds an app approved before hundreds of later screen actions", async () => {
     const effects = [
       ...Array.from({ length: 450 }, (_, index) => ({ id: `e${450 - index}`, app: "TextEdit" })),

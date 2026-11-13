@@ -12,6 +12,8 @@ import { NoneSandboxProvider } from "./none-sandbox.js";
 export interface SandboxProviderOptions {
   hostComputerUrl?: string;
   hostComputerToken?: string;
+  /** Fresh installation policy. A managed workspace cannot grant host filesystem authority. */
+  hostAccessAllowed?: () => Promise<boolean>;
   supervisorUrl?: string;
   supervisorToken?: string;
   e2bApiKey?: string;

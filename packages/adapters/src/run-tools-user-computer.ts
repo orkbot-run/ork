@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tools are preserved. Workspace host restrictions follow LICENSE.md.
+
 import path from "node:path";
 import type { AgentToolExecutionResult, ProcessEvent } from "@orkbot/adapter-kit";
 import { redactSecrets, sandboxCommandTimeoutMs } from "@orkbot/core";
@@ -70,7 +74,7 @@ export async function userComputerGate(
   name: string,
   args: Record<string, unknown>,
 ): Promise<"deny" | "allow" | "ask"> {
-  if (blocked) return "deny";
+  if (blocked || ctx.run.centralWorkspaceId) return "deny";
   const { deps, run } = ctx;
   const pairedSince = await deps.userDevices?.pairedSince(run.userId);
   if (!pairedSince) return "ask";
@@ -138,6 +142,7 @@ async function lastValue<T>(values: AsyncIterable<T>): Promise<T> {
 
 /** Checked again at execution: the desktop can disconnect or be revoked after the offer. */
 async function connectedUserComputer(ctx: RunContext) {
+  if (ctx.run.centralWorkspaceId) return undefined;
   const owner = ctx.source.userComputerOwner;
   const devices = ctx.deps.userDevices;
   const device = owner && devices ? await devices.connected(owner).catch(() => null) : null;

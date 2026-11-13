@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace host restrictions follow LICENSE.md.
+
 import { EventEmitter, once } from "node:events";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -161,7 +165,7 @@ const environment: HostComputerRequest = { method: "environment", botId: "bot-1"
 const secret = userDeviceForwardSecret("test-encryption-key");
 const hubs: UserDeviceHub[] = [];
 
-function setup() {
+function setup(allowHostAccess?: () => Promise<boolean>) {
   const db = fakePrisma();
   db.deviceRows.set(device.id, {
     ...device,
@@ -170,9 +174,18 @@ function setup() {
     revokedAt: null,
     lastSeenAt: null,
   });
-  const hub = new UserDeviceHub({ prisma: db.prisma, address: "http://10.0.0.5:3100" });
+  const hub = new UserDeviceHub({
+    prisma: db.prisma,
+    address: "http://10.0.0.5:3100",
+    allowHostAccess,
+  });
   hubs.push(hub);
-  const devices = new UserDevices({ prisma: db.prisma, forwardSecret: secret, hub });
+  const devices = new UserDevices({
+    prisma: db.prisma,
+    forwardSecret: secret,
+    hub,
+    allowHostAccess,
+  });
   return { ...db, hub, devices };
 }
 
@@ -186,6 +199,49 @@ afterEach(async () => {
   await Promise.all(hubs.splice(0).map((hub) => hub.close()));
   vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+it("closes a previously paired host before forwarding work after workspace activation", async () => {
+  let allowed = true;
+  const f = setup(async () => allowed);
+  const socket = new FakeSocket();
+  const connectionId = await f.hub.attach(device, socket);
+  expect(await f.devices.connected(device.userId)).not.toBeNull();
+  allowed = false;
+  expect(await f.hub.authenticate(`Bearer ${"a".repeat(64)}`)).toBeNull();
+  expect(await f.devices.connected(device.userId)).toBeNull();
+  const signal = new AbortController().signal;
+  await expect(collect(f.devices.request(device.userId, environment, signal))).rejects.toThrow();
+  await expect(
+    collect(
+      f.hub.frames(
+        { deviceId: device.id, userId: device.userId, connectionId },
+        environment,
+        signal,
+      ),
+    ),
+  ).rejects.toThrow();
+  expect(socket.closed?.code).toBe(4003);
+  expect(socket.sent.filter((frame) => frame.type === "request")).toEqual([]);
+  const replacement = new FakeSocket();
+  await expect(f.hub.attach(device, replacement)).rejects.toThrow();
+  expect(replacement.closed?.code).toBe(4003);
+});
+
+it("prevents a worker from forwarding host commands while managed workspace policy denies them", async () => {
+  const f = setup();
+  await f.hub.attach(device, new FakeSocket());
+  const fetcher = vi.fn<typeof fetch>();
+  const worker = new UserDevices({
+    prisma: f.prisma,
+    forwardSecret: secret,
+    fetch: fetcher,
+    allowHostAccess: async () => false,
+  });
+  await expect(
+    collect(worker.request(device.userId, environment, new AbortController().signal)),
+  ).rejects.toThrow();
+  expect(fetcher).not.toHaveBeenCalled();
 });
 
 describe("device tokens", () => {

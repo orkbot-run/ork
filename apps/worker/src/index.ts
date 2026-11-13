@@ -159,6 +159,9 @@ async function main() {
   const workspaceAuthority = installation
     ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
     : undefined;
+  const hostAccessAllowed = installation
+    ? async () => !(await installation.registered())
+    : undefined;
   const stopWorkspaceAuthority =
     installation && workspaceAuthority
       ? startWorkspaceAuthority(
@@ -221,6 +224,7 @@ async function main() {
     sandboxKind: sandboxProvider,
     sandboxOptions: {
       ...sandboxProviderOptionsFromEnv(process.env),
+      hostAccessAllowed,
       supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
       supervisorToken:
         sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
@@ -381,6 +385,7 @@ async function main() {
         : new UserDevices({
             prisma,
             forwardSecret: userDeviceForwardSecret(resolveEncryptionKey(process.env)),
+            allowHostAccess: hostAccessAllowed,
           }),
     paymentWallet,
     shutdownSignal: shutdown.signal,

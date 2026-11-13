@@ -1487,13 +1487,15 @@ export function createRunExecutor(executorDeps: ExecutorDeps) {
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
         const disabledBuiltinTools = disabledBuiltinToolSet(bot.disabledBuiltinTools);
-        const userComputerOwnerId = userComputerOwner({
-          trigger: run.trigger,
-          sourceRole: sourceMessage?.role,
-          messagingChannelRun: nonOwnerChatRun,
-          runUserId: run.userId,
-          botUserId: bot.userId,
-        });
+        const userComputerOwnerId = run.centralWorkspaceId
+          ? undefined
+          : userComputerOwner({
+              trigger: run.trigger,
+              sourceRole: sourceMessage?.role,
+              messagingChannelRun: nonOwnerChatRun,
+              runUserId: run.userId,
+              botUserId: bot.userId,
+            });
         let userComputer: UserComputerState;
         let userComputerScreen = false;
         if (

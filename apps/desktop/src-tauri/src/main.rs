@@ -797,6 +797,7 @@ fn managed_stack(
     let stacks = state.stack.lock().ok()?;
     let stack = stacks.snapshot();
     if setup.mode != settings::InstanceMode::New
+        || setup.workspace.is_some()
         || setup.account.as_deref() != stacks.owner()
         || !stacks.is_selected(&stack)
         || setup.server_url.origin() != stack.web_url().origin()
@@ -2186,6 +2187,9 @@ async fn start_local_server(
         return Err("This saved local instance is unavailable for this account. Choose This computer to create or open your instance.".into());
     }
     require_current_stack(state, authorization, &stack)?;
+    if let Some(host) = &state.host_computer {
+        host.activate(None);
+    }
     let result = stack.start_for(intent).await;
     require_setup(window)?;
     let authorization = state

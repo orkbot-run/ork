@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rakazo contributors
 // SPDX-FileCopyrightText: 2026 Ork contributors
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 settings are preserved. Workspace host restrictions follow LICENSE.md.
 
 import { timingSafeEqual } from "node:crypto";
 import { LOCAL_COMPUTER_HOST_PATH, LOCAL_SETTINGS_TOKEN_HEADER } from "@orkbot/contracts";
@@ -28,6 +29,7 @@ export function mountLocalComputerHost(
   deps: {
     token?: string;
     sandboxProvider?: string;
+    hostAccessAllowed?: () => Promise<boolean>;
     prisma: PrismaClient;
   },
 ) {
@@ -50,6 +52,8 @@ export function mountLocalComputerHost(
       return c.json({ error: "Invalid computer host" }, 400);
     }
     const selected = computerHost;
+    if (selected === "this-mac" && deps.hostAccessAllowed && !(await deps.hostAccessAllowed()))
+      return c.json({ error: "Local computer access is disabled" }, 403);
     await runAsSystem("locally authorized computer host choice", () =>
       deps.prisma.deploymentSettings.upsert({
         where: { id: "default" },

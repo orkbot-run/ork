@@ -377,6 +377,9 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   const installation = env.accountsEnabled
     ? new InstallationClient(prisma, { issuer: accountsIssuer, encryptionKey: env.encryptionKey })
     : undefined;
+  const hostAccessAllowed = installation
+    ? async () => !(await installation.registered())
+    : undefined;
   const workspaceAuthority = installation
     ? new WorkspaceAuthority(prisma, installation, accountsIssuer, realtime)
     : undefined;
@@ -506,6 +509,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
       ? {}
       : {
           ...sandboxProviderOptionsFromEnv(),
+          hostAccessAllowed,
           supervisorUrl: env.sandboxSupervisorUrl,
           supervisorToken: env.sandboxSupervisorToken,
           e2bApiKey: env.e2bApiKey,
@@ -643,16 +647,23 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
     ? new UserDeviceHub({
         prisma,
         address: userDeviceInternalAddress(env.apiHost, env.port),
+        allowHostAccess: hostAccessAllowed,
         ...(env.accountsEnabled
           ? {
-              authorizeSession: (userId: string, sessionId: string) =>
+              authorizeSession: async (userId: string, sessionId: string) =>
+                (!hostAccessAllowed || (await hostAccessAllowed())) &&
                 workspaceSessionAllowed({ user: { id: userId }, session: { id: sessionId } }),
             }
           : {}),
       })
     : undefined;
   const userDevices = userDeviceHub
-    ? new UserDevices({ prisma, forwardSecret: userDeviceSecret, hub: userDeviceHub })
+    ? new UserDevices({
+        prisma,
+        forwardSecret: userDeviceSecret,
+        hub: userDeviceHub,
+        allowHostAccess: hostAccessAllowed,
+      })
     : undefined;
   const deviceSessions = {
     prisma,
@@ -1172,6 +1183,7 @@ async function buildApp(overrides: CreateAppOverrides): Promise<AppHandles> {
   mountLocalComputerHost(app, {
     token: env.desktopStackToken,
     sandboxProvider: env.sandboxProvider,
+    hostAccessAllowed,
     prisma,
   });
   const requestSession = async (request: Request) => {

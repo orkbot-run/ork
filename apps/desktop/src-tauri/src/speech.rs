@@ -265,17 +265,15 @@ fn executable_file(path: &Path) -> bool {
     let Ok(metadata) = std::fs::symlink_metadata(path) else {
         return false;
     };
-    if !metadata.is_file() || metadata.file_type().is_symlink() {
-        return false;
-    }
+    let regular = metadata.is_file() && !metadata.file_type().is_symlink();
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        metadata.permissions().mode() & 0o111 != 0
+        regular && metadata.permissions().mode() & 0o111 != 0
     }
     #[cfg(not(unix))]
     {
-        true
+        regular
     }
 }
 
@@ -516,6 +514,26 @@ async fn run_recognizer(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn speech_helper_requires_a_regular_file_and_executable_permissions_on_unix() {
+        let directory = tempfile::tempdir().unwrap();
+        let helper = directory.path().join("helper");
+        assert!(!executable_file(&helper));
+        assert!(!executable_file(directory.path()));
+        std::fs::write(&helper, "fixture helper").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o600)).unwrap();
+            assert!(!executable_file(&helper));
+            std::fs::set_permissions(&helper, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let link = directory.path().join("linked-helper");
+            std::os::unix::fs::symlink(&helper, &link).unwrap();
+            assert!(!executable_file(&link));
+        }
+        assert!(executable_file(&helper));
+    }
 
     #[test]
     fn event_payloads_match_the_shared_desktop_contract() {

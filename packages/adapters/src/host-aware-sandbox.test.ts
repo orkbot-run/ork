@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited Apache-2.0 tests are preserved. Workspace host restrictions follow LICENSE.md.
+
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -28,6 +32,33 @@ describe("host-aware sandbox", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it("keeps managed runs on Docker even when a saved host choice is still enabled", async () => {
+    const native = vi.spyOn(HostComputerSandbox.prototype, "provision");
+    const isolated = vi.spyOn(DockerSandboxProvider.prototype, "provision").mockResolvedValue({
+      id: "isolated",
+      botId: "home",
+      kind: "docker",
+      providerRef: "container",
+    });
+    const sandbox = await createRunSandbox("docker", {
+      prisma: {
+        deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+      } as unknown as PrismaClient,
+      hostAccessAllowed: async () => false,
+    });
+    expect((await sandbox.provision({ botId: "home", homePath: "/unused" }, ctx)).kind).toBe(
+      "docker",
+    );
+    expect(native).not.toHaveBeenCalled();
+    expect(isolated).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a direct backend host provider when the server can enroll managed workspaces", async () => {
+    await expect(
+      createRunSandbox("desktop", { hostAccessAllowed: async () => true }),
+    ).rejects.toThrow("isolated computer provider");
+  });
+
   it("never falls back to backend execution when the native connection is missing", async () => {
     const provision = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
     const sandbox = await createRunSandbox("docker", {
@@ -57,6 +88,85 @@ describe("host-aware sandbox", () => {
     };
     await expect(attempt()).rejects.toThrow("disabled");
     expect(execute).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      "readFile",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.readFile(computer, "credentials", ctx),
+    ],
+    [
+      "writeFile",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.writeFile(computer, { path: "another-workspace", content: new Uint8Array() }, ctx),
+    ],
+    [
+      "listFiles",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.listFiles(computer, ".", ctx),
+    ],
+    [
+      "prepare",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.prepare(computer, ctx),
+    ],
+    [
+      "environment",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.environment(computer, ctx),
+    ],
+    [
+      "observe",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.observe(computer, ctx),
+    ],
+    [
+      "snapshot",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.snapshot(computer, ctx),
+    ],
+    [
+      "terminal",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.connectTerminal(computer, { cols: 80, rows: 24 } as never, ctx),
+    ],
+    [
+      "directories",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.workspaceDirectories(computer, { action: "list" }, ctx),
+    ],
+    [
+      "transfer",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.readTransferFile(computer, "credentials", ctx, 1024),
+    ],
+    [
+      "export",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) => sandbox.exportWorkspace(computer, ctx),
+    ],
+    [
+      "exportDirectory",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.exportDirectory(computer, ".", ctx, { maxBytes: 1024, maxEntries: 10 } as never),
+    ],
+    [
+      "import",
+      (sandbox: HostAwareSandbox, computer: ComputerRef) =>
+        sandbox.importWorkspace(computer, (async function* () {})(), ctx),
+    ],
+  ])("refuses %s through a host reference after access was disabled", async (_name, operation) => {
+    const host = new FakeSandboxProvider();
+    const sandbox = new HostAwareSandbox(new FakeSandboxProvider(), host, async () => false);
+    const computer = {
+      id: "old-host",
+      botId: "old-home",
+      kind: "desktop",
+      providerRef: "old-host",
+    } as const;
+    const attempt = async () => {
+      const result = operation(sandbox, computer);
+      if (result && Symbol.asyncIterator in Object(result)) {
+        for await (const _value of result as AsyncIterable<unknown>) {
+        }
+      } else await result;
+    };
+    await expect(attempt()).rejects.toThrow("Local computer access is disabled");
   });
 
   it("exposes and routes page commands through the production Docker wrapper", async () => {

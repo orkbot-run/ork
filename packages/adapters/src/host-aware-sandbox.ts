@@ -83,6 +83,8 @@ async function createBaseRunSandbox(
 ): Promise<SandboxProvider> {
   if (kind === "desktop") {
     assertHostCommandsAllowed();
+    if (opts.hostAccessAllowed)
+      throw new Error("Workspace installations require an isolated computer provider");
     return new DesktopSandboxProvider({
       root: opts.dataDir,
       hostRoots: [homedir()],
@@ -131,6 +133,7 @@ async function createBaseRunSandbox(
     primary,
     new HostComputerSandbox(opts.hostComputerUrl ?? "", opts.hostComputerToken ?? ""),
     async () => {
+      if (opts.hostAccessAllowed && !(await opts.hostAccessAllowed())) return false;
       const settings = await opts.prisma!.deploymentSettings.findUnique({
         where: { id: "default" },
       });
@@ -148,8 +151,8 @@ export class HostAwareSandbox implements SandboxProvider {
     private readonly hostEnabled: () => Promise<boolean>,
   ) {
     if (isolated.pageBrowser || host.pageBrowser) {
-      this.pageBrowser = (computer, request, context) => {
-        const provider = this.route(computer);
+      this.pageBrowser = async (computer, request, context) => {
+        const provider = await this.authorized(computer);
         return provider.pageBrowser
           ? provider.pageBrowser(computer, request, context)
           : Promise.resolve({
@@ -174,6 +177,12 @@ export class HostAwareSandbox implements SandboxProvider {
     return computer.kind === "desktop" ? this.host : this.isolated;
   }
 
+  private async authorized(computer: Pick<ComputerRef, "kind">) {
+    if (computer.kind === "desktop" && !(await this.hostEnabled()))
+      throw new Error("Local computer access is disabled");
+    return this.route(computer);
+  }
+
   async provisionKind() {
     const provider = (await this.hostEnabled()) ? this.host : this.isolated;
     return provider.describe().id as ComputerRef["kind"];
@@ -186,7 +195,9 @@ export class HostAwareSandbox implements SandboxProvider {
         homeKey: input.homeKey,
       }))().catch(() => unavailable);
     const active = input.computer
-      ? inspectComputerCapabilities(this.route(input.computer), input).catch(() => unavailable)
+      ? this.authorized(input.computer)
+          .then((provider) => inspectComputerCapabilities(provider, input))
+          .catch(() => unavailable)
       : next;
     return { ...(await active), start: (await next).start };
   }
@@ -218,16 +229,16 @@ export class HostAwareSandbox implements SandboxProvider {
   }
 
   async isStopped(computer: ComputerRef, context: AdapterContext): Promise<boolean> {
-    return this.route(computer).isStopped?.(computer, context) ?? false;
+    return (await this.authorized(computer)).isStopped?.(computer, context) ?? false;
   }
 
   async environment(computer: ComputerRef, context: AdapterContext) {
-    const provider = this.route(computer);
+    const provider = await this.authorized(computer);
     return provider.environment?.(computer, context);
   }
 
-  prepare(computer: ComputerRef, context: AdapterContext) {
-    return this.route(computer).prepare(computer, context);
+  async prepare(computer: ComputerRef, context: AdapterContext) {
+    return (await this.authorized(computer)).prepare(computer, context);
   }
 
   async *execute(
@@ -235,106 +246,118 @@ export class HostAwareSandbox implements SandboxProvider {
     request: CommandRequest,
     context: AdapterContext,
   ): AsyncIterable<ProcessEvent> {
-    if (computer.kind === "desktop" && !(await this.hostEnabled()))
-      throw new Error("Local computer access is disabled");
-    yield* this.route(computer).execute(computer, request, context);
+    yield* (await this.authorized(computer)).execute(computer, request, context);
   }
 
-  workspaceDirectories(
+  async workspaceDirectories(
     computer: ComputerRef,
     request: WorkspaceDirectoryRequest,
     context: AdapterContext,
   ) {
-    return manageComputerWorkspaceDirectories(this.route(computer), computer, request, context);
+    return manageComputerWorkspaceDirectories(
+      await this.authorized(computer),
+      computer,
+      request,
+      context,
+    );
   }
 
   cancelRunWork(computer: ComputerRef, computerId: string, runId: string, context: AdapterContext) {
     return cancelComputerRunWork(this.route(computer), computer, computerId, runId, context);
   }
 
-  connectScreen(computer: ComputerRef, request: ScreenRequest, context: AdapterContext) {
-    return this.route(computer).connectScreen(computer, request, context);
+  async connectScreen(computer: ComputerRef, request: ScreenRequest, context: AdapterContext) {
+    return (await this.authorized(computer)).connectScreen(computer, request, context);
   }
 
-  connectTerminal(computer: ComputerRef, request: TerminalRequest, context: AdapterContext) {
-    const provider = this.route(computer);
+  async connectTerminal(computer: ComputerRef, request: TerminalRequest, context: AdapterContext) {
+    const provider = await this.authorized(computer);
     if (!provider.connectTerminal) {
       return Promise.reject(new Error("terminal is unavailable on this computer"));
     }
     return provider.connectTerminal(computer, request, context);
   }
 
-  sendInput(
+  async sendInput(
     computer: ComputerRef,
     input: ComputerInput,
     lease: ControlLeaseRef,
     context: AdapterContext,
   ) {
-    return this.route(computer).sendInput(computer, input, lease, context);
+    return (await this.authorized(computer)).sendInput(computer, input, lease, context);
   }
 
-  observe(computer: ComputerRef, context: AdapterContext) {
-    return this.route(computer).observe(computer, context);
+  async observe(computer: ComputerRef, context: AdapterContext) {
+    return (await this.authorized(computer)).observe(computer, context);
   }
 
-  act(computer: ComputerRef, request: ComputerActionRequest, context: AdapterContext) {
-    return this.route(computer).act(computer, request, context);
+  async act(computer: ComputerRef, request: ComputerActionRequest, context: AdapterContext) {
+    return (await this.authorized(computer)).act(computer, request, context);
   }
 
-  listFiles(computer: ComputerRef, path: string, context: AdapterContext) {
-    return this.route(computer).listFiles(computer, path, context);
+  async listFiles(computer: ComputerRef, path: string, context: AdapterContext) {
+    return (await this.authorized(computer)).listFiles(computer, path, context);
   }
 
   sharesWorkspace(computer: ComputerRef) {
     return this.route(computer).sharesWorkspace?.(computer) ?? false;
   }
 
-  readTransferFile(computer: ComputerRef, path: string, context: AdapterContext, maxBytes: number) {
-    const provider = this.route(computer);
+  async readTransferFile(
+    computer: ComputerRef,
+    path: string,
+    context: AdapterContext,
+    maxBytes: number,
+  ) {
+    const provider = await this.authorized(computer);
     if (!provider.readTransferFile)
       throw new Error("File transfer is unsupported on this computer");
     return provider.readTransferFile(computer, path, context, maxBytes);
   }
 
-  exportDirectory(
+  async *exportDirectory(
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
     limits: DirectoryExportLimits,
   ) {
-    const provider = this.route(computer);
+    const provider = await this.authorized(computer);
     if (!provider.exportDirectory)
       throw new Error("Directory transfer is unsupported on this computer");
-    return provider.exportDirectory(computer, path, context, limits);
+    yield* provider.exportDirectory(computer, path, context, limits);
   }
 
-  readFile(
+  async readFile(
     computer: ComputerRef,
     path: string,
     context: AdapterContext,
     options?: { maxBytes?: number },
   ) {
-    return this.route(computer).readFile(computer, path, context, options);
+    return (await this.authorized(computer)).readFile(computer, path, context, options);
   }
 
-  writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {
-    return this.route(computer).writeFile(computer, file, context);
+  async writeFile(computer: ComputerRef, file: PortableFile, context: AdapterContext) {
+    return (await this.authorized(computer)).writeFile(computer, file, context);
   }
 
-  exportWorkspace(computer: ComputerRef, context: AdapterContext, limits?: WorkspaceExportLimits) {
-    return this.route(computer).exportWorkspace(computer, context, limits);
+  async *exportWorkspace(
+    computer: ComputerRef,
+    context: AdapterContext,
+    limits?: WorkspaceExportLimits,
+  ) {
+    yield* (await this.authorized(computer)).exportWorkspace(computer, context, limits);
   }
 
-  importWorkspace(
+  async importWorkspace(
     computer: ComputerRef,
     files: AsyncIterable<PortableFile>,
     context: AdapterContext,
   ) {
-    return this.route(computer).importWorkspace(computer, files, context);
+    return (await this.authorized(computer)).importWorkspace(computer, files, context);
   }
 
-  snapshot(computer: ComputerRef, context: AdapterContext) {
-    return this.route(computer).snapshot(computer, context);
+  async snapshot(computer: ComputerRef, context: AdapterContext) {
+    return (await this.authorized(computer)).snapshot(computer, context);
   }
 
   billsWhileRunning(computer: Pick<ComputerRef, "kind">): boolean {
@@ -345,23 +368,27 @@ export class HostAwareSandbox implements SandboxProvider {
     return providerKeepsHome(this.route(computer), computer);
   }
 
-  keepAlive(computer: ComputerRef) {
-    return this.route(computer).keepAlive?.(computer) ?? Promise.resolve();
+  async keepAlive(computer: ComputerRef) {
+    return (await this.authorized(computer)).keepAlive?.(computer) ?? Promise.resolve();
   }
 
   releaseScreen(computer: ComputerRef, context: AdapterContext) {
     return this.route(computer).releaseScreen?.(computer, context) ?? Promise.resolve();
   }
 
-  setScreenControl(
+  async setScreenControl(
     computer: ComputerRef,
     interactive: boolean,
     context: AdapterContext,
     controlToken?: string,
   ) {
     return (
-      this.route(computer).setScreenControl?.(computer, interactive, context, controlToken) ??
-      Promise.resolve()
+      (interactive ? await this.authorized(computer) : this.route(computer)).setScreenControl?.(
+        computer,
+        interactive,
+        context,
+        controlToken,
+      ) ?? Promise.resolve()
     );
   }
 
