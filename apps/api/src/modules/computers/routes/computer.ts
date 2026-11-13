@@ -66,6 +66,7 @@ import type { RouterDeps } from "#modules/platform/router";
 import type { RouterContext } from "#modules/platform/routes/context";
 import { computerContext } from "#modules/platform/routes/shared";
 import { botComputerCapabilities } from "../computer-capabilities.js";
+import { computerFrame } from "../computer-frame.js";
 import { scrollPoint } from "../computer-input.js";
 import {
   executionBlocksUserTakeover,
@@ -82,6 +83,52 @@ export function computerRoutes(ctx: RouterContext) {
   const { deps, repos, taughtSkills, authed } = ctx;
   return {
     computer: {
+      frame: authed.computer.frame.handler(async ({ context, input }) => {
+        const bot = await repos.getBot(context.actor, input.botId);
+        const computer = bot.computer;
+        if (
+          !computer?.providerRef ||
+          computer.state !== "running" ||
+          !(await botComputerCapabilities(deps, bot)).screen
+        )
+          throw new ORPCError("CONFLICT", { message: COMPUTER_SCREEN_UNAVAILABLE });
+        const adapter = await computerScreenContext(
+          deps.prisma,
+          context.actor,
+          computer.id,
+          bot.id,
+          "frame",
+        );
+        const signal = context.signal ?? adapter.signal;
+        signal.throwIfAborted();
+        const observation = await deps.sandbox.observe(toComputerRef(computer), {
+          ...adapter,
+          signal,
+        });
+        const frame = await computerFrame(
+          JSON.stringify([
+            context.actor.spaceId,
+            bot.id,
+            computer.id,
+            bot.screenGeneration,
+            computer.screenGeneration,
+          ]),
+          observation,
+          input.previous,
+        );
+        signal.throwIfAborted();
+        const current = await repos.getBot(context.actor, bot.id);
+        if (
+          current.computer?.id !== computer.id ||
+          current.screenGeneration !== bot.screenGeneration ||
+          current.computer.screenGeneration !== computer.screenGeneration ||
+          current.computer.providerRef !== computer.providerRef ||
+          current.computer.state !== "running"
+        )
+          throw new IsolationError();
+        scheduleComputerSleep(deps.jobs, computer.id);
+        return frame;
+      }),
       status: authed.computer.status.handler(async ({ context, input }) =>
         computerStatus(deps, context.actor, input.botId),
       ),

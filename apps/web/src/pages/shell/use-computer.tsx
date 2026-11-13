@@ -12,6 +12,7 @@ import type {
   ThreadSnapshot,
 } from "@orkbot/contracts";
 import {
+  COMPUTER_FRAME_SOURCE,
   computerCapabilitiesFor,
   createScreenReconnects,
   isRetryableError,
@@ -36,6 +37,7 @@ import {
   screenFrameMessage,
   screenFrameStarted,
 } from "../../lib/computer-screen";
+import { desktopBridge } from "../../lib/desktop";
 import type { Panel } from "../../lib/right-panel-state";
 import type { createSpaceRpc } from "../../lib/rpc";
 import {
@@ -378,7 +380,10 @@ export function useComputerState({
     const read = request ?? ++screenRequest.current;
     const issuedState = computerRef.current?.botId === id ? computerRef.current.state : undefined;
     return loadComputerScreen({
-      load: () => rpc.computer.screenUrl({ botId: id }),
+      load: () =>
+        desktopBridge()?.accounts?.signInToServer
+          ? Promise.resolve({ url: COMPUTER_FRAME_SOURCE })
+          : rpc.computer.screenUrl({ botId: id }),
       isCurrent: () =>
         read === screenRequest.current &&
         (activeBotId.current === id || computerBotIdRef.current === id) &&

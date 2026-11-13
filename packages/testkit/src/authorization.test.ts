@@ -13,8 +13,12 @@ import {
   PrismaPushTokenStore,
 } from "@orkbot/adapters";
 import type { createApp } from "@orkbot/api/app";
-import type { appContract, Space, SpaceNavigation } from "@orkbot/contracts";
-import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
+import type { appContract, ComputerFrame, Space, SpaceNavigation } from "@orkbot/contracts";
+import {
+  CLIENT_PROTOCOL_HEADER,
+  CLIENT_PROTOCOL_VERSION,
+  ComputerFrameSchema,
+} from "@orkbot/contracts";
 import {
   claimSpaceDeletionForMember,
   deleteClaimedSpaceForMember,
@@ -84,6 +88,52 @@ describeWithDatabase("API authorization and resource isolation", () => {
   afterAll(async () => {
     await handles?.stop();
     rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("keeps native image frames scoped and rejects a computer revision changed during capture", async () => {
+    const owner = await signup(app, `frame-owner-${stamp}@orkbot.test`, "Owner");
+    const outsider = await signup(app, `frame-other-${stamp}@orkbot.test`, "Other");
+    const actor = await rpc<Actor>(app, owner, "me");
+    const bot = await rpc<Bot>(app, owner, "bots/create", botInput("Frame viewer"), actor.spaceId);
+    await rpc(app, owner, "computer/boot", { botId: bot.id }, actor.spaceId);
+    const frame = await rpc<ComputerFrame>(
+      app,
+      owner,
+      "computer/frame",
+      { botId: bot.id },
+      actor.spaceId,
+    );
+    expect(ComputerFrameSchema.safeParse(frame).success).toBe(true);
+    expect(
+      await rpc(app, owner, "computer/frame", { botId: bot.id, previous: frame.id }, actor.spaceId),
+    ).toBeNull();
+    await expectDenied(app, outsider, "computer/frame", { botId: bot.id }, actor.spaceId);
+    let captured!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      captured = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const observe = handles.sandbox.observe.bind(handles.sandbox);
+    const pending = vi
+      .spyOn(handles.sandbox, "observe")
+      .mockImplementationOnce(async (ref, context) => {
+        captured();
+        await blocked;
+        return observe(ref, context);
+      });
+    try {
+      const response = raw(app, owner, "computer/frame", { botId: bot.id }, actor.spaceId);
+      await started;
+      await db.bot.update({ where: { id: bot.id }, data: { screenGeneration: { increment: 1 } } });
+      release();
+      expect((await response).status).toBeGreaterThanOrEqual(400);
+    } finally {
+      release();
+      pending.mockRestore();
+    }
   });
 
   it("keeps another member's routine test run keys apart from a send's", async () => {
@@ -427,6 +477,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/files", { botId: "missing-bot", path: "/" }],
       ["computer/readFile", { botId: "missing-bot", path: "MEMORY.md" }],
       ["computer/screenUrl", { botId: "missing-bot" }],
+      ["computer/frame", { botId: "missing-bot" }],
       ["computer/heartbeat", { botId: "missing-bot" }],
       ["computer/recover"],
       ["computer/reset"],
@@ -813,6 +864,7 @@ describeWithDatabase("API authorization and resource isolation", () => {
       ["computer/files", { botId: ownerBot.id, path: "/" }],
       ["computer/readFile", { botId: ownerBot.id, path: "PRIVATE.md" }],
       ["computer/screenUrl", { botId: ownerBot.id }],
+      ["computer/frame", { botId: ownerBot.id }],
       ["computer/heartbeat", { botId: ownerBot.id }],
       ["routines/list", { botId: ownerBot.id }],
       ["routines/create", routineInput(ownerBot.id)],

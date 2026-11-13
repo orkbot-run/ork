@@ -11,3 +11,5 @@ Use `computerRoutes` and `computerProviderRoutes` for RPC, `mountScreenTarget` f
 Managed installations refuse host execution and host filesystem access. The API and worker pass the same fresh installation policy to sandbox routing and paired-device transport. Local settings can select Docker for cleanup while that policy denies host access.
 
 Workspace computers use the versioned supervisor API. It checks existing containers for the exact home mount, disabled privilege escalation, and retained shared host mounts before content operations. Stop, release, and deletion remain available for cleanup. Providers without a verified workspace boundary are unavailable on Accounts-enabled installations.
+
+Native clients read `computer.frame` through the selected installation's authenticated HTTP channel. The response contains a bounded PNG or JPEG and a hash tied to the workspace, bot, computer and screen generations. A matching previous hash returns no image. The route checks the bot's binding again after capture, so a late screenshot from a replaced computer is refused. Provider pages and WebSocket credentials stay on the server.

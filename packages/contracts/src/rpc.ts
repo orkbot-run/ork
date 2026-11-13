@@ -53,6 +53,7 @@ import {
   VaultRevealed,
   VaultRevealInput,
 } from "./bot-secrets.js";
+import { ComputerFrameIdSchema, ComputerFrameSchema } from "./computer-frame.js";
 import {
   AccessGrantInputSchema,
   AccessGrantSchema,
@@ -858,6 +859,9 @@ export const appContract = {
     unsnooze: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
   computer: {
+    frame: oc
+      .input(z.object({ botId: Id, previous: ComputerFrameIdSchema.optional() }))
+      .output(ComputerFrameSchema.nullable()),
     status: oc.input(botId).output(ComputerStatusSchema),
     boot: oc.input(botId).output(ComputerStatusSchema),
     stop: oc.input(botId).output(ComputerStatusSchema),

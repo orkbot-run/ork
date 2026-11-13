@@ -199,6 +199,15 @@ export function currentApiBase() {
   return parsed.url;
 }
 
+/** Public scope only. Native images and input must retire when this identity changes. */
+export function nativeInstallationScope(): string | null {
+  const origin = currentApiBase();
+  const workspace = installationRevocationScope(origin);
+  return workspace
+    ? JSON.stringify([origin, currentSessionGeneration(), selectedSpaceId(), workspace])
+    : null;
+}
+
 export async function loadApiBase() {
   retryPendingRevocations();
   let apiBase = defaultApiBase();

@@ -3,7 +3,7 @@
 
 # Native Ork Accounts connection
 
-Use `https://api.ork.run` as the Accounts issuer. Identity bindings from the previous issuer are not migrated. Back up any data you need, then use a new installation and sign in again.
+Use `https://api.ork.run` for new Accounts clients. Preserve the configured issuer and exact registered callbacks when upgrading an existing deployment. Keep installation data and ownership records. Legacy local organizations require an explicit operator mapping before Accounts access is enabled.
 
 Register a public Accounts client for each native app, then supply its settings when
 building Tauri or Expo:
@@ -70,6 +70,29 @@ returns the code only to the initiating document. The authenticated workspace se
 completes the token exchange. Changing accounts or workspaces cancels completion.
 The provider receives the installation's configured callback address, even when the
 installation is reached through relay. Browser clients retain their popup flow.
+
+## Computer viewing and control
+
+Native clients display image snapshots through the same pinned HTTP transport used for
+workspace requests. Only one capture is in flight per viewer, with a 500 ms pause between
+captures. Unchanged images return only an acknowledgement. Images are limited to 6 MiB
+and 67,108,864 pixels. Encoded image dimensions and format must match the observation.
+
+Control uses the workspace's authenticated input route. Desktop supports pointer, scroll
+and keyboard input. Press Shift+Escape to return keyboard focus to the app. Mobile uses
+touch input and the native keyboard. Switching accounts or workspaces cancels capture
+and discards queued input. Mobile also stops capture while backgrounded. Server-side
+takeover rules still decide who may control the computer.
+
+After connecting a native Accounts build to a workspace, run the existing Maestro
+catalog entry with a bot from that workspace:
+
+```sh
+maestro test -e ORKBOT_SCREENSHOT_BOT_ID=replace-with-workspace-bot-id \
+  .maestro/native-workspace-computer.yaml
+```
+
+Run it from `apps/mobile`. It retains the authorized app and captures viewing and control.
 
 ## Server connection links
 

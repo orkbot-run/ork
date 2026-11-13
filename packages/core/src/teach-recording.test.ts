@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited teaching tests are preserved. Unicode regression coverage follows LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   computerInputForDomKey,
@@ -28,6 +32,7 @@ describe("computerInputForDomKey", () => {
     expect(computerInputForDomKey(" ")).toEqual({ kind: "clipboard", text: " " });
     expect(computerInputForDomKey("@")).toEqual({ kind: "clipboard", text: "@" });
     expect(computerInputForDomKey(".")).toEqual({ kind: "clipboard", text: "." });
+    expect(computerInputForDomKey("👋")).toEqual({ kind: "clipboard", text: "👋" });
   });
 
   it("translates browser key names to X11 keysyms", () => {

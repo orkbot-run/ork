@@ -5,11 +5,12 @@
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
 import type { Bot, ComputerCapabilities, ComputerStatus, Me } from "@orkbot/contracts";
-import { computerCapabilitiesFor } from "@orkbot/core";
+import { COMPUTER_FRAME_SOURCE, computerCapabilitiesFor } from "@orkbot/core";
 import { BotAvatar, Button } from "@orkbot/ui-web";
 import { HardDrive, Maximize2, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { ComputersUnavailableHint } from "../../components/ComputersUnavailableHint";
+import { NativeComputerScreen } from "../../components/NativeComputerScreen";
 import { screenIframeSandbox } from "../../lib/computer-screen";
 import { computerLabel, computerPlaceholder, ScreenUnavailableState } from "./computer-view";
 
@@ -164,16 +165,20 @@ function ComputerPreview({
           computer?.state === "running" &&
           embeddedScreenUrl &&
           !computerScreenError ? (
-          <iframe
-            key={screenFrameKey}
-            title={t`Bot screen preview`}
-            ref={screenFrameRef}
-            src={embeddedScreenUrl}
-            sandbox={screenIframeSandbox(embeddedScreenUrl)}
-            className="h-full w-full border-0 bg-black"
-            allow="clipboard-read; clipboard-write"
-            style={{ pointerEvents: "none" }}
-          />
+          embeddedScreenUrl === COMPUTER_FRAME_SOURCE ? (
+            <NativeComputerScreen key={screenFrameKey} botId={bot.id} />
+          ) : (
+            <iframe
+              key={screenFrameKey}
+              title={t`Bot screen preview`}
+              ref={screenFrameRef}
+              src={embeddedScreenUrl}
+              sandbox={screenIframeSandbox(embeddedScreenUrl)}
+              className="h-full w-full border-0 bg-black"
+              allow="clipboard-read; clipboard-write"
+              style={{ pointerEvents: "none" }}
+            />
+          )
         ) : (
           <div
             className={`grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80 ${hideOnHover}`}

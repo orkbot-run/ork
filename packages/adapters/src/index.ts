@@ -58,6 +58,7 @@ export * from "./composio-fake.js";
 export * from "./computer-browser.js";
 export * from "./computer-control.js";
 export * from "./computer-disk.js";
+export * from "./computer-frame-image.js";
 export * from "./computer-idle.js";
 export * from "./computer-lifecycle.js";
 export * from "./computer-provider-descriptor.js";

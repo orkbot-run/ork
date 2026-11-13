@@ -1,8 +1,13 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited keyboard tests are preserved. Native HTTP input coverage follows LICENSE.md.
+
 import { describe, expect, it } from "vitest";
 import {
   COMPUTER_KEYBOARD_READY_MESSAGE,
   commandsForKeyboardChange,
   computerKeyboardChanges,
+  computerKeyboardInputs,
   computerKeyboardReadyProbe,
   computerKeyboardScript,
   createComputerKeyboardBridge,
@@ -110,5 +115,26 @@ describe("computer keyboard edits", () => {
     expect(JSON.parse(literal)).toBe(`${COMPUTER_KEYBOARD_READY_MESSAGE}:1"</script>`);
     expect(isComputerKeyboardReadyMessage(`${COMPUTER_KEYBOARD_READY_MESSAGE}:4`, "4")).toBe(true);
     expect(isComputerKeyboardReadyMessage(`${COMPUTER_KEYBOARD_READY_MESSAGE}:4`, "5")).toBe(false);
+  });
+});
+
+describe("native HTTP keyboard input", () => {
+  it("preserves Unicode text and maps control chords and special keys", () => {
+    expect([...computerKeyboardInputs({ type: "text", text: "Hello 👋" })]).toEqual([
+      { kind: "clipboard", payload: { text: "Hello 👋" } },
+    ]);
+    expect([...computerKeyboardInputs({ type: "key", name: "ArrowLeft", control: true })]).toEqual([
+      { kind: "key", payload: { key: "ctrl+Left" } },
+    ]);
+    expect([...computerKeyboardInputs({ type: "char", text: "a", control: true })]).toEqual([
+      { kind: "key", payload: { key: "ctrl+a" } },
+    ]);
+    expect([...computerKeyboardInputs({ type: "key", name: "Return" })]).toEqual([
+      { kind: "key", payload: { key: "Return" } },
+    ]);
+    expect([...computerKeyboardInputs({ type: "backspace", count: 2 })]).toEqual([
+      { kind: "key", payload: { key: "BackSpace" } },
+      { kind: "key", payload: { key: "BackSpace" } },
+    ]);
   });
 });

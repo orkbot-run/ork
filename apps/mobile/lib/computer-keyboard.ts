@@ -1,3 +1,10 @@
+// SPDX-FileCopyrightText: 2026 Ork contributors (modifications)
+// SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
+// Inherited keyboard editing remains available. Native HTTP input mapping follows LICENSE.md.
+
+import type { RpcInput } from "@orkbot/contracts";
+import { computerInputForDomKey } from "@orkbot/core";
+
 export const NATIVE_COMPUTER_KEYBOARD_BOOT = "window.__orkbotNativeKeys=true;true;";
 
 export type ComputerKeyName =
@@ -15,6 +22,27 @@ export type ComputerKeyboardCommand =
   | { type: "backspace"; count: number }
   | { type: "key"; name: ComputerKeyName; control?: boolean }
   | { type: "char"; text: string; control?: boolean };
+
+export function* computerKeyboardInputs(
+  command: ComputerKeyboardCommand,
+): Generator<Pick<RpcInput<"computer/input">, "kind" | "payload">> {
+  if (command.type === "text" || (command.type === "char" && !command.control)) {
+    if (command.text) yield { kind: "clipboard", payload: { text: command.text } };
+    return;
+  }
+  if (command.type === "backspace") {
+    for (let index = 0; index < command.count; index++)
+      yield { kind: "key", payload: { key: "BackSpace" } };
+    return;
+  }
+  const value = command.type === "char" ? command.text : command.name;
+  const mapped = computerInputForDomKey(value);
+  yield command.control
+    ? { kind: "key", payload: { key: `ctrl+${mapped.kind === "key" ? mapped.key : value}` } }
+    : mapped.kind === "key"
+      ? { kind: "key", payload: { key: mapped.key } }
+      : { kind: "clipboard", payload: { text: mapped.text } };
+}
 
 /**
  * What one change of the hidden field means on the remote, whose caret is at the field's end:
