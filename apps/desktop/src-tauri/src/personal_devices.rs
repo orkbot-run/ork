@@ -34,6 +34,8 @@ pub(crate) struct Credential {
     pub public_key: String,
     pub selection: Selection,
     pub account: Account,
+    #[serde(default)]
+    pub profile_epoch: String,
     active: bool,
 }
 
@@ -212,9 +214,15 @@ impl PersonalDevices {
         self.write(&registry)
     }
 
-    pub fn stage(&self, selection: &Selection, account: &Account) -> Result<Staged, String> {
+    pub fn stage(
+        &self,
+        selection: &Selection,
+        account: &Account,
+        profile_epoch: &str,
+    ) -> Result<Staged, String> {
         let _guard = self.gate.lock().map_err(|_| ERROR)?;
         if !selection.valid()
+            || !crate::profile::valid_epoch(profile_epoch)
             || selection.account != crate::settings::account_key(account.identity())
         {
             return Err(ERROR.into());
@@ -242,6 +250,7 @@ impl PersonalDevices {
             public_key: String::new(),
             selection: selection.clone(),
             account: account.clone(),
+            profile_epoch: profile_epoch.to_owned(),
             active: false,
         };
         registry.records.push(credential.clone());
@@ -319,12 +328,18 @@ impl PersonalDevices {
         if registry.denied {
             return Ok(None);
         }
-        for record in registry.records.into_iter().filter(|record| {
-            record.active
-                && record.selection.account == selection.account
-                && record.selection.origin == selection.origin
-                && record.selection.target == selection.target
-        }) {
+        for record in registry
+            .records
+            .into_iter()
+            .filter(|record| {
+                record.active
+                    && crate::profile::valid_epoch(&record.profile_epoch)
+                    && record.selection.account == selection.account
+                    && record.selection.origin == selection.origin
+                    && record.selection.target == selection.target
+            })
+            .rev()
+        {
             if self.keys.public_key(&record.label)?.as_deref() == Some(&record.public_key) {
                 return Ok(Some(record));
             }

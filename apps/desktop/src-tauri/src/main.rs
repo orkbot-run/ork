@@ -602,7 +602,7 @@ async fn native_command(
         }
         Command::AccountsSession => {
             if let Some(credential) =
-                installation_login::personal_credential(&app, &state, &document)?
+                installation_login::personal_credential(&app, &state, &document).await?
             {
                 return serde_json::to_value(credential.account)
                     .map_err(|_| "Accounts session unavailable.".into());
@@ -624,7 +624,7 @@ async fn native_command(
         }
         Command::AccountsWorkspaceTarget => {
             if let Some(credential) =
-                installation_login::personal_credential(&app, &state, &document)?
+                installation_login::personal_credential(&app, &state, &document).await?
             {
                 return serde_json::to_value(credential.selection.target)
                     .map_err(|_| "Could not continue".into());
@@ -2598,6 +2598,32 @@ async fn open_server(
         require_setup(window)?;
         require_current_stack(state, authorization, stack)?;
     }
+    let previous_document = state.active_window.lock().ok().and_then(|label| {
+        label
+            .as_ref()
+            .and_then(|label| state.sessions.current(label))
+    });
+    let _drafts = if let Some(document) = previous_document {
+        if let Some(previous) = app.get_webview_window(&document.label) {
+            Some(
+                document::flush_drafts(
+                    &previous,
+                    Duration::from_secs(3),
+                    state.transport.selected(&document.label).is_some(),
+                    || {
+                        state.sessions.is_current(&document)
+                            && require_native_account(state, authorization).is_ok()
+                            && state.restore_intent.load(Ordering::SeqCst) == intent
+                    },
+                )
+                .await?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let logical = choice.server_url.clone();
     let target = if choice.workspace.is_some() {
         state.transport.renderer(&state.directory).await?
@@ -2651,6 +2677,7 @@ async fn open_server(
         &logical,
         authorization.account.identity(),
         choice.workspace.as_ref(),
+        authorization.profile_epoch(),
     );
     #[cfg(target_os = "macos")]
     let builder = builder
@@ -3376,6 +3403,15 @@ async fn restore_personal_server(
     let Some(credential) = state.personal_devices.saved(&choice)? else {
         return Ok(false);
     };
+    if let Some((account, profile_epoch)) = state
+        .accounts
+        .local_profile_epoch(&server_directory::origin())
+        .await?
+    {
+        if account != credential.selection.account || profile_epoch != credential.profile_epoch {
+            return Ok(false);
+        }
+    }
     let authorization = state.accounts.personal_authorization(&credential, epoch)?;
     if state.restore_intent.load(Ordering::SeqCst) != intent {
         return Ok(false);

@@ -8,6 +8,7 @@ import {
   newClientId,
   validateComposerMentionBindings,
 } from "@orkbot/core";
+import { clearPendingAttachmentDrafts } from "./pending-attachment-drafts";
 
 export const COMPOSER_DRAFT_STORAGE_PREFIX = "orkbot.runposerDraft.";
 const COMPOSER_BINDINGS_STORAGE_PREFIX = "orkbot.runposerBindings.";
@@ -204,6 +205,8 @@ export function clearComposerDrafts(): void {
   lifetime = {};
   try {
     const storage = getLocalStorage();
+    const retired = storage?.getItem(COMPOSER_NAMESPACE_STORAGE_KEY);
+    if (retired) void clearPendingAttachmentDrafts(retired).catch(() => undefined);
     storage?.removeItem(COMPOSER_NAMESPACE_STORAGE_KEY);
     storage?.setItem(COMPOSER_NAMESPACE_STORAGE_KEY, newClientId());
   } catch {}

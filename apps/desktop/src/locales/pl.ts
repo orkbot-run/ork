@@ -18,6 +18,8 @@ export const PL_MESSAGES: Record<string, string> = {
   "Access required": "Wymagany dostęp",
   "Server unavailable": "Serwer niedostępny",
   "Update Ork to connect to this server.": "Zaktualizuj Ork, aby połączyć się z tym serwerem.",
+  "Could not save the selected files. Remove a file or try again.":
+    "Nie udało się zapisać wybranych plików. Usuń plik lub spróbuj ponownie.",
   // Menus
   "About {name}": "O {name}",
   "Check for Updates…": "Sprawdź aktualizacje…",

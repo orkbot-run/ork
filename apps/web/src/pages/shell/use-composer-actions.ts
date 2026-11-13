@@ -39,6 +39,7 @@ import {
 import { canPrepareImage, prepareImage } from "../../lib/prepare-image";
 import type { createSpaceRpc } from "../../lib/rpc";
 import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../../lib/run-error-storage";
+import { usePendingAttachmentDrafts } from "../../lib/use-pending-attachment-drafts";
 
 import { errorText } from "../../lib/user-error";
 import type { PendingAttachment } from "./chat-shared";
@@ -95,7 +96,10 @@ export function useComposerActions({
   flushPendingBrowserNotifications: () => void;
 }) {
   const { t } = useLingui();
-  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [pendingAttachments, setPendingAttachments] = usePendingAttachmentDrafts(
+    bootstrapMe?.spaceId,
+    bootstrapMe?.userId,
+  );
   usePendingAttachmentPreviewCleanup(pendingAttachments);
   const [replyTarget, setReplyTarget] = useState<ThreadMessage | null>(null);
   const [replyQuote, setReplyQuote] = useState<string | null>(null);

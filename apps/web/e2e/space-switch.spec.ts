@@ -3,7 +3,7 @@
 // Inherited Apache-2.0 tests are preserved. Native renderer entry selection is an Ork addition.
 
 import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 import { expect, test } from "./renderer-test";
 
 test("opening a bot in another space switches in place, without a page reload", async ({
@@ -62,4 +62,69 @@ test("opening a bot in another space switches in place, without a page reload", 
   ).toBe(0);
   expect(await page.evaluate(() => window.localStorage.getItem("orkbot:space-id"))).toBe(space.id);
   await captureScreenshot(page, testInfo, "space-switch-in-place");
+});
+
+test("workspace drafts retain their own file bytes after switching and reopening the renderer", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `draft-switch-${Date.now()}@orkbot.test`, "password12", "Draft Switcher");
+  await completeOnboarding(page);
+  const firstBot = activeBotId(page);
+  const firstDraft = "Unsent workspace A draft";
+  await page.getByRole("combobox", { name: /Message/ }).fill(firstDraft);
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "workspace-a.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Workspace A file bytes"),
+  });
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toBeVisible();
+  const headers = { [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) };
+  const response = await page.request.post("/rpc/spaces/create", {
+    headers,
+    data: { json: { name: "Draft B" } },
+  });
+  const { json: space } = (await response.json()) as { json: { id: string } };
+  const created = await page.request.post("/rpc/bots/create", {
+    headers: { ...headers, "x-orkbot-space-id": space.id },
+    data: { json: { name: "Scout", description: "", notifyOnFinish: true, computerMode: "team" } },
+  });
+  expect(created.ok()).toBe(true);
+  const { json: scout } = (await created.json()) as { json: { id: string } };
+  await page.goto(`/app/${scout.id}`);
+  const composer = page.getByRole("combobox", { name: /Message/ });
+  await expect(composer).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toHaveCount(0);
+  await composer.fill("Unsent workspace B draft");
+  await page.goto(`/app/${firstBot}`);
+  await expect(composer).toHaveValue(firstDraft);
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(composer).toHaveValue(firstDraft);
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "workspace-draft-file-restored");
+  const uploaded: string[] = [];
+  await page.route("**/rpc/artifacts/create", async (route) => {
+    uploaded.push(route.request().postDataJSON().json.contentBase64);
+    await route.continue();
+  });
+  await composer.press("Enter");
+  await expect(page.getByTestId("transcript").getByText(firstDraft, { exact: true })).toBeVisible();
+  expect(uploaded).toEqual([Buffer.from("Workspace A file bytes").toString("base64")]);
+  await page.goto(`/app/${scout.id}`);
+  await expect(composer).toHaveValue("Unsent workspace B draft");
+  await expect(
+    page.getByRole("button", { name: "Remove workspace-a.txt", exact: true }),
+  ).toHaveCount(0);
 });

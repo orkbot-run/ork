@@ -1044,6 +1044,23 @@ mod tests {
         );
         assert!(store.get(&config().key(&central)).unwrap().is_none());
         assert!(store.get(&config().key(&legacy)).unwrap().is_some());
+        let retained: Credential =
+            serde_json::from_str(&store.get(&config().key(&legacy)).unwrap().unwrap()).unwrap();
+        let mut fresh = credential();
+        fresh.account.expires_at = now() + 300;
+        fresh.nonce = Proof::new().unwrap().nonce;
+        accounts
+            .save(&config().key(&central), &fresh)
+            .await
+            .unwrap();
+        let authorization = accounts
+            .authorization_config(&central, &config())
+            .await
+            .unwrap();
+        assert_ne!(
+            authorization.profile_epoch(),
+            login_profile_epoch(&retained.nonce)
+        );
     }
 
     #[tokio::test]
@@ -1070,6 +1087,7 @@ mod tests {
         assert!(authorization.directory_bearer().is_err());
         let mut central_authorization = Authorization {
             account: authorization.account.clone(),
+            profile_epoch: authorization.profile_epoch.clone(),
             token: "central-access".into(),
             generation: authorization.generation,
             personal: None,
@@ -1119,6 +1137,40 @@ mod tests {
             .lock()
             .unwrap()
             .contains_key(&config().key(&fixture.origin)));
+    }
+
+    #[tokio::test]
+    async fn login_profile_epoch_survives_refresh_and_restart_but_changes_on_interactive_login() {
+        let fixture = Fixture::new(false).await;
+        let expected = login_profile_epoch(&credential().nonce);
+        let refreshed = fixture
+            .accounts
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_eq!(refreshed.profile_epoch(), expected);
+        let restarted = Accounts::new(Store(fixture.store.clone()));
+        let restored = restarted
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_eq!(restored.profile_epoch(), expected);
+        // A successful interactive exchange replaces the nonce even if old profile data remains.
+        let mut next = credential();
+        next.account.expires_at = now() + 300;
+        next.nonce = Proof::new().unwrap().nonce;
+        restarted
+            .save(&config().key(&fixture.origin), &next)
+            .await
+            .unwrap();
+        let replacement = restarted
+            .authorization_config(&fixture.origin, &config())
+            .await
+            .unwrap();
+        assert_ne!(replacement.profile_epoch(), expected);
+        assert!(!serde_json::to_string(&replacement.account)
+            .unwrap()
+            .contains(replacement.profile_epoch()));
     }
 }
 
@@ -1211,6 +1263,7 @@ pub(crate) struct Authorization {
     token: String,
     generation: u64,
     personal: Option<PersonalAuthority>,
+    profile_epoch: String,
 }
 
 pub(crate) struct PersonalAuthority {
@@ -1220,6 +1273,9 @@ pub(crate) struct PersonalAuthority {
 }
 
 impl Authorization {
+    pub(crate) fn profile_epoch(&self) -> &str {
+        &self.profile_epoch
+    }
     pub(crate) fn directory_bearer(&self) -> Result<&str, String> {
         if self.personal.is_some()
             || self.token.is_empty()
@@ -1243,6 +1299,17 @@ struct Credential {
     access_token: String,
     refresh_token: Option<String>,
     nonce: String,
+}
+
+fn login_profile_epoch(nonce: &str) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"orkbot-login-profile-v1\0");
+    digest.update(nonce.as_bytes());
+    digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -1674,10 +1741,14 @@ impl Accounts {
         credential: &crate::personal_devices::Credential,
         epoch: u64,
     ) -> Result<Authorization, String> {
+        if !crate::profile::valid_epoch(&credential.profile_epoch) {
+            return Err("Sign in to Accounts first.".into());
+        }
         let authorization = Authorization {
             account: credential.account.clone(),
             token: String::new(),
             generation: self.generation.load(Ordering::SeqCst),
+            profile_epoch: credential.profile_epoch.clone(),
             personal: Some(PersonalAuthority {
                 selection: credential.selection.clone(),
                 device_id: credential.device_id.clone(),
@@ -1717,6 +1788,35 @@ impl Accounts {
         Ok(Some(stored.account))
     }
 
+    /// Read only the durable login lifetime; this never renews or creates central authority.
+    pub(crate) async fn local_profile_epoch(
+        &self,
+        origin: &Url,
+    ) -> Result<Option<(String, String)>, String> {
+        let generation = self.generation.load(Ordering::SeqCst);
+        let _operation = self.operation.lock().await;
+        if self.signing_in.load(Ordering::SeqCst) {
+            return Err(ERROR.into());
+        }
+        let config = Config::build()?;
+        let Some(raw) = self.store.get(config.key(origin)).await? else {
+            return Ok(None);
+        };
+        if raw.len() > 128 * 1024 {
+            return Err(ERROR.into());
+        }
+        let stored: Credential = serde_json::from_str(&raw).map_err(|_| ERROR)?;
+        if stored.account.issuer != config.issuer
+            || generation != self.generation.load(Ordering::SeqCst)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some((
+            crate::settings::account_key(stored.account.identity()),
+            login_profile_epoch(&stored.nonce),
+        )))
+    }
+
     async fn authorization_config(
         &self,
         origin: &Url,
@@ -1728,6 +1828,7 @@ impl Accounts {
             .await?
             .ok_or("Sign in to Accounts first.")?;
         let authorization = Authorization {
+            profile_epoch: login_profile_epoch(&credential.nonce),
             account: credential.account,
             token: credential.access_token,
             generation,

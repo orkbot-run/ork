@@ -16,6 +16,43 @@ const DOCUMENT_SCRIPT: &str = include_str!("../../build/tauri-ui/app-document-sc
 const POLL_INTERVAL: Duration = Duration::from_millis(50);
 const CLOSED: &str = "The window closed before the app loaded.";
 const TIMED_OUT: &str = "The app did not finish loading. Try connecting again.";
+const FLUSH_FAILED: &str = "Could not save the selected files. Remove a file or try again.";
+const FLUSH_SCRIPT: &str = r#"(() => {
+  if (typeof window.orkbotFlushComposerDrafts !== 'function') return required ? 'failed' : 'ready';
+  if (!window.__orkbotDraftFlush) {
+    const attempt = { state: 'pending' };
+    window.__orkbotDraftFlush = attempt;
+    Promise.resolve().then(() => window.orkbotFlushComposerDrafts()).then(
+      () => { attempt.state = 'ready'; }, () => { attempt.state = 'failed'; }
+    );
+  }
+  return window.__orkbotDraftFlush.state;
+})()"#;
+const RESUME_SCRIPT: &str =
+    "window.orkbotResumeComposerDrafts?.(); delete window.__orkbotDraftFlush;";
+
+pub struct FlushedDrafts<R: Runtime>(WebviewWindow<R>);
+impl<R: Runtime> Drop for FlushedDrafts<R> {
+    fn drop(&mut self) {
+        // A failed candidate leaves the previous editor usable. A destroyed window ignores this.
+        let _ = self.0.eval(RESUME_SCRIPT);
+    }
+}
+
+/// Only completion status crosses this bounded callback; file bytes remain in the webview profile.
+pub async fn flush_drafts<R: Runtime>(
+    window: &WebviewWindow<R>,
+    timeout: Duration,
+    required: bool,
+    current: impl Fn() -> bool,
+) -> Result<FlushedDrafts<R>, String> {
+    let script = format!("(() => {{ const required = {required}; return {FLUSH_SCRIPT}; }})()");
+    if let Err(error) = wait_for_state(window, timeout, &script, false, current).await {
+        let _ = window.eval(RESUME_SCRIPT);
+        return Err(error);
+    }
+    Ok(FlushedDrafts(window.clone()))
+}
 
 fn is_mounted_document(answer: &str) -> bool {
     serde_json::from_str::<String>(answer)
@@ -27,6 +64,16 @@ pub async fn wait_for_document<R: Runtime>(
     window: &WebviewWindow<R>,
     timeout: Duration,
 ) -> Result<(), String> {
+    wait_for_state(window, timeout, DOCUMENT_SCRIPT, true, || true).await
+}
+
+async fn wait_for_state<R: Runtime>(
+    window: &WebviewWindow<R>,
+    timeout: Duration,
+    script: &str,
+    allow_failed: bool,
+    current: impl Fn() -> bool,
+) -> Result<(), String> {
     let deadline = Instant::now() + timeout;
     let (closed_sender, mut closed) = watch::channel(false);
     let _closed_guard = closed_sender.clone();
@@ -37,6 +84,9 @@ pub async fn wait_for_document<R: Runtime>(
     });
 
     loop {
+        if !current() {
+            return Err("This connection is no longer active.".into());
+        }
         if *closed.borrow()
             || window
                 .app_handle()
@@ -46,13 +96,18 @@ pub async fn wait_for_document<R: Runtime>(
             return Err(CLOSED.into());
         }
         if Instant::now() >= deadline {
-            return Err(TIMED_OUT.into());
+            return Err(if allow_failed {
+                TIMED_OUT
+            } else {
+                FLUSH_FAILED
+            }
+            .into());
         }
 
         let (sender, answer) = oneshot::channel();
         // Tauri accepts an Fn callback, so a late or repeated answer can consume the sender only once.
         let sender = Mutex::new(Some(sender));
-        let evaluation = window.eval_with_callback(DOCUMENT_SCRIPT, move |result| {
+        let evaluation = window.eval_with_callback(script, move |result| {
             if let Ok(mut sender) = sender.lock() {
                 if let Some(sender) = sender.take() {
                     let _ = sender.send(result);
@@ -64,10 +119,16 @@ pub async fn wait_for_document<R: Runtime>(
             let answer = tokio::select! {
                 _ = closed.changed() => return Err(CLOSED.into()),
                 answer = timeout_at(deadline, answer) => {
-                    answer.map_err(|_| TIMED_OUT.to_owned())?.ok()
+                    answer.map_err(|_| if allow_failed { TIMED_OUT } else { FLUSH_FAILED }.to_owned())?.ok()
                 }
             };
             if answer.as_deref().is_some_and(is_mounted_document) {
+                if !current() {
+                    return Err("This connection is no longer active.".into());
+                }
+                if !allow_failed && answer.as_deref() != Some(r#""ready""#) {
+                    return Err(FLUSH_FAILED.into());
+                }
                 if *closed.borrow()
                     || window
                         .app_handle()
@@ -133,5 +194,55 @@ mod tests {
         );
         assert!(started.elapsed() >= timeout);
         assert!(started.elapsed() < Duration::from_secs(1));
+    }
+
+    #[tokio::test]
+    async fn draft_flush_timeout_keeps_the_previous_window_available() {
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(
+            &app,
+            "previous",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .build()
+        .unwrap();
+        let started = Instant::now();
+        assert!(matches!(
+            flush_drafts(&window, Duration::from_millis(20), true, || true).await,
+            Err(error) if error == FLUSH_FAILED
+        ));
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(app.get_webview_window("previous").is_some());
+    }
+
+    #[tokio::test]
+    async fn document_replacement_retires_a_pending_flush_without_closing_the_window() {
+        let app = tauri::test::mock_app();
+        let window = tauri::WebviewWindowBuilder::new(
+            &app,
+            "previous",
+            tauri::WebviewUrl::App("index.html".into()),
+        )
+        .build()
+        .unwrap();
+        let sessions = crate::native::Sessions::default();
+        let origin = url::Url::parse("https://installation.example.test").unwrap();
+        let proof = sessions.insert("previous", &origin).unwrap();
+        let old = sessions
+            .authorize("previous", &origin, &proof, &"a".repeat(64), Some(1))
+            .unwrap()
+            .0;
+        let (result, ()) = tokio::join!(
+            flush_drafts(&window, Duration::from_secs(1), true, || sessions
+                .is_current(&old)),
+            async {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                sessions
+                    .authorize("previous", &origin, &proof, &"b".repeat(64), Some(2))
+                    .unwrap();
+            },
+        );
+        assert!(matches!(result, Err(error) if error == "This connection is no longer active."));
+        assert!(app.get_webview_window("previous").is_some());
     }
 }

@@ -88,7 +88,7 @@ fn completed(credential: &Credential) -> Value {
     }}})
 }
 fn activate(vault: &PersonalDevices, selection: &Selection) -> Credential {
-    let staged = vault.stage(selection, &account()).unwrap();
+    let staged = vault.stage(selection, &account(), &"c".repeat(64)).unwrap();
     let expected = completed(&staged.credential);
     vault.activate(staged, &expected).unwrap();
     vault.credential(selection).unwrap().unwrap()
@@ -121,7 +121,9 @@ fn pending_activation_has_no_authority_and_signs_only_the_exact_grant_bound_mess
     let vault = vault(directory.path(), keys.clone());
     let server = SigningKey::random(&mut rand_core::OsRng);
     let selection = selection(&server);
-    let staged = vault.stage(&selection, &account()).unwrap();
+    let staged = vault
+        .stage(&selection, &account(), &"c".repeat(64))
+        .unwrap();
     assert!(vault.credential(&selection).unwrap().is_none());
     let nonce = random_nonce();
     let signature = vault
@@ -157,7 +159,9 @@ fn pending_activation_has_no_authority_and_signs_only_the_exact_grant_bound_mess
     assert!(vault.activate(staged, &wrong).is_err());
     assert!(vault.credential(&selection).unwrap().is_none());
     // A retry cleans the prior journaled reservation before creating another key.
-    let _retry = vault.stage(&selection, &account()).unwrap();
+    let _retry = vault
+        .stage(&selection, &account(), &"c".repeat(64))
+        .unwrap();
     assert_eq!(keys.values.lock().unwrap().len(), 1);
 }
 
@@ -276,12 +280,22 @@ fn interrupted_logout_denies_authority_durably_before_os_key_deletion() {
             restarted.epoch()
         )
         .is_err());
-    assert!(restarted.stage(&selected, &account()).is_err());
+    assert!(restarted
+        .stage(&selected, &account(), &"c".repeat(64))
+        .is_err());
     keys.deny_delete.store(false, Ordering::SeqCst);
-    assert!(restarted.stage(&selected, &account()).is_err());
+    assert!(restarted
+        .stage(&selected, &account(), &"c".repeat(64))
+        .is_err());
     restarted.after_interactive_sign_in().unwrap();
-    let replacement = activate(&restarted, &selected);
+    let staged = restarted
+        .stage(&selected, &account(), &"d".repeat(64))
+        .unwrap();
+    let receipt = completed(&staged.credential);
+    restarted.activate(staged, &receipt).unwrap();
+    let replacement = restarted.credential(&selected).unwrap().unwrap();
     assert_ne!(replacement.device_id, credential.device_id);
+    assert_ne!(replacement.profile_epoch, credential.profile_epoch);
     assert_eq!(keys.values.lock().unwrap().len(), 1);
     restarted.forget_all().unwrap();
     assert!(keys.values.lock().unwrap().is_empty());
@@ -292,12 +306,58 @@ fn interrupted_logout_denies_authority_durably_before_os_key_deletion() {
 }
 
 #[test]
+fn offline_device_retains_its_login_profile_and_a_new_activation_replaces_the_profile_lifetime() {
+    let directory = tempfile::tempdir().unwrap();
+    let keys = Arc::new(Keys::default());
+    let first = vault(directory.path(), keys.clone());
+    let selected = selection(&SigningKey::random(&mut rand_core::OsRng));
+    let credential = activate(&first, &selected);
+    let accounts = crate::accounts::Accounts::default();
+    let offline = accounts
+        .personal_authorization(&credential, first.epoch())
+        .unwrap();
+    assert_eq!(offline.profile_epoch(), "c".repeat(64));
+    let restarted = vault(directory.path(), keys);
+    let restored = restarted.credential(&selected).unwrap().unwrap();
+    assert_eq!(restored.profile_epoch, credential.profile_epoch);
+    let staged = restarted
+        .stage(&selected, &account(), &"d".repeat(64))
+        .unwrap();
+    let receipt = completed(&staged.credential);
+    restarted.activate(staged, &receipt).unwrap();
+    let latest = restarted.credential(&selected).unwrap().unwrap();
+    assert_eq!(latest.profile_epoch, "d".repeat(64));
+    assert_ne!(latest.profile_epoch, credential.profile_epoch);
+}
+
+#[test]
+fn a_legacy_device_journal_without_a_login_profile_requires_interactive_sign_in() {
+    let directory = tempfile::tempdir().unwrap();
+    let keys = Arc::new(Keys::default());
+    let first = vault(directory.path(), keys.clone());
+    let selected = selection(&SigningKey::random(&mut rand_core::OsRng));
+    let mut old = activate(&first, &selected);
+    let mut bytes: Value = serde_json::from_slice(&std::fs::read(first.path()).unwrap()).unwrap();
+    bytes["records"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("profileEpoch");
+    crate::local_stack::write_private(&first.path(), &serde_json::to_vec(&bytes).unwrap()).unwrap();
+    let restarted = vault(directory.path(), keys);
+    assert!(restarted.credential(&selected).unwrap().is_none());
+    old.profile_epoch.clear();
+    assert!(crate::accounts::Accounts::default()
+        .personal_authorization(&old, restarted.epoch())
+        .is_err());
+}
+
+#[test]
 fn logout_fences_an_already_staged_activation_and_corrupt_metadata_fails_closed() {
     let directory = tempfile::tempdir().unwrap();
     let vault = vault(directory.path(), Arc::new(Keys::default()));
     let server = SigningKey::random(&mut rand_core::OsRng);
     let selected = selection(&server);
-    let staged = vault.stage(&selected, &account()).unwrap();
+    let staged = vault.stage(&selected, &account(), &"c".repeat(64)).unwrap();
     let result = completed(&staged.credential);
     vault.forget_all().unwrap();
     assert!(vault

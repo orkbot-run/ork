@@ -13,7 +13,7 @@ pub async fn sign_in(
     document: &native::Document,
 ) -> Result<serde_json::Value, String> {
     let _login = state.transport.begin_login(&document.label, &document.id)?;
-    if let Some(credential) = personal_credential(app, state, document)? {
+    if let Some(credential) = personal_credential(app, state, document).await? {
         return sign_in_personal(app, state, document, &credential).await;
     }
     let authorization = state
@@ -58,11 +58,11 @@ pub async fn sign_in(
         return Err("Could not continue".into());
     }
     let staged = if personal {
-        Some(
-            state
-                .personal_devices
-                .stage(&selection, &authorization.account)?,
-        )
+        Some(state.personal_devices.stage(
+            &selection,
+            &authorization.account,
+            authorization.profile_epoch(),
+        )?)
     } else {
         None
     };
@@ -133,7 +133,7 @@ pub async fn sign_in(
 }
 
 /// A saved descriptor is useful only in its exact current native document and OS key scope.
-pub fn personal_credential(
+pub async fn personal_credential(
     app: &tauri::AppHandle,
     state: &DesktopState,
     document: &native::Document,
@@ -160,7 +160,22 @@ pub fn personal_credential(
         return Err("Could not continue".into());
     }
     // Unavailable personal storage grants no offline authority. Online company login stays independent.
-    Ok(state.personal_devices.credential(&selection).ok().flatten())
+    let credential = state.personal_devices.credential(&selection).ok().flatten();
+    if let Some(retained) = &credential {
+        if let Some((account, epoch)) = state
+            .accounts
+            .local_profile_epoch(&server_directory::origin())
+            .await?
+        {
+            if account != selection.account || epoch != retained.profile_epoch {
+                return Ok(None);
+            }
+        }
+    }
+    if !state.sessions.is_current(document) {
+        return Err("Could not continue".into());
+    }
+    Ok(credential)
 }
 
 async fn sign_in_personal(
