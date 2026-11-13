@@ -4,12 +4,14 @@
 
 """Classify pull-request merge commits in disposable repositories, without network access."""
 
+import os
 import pathlib
 import subprocess
 import tempfile
 import unittest
 
 SCRIPT = pathlib.Path(__file__).with_name("changed-areas.sh").resolve()
+WORKFLOW = SCRIPT.parents[1] / "workflows" / "ci.yml"
 BASE_FILES = ("apps/web/src/logo.svg", "apps/mobile/app/index.tsx", "README.md")
 
 
@@ -17,7 +19,35 @@ def git(root, *args):
     return subprocess.check_output(["git", *args], cwd=root, stderr=subprocess.DEVNULL, text=True)
 
 
-def areas(change):
+def changes_job():
+    return WORKFLOW.read_text().split("  changes:\n", 1)[1].split("\n  build:\n", 1)[0]
+
+
+def workflow_areas(root, event):
+    """Execute the active workflow's routing shell, with no Actions service or network."""
+    local_script = root / ".github" / "scripts" / "changed-areas.sh"
+    local_script.parent.mkdir(parents=True, exist_ok=True)
+    local_script.write_text(SCRIPT.read_text())
+    step = changes_job().split("      - id: areas\n", 1)[1]
+    body = step.split("        run: ", 1)[1]
+    script = (
+        "\n".join(line[10:] for line in body[2:].splitlines() if line.strip())
+        if body.startswith("|\n")
+        else body.splitlines()[0]
+    )
+    destination = root / "outputs"
+    subprocess.run(
+        ["bash", "-e", "-o", "pipefail", "-c", script],
+        cwd=root,
+        env={**os.environ, "GITHUB_EVENT_NAME": event, "GITHUB_OUTPUT": str(destination)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return dict(line.split("=", 1) for line in destination.read_text().splitlines())
+
+
+def areas(change, event=None):
     """Commit `change(root)` on a branch, merge it into the base, and classify the merge commit."""
     with tempfile.TemporaryDirectory() as directory:
         root = pathlib.Path(directory)
@@ -40,6 +70,8 @@ def areas(change):
         git(root, "add", "-A")
         git(root, "commit", "-qm", "unrelated main commit")
         git(root, "merge", "-q", "--no-ff", "-m", "merge", "pr")
+        if event:
+            return workflow_areas(root, event)
         output = subprocess.check_output(["bash", str(SCRIPT)], cwd=root, text=True)
         return dict(line.split("=", 1) for line in output.split())
 
@@ -63,6 +95,27 @@ EVERY_BROWSER_AREA = ("web", "e2e", "server")
 
 
 class ChangedAreasTests(unittest.TestCase):
+    def test_workflow_changes_job_runs_for_every_trigger(self):
+        self.assertNotRegex(changes_job(), r"(?m)^    if:")
+
+    def test_pull_request_workflow_retains_the_real_merge_diff_filter(self):
+        for path, expected in [
+            ("apps/mobile/app/screen.tsx", expect()),
+            ("docs/getting-started.md", expect("web")),
+            ("apps/desktop/src-tauri/src/lib.rs", expect("web", "e2e", "native")),
+        ]:
+            with self.subTest(path=path):
+                self.assertEqual(areas(write(path), "pull_request"), expected)
+
+    def test_main_and_manual_workflows_run_every_dependent_area_without_a_pr_diff(self):
+        for event in ["push", "workflow_dispatch"]:
+            with self.subTest(event=event), tempfile.TemporaryDirectory() as directory:
+                # No git repository or merge parent exists in these event fixtures.
+                self.assertEqual(
+                    workflow_areas(pathlib.Path(directory), event),
+                    {area: "true" for area in ("web", "server", "native", "compose")},
+                )
+
     def test_classifies_what_the_pull_request_changed(self):
         cases = [
             ("apps/mobile/app/screen.tsx", expect()),

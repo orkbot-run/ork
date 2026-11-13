@@ -23,12 +23,10 @@ env:
   TESTCONTAINERS_HUB_IMAGE_NAME_PREFIX: mirror.gcr.io/
 
 jobs:
-  # Pull requests skip suites their files cannot affect (see .github/scripts/changed-areas.sh); a
-  # job skipped by `if` still satisfies a required check. Main skips this job, and with it every
-  # job that needs it. Web E2E checks its own areas instead, so its shards start with the first jobs.
+  # Pull requests skip suites their files cannot affect. Main and manual runs qualify every
+  # dependent area. Web E2E checks its own PR areas so its shards start with the first jobs.
   changes:
     name: Changed areas
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -45,7 +43,12 @@ jobs:
           filter: blob:none
           sparse-checkout: .github
       - id: areas
-        run: bash .github/scripts/changed-areas.sh >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            bash .github/scripts/changed-areas.sh >> "$GITHUB_OUTPUT"
+          else
+            printf '%s\n' web=true server=true native=true compose=true >> "$GITHUB_OUTPUT"
+          fi
 
   build:
     name: Production builds
