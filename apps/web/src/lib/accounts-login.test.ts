@@ -36,6 +36,16 @@ function setup(bootstrapRequired = false) {
   return { createServerLoginGrant, consumeServerInitializationSecret, fetcher };
 }
 
+it("delegates native installation authentication without exposing the grant to the renderer", async () => {
+  const state = setup();
+  const signInToServer = vi.fn(async () => undefined);
+  window.orkbotDesktop!.accounts!.signInToServer = signInToServer;
+  await signInWithNativeAccounts();
+  expect(signInToServer).toHaveBeenCalledOnce();
+  expect(state.createServerLoginGrant).not.toHaveBeenCalled();
+  expect(state.fetcher).not.toHaveBeenCalled();
+});
+
 it("sends only the proof to the current server and never opens an OIDC popup", async () => {
   const state = setup();
   await signInWithNativeAccounts();

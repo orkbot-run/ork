@@ -19,6 +19,7 @@
     "tauri:check": "pnpm tauri:prepare && tsc --ignoreConfig --noEmit --strict --target es2022 --module esnext --moduleResolution bundler --skipLibCheck --lib es2022,dom tauri-ui/setup.ts tauri-ui/native-bridge.ts && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --locked --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings"
   },
   "dependencies": {
+    "@orkbot/client-transport": "workspace:*",
     "@orkbot/avatar": "workspace:*",
     "@orkbot/contracts": "workspace:*",
     "@orkbot/core": "workspace:*"

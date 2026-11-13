@@ -31,12 +31,21 @@ pub struct HttpHeader {
     pub value: String,
 }
 
-#[derive(uniffi::Record)]
+#[derive(Clone, uniffi::Record)]
 pub struct HttpRequest {
     pub method: String,
     pub path: String,
     pub headers: Vec<HttpHeader>,
     pub has_body: bool,
+}
+
+impl HttpRequest {
+    /// Apply the same HTTP policy before opening a network channel or retaining an IPC request.
+    pub fn validate(&self) -> Result<(), TransportError> {
+        let (_, receiver) = mpsc::channel(1);
+        request("installation.invalid", self.clone(), Upload { receiver })?;
+        Ok(())
+    }
 }
 
 #[derive(Clone, uniffi::Record)]

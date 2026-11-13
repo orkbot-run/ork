@@ -4,6 +4,7 @@
   "license": "Apache-2.0 AND PolyForm-Noncommercial-1.0.0",
   "type": "module",
   "exports": {
+    "./native-fetch": "./src/native-fetch.ts",
     ".": "./src/index.ts"
   },
   "scripts": {

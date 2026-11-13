@@ -1557,6 +1557,37 @@ impl Accounts {
             .await
     }
 
+    pub(crate) async fn queue_installation_logout(
+        &self,
+        selection: crate::installation_transport::Selection,
+        token: String,
+    ) -> Result<(), String> {
+        self.revocations
+            .enqueue(crate::revocations::Target::Installation { selection, token })
+            .await
+    }
+
+    pub(crate) async fn retry_installation_revocations(&self, authorization: &Authorization) {
+        let account = crate::settings::account_key(authorization.account.identity());
+        self.revocations
+            .flush_installations(&account, |selection| async move {
+                if !self.is_current(authorization) {
+                    return Err(ERROR.into());
+                }
+                if selection.relay_origin.is_none() {
+                    return Ok(None);
+                }
+                crate::server_login::issue_relay(
+                    authorization.directory_bearer()?,
+                    &selection,
+                    || self.is_current(authorization),
+                )
+                .await
+                .map(Some)
+            })
+            .await;
+    }
+
     pub(crate) fn retry_revocations(&self) {
         if self.revocations.is_known_empty() || self.revocations.is_running() {
             return;

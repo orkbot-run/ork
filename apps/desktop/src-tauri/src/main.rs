@@ -10,6 +10,8 @@ mod credentials;
 mod document;
 mod host_computer;
 mod host_runner;
+mod installation_login;
+mod installation_transport;
 #[cfg(any(target_os = "macos", test))]
 mod lifecycle;
 mod local_enrollment;
@@ -21,6 +23,7 @@ mod native;
 mod pairing;
 mod passkeys;
 mod profile;
+mod renderer_host;
 #[cfg(any(windows, test))]
 mod revocation_storage;
 mod revocations;
@@ -62,6 +65,7 @@ struct DesktopState {
     sequence: AtomicU64,
     switching: tokio::sync::Mutex<()>,
     sessions: native::Sessions,
+    transport: installation_transport::Transport,
     browser_auth: browser_auth::BrowserAuth,
     accounts: accounts::Accounts,
     accounts_started: Mutex<AccountsStarted>,
@@ -293,8 +297,59 @@ fn current_server_account(
                     .and_then(|setup| setup.clone())
                     .is_some_and(|setup| {
                         setup.belongs_to(authorization.account.identity())
-                            && setup.server_url.origin() == document.origin.origin()
+                            && setup.server_url.origin()
+                                == document_server_origin(state, document).origin()
                     })))
+}
+
+fn document_server_origin(state: &DesktopState, document: &native::Document) -> Url {
+    state
+        .transport
+        .logical_origin(&document.label, &document.origin)
+        .unwrap_or_else(|| document.origin.clone())
+}
+
+async fn installation_ticket(
+    app: &tauri::AppHandle,
+    state: &DesktopState,
+    document: &native::Document,
+) -> Result<Option<String>, String> {
+    let selection = state
+        .transport
+        .selected(&document.label)
+        .ok_or("Native connection changed")?;
+    if selection.relay_origin.is_none() {
+        return Ok(None);
+    }
+    let authorization = state
+        .accounts
+        .authorization(&server_directory::origin())
+        .await?;
+    let current = || {
+        current_server_account(app, state, document, &authorization)
+            && selection.account == settings::account_key(authorization.account.identity())
+            && state.transport.selected(&document.label).as_ref() == Some(&selection)
+    };
+    server_login::issue_relay(authorization.directory_bearer()?, &selection, current)
+        .await
+        .map(Some)
+}
+
+fn retry_installation_revocations(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<DesktopState>();
+        if let Ok(authorization) = state
+            .accounts
+            .authorization(&server_directory::origin())
+            .await
+        {
+            state
+                .accounts
+                .retry_installation_revocations(&authorization)
+                .await;
+        }
+    });
 }
 
 fn active_document(app: &tauri::AppHandle) -> Option<native::Document> {
@@ -330,7 +385,7 @@ fn document_workspace(
         .as_ref()
         .filter(|setup| {
             setup.belongs_to(authorization.account.identity())
-                && setup.server_url.origin() == document.origin.origin()
+                && setup.server_url.origin() == document_server_origin(state, document).origin()
         })
         .and_then(|setup| setup.workspace.clone()))
 }
@@ -364,6 +419,7 @@ fn send_native_event(
 
 fn cancel_native_document(app: &tauri::AppHandle, label: &str) {
     if let Some(state) = app.try_state::<DesktopState>() {
+        state.transport.remove(label);
         if let Some(document) = state.sessions.invalidate(label) {
             let owner = native::owner(label, &document);
             state.browser_auth.cancel_owner(&owner);
@@ -418,6 +474,9 @@ async fn native_command(
         }
         auth::close_popup(&app, window.label());
     }
+    if matches!(command, Command::Hello { .. }) {
+        state.transport.document(&document.label, &document.id);
+    }
     let active = state
         .active_window
         .lock()
@@ -430,6 +489,14 @@ async fn native_command(
             | native::Command::AccountsWorkspaceTarget
             | native::Command::AccountsConsumeServerInitializationSecret
             | native::Command::ServerRemember
+            | native::Command::TransportOpen { .. }
+            | native::Command::TransportStart { .. }
+            | native::Command::TransportWrite { .. }
+            | native::Command::TransportFinish { .. }
+            | native::Command::TransportHead { .. }
+            | native::Command::TransportRead { .. }
+            | native::Command::TransportCancel { .. }
+            | native::Command::AccountsSignInToServer
     ) && opening_server_matches(&state, &document, None);
     if !active && !command.read_only() && !opening_auth {
         return Err("This desktop window is not active.".into());
@@ -437,7 +504,56 @@ async fn native_command(
     let owner = document.owner();
     let unit = serde_json::Value::Null;
     match command {
+        Command::TransportOpen { id, input } => {
+            let ticket = installation_ticket(&app, &state, &document).await?;
+            state
+                .transport
+                .open(&document.label, &document.id, &id, &input, ticket)?;
+            Ok(unit)
+        }
+        Command::TransportStart { id } => {
+            state
+                .transport
+                .start(&document.label, &document.id, &id)
+                .await?;
+            Ok(unit)
+        }
+        Command::TransportWrite { id, bytes } => Ok(serde_json::json!(
+            state
+                .transport
+                .write(&document.label, &document.id, &id, &bytes)
+                .await?
+        )),
+        Command::TransportFinish { id } => {
+            state
+                .transport
+                .finish(&document.label, &document.id, &id)
+                .await?;
+            Ok(unit)
+        }
+        Command::TransportHead { id } => {
+            state
+                .transport
+                .head(&document.label, &document.id, &id)
+                .await
+        }
+        Command::TransportRead { id } => Ok(serde_json::json!(
+            state
+                .transport
+                .read(&document.label, &document.id, &id)
+                .await?
+        )),
+        Command::TransportCancel { id } => {
+            state.transport.cancel(&document.label, &document.id, &id);
+            Ok(unit)
+        }
+        Command::AccountsSignInToServer => {
+            installation_login::sign_in(&app, &state, &document).await
+        }
         Command::AccountsSignIn => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err("Use server settings to change Accounts sign-in.".into());
+            }
             let opener_app = app.clone();
             let opener_owner = owner.clone();
             let account = state
@@ -473,10 +589,18 @@ async fn native_command(
         }
         Command::AccountsRetryRevocations => {
             state.accounts.retry_revocations();
+            retry_installation_revocations(&app);
             Ok(unit)
         }
         Command::AccountsSession => {
-            let account = state.accounts.session(&document.origin).await?;
+            let account = state
+                .accounts
+                .session(&if state.transport.selected(&document.label).is_some() {
+                    server_directory::origin()
+                } else {
+                    document.origin.clone()
+                })
+                .await?;
             if !state.sessions.is_current(&document)
                 || active_document(&app).is_none_or(|current| current.owner() != owner)
             {
@@ -496,6 +620,9 @@ async fn native_command(
                 .map_err(|_| "Could not continue".into())
         }
         Command::AccountsCreateServerLoginGrant { origin, challenge } => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err("Native installation sign-in must run in Rust.".into());
+            }
             let audience = server_login::audience_for_document(&document.origin, &origin)?;
             if !server_login::valid_challenge(&challenge) {
                 return Err("Could not continue".into());
@@ -528,6 +655,11 @@ async fn native_command(
             serde_json::to_value(result).map_err(|_| "Could not continue".into())
         }
         Command::AccountsConsumeServerInitializationSecret => {
+            if state.transport.selected(&document.label).is_some() {
+                return Err(
+                    "This installation does not accept a renderer bootstrap secret.".into(),
+                );
+            }
             let authorization = state
                 .accounts
                 .authorization(&server_directory::origin())
@@ -933,7 +1065,9 @@ fn start_server_discovery(app: tauri::AppHandle) {
                 authorization.account.identity(),
                 generation,
                 &servers,
-                &document.origin.origin().ascii_serialization(),
+                &document_server_origin(&state, &document)
+                    .origin()
+                    .ascii_serialization(),
             ) {
                 continue;
             }
@@ -1082,6 +1216,7 @@ fn cancel_server_pairings(state: &DesktopState) {
 }
 
 fn begin_accounts_logout(state: &DesktopState) -> Result<AccountsLogout, String> {
+    state.transport.block_all();
     cancel_server_pairings(state);
     let generation = state.reset_accounts_started()?;
     cancel_restore(state);
@@ -1163,7 +1298,7 @@ fn logout_document_matches(
             .and_then(|setup| setup.clone())
             .is_some_and(|setup| {
                 setup.account.as_deref() == account
-                    && setup.server_url.origin() == document.origin.origin()
+                    && setup.server_url.origin() == document_server_origin(state, document).origin()
             })
 }
 
@@ -2270,7 +2405,37 @@ async fn open_server(
         .generation;
     require_setup(window)?;
     require_account(state, authorization)?;
-    server::require_accounts_only(&choice.server_url).await?;
+    let pinned = if let Some(workspace) = &choice.workspace {
+        let catalog = server_directory::Directory::new()?
+            .catalog_for_device(
+                authorization.directory_bearer()?,
+                &server_directory::device_id(&state.directory)?,
+            )
+            .await?;
+        let selection = installation_transport::Selection {
+            account: settings::account_key(authorization.account.identity()),
+            origin: choice.server_url.origin().ascii_serialization(),
+            target: workspace.clone(),
+            relay_origin: catalog.relay_origin(workspace, &choice.server_url)?,
+        };
+        let ticket = if selection.relay_origin.is_some() {
+            Some(
+                server_login::issue_relay(authorization.directory_bearer()?, &selection, || {
+                    require_setup(window).is_ok()
+                        && require_account(state, authorization).is_ok()
+                        && state.restore_intent.load(Ordering::SeqCst) == intent
+                })
+                .await?,
+            )
+        } else {
+            None
+        };
+        selection.probe(ticket).await?;
+        Some(selection)
+    } else {
+        server::require_accounts_only(&choice.server_url).await?;
+        None
+    };
     require_setup(window)?;
     require_account(state, authorization)?;
     let local = if choice.mode == settings::InstanceMode::New {
@@ -2291,14 +2456,23 @@ async fn open_server(
         require_setup(window)?;
         require_current_stack(state, authorization, stack)?;
     }
-    let target = choice.server_url.clone();
+    let logical = choice.server_url.clone();
+    let target = if choice.workspace.is_some() {
+        state.transport.renderer(&state.directory).await?
+    } else {
+        logical.clone()
+    };
     let label = format!("server-{}", state.sequence.fetch_add(1, Ordering::Relaxed));
     let origin = target.origin();
     let popup_app = app.clone();
     let popup_parent = label.clone();
     let popup_origin = target.clone();
     let proof = state.sessions.insert(&label, &target)?;
+    if let Some(selection) = pinned {
+        state.transport.select(&label, selection)?;
+    }
     if native::grant(app, &label, &target).is_err() {
+        state.transport.remove(&label);
         state.sessions.remove(&label);
         return Err("Could not secure the desktop window.".into());
     }
@@ -2326,10 +2500,13 @@ async fn open_server(
         label: label.clone(),
     };
     let navigation_target = target.clone();
+    let bundled = choice.workspace.is_some();
+    let navigation_origin = target.origin();
+    let navigation_app = app.clone();
     let builder = profile::configure(
         WebviewWindowBuilder::new(app, &label, WebviewUrl::External(target.clone())),
         &state.directory,
-        &target,
+        &logical,
         authorization.account.identity(),
         choice.workspace.as_ref(),
     );
@@ -2345,17 +2522,25 @@ async fn open_server(
         .visible(false)
         .disable_drag_drop_handler()
         .initialization_script(auth::initialization_script(&target))
-        .initialization_script(native::initialization_script(
+        .initialization_script(native::initialization_script_with_transport(
             &label,
             &target,
             &proof,
             state.speech.available(),
             choice.mode == settings::InstanceMode::New && state.host_computer.is_some(),
+            choice.workspace.is_some(),
         ))
         // WebKit navigation policy callbacks include subframes. Their loads must
         // not retire the main document or open an artifact in the system browser.
-        .on_navigation(|url| match url.scheme() {
-            "http" | "https" => url.username().is_empty() && url.password().is_none(),
+        .on_navigation(move |url| match url.scheme() {
+            "http" | "https" => {
+                if bundled && url.origin() != navigation_origin {
+                    open_external(&navigation_app, url);
+                    false
+                } else {
+                    url.username().is_empty() && url.password().is_none()
+                }
+            }
             "about" => matches!(url.path(), "blank" | "srcdoc"),
             "data" | "blob" => true,
             _ => false,
@@ -2382,6 +2567,7 @@ async fn open_server(
     let next = match next {
         Ok(next) => next,
         Err(_) => {
+            state.transport.remove(&label);
             state.sessions.remove(&label);
             return Err("Could not open that server.".into());
         }
@@ -2622,6 +2808,25 @@ async fn clear_server_session(
     let current = || logout.is_current(state) && logout_document_matches(state, document, account);
     if !current() {
         return Err("Accounts sign-in changed. Try again.".into());
+    }
+    if state.transport.selected(&document.label).is_some() {
+        let queued = if let Some((selection, token)) = state
+            .transport
+            .captured_session(&document.label, &document.id)?
+        {
+            state
+                .accounts
+                .queue_installation_logout(selection, token)
+                .await
+        } else {
+            Ok(())
+        };
+        state
+            .transport
+            .retire_session(&document.label, &document.id)?;
+        queued?;
+        state.accounts.retry_revocations();
+        return Ok(());
     }
     let cookie_window = window.clone();
     let cookie_url = document
@@ -3424,6 +3629,7 @@ fn main() {
                 sequence: AtomicU64::new(1),
                 switching: tokio::sync::Mutex::new(()),
                 sessions: native::Sessions::default(),
+                transport: installation_transport::Transport::default(),
                 browser_auth,
                 accounts: accounts::Accounts::new(credential_store.clone()),
                 accounts_started: Mutex::new(AccountsStarted::default()),
@@ -3579,6 +3785,7 @@ mod tests {
             sequence: AtomicU64::new(1),
             switching: tokio::sync::Mutex::new(()),
             sessions: native::Sessions::default(),
+            transport: installation_transport::Transport::default(),
             browser_auth: browser_auth::BrowserAuth::new(Arc::new(|_, _| {})),
             accounts: accounts::Accounts::new(store.clone()),
             accounts_started: Mutex::new(AccountsStarted::default()),

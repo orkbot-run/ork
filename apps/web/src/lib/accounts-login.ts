@@ -26,6 +26,10 @@ async function request(path: string, body: unknown): Promise<Record<string, unkn
 /** Exchange an audience-bound native proof; the Accounts bearer never enters the renderer. */
 export async function signInWithNativeAccounts(): Promise<void> {
   const accounts = desktopBridge()?.accounts;
+  if (accounts?.signInToServer) {
+    await accounts.signInToServer();
+    return;
+  }
   if (!accounts?.createServerLoginGrant) throw new Error("Could not continue");
   const origin = window.location.origin;
   const selected = await accounts.workspaceTarget?.();

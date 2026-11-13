@@ -4,10 +4,11 @@
 # Tauri desktop development
 
 `apps/desktop` uses Tauri 2 and carries the React renderer in its application bundle.
-The WebView keeps the selected server's origin for API requests and session cookies,
-then starts the packaged renderer on the server's minimal HTML document. The bundle
-is named **Ork**. It keeps the `run.orkbot.desktop.preview` identifier so existing
-Tauri profiles remain usable.
+Managed workspaces open a local document. Rust sends their HTTP requests through the
+shared installation transport, which pins the installation key inside TLS 1.3 and
+supports direct connections or an opaque relay when the server is behind NAT.
+The bundle is named **Ork**. It keeps the `run.orkbot.desktop.preview` identifier
+so existing Tauri profiles remain usable.
 
 ## Run and check locally
 
@@ -51,17 +52,30 @@ unencrypted. OS user permissions control access, so software running as the same
 can read them. This storage avoids Keychain prompts. Sign in once after upgrading from
 a build that used Keychain. Windows and Linux use their system credential stores.
 
-The native bridge belongs to the selected server's top-level document. Rust checks its
+The native bridge belongs to one top-level application document. Rust checks its
 window, origin and private document proof before running a command, and checks again
 before delivering events. Navigation cancels browser-auth and dictation.
 Related SSO popups share the server's session without receiving native authority.
 The setup page has separate capabilities, while remote pages receive no direct
 filesystem or shell plugin permissions.
 
-The renderer and its stylesheet ship with the desktop app. Server deployments cannot
-replace them. The selected server's document remains trusted, including scripts its
-content policy permits, so an XSS in that document could call the permitted bridge
-actions.
+Managed workspaces start from a static loopback document. The server supplies no
+executable page. Rust limits this listener to application document routes, and a
+saved port preserves the local origin after restart while separate account and
+workspace profiles keep browser storage apart. Every request belongs to its
+document. Retiring the document cancels pending work. Delayed callbacks are refused.
+
+Authentication stays in Rust. The native transport substitutes the selected product
+session for renderer-supplied authorization, then carries request and response
+bodies across IPC in chunks of at most 64 KiB. Logout blocks new requests immediately.
+Rust persists retired credentials alongside their installation pin so that cleanup
+can retry, and a relay retry must wait for the same Accounts identity to obtain a
+fresh short capability.
+
+Legacy connections still use server HTML and browser cookies. That document remains
+trusted, including scripts its content policy permits, until the connection is
+converted to a managed workspace. Desktop personal keys remain unfinished. Offline
+renewal also needs implementation and acceptance before this rollout can ship.
 
 Desktop checks for the server's `nativeRenderer: "bundled-v1"` capability before
 opening a product window. Upgrade an older server first. An older desktop connected

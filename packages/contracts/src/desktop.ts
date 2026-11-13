@@ -115,6 +115,8 @@ export interface OrkDesktop {
       origin: string;
       challenge: string;
     }) => Promise<{ grant: string; expiresAt: number }>;
+    /** Native orchestration keeps installation sessions and device proofs outside the renderer. */
+    signInToServer?: () => Promise<void>;
     /** Released once to the confirmed server document, never persisted in its bookmark. */
     consumeServerInitializationSecret?: () => Promise<string | null>;
   };

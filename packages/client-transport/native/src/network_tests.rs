@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
 use super::*;
+use crate::HttpHeader;
 use serde_json::json;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -110,6 +111,29 @@ fn relay_refuses_account_tokens_wrong_scopes_and_noncanonical_routes_before_netw
         )
         .is_err());
     }
+}
+
+#[tokio::test]
+async fn invalid_http_metadata_is_refused_before_opening_the_outer_channel() {
+    let connection = InstallationConnection::new(
+        "https://unreachable.invalid".into(),
+        SERVER.into(),
+        1,
+        "a".repeat(64),
+    )
+    .unwrap();
+    let result = connection
+        .start_request(HttpRequest {
+            method: "GET".into(),
+            path: "/rpc/me".into(),
+            has_body: false,
+            headers: vec![HttpHeader {
+                name: "origin".into(),
+                value: "orkbot://".into(),
+            }],
+        })
+        .await;
+    assert!(matches!(result, Err(TransportError::InvalidRequest)));
 }
 
 #[tokio::test]

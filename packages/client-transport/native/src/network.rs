@@ -385,6 +385,7 @@ impl InstallationConnection {
         if self.canceled.is_cancelled() {
             return Err(TransportError::Canceled);
         }
+        request.validate()?;
         if self.started.swap(true, Ordering::SeqCst) {
             return Err(TransportError::AlreadyStarted);
         }

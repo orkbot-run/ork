@@ -172,6 +172,9 @@ importers:
       '@orkbot/avatar':
         specifier: workspace:*
         version: link:../../packages/avatar
+      '@orkbot/client-transport':
+        specifier: workspace:*
+        version: link:../../packages/client-transport
       '@orkbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

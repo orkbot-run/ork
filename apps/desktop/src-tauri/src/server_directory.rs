@@ -60,6 +60,7 @@ impl WorkspaceTarget {
             || !uuid(&self.server_id)
             || !uuid(&self.workspace_id)
             || self.binding_version == 0
+            || self.binding_version > 9_007_199_254_740_991
             || self.key_fingerprint.len() != 64
             || !self
                 .key_fingerprint
@@ -146,6 +147,54 @@ struct CatalogWorkspace {
 }
 
 impl WorkspaceCatalog {
+    pub fn relay_origin(
+        &self,
+        target: &WorkspaceTarget,
+        origin: &Url,
+    ) -> Result<Option<String>, String> {
+        target.validate()?;
+        let server = self
+            .organizations
+            .iter()
+            .find(|row| row.id == target.organization_id)
+            .and_then(|organization| {
+                organization
+                    .servers
+                    .iter()
+                    .find(|row| row.id == target.server_id)
+            })
+            .ok_or(ERROR)?;
+        if server.state != "ready"
+            || server.binding_version != target.binding_version
+            || server.key_fingerprint.as_deref() != Some(&target.key_fingerprint)
+            || !server
+                .workspaces
+                .iter()
+                .any(|row| row.id == target.workspace_id && row.state == "ready" && row.can_open)
+        {
+            return Err(ERROR.into());
+        }
+        if origin.as_str().trim_end_matches('/')
+            != format!("https://{}.installation.ork.invalid", target.server_id)
+        {
+            return Ok(None);
+        }
+        let route = server
+            .routes
+            .iter()
+            .find(|row| row.kind == "tunnel" && row.device_id.is_none())
+            .ok_or(ERROR)?;
+        let parsed = normalize_server_url(&route.address)?;
+        if parsed.scheme() != "https"
+            || parsed.origin() == self::origin().origin()
+            || parsed.origin().ascii_serialization() != route.address
+            || !uuid(&route.id)
+        {
+            return Err(ERROR.into());
+        }
+        Ok(Some(route.address.clone()))
+    }
+
     pub fn local_installation_routes(
         &self,
         target: &WorkspaceTarget,
@@ -318,6 +367,12 @@ impl WorkspaceCatalog {
                             .routes
                             .iter()
                             .find(|route| route.kind == "direct" && route.device_id.is_none())
+                    })
+                    .or_else(|| {
+                        server
+                            .routes
+                            .iter()
+                            .find(|route| route.kind == "tunnel" && route.device_id.is_none())
                     });
                 if server.state != "ready" {
                     continue;
@@ -331,6 +386,9 @@ impl WorkspaceCatalog {
                 let route_url = normalize_server_url(&route.address)?;
                 if (route.kind == "local"
                     && !matches!(route_url.host_str(), Some("127.0.0.1" | "[::1]")))
+                    || (route.kind == "tunnel"
+                        && (route_url.scheme() != "https"
+                            || route_url.origin() == origin().origin()))
                     || (route.kind == "direct"
                         && (route_url.scheme() != "https"
                             || route_url.host_str().is_some_and(|host| {
@@ -357,7 +415,11 @@ impl WorkspaceCatalog {
                             "{} / {} / {}",
                             organization.name, server.name, workspace.name
                         ),
-                        url: route.address.clone(),
+                        url: if route.kind == "tunnel" {
+                            format!("https://{}.installation.ork.invalid", server.id)
+                        } else {
+                            route.address.clone()
+                        },
                         target: Some(WorkspaceTarget {
                             organization_id: organization.id.clone(),
                             server_id: server.id.clone(),
@@ -1536,6 +1598,37 @@ mod tests {
                 "workspaces": [{"id": DEVICE, "name": "Studio", "state": "ready", "canOpen": true, "role": "member"}]
             }]
         }]})
+    }
+
+    #[test]
+    fn tunnel_only_workspaces_use_a_virtual_origin_and_a_separate_exact_relay_route() {
+        let mut value = workspace_catalog();
+        value["organizations"][0]["servers"][0]["routes"][0]["kind"] = serde_json::json!("tunnel");
+        value["organizations"][0]["servers"][0]["routes"][0]["address"] =
+            serde_json::json!("https://relay.example.test");
+        let catalog: WorkspaceCatalog = serde_json::from_value(value.clone()).unwrap();
+        let workspace = catalog.clone().workspaces().unwrap().pop().unwrap();
+        let target = workspace.target.unwrap();
+        let virtual_origin = Url::parse(&workspace.url).unwrap();
+        assert_eq!(
+            workspace.url,
+            format!("https://{DEVICE}.installation.ork.invalid")
+        );
+        assert_eq!(
+            catalog
+                .relay_origin(&target, &virtual_origin)
+                .unwrap()
+                .as_deref(),
+            Some("https://relay.example.test")
+        );
+        let mut wrong = target.clone();
+        wrong.key_fingerprint = "b".repeat(64);
+        assert!(catalog.relay_origin(&wrong, &virtual_origin).is_err());
+        value["organizations"][0]["servers"][0]["routes"][0]["address"] =
+            serde_json::json!(origin().origin().ascii_serialization());
+        let catalog: WorkspaceCatalog = serde_json::from_value(value).unwrap();
+        assert!(catalog.clone().workspaces().is_err());
+        assert!(catalog.relay_origin(&target, &virtual_origin).is_err());
     }
 
     #[test]

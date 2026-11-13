@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Adapts the inherited preload.cjs compatibility interface to the new scoped Rust transport.
 
+import type { NativeHttpBridge } from "@orkbot/client-transport/native-fetch";
+import { createNativeFetch } from "@orkbot/client-transport/native-fetch";
 import type {
   DesktopMenuCommand,
   OrkDesktop,
@@ -19,6 +21,7 @@ declare const config: {
   speech: boolean;
   computer: boolean;
   label: string;
+  transport?: boolean;
 };
 
 if (
@@ -68,12 +71,22 @@ if (
   const bridge: OrkDesktop = {
     accounts: {
       signIn: () => call("accounts.signIn"),
+      ...(config.transport ? { signInToServer: () => call<void>("accounts.signInToServer") } : {}),
       session: () => call("accounts.session"),
       workspaceTarget: () => call("accounts.workspaceTarget"),
       logout: () => call("accounts.logout"),
       retryRevocations: () => call("accounts.retryRevocations"),
-      createServerLoginGrant: (request) => call("accounts.createServerLoginGrant", request),
-      consumeServerInitializationSecret: () => call("accounts.consumeServerInitializationSecret"),
+      ...(config.transport
+        ? {}
+        : {
+            createServerLoginGrant: (request: { origin: string; challenge: string }) =>
+              call<{ grant: string; expiresAt: number }>(
+                "accounts.createServerLoginGrant",
+                request,
+              ),
+            consumeServerInitializationSecret: () =>
+              call<string | null>("accounts.consumeServerInitializationSecret"),
+          }),
     },
     pairing: {
       sync: () => call("pairing.sync"),
@@ -139,4 +152,68 @@ if (
     configurable: false,
     writable: false,
   });
+  if (config.transport) {
+    const pending = new Set<string>();
+    let retired = false;
+    const http: NativeHttpBridge = {
+      open: async (_session, _revision, id, input) => {
+        pending.add(id);
+        await call<void>("transport.open", { id, input });
+      },
+      start: (_session, _revision, id) => call("transport.start", { id }),
+      write: (_session, _revision, id, bytes) => call("transport.write", { id, bytes }),
+      finish: (_session, _revision, id) => call("transport.finish", { id }),
+      head: (_session, _revision, id) => call("transport.head", { id }),
+      read: async (_session, _revision, id) => {
+        const bytes = await call<string | null>("transport.read", { id });
+        if (bytes === null) pending.delete(id);
+        return bytes;
+      },
+      cancel: async (_session, _revision, id) => {
+        pending.delete(id);
+        await call<void>("transport.cancel", { id });
+      },
+    };
+    const nativeFetch = createNativeFetch(
+      http,
+      {
+        session: document,
+        revision: 1,
+        origin: config.origin,
+        current: () => !retired,
+      },
+      () => {
+        // getRandomValues also exists on the oldest supported macOS WebView.
+        const bytes = crypto.getRandomValues(new Uint8Array(16));
+        bytes[6] = (bytes[6]! & 15) | 64;
+        bytes[8] = (bytes[8]! & 63) | 128;
+        const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+      },
+    );
+    const ordinary = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), config.origin);
+      if (url.origin === config.origin && init?.body instanceof FormData) {
+        const headers = new Headers(init.headers);
+        headers.delete("content-type");
+        // The WebView's standard Request encoder supplies the multipart boundary and a byte
+        // stream. File data crosses IPC in bounded chunks instead of one materialized buffer.
+        return nativeFetch(new Request(url, { ...init, headers }));
+      }
+      return url.origin === config.origin
+        ? nativeFetch(input instanceof Request ? input : url, init)
+        : ordinary(input, init);
+    };
+    window.addEventListener(
+      "pagehide",
+      () => {
+        retired = true;
+        for (const id of pending)
+          void call<void>("transport.cancel", { id }).catch(() => undefined);
+        pending.clear();
+      },
+      { once: true },
+    );
+  }
 }

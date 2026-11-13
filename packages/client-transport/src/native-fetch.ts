@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
-import { withAbort } from "@orkbot/core";
+import { withAbort } from "@orkbot/core/async";
 import { throwIfAborted } from "./signal.js";
 
 export interface NativeHttpBridge {
