@@ -66,6 +66,7 @@ import { useSignOut } from "../lib/sign-out";
 import { useModelOAuthSignIn } from "../lib/use-model-oauth-signin";
 import { errorText } from "../lib/user-error";
 import { CompatibleKeyField } from "./model-settings/compatible-key-field";
+import { ManagedModelSetup } from "./onboarding/managed-model-setup";
 
 const CUSTOM_MODEL_OPTION = "__orkbot_custom_model__";
 /** Ork credits sit among the providers as the one choice that needs no account of its own. */
@@ -90,7 +91,16 @@ export function OnboardingPage() {
   const linkedStep = routeStep === "survey" || routeStep === "model" ? routeStep : undefined;
   const [creatingBot, setCreatingBot] = useState(false);
   const [surveyDone, setSurveyDone] = useState(false);
-  const step = creatingBot ? "bot" : surveyDone ? "loading" : (linkedStep ?? "loading");
+  const [managed, setManaged] = useState<boolean | null>(null);
+  const [loadRevision, setLoadRevision] = useState(0);
+  const step =
+    managed === null
+      ? "loading"
+      : creatingBot
+        ? "bot"
+        : surveyDone
+          ? "loading"
+          : (linkedStep ?? "loading");
   const [billingEnabled, setBillingEnabled] = useState(false);
   // The step after the survey; null until me loads.
   const [afterSurvey, setAfterSurvey] = useState<"model" | "bot" | null>(null);
@@ -152,10 +162,15 @@ export function OnboardingPage() {
 
   useEffect(() => {
     mounted.current = true;
+    let active = true;
     const form = formState.capture();
-    void Promise.all([rpc.me(), rpc.models.list().catch(() => [])])
-      .then(([me, models]) => {
-        if (!form.isSelected()) return;
+    setError(null);
+    void Promise.all([rpc.me(), rpc.models.workspacePolicy()])
+      .then(async ([me, policy]) => {
+        if (!active || !form.isSelected()) return;
+        const models = policy.managed ? [] : await rpc.models.list().catch(() => []);
+        if (!active || !form.isSelected()) return;
+        setManaged(policy.managed === true);
         setBillingEnabled(me.billingEnabled);
         setCatalog(models);
         const next = me.needsModel ? "model" : "bot";
@@ -163,13 +178,14 @@ export function OnboardingPage() {
         if (!linkedStep) goTo(me.needsSignupSurvey ? "survey" : next);
       })
       .catch((err: unknown) => {
-        if (form.isSelected()) setError(errorText(err, t`Could not load model settings`));
+        if (active && form.isSelected()) setError(errorText(err, t`Could not load model settings`));
       });
     return () => {
+      active = false;
       mounted.current = false;
       modelProbe.invalidate();
     };
-  }, []);
+  }, [loadRevision]);
 
   useEffect(() => {
     if (!surveyDone || !afterSurvey) return;
@@ -402,7 +418,25 @@ export function OnboardingPage() {
   async function continueAfterModel(stillCurrent: () => boolean) {
     const me = await rpc.me();
     if (!mounted.current || !owner.isCurrent() || !stillCurrent()) return;
+    if (managed && me.needsModel) {
+      setError(t`Enable a default model for this workspace to continue.`);
+      return;
+    }
     goTo(me.needsSignupSurvey ? "survey" : me.needsModel ? "model" : "bot");
+  }
+
+  async function continueManagedModel() {
+    if (saving || !mounted.current || !owner.isCurrent()) return;
+    const form = formState.capture();
+    setSaving(true);
+    setError(null);
+    try {
+      await continueAfterModel(form.isCurrent);
+    } catch (err) {
+      if (form.isCurrent()) setError(errorText(err, t`Could not load model settings`));
+    } finally {
+      if (form.isSelected()) setSaving(false);
+    }
   }
 
   async function saveModel() {
@@ -501,12 +535,24 @@ export function OnboardingPage() {
       <AccountMenu signingOut={signingOut} onLogOut={() => void logOut()} />
       <div className="mx-auto w-full max-w-[560px]">
         {step === "loading" && error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+          <div className="grid gap-4">
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+            <Button variant="outline" onClick={() => setLoadRevision((value) => value + 1)}>
+              <Trans>Retry</Trans>
+            </Button>
+          </div>
         ) : null}
         {step === "survey" ? <SignupSurvey onDone={() => setSurveyDone(true)} /> : null}
-        {step === "model" ? (
+        {step === "model" && managed ? (
+          <ManagedModelSetup
+            saving={saving}
+            error={error}
+            onContinue={() => void continueManagedModel()}
+          />
+        ) : null}
+        {step === "model" && !managed ? (
           <div>
             <h1 className="text-[32px] font-medium text-foreground">
               <Trans>Connect a model</Trans>

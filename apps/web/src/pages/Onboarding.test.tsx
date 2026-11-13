@@ -33,6 +33,7 @@ vi.mock("../lib/rpc", () => {
       promptFocus: vi.fn(),
     },
     models: {
+      workspacePolicy: vi.fn(async () => ({ managed: false, canManage: true, policy: null })),
       connect: vi.fn(async () => ({ id: "fixture-credential" })),
       list: vi.fn(async () => [
         {
