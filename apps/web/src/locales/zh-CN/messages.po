@@ -1149,6 +1149,7 @@ msgstr "Bot 只看不操作"
 msgid "Bot models"
 msgstr "Bot 模型"
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "Bot 屏幕"
@@ -1662,6 +1663,10 @@ msgstr "电脑"
 msgid "Computer access is approved separately."
 msgstr "访问计算机需要单独审批。"
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "计算机控制"
+
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Computer failed to boot"
@@ -1821,6 +1826,7 @@ msgid "Connected, but could not refresh."
 msgstr "已连接，但无法刷新。"
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2227,6 +2233,10 @@ msgstr "无法加载登录选项"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "无法加载技能"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "无法加载桌面。"
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -5135,6 +5145,10 @@ msgstr "偏好设置"
 #: src/components/ServerUpdates.tsx
 msgid "Preparing update…"
 msgstr ""
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "按 Shift+Escape 退出计算机控制。"
 
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx

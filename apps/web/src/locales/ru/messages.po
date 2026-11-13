@@ -1149,6 +1149,7 @@ msgstr "Бот наблюдает, но не действует"
 msgid "Bot models"
 msgstr ""
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "Экран бота"
@@ -1662,6 +1663,10 @@ msgstr "Компьютер"
 msgid "Computer access is approved separately."
 msgstr "Доступ к компьютеру одобряется отдельно."
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "Управление компьютером"
+
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Computer failed to boot"
@@ -1821,6 +1826,7 @@ msgid "Connected, but could not refresh."
 msgstr "Подключено, но обновить не удалось."
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2227,6 +2233,10 @@ msgstr "Не удалось загрузить способы входа"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Не удалось загрузить навык"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "Не удалось загрузить рабочий стол."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -5135,6 +5145,10 @@ msgstr "Предпочтения"
 #: src/components/ServerUpdates.tsx
 msgid "Preparing update…"
 msgstr ""
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "Нажмите Shift+Escape, чтобы выйти из управления компьютером."
 
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx

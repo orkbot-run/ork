@@ -1149,6 +1149,7 @@ msgstr "Bot obserwuje, bez wykonywania działań"
 msgid "Bot models"
 msgstr "Modele botów"
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "Ekran bota"
@@ -1662,6 +1663,10 @@ msgstr "Komputer"
 msgid "Computer access is approved separately."
 msgstr "Dostęp do komputera zatwierdza się osobno."
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "Sterowanie komputerem"
+
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Computer failed to boot"
@@ -1821,6 +1826,7 @@ msgid "Connected, but could not refresh."
 msgstr "Połączono, ale nie udało się odświeżyć."
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2227,6 +2233,10 @@ msgstr "Nie udało się wczytać opcji logowania"
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "Nie udało się wczytać umiejętności"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "Nie udało się wczytać pulpitu."
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -5135,6 +5145,10 @@ msgstr "Preferencje"
 #: src/components/ServerUpdates.tsx
 msgid "Preparing update…"
 msgstr "Przygotowywanie aktualizacji…"
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "Naciśnij Shift+Escape, aby opuścić sterowanie komputerem."
 
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx

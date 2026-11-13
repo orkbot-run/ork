@@ -1149,6 +1149,7 @@ msgstr "बॉट देख रहा है, कार्रवाई नही
 msgid "Bot models"
 msgstr ""
 
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/shell/computer-overlay.tsx
 msgid "Bot screen"
 msgstr "बॉट स्क्रीन"
@@ -1662,6 +1663,10 @@ msgstr "कंप्यूटर"
 msgid "Computer access is approved separately."
 msgstr "कंप्यूटर तक पहुँच के लिए अलग से अनुमोदन लिया जाता है।"
 
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Computer controls"
+msgstr "कंप्यूटर नियंत्रण"
+
 #: src/pages/shell/computer-view.tsx
 #: src/pages/shell/use-computer.tsx
 msgid "Computer failed to boot"
@@ -1821,6 +1826,7 @@ msgid "Connected, but could not refresh."
 msgstr "कनेक्ट हो गया, लेकिन रिफ़्रेश नहीं हो सका।"
 
 #: src/components/integrations/plugin-marketplace.tsx
+#: src/components/NativeComputerScreen.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory-providers/HonchoSettingsForm.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
@@ -2227,6 +2233,10 @@ msgstr "साइन इन के विकल्प लोड नहीं ह
 #: src/pages/KnowledgeSection.tsx
 msgid "Could not load skill"
 msgstr "स्किल लोड नहीं हो सकी"
+
+#: src/components/NativeComputerScreen.tsx
+msgid "Could not load the desktop."
+msgstr "डेस्कटॉप लोड नहीं हो सका।"
 
 #: src/pages/Artifacts.tsx
 msgid "Could not load this artifact."
@@ -5135,6 +5145,10 @@ msgstr "प्राथमिकताएँ"
 #: src/components/ServerUpdates.tsx
 msgid "Preparing update…"
 msgstr ""
+
+#: src/components/teach/TeachCaptureOverlay.tsx
+msgid "Press Shift+Escape to leave computer controls."
+msgstr "कंप्यूटर नियंत्रण से बाहर निकलने के लिए Shift+Escape दबाएँ।"
 
 #: src/components/integrations/skills-dialog.tsx
 #: src/components/ServerUpdates.tsx
