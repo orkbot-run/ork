@@ -3267,6 +3267,7 @@ name = "orkbot-desktop-preview"
 version = "1.0.0"
 dependencies = [
  "base64 0.22.1",
+ "core-foundation 0.10.1",
  "dotenvy",
  "getrandom 0.3.4",
  "hmac",
@@ -3286,6 +3287,7 @@ dependencies = [
  "reqwest 0.12.28",
  "rsa",
  "security-framework",
+ "security-framework-sys",
  "serde",
  "serde_json",
  "sha2",

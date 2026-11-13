@@ -145,6 +145,12 @@ fn public_der(bytes: &[u8]) -> Result<String, String> {
 #[cfg(target_os = "macos")]
 mod platform {
     use super::*;
+    use core_foundation::{
+        base::{CFType, TCFType},
+        boolean::CFBoolean,
+        dictionary::CFDictionary,
+        string::{CFString, CFStringRef},
+    };
     use security_framework::{
         access_control::{ProtectionMode, SecAccessControl},
         item::{
@@ -152,6 +158,19 @@ mod platform {
         },
         key::{Algorithm, GenerateKeyOptions, KeyType, SecKey},
     };
+    use security_framework_sys::{
+        item::{
+            kSecAttrLabel, kSecAttrSynchronizable, kSecClass, kSecClassKey,
+            kSecUseAuthenticationUI, kSecUseDataProtectionKeychain,
+        },
+        keychain_item::SecItemDelete,
+    };
+
+    #[link(name = "Security", kind = "framework")]
+    unsafe extern "C" {
+        // This public Security constant is not exported by security-framework-sys 2.17.
+        static kSecUseAuthenticationUIFail: CFStringRef;
+    }
 
     fn query(label: &str) -> ItemSearchOptions {
         let mut query = ItemSearchOptions::new();
@@ -190,6 +209,42 @@ mod platform {
             .and_then(|key| key.external_representation())
             .ok_or(ERROR)?;
         public_der(bytes.bytes())
+    }
+
+    fn deletion_query(label: &str) -> CFDictionary<CFString, CFType> {
+        // SAFETY: These are process-lifetime Security CFString constants. Get-rule wrappers
+        // retain them, and the resulting dictionary retains each scoped key and value.
+        unsafe {
+            CFDictionary::from_CFType_pairs(&[
+                (
+                    CFString::wrap_under_get_rule(kSecClass),
+                    CFString::wrap_under_get_rule(kSecClassKey).as_CFType(),
+                ),
+                (
+                    CFString::wrap_under_get_rule(kSecAttrLabel),
+                    CFString::new(label).as_CFType(),
+                ),
+                (
+                    CFString::wrap_under_get_rule(kSecUseDataProtectionKeychain),
+                    CFBoolean::true_value().as_CFType(),
+                ),
+                (
+                    CFString::wrap_under_get_rule(kSecAttrSynchronizable),
+                    CFBoolean::false_value().as_CFType(),
+                ),
+                // UISkip is search-only. UIFail preserves noninteractive deletion.
+                (
+                    CFString::wrap_under_get_rule(kSecUseAuthenticationUI),
+                    CFString::wrap_under_get_rule(kSecUseAuthenticationUIFail).as_CFType(),
+                ),
+            ])
+        }
+    }
+
+    fn delete_status(label: &str) -> i32 {
+        let query = deletion_query(label);
+        // SAFETY: The owned dictionary remains alive for the synchronous Security call.
+        unsafe { SecItemDelete(query.as_concrete_TypeRef()) }
     }
 
     impl DeviceKeys for SystemKeys {
@@ -237,14 +292,65 @@ mod platform {
                 })
         }
         fn forget(&self, label: &str) -> Result<(), String> {
-            match query(label).delete() {
-                Ok(()) => Ok(()),
-                Err(error) if error.code() == -25300 => Ok(()),
-                Err(error) => {
-                    diagnose("delete", Some(i64::from(error.code())));
+            match delete_status(label) {
+                0 | -25300 => Ok(()),
+                code => {
+                    diagnose("delete", Some(i64::from(code)));
                     Err(ERROR.into())
                 }
             }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn deletion_keeps_exact_key_label_protection_scope_and_disallows_interaction() {
+            let label = "run.orkbot.personal-device.scope-assertion";
+            let dictionary = deletion_query(label);
+            // SAFETY: The same system-owned constants are retained by the dictionary above.
+            unsafe {
+                let value = |key| dictionary.get(CFString::wrap_under_get_rule(key)).clone();
+                assert_eq!(
+                    value(kSecClass),
+                    CFString::wrap_under_get_rule(kSecClassKey).as_CFType()
+                );
+                assert_eq!(value(kSecAttrLabel), CFString::new(label).as_CFType());
+                assert_eq!(
+                    value(kSecUseDataProtectionKeychain),
+                    CFBoolean::true_value().as_CFType()
+                );
+                assert_eq!(
+                    value(kSecAttrSynchronizable),
+                    CFBoolean::false_value().as_CFType()
+                );
+                assert_eq!(
+                    value(kSecUseAuthenticationUI),
+                    CFString::wrap_under_get_rule(kSecUseAuthenticationUIFail).as_CFType()
+                );
+            }
+        }
+
+        #[test]
+        fn deleting_a_nonexistent_random_key_reaches_authorization_instead_of_invalid_parameters() {
+            let mut nonce = [0u8; 24];
+            getrandom::fill(&mut nonce).unwrap();
+            let label = format!(
+                "run.orkbot.personal-device.nonexistent-canary.{}",
+                URL_SAFE_NO_PAD.encode(nonce)
+            );
+            assert!(key(&label).unwrap().is_none());
+            // Unsigned unit tests have no application-identifier entitlement. A signed app
+            // reaches item-not-found; an unsigned process must still fail authorization.
+            let status = delete_status(&label);
+            assert!(
+                matches!(status, -25300 | -34018),
+                "Unexpected OSStatus: {status}"
+            );
+            assert_eq!(SystemKeys.forget(&label).is_ok(), status == -25300);
+            assert!(key(&label).unwrap().is_none());
         }
     }
 }
