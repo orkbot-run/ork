@@ -104,6 +104,12 @@ mod tests {
     fn discovery() -> Discovery {
         serde_json::from_value(json!({"issuer":"https://identity.example.com", "authorization_endpoint":"https://identity.example.com/authorize", "token_endpoint":"https://identity.example.com/token", "userinfo_endpoint":"https://identity.example.com/userinfo", "jwks_uri":"https://identity.example.com/jwks", "revocation_endpoint":null, "code_challenge_methods_supported":["S256"], "id_token_signing_alg_values_supported":["RS256"], "token_endpoint_auth_methods_supported":["none"], "response_types_supported":["code"], "authorization_response_iss_parameter_supported":true})).unwrap()
     }
+    fn fixture_nonce() -> &'static str {
+        static NONCE: OnceLock<String> = OnceLock::new();
+        NONCE
+            .get_or_init(|| Proof::new().expect("create test login proof").nonce)
+            .as_str()
+    }
     fn credential() -> Credential {
         Credential {
             account: Account {
@@ -114,7 +120,7 @@ mod tests {
             },
             access_token: "old-access".into(),
             refresh_token: Some("old-refresh".into()),
-            nonce: "nonce-a".into(),
+            nonce: fixture_nonce().into(),
         }
     }
 
@@ -300,7 +306,7 @@ mod tests {
 
     #[test]
     fn id_tokens_require_signature_nonce_issuer_audience_expiry_and_subject_continuity() {
-        let claims = json!({"iss":config().issuer,"aud":config().client_id,"sub":"subject-a","iat":now(),"exp":now()+300,"nonce":"nonce-a"});
+        let claims = json!({"iss":config().issuer,"aud":config().client_id,"sub":"subject-a","iat":now(),"exp":now()+300,"nonce":fixture_nonce()});
         let token = signed(&claims);
         let mut hashed = claims.clone();
         hashed["at_hash"] = json!(URL_SAFE_NO_PAD.encode(&Sha256::digest(b"access-a")[..16]));
@@ -308,7 +314,7 @@ mod tests {
             &signed(&hashed),
             &signing().1,
             &config(),
-            Some(("nonce-a", true)),
+            Some((fixture_nonce(), true)),
             None,
         )
         .unwrap();
@@ -318,7 +324,7 @@ mod tests {
             &signed(&claims),
             &signing().1,
             &config(),
-            Some(("nonce-a", false)),
+            Some((fixture_nonce(), false)),
             Some("subject-a"),
         )
         .unwrap();
@@ -364,7 +370,7 @@ mod tests {
                 &token,
                 &signing().1,
                 &config(),
-                Some(("nonce-a", true)),
+                Some((fixture_nonce(), true)),
                 None
             )
             .unwrap()
@@ -390,7 +396,7 @@ mod tests {
                     &signed(&invalid),
                     &signing().1,
                     &config(),
-                    Some(("nonce-a", true)),
+                    Some((fixture_nonce(), true)),
                     None
                 )
                 .is_err(),
