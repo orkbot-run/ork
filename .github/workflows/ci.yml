@@ -328,7 +328,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         if: steps.areas.outputs.server != 'false'
-      - run: pnpm test:integration --shard=${{ matrix.shard }}/2
+      # Each worker clones a database and opens separate pools on the shared runner.
+      - run: pnpm test:integration --shard=${{ matrix.shard }}/2 --workers=2
         if: steps.areas.outputs.server != 'false'
         env:
           VERIFY_LOGGING: '1'
