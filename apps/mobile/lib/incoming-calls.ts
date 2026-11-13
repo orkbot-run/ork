@@ -27,6 +27,8 @@ import {
 } from "./api";
 import { endCall, getSnapshot, startCall, subscribe as subscribeCall } from "./call-session";
 import { t } from "./i18n";
+import type { NativeNotificationTransport } from "./notification-transport";
+import { prepareNotificationTransport } from "./notification-transport";
 import { registerCallPushToken } from "./push";
 import { serverHeaders } from "./server-headers";
 import { currentSessionGeneration, registerSessionDiskCache } from "./session";
@@ -38,7 +40,7 @@ export function usesNativeIncomingCallRingtone() {
 export type { IncomingBotCall } from "@orkbot/contracts";
 
 type NativeAction = { action: "answer" | "end"; callId: string; botId: string; expiresAt: string };
-type NativeCalls = {
+type NativeCalls = Partial<NativeNotificationTransport> & {
   configureIncomingSession?(base: string, headers: Record<string, string>): Promise<void>;
   reportIncomingCall(call: Record<string, string>): Promise<void>;
   incomingState(): Promise<{
@@ -49,7 +51,7 @@ type NativeCalls = {
   finishAnswer(id: string, success: boolean): Promise<void>;
   endIncomingCall(id: string): Promise<void>;
   clearIncomingCalls(): Promise<void>;
-  addListener(name: string, callback: () => void): { remove(): void };
+  addListener(name: string, callback: (event: unknown) => void): { remove(): void };
 };
 const module = requireOptionalNativeModule<NativeCalls>("OrkNotifications");
 const native = module?.incomingState ? module : null;
@@ -470,6 +472,14 @@ export function startIncomingCalls() {
       .then(async (context) => {
         // SecureStore may still be locked after a cold PushKit launch. Retry on foreground.
         if (!context.headers.authorization || !currentFeed(owner)) return;
+        if (native?.configureIncomingSession)
+          await prepareNotificationTransport(
+            native,
+            context.apiBase,
+            context.headers.authorization.replace(/^Bearer /, ""),
+            "",
+          );
+        if (!currentFeed(owner)) return;
         await native?.configureIncomingSession?.(context.apiBase, {
           ...serverHeaders(context.apiBase),
           ...context.headers,

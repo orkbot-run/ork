@@ -94,6 +94,19 @@ maestro test -e ORKBOT_SCREENSHOT_BOT_ID=replace-with-workspace-bot-id \
 
 Run it from `apps/mobile`. It retains the authorized app and captures viewing and control.
 
+## Native background requests
+
+Android live-status polling and native call declines on both mobile platforms use the
+initialized app's selected installation transport. Native code dispatches a bounded set
+of requests with opaque context IDs. The app supplies its captured product session,
+workspace, protocol, build headers and fresh relay tickets. Accounts tokens remain on
+the Accounts connection. Replies are limited to 16 MiB and discarded after a scope change.
+
+Managed installations never fall back to native URL-based requests. If the operating
+system restarts only the background service, polling stops until the app establishes a
+verified connection again. Saved bearer tokens alone cannot restore that authority.
+Ordinary push delivery remains separate.
+
 ## Server connection links
 
 Opening a self-hosted server in a browser shows its address, a pairing-code field and an

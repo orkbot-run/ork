@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0 AND PolyForm-Noncommercial-1.0.0
 // Inherited Apache-2.0 tests are preserved. Updated boundary fixtures follow LICENSE.md.
 
+import { CLIENT_PROTOCOL_HEADER, CLIENT_PROTOCOL_VERSION } from "@orkbot/contracts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { native } = vi.hoisted(() => ({
@@ -51,7 +52,7 @@ describe("Android live notification resume", () => {
       "token-1",
       "space-1",
       "de",
-      "",
+      JSON.stringify({ [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) }),
     );
   });
 
@@ -64,7 +65,10 @@ describe("Android live notification resume", () => {
       "token-1",
       "space-1",
       "de",
-      JSON.stringify({ "CF-Access-Client-Id": "id" }),
+      JSON.stringify({
+        "CF-Access-Client-Id": "id",
+        [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION),
+      }),
     );
   });
 
@@ -85,7 +89,7 @@ describe("Android live notification resume", () => {
       "token-1",
       "space-1",
       "de",
-      "",
+      JSON.stringify({ [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) }),
       "bot-1",
     );
     expect(native.resume).not.toHaveBeenCalled();
@@ -113,7 +117,7 @@ describe("Android live notification resume", () => {
         "token-1",
         "space-1",
         "de",
-        "",
+        JSON.stringify({ [CLIENT_PROTOCOL_HEADER]: String(CLIENT_PROTOCOL_VERSION) }),
       );
     } finally {
       native.resumeAfterMute = resumeAfterMute;

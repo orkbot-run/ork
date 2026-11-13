@@ -148,6 +148,10 @@ try {
     ...globSync("apple/*.swift", { cwd: native })
       .sort()
       .map((file) => join(native, file)),
+    resolve(
+      native,
+      "../../../apps/mobile/modules/orkbot-notifications/ios/NotificationRequests.swift",
+    ),
     join(source, "Conformance.swift"),
     "-L",
     library,

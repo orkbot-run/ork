@@ -143,6 +143,10 @@ internal object IncomingCalls {
     executor.execute {
       try {
         if (!fresh(call) || token.isBlank() || !isAllowedNotificationEndpoint(endpoint)) return@execute
+        if (isInstallationNotificationEndpoint(endpoint)) {
+          rpc(endpoint, token, "", headers, "notifications/declineIncomingCall", JSONObject().put("callId", call.getString("callId")))
+          return@execute
+        }
         val connection = URI("${endpoint.trimEnd('/')}/rpc/notifications/declineIncomingCall").toURL().openConnection() as HttpURLConnection
         connection.instanceFollowRedirects = false
         connection.connectTimeout = 5000

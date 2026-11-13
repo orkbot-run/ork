@@ -48,8 +48,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.random.Random
 
-private class ApiException(val status: Int) : IOException()
-private const val MAX_RPC_RESPONSE_BYTES = 16 * 1024 * 1024
+internal class ApiException(val status: Int) : IOException()
 
 class OrkNotificationService : Service() {
   private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -216,7 +215,7 @@ class OrkNotificationService : Service() {
         }
         cadence.success()
       } catch (error: ApiException) {
-        if (error.status == 401) {
+        if (error.status == 401 || error.status == 403 || error.status == 426) {
           stopIfCurrent(generation)
           return
         }
@@ -1046,6 +1045,11 @@ internal fun rpc(
   input: JSONObject,
 ): JSONObject {
   if (!isAllowedNotificationEndpoint(endpoint)) throw IOException("Disallowed notification endpoint")
+  if (isInstallationNotificationEndpoint(endpoint)) {
+    val response = NotificationRequests.request(endpoint, token, spaceId, procedure, input.toString())
+    if (response.status !in 200..299) throw ApiException(response.status)
+    return notificationResponseJson(response.body)
+  }
   val connection = URL("$endpoint/rpc/$procedure").openConnection() as HttpURLConnection
   return try {
     connection.requestMethod = "POST"
@@ -1071,22 +1075,24 @@ internal fun rpc(
       val bytes = ByteArrayOutputStream()
       val buffer = ByteArray(8_192)
       while (true) {
-        val count = stream.read(buffer, 0, minOf(buffer.size, MAX_RPC_RESPONSE_BYTES - bytes.size() + 1))
+        val count = stream.read(buffer, 0, minOf(buffer.size, MAX_NOTIFICATION_RESPONSE_BYTES - bytes.size() + 1))
         if (count == -1) break
-        if (bytes.size() + count > MAX_RPC_RESPONSE_BYTES) throw IOException("Server response too large")
+        if (bytes.size() + count > MAX_NOTIFICATION_RESPONSE_BYTES) throw IOException("Server response too large")
         bytes.write(buffer, 0, count)
       }
       bytes.toString(Charsets.UTF_8.name())
     }
-    val root = try {
-      JSONObject(body)
-    } catch (_: JSONException) {
-      throw IOException("Invalid server response")
-    }
-    root.optJSONObject("json") ?: throw IOException("Invalid server response")
+    notificationResponseJson(body)
   } finally {
     connection.disconnect()
   }
+}
+
+private fun notificationResponseJson(body: String): JSONObject {
+  val root = try { JSONObject(body) } catch (_: JSONException) {
+    throw IOException("Invalid server response")
+  }
+  return root.optJSONObject("json") ?: throw IOException("Invalid server response")
 }
 
 /** The saved headers; a value that is not a JSON object of strings sends none. */

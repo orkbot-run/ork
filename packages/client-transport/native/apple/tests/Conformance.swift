@@ -21,6 +21,7 @@ struct Check: Decodable { let uploads: Int; let canceled: Int; let opaque: Bool 
   }
 
   static func verify() async throws {
+    try verifyNotificationRequests()
     let endpoint = try JSONDecoder().decode(Endpoint.self, from: Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1])))
     func operation(_ fingerprint: String? = nil) throws -> InstallationRequest {
       try InstallationRequest(origin: endpoint.origin, serverId: endpoint.serverId, bindingVersion: endpoint.bindingVersion, fingerprint: fingerprint ?? endpoint.fingerprint)
@@ -110,6 +111,46 @@ struct Check: Decodable { let uploads: Int; let canceled: Int; let opaque: Bool 
     guard try await contexts.head(session: replacement, revision: 1, id: newId).status == 200 else { fatalError("new context closed by stale logout") }
     while try await contexts.read(session: replacement, revision: 1, id: newId) != nil {}
     await contexts.end(session: replacement)
-    print("PASS: native Swift/Rust HTTP, files, SSE, cancellation, pins, opaque relay and selection fencing")
+    print("PASS: native Swift/Rust HTTP, files, SSE, cancellation, pins, opaque relay, selection fencing and notification scope")
+  }
+
+  static func verifyNotificationRequests() throws {
+    let requests = NotificationRequests()
+    let endpoint = "https://a0000000-0000-4000-8000-000000000001.installation.ork.invalid"
+    let first = UUID().uuidString.lowercased()
+    let second = UUID().uuidString.lowercased()
+    var event: [String: String] = [:]
+    let dispatcher = requests.install { event = $0 }
+    defer { requests.uninstall(dispatcher) }
+    guard NotificationRequests.isInstallationEndpoint(endpoint) else { fatalError("canonical endpoint refused") }
+    for invalid in [endpoint + "/", endpoint + ":443", endpoint + "?q=1", endpoint + "#fragment", endpoint.uppercased(), endpoint + ".", endpoint.replacingOccurrences(of: "https://", with: "https://user@")] {
+      guard !NotificationRequests.isInstallationEndpoint(invalid), NotificationRequests.isReservedEndpoint(invalid) else { fatalError("noncanonical installation route accepted") }
+    }
+    var cold: Int?
+    requests.decline(endpoint: endpoint, token: "product-session-fixture", callId: "call-fixture") { cold = $0 }
+    guard cold == 401, event.isEmpty else { fatalError("persisted session gained background authority") }
+    try requests.configure(first, endpoint: endpoint, token: "product-session-fixture", space: "")
+    var old: Int?
+    requests.decline(endpoint: endpoint, token: "product-session-fixture", callId: "call-fixture") { old = $0 }
+    guard event["scope"] == first, event["procedure"] == "notifications/declineIncomingCall", !event.values.contains("product-session-fixture") else { fatalError("wrong notification dispatch") }
+    let retired = event
+    try requests.configure(second, endpoint: endpoint, token: "replacement-product-session", space: "")
+    guard old == 401 else { fatalError("scope replacement retained pending decline") }
+    try requests.reply(retired["id"]!, scope: first, status: 200, body: "retired")
+    guard old == 401 else { fatalError("retired response delivered") }
+    var result: Int?
+    requests.decline(endpoint: endpoint, token: "replacement-product-session", callId: "call-fixture") { result = $0 }
+    try requests.reply(event["id"]!, scope: first, status: 200, body: "wrong-owner")
+    guard result == nil else { fatalError("wrong reply owner accepted") }
+    do {
+      try requests.reply(event["id"]!, scope: second, status: 200, body: String(repeating: "é", count: 8 * 1024 * 1024 + 1))
+      fatalError("oversized response accepted")
+    } catch {}
+    try requests.reply(event["id"]!, scope: second, status: 200, body: "{\"json\":{\"ok\":true}}")
+    guard result == 200 else { fatalError("current decline did not complete") }
+    result = nil
+    requests.decline(endpoint: endpoint, token: "replacement-product-session", callId: "call-fixture") { result = $0 }
+    requests.clear()
+    guard result == 401 else { fatalError("logout retained pending decline") }
   }
 }
