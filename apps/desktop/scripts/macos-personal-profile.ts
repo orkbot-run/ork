@@ -300,6 +300,34 @@ export function ownEntitlements(
   };
 }
 
+export function personalProfileEntitlements(
+  decoded: string,
+  certificate: Pick<X509Certificate, "raw">,
+  identity: string,
+  base: Record<string, unknown>,
+  run: Command,
+) {
+  const extract = (key: string, format: string, type: string) =>
+    run("/usr/bin/plutil", ["-extract", key, format, "-expect", type, "-o", "-", decoded]);
+  const certificateXml = extract("DeveloperCertificates", "xml1", "array");
+  const decodedCertificates = [...certificateXml.matchAll(/<data>([\s\S]*?)<\/data>/g)].map(
+    (match) => Buffer.from(match[1]!.replace(/\s/g, ""), "base64"),
+  );
+  return ownEntitlements(
+    {
+      teams: JSON.parse(extract("TeamIdentifier", "json", "array")),
+      prefixes: JSON.parse(extract("ApplicationIdentifierPrefix", "json", "array")),
+      allDevices: JSON.parse(extract("ProvisionsAllDevices", "raw", "bool")),
+      expiresAt: extract("ExpirationDate", "raw", "date").trim(),
+      entitlements: JSON.parse(extract("Entitlements", "json", "dictionary")),
+      certificates: decodedCertificates,
+    },
+    certificate,
+    identity,
+    base,
+  );
+}
+
 /** Reuse existing signing identities. No certificate, key, or unrelated profile is removed. */
 export async function preparePersonalProfile(
   directory: string,
@@ -437,12 +465,6 @@ export async function preparePersonalProfile(
   writeFileSync(file, Buffer.from(profile.attributes.profileContent, "base64"), { mode: 0o600 });
   run("/usr/bin/security", ["cms", "-D", "-i", file, "-o", decoded]);
   chmodSync(decoded, 0o600);
-  const extract = (key: string, format = "json") =>
-    run("/usr/bin/plutil", ["-extract", key, format, "-o", "-", decoded]);
-  const certificateXml = extract("DeveloperCertificates", "xml1");
-  const decodedCertificates = [...certificateXml.matchAll(/<data>([\s\S]*?)<\/data>/g)].map(
-    (match) => Buffer.from(match[1]!.replace(/\s/g, ""), "base64"),
-  );
   const base = JSON.parse(
     run("/usr/bin/plutil", [
       "-convert",
@@ -452,18 +474,12 @@ export async function preparePersonalProfile(
       "apps/desktop/src-tauri/Entitlements.plist",
     ]),
   );
-  const claims = ownEntitlements(
-    {
-      teams: JSON.parse(extract("TeamIdentifier")),
-      prefixes: JSON.parse(extract("ApplicationIdentifierPrefix")),
-      allDevices: JSON.parse(extract("ProvisionsAllDevices")),
-      expiresAt: extract("ExpirationDate", "raw").trim(),
-      entitlements: JSON.parse(extract("Entitlements")),
-      certificates: decodedCertificates,
-    },
+  const claims = personalProfileEntitlements(
+    decoded,
     certificate,
     env.APPLE_SIGNING_IDENTITY!,
     base,
+    run,
   );
   writeFileSync(entitlements, JSON.stringify(claims), { mode: 0o600 });
   run("/usr/bin/plutil", ["-convert", "xml1", entitlements]);

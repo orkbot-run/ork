@@ -1,12 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Ork contributors
 // SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0
 
+import { execFileSync } from "node:child_process";
 import { generateKeyPairSync, verify } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { expect, it, vi } from "vitest";
 import {
   AppleProfiles,
   appleSystemFetch,
   ownEntitlements,
+  personalProfileEntitlements,
 } from "../scripts/macos-personal-profile.js";
 
 const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
@@ -29,6 +34,86 @@ const valid = () => ({
     "keychain-access-groups": ["LEGACY1234.*"],
   },
 });
+
+it("extracts profile claims with plutil semantics that reject scalar JSON output", () => {
+  const profile = valid();
+  const values: Record<string, { type: string; value: unknown }> = {
+    DeveloperCertificates: { type: "array", value: profile.certificates },
+    TeamIdentifier: { type: "array", value: profile.teams },
+    ApplicationIdentifierPrefix: { type: "array", value: profile.prefixes },
+    ProvisionsAllDevices: { type: "bool", value: profile.allDevices },
+    ExpirationDate: { type: "date", value: profile.expiresAt },
+    Entitlements: { type: "dictionary", value: profile.entitlements },
+  };
+  const run = (command: string, args: string[]) => {
+    expect(command).toBe("/usr/bin/plutil");
+    const entry = values[args[1]!]!;
+    if (args[args.indexOf("-expect") + 1] !== entry.type) throw new Error("Wrong plist type");
+    if (args[2] === "json") {
+      if (!["array", "dictionary"].includes(entry.type))
+        throw new Error("Invalid object in plist for JSON format");
+      return JSON.stringify(entry.value);
+    }
+    if (args[2] === "xml1")
+      return `<array><data>${certificate.raw.toString("base64")}</data></array>`;
+    return String(entry.value);
+  };
+  expect(personalProfileEntitlements("fixture.plist", certificate, identity, {}, run)).toEqual(
+    ownEntitlements(profile, certificate, identity, {}),
+  );
+  for (const [type, value] of [
+    ["bool", false],
+    ["string", "true"],
+    ["integer", 1],
+  ] as const) {
+    values.ProvisionsAllDevices = { type, value };
+    expect(() =>
+      personalProfileEntitlements("fixture.plist", certificate, identity, {}, run),
+    ).toThrow();
+  }
+});
+
+it.runIf(process.platform === "darwin")(
+  "reads a synthetic profile with actual macOS plutil and rejects a string masquerading as a boolean",
+  () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), "ork-personal-profile-plutil-"));
+    const file = path.join(directory, "profile.plist");
+    const profile = valid();
+    const run = (command: string, args: string[]) =>
+      execFileSync(command, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    const writeProfile = (allDevices: string) =>
+      writeFileSync(
+        file,
+        `<?xml version="1.0"?><plist version="1.0"><dict>
+<key>DeveloperCertificates</key><array><data>${certificate.raw.toString("base64")}</data></array>
+<key>TeamIdentifier</key><array><string>ABCDE12345</string></array>
+<key>ApplicationIdentifierPrefix</key><array><string>LEGACY1234</string></array>
+<key>ProvisionsAllDevices</key>${allDevices}
+<key>ExpirationDate</key><date>${profile.expiresAt.replace(/\.\d{3}Z$/, "Z")}</date>
+<key>Entitlements</key><dict>
+<key>com.apple.application-identifier</key><string>LEGACY1234.run.orkbot.desktop.preview</string>
+<key>com.apple.developer.team-identifier</key><string>ABCDE12345</string>
+<key>keychain-access-groups</key><array><string>LEGACY1234.*</string></array>
+</dict></dict></plist>`,
+        { mode: 0o600 },
+      );
+    try {
+      writeProfile("<true/>");
+      expect(() =>
+        run("/usr/bin/plutil", ["-extract", "ProvisionsAllDevices", "json", file]),
+      ).toThrow();
+      expect(personalProfileEntitlements(file, certificate, identity, {}, run)).toEqual(
+        ownEntitlements(profile, certificate, identity, {}),
+      );
+      for (const value of ["<false/>", "<string>true</string>", "<integer>1</integer>"]) {
+        writeProfile(value);
+        expect(() => personalProfileEntitlements(file, certificate, identity, {}, run)).toThrow();
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  },
+);
 
 it("uses system HTTPS with bounded responses, no redirects, and credentials only on stdin", async () => {
   const run = vi.fn(() => Buffer.from('{"data":[]}\n200'));
